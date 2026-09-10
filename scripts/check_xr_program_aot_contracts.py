@@ -58,12 +58,19 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         {
             "stable_id": row["stable_id"],
             "spelling": row["spelling"],
-            "aot": "COMPLETE",
-            "backend_ir": "COMPLETE",
-            "portable_c11": "COMPLETE",
-            "translation_validation": "STRUCTURAL_EXACT",
+            "aot": row["coverage"]["aot"]["status"],
+            "backend_ir": row["coverage"]["aot"]["status"],
+            "portable_c11": row["coverage"]["aot"]["status"],
+            "translation_validation": (
+                "STRUCTURAL_EXACT"
+                if row["coverage"]["aot"]["status"] == "COMPLETE" else None
+            ),
         }
         for row in registry["operations"]
+    ]
+    incomplete = [
+        row["spelling"] for row in registry["operations"]
+        if row["coverage"]["aot"]["status"] != "COMPLETE"
     ]
     return {
         "schema": "xray-program-aot-coverage/1",
@@ -74,6 +81,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         "backend": "xray-c11-aot@1",
         "operation_count": len(operations),
         "operations": operations,
+        "incomplete_operations": incomplete,
         "pass_contract": {
             "ordinary": "pre-post-invariant-plus-preservation-set",
             "high_risk": "directed-translation-witness-required",
@@ -213,12 +221,17 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
 
     for row in registry["operations"]:
         coverage = row.get("coverage", {}).get("aot", {})
-        require(coverage == {"status": "COMPLETE", "task": 300},
+        require(coverage.get("status") in {"COMPLETE", "NOT_YET_ACTIVE"} and
+                coverage.get("task") == 300,
                 f"registry AOT coverage is stale for {row['spelling']}")
         token = enum_token(row["spelling"])
-        require(re.search(rf"\bcase\s+{re.escape(token)}\s*:", emitter) is not None,
-                f"generated-C emitter omits {row['spelling']}")
-        require(token in lowering, f"BackendIR admission omits {row['spelling']}")
+        emitted = re.search(rf"\bcase\s+{re.escape(token)}\s*:", emitter) is not None
+        admitted = re.search(rf"\bcase\s+{re.escape(token)}\s*:", lowering) is not None
+        active = coverage["status"] == "COMPLETE"
+        require(emitted == active,
+                f"generated-C emitter lifecycle disagrees with registry for {row['spelling']}")
+        require(admitted == active,
+                f"BackendIR lifecycle disagrees with registry for {row['spelling']}")
         require(token in test, f"generated-C behavioral fixture omits {row['spelling']}")
 
     for token in (

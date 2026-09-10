@@ -45,6 +45,11 @@ _Static_assert(XR_CORE_OP_CORE_COROUTINE_SUSPEND == 140, "coroutine suspension s
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT == 141,
                "indirect coroutine call stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_CONSTRUCT == 142, "class construct stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_SHARE == 143, "class share stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_FIELD_LOAD == 144, "class field load stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CLASS_FIELD_PLACE == 145, "class field place stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PLACE_EXCHANGE == 146, "place exchange stable id drifted");
 _Static_assert(XR_CORE_TYPE_U16 == 6, "u16 stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted");
@@ -191,6 +196,36 @@ static void test_skip_instruction(const uint8_t *bytes, size_t size, size_t *off
     uint64_t successors = test_take_uvar(bytes, size, offset);
     for (uint64_t successor = 0u; successor < successors; ++successor)
         (void) test_take_uvar(bytes, size, offset);
+}
+
+static size_t find_operation_offset(const XrProgramArtifact *artifact, uint16_t wanted) {
+    XrProgramView view;
+    if (xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+        XR_PROGRAM_DECODE_OK)
+        return SIZE_MAX;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_CODE - 1u].offset;
+    uint64_t function_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint64_t function = 0u; function < function_count; ++function) {
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t block_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        for (uint64_t block = 0u; block < block_count; ++block) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            uint64_t argument_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t argument = 0u; argument < argument_count; ++argument)
+                for (uint32_t field = 0u; field < 4u; ++field)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            uint64_t instruction_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t instruction = 0u; instruction < instruction_count; ++instruction) {
+                size_t operation_offset = cursor;
+                uint64_t operation = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                cursor = operation_offset;
+                test_skip_instruction(artifact->bytes, artifact->size, &cursor);
+                if (operation == wanted)
+                    return operation_offset;
+            }
+        }
+    }
+    return SIZE_MAX;
 }
 
 static XrProgramBuildStatus
@@ -776,7 +811,8 @@ static void test_aggregate_variant_operations(void) {
 }
 
 static XrProgramBuildStatus build_with_type_graph(const XrCoreIrTypeInput *types,
-                                                  uint32_t type_count) {
+                                                  uint32_t type_count,
+                                                  XrProgramArtifact *artifact) {
     XrCoreIrInstructionInput instruction = {
         .operation_id = XR_CORE_OP_CORE_TRAP,
         .result_type_id = XR_CORE_TYPE_VOID,
@@ -818,8 +854,93 @@ static XrProgramBuildStatus build_with_type_graph(const XrCoreIrTypeInput *types
     char diagnostic[256] = {0};
     XrProgramBuildStatus status =
         xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic));
+    if (status == XR_PROGRAM_BUILD_OK && artifact)
+        status = xr_program_write(program, artifact, diagnostic, sizeof(diagnostic));
     xr_core_ir_program_free(program);
     return status;
+}
+
+static XrProgramBuildStatus build_class_execution_hostile(XrProgramArtifact *artifact) {
+    enum { CLASS_TYPE = 42 };
+    XrCoreIrTypeInput type = {
+        .key = key("class-hostile:type"),
+        .local_id = CLASS_TYPE,
+        .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+        .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+    };
+    XrCoreIrKey parameter = key("class-hostile:value:parameter");
+    XrCoreIrKey copied = key("class-hostile:value:copied");
+    XrCoreIrKey moved = key("class-hostile:value:moved");
+    XrCoreIrValueInput argument = {
+        .key = parameter,
+        .type_id = CLASS_TYPE,
+        .category = XR_CORE_IR_VALUE,
+        .ownership = XR_CORE_IR_OWNER,
+    };
+    XrCoreIrKey parameter_operand[] = {parameter};
+    XrCoreIrKey copied_operand[] = {copied};
+    XrCoreIrKey moved_operand[] = {moved};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = parameter_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result = copied,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = parameter_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = copied_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_MOVE,
+         .result = moved,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = parameter_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = moved_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = key("class-hostile:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .arguments = &argument,
+        .argument_count = 1u,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    uint16_t parameter_type = CLASS_TYPE;
+    XrParamMode parameter_mode = XR_PARAM_MOVE;
+    XrCoreIrFunctionInput function = {
+        .key = key("class-hostile:function"),
+        .parameter_types = &parameter_type,
+        .parameter_modes = &parameter_mode,
+        .parameter_count = 1u,
+        .result_type_id = CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("class-hostile:module"),
+        .functions = &function,
+        .function_count = 1u,
+    };
+    return write_typed_modules(&type, 1u, &module, 1u, artifact);
 }
 
 static void test_dynamic_type_graph_rejection(void) {
@@ -835,7 +956,7 @@ static void test_dynamic_type_graph_rejection(void) {
         .field_types = self_field,
         .field_count = 1u,
     };
-    CHECK(build_with_type_graph(&recursive, 1u) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    CHECK(build_with_type_graph(&recursive, 1u, NULL) == XR_PROGRAM_BUILD_INVALID_INPUT);
 
     uint16_t missing_field[] = {MISSING_TYPE};
     XrCoreIrTypeInput unresolved = {
@@ -845,7 +966,28 @@ static void test_dynamic_type_graph_rejection(void) {
         .field_types = missing_field,
         .field_count = 1u,
     };
-    CHECK(build_with_type_graph(&unresolved, 1u) == XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE);
+    CHECK(build_with_type_graph(&unresolved, 1u, NULL) == XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE);
+
+    XrCoreIrTypeInput legacy_class = recursive;
+    legacy_class.kind = XR_CORE_IR_TYPE_AGGREGATE;
+    legacy_class.nominal_kind = XR_CORE_IR_NOMINAL_CLASS;
+    legacy_class.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    legacy_class.copy_contract = XR_CORE_IR_COPY_EXPLICIT;
+    CHECK(build_with_type_graph(&legacy_class, 1u, NULL) == XR_PROGRAM_BUILD_INVALID_INPUT);
+
+    XrCoreIrTypeInput recursive_class = legacy_class;
+    recursive_class.kind = XR_CORE_IR_TYPE_CLASS_REFERENCE;
+    XrProgramArtifact class_artifact = {0};
+    CHECK(build_with_type_graph(&recursive_class, 1u, &class_artifact) == XR_PROGRAM_BUILD_OK);
+    XrProgramView class_view;
+    CHECK(xr_program_decode_structure(class_artifact.bytes, class_artifact.size, NULL, &class_view,
+                                      NULL, 0u) == XR_PROGRAM_DECODE_OK);
+    expect_semantic_reject(&class_artifact, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    xr_program_artifact_free(&class_artifact);
+
+    XrProgramArtifact hostile = {0};
+    CHECK(build_class_execution_hostile(&hostile) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    CHECK(hostile.bytes == NULL);
 }
 
 static void test_scalar_operations(void) {
@@ -2167,7 +2309,7 @@ static XrProgramBuildStatus build_optional_owner_artifact(OptionalOwnerFixtureMo
         {.key = key("optional-owner:class"),
          .local_id = CLASS_TYPE,
          .kind = XR_CORE_IR_TYPE_AGGREGATE,
-         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .nominal_kind = XR_CORE_IR_NOMINAL_NONE,
          .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
          .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
          .field_types = class_fields,
@@ -4459,6 +4601,23 @@ static void test_provider_trap_continuation_semantics(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_inactive_operation_fails_closed_before_semantics(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_trap_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    size_t operation_offset = find_operation_offset(&artifact, XR_CORE_OP_CORE_PROVIDER_CALL);
+    CHECK(operation_offset != SIZE_MAX);
+    if (operation_offset != SIZE_MAX) {
+        CHECK(artifact.bytes[operation_offset] == UINT8_C(0x88));
+        CHECK(artifact.bytes[operation_offset + 1u] == UINT8_C(0x01));
+        expect_mutated_verify(&artifact, operation_offset, UINT8_C(0x8e),
+                              XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                              XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    }
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_aggregate_construct_owner_transfers(void) {
     uint32_t accepted = 0u, rejected = 0u;
     for (size_t index = 0u; index < XR_PROGRAM_CONSTRUCT_CASE_COUNT; ++index) {
@@ -4534,6 +4693,7 @@ int main(void) {
     test_cleanup_reason_graph_cannot_suspend();
     test_provider_output_semantics();
     test_provider_trap_continuation_semantics();
+    test_inactive_operation_fails_closed_before_semantics();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

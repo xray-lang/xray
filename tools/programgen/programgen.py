@@ -20,7 +20,7 @@ XI_REGISTRY_PATH = Path("xisa/xi/ops.def")
 HEADER_PATH = Path("src/program/xr_program_schema_gen.h")
 SOURCE_PROJECTION_HEADER_PATH = Path("src/program/xr_program_xi_projection_gen.h")
 SOURCE_PROJECTION_SOURCE_PATH = Path("src/program/xr_program_xi_projection_gen.c")
-SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v1.md")
+SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v2.md")
 COVERAGE_PATH = Path("contracts/canonical-program/xrprogram-format-coverage.json")
 TOP_KEYS = {
     "schema", "format", "encoding", "type_system", "value_system", "imports", "sections",
@@ -64,6 +64,7 @@ TYPE_SYSTEM_KEYS = {
     "copy_contracts",
     "identity_order",
     "aggregate_shape",
+    "class_reference_shape",
     "variant_shape",
     "view_shape",
     "callable_shape",
@@ -274,13 +275,13 @@ def c_identifier(name: str) -> str:
 
 def validate(schema: dict[str, Any]) -> None:
     require(set(schema) == TOP_KEYS, "program schema top-level fields drifted")
-    require(schema["schema"] == "xray-program-format-schema/1", "program schema version drifted")
+    require(schema["schema"] == "xray-program-format-schema/2", "program schema version drifted")
     fmt = schema["format"]
     require(isinstance(fmt, dict) and set(fmt) == FORMAT_KEYS, "format fields drifted")
-    require(fmt["major"] == 1 and fmt["minor"] == 0, "W2 must define XrProgram format 1.0")
+    require(fmt["major"] == 2 and fmt["minor"] == 0, "XrProgram format must be 2.0")
     require(isinstance(fmt["magic_hex"], str) and re.fullmatch(r"[0-9a-f]{16}", fmt["magic_hex"]),
             "program magic must be eight canonical lowercase hex bytes")
-    require(fmt["program_id_domain"] == "xray-program-id-v1", "ProgramId domain drifted")
+    require(fmt["program_id_domain"] == "xray-program-id-v2", "ProgramId domain drifted")
 
     encoding = schema["encoding"]
     require(isinstance(encoding, dict) and set(encoding) == ENCODING_KEYS,
@@ -304,19 +305,22 @@ def validate(schema: dict[str, Any]) -> None:
             "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian",
         ],
         "dynamic_type_base": 16,
-        "dynamic_kinds": ["aggregate", "variant", "view", "callable", "existential"],
+        "dynamic_kinds": [
+            "aggregate", "variant", "view", "callable", "existential", "class-reference",
+        ],
         "ownership_kinds": ["0:trivial", "1:affine"],
         "copy_contracts": ["0:trivial", "1:explicit", "2:forbidden"],
         "identity_order": "ascending-semantic-key",
         "aggregate_shape": "declaration-ordered-field-type-ids",
+        "class_reference_shape": "declaration-ordered-field-type-ids; nominal CLASS is implied by the type kind; physical object layout and lifetime representation are forbidden",
         "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
         "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
         "callable_shape": "one canonical SignatureId with visible effect and capability upper bounds; every callable TypeId is affine with explicit copy and its signature has no receiver",
         "callable_pack": "one closed FunctionId plus zero operands for a structurally exact captureless signature, or one consumed affine explicit-copy aggregate owner used as a READ hidden receiver; implementation effects and capabilities must be subsets of the visible upper bounds and target result borrows may not name the hidden receiver",
         "callable_dispatch": "indirect direct/invoke borrow an affine callable value (owned or non-owner) without consuming it and use its SignatureId as the sole visible contract; target identity and optional capture representation remain executor-private",
         "existential_shape": "ordered-(InterfaceId,InterfaceUseKind); READ is trivial-copy snapshot, REF/MOVE/OWNED_STORAGE are affine and copy-forbidden, CONSTRAINT_BOUND is non-runtime",
-        "nominal_kind": "aggregate/variant rows carry NONE/CLASS/STRUCT/ENUM; conformance implementor kind must match",
-        "recursive_value_shape": "reject",
+        "nominal_kind": "aggregate/variant rows carry NONE/STRUCT/ENUM; class-reference rows imply CLASS; conformance implementor kind must match",
+        "recursive_value_shape": "reject by-value aggregate/variant cycles; class-reference field edges terminate by-value cycle traversal",
         "physical_layout": "forbidden",
     }, "type-system semantic policy drifted")
 
@@ -487,6 +491,11 @@ def validate_source_projection(projection: dict[str, Any], core: dict[str, Any],
         "exact-value-struct-xi.agg.new-plus-xi.agg.set-sequence",
         "exact-value-struct-read-call-local-address",
         "exact-value-struct-read-receiver-place-load",
+        "exact-class-construction",
+        "class-identity-alias-requiring-independent-owner",
+        "exact-class-field-load",
+        "exact-class-field-place",
+        "atomic-owned-place-replacement",
         "function-return",
         "resolved-fallible-call-plus-xi.err.check-cfg",
         "xi.err.return-after-explicit-cleanup-cfg",
@@ -862,7 +871,7 @@ def generate_header(schema: dict[str, Any], digest: str) -> str:
 
 def generate_spec(schema: dict[str, Any], digest: str) -> str:
     lines = [
-        "# XrProgram format v1",
+        "# XrProgram format v2",
         "",
         "> AUTO-GENERATED by `tools/programgen/programgen.py`; do not edit.",
         f"> Schema SHA-256: `{digest}`.",
@@ -888,6 +897,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Ownership kinds: `{', '.join(type_system['ownership_kinds'])}`",
         f"- Copy contracts: `{', '.join(type_system['copy_contracts'])}`",
         f"- Aggregate shape: `{type_system['aggregate_shape']}`",
+        f"- Class-reference shape: `{type_system['class_reference_shape']}`",
         f"- Variant shape: `{type_system['variant_shape']}`",
         f"- View shape: `{type_system['view_shape']}`",
         f"- Callable shape: `{type_system['callable_shape']}`",
@@ -939,13 +949,20 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
 def generate_coverage(schema: dict[str, Any], digest: str) -> str:
     value = {
         "schema": "xray-program-format-coverage/1",
-        "format": "1.0",
+        "format": "2.0",
         "schema_sha256": digest,
         "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
         "structural_decoder": "COMPLETE",
-        "semantic_admission": "COMPLETE_TASK_297",
-        "vm_consumer": "COMPLETE_TASK_299",
-        "aot_consumer": "COMPLETE_TASK_300",
+        "semantic_admission": "OPEN",
+        "vm_consumer": "OPEN",
+        "aot_consumer": "OPEN",
+        "incomplete_operations": [
+            "core.class.construct",
+            "core.class.share",
+            "core.class.field_load",
+            "core.class.field_place",
+            "core.place.exchange",
+        ],
         "sections": [
             {
                 "stable_id": section["stable_id"],

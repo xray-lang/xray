@@ -6857,6 +6857,273 @@
       "expect": {
         "valid": true
       }
+    },
+    {
+      "id": "class-construct-valid",
+      "operation": "core.class.construct",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "field_types": [
+          "i64"
+        ],
+        "field_type_ownerships": [
+          "trivial"
+        ],
+        "operand_types": [
+          "i64"
+        ],
+        "operand_values": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "type_ownership": "affine",
+        "copy_contract": "explicit",
+        "result_ownership": "owner",
+        "consumed_before": [],
+        "consumed_after": []
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "class-construct-rejects-borrowed-affine-field",
+      "operation": "core.class.construct",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "field_types": [
+          "Leaf"
+        ],
+        "field_type_ownerships": [
+          "affine"
+        ],
+        "operand_types": [
+          "Leaf"
+        ],
+        "operand_values": [
+          "leaf"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "type_ownership": "affine",
+        "copy_contract": "explicit",
+        "result_ownership": "owner",
+        "consumed_before": [],
+        "consumed_after": [
+          "leaf"
+        ]
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "class-share-valid",
+      "operation": "core.class.share",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "operand_type": "Node",
+        "result_type": "Node",
+        "type_ownership": "affine",
+        "operand_category": "value",
+        "operand_ownership": "non-owner",
+        "source_rooted": true,
+        "result_category": "value",
+        "result_ownership": "owner",
+        "source_consumed": false,
+        "referent_identity_preserved": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "class-share-rejects-consumed-source",
+      "operation": "core.class.share",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "operand_type": "Node",
+        "result_type": "Node",
+        "type_ownership": "affine",
+        "operand_category": "value",
+        "operand_ownership": "owner",
+        "source_rooted": true,
+        "result_category": "value",
+        "result_ownership": "owner",
+        "source_consumed": true,
+        "referent_identity_preserved": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "class-share-rejects-unrooted-borrow",
+      "operation": "core.class.share",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "operand_type": "Node",
+        "result_type": "Node",
+        "type_ownership": "affine",
+        "operand_category": "value",
+        "operand_ownership": "non-owner",
+        "source_rooted": false,
+        "result_category": "value",
+        "result_ownership": "owner",
+        "source_consumed": false,
+        "referent_identity_preserved": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "class-field-load-valid",
+      "operation": "core.class.field_load",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "operand_type": "Box",
+        "class_type": "Box",
+        "operand_category": "value",
+        "field_types": [
+          "i64"
+        ],
+        "field_type_ownerships": [
+          "trivial"
+        ],
+        "field_ordinal": 0,
+        "result_type": "i64",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "receiver_rooted": true,
+        "semantics": "value-snapshot"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "class-field-load-rejects-unrooted-affine-borrow",
+      "operation": "core.class.field_load",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "operand_type": "Box",
+        "class_type": "Box",
+        "operand_category": "value",
+        "field_types": [
+          "Leaf"
+        ],
+        "field_type_ownerships": [
+          "affine"
+        ],
+        "field_ordinal": 0,
+        "result_type": "Leaf",
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "receiver_rooted": false,
+        "semantics": "rooted-borrow"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "class-field-place-valid",
+      "operation": "core.class.field_place",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "operand_type": "Box",
+        "class_type": "Box",
+        "operand_category": "value",
+        "field_types": [
+          "Leaf"
+        ],
+        "field_ordinal": 0,
+        "result_type": "Leaf",
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "receiver_rooted": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "class-field-place-rejects-bad-ordinal",
+      "operation": "core.class.field_place",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "class-reference",
+        "operand_type": "Box",
+        "class_type": "Box",
+        "operand_category": "value",
+        "field_types": [
+          "Leaf"
+        ],
+        "field_ordinal": 1,
+        "result_type": "Leaf",
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "receiver_rooted": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-exchange-affine-valid",
+      "operation": "core.place.exchange",
+      "kind": "contract",
+      "actual": {
+        "type_ownership": "affine",
+        "place_type": "Leaf",
+        "replacement_type": "Leaf",
+        "result_type": "Leaf",
+        "place_category": "place",
+        "replacement_category": "value",
+        "result_category": "value",
+        "replacement_ownership": "owner",
+        "result_ownership": "owner",
+        "replacement_consumed": true,
+        "atomic": true,
+        "may_transfer_control": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-exchange-rejects-borrowed-affine-replacement",
+      "operation": "core.place.exchange",
+      "kind": "contract",
+      "actual": {
+        "type_ownership": "affine",
+        "place_type": "Leaf",
+        "replacement_type": "Leaf",
+        "result_type": "Leaf",
+        "place_category": "place",
+        "replacement_category": "value",
+        "result_category": "value",
+        "replacement_ownership": "non-owner",
+        "result_ownership": "owner",
+        "replacement_consumed": true,
+        "atomic": true,
+        "may_transfer_control": false
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

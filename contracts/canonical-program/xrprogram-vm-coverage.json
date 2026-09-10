@@ -24,7 +24,7 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 57,
+  "operation_count": 62,
   "operations": [
     {
       "stable_id": 1,
@@ -481,7 +481,54 @@
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",
       "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 142,
+      "spelling": "core.class.construct",
+      "vm": "NOT_YET_ACTIVE",
+      "baseline_view": "NOT_YET_ACTIVE",
+      "fixed_row_view": "NOT_YET_ACTIVE",
+      "differential_oracle": null
+    },
+    {
+      "stable_id": 143,
+      "spelling": "core.class.share",
+      "vm": "NOT_YET_ACTIVE",
+      "baseline_view": "NOT_YET_ACTIVE",
+      "fixed_row_view": "NOT_YET_ACTIVE",
+      "differential_oracle": null
+    },
+    {
+      "stable_id": 144,
+      "spelling": "core.class.field_load",
+      "vm": "NOT_YET_ACTIVE",
+      "baseline_view": "NOT_YET_ACTIVE",
+      "fixed_row_view": "NOT_YET_ACTIVE",
+      "differential_oracle": null
+    },
+    {
+      "stable_id": 145,
+      "spelling": "core.class.field_place",
+      "vm": "NOT_YET_ACTIVE",
+      "baseline_view": "NOT_YET_ACTIVE",
+      "fixed_row_view": "NOT_YET_ACTIVE",
+      "differential_oracle": null
+    },
+    {
+      "stable_id": 146,
+      "spelling": "core.place.exchange",
+      "vm": "NOT_YET_ACTIVE",
+      "baseline_view": "NOT_YET_ACTIVE",
+      "fixed_row_view": "NOT_YET_ACTIVE",
+      "differential_oracle": null
     }
+  ],
+  "incomplete_operations": [
+    "core.class.construct",
+    "core.class.share",
+    "core.class.field_load",
+    "core.class.field_place",
+    "core.place.exchange"
   ],
   "profile_matrix": [
     "lp64-x86_64-windows",

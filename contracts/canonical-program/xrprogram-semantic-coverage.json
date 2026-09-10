@@ -1,8 +1,8 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "3e1a819236cf29266adc940d6b642aa4be3d794f4a7be284f2dbc2892167a323",
-  "program_schema_sha256": "54ef7d8da78858543453d58e219cf818d7c9c7a3cfa8b96deb88986b3fd49bfc",
+  "core_spec_semantic_sha256": "482b2ea7f575cf3eeff773b5095e1c4c575c4903c9abf70dc2c65b06e3b5a713",
+  "program_schema_sha256": "8a42de2b883d4bc4b5f37217751e5d6e1200d083303e5fa003d155bc96c79086",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "execution_budgets": [
@@ -10,7 +10,7 @@
     "call-depth",
     "aggregate-value-cells"
   ],
-  "operation_count": 57,
+  "operation_count": 62,
   "operations": [
     {
       "stable_id": 1,
@@ -467,7 +467,54 @@
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",
       "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 142,
+      "spelling": "core.class.construct",
+      "decoder": "NOT_YET_ACTIVE",
+      "verifier": "NOT_YET_ACTIVE",
+      "evaluator": "NOT_YET_ACTIVE",
+      "positive_kat": null
+    },
+    {
+      "stable_id": 143,
+      "spelling": "core.class.share",
+      "decoder": "NOT_YET_ACTIVE",
+      "verifier": "NOT_YET_ACTIVE",
+      "evaluator": "NOT_YET_ACTIVE",
+      "positive_kat": null
+    },
+    {
+      "stable_id": 144,
+      "spelling": "core.class.field_load",
+      "decoder": "NOT_YET_ACTIVE",
+      "verifier": "NOT_YET_ACTIVE",
+      "evaluator": "NOT_YET_ACTIVE",
+      "positive_kat": null
+    },
+    {
+      "stable_id": 145,
+      "spelling": "core.class.field_place",
+      "decoder": "NOT_YET_ACTIVE",
+      "verifier": "NOT_YET_ACTIVE",
+      "evaluator": "NOT_YET_ACTIVE",
+      "positive_kat": null
+    },
+    {
+      "stable_id": 146,
+      "spelling": "core.place.exchange",
+      "decoder": "NOT_YET_ACTIVE",
+      "verifier": "NOT_YET_ACTIVE",
+      "evaluator": "NOT_YET_ACTIVE",
+      "positive_kat": null
     }
+  ],
+  "incomplete_operations": [
+    "core.class.construct",
+    "core.class.share",
+    "core.class.field_load",
+    "core.class.field_place",
+    "core.place.exchange"
   ],
   "negative_mutations": [
     "core-spec-identity",

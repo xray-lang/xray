@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop, local place load/store, nominal field-place projection, and affine place take are complete Wave 3 slices; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; canonical bool not/and/or preserve source-owned short-circuit policy; existential pack/test/project and explicit owned-to-READ reborrow, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices; source integration is complete for pack and reborrow but the other rows remain IN_PROGRESS until their source domains and old-owner deletion close; provider.call now has real-source clock and pipe publication plus exact success/refusal executor evidence, but remains IN_PROGRESS until the complete provider-backed source surface, trap continuations, and old-owner deletion close; trap and profile query remain frozen for their owning waves."
+    "note": "All 62 operation laws and normative KATs are frozen. The five class-reference and atomic place operations have complete contract-oracle coverage but remain explicitly NOT_YET_ACTIVE in decoder, verifier, evaluator, VM, AOT, and source execution."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -27,15 +27,22 @@
     "note": "W2 owns canonical bytes and bounded structural decode. W3 owns typed admission; executor coverage remains frozen for W5-W7."
   },
   "semantic_admission_stage": {
-    "status": "COMPLETE",
+    "status": "OPEN",
     "owner_task": 297,
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 55 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; explicit reborrow proves a same-interface scoped READ view is paired with one live MOVE/OWNED_STORAGE owner across every SSA edge; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; coroutine suspension now carries an explicit cancel continuation ending in a distinct terminal cancellation outcome; the single typed provider-call operation derives each admitted logical shape from Program types and uses exact dense provider requirement and operation references. Source publication is active only for registry-backed, structurally admitted clock and pipe routes; other provider-backed source shapes remain fail closed."
+    "incomplete_operations": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ],
+    "note": "The original 57 operations retain bounded verification and independent reference evaluation. The five newly frozen operations are rejected before semantic dispatch until their execution slices become active."
   },
   "vm_stage": {
-    "status": "COMPLETE",
+    "status": "OPEN",
     "owner_task": 299,
     "input_authority": "XrValidatedProgram",
     "execution_authority": "XrInstance",
@@ -45,17 +52,31 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 55 registered operations execute in the independent typed VM and match the reference evaluator. Suspended sessions select either the resume edge or the explicit cancellation continuation, recursively cancelling an active sealed child before publishing cancellation. Provider operations use only Program-typed, ABI-matched, lease-pinned private adapters; output is compared byte-for-byte across the reference evaluator and both VM decode policies. Private existential/callable carriers, including the nonowning READ reborrow view, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "incomplete_operations": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ],
+    "note": "The original 57 operations retain differential VM coverage. The five newly frozen operations have no VM handler and remain NOT_YET_ACTIVE."
   },
   "aot_stage": {
-    "status": "COMPLETE",
+    "status": "OPEN",
     "owner_task": 300,
     "input_authority": "XrValidatedProgram",
     "compile_authority": "XrValidatedProgram + XrTargetProfile",
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 55 registered operations lower through an independently verified BackendIR into portable C11 without a live XrInstance or lease. Native coroutine descriptors expose distinct step and cancel callbacks; generated cancellation recursively closes an active child frame and follows the Program cancel edge. Embedded AOT exposes Program-typed provider callbacks; real-source clock fixtures prove exact success and one-event refusal-to-trap normalization, while hosted standalone output and pipe-open bind backend-private host adapters and unsupported freestanding providers fail closed. Existential and callable carriers, including the nonowning READ reborrow copy, remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixtures link no VM, compiler, program loader, or AOT toolchain."
+    "incomplete_operations": [
+      "core.class.construct",
+      "core.class.share",
+      "core.class.field_load",
+      "core.class.field_place",
+      "core.place.exchange"
+    ],
+    "note": "The original 57 operations retain verified BackendIR and portable C11 lowering. The five newly frozen operations have no BackendIR admission or emitter case and remain NOT_YET_ACTIVE."
   },
   "operations": [
     {
@@ -1135,6 +1156,96 @@
         "tests/unit/analysis/test_xglobal_summary.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot.c"
+      ]
+    },
+    {
+      "id": "core.class.construct",
+      "core_spec_contract": "construct one affine class-reference identity from exact declaration-ordered field values",
+      "program_encoding": "one CLASS_REFERENCE result TypeId and exact field operands; representation and allocation remain private to each backend",
+      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
+      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "source_producer": "the structural projection is frozen, but production fails closed until recursive source identities gain two-stage semantic-key stabilization and cycle-safe copy-contract fixed-point analysis in the execution slice",
+      "old_owner_deletion": "aggregate plus nominal-class encoding is forbidden and has no compatibility alias",
+      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "xisa/program/schema.json",
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_verify.c"
+      ]
+    },
+    {
+      "id": "core.class.share",
+      "core_spec_contract": "create an independent affine owner for the same class-reference identity without consuming the source owner",
+      "program_encoding": "one CLASS_REFERENCE operand and result with the same exact TypeId",
+      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
+      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "old_owner_deletion": "generic aggregate copy is not a class identity-sharing path",
+      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "xisa/program/schema.json",
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_verify.c"
+      ]
+    },
+    {
+      "id": "core.class.field_load",
+      "core_spec_contract": "load one declared class field as an independent scalar snapshot or an owner-rooted affine borrow",
+      "program_encoding": "one CLASS_REFERENCE owner operand plus one declaration-order field ordinal",
+      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
+      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "old_owner_deletion": "aggregate projection and raw representation offsets cannot observe class fields",
+      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "xisa/program/schema.json",
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_verify.c"
+      ]
+    },
+    {
+      "id": "core.class.field_place",
+      "core_spec_contract": "derive one mutable field place rooted in a live exact class-reference owner",
+      "program_encoding": "one CLASS_REFERENCE owner place plus one declaration-order field ordinal",
+      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
+      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "old_owner_deletion": "generic aggregate place projection is not a class-field authority",
+      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "xisa/program/schema.json",
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_verify.c"
+      ]
+    },
+    {
+      "id": "core.place.exchange",
+      "core_spec_contract": "atomically replace one owned place value and return the displaced owner without an observable empty state",
+      "program_encoding": "one exact typed place, one exact typed replacement owner, and one exact typed displaced result",
+      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
+      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "old_owner_deletion": "take-then-store is not retained as a non-atomic compatibility lowering",
+      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "xisa/program/schema.json",
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_verify.c"
       ]
     }
   ],

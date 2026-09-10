@@ -5,7 +5,7 @@
   "execution_authority": "not-an-AOT-compiler-input",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@1",
-  "operation_count": 57,
+  "operation_count": 62,
   "operations": [
     {
       "stable_id": 1,
@@ -462,7 +462,54 @@
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",
       "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 142,
+      "spelling": "core.class.construct",
+      "aot": "NOT_YET_ACTIVE",
+      "backend_ir": "NOT_YET_ACTIVE",
+      "portable_c11": "NOT_YET_ACTIVE",
+      "translation_validation": null
+    },
+    {
+      "stable_id": 143,
+      "spelling": "core.class.share",
+      "aot": "NOT_YET_ACTIVE",
+      "backend_ir": "NOT_YET_ACTIVE",
+      "portable_c11": "NOT_YET_ACTIVE",
+      "translation_validation": null
+    },
+    {
+      "stable_id": 144,
+      "spelling": "core.class.field_load",
+      "aot": "NOT_YET_ACTIVE",
+      "backend_ir": "NOT_YET_ACTIVE",
+      "portable_c11": "NOT_YET_ACTIVE",
+      "translation_validation": null
+    },
+    {
+      "stable_id": 145,
+      "spelling": "core.class.field_place",
+      "aot": "NOT_YET_ACTIVE",
+      "backend_ir": "NOT_YET_ACTIVE",
+      "portable_c11": "NOT_YET_ACTIVE",
+      "translation_validation": null
+    },
+    {
+      "stable_id": 146,
+      "spelling": "core.place.exchange",
+      "aot": "NOT_YET_ACTIVE",
+      "backend_ir": "NOT_YET_ACTIVE",
+      "portable_c11": "NOT_YET_ACTIVE",
+      "translation_validation": null
     }
+  ],
+  "incomplete_operations": [
+    "core.class.construct",
+    "core.class.share",
+    "core.class.field_load",
+    "core.class.field_place",
+    "core.place.exchange"
   ],
   "pass_contract": {
     "ordinary": "pre-post-invariant-plus-preservation-set",

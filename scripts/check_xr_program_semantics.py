@@ -62,12 +62,22 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
         {
             "stable_id": row["stable_id"],
             "spelling": row["spelling"],
-            "decoder": "COMPLETE",
-            "verifier": "COMPLETE",
-            "evaluator": "COMPLETE",
-            "positive_kat": "tests/unit/program/test_xr_program_verify.c",
+            "decoder": row["coverage"]["decoder"]["status"],
+            "verifier": row["coverage"]["verifier"]["status"],
+            "evaluator": row["coverage"]["evaluator"]["status"],
+            "positive_kat": (
+                "tests/unit/program/test_xr_program_verify.c"
+                if all(row["coverage"][consumer]["status"] == "COMPLETE"
+                       for consumer in ("decoder", "verifier", "evaluator"))
+                else None
+            ),
         }
         for row in registry["operations"]
+    ]
+    incomplete = [
+        row["spelling"] for row in registry["operations"]
+        if any(row["coverage"][consumer]["status"] != "COMPLETE"
+               for consumer in ("decoder", "verifier", "evaluator"))
     ]
     return {
         "schema": "xray-program-semantic-coverage/1",
@@ -81,6 +91,7 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
         "execution_budgets": ["steps", "call-depth", "aggregate-value-cells"],
         "operation_count": len(operations),
         "operations": operations,
+        "incomplete_operations": incomplete,
         "negative_mutations": [
             "core-spec-identity",
             "effect-mask",
@@ -117,15 +128,18 @@ def validate_sources(registry: dict[str, Any], sources: dict[Path, str]) -> None
             )
     for row in registry["operations"]:
         token = enum_token(row["spelling"])
-        require(
-            re.search(rf"\bcase\s+{re.escape(token)}\s*:", verifier) is not None,
-            f"verifier has no explicit case for {row['spelling']}",
-        )
-        require(
-            re.search(rf"\bcase\s+{re.escape(token)}\s*:", evaluator) is not None,
-            f"evaluator has no explicit case for {row['spelling']}",
-        )
+        verifier_case = re.search(rf"\bcase\s+{re.escape(token)}\s*:", verifier) is not None
+        evaluator_case = re.search(rf"\bcase\s+{re.escape(token)}\s*:", evaluator) is not None
+        verifier_active = row["coverage"]["verifier"]["status"] == "COMPLETE"
+        evaluator_active = row["coverage"]["evaluator"]["status"] == "COMPLETE"
+        require(verifier_case == verifier_active,
+                f"verifier lifecycle disagrees with registry for {row['spelling']}")
+        require(evaluator_case == evaluator_active,
+                f"evaluator lifecycle disagrees with registry for {row['spelling']}")
         require(token in test, f"positive test has no operation token for {row['spelling']}")
+    require("spec->verifier_status != XR_CORE_COVERAGE_COMPLETE" in verifier and
+            "decoder_status !=" in verifier,
+            "inactive operations are not rejected before semantic dispatch")
     require("XrValidatedProgram" in verifier, "verifier does not construct the typed state")
     require("XrProgramDiagnosticKind" in verifier, "verifier has no stable diagnostic kind")
     require("max_work" in verifier, "verifier has no explicit work budget")

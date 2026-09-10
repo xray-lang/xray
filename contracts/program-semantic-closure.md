@@ -378,7 +378,7 @@ registrations inside cold handlers. Normal exits close active boundaries; an exp
 may abandon an outer closed boundary and must preserve its reason. Cancellation owner payload
 exactness is checked only after live-in propagation reaches its fixed point.
 
-anchor-sha256: CMakeLists.txt 2e426827b5090782edf47da86e6ccbebe63631e6038f1f8fb1390057e6e0e352
+anchor-sha256: CMakeLists.txt 5cbe10e2f0599c8f4db286797f119e4fdea855f12adea2f89e4ccd420543511b
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d

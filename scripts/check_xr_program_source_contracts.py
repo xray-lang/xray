@@ -584,6 +584,13 @@ def validate(root: Path) -> None:
     canonical_coroutine_indirect_call = {"core.coroutine.call.indirect"}
     canonical_coroutine_suspend = {"core.coroutine.suspend"}
     canonical_coroutine_cancel = {"core.cancel.publish"}
+    inactive_class_contracts = {
+        "core.class.construct",
+        "core.class.share",
+        "core.class.field_load",
+        "core.class.field_place",
+        "core.place.exchange",
+    }
     wave_five_provider = {"core.provider.call"}
     wave_five_reborrow = {"core.existential.reborrow_read"}
     canonical_source_output = {"core.output.group.i64"}
@@ -650,6 +657,8 @@ def validate(root: Path) -> None:
            for operation in canonical_source_output},
         **{operation: "COMPLETE_W7_WAVE5_BOOLEAN" for operation in canonical_boolean},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
+        **{operation: "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE"
+           for operation in inactive_class_contracts},
     }
     require(set(expected_status) == registry_ids,
             "source gate status partition does not cover the CoreSpec registry")
@@ -666,6 +675,20 @@ def validate(root: Path) -> None:
         for relative in evidence:
             require(isinstance(relative, str) and (root / relative).is_file(),
                     f"active operation has missing evidence: {operation}: {relative}")
+
+    expected_incomplete = [
+        "core.class.construct",
+        "core.class.share",
+        "core.class.field_load",
+        "core.class.field_place",
+        "core.place.exchange",
+    ]
+    for stage in ("semantic_admission_stage", "vm_stage", "aot_stage"):
+        stage_row = matrix.get(stage)
+        require(isinstance(stage_row, dict) and stage_row.get("status") == "OPEN",
+                f"{stage} must remain OPEN while operations are inactive")
+        require(stage_row.get("incomplete_operations") == expected_incomplete,
+                f"{stage} incomplete operation set drifted")
 
 
 def self_test(root: Path) -> None:

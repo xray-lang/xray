@@ -43,6 +43,7 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_VIEW = 18,
     XR_PROGRAM_TYPE_KIND_CALLABLE = 19,
     XR_PROGRAM_TYPE_KIND_EXISTENTIAL = 20,
+    XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE = 21,
 } XrProgramTypeKind;
 
 typedef struct XrCoreIrKey {
@@ -55,6 +56,7 @@ typedef enum XrCoreIrTypeKind {
     XR_CORE_IR_TYPE_VIEW = 3,
     XR_CORE_IR_TYPE_CALLABLE = 4,
     XR_CORE_IR_TYPE_EXISTENTIAL = 5,
+    XR_CORE_IR_TYPE_CLASS_REFERENCE = 6,
 } XrCoreIrTypeKind;
 
 typedef enum XrCoreIrNominalKind {

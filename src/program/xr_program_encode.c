@@ -505,12 +505,18 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
                         : type->kind == XR_CORE_IR_TYPE_VARIANT  ? XR_PROGRAM_TYPE_KIND_VARIANT
                         : type->kind == XR_CORE_IR_TYPE_VIEW     ? XR_PROGRAM_TYPE_KIND_VIEW
                         : type->kind == XR_CORE_IR_TYPE_CALLABLE ? XR_PROGRAM_TYPE_KIND_CALLABLE
-                                                                 : XR_PROGRAM_TYPE_KIND_EXISTENTIAL;
+                        : type->kind == XR_CORE_IR_TYPE_EXISTENTIAL
+                            ? XR_PROGRAM_TYPE_KIND_EXISTENTIAL
+                            : XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE;
         buffer_put_uvar(buffer, kind);
         buffer_put_uvar(buffer, type->ownership);
         buffer_put_uvar(buffer, type->copy_contract);
         buffer_put_bytes(buffer, type->key.bytes, sizeof(type->key.bytes));
-        if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
+        if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+            buffer_put_uvar(buffer, type->field_count);
+            for (uint32_t field = 0; field < type->field_count; ++field)
+                buffer_put_uvar(buffer, type->field_types[field]);
+        } else if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
             buffer_put_uvar(buffer, type->nominal_kind);
             buffer_put_uvar(buffer, type->field_count);
             for (uint32_t field = 0; field < type->field_count; ++field)

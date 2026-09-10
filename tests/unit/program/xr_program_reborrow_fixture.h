@@ -59,9 +59,9 @@ xr_program_reborrow_fixture_write_mutated(XrProgramReborrowFixtureMutation mutat
             .key = xr_reborrow_fixture_key("reborrow:type:box"),
             .local_id = XR_REBORROW_FIXTURE_BOX_TYPE,
             .kind = XR_CORE_IR_TYPE_AGGREGATE,
-            .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
-            .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
-            .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+            .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+            .ownership = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+            .copy_contract = XR_CORE_IR_COPY_TRIVIAL,
         },
         {
             .key = xr_reborrow_fixture_key("reborrow:type:owned"),
@@ -99,7 +99,7 @@ xr_program_reborrow_fixture_write_mutated(XrProgramReborrowFixtureMutation mutat
     XrCoreIrConformanceInput conformance = {
         .key = xr_reborrow_fixture_key("reborrow:conformance:box-reader"),
         .implementor_type_id = XR_REBORROW_FIXTURE_BOX_TYPE,
-        .implementor_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .implementor_kind = XR_CORE_IR_NOMINAL_STRUCT,
         .interface_key = interface_key,
         .slot_functions = conformance_slots,
         .slot_count = 1u,
@@ -269,7 +269,7 @@ xr_program_reborrow_fixture_write_mutated(XrProgramReborrowFixtureMutation mutat
         .result = box,
         .result_type_id = XR_REBORROW_FIXTURE_BOX_TYPE,
         .result_category = XR_CORE_IR_VALUE,
-        .result_ownership = XR_CORE_IR_OWNER,
+        .result_ownership = XR_CORE_IR_NON_OWNER,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
     entry_instructions[entry_instruction_count++] = (XrCoreIrInstructionInput) {

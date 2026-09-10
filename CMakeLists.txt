@@ -677,7 +677,7 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_schema_gen.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v1.md
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v2.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-coverage.json
     COMMENT "programgen: verifying canonical XrProgram schema projections"
     VERBATIM
