@@ -7415,6 +7415,99 @@ TEST(global_evidence_build_skips_imported_package_module_rows) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_requires_selected_module_to_own_both_private_import_decls) {
+    setup_parser_session();
+    AstNode *library = xr_parse(g_session, "fn origin<T>(value: T) -> T { return value }\n"
+                                          "export fn specialized(value: i64) -> i64 { return value }\n");
+    AstNode *decoy = xr_parse(g_session, "fn origin<T>(value: T) -> T { return value }\n"
+                                        "export fn specialized(value: i64) -> i64 { return value }\n");
+    AstNode *entry = xr_parse(g_session, "import { specialized as hidden } from library\n");
+    ASSERT_NOT_NULL(library);
+    ASSERT_NOT_NULL(decoy);
+    ASSERT_NOT_NULL(entry);
+    ASSERT_EQ_UINT(library->as.program.count, 2u);
+    ASSERT_EQ_UINT(entry->as.program.count, 1u);
+
+    AstNode *generic_decl = library->as.program.statements[0];
+    AstNode *target_decl = library->as.program.statements[1];
+    AstNode *decoy_generic_decl = decoy->as.program.statements[0];
+    AstNode *decoy_target_decl = decoy->as.program.statements[1];
+    ImportMember *member = &entry->as.program.statements[0]->as.import_stmt.members[0];
+    XrTypeRef *type_args[1] = {target_decl->as.function_decl.params[0]->type};
+    XaGenericSpecializationFact fact = {
+        .generic_decl = generic_decl,
+        .declaration_type_args = type_args,
+        .declaration_type_arg_count = 1u,
+        .effect = XA_GENERIC_SPECIALIZATION_EFFECT_NONE,
+    };
+
+    XrModuleSpec specs[3];
+    int entry_deps[1] = {0};
+    int topo_order[3] = {0, 1, 2};
+    memset(specs, 0, sizeof(specs));
+    for (uint32_t index = 0u; index < 3u; ++index)
+        init_memory_module_spec(&specs[index]);
+    specs[0].canonical = "memory-module-v1:id=25:private-import-library-v1";
+    specs[0].source_path = "private-import-library.xr";
+    specs[0].ast = library;
+    specs[1].canonical = "memory-module-v1:id=23:private-import-decoy-v1";
+    specs[1].source_path = "private-import-decoy.xr";
+    specs[1].ast = decoy;
+    specs[2].canonical = "memory-module-v1:id=23:private-import-entry-v1";
+    specs[2].source_path = "private-import-entry.xr";
+    specs[2].ast = entry;
+    specs[2].dep_indices = entry_deps;
+    specs[2].dep_count = 1;
+    XrModuleGraph graph = {
+        .specs = specs,
+        .spec_count = 3,
+        .topo_order = topo_order,
+        .topo_count = 3,
+        .entry_index = 2,
+    };
+
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, specs[0].source_path, library);
+    xa_analyzer_analyze(analyzer, specs[1].source_path, decoy);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+    ASSERT_TRUE(xa_analyzer_set_generic_specialization(analyzer, target_decl, &fact));
+
+    member->has_private_target = true;
+    member->private_target_spec_index = 0;
+    member->private_generic_decl = generic_decl;
+    member->private_target_decl = target_decl;
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    xg_global_evidence_free(&evidence);
+
+    fact.generic_decl = generic_decl;
+    ASSERT_TRUE(xa_analyzer_set_generic_specialization(analyzer, decoy_target_decl, &fact));
+    member->private_target_decl = decoy_target_decl;
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_EQ_UINT(evidence.nmodules, 0u);
+    ASSERT_NULL(evidence.modules);
+
+    fact.generic_decl = decoy_generic_decl;
+    ASSERT_TRUE(xa_analyzer_set_generic_specialization(analyzer, target_decl, &fact));
+    member->private_generic_decl = decoy_generic_decl;
+    member->private_target_decl = target_decl;
+    ASSERT_FALSE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_EQ_UINT(evidence.nmodules, 0u);
+    ASSERT_NULL(evidence.modules);
+
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(entry);
+    xr_program_destroy(decoy);
+    xr_program_destroy(library);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     setup_parser_session();
     const char *source = "fn callee(x: i64) -> i64 { return x + 1 }\n"
@@ -16041,6 +16134,7 @@ RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
 RUN_TEST(global_evidence_build_key_uses_explicit_imported_summary_hash);
 RUN_TEST(global_evidence_build_skips_imported_package_module_rows);
+RUN_TEST(global_evidence_requires_selected_module_to_own_both_private_import_decls);
 RUN_TEST(global_evidence_producer_resolves_direct_function_callsite_targets);
 RUN_TEST(global_evidence_producer_uses_stable_source_identity);
 RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);

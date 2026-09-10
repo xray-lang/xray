@@ -362,6 +362,15 @@ Loading and atomically publishing such a module does not grant PSC,
 SemanticPlan, TargetPlan, XTP, typed-VM, or AOT admission. Those stages still
 require the independently verified program authority frozen above.
 
+Compiler-private specialization imports carry graph-local declaration
+authority, not a hidden public export. The selected module specification must
+own both the exact source generic declaration and the exact specialized target
+as unique top-level AST nodes. The target must also carry an analyzer-owned
+specialization fact that points back to that source declaration. A matching
+name, shape, import coordinate, or declaration pointer owned by another module
+cannot authorize the binding; analysis and global-evidence production both
+fail closed before executable call resolution.
+
 ## Digest anchors
 
 Static cleanup closure is computed over the complete registration-derived Xi graph, including
@@ -372,8 +381,8 @@ exactness is checked only after live-in propagation reaches its fixed point.
 anchor-sha256: CMakeLists.txt 2e426827b5090782edf47da86e6ccbebe63631e6038f1f8fb1390057e6e0e352
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
-anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1
-anchor-sha256: src/module/xmodule_graph.c 1477680db64b48d49f7a8d09405964aa6e7ab5328c37712b1d490d248f8159fc
+anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
+anchor-sha256: src/module/xmodule_graph.c df2a1ef9ff63dee28badae0307f1a1279f6e8b6697b296ec63275a10cde1ba4c
 anchor-sha256: src/frontend/parser/xparse.c 6057b2b9614e1cff0acee51874645a7f03bd3b7957b54fc3ece7299993360642
 anchor-sha256: src/frontend/parser/xparse_decl.c 3f5c544c32fd42a0b66a2d6095e0986dc800cdbf8bc94f8713fb10ab36090ef2
 anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec

@@ -12526,11 +12526,28 @@ static bool add_import_contract(XgProducer *p, XgModuleId module_id, const AstNo
         const char *local_name = member->alias ? member->alias : member->name;
         XgModuleId exact_target_module_id = XG_NO_ID;
         if (member->has_private_target) {
+            XaGenericSpecializationFact fact = {0};
             if (!p->module_graph || member->private_target_spec_index < 0 ||
-                member->private_target_spec_index >= p->module_graph->spec_count ||
-                !member->private_target_decl)
+                member->private_target_spec_index >= p->module_graph->spec_count || !p->analyzer ||
+                !member->name || !member->private_generic_decl || !member->private_target_decl)
                 return false;
             const XrModuleSpec *target = &p->module_graph->specs[member->private_target_spec_index];
+            const char *target_name = member->private_target_decl->type == AST_FUNCTION_DECL
+                                          ? member->private_target_decl->as.function_decl.name
+                                      : member->private_target_decl->type == AST_CLASS_DECL
+                                          ? member->private_target_decl->as.class_decl.name
+                                      : member->private_target_decl->type == AST_STRUCT_DECL
+                                          ? member->private_target_decl->as.struct_decl.name
+                                          : NULL;
+            if (!target_name || strcmp(target_name, member->name) != 0 ||
+                member->private_target_decl == member->private_generic_decl ||
+                !xr_module_spec_owns_top_level_decl(target, member->private_generic_decl) ||
+                !xr_module_spec_owns_top_level_decl(target, member->private_target_decl) ||
+                !xa_analyzer_get_generic_specialization(p->analyzer, member->private_target_decl,
+                                                        &fact) ||
+                !xa_generic_specialization_fact_valid(&fact) ||
+                fact.generic_decl != member->private_generic_decl)
+                return false;
             exact_target_module_id = producer_module_id_for_identity(p, target->canonical);
             if (exact_target_module_id == XG_NO_ID)
                 return false;

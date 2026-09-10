@@ -58,6 +58,18 @@ void xr_module_source_fingerprint(const char *source, XrFingerprint *out) {
     xr_sha256_final(&context, out->bytes);
 }
 
+bool xr_module_spec_owns_top_level_decl(const XrModuleSpec *spec, const AstNode *decl) {
+    if (!spec || !decl || !spec->ast || spec->ast->type != AST_PROGRAM)
+        return false;
+    uint32_t matches = 0u;
+    const ProgramNode *program = &spec->ast->as.program;
+    for (int index = 0; index < program->count; ++index) {
+        if (program->statements[index] == decl)
+            ++matches;
+    }
+    return matches == 1u;
+}
+
 /* ========== Lifecycle ========== */
 
 XR_FUNC XrModuleGraph *xr_module_graph_new(XrCompilerSession *compiler_session,

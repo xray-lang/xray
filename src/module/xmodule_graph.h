@@ -170,6 +170,12 @@ XR_FUNC int xr_module_graph_find_source(const XrModuleGraph *g, const char *sour
 XR_FUNC int xr_module_graph_find_named_dependency(const XrModuleGraph *g, const char *importer_path,
                                                   const char *specifier);
 
+/* True only when `decl` is one exact top-level declaration owned by `spec`.
+ * Compiler-private
+ * bindings use pointer identity here; names are not authority. */
+XR_FUNC bool xr_module_spec_owns_top_level_decl(const XrModuleSpec *spec,
+                                                const struct AstNode *decl);
+
 /* Initialize every dependency exactly once in topological order and return a
  * table indexed by topo position. The caller owns the table, but not its
  * module pointers. A failed dependency aborts the whole preload. */

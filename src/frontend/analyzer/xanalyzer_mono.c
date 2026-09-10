@@ -2596,10 +2596,7 @@ static bool mono_find_private_target(XaAnalyzer *analyzer,
         AstNode *root = graph->specs[spec_index].ast;
         if (!root || root->type != AST_PROGRAM)
             continue;
-        bool owns_generic = false;
-        for (int i = 0; i < root->as.program.count; ++i)
-            owns_generic |= root->as.program.statements[i] == identity->generic_decl;
-        if (!owns_generic)
+        if (!xr_module_spec_owns_top_level_decl(&graph->specs[spec_index], identity->generic_decl))
             continue;
         for (int i = 0; i < root->as.program.count; ++i) {
             AstNode *candidate = root->as.program.statements[i];

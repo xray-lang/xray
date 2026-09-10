@@ -3444,6 +3444,9 @@ static XaSymbol *resolve_private_import_target(XaAnalyzer *analyzer, const Impor
         !member->private_generic_decl || !member->private_target_decl)
         return NULL;
     XrModuleSpec *target = &graph->specs[member->private_target_spec_index];
+    if (!xr_module_spec_owns_top_level_decl(target, member->private_generic_decl) ||
+        !xr_module_spec_owns_top_level_decl(target, member->private_target_decl))
+        return NULL;
     XaSymbol *symbol = target->export_symbols
                            ? (XaSymbol *) xr_hashmap_get(target->export_symbols, member->name)
                            : NULL;
