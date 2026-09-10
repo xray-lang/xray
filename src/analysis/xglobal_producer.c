@@ -1213,21 +1213,6 @@ static bool generic_specialization_effect_to_xglobal(XaGenericSpecializationEffe
     }
 }
 
-static uint64_t hash_generic_receiver_type_key(XgProducer *producer, const AstNode *owner_decl,
-                                               XrTypeRef **type_args, int type_arg_count) {
-    const char *owner_name = generic_receiver_owner_name(owner_decl);
-    uint64_t h = XR_FNV64_OFFSET_BASIS;
-    if (!owner_name)
-        return 0;
-    h = fold_u64(h, UINT64_C(0x5847524356545950)); /* "XGRCVTYP" */
-    h = fold_u64(h, (uint64_t) owner_decl->type);
-    h = fold_bytes(h, owner_name, strlen(owner_name));
-    h = fold_u64(h, (uint64_t) type_arg_count);
-    for (int i = 0; i < type_arg_count; ++i)
-        h = hash_exact_generic_arg(h, producer, type_args ? type_args[i] : NULL);
-    return h ? h : 1;
-}
-
 typedef struct XgGenericInstInput {
     const char *name;
     const AstNode *receiver_owner_decl;
@@ -1239,6 +1224,7 @@ typedef struct XgGenericInstInput {
     XgFuncId origin_func_id;
     XgMethodId origin_method_id;
     XgClassId origin_class_id;
+    uint64_t origin_nominal_key;
     XgClassId receiver_class_id;
     XgCallsiteId root_callsite_id;
     uint32_t source_span_id;
@@ -1256,6 +1242,8 @@ static bool producer_fill_generic_inst_identity(XgProducer *producer, XgGenericI
         input->specialization_effect > XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW)
         return false;
     is_method = input->kind == XG_GENERIC_INST_METHOD;
+    if (((input->kind == XG_GENERIC_INST_CLASS || is_method) != (input->origin_nominal_key != 0)))
+        return false;
     if (is_method) {
         if (input->receiver_class_id == XG_NO_ID || !input->receiver_owner_decl ||
             (input->receiver_type_arg_count == 0u && input->declaration_type_arg_count == 0u))
@@ -1269,28 +1257,31 @@ static bool producer_fill_generic_inst_identity(XgProducer *producer, XgGenericI
         return false;
 
     inst->name_id = hash_name32(input->name);
+    inst->origin_nominal_key = input->origin_nominal_key;
     inst->receiver_class_id = input->receiver_class_id;
-    inst->receiver_type_key =
-        is_method ? (input->receiver_type_arg_count > 0u
-                         ? hash_generic_declaration_type_key(
-                               producer, generic_receiver_owner_name(input->receiver_owner_decl),
-                               input->receiver_type_args, (int) input->receiver_type_arg_count,
-                               XG_GENERIC_INST_CLASS)
-                         : hash_generic_receiver_type_key(producer, input->receiver_owner_decl,
-                                                          input->receiver_type_args,
-                                                          (int) input->receiver_type_arg_count))
-                  : 0;
     inst->receiver_type_arg_key_start = hash_tref_list64_exact(
         producer, input->receiver_type_args, (int) input->receiver_type_arg_count,
         UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
     inst->receiver_type_arg_count = (uint16_t) input->receiver_type_arg_count;
-    inst->declaration_type_key =
-        hash_generic_declaration_type_key(producer, input->name, input->declaration_type_args,
-                                          (int) input->declaration_type_arg_count, input->kind);
     inst->declaration_type_arg_key_start = hash_tref_list64_exact(
         producer, input->declaration_type_args, (int) input->declaration_type_arg_count,
         UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
     inst->declaration_type_arg_count = (uint16_t) input->declaration_type_arg_count;
+    inst->receiver_type_key =
+        is_method ? (inst->receiver_type_arg_count > 0u
+                         ? xg_generic_nominal_type_key(
+                               input->origin_nominal_key, inst->receiver_type_arg_key_start,
+                               inst->receiver_type_arg_count, XG_GENERIC_INST_CLASS)
+                         : input->origin_nominal_key)
+                  : 0;
+    inst->declaration_type_key =
+        input->kind == XG_GENERIC_INST_CLASS
+            ? xg_generic_nominal_type_key(input->origin_nominal_key,
+                                          inst->declaration_type_arg_key_start,
+                                          inst->declaration_type_arg_count, input->kind)
+            : hash_generic_declaration_type_key(producer, input->name, input->declaration_type_args,
+                                                (int) input->declaration_type_arg_count,
+                                                input->kind);
     inst->specialization_effect = input->specialization_effect;
     return !producer->failed && inst->name_id != 0 && inst->declaration_type_key != 0 &&
            (!is_method || inst->receiver_type_key != 0);
@@ -1656,7 +1647,6 @@ static XgInterfaceNameRow *producer_lookup_interface_row_by_id(const XgProducer 
 static uint64_t producer_nominal_key_fields(const XgProducer *producer, XgModuleId module_id,
                                             uint32_t source_node_id, uint8_t kind,
                                             uint32_t type_key) {
-    uint64_t hash = XR_FNV64_OFFSET_BASIS;
     const XgModuleSummary *module = NULL;
     if (!producer || !producer->evidence || module_id == XG_NO_ID || source_node_id == 0 ||
         kind == 0)
@@ -1669,11 +1659,7 @@ static uint64_t producer_nominal_key_fields(const XgProducer *producer, XgModule
     }
     if (!module || module->canonical_hash == 0)
         return 0;
-    hash = fold_u64(hash, module->canonical_hash);
-    hash = fold_u64(hash, source_node_id);
-    hash = fold_u64(hash, kind);
-    hash = fold_u64(hash, type_key);
-    return hash;
+    return xg_nominal_decl_key(module->canonical_hash, source_node_id, kind, type_key);
 }
 
 static XgInterfaceId producer_interface_id(uint64_t nominal_key) {
@@ -2600,7 +2586,11 @@ static bool
 producer_generic_method_receiver_matches(XgProducer *producer, XgClassId receiver_class_id,
                                          const XgClassSummary *source_owner,
                                          const XaGenericSpecializationFact *specialization) {
+    const XgDeclSummary *source_decl;
     if (!producer || !producer->evidence || !source_owner || !specialization)
+        return false;
+    source_decl = producer_decl_by_id(producer, source_owner->decl_id);
+    if (!source_decl || source_decl->nominal_key == 0)
         return false;
     if (specialization->receiver_type_arg_count == 0u)
         return producer_class_is_descendant_or_self(producer, receiver_class_id,
@@ -2628,17 +2618,16 @@ producer_generic_method_receiver_matches(XgProducer *producer, XgClassId receive
         receiver_row && receiver_row->summary_index < producer->evidence->nclasses
             ? &producer->evidence->classes[receiver_row->summary_index]
             : NULL;
-    const char *owner_name = generic_receiver_owner_name(specialization->owner_decl);
-    uint64_t expected_type_key = hash_generic_declaration_type_key(
-        producer, owner_name, specialization->receiver_type_args,
-        (int) specialization->receiver_type_arg_count, XG_GENERIC_INST_CLASS);
     uint64_t expected_tuple_key = hash_tref_list64_exact(
         producer, specialization->receiver_type_args, (int) specialization->receiver_type_arg_count,
         UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
+    uint64_t expected_type_key = xg_generic_nominal_type_key(
+        source_decl->nominal_key, expected_tuple_key,
+        (uint16_t) specialization->receiver_type_arg_count, XG_GENERIC_INST_CLASS);
     return receiver && (receiver->flags & XG_CLASS_MONOMORPHIZED) != 0u &&
            receiver->decl_kind == XG_DECL_STRUCT &&
            receiver->generic_origin_class_id == source_owner->class_id &&
-           receiver->generic_origin_name_id == hash_name32(owner_name) &&
+           receiver->generic_origin_nominal_key == source_decl->nominal_key &&
            receiver->generic_type_key == expected_type_key &&
            receiver->generic_type_arg_key_start == expected_tuple_key &&
            receiver->generic_type_arg_count == specialization->receiver_type_arg_count;
@@ -2728,6 +2717,12 @@ static XgDeclId producer_lookup_class_decl_id(const XgProducer *p, XgClassId cla
     return p->evidence->classes[row->summary_index].decl_id;
 }
 
+static uint64_t producer_lookup_class_nominal_key(const XgProducer *producer, XgClassId class_id) {
+    XgDeclId decl_id = producer_lookup_class_decl_id(producer, class_id);
+    const XgDeclSummary *decl = producer_decl_by_id(producer, decl_id);
+    return decl ? decl->nominal_key : 0;
+}
+
 static XgClassId producer_lookup_class_from_analyzer_type(const XgProducer *producer,
                                                           const XrType *type);
 
@@ -2777,6 +2772,49 @@ static XgClassId producer_lookup_class_from_analyzer_type(const XgProducer *prod
         class_summary->decl_kind != decl->kind)
         return XG_NO_ID;
     return class_summary->class_id;
+}
+
+static XgClassId producer_lookup_generic_origin_from_analyzer_type(const XgProducer *producer,
+                                                                   const XrType *type) {
+    XgClassId exact_class_id = producer_lookup_class_from_analyzer_type(producer, type);
+    XgClassNameRow *exact_row = producer_lookup_class_row_by_id(producer, exact_class_id);
+    const XgClassSummary *exact = producer && producer->evidence && exact_row &&
+                                          exact_row->summary_index < producer->evidence->nclasses
+                                      ? &producer->evidence->classes[exact_row->summary_index]
+                                      : NULL;
+    if (!exact)
+        return XG_NO_ID;
+    if ((exact->flags & XG_CLASS_MONOMORPHIZED) == 0u)
+        return exact->class_id;
+    const XgClassNameRow *origin_row =
+        producer_lookup_class_row_by_id(producer, exact->generic_origin_class_id);
+    const XgClassSummary *origin =
+        origin_row && origin_row->summary_index < producer->evidence->nclasses
+            ? &producer->evidence->classes[origin_row->summary_index]
+            : NULL;
+    const XgDeclSummary *origin_decl =
+        origin ? producer_decl_by_id(producer, origin->decl_id) : NULL;
+    if (!origin || !origin_decl || origin_decl->nominal_key == 0 ||
+        exact->generic_origin_nominal_key != origin_decl->nominal_key)
+        return XG_NO_ID;
+    return origin->class_id;
+}
+
+static XgClassId producer_lookup_generic_origin_from_node(const XgProducer *producer,
+                                                          const AstNode *node) {
+    XaGenericSpecializationFact specialization = {0};
+    if (!producer || !producer->analyzer || !node)
+        return XG_NO_ID;
+    if (xa_analyzer_get_generic_specialization(producer->analyzer, node, &specialization) &&
+        xa_generic_specialization_fact_valid(&specialization) && specialization.generic_decl &&
+        (specialization.generic_decl->type == AST_CLASS_DECL ||
+         specialization.generic_decl->type == AST_STRUCT_DECL)) {
+        const XgClassNameRow *origin =
+            producer_lookup_class_row_by_decl(producer, specialization.generic_decl);
+        return origin ? origin->class_id : XG_NO_ID;
+    }
+    return producer_lookup_generic_origin_from_analyzer_type(
+        producer, xa_analyzer_get_node_type(producer->analyzer, node));
 }
 
 static XgMethodSummary *producer_find_class_method(XgGlobalEvidence *ev, const XgClassSummary *cls,
@@ -10043,6 +10081,11 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 .origin_func_id = generic_origin_func_id,
                 .origin_method_id = generic_origin_method_id,
                 .origin_class_id = generic_origin_class_id,
+                .origin_nominal_key =
+                    (generic_kind == XG_GENERIC_INST_CLASS ||
+                     generic_kind == XG_GENERIC_INST_METHOD)
+                        ? producer_lookup_class_nominal_key(bc->producer, generic_origin_class_id)
+                        : 0,
                 .receiver_class_id = generic_kind == XG_GENERIC_INST_METHOD
                                          ? row.receiver_static_class_id
                                          : XG_NO_ID,
@@ -10075,6 +10118,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                     .origin_func_id = generic_origin_func_id,
                     .origin_method_id = generic_origin_method_id,
                     .origin_class_id = generic_origin_class_id,
+                    .origin_nominal_key =
+                        producer_lookup_class_nominal_key(bc->producer, generic_origin_class_id),
                     .root_callsite_id = row.callsite_id,
                     .source_span_id = (uint32_t) call->line,
                     .kind = XG_GENERIC_INST_CLASS,
@@ -11287,19 +11332,26 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_STRUCT_LITERAL:
             if (node->as.struct_literal.type_arg_count > 0) {
                 XgClassId origin_class =
-                    producer_lookup_class(bc->producer, node->as.struct_literal.struct_name);
-                XgGenericInstInput input = {
-                    .name = node->as.struct_literal.struct_name,
-                    .declaration_type_args = node->as.struct_literal.type_args,
-                    .declaration_type_arg_count = (uint32_t) node->as.struct_literal.type_arg_count,
-                    .origin_decl_id = producer_lookup_class_decl_id(bc->producer, origin_class),
-                    .origin_class_id = origin_class,
-                    .source_span_id = (uint32_t) node->line,
-                    .kind = XG_GENERIC_INST_CLASS,
-                    .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NONE,
-                };
-                if (!body_add_generic_inst(bc, &input))
+                    producer_lookup_generic_origin_from_node(bc->producer, node);
+                if (origin_class == XG_NO_ID) {
                     bc->producer->failed = true;
+                } else {
+                    XgGenericInstInput input = {
+                        .name = node->as.struct_literal.struct_name,
+                        .declaration_type_args = node->as.struct_literal.type_args,
+                        .declaration_type_arg_count =
+                            (uint32_t) node->as.struct_literal.type_arg_count,
+                        .origin_decl_id = producer_lookup_class_decl_id(bc->producer, origin_class),
+                        .origin_class_id = origin_class,
+                        .origin_nominal_key =
+                            producer_lookup_class_nominal_key(bc->producer, origin_class),
+                        .source_span_id = (uint32_t) node->line,
+                        .kind = XG_GENERIC_INST_CLASS,
+                        .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NONE,
+                    };
+                    if (!body_add_generic_inst(bc, &input))
+                        bc->producer->failed = true;
+                }
             }
             if (node->as.struct_literal.field_values) {
                 for (int i = 0; i < node->as.struct_literal.field_count; i++)
@@ -11313,19 +11365,23 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_capabilities_for_builtin_constructor(node->as.new_expr.class_name);
             if (node->as.new_expr.type_arg_count > 0) {
                 XgClassId origin_class =
-                    producer_lookup_class(bc->producer, node->as.new_expr.class_name);
-                XgGenericInstInput input = {
-                    .name = node->as.new_expr.class_name,
-                    .declaration_type_args = node->as.new_expr.type_args,
-                    .declaration_type_arg_count = (uint32_t) node->as.new_expr.type_arg_count,
-                    .origin_decl_id = producer_lookup_class_decl_id(bc->producer, origin_class),
-                    .origin_class_id = origin_class,
-                    .source_span_id = (uint32_t) node->line,
-                    .kind = XG_GENERIC_INST_CLASS,
-                    .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NONE,
-                };
-                if (!body_add_generic_inst(bc, &input))
-                    bc->producer->failed = true;
+                    producer_lookup_generic_origin_from_node(bc->producer, node);
+                if (origin_class != XG_NO_ID) {
+                    XgGenericInstInput input = {
+                        .name = node->as.new_expr.class_name,
+                        .declaration_type_args = node->as.new_expr.type_args,
+                        .declaration_type_arg_count = (uint32_t) node->as.new_expr.type_arg_count,
+                        .origin_decl_id = producer_lookup_class_decl_id(bc->producer, origin_class),
+                        .origin_class_id = origin_class,
+                        .origin_nominal_key =
+                            producer_lookup_class_nominal_key(bc->producer, origin_class),
+                        .source_span_id = (uint32_t) node->line,
+                        .kind = XG_GENERIC_INST_CLASS,
+                        .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NONE,
+                    };
+                    if (!body_add_generic_inst(bc, &input))
+                        bc->producer->failed = true;
+                }
             }
             for (int i = 0; i < node->as.new_expr.arg_count; i++)
                 walk_body_for_calls(bc, node->as.new_expr.arguments[i]);
@@ -11990,6 +12046,7 @@ static bool add_monomorphized_class_instantiation(XgProducer *p, XgModuleId modu
         .name = origin_name,
         .declaration_type_args = fact->declaration_type_args,
         .declaration_type_arg_count = fact->declaration_type_arg_count,
+        .origin_nominal_key = producer_lookup_class_nominal_key(p, origin_class_id),
         .kind = XG_GENERIC_INST_CLASS,
         .specialization_effect = specialization_effect,
     };
@@ -12022,6 +12079,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
     XaGenericSpecializationFact mono_fact = {0};
     XgClassNameRow *generic_origin_row = NULL;
+    const XgDeclSummary *generic_origin_decl = NULL;
     if (cls->is_monomorphized) {
         if (!p->analyzer ||
             !xa_analyzer_get_generic_specialization(p->analyzer, node, &mono_fact) ||
@@ -12033,6 +12091,10 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             return false;
         generic_origin_row = producer_lookup_class_row_by_decl(p, mono_fact.generic_decl);
         if (!generic_origin_row)
+            return false;
+        generic_origin_decl =
+            producer_decl_by_id(p, producer_lookup_class_decl_id(p, generic_origin_row->class_id));
+        if (!generic_origin_decl || generic_origin_decl->nominal_key == 0)
             return false;
     }
     memset(&decl, 0, sizeof(decl));
@@ -12146,15 +12208,18 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         csum.flags |= XG_CLASS_MONOMORPHIZED;
         csum.generic_origin_class_id = generic_origin_row->class_id;
         csum.generic_origin_name_id = hash_name32(origin_name);
-        csum.generic_type_key = hash_generic_declaration_type_key(
-            p, origin_name, mono_fact.declaration_type_args,
-            (int) mono_fact.declaration_type_arg_count, XG_GENERIC_INST_CLASS);
+        csum.generic_origin_nominal_key = generic_origin_decl->nominal_key;
         csum.generic_type_arg_key_start = hash_tref_list64_exact(
             p, mono_fact.declaration_type_args, (int) mono_fact.declaration_type_arg_count,
             UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
-        csum.generic_type_arg_count = (uint16_t) (mono_fact.declaration_type_arg_count < UINT16_MAX
-                                                      ? mono_fact.declaration_type_arg_count
-                                                      : UINT16_MAX);
+        if (mono_fact.declaration_type_arg_count > UINT16_MAX)
+            return false;
+        csum.generic_type_arg_count = (uint16_t) mono_fact.declaration_type_arg_count;
+        csum.generic_type_key = xg_generic_nominal_type_key(
+            csum.generic_origin_nominal_key, csum.generic_type_arg_key_start,
+            csum.generic_type_arg_count, XG_GENERIC_INST_CLASS);
+        if (csum.generic_type_key == 0)
+            return false;
     }
     csum.field_start = field_count > 0 ? field_start : 0;
     csum.field_count = field_count;
@@ -13148,6 +13213,7 @@ static bool evidence_has_equivalent_generic_inst(const XgGlobalEvidence *ev,
         const XgGenericInstSummary *row = &ev->generic_insts[i];
         if (row->module_id != inst->module_id || row->kind != inst->kind ||
             row->name_id != inst->name_id || row->receiver_class_id != inst->receiver_class_id ||
+            row->origin_nominal_key != inst->origin_nominal_key ||
             row->receiver_type_key != inst->receiver_type_key ||
             row->receiver_type_arg_key_start != inst->receiver_type_arg_key_start ||
             row->receiver_type_arg_count != inst->receiver_type_arg_count ||
@@ -13250,6 +13316,7 @@ static uint64_t evidence_generic_body_use_hash(const XgGenericInstSummary *inst,
     h = fold_u64(h, inst ? inst->origin_func_id : 0);
     h = fold_u64(h, inst ? inst->origin_method_id : 0);
     h = fold_u64(h, inst ? inst->origin_class_id : 0);
+    h = fold_u64(h, inst ? inst->origin_nominal_key : 0);
     h = fold_u64(h, inst ? inst->specialized_func_id : 0);
     h = fold_u64(h, inst ? inst->specialized_class_id : 0);
     h = fold_u64(h, inst ? inst->root_callsite_id : 0);
@@ -13312,6 +13379,7 @@ static bool evidence_add_generic_body_deepen_rows(XgGlobalEvidence *dst,
     body_use.origin_body_func_id = origin_body->func_id;
     body_use.specialized_body_func_id = specialized_body->func_id;
     body_use.root_callsite_id = call->callsite_id;
+    body_use.origin_nominal_key = inst->origin_nominal_key;
     body_use.receiver_class_id = inst->receiver_class_id;
     body_use.receiver_type_key = inst->receiver_type_key;
     body_use.receiver_type_arg_key_start = inst->receiver_type_arg_key_start;
@@ -13360,6 +13428,8 @@ static bool evidence_finalize_generic_body_root(XgGlobalEvidence *evidence,
     if (!evidence || !inst ||
         (inst->kind != XG_GENERIC_INST_FUNCTION && inst->kind != XG_GENERIC_INST_METHOD))
         return true;
+    if (inst->root_callsite_id == XG_NO_ID)
+        return true;
     const XgCallsiteSummary *call = evidence_find_callsite_by_id(evidence, inst->root_callsite_id);
     const XgBodySummary *origin = evidence_find_body_by_func_id(evidence, inst->origin_func_id);
     const XgBodySummary *owner =
@@ -13374,11 +13444,13 @@ static bool evidence_finalize_generic_body_root(XgGlobalEvidence *evidence,
         specialized = evidence_find_body_by_method_id(evidence, call->method_id);
     else if (call && inst->kind == XG_GENERIC_INST_METHOD)
         return false;
+    if (!call || !owner || owner->module_id != inst->module_id)
+        return false;
     if (specialized && inst->kind == XG_GENERIC_INST_METHOD &&
         specialized->owner_class_id !=
             (inst->receiver_type_arg_count > 0u ? inst->receiver_class_id : inst->origin_class_id))
         return false;
-    if (!call || !origin || !specialized || specialized->func_id == origin->func_id)
+    if (!origin || !specialized || specialized->func_id == origin->func_id)
         return true;
     inst->specialized_func_id = specialized->func_id;
     inst->flags |= XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI;
@@ -13427,6 +13499,13 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
 
         mapped.generic_inst_id = (XgGenericInstId) (dst->ngeneric_insts + 1);
         mapped.origin_decl_id = dst_decl ? dst_decl->decl_id : XG_NO_ID;
+        if ((mapped.kind == XG_GENERIC_INST_CLASS || mapped.kind == XG_GENERIC_INST_METHOD) &&
+            (!dst_decl || mapped.origin_nominal_key == 0 ||
+             mapped.origin_nominal_key != dst_decl->nominal_key))
+            return false;
+        if (mapped.kind != XG_GENERIC_INST_CLASS && mapped.kind != XG_GENERIC_INST_METHOD &&
+            mapped.origin_nominal_key != 0)
+            return false;
 
         if (src_origin_body)
             dst_origin_body = evidence_find_matching_body(dst, src_origin_body);
@@ -13490,6 +13569,11 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
             if (!concrete_receiver || (concrete_receiver->flags & XG_CLASS_MONOMORPHIZED) == 0u ||
                 concrete_receiver->decl_kind != XG_DECL_STRUCT ||
                 concrete_receiver->generic_origin_class_id != mapped.origin_class_id ||
+                concrete_receiver->generic_origin_nominal_key != mapped.origin_nominal_key ||
+                concrete_receiver->generic_type_key !=
+                    xg_generic_nominal_type_key(
+                        mapped.origin_nominal_key, concrete_receiver->generic_type_arg_key_start,
+                        concrete_receiver->generic_type_arg_count, XG_GENERIC_INST_CLASS) ||
                 concrete_receiver->generic_type_arg_count != mapped.receiver_type_arg_count)
                 return false;
             mapped.receiver_class_id = concrete_receiver->class_id;

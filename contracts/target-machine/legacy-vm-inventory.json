@@ -18,7 +18,7 @@
   ],
   "generator": "target-machine-phase0/1",
   "legacy_artifact_symbols": [],
-  "opcode_count": 299,
+  "opcode_count": 298,
   "opcodes": [
     {
       "deletion_task": 276,
@@ -2795,18 +2795,6 @@
     {
       "deletion_task": 276,
       "error_suspend_edges": "handler-specific",
-      "family": "typed-operation",
-      "observable_behavior": "description-in-xinstruction-table",
-      "opcode": "OP_REGEX_COMPILE",
-      "operand_format": "FMT_ABC",
-      "operand_roles": "KOP_ABC_BIN_K",
-      "ownership": "implicit-opcode-handler-contract",
-      "tag_assumption": "XrValue-register-frame",
-      "target_plan_mapping": "map-to-target-plan-op"
-    },
-    {
-      "deletion_task": 276,
-      "error_suspend_edges": "handler-specific",
       "family": "retained-coroutine-stack",
       "observable_behavior": "description-in-xinstruction-table",
       "opcode": "OP_GO",
@@ -3614,7 +3602,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "5e4351baa54bae5a8b5380a7d5bb82e75521e03ccb0820d7f51b225fd9ca5fee",
+  "source_tree_fingerprint": "ec15f8e8e0748209e505468b31d300b7fef20163573924018c3c1e92107ecbeb",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xr_typed_dispatch.c",
@@ -3673,7 +3661,6 @@
       "path": "src/vm/xvm_coro_backend.c",
       "pointer_names": [
         "args",
-        "base",
         "closure_base",
         "dst",
         "func_base",
@@ -3772,7 +3759,6 @@
     {
       "path": "src/vm/xvm_parallel_ops.c",
       "pointer_names": [
-        "args",
         "base",
         "batch_slot",
         "body_slot",

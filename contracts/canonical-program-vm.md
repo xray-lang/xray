@@ -174,8 +174,9 @@ receiver type tuple independently from the method declaration tuple. `Box<i64>` 
 nominal aggregate TypeIds; `readAs<U>` and a nested `forwardAs<U>` call materialize concrete method
 bodies on the exact monomorphized receiver rather than on the source skeleton. The open `this`
 receiver fact remains a non-executable template edge until aggregate cloning substitutes it. Xglobal
-schema 58 binds each concrete method body and body-use to the matching monomorphized receiver class
-identity; incomplete or inconsistent receiver facts are rejected before Program execution.
+schema 59 binds each concrete method body and body-use to a source-derived nominal origin and the
+matching monomorphized receiver class identity; incomplete, inconsistent, or coordinated-forged
+receiver facts are rejected before Program execution.
 Reference and both VM decode policies return 42. Cross-module or re-exported generic receivers,
 generic heap/class receivers, interface generic dispatch, parameterized and builtin constraints,
 generic ownership cleanup, arbitrary returned/projected READ places, and valid finite recursive

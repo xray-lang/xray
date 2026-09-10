@@ -444,4 +444,4 @@ anchor-sha256: tests/unit/ir/test_xi_pipeline.c ae37e1792e11968b7bef489ff58735b5
 anchor-sha256: tests/unit/CMakeLists.txt 899a1873a15d878d3e449b850f81aa2a3ab7b2a22e359248c9544b02bb81f8a8
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
-anchor-sha256: src/aot/xaot_bundle.c 450c82d7bb97ad589c93e9277092a5faa50522252ee21339b0c4cec7433e8e92
+anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc

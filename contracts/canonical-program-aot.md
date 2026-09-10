@@ -173,9 +173,9 @@ introduced. A bounded same-module generic value-struct receiver keeps the receiv
 independent from the method declaration tuple. `Box<i64>` and `Box<bool>` have distinct nominal aggregate TypeIds;
 `readAs<U>` and a nested `forwardAs<U>` call materialize concrete method bodies on the exact
 monomorphized receiver, while the open `this` receiver remains a non-executable template edge until
-cloning substitutes it. Xglobal schema 58 and the AOT verifier match the method receiver to the
-independent monomorphized class identity; coordinated corruption of the instantiation, body-use, and
-derived AOT plans is rejected. Repeated C remains byte-identical and strict native execution returns
+cloning substitutes it. Xglobal schema 59 and the AOT verifier independently rederive the source
+nominal origin, call-site owner module, and monomorphized receiver identity; coordinated corruption
+of the instantiation, body-use, and derived AOT plans is rejected. Repeated C remains byte-identical and strict native execution returns
 42. Cross-module or re-exported generic receivers, generic heap/class receivers, interface generic
 dispatch, parameterized/builtin constraints, generic ownership cleanup, arbitrary returned/projected
 READ places, and valid finite recursive specialization remain unqualified.

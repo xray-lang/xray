@@ -1775,6 +1775,17 @@ static const XgDeclSummary *verify_find_evidence_decl(const XgGlobalEvidence *ev
     return NULL;
 }
 
+static const XgModuleSummary *verify_find_evidence_module(const XgGlobalEvidence *ev,
+                                                          XgModuleId module_id) {
+    if (!ev || module_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nmodules; i++) {
+        if (ev->modules[i].module_id == module_id)
+            return &ev->modules[i];
+    }
+    return NULL;
+}
+
 static const XgDeclSummary *verify_find_evidence_func_decl_by_name_flags(const XgGlobalEvidence *ev,
                                                                          uint32_t name_id,
                                                                          uint32_t required_flags) {
@@ -1862,8 +1873,8 @@ static bool verify_generic_type_identity_shape(uint64_t type_key, uint64_t type_
 }
 
 static bool verify_generic_specialization_identity_shape(
-    const XgGlobalEvidence *ev, uint8_t kind, XgClassId receiver_class_id,
-    uint64_t receiver_type_key, uint64_t receiver_type_arg_key_start,
+    const XgGlobalEvidence *ev, uint8_t kind, uint64_t origin_nominal_key,
+    XgClassId receiver_class_id, uint64_t receiver_type_key, uint64_t receiver_type_arg_key_start,
     uint16_t receiver_type_arg_count, uint64_t declaration_type_key,
     uint64_t declaration_type_arg_key_start, uint16_t declaration_type_arg_count,
     uint8_t specialization_effect, const char *row_name, char *errbuf, size_t errbuf_len) {
@@ -1872,11 +1883,31 @@ static bool verify_generic_specialization_identity_shape(
             snprintf(errbuf, errbuf_len, "AOT %s specialization effect is invalid", row_name);
         return false;
     }
+    if (((kind == XG_GENERIC_INST_CLASS || kind == XG_GENERIC_INST_METHOD) !=
+         (origin_nominal_key != 0))) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s specialization identity is invalid", row_name);
+        return false;
+    }
     if (!verify_generic_type_identity_shape(declaration_type_key, declaration_type_arg_key_start,
                                             declaration_type_arg_count)) {
         if (errbuf && errbuf_len > 0)
             snprintf(errbuf, errbuf_len, "AOT %s declaration type identity is invalid", row_name);
         return false;
+    }
+    if (kind == XG_GENERIC_INST_CLASS) {
+        if (receiver_class_id != XG_NO_ID || receiver_type_key != 0 ||
+            receiver_type_arg_key_start != 0 || receiver_type_arg_count != 0u ||
+            declaration_type_arg_count == 0u ||
+            declaration_type_key != xg_generic_nominal_type_key(origin_nominal_key,
+                                                                declaration_type_arg_key_start,
+                                                                declaration_type_arg_count, kind)) {
+            if (errbuf && errbuf_len > 0)
+                snprintf(errbuf, errbuf_len, "AOT %s aggregate identity does not re-derive",
+                         row_name);
+            return false;
+        }
+        return true;
     }
     if (kind != XG_GENERIC_INST_METHOD) {
         if (receiver_class_id != XG_NO_ID || receiver_type_key != 0 ||
@@ -1905,6 +1936,15 @@ static bool verify_generic_specialization_identity_shape(
             snprintf(errbuf, errbuf_len, "AOT %s receiver class is missing", row_name);
         return false;
     }
+    if (receiver_type_key !=
+        (receiver_type_arg_count > 0u
+             ? xg_generic_nominal_type_key(origin_nominal_key, receiver_type_arg_key_start,
+                                           receiver_type_arg_count, XG_GENERIC_INST_CLASS)
+             : origin_nominal_key)) {
+        if (errbuf && errbuf_len > 0)
+            snprintf(errbuf, errbuf_len, "AOT %s receiver identity does not re-derive", row_name);
+        return false;
+    }
     if (receiver_type_arg_count == 0u && declaration_type_arg_count == 0u) {
         if (errbuf && errbuf_len > 0)
             snprintf(errbuf, errbuf_len, "AOT %s specialization tuple is empty", row_name);
@@ -1922,6 +1962,7 @@ static bool verify_generic_inst_anchors_monomorphized_class(const XgGenericInstS
     if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) == 0)
         return false;
     return inst->origin_class_id == cls->generic_origin_class_id &&
+           inst->origin_nominal_key == cls->generic_origin_nominal_key &&
            inst->name_id == cls->generic_origin_name_id &&
            inst->declaration_type_key == cls->generic_type_key &&
            inst->declaration_type_arg_key_start == cls->generic_type_arg_key_start &&
@@ -1951,8 +1992,12 @@ static bool verify_generic_method_receiver_matches_source(const XgGlobalEvidence
     return receiver && (receiver->flags & XG_CLASS_MONOMORPHIZED) != 0u &&
            receiver->decl_kind == XG_DECL_STRUCT &&
            receiver->generic_origin_class_id == source_owner->class_id &&
-           receiver->generic_origin_name_id != 0u &&
+           receiver->generic_origin_nominal_key == inst->origin_nominal_key &&
            receiver->generic_type_key == inst->receiver_type_key &&
+           receiver->generic_type_key ==
+               xg_generic_nominal_type_key(
+                   inst->origin_nominal_key, receiver->generic_type_arg_key_start,
+                   receiver->generic_type_arg_count, XG_GENERIC_INST_CLASS) &&
            receiver->generic_type_arg_key_start == inst->receiver_type_arg_key_start &&
            receiver->generic_type_arg_count == inst->receiver_type_arg_count;
 }
@@ -1989,12 +2034,36 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
                 return set_error(errbuf, errbuf_len, "AOT generic inst evidence has invalid kind");
         }
         if (!verify_generic_specialization_identity_shape(
-                ev, inst->kind, inst->receiver_class_id, inst->receiver_type_key,
-                inst->receiver_type_arg_key_start, inst->receiver_type_arg_count,
-                inst->declaration_type_key, inst->declaration_type_arg_key_start,
-                inst->declaration_type_arg_count, inst->specialization_effect, "generic inst",
-                errbuf, errbuf_len))
+                ev, inst->kind, inst->origin_nominal_key, inst->receiver_class_id,
+                inst->receiver_type_key, inst->receiver_type_arg_key_start,
+                inst->receiver_type_arg_count, inst->declaration_type_key,
+                inst->declaration_type_arg_key_start, inst->declaration_type_arg_count,
+                inst->specialization_effect, "generic inst", errbuf, errbuf_len))
             return false;
+        if (inst->kind == XG_GENERIC_INST_CLASS || inst->kind == XG_GENERIC_INST_METHOD) {
+            const XgDeclSummary *origin_decl = verify_find_evidence_decl(ev, inst->origin_decl_id);
+            const XgModuleSummary *origin_module =
+                origin_decl ? verify_find_evidence_module(ev, origin_decl->module_id) : NULL;
+            if (!origin_decl || !origin_module ||
+                origin_decl->nominal_key !=
+                    xg_nominal_decl_key(origin_module->canonical_hash, origin_decl->source_node_id,
+                                        origin_decl->kind, origin_decl->type_key))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT declaration nominal identity does not re-derive");
+            if (inst->origin_nominal_key != origin_decl->nominal_key)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic inst origin nominal identity does not re-derive");
+            if (inst->kind == XG_GENERIC_INST_CLASS) {
+                const XgClassSummary *origin_class =
+                    verify_find_evidence_class(ev, inst->origin_class_id);
+                if (!origin_class || origin_class->decl_id != origin_decl->decl_id ||
+                    origin_class->name_id != inst->name_id ||
+                    (origin_class->flags & XG_CLASS_GENERIC_SKELETON) == 0u ||
+                    (origin_class->flags & XG_CLASS_MONOMORPHIZED) != 0u)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT generic class source owner identity is stale");
+            }
+        }
         if (inst->origin_decl_id != XG_NO_ID &&
             !verify_find_evidence_decl(ev, inst->origin_decl_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst origin declaration is missing");
@@ -2056,7 +2125,13 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
                 return set_error(errbuf, errbuf_len,
                                  "AOT generic inst specialized class origin does not re-derive");
             if (specialized_class->generic_origin_name_id != inst->name_id ||
+                specialized_class->generic_origin_nominal_key != inst->origin_nominal_key ||
                 specialized_class->generic_type_key != inst->declaration_type_key ||
+                specialized_class->generic_type_key !=
+                    xg_generic_nominal_type_key(specialized_class->generic_origin_nominal_key,
+                                                specialized_class->generic_type_arg_key_start,
+                                                specialized_class->generic_type_arg_count,
+                                                XG_GENERIC_INST_CLASS) ||
                 specialized_class->generic_type_arg_key_start !=
                     inst->declaration_type_arg_key_start ||
                 specialized_class->generic_type_arg_count != inst->declaration_type_arg_count)
@@ -2066,6 +2141,15 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
         if (inst->root_callsite_id != XG_NO_ID &&
             !verify_find_evidence_callsite(ev, inst->root_callsite_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst root callsite is missing");
+        if (inst->root_callsite_id != XG_NO_ID) {
+            const XgCallsiteSummary *root =
+                verify_find_evidence_callsite(ev, inst->root_callsite_id);
+            const XgBodySummary *owner =
+                root ? verify_find_evidence_body_by_func(ev, root->owner_func_id) : NULL;
+            if (!root || !owner || owner->module_id != inst->module_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic inst caller module does not re-derive");
+        }
         if (((inst->flags & XG_GENERIC_INST_INTERFACE_CONSTRAINT) != 0) !=
             (inst->constraint_interface_id != XG_NO_ID))
             return set_error(errbuf, errbuf_len,
@@ -2162,13 +2246,14 @@ static bool verify_generic_deepen_rows(const XgGlobalEvidence *ev, char *errbuf,
         if (use->module_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT generic body-use evidence has no module");
         if (!verify_generic_specialization_identity_shape(
-                ev, inst->kind, use->receiver_class_id, use->receiver_type_key,
-                use->receiver_type_arg_key_start, use->receiver_type_arg_count,
-                use->declaration_type_key, use->declaration_type_arg_key_start,
-                use->declaration_type_arg_count, use->specialization_effect, "generic body-use",
-                errbuf, errbuf_len))
+                ev, inst->kind, use->origin_nominal_key, use->receiver_class_id,
+                use->receiver_type_key, use->receiver_type_arg_key_start,
+                use->receiver_type_arg_count, use->declaration_type_key,
+                use->declaration_type_arg_key_start, use->declaration_type_arg_count,
+                use->specialization_effect, "generic body-use", errbuf, errbuf_len))
             return false;
         if (use->module_id != inst->module_id ||
+            use->origin_nominal_key != inst->origin_nominal_key ||
             use->receiver_class_id != inst->receiver_class_id ||
             use->receiver_type_key != inst->receiver_type_key ||
             use->receiver_type_arg_key_start != inst->receiver_type_arg_key_start ||
@@ -2179,6 +2264,16 @@ static bool verify_generic_deepen_rows(const XgGlobalEvidence *ev, char *errbuf,
             use->specialization_effect != inst->specialization_effect)
             return set_error(errbuf, errbuf_len,
                              "AOT generic body-use identity does not match inst");
+        {
+            const XgCallsiteSummary *root =
+                verify_find_evidence_callsite(ev, use->root_callsite_id);
+            if (!root || use->root_callsite_id != inst->root_callsite_id ||
+                use->owner_func_id != root->owner_func_id ||
+                use->origin_body_func_id != inst->origin_func_id ||
+                use->specialized_body_func_id != inst->specialized_func_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic body-use call identity does not match inst");
+        }
         if (use->origin_body_func_id != XG_NO_ID &&
             !verify_find_evidence_body_by_func(ev, use->origin_body_func_id))
             return set_error(errbuf, errbuf_len, "AOT generic body-use origin body is missing");
@@ -4712,6 +4807,7 @@ static bool verify_generic_instantiation_plan_rederives(const XaotGenericInstant
         plan->origin_func_id != inst->origin_func_id ||
         plan->origin_method_id != inst->origin_method_id ||
         plan->origin_class_id != inst->origin_class_id ||
+        plan->origin_nominal_key != inst->origin_nominal_key ||
         plan->specialized_func_id != inst->specialized_func_id ||
         plan->specialized_class_id != inst->specialized_class_id ||
         plan->root_callsite_id != inst->root_callsite_id ||
@@ -4829,6 +4925,7 @@ static bool verify_generic_body_plan_rederives(const XgGlobalEvidence *ev,
         plan->origin_body_func_id != use->origin_body_func_id ||
         plan->specialized_body_func_id != use->specialized_body_func_id ||
         plan->root_callsite_id != use->root_callsite_id ||
+        plan->origin_nominal_key != use->origin_nominal_key ||
         plan->receiver_class_id != use->receiver_class_id ||
         plan->receiver_type_key != use->receiver_type_key ||
         plan->receiver_type_arg_key_start != use->receiver_type_arg_key_start ||

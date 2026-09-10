@@ -875,6 +875,7 @@ typedef struct XaotGenericInstantiationPlan {
     XgFuncId origin_func_id;
     XgMethodId origin_method_id;
     XgClassId origin_class_id;
+    uint64_t origin_nominal_key;
     XgFuncId specialized_func_id;
     XgClassId specialized_class_id;
     XgCallsiteId root_callsite_id;
@@ -957,6 +958,7 @@ typedef struct XaotGenericBodyPlan {
     XgFuncId origin_body_func_id;
     XgFuncId specialized_body_func_id;
     XgCallsiteId root_callsite_id;
+    uint64_t origin_nominal_key;
     XgClassId receiver_class_id;
     uint64_t receiver_type_key;
     uint64_t receiver_type_arg_key_start;

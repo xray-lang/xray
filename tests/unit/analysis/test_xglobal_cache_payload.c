@@ -17,8 +17,12 @@
 
 static void refresh_cache_payload_hash(char *payload) {
     char *body = payload;
+    char *encoded_bytes;
     char *encoded_hash;
+    char *header_end;
+    char bytes_text[32];
     char hash_text[17];
+    size_t encoded_bytes_len;
     uint64_t body_hash;
 
     ASSERT_NOT_NULL(payload);
@@ -30,10 +34,92 @@ static void refresh_cache_payload_hash(char *payload) {
     body_hash = xr_hash_bytes64(body, strlen(body));
     if (body_hash == 0)
         body_hash = 1;
+    encoded_bytes = strstr(payload, " bytes=");
+    ASSERT_NOT_NULL(encoded_bytes);
+    encoded_bytes += strlen(" bytes=");
+    header_end = strchr(encoded_bytes, '\n');
+    ASSERT_NOT_NULL(header_end);
+    encoded_bytes_len = (size_t) (header_end - encoded_bytes);
+    snprintf(bytes_text, sizeof(bytes_text), "%zu", strlen(body));
+    ASSERT_EQ_UINT(strlen(bytes_text), encoded_bytes_len);
+    memcpy(encoded_bytes, bytes_text, encoded_bytes_len);
     snprintf(hash_text, sizeof(hash_text), "%016" PRIx64, body_hash);
     encoded_hash = strstr(payload, " payload=");
     ASSERT_NOT_NULL(encoded_hash);
     memcpy(encoded_hash + strlen(" payload="), hash_text, 16);
+}
+
+static char *replace_cache_payload_text(const char *payload, const char *needle,
+                                        const char *replacement) {
+    const char *match;
+    size_t prefix_len;
+    size_t needle_len;
+    size_t replacement_len;
+    size_t suffix_len;
+    char *updated;
+
+    if (!payload || !needle || !replacement)
+        return NULL;
+    match = strstr(payload, needle);
+    if (!match)
+        return NULL;
+    prefix_len = (size_t) (match - payload);
+    needle_len = strlen(needle);
+    replacement_len = strlen(replacement);
+    suffix_len = strlen(match + needle_len);
+    updated = xr_malloc(prefix_len + replacement_len + suffix_len + 1u);
+    if (!updated)
+        return NULL;
+    memcpy(updated, payload, prefix_len);
+    memcpy(updated + prefix_len, replacement, replacement_len);
+    memcpy(updated + prefix_len + replacement_len, match + needle_len, suffix_len + 1u);
+    return updated;
+}
+
+static void rewrite_cache_payload_schema(char *payload, uint32_t schema_version) {
+    XgEvidenceCachePayloadInfo info = {0};
+    XgEvidenceCacheRequestKey request;
+    XgEvidenceCacheKey key;
+    char request_line[512];
+    char key_line[512];
+    char hash_text[17];
+    char *request_begin;
+    char *request_end;
+    char *key_begin;
+    char *key_end;
+    char *encoded_hash;
+
+    ASSERT(xg_evidence_cache_payload_parse(payload, &info));
+    request = info.request_key;
+    key = info.key;
+    request.schema_version = schema_version;
+    key.schema_version = schema_version;
+    ASSERT(xg_evidence_cache_request_key_format(&request, request_line, sizeof(request_line)));
+    ASSERT(xg_evidence_cache_key_format(&key, key_line, sizeof(key_line)));
+
+    request_begin = strchr(payload, '\n');
+    ASSERT_NOT_NULL(request_begin);
+    request_begin++;
+    request_end = strchr(request_begin, '\n');
+    ASSERT_NOT_NULL(request_end);
+    ASSERT_EQ_UINT(strlen(request_line), (size_t) (request_end - request_begin));
+    memcpy(request_begin, request_line, strlen(request_line));
+
+    key_begin = request_end + 1;
+    key_end = strchr(key_begin, '\n');
+    ASSERT_NOT_NULL(key_end);
+    ASSERT_EQ_UINT(strlen(key_line), (size_t) (key_end - key_begin));
+    memcpy(key_begin, key_line, strlen(key_line));
+
+    snprintf(hash_text, sizeof(hash_text), "%016" PRIx64,
+             xg_evidence_cache_request_key_hash(&request));
+    encoded_hash = strstr(payload, " request=");
+    ASSERT_NOT_NULL(encoded_hash);
+    memcpy(encoded_hash + strlen(" request="), hash_text, 16);
+    snprintf(hash_text, sizeof(hash_text), "%016" PRIx64, xg_evidence_cache_key_hash(&key));
+    encoded_hash = strstr(payload, " key=");
+    ASSERT_NOT_NULL(encoded_hash);
+    memcpy(encoded_hash + strlen(" key="), hash_text, 16);
 }
 
 static void finalize_object_shape_fixture(XgObjectShapeSummary *shape) {
@@ -200,11 +286,6 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     cls.method_count = 1;
     cls.interface_start = 40;
     cls.interface_count = 1;
-    cls.generic_origin_class_id = 19;
-    cls.generic_origin_name_id = xg_name_id("Box");
-    cls.generic_type_key = UINT64_C(0x300000384);
-    cls.generic_type_arg_key_start = UINT64_C(0x40000038e);
-    cls.generic_type_arg_count = 1;
     cls.decl_kind = XG_DECL_CLASS;
     ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &cls));
 
@@ -306,6 +387,103 @@ static void add_sample_semantic_summary(XgGlobalEvidence *ev) {
     derived_method.signature_key = 950;
     derived_method.flags = XG_DERIVED_METHOD_NO_ALLOC | XG_DERIVED_METHOD_PURE;
     ASSERT_NOT_NULL(xg_global_evidence_add_derived_method(ev, &derived_method));
+}
+
+static void add_generic_class_nominal_summary(XgGlobalEvidence *ev,
+                                              uint64_t *out_origin_nominal_key) {
+    XgDeclSummary origin_decl = {0};
+    XgClassSummary origin = {0};
+    XgClassSummary specialized = {0};
+    XgGenericInstSummary inst = {0};
+    XgGenericInstSummary method_inst = {0};
+    XgGenericBodyUseSummary body_use = {0};
+
+    ASSERT_NOT_NULL(ev);
+    ASSERT_NOT_NULL(out_origin_nominal_key);
+    ASSERT_TRUE(ev->nmodules > 0u);
+    origin_decl.decl_id = 12;
+    origin_decl.module_id = ev->modules[0].module_id;
+    origin_decl.source_node_id = 10012;
+    origin_decl.kind = XG_DECL_STRUCT;
+    origin_decl.name_id = xg_name_id("GenericBox");
+    origin_decl.type_key = 951;
+    origin_decl.nominal_key = xg_nominal_decl_key(
+        ev->modules[0].canonical_hash, origin_decl.source_node_id, origin_decl.kind,
+        origin_decl.type_key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(ev, &origin_decl));
+
+    origin.class_id = 21;
+    origin.module_id = origin_decl.module_id;
+    origin.decl_id = origin_decl.decl_id;
+    origin.name_id = origin_decl.name_id;
+    origin.flags = XG_CLASS_GENERIC_SKELETON | XG_CLASS_INFERRED_FINAL;
+    origin.decl_kind = XG_DECL_STRUCT;
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &origin));
+
+    specialized.class_id = 22;
+    specialized.module_id = origin_decl.module_id;
+    specialized.decl_id = origin_decl.decl_id;
+    specialized.name_id = origin_decl.name_id;
+    specialized.flags = XG_CLASS_MONOMORPHIZED | XG_CLASS_INFERRED_FINAL;
+    specialized.generic_origin_class_id = origin.class_id;
+    specialized.generic_origin_name_id = origin.name_id;
+    specialized.generic_origin_nominal_key = origin_decl.nominal_key;
+    specialized.generic_type_arg_key_start = UINT64_C(0x40000003b);
+    specialized.generic_type_arg_count = 1;
+    specialized.generic_type_key = xg_generic_nominal_type_key(
+        specialized.generic_origin_nominal_key, specialized.generic_type_arg_key_start,
+        specialized.generic_type_arg_count, XG_GENERIC_INST_CLASS);
+    specialized.decl_kind = XG_DECL_STRUCT;
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(ev, &specialized));
+
+    inst.generic_inst_id = 4;
+    inst.module_id = origin_decl.module_id;
+    inst.origin_decl_id = origin_decl.decl_id;
+    inst.origin_class_id = origin.class_id;
+    inst.origin_nominal_key = origin_decl.nominal_key;
+    inst.specialized_class_id = specialized.class_id;
+    inst.name_id = origin.name_id;
+    inst.declaration_type_key = specialized.generic_type_key;
+    inst.declaration_type_arg_key_start = specialized.generic_type_arg_key_start;
+    inst.declaration_type_arg_count = specialized.generic_type_arg_count;
+    inst.kind = XG_GENERIC_INST_CLASS;
+    inst.flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_SPECIALIZED_ABI |
+                 XG_GENERIC_INST_CONCRETE_STORAGE;
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(ev, &inst));
+
+    method_inst.generic_inst_id = 5;
+    method_inst.module_id = origin_decl.module_id;
+    method_inst.origin_decl_id = origin_decl.decl_id;
+    method_inst.origin_class_id = origin.class_id;
+    method_inst.origin_nominal_key = origin_decl.nominal_key;
+    method_inst.receiver_class_id = specialized.class_id;
+    method_inst.name_id = xg_name_id("readAs");
+    method_inst.receiver_type_key = specialized.generic_type_key;
+    method_inst.receiver_type_arg_key_start = specialized.generic_type_arg_key_start;
+    method_inst.receiver_type_arg_count = specialized.generic_type_arg_count;
+    method_inst.declaration_type_key = UINT64_C(0x50000003c);
+    method_inst.declaration_type_arg_key_start = UINT64_C(0x60000003d);
+    method_inst.declaration_type_arg_count = 1;
+    method_inst.kind = XG_GENERIC_INST_METHOD;
+    method_inst.flags = XG_GENERIC_INST_CONCRETE_TYPES;
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(ev, &method_inst));
+
+    body_use.use_id = 92;
+    body_use.generic_inst_id = method_inst.generic_inst_id;
+    body_use.module_id = method_inst.module_id;
+    body_use.origin_nominal_key = method_inst.origin_nominal_key;
+    body_use.receiver_class_id = method_inst.receiver_class_id;
+    body_use.receiver_type_key = method_inst.receiver_type_key;
+    body_use.receiver_type_arg_key_start = method_inst.receiver_type_arg_key_start;
+    body_use.receiver_type_arg_count = method_inst.receiver_type_arg_count;
+    body_use.declaration_type_key = method_inst.declaration_type_key;
+    body_use.declaration_type_arg_key_start = method_inst.declaration_type_arg_key_start;
+    body_use.declaration_type_arg_count = method_inst.declaration_type_arg_count;
+    body_use.body_use_hash = UINT64_C(0xabc012);
+    ASSERT_NOT_NULL(xg_global_evidence_add_generic_body_use(ev, &body_use));
+
+    ASSERT_TRUE(origin_decl.nominal_key != 0u);
+    *out_origin_nominal_key = origin_decl.nominal_key;
 }
 
 static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
@@ -615,7 +793,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_EQ_UINT(info.key_hash, xg_evidence_cache_key_hash(&expected));
     ASSERT_EQ_UINT(info.body_len, info.payload_bytes);
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-payload v2"));
-    ASSERT_NOT_NULL(strstr(payload, "xg-cache-key v1 schema=58"));
+    ASSERT_NOT_NULL(strstr(payload, "xg-cache-key v1 schema=59"));
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-request v1"));
     ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 param_storages=2 callsites=1"));
     ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
@@ -652,15 +830,47 @@ TEST(cache_payload_parse_exposes_validated_body) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(cache_payload_rejects_coherent_old_schema) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence rejected = {0};
+    XgEvidenceCachePayloadInfo info = {0};
+    char *payload;
+
+    ev.key.module_id = 7;
+    ev.key.source_hash = UINT64_C(0x10101010);
+    ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    ev.key.compiler_semver_hash = UINT64_C(0x1111);
+    ev.key.profile_hash = UINT64_C(0x2222);
+    ev.key.imported_summary_hash = UINT64_C(0x3333);
+    add_sample_body_summary(&ev);
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_BODY_SUMMARY);
+    ASSERT_NOT_NULL(payload);
+
+    rewrite_cache_payload_schema(payload, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION - 1u);
+    ASSERT(xg_evidence_cache_payload_parse(payload, &info));
+    ASSERT_EQ_UINT(info.request_key.schema_version, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION - 1u);
+    ASSERT_EQ_UINT(info.key.schema_version, XG_GLOBAL_EVIDENCE_SCHEMA_VERSION - 1u);
+    ASSERT(!xg_evidence_cache_payload_materialize(payload, &rejected));
+
+    xg_global_evidence_free(&rejected);
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(cache_payload_roundtrips_generic_method_identity) {
     XgGlobalEvidence ev = {0};
     XgGlobalEvidence materialized = {0};
+    const uint64_t origin_nominal_key = UINT64_C(0x7abc000000000001);
+    const uint64_t receiver_tuple_key = UINT64_C(0x200000182);
+    const uint64_t receiver_type_key = xg_generic_nominal_type_key(
+        origin_nominal_key, receiver_tuple_key, 1u, XG_GENERIC_INST_CLASS);
     XgGenericInstSummary inst = {
         .generic_inst_id = 3,
         .module_id = 7,
+        .origin_nominal_key = origin_nominal_key,
         .receiver_class_id = 20,
-        .receiver_type_key = UINT64_C(0x100000181),
-        .receiver_type_arg_key_start = UINT64_C(0x200000182),
+        .receiver_type_key = receiver_type_key,
+        .receiver_type_arg_key_start = receiver_tuple_key,
         .receiver_type_arg_count = 1,
         .declaration_type_key = UINT64_C(0x300000190),
         .declaration_type_arg_key_start = UINT64_C(0x400000191),
@@ -673,9 +883,10 @@ TEST(cache_payload_roundtrips_generic_method_identity) {
         .use_id = 91,
         .generic_inst_id = 3,
         .module_id = 7,
+        .origin_nominal_key = origin_nominal_key,
         .receiver_class_id = 20,
-        .receiver_type_key = UINT64_C(0x100000181),
-        .receiver_type_arg_key_start = UINT64_C(0x200000182),
+        .receiver_type_key = receiver_type_key,
+        .receiver_type_arg_key_start = receiver_tuple_key,
         .receiver_type_arg_count = 1,
         .declaration_type_key = UINT64_C(0x300000190),
         .declaration_type_arg_key_start = UINT64_C(0x400000191),
@@ -694,11 +905,12 @@ TEST(cache_payload_roundtrips_generic_method_identity) {
 
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
-    ASSERT_NOT_NULL(strstr(payload, "payload-extra v12 generic_body_uses=1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v13 generic_body_uses=1"));
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     ASSERT_EQ_UINT(materialized.ngeneric_insts, 1);
     ASSERT_EQ_UINT(materialized.ngeneric_body_uses, 1);
     ASSERT_EQ_UINT(materialized.generic_insts[0].receiver_class_id, inst.receiver_class_id);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].origin_nominal_key, inst.origin_nominal_key);
     ASSERT_EQ_UINT(materialized.generic_insts[0].receiver_type_key, inst.receiver_type_key);
     ASSERT_EQ_UINT(materialized.generic_insts[0].receiver_type_arg_key_start,
                    inst.receiver_type_arg_key_start);
@@ -714,6 +926,8 @@ TEST(cache_payload_roundtrips_generic_method_identity) {
                    inst.specialization_effect);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].receiver_class_id,
                    body_use.receiver_class_id);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].origin_nominal_key,
+                   body_use.origin_nominal_key);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].receiver_type_key,
                    body_use.receiver_type_key);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].receiver_type_arg_key_start,
@@ -731,6 +945,76 @@ TEST(cache_payload_roundtrips_generic_method_identity) {
 
     xg_global_evidence_free(&materialized);
     xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(cache_payload_roundtrips_generic_class_nominal_identity) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence materialized = {0};
+    uint64_t origin_nominal_key = 0u;
+    char *payload;
+
+    ev.key.module_id = 7;
+    ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    add_sample_module_summary(&ev);
+    add_generic_class_nominal_summary(&ev, &origin_nominal_key);
+
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ASSERT_NOT_NULL(payload);
+    ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
+    ASSERT_EQ_UINT(materialized.ndecls, 1u);
+    ASSERT_EQ_UINT(materialized.nclasses, 2u);
+    ASSERT_EQ_UINT(materialized.ngeneric_insts, 2u);
+    ASSERT_EQ_UINT(materialized.ngeneric_body_uses, 1u);
+    ASSERT_EQ_UINT(materialized.decls[0].nominal_key, origin_nominal_key);
+    ASSERT_EQ_UINT(materialized.classes[1].generic_origin_nominal_key, origin_nominal_key);
+    ASSERT_EQ_UINT(materialized.generic_insts[0].origin_nominal_key, origin_nominal_key);
+    ASSERT_EQ_UINT(materialized.generic_insts[1].origin_nominal_key, origin_nominal_key);
+    ASSERT_EQ_UINT(materialized.generic_body_uses[0].origin_nominal_key, origin_nominal_key);
+
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(cache_payload_rejects_class_field_narrowing_overflow) {
+    XgGlobalEvidence ev = {0};
+    XgGlobalEvidence rejected = {0};
+    XgEvidenceCachePayloadInfo info = {0};
+    char decl_kind_text[64];
+    char *payload;
+    char *mutated;
+
+    ev.key.module_id = 7;
+    ev.key.profile = XG_BUILD_NATIVE_RELEASE;
+    add_sample_semantic_summary(&ev);
+
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    ASSERT_NOT_NULL(payload);
+    mutated = replace_cache_payload_text(payload, " args=0+0 origin_nominal=0 ",
+                                         " args=0+65536 origin_nominal=0 ");
+    ASSERT_NOT_NULL(mutated);
+    xr_free(payload);
+    refresh_cache_payload_hash(mutated);
+    ASSERT(xg_evidence_cache_payload_parse(mutated, &info));
+    ASSERT(!xg_evidence_cache_payload_materialize(mutated, &rejected));
+    xg_global_evidence_free(&rejected);
+    xr_free(mutated);
+
+    payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_SEMANTIC_GRAPH);
+    ASSERT_NOT_NULL(payload);
+    snprintf(decl_kind_text, sizeof(decl_kind_text),
+             " origin_nominal=0 decl_kind=%u\n", (unsigned) XG_DECL_CLASS);
+    mutated = replace_cache_payload_text(payload, decl_kind_text,
+                                         " origin_nominal=0 decl_kind=256\n");
+    ASSERT_NOT_NULL(mutated);
+    xr_free(payload);
+    refresh_cache_payload_hash(mutated);
+    memset(&info, 0, sizeof(info));
+    ASSERT(xg_evidence_cache_payload_parse(mutated, &info));
+    ASSERT(!xg_evidence_cache_payload_materialize(mutated, &rejected));
+    xg_global_evidence_free(&rejected);
+    xr_free(mutated);
     xg_global_evidence_free(&ev);
 }
 
@@ -802,7 +1086,7 @@ TEST(cache_payload_materializes_semantic_graph_summary) {
     ASSERT_EQ_UINT(materialized.nderived_methods, 1);
     ASSERT_EQ_UINT(materialized.modules[0].module_id, 7);
     ASSERT_EQ_UINT(materialized.modules[0].canonical_hash, UINT64_C(0xabc7));
-    ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_count, 1);
+    ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_count, 0);
     ASSERT_EQ_UINT(materialized.classes[0].field_start, 1);
     ASSERT_EQ_UINT(materialized.classes[0].field_count, 1);
     ASSERT_EQ_UINT(materialized.class_fields[0].field_id, 1);
@@ -901,7 +1185,7 @@ TEST(cache_payload_materializes_global_evidence) {
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
     ASSERT_NOT_NULL(strstr(payload, "payload-global v1"));
-    ASSERT_NOT_NULL(strstr(payload, "payload-extra v12 generic_body_uses=1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v13 generic_body_uses=1"));
     expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     materialized_key =
@@ -936,8 +1220,8 @@ TEST(cache_payload_materializes_global_evidence) {
                    UINT64_C(0x200000191));
     ASSERT_EQ_UINT(materialized.generic_insts[0].specialization_effect,
                    XG_GENERIC_SPECIALIZATION_EFFECT_NO_THROW);
-    ASSERT_EQ_UINT(materialized.classes[0].generic_type_key, UINT64_C(0x300000384));
-    ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_key_start, UINT64_C(0x40000038e));
+    ASSERT_EQ_UINT(materialized.classes[0].generic_type_key, 0);
+    ASSERT_EQ_UINT(materialized.classes[0].generic_type_arg_key_start, 0);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].declaration_type_key,
                    UINT64_C(0x100000190));
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].declaration_type_arg_key_start,
@@ -960,9 +1244,9 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].source_node_id, 104);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].use_kind, XG_INTERFACE_USE_REF);
 
-    char *extra_version = strstr(payload, "payload-extra v12");
+    char *extra_version = strstr(payload, "payload-extra v13");
     ASSERT_NOT_NULL(extra_version);
-    memcpy(extra_version, "payload-extra v11", strlen("payload-extra v11"));
+    memcpy(extra_version, "payload-extra v12", strlen("payload-extra v12"));
     refresh_cache_payload_hash(payload);
     XgEvidenceCachePayloadInfo stale_info;
     ASSERT(xg_evidence_cache_payload_parse(payload, &stale_info));
@@ -990,6 +1274,7 @@ TEST(cache_payload_imports_package_with_id_remap) {
     XgObjectShapeSummary consumer_object = {0};
     XgMapShapeSummary consumer_map = {0};
     XgMapEntrySummary consumer_entry = {0};
+    uint64_t generic_origin_nominal_key = 0u;
     uint64_t package_hash;
     char *payload;
 
@@ -1002,6 +1287,7 @@ TEST(cache_payload_imports_package_with_id_remap) {
     add_sample_semantic_summary(&package);
     add_sample_body_summary(&package);
     add_sample_global_extra_summary(&package);
+    add_generic_class_nominal_summary(&package, &generic_origin_nominal_key);
     package.classes[0].method_start = 1;
     package.classes[0].interface_start = 1;
     package.derives[0].field_start = 1;
@@ -1101,22 +1387,30 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(report.package_hash, package_hash);
     ASSERT_EQ_UINT(report.modules_remapped, 1);
     ASSERT_EQ_UINT(report.modules_added, 1);
-    ASSERT_EQ_UINT(report.rows_imported, 38);
+    ASSERT_EQ_UINT(report.rows_imported, 44);
 
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.modules[1].module_id, 101);
     ASSERT_EQ_UINT(target.modules[1].canonical_hash, UINT64_C(0xabc7));
-    ASSERT_EQ_UINT(target.ndecls, 3);
+    ASSERT_EQ_UINT(target.ndecls, 4);
     ASSERT_EQ_UINT(target.decls[1].decl_id, 110);
     ASSERT_EQ_UINT(target.decls[1].module_id, 101);
+    ASSERT_EQ_UINT(target.decls[1].nominal_key, package.decls[0].nominal_key);
     ASSERT_EQ_UINT(target.decls[2].decl_id, 101);
     ASSERT_EQ_UINT(target.decls[2].module_id, 101);
-    ASSERT_EQ_UINT(target.nclasses, 2);
+    ASSERT_EQ_UINT(target.decls[3].decl_id, 112);
+    ASSERT_EQ_UINT(target.decls[3].module_id, 101);
+    ASSERT_EQ_UINT(target.decls[3].nominal_key, generic_origin_nominal_key);
+    ASSERT_EQ_UINT(target.nclasses, 4);
     ASSERT_EQ_UINT(target.classes[1].class_id, 220);
     ASSERT_EQ_UINT(target.classes[1].decl_id, 110);
     ASSERT_EQ_UINT(target.classes[1].field_start, 2);
     ASSERT_EQ_UINT(target.classes[1].method_start, 2);
     ASSERT_EQ_UINT(target.classes[1].interface_start, 1);
+    ASSERT_EQ_UINT(target.classes[2].class_id, 221);
+    ASSERT_EQ_UINT(target.classes[3].class_id, 222);
+    ASSERT_EQ_UINT(target.classes[3].generic_origin_class_id, 221);
+    ASSERT_EQ_UINT(target.classes[3].generic_origin_nominal_key, generic_origin_nominal_key);
     ASSERT_EQ_UINT(target.class_fields[1].field_id, 301);
     ASSERT_EQ_UINT(target.class_fields[1].module_id, 101);
     ASSERT_EQ_UINT(target.class_fields[1].owner_class_id, 220);
@@ -1125,6 +1419,8 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(target.methods[1].root_method_id, 430);
     ASSERT_EQ_UINT(target.interface_impls[0].implementor_class_id, 220);
     ASSERT_EQ_UINT(target.interface_impls[0].interface_id, 41);
+    ASSERT_EQ_UINT(target.interface_impls[0].nominal_key,
+                   package.interface_impls[0].nominal_key);
     ASSERT_EQ_UINT(target.interface_methods[0].interface_method_id, 50);
     ASSERT_EQ_UINT(target.interface_methods[0].owner_interface_id, 41);
     ASSERT_EQ_UINT(target.interface_methods[0].parameter_start, 1);
@@ -1148,8 +1444,24 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(target.generic_insts[0].origin_func_id, 511);
     ASSERT_EQ_UINT(target.generic_insts[0].specialized_func_id, 531);
     ASSERT_EQ_UINT(target.generic_insts[0].root_callsite_id, 402);
+    ASSERT_EQ_UINT(target.generic_insts[1].generic_inst_id, 4);
+    ASSERT_EQ_UINT(target.generic_insts[1].module_id, 101);
+    ASSERT_EQ_UINT(target.generic_insts[1].origin_decl_id, 112);
+    ASSERT_EQ_UINT(target.generic_insts[1].origin_class_id, 221);
+    ASSERT_EQ_UINT(target.generic_insts[1].specialized_class_id, 222);
+    ASSERT_EQ_UINT(target.generic_insts[1].origin_nominal_key, generic_origin_nominal_key);
+    ASSERT_EQ_UINT(target.generic_insts[2].generic_inst_id, 5);
+    ASSERT_EQ_UINT(target.generic_insts[2].module_id, 101);
+    ASSERT_EQ_UINT(target.generic_insts[2].origin_decl_id, 112);
+    ASSERT_EQ_UINT(target.generic_insts[2].origin_class_id, 221);
+    ASSERT_EQ_UINT(target.generic_insts[2].receiver_class_id, 222);
+    ASSERT_EQ_UINT(target.generic_insts[2].origin_nominal_key, generic_origin_nominal_key);
     ASSERT_EQ_UINT(target.generic_body_uses[0].generic_inst_id, 3);
     ASSERT_EQ_UINT(target.generic_body_uses[0].owner_func_id, 511);
+    ASSERT_EQ_UINT(target.generic_body_uses[1].generic_inst_id, 5);
+    ASSERT_EQ_UINT(target.generic_body_uses[1].module_id, 101);
+    ASSERT_EQ_UINT(target.generic_body_uses[1].origin_nominal_key,
+                   generic_origin_nominal_key);
     ASSERT_EQ_UINT(target.object_shapes[1].object_shape_id, 901);
     ASSERT_EQ_UINT(target.object_shapes[1].module_id, 101);
     ASSERT_EQ_UINT(target.object_shapes[1].domain, XG_OBJECT_DOMAIN_STRUCT);
@@ -1462,6 +1774,7 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Global Evidence Cache Payload");
 RUN_TEST(cache_payload_parse_exposes_validated_body);
+RUN_TEST(cache_payload_rejects_coherent_old_schema);
 RUN_TEST(cache_payload_materializes_declaration_summary);
 RUN_TEST(cache_payload_materializes_semantic_graph_summary);
 RUN_TEST(cache_payload_parse_rejects_body_drift);
@@ -1469,6 +1782,8 @@ RUN_TEST(cache_payload_matches_rejects_wrong_phase_key);
 RUN_TEST(cache_payload_parse_rejects_request_drift);
 RUN_TEST(cache_payload_materializes_global_evidence);
 RUN_TEST(cache_payload_roundtrips_generic_method_identity);
+RUN_TEST(cache_payload_roundtrips_generic_class_nominal_identity);
+RUN_TEST(cache_payload_rejects_class_field_narrowing_overflow);
 RUN_TEST(cache_payload_imports_package_with_id_remap);
 RUN_TEST(cache_payload_import_reuses_module_stub_without_duplicate_module);
 RUN_TEST(cache_payload_import_rejects_duplicate_rows_for_existing_module);

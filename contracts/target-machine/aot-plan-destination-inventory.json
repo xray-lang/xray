@@ -1069,7 +1069,6 @@
         "src/aot/xi_cgen_array_helpers.inc.c",
         "src/aot/xi_cgen_coro.inc.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
-        "src/aot/xi_cgen_stdlib_helpers.inc.c",
         "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
         "src/aot/xi_cgen_struct_helpers.inc.c",
         "src/aot/xi_cgen_value_helpers.inc.c"
@@ -1093,7 +1092,6 @@
         "src/aot/xi_cgen_array_helpers.inc.c",
         "src/aot/xi_cgen_coro.inc.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
-        "src/aot/xi_cgen_stdlib_helpers.inc.c",
         "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
         "src/aot/xi_cgen_struct_helpers.inc.c",
         "src/aot/xi_cgen_value_helpers.inc.c"
@@ -1102,5 +1100,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "6c214a1f3d84c0d30e80bc948030aba509cdf2e7a49326c06b945935205a1a12"
+  "source_tree_fingerprint": "838ed9967c092c9e73e9250d9710a3bd8ecfc525903925a06c8fe805d626210c"
 }

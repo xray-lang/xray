@@ -1819,6 +1819,7 @@ static bool xaot_bundle_add_generic_instantiation_plan(XaotBundle *bundle,
     plan->origin_func_id = inst->origin_func_id;
     plan->origin_method_id = inst->origin_method_id;
     plan->origin_class_id = inst->origin_class_id;
+    plan->origin_nominal_key = inst->origin_nominal_key;
     plan->specialized_func_id = inst->specialized_func_id;
     plan->specialized_class_id = inst->specialized_class_id;
     plan->root_callsite_id = inst->root_callsite_id;
@@ -1949,6 +1950,7 @@ static bool xaot_bundle_add_generic_body_plan(XaotBundle *bundle, const XgGlobal
     plan->origin_body_func_id = use->origin_body_func_id;
     plan->specialized_body_func_id = use->specialized_body_func_id;
     plan->root_callsite_id = use->root_callsite_id;
+    plan->origin_nominal_key = use->origin_nominal_key;
     plan->receiver_class_id = use->receiver_class_id;
     plan->receiver_type_key = use->receiver_type_key;
     plan->receiver_type_arg_key_start = use->receiver_type_arg_key_start;
@@ -8144,19 +8146,21 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         const XaotGenericInstantiationPlan *gp = &bundle->generic_instantiation_plans[gi];
         fprintf(out,
                 "generic-instantiation %u id=%u module=%u kind=%s origin_decl=%u "
-                "origin_func=%u origin_method=%u origin_class=%u specialized_func=%u "
+                "origin_func=%u origin_method=%u origin_class=%u origin_nominal=%016" PRIx64
+                " specialized_func=%u "
                 "specialized_class=%u root_callsite=%u constraint_iface=%u receiver_class=%u "
                 "receiver_type=%" PRIu64 " receiver_type_args=%" PRIu64
                 "+%u declaration_type=%" PRIu64 " declaration_type_args=%" PRIu64
                 "+%u specialization_effect=%u name=%u action=%s evidence=",
                 gi, gp->generic_inst_id, gp->module_id, xg_generic_inst_kind_name(gp->inst_kind),
                 gp->origin_decl_id, gp->origin_func_id, gp->origin_method_id, gp->origin_class_id,
-                gp->specialized_func_id, gp->specialized_class_id, gp->root_callsite_id,
-                gp->constraint_interface_id, gp->receiver_class_id, gp->receiver_type_key,
-                gp->receiver_type_arg_key_start, (unsigned) gp->receiver_type_arg_count,
-                gp->declaration_type_key, gp->declaration_type_arg_key_start,
-                (unsigned) gp->declaration_type_arg_count, (unsigned) gp->specialization_effect,
-                gp->name_id, generic_instantiation_action_name(gp->action));
+                gp->origin_nominal_key, gp->specialized_func_id, gp->specialized_class_id,
+                gp->root_callsite_id, gp->constraint_interface_id, gp->receiver_class_id,
+                gp->receiver_type_key, gp->receiver_type_arg_key_start,
+                (unsigned) gp->receiver_type_arg_count, gp->declaration_type_key,
+                gp->declaration_type_arg_key_start, (unsigned) gp->declaration_type_arg_count,
+                (unsigned) gp->specialization_effect, gp->name_id,
+                generic_instantiation_action_name(gp->action));
         print_generic_instantiation_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n",
                 generic_instantiation_unproven_reason_name(gp->unproven_reason));
@@ -8166,17 +8170,17 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         const XaotGenericBodyPlan *gp = &bundle->generic_body_plans[gi];
         fprintf(out,
                 "generic-body-plan %u id=%u inst=%u module=%u owner=%u origin_body=%u "
-                "specialized_body=%u root_callsite=%u receiver_class=%u receiver_type=%" PRIu64
-                " receiver_type_args=%" PRIu64 "+%u declaration_type=%" PRIu64
-                " declaration_type_args=%" PRIu64
+                "specialized_body=%u root_callsite=%u origin_nominal=%016" PRIx64
+                " receiver_class=%u receiver_type=%" PRIu64 " receiver_type_args=%" PRIu64
+                "+%u declaration_type=%" PRIu64 " declaration_type_args=%" PRIu64
                 "+%u specialization_effect=%u size=%u action=%s evidence=",
                 gi, gp->use_id, gp->generic_inst_id, gp->module_id, gp->owner_func_id,
                 gp->origin_body_func_id, gp->specialized_body_func_id, gp->root_callsite_id,
-                gp->receiver_class_id, gp->receiver_type_key, gp->receiver_type_arg_key_start,
-                (unsigned) gp->receiver_type_arg_count, gp->declaration_type_key,
-                gp->declaration_type_arg_key_start, (unsigned) gp->declaration_type_arg_count,
-                (unsigned) gp->specialization_effect, gp->estimated_body_size,
-                generic_body_action_name(gp->action));
+                gp->origin_nominal_key, gp->receiver_class_id, gp->receiver_type_key,
+                gp->receiver_type_arg_key_start, (unsigned) gp->receiver_type_arg_count,
+                gp->declaration_type_key, gp->declaration_type_arg_key_start,
+                (unsigned) gp->declaration_type_arg_count, (unsigned) gp->specialization_effect,
+                gp->estimated_body_size, generic_body_action_name(gp->action));
         print_generic_body_evidence_bits(out, gp->evidence);
         fprintf(out, " reason=%s\n", generic_deepen_unproven_reason_name(gp->unproven_reason));
     }

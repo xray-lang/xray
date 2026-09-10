@@ -1139,11 +1139,14 @@ TEST(global_evidence_hash_is_content_stable) {
     XgGenericInstSummary inst = {.generic_inst_id = 1,
                                  .module_id = 5,
                                  .origin_class_id = 10,
-                                 .declaration_type_key = 600,
+                                 .origin_nominal_key = UINT64_C(0xabcde),
                                  .declaration_type_arg_key_start = 700,
                                  .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES};
+    inst.declaration_type_key = xg_generic_nominal_type_key(
+        inst.origin_nominal_key, inst.declaration_type_arg_key_start,
+        inst.declaration_type_arg_count, inst.kind);
 
     xg_global_evidence_init(&a, key);
     xg_global_evidence_init(&b, key);
@@ -1354,8 +1357,8 @@ static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
                                  .module_id = key.module_id,
                                  .origin_method_id = 1,
                                  .origin_class_id = 1,
+                                 .origin_nominal_key = UINT64_C(0xabcde),
                                  .receiver_class_id = 1,
-                                 .receiver_type_key = 43,
                                  .root_callsite_id = 1,
                                  .name_id = 14,
                                  .declaration_type_key = 44,
@@ -1363,6 +1366,7 @@ static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
                                  .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_METHOD,
                                  .flags = XG_GENERIC_INST_CONCRETE_TYPES};
+    inst.receiver_type_key = inst.origin_nominal_key;
 
     snprintf(link.name, sizeof(link.name), "math.sqrt");
     xg_global_evidence_init(ev, key);
@@ -1493,7 +1497,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=58 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=59 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1831,13 +1835,13 @@ TEST(global_evidence_dump_lists_core_rows) {
         .origin_func_id = 4,
         .origin_method_id = 3,
         .origin_class_id = 2,
+        .origin_nominal_key = UINT64_C(0xabcde),
         .receiver_class_id = 2,
         .specialized_func_id = 0,
         .specialized_class_id = 2,
         .root_callsite_id = 5,
         .constraint_interface_id = 123,
         .name_id = 900,
-        .receiver_type_key = 801,
         .receiver_type_arg_key_start = 802,
         .receiver_type_arg_count = 1,
         .declaration_type_key = 901,
@@ -1849,6 +1853,9 @@ TEST(global_evidence_dump_lists_core_rows) {
         .flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_INTERFACE_CONSTRAINT |
                  XG_GENERIC_INST_SPECIALIZED_ABI,
     };
+    generic_inst.receiver_type_key = xg_generic_nominal_type_key(
+        generic_inst.origin_nominal_key, generic_inst.receiver_type_arg_key_start,
+        generic_inst.receiver_type_arg_count, XG_GENERIC_INST_CLASS);
     memcpy(link_dep.name, "m", 2);
     memcpy(stdlib_module.name, "path", 5);
     memcpy(stdlib_symbol.name, "path.join", 10);
@@ -1872,15 +1879,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=58 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=58 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=58 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=58 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=59 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=59 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=59 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=59 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=59 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=59 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=59 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=59 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -1912,7 +1919,8 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "origin_decl=2 origin_func=4 origin_method=3 origin_class=2"));
     ASSERT_NOT_NULL(strstr(dump, "root_callsite=5 constraint_iface=123"));
     ASSERT_NOT_NULL(strstr(dump, "receiver_class=2"));
-    ASSERT_NOT_NULL(strstr(dump, "receiver_type=801 receiver_type_args=802+1"));
+    ASSERT_NOT_NULL(strstr(dump, "origin_nominal=00000000000abcde"));
+    ASSERT_NOT_NULL(strstr(dump, "receiver_type_args=802+1"));
     ASSERT_NOT_NULL(strstr(
         dump, "declaration_type=901 declaration_type_args=902+2 specialization_effect=2"));
 
@@ -1929,8 +1937,9 @@ TEST(global_evidence_dump_lists_core_rows) {
     char *plan_dump = xaot_bundle_dump_global_evidence_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
     ASSERT_NOT_NULL(strstr(plan_dump, "generic-instantiation 0 id=9 module=1 kind=method"));
-    ASSERT_NOT_NULL(strstr(
-        plan_dump, "receiver_class=2 receiver_type=801 receiver_type_args=802+1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "origin_nominal=00000000000abcde"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "receiver_class=2"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "receiver_type_args=802+1"));
     ASSERT_NOT_NULL(strstr(
         plan_dump,
         "declaration_type=901 declaration_type_args=902+2 specialization_effect=2"));
@@ -2038,11 +2047,25 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class) {
                       .imported_summary_hash = 0x1923,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
+    XgModuleSummary evidence_module = {.module_id = 1, .canonical_hash = UINT64_C(0x1924)};
+    XgDeclSummary origin_decl = {.decl_id = 1,
+                                 .module_id = 1,
+                                 .source_node_id = 1,
+                                 .kind = XG_DECL_CLASS,
+                                 .name_id = 10,
+                                 .type_key = 20};
+    XgClassSummary origin_class = {.class_id = 1,
+                                   .module_id = 1,
+                                   .decl_id = 1,
+                                   .name_id = 10,
+                                   .flags = XG_CLASS_GENERIC_SKELETON | XG_CLASS_INFERRED_FINAL,
+                                   .decl_kind = XG_DECL_CLASS};
     XgGenericInstSummary inst = {.generic_inst_id = 1,
                                  .module_id = 1,
+                                 .origin_decl_id = 1,
+                                 .origin_class_id = 1,
                                  .specialized_class_id = 99,
                                  .name_id = 10,
-                                 .declaration_type_key = 11,
                                  .declaration_type_arg_key_start = 12,
                                  .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
@@ -2055,7 +2078,17 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class) {
     XaotBundle bundle;
     char err[256];
 
+    origin_decl.nominal_key = xg_nominal_decl_key(
+        evidence_module.canonical_hash, origin_decl.source_node_id, origin_decl.kind,
+        origin_decl.type_key);
+    inst.origin_nominal_key = origin_decl.nominal_key;
+    inst.declaration_type_key = xg_generic_nominal_type_key(
+        inst.origin_nominal_key, inst.declaration_type_arg_key_start,
+        inst.declaration_type_arg_count, inst.kind);
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&ev, &evidence_module));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &origin_decl));
+    ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &origin_class));
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
 
     memset(&init_func, 0, sizeof(init_func));
@@ -2071,6 +2104,15 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class) {
     bundle.modules = modules;
     bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+
+    ev.classes[0].decl_id = 2;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT generic class source owner identity is stale"));
+    ev.classes[0].decl_id = 1;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT generic inst specialized class is missing"));
@@ -2087,6 +2129,13 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_ident
                       .imported_summary_hash = 0x1933,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
+    XgModuleSummary evidence_module = {.module_id = 1, .canonical_hash = UINT64_C(0x1934)};
+    XgDeclSummary origin_decl = {.decl_id = 1,
+                                 .module_id = 1,
+                                 .source_node_id = 1,
+                                 .kind = XG_DECL_CLASS,
+                                 .name_id = 10,
+                                 .type_key = 20};
     XgClassSummary origin = {.module_id = 1,
                              .decl_id = 1,
                              .class_id = 1,
@@ -2100,16 +2149,15 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_ident
                                   .flags = XG_CLASS_MONOMORPHIZED | XG_CLASS_INFERRED_FINAL,
                                   .generic_origin_class_id = 1,
                                   .generic_origin_name_id = 10,
-                                  .generic_type_key = 99,
                                   .generic_type_arg_key_start = 12,
                                   .generic_type_arg_count = 1,
                                   .decl_kind = XG_DECL_CLASS};
     XgGenericInstSummary inst = {.generic_inst_id = 1,
                                  .module_id = 1,
+                                 .origin_decl_id = 1,
                                  .origin_class_id = 1,
                                  .specialized_class_id = 2,
                                  .name_id = 10,
-                                 .declaration_type_key = 11,
                                  .declaration_type_arg_key_start = 12,
                                  .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
@@ -2122,10 +2170,22 @@ TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class_ident
     XaotBundle bundle;
     char err[256];
 
+    origin_decl.nominal_key = xg_nominal_decl_key(
+        evidence_module.canonical_hash, origin_decl.source_node_id, origin_decl.kind,
+        origin_decl.type_key);
+    specialized.generic_origin_nominal_key = origin_decl.nominal_key;
+    specialized.generic_type_key = xg_generic_nominal_type_key(
+        origin_decl.nominal_key, specialized.generic_type_arg_key_start,
+        specialized.generic_type_arg_count, XG_GENERIC_INST_CLASS);
+    inst.origin_nominal_key = origin_decl.nominal_key;
+    inst.declaration_type_key = specialized.generic_type_key;
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&ev, &evidence_module));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &origin_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &origin));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &specialized));
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
+    ev.classes[1].generic_type_key ^= UINT64_C(1);
 
     memset(&init_func, 0, sizeof(init_func));
     init_func.name = "init";
@@ -2179,6 +2239,10 @@ TEST(global_evidence_verifier_rejects_monomorphized_class_without_generic_inst_a
     XaotBundle bundle;
     char err[256];
 
+    specialized.generic_origin_nominal_key = UINT64_C(0x1944);
+    specialized.generic_type_key = xg_generic_nominal_type_key(
+        specialized.generic_origin_nominal_key, specialized.generic_type_arg_key_start,
+        specialized.generic_type_arg_count, XG_GENERIC_INST_CLASS);
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &origin));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &specialized));
@@ -2212,6 +2276,13 @@ TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_class_a
                       .imported_summary_hash = 0x1953,
                       .module_id = 1,
                       .profile = XG_BUILD_NATIVE_RELEASE};
+    XgModuleSummary evidence_module = {.module_id = 1, .canonical_hash = UINT64_C(0x1954)};
+    XgDeclSummary origin_decl = {.decl_id = 1,
+                                 .module_id = 1,
+                                 .source_node_id = 1,
+                                 .kind = XG_DECL_CLASS,
+                                 .name_id = 10,
+                                 .type_key = 20};
     XgClassSummary origin = {.module_id = 1,
                              .decl_id = 1,
                              .class_id = 1,
@@ -2225,16 +2296,15 @@ TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_class_a
                                   .flags = XG_CLASS_MONOMORPHIZED | XG_CLASS_INFERRED_FINAL,
                                   .generic_origin_class_id = 1,
                                   .generic_origin_name_id = 10,
-                                  .generic_type_key = 11,
                                   .generic_type_arg_key_start = 12,
                                   .generic_type_arg_count = 1,
                                   .decl_kind = XG_DECL_CLASS};
     XgGenericInstSummary inst = {.generic_inst_id = 1,
                                  .module_id = 1,
+                                 .origin_decl_id = 1,
                                  .origin_class_id = 1,
                                  .specialized_class_id = 2,
                                  .name_id = 10,
-                                 .declaration_type_key = 11,
                                  .declaration_type_arg_key_start = 12,
                                  .declaration_type_arg_count = 1,
                                  .kind = XG_GENERIC_INST_CLASS,
@@ -2248,9 +2318,22 @@ TEST(global_evidence_verifier_rejects_duplicate_generic_inst_specialized_class_a
     XaotBundle bundle;
     char err[256];
 
+    origin_decl.nominal_key = xg_nominal_decl_key(
+        evidence_module.canonical_hash, origin_decl.source_node_id, origin_decl.kind,
+        origin_decl.type_key);
+    specialized.generic_origin_nominal_key = origin_decl.nominal_key;
+    specialized.generic_type_key = xg_generic_nominal_type_key(
+        origin_decl.nominal_key, specialized.generic_type_arg_key_start,
+        specialized.generic_type_arg_count, XG_GENERIC_INST_CLASS);
+    inst.origin_nominal_key = origin_decl.nominal_key;
+    inst.declaration_type_key = specialized.generic_type_key;
     duplicate.generic_inst_id = 2;
+    duplicate.origin_nominal_key = inst.origin_nominal_key;
+    duplicate.declaration_type_key = inst.declaration_type_key;
 
     xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_module(&ev, &evidence_module));
+    ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &origin_decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &origin));
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &specialized));
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
@@ -8313,6 +8396,8 @@ TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver
     XaotBundle hostile_bundle = {0};
     ASSERT_TRUE(
         xaot_bundle_set_global_evidence(&hostile_bundle, &evidence, XG_BUILD_NATIVE_RELEASE));
+    uint64_t original_origin_nominal_key = hostile_inst->origin_nominal_key;
+    uint64_t original_receiver_type_key = hostile_inst->receiver_type_key;
     uint64_t forged_receiver_type_key = hostile_inst->receiver_type_key ^ UINT64_C(1);
     ASSERT_TRUE(forged_receiver_type_key != 0u);
     hostile_inst->receiver_type_key = forged_receiver_type_key;
@@ -8347,7 +8432,62 @@ TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver
     ASSERT_FALSE(xaot_verify_global_evidence_plan(&hostile_bundle, verifier_error,
                                                   sizeof(verifier_error)));
     ASSERT_MSG(strstr(verifier_error,
-                      "AOT generic method receiver is not source-owner-visible") != NULL,
+                      "AOT generic inst receiver identity does not re-derive") != NULL,
+               verifier_error);
+
+    hostile_inst->receiver_type_key = original_receiver_type_key;
+    for (uint32_t i = 0u; i < evidence.ngeneric_body_uses; ++i) {
+        if (evidence.generic_body_uses[i].generic_inst_id == hostile_inst->generic_inst_id)
+            evidence.generic_body_uses[i].receiver_type_key = original_receiver_type_key;
+    }
+    for (uint32_t i = 0u; i < hostile_bundle.ngeneric_instantiation_plans; ++i) {
+        XaotGenericInstantiationPlan *plan = &hostile_bundle.generic_instantiation_plans[i];
+        if (plan->generic_inst_id == hostile_inst->generic_inst_id)
+            plan->receiver_type_key = original_receiver_type_key;
+    }
+    for (uint32_t i = 0u; i < hostile_bundle.ngeneric_body_plans; ++i) {
+        XaotGenericBodyPlan *plan = &hostile_bundle.generic_body_plans[i];
+        if (plan->generic_inst_id == hostile_inst->generic_inst_id)
+            plan->receiver_type_key = original_receiver_type_key;
+    }
+
+    /* Even when every derived row is forged coherently, the source
+     * declaration remains the independent nominal identity authority. */
+    uint64_t forged_origin_nominal_key = original_origin_nominal_key ^ UINT64_C(1);
+    ASSERT_TRUE(forged_origin_nominal_key != 0u);
+    forged_receiver_type_key = xg_generic_nominal_type_key(
+        forged_origin_nominal_key, hostile_inst->receiver_type_arg_key_start,
+        hostile_inst->receiver_type_arg_count, XG_GENERIC_INST_CLASS);
+    ASSERT_TRUE(forged_receiver_type_key != 0u);
+    hostile_inst->origin_nominal_key = forged_origin_nominal_key;
+    hostile_inst->receiver_type_key = forged_receiver_type_key;
+    for (uint32_t i = 0u; i < evidence.ngeneric_body_uses; ++i) {
+        XgGenericBodyUseSummary *use = &evidence.generic_body_uses[i];
+        if (use->generic_inst_id != hostile_inst->generic_inst_id)
+            continue;
+        use->origin_nominal_key = forged_origin_nominal_key;
+        use->receiver_type_key = forged_receiver_type_key;
+    }
+    for (uint32_t i = 0u; i < hostile_bundle.ngeneric_instantiation_plans; ++i) {
+        XaotGenericInstantiationPlan *plan = &hostile_bundle.generic_instantiation_plans[i];
+        if (plan->generic_inst_id != hostile_inst->generic_inst_id)
+            continue;
+        plan->origin_nominal_key = forged_origin_nominal_key;
+        plan->receiver_type_key = forged_receiver_type_key;
+    }
+    for (uint32_t i = 0u; i < hostile_bundle.ngeneric_body_plans; ++i) {
+        XaotGenericBodyPlan *plan = &hostile_bundle.generic_body_plans[i];
+        if (plan->generic_inst_id != hostile_inst->generic_inst_id)
+            continue;
+        plan->origin_nominal_key = forged_origin_nominal_key;
+        plan->receiver_type_key = forged_receiver_type_key;
+    }
+    hostile_bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&evidence);
+    memset(verifier_error, 0, sizeof(verifier_error));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&hostile_bundle, verifier_error,
+                                                  sizeof(verifier_error)));
+    ASSERT_MSG(strstr(verifier_error,
+                      "AOT generic inst origin nominal identity does not re-derive") != NULL,
                verifier_error);
     xaot_bundle_free(&hostile_bundle);
 
@@ -8440,7 +8580,8 @@ TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver) {
 
 static bool build_monomorphized_type_keys(const char *source, const char *canonical,
                                           const char *namespace_id, const char *source_path,
-                                          uint64_t *out_type_key, uint64_t *out_type_arg_key) {
+                                          uint64_t *out_type_key, uint64_t *out_type_arg_key,
+                                          uint64_t *out_origin_nominal_key) {
     AstNode *ast = xr_parse(g_session, source);
     if (!ast)
         return false;
@@ -8465,25 +8606,20 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
     }
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
-    bool first_analysis_ok = analyzer->diagnostic_count == 0u;
     XgGlobalEvidence pre = {0};
-    bool pre_ok = xg_global_evidence_build_pre_monomorphization_from_module_graph(
-        &pre, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
-    bool ok = first_analysis_ok && pre_ok;
+    bool ok = analyzer->diagnostic_count == 0u &&
+              xg_global_evidence_build_pre_monomorphization_from_module_graph(
+                  &pre, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
     XaMonoBudget budget = xa_mono_default_budget();
     XaMonoUsage usage = {0};
     AstNode *roots[1] = {ast};
-    bool mono_ok = xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer);
-    ok = ok && mono_ok;
+    ok = ok && xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer);
     xa_analyzer_clear_diagnostics(analyzer);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
-    bool second_analysis_ok = analyzer->diagnostic_count == 0u;
-    ok = ok && second_analysis_ok;
+    ok = ok && analyzer->diagnostic_count == 0u;
     XgGlobalEvidence evidence = {0};
-    bool evidence_ok =
-        xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
-            &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
-    ok = ok && evidence_ok;
+    ok = ok && xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+                   &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer);
     uint32_t specialized_count = 0;
     if (ok) {
         for (uint32_t i = 0u; i < evidence.nclasses; ++i) {
@@ -8493,6 +8629,7 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
             specialized_count++;
             *out_type_key = specialized->generic_type_key;
             *out_type_arg_key = specialized->generic_type_arg_key_start;
+            *out_origin_nominal_key = specialized->generic_origin_nominal_key;
         }
     }
     xg_global_evidence_free(&evidence);
@@ -8500,7 +8637,8 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
     xr_program_destroy(ast);
-    return ok && specialized_count == 1u && *out_type_key != 0u && *out_type_arg_key != 0u;
+    return ok && specialized_count == 1u && *out_type_key != 0u && *out_type_arg_key != 0u &&
+           *out_origin_nominal_key != 0u;
 }
 
 TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments) {
@@ -8512,14 +8650,19 @@ TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments) {
     uint64_t left_arg_key = 0u;
     uint64_t right_type_key = 0u;
     uint64_t right_arg_key = 0u;
+    uint64_t left_origin_nominal_key = 0u;
+    uint64_t right_origin_nominal_key = 0u;
     ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=18:generic-class-left",
-                                              "generic-class-left", "generic-class-left.xr",
-                                              &left_type_key, &left_arg_key));
+                                               "generic-class-left", "generic-class-left.xr",
+                                               &left_type_key, &left_arg_key,
+                                               &left_origin_nominal_key));
     ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=19:generic-class-right",
-                                              "generic-class-right", "generic-class-right.xr",
-                                              &right_type_key, &right_arg_key));
+                                               "generic-class-right", "generic-class-right.xr",
+                                               &right_type_key, &right_arg_key,
+                                               &right_origin_nominal_key));
     ASSERT_TRUE(left_type_key != right_type_key);
     ASSERT_TRUE(left_arg_key != right_arg_key);
+    ASSERT_TRUE(left_origin_nominal_key != right_origin_nominal_key);
     teardown_parser_session();
 }
 
@@ -8535,14 +8678,47 @@ TEST(global_evidence_monomorphized_struct_keys_use_exact_nominal_arguments) {
     uint64_t left_arg_key = 0u;
     uint64_t right_type_key = 0u;
     uint64_t right_arg_key = 0u;
-    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=20:generic-struct-left",
-                                              "generic-struct-left", "generic-struct-left.xr",
-                                              &left_type_key, &left_arg_key));
-    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=21:generic-struct-right",
-                                              "generic-struct-right", "generic-struct-right.xr",
-                                              &right_type_key, &right_arg_key));
+    uint64_t left_origin_nominal_key = 0u;
+    uint64_t right_origin_nominal_key = 0u;
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=19:generic-struct-left",
+                                               "generic-struct-left", "generic-struct-left.xr",
+                                               &left_type_key, &left_arg_key,
+                                               &left_origin_nominal_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=20:generic-struct-right",
+                                               "generic-struct-right", "generic-struct-right.xr",
+                                               &right_type_key, &right_arg_key,
+                                               &right_origin_nominal_key));
     ASSERT_TRUE(left_type_key != right_type_key);
     ASSERT_TRUE(left_arg_key != right_arg_key);
+    ASSERT_TRUE(left_origin_nominal_key != right_origin_nominal_key);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_monomorphized_keys_separate_same_name_same_tuple_sources) {
+    setup_parser_session();
+    const char *source = "struct Box<T> { value: T }\n"
+                         "fn make() { var value = Box<i64>{value: 1} }\n";
+    uint64_t left_type_key = 0u;
+    uint64_t left_arg_key = 0u;
+    uint64_t left_origin_nominal_key = 0u;
+    uint64_t right_type_key = 0u;
+    uint64_t right_arg_key = 0u;
+    uint64_t right_origin_nominal_key = 0u;
+    ASSERT_TRUE(build_monomorphized_type_keys(
+        source, "memory-module-v1:id=15:same-tuple-left", "same-tuple-left",
+        "same-tuple-left.xr", &left_type_key, &left_arg_key, &left_origin_nominal_key));
+    ASSERT_TRUE(build_monomorphized_type_keys(
+        source, "memory-module-v1:id=16:same-tuple-right", "same-tuple-right",
+        "same-tuple-right.xr", &right_type_key, &right_arg_key, &right_origin_nominal_key));
+    ASSERT_EQ_UINT(left_arg_key, right_arg_key);
+    ASSERT_TRUE(left_origin_nominal_key != right_origin_nominal_key);
+    ASSERT_TRUE(left_type_key != right_type_key);
+    ASSERT_EQ_UINT(left_type_key,
+                   xg_generic_nominal_type_key(left_origin_nominal_key, left_arg_key, 1u,
+                                               XG_GENERIC_INST_CLASS));
+    ASSERT_EQ_UINT(right_type_key,
+                   xg_generic_nominal_type_key(right_origin_nominal_key, right_arg_key, 1u,
+                                               XG_GENERIC_INST_CLASS));
     teardown_parser_session();
 }
 
@@ -8707,6 +8883,22 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+
+    /* The root callsite owner's body, not a copied module id, is the
+     * independent authority for the caller module. */
+    ev.generic_insts[0].module_id = 2;
+    ev.generic_body_uses[0].module_id = 2;
+    bundle.generic_instantiation_plans[0].module_id = 2;
+    bundle.generic_body_plans[0].module_id = 2;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "generic inst caller module does not re-derive") != NULL, err);
+    ev.generic_insts[0].module_id = 1;
+    ev.generic_body_uses[0].module_id = 1;
+    bundle.generic_instantiation_plans[0].module_id = 1;
+    bundle.generic_body_plans[0].module_id = 1;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
 
     ev.generic_insts[0].specialization_effect = UINT8_MAX;
     bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
@@ -16148,6 +16340,8 @@ RUN_TEST(global_evidence_post_mono_records_concrete_generic_method_root);
 RUN_TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver);
 RUN_TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver);
 RUN_TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments);
+RUN_TEST(global_evidence_monomorphized_struct_keys_use_exact_nominal_arguments);
+RUN_TEST(global_evidence_monomorphized_keys_separate_same_name_same_tuple_sources);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
 RUN_TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity);
 RUN_TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry);

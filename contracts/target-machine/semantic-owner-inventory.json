@@ -70,6 +70,7 @@
     "src/base/xnumber_parse_error.h",
     "src/base/xplatform.h",
     "src/base/xposix_compat.h",
+    "src/base/xsha256.h",
     "src/base/xstable_id.h",
     "src/base/xstorage.h",
     "src/base/xtarget_data_layout.h",
@@ -86,6 +87,7 @@
     "src/frontend/analyzer/xa_memory_effect_db.h",
     "src/frontend/analyzer/xa_ownership.h",
     "src/frontend/analyzer/xa_selection.h",
+    "src/frontend/analyzer/xa_suspend_point.h",
     "src/frontend/analyzer/xa_target_query.h",
     "src/frontend/analyzer/xanalyzer_builtins.h",
     "src/frontend/analyzer/xanalyzer_symbol.h",
@@ -104,6 +106,7 @@
     "src/ir/xi.h",
     "src/ir/xi_analysis.h",
     "src/ir/xi_backend_lower.h",
+    "src/ir/xi_builtin_map_entry_iterator_shape.h",
     "src/ir/xi_core_api.h",
     "src/ir/xi_coro_analyze.h",
     "src/ir/xi_coro_lower.h",
@@ -112,6 +115,7 @@
     "src/ir/xi_evidence.h",
     "src/ir/xi_lowering_coverage_gen.h",
     "src/ir/xi_method_sym.def",
+    "src/ir/xi_method_symbol.h",
     "src/ir/xi_module.h",
     "src/ir/xi_op_name.h",
     "src/ir/xi_ops_gen.h",
@@ -121,16 +125,27 @@
     "src/ir/xi_pass_policy.h",
     "src/ir/xi_range.h",
     "src/ir/xi_value_query.h",
+    "src/module/xmodule_identity.h",
     "src/module/xnative_package.h",
     "src/os/os_time.h",
     "src/plan/semantic/xr_program_semantic_closure.h",
+    "src/plan/semantic/xr_semantic_allocation_shape.h",
+    "src/plan/semantic/xr_semantic_builtin_runtime_method_shape.h",
+    "src/plan/semantic/xr_semantic_class_shape.h",
+    "src/plan/semantic/xr_semantic_dynamic_value_shape.h",
     "src/plan/semantic/xr_semantic_enum_shape.h",
     "src/plan/semantic/xr_semantic_ids.h",
     "src/plan/semantic/xr_semantic_local_call_target_shape.h",
+    "src/plan/semantic/xr_semantic_native_leaf_shape.h",
+    "src/plan/semantic/xr_semantic_native_module_shape.h",
     "src/plan/semantic/xr_semantic_number_parse_error_shape.h",
+    "src/plan/semantic/xr_semantic_owner_transfer_shape.h",
     "src/plan/semantic/xr_semantic_panic_catch_shape.h",
     "src/plan/semantic/xr_semantic_plan.h",
+    "src/plan/semantic/xr_semantic_range_shape.h",
     "src/plan/semantic/xr_semantic_shared_read_shape.h",
+    "src/plan/semantic/xr_semantic_string_shape.h",
+    "src/plan/semantic/xr_semantic_type_admission_shape.h",
     "src/plan/target/xr_target_capability.h",
     "src/plan/target/xr_target_instruction_gen.h",
     "src/plan/target/xr_target_plan.h",
@@ -195,11 +210,12 @@
     "src/shared/xr_utf8_core.h",
     "src/shared/xr_view_origin.h",
     "src/stdlib/xstdlib_defs_generated.h",
+    "src/stdlib/xstdlib_metadata.h",
     "xisa/xi/lowering.def",
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 284,
+  "operation_count": 282,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -1189,32 +1205,6 @@
         "aot",
         "hosted",
         "freestanding"
-      ]
-    },
-    {
-      "benchmark_anchor": "shared-core/regex-flag-contract",
-      "capabilities": [
-        "vm",
-        "aot",
-        "hosted"
-      ],
-      "current_aot_owner": "representation adapter",
-      "current_shared_owner": "src/shared/xr_regex_core.h",
-      "current_vm_owner": "representation adapter",
-      "effects": [],
-      "error_panic_suspend_cancel_publication": [],
-      "family": "shared-kernel",
-      "future_semantic_owner": "SemanticOwnerRegistry/regex-flag-contract",
-      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
-      "migration_task": 278,
-      "observable_contract": "src/shared/xr_regex_core.h",
-      "observable_edges": [],
-      "operation_id": "shared.regex-flag-contract",
-      "ownership": "native",
-      "targets": [
-        "vm",
-        "aot",
-        "hosted"
       ]
     },
     {
@@ -7470,5 +7460,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "68cdaa451a925df6f432b771783a5e2913553ca68a90bed9cb67a152c7a8d900"
+  "source_tree_fingerprint": "d0f03765a184eb5eae1427c0f323deacd461d789ba6b6bd3668e45434cedb88a"
 }

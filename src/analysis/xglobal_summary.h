@@ -85,8 +85,12 @@ enum {
      * 58:
      * anchors a generic value-struct method receiver tuple to the exact
      * monomorphized class
-     * identity used by the executable method body. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 58,
+     * identity used by the executable method body.
+     * 59: anchors aggregate specialization
+     * identity to the stable nominal key
+     * of its source declaration and binds each root to
+     * its caller module. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 59,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -821,6 +825,7 @@ typedef struct XgClassSummary {
     uint32_t interface_count;
     XgClassId generic_origin_class_id;
     uint32_t generic_origin_name_id;
+    uint64_t generic_origin_nominal_key;
     uint64_t generic_type_key;
     uint64_t generic_type_arg_key_start;
     uint16_t generic_type_arg_count;
@@ -1061,6 +1066,7 @@ typedef struct XgGenericInstSummary {
     XgFuncId origin_func_id;
     XgMethodId origin_method_id;
     XgClassId origin_class_id;
+    uint64_t origin_nominal_key;
     XgClassId receiver_class_id;
     XgFuncId specialized_func_id;
     XgClassId specialized_class_id;
@@ -1087,6 +1093,7 @@ typedef struct XgGenericBodyUseSummary {
     XgFuncId origin_body_func_id;
     XgFuncId specialized_body_func_id;
     XgCallsiteId root_callsite_id;
+    uint64_t origin_nominal_key;
     XgClassId receiver_class_id;
     uint64_t receiver_type_key;
     uint64_t receiver_type_arg_key_start;
@@ -1775,6 +1782,11 @@ xg_global_evidence_find_interface_witness(const XgGlobalEvidence *evidence,
 XR_FUNC XgReturnOwnership xg_global_evidence_interface_method_return_ownership(
     const XgGlobalEvidence *evidence, XgInterfaceId receiver_interface_id, uint32_t name_id,
     uint32_t signature_key);
+XR_FUNC uint64_t xg_nominal_decl_key(uint64_t module_canonical_hash, uint32_t source_node_id,
+                                     uint8_t decl_kind, uint32_t type_key);
+XR_FUNC uint64_t xg_generic_nominal_type_key(uint64_t origin_nominal_key,
+                                             uint64_t type_arg_tuple_key, uint16_t type_arg_count,
+                                             uint8_t inst_kind);
 XR_FUNC const XgGenericInstSummary *
 xg_global_evidence_find_generic_inst(const XgGlobalEvidence *evidence,
                                      XgGenericInstId generic_inst_id);
