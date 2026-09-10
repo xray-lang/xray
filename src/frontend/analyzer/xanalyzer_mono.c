@@ -807,13 +807,17 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             if (clone_ctx && clone_ctx->analyzer) {
                 XaGenericSpecializationFact fact;
                 if (xa_analyzer_get_generic_specialization(clone_ctx->analyzer, node, &fact)) {
-                    if (!fact.generic_decl || fact.receiver_type_arg_count != 0u ||
-                        fact.declaration_type_arg_count == 0u ||
+                    XrTypeRef **receiver_type_args =
+                        clone_tref_array(fact.receiver_type_args,
+                                         (int) fact.receiver_type_arg_count, map, mc, clone_ctx);
+                    if (!fact.generic_decl || fact.declaration_type_arg_count == 0u ||
                         fact.declaration_type_arg_count !=
                             (uint32_t) n->as.call_expr.type_arg_count ||
-                        !n->as.call_expr.type_args) {
+                        !n->as.call_expr.type_args ||
+                        (fact.receiver_type_arg_count > 0u && !receiver_type_args)) {
                         clone_ctx->type_substitution_failed = true;
                     } else {
+                        fact.receiver_type_args = receiver_type_args;
                         fact.declaration_type_args = n->as.call_expr.type_args;
                         if (!xa_analyzer_set_generic_specialization(clone_ctx->analyzer, n, &fact))
                             clone_ctx->type_substitution_failed = true;
@@ -1481,15 +1485,36 @@ static XrTypeRef **mono_copy_type_ref_tuple(XrTypeRef **source, uint32_t count) 
     return copy;
 }
 
+static const char *mono_generic_owner_name(const AstNode *owner_decl) {
+    if (!owner_decl)
+        return NULL;
+    if (owner_decl->type == AST_CLASS_DECL)
+        return owner_decl->as.class_decl.name;
+    if (owner_decl->type == AST_STRUCT_DECL)
+        return owner_decl->as.struct_decl.name;
+    return NULL;
+}
+
 static bool mono_specialization_supported(const XaGenericSpecializationFact *identity) {
     if (!identity || !identity->generic_decl || identity->generic_decl->type != AST_METHOD_DECL)
         return true;
-    if (!identity->owner_decl || identity->receiver_type_arg_count != 0u)
+    if (!identity->owner_decl || (identity->owner_decl->type != AST_CLASS_DECL &&
+                                  identity->owner_decl->type != AST_STRUCT_DECL))
         return false;
     const ClassDeclNode *owner = identity->owner_decl->type == AST_CLASS_DECL
                                      ? &identity->owner_decl->as.class_decl
                                      : &identity->owner_decl->as.struct_decl;
-    return owner->type_param_count == 0 && !owner->is_generic_skeleton && !owner->is_monomorphized;
+    if (owner->type_param_count == 0)
+        return identity->receiver_type_arg_count == 0u && !owner->is_generic_skeleton &&
+               !owner->is_monomorphized;
+    /* The first executable generic-receiver slice is a value struct. Generic
+     * classes need
+     * separate heap identity and owned-field lifetime work; do
+     * not admit them through the
+     * value path. */
+    return identity->owner_decl->type == AST_STRUCT_DECL &&
+           identity->receiver_type_arg_count == (uint32_t) owner->type_param_count &&
+           !owner->is_monomorphized;
 }
 
 static const char *xa_mono_collector_add_exact(XaMonoCollector *c, const char *generic_name,
@@ -1508,6 +1533,27 @@ static const char *xa_mono_collector_add_exact(XaMonoCollector *c, const char *g
      * will then collect the concrete nested root. */
     if (mono_specialization_contains_open_type(c, identity))
         return NULL;
+
+    /* A method on a generic receiver is executable only on the exact concrete
+     * aggregate.
+     * Register that aggregate before the method so injection can
+     * attach the specialized body
+     * through an AST identity, even when the
+     * receiver reaches the call through a parameter
+     * rather than a literal. */
+    if (identity->generic_decl->type == AST_METHOD_DECL && identity->receiver_type_arg_count > 0u) {
+        const char *owner_name = mono_generic_owner_name(identity->owner_decl);
+        XaGenericSpecializationFact owner_identity = {
+            .generic_decl = identity->owner_decl,
+            .declaration_type_args = identity->receiver_type_args,
+            .declaration_type_arg_count = identity->receiver_type_arg_count,
+            .effect = XA_GENERIC_SPECIALIZATION_EFFECT_NONE,
+        };
+        if (!owner_name || !xa_mono_collector_add_exact(c, owner_name, &owner_identity, loc)) {
+            mono_report_exact_type_identity(c, generic_name, loc);
+            return NULL;
+        }
+    }
 
     char *candidate_mangled = mono_specialization_mangle(c, generic_name, identity);
     if (!candidate_mangled) {
@@ -1656,9 +1702,10 @@ static const AstNode *mono_exact_generic_type_decl(XaMonoCollector *collector,
     return decl;
 }
 
-static const char *xa_mono_collector_lookup_type(XaMonoCollector *collector,
-                                                 const AstNode *generic_decl, XrTypeRef **type_args,
-                                                 int type_arg_count) {
+static XaMonoInstance *xa_mono_collector_find_type_instance(XaMonoCollector *collector,
+                                                            const AstNode *generic_decl,
+                                                            XrTypeRef **type_args,
+                                                            int type_arg_count) {
     if (!collector || !generic_decl || !type_args || type_arg_count <= 0)
         return NULL;
     XaGenericSpecializationFact identity = {
@@ -1680,9 +1727,17 @@ static const char *xa_mono_collector_lookup_type(XaMonoCollector *collector,
         bool matches = candidate && strcmp(instance->mangled_name, candidate) == 0;
         xr_free(candidate);
         if (matches)
-            return instance->mangled_name;
+            return &collector->instances[i];
     }
     return NULL;
+}
+
+static const char *xa_mono_collector_lookup_type(XaMonoCollector *collector,
+                                                 const AstNode *generic_decl, XrTypeRef **type_args,
+                                                 int type_arg_count) {
+    XaMonoInstance *instance =
+        xa_mono_collector_find_type_instance(collector, generic_decl, type_args, type_arg_count);
+    return instance ? instance->mangled_name : NULL;
 }
 
 // task-221 gap C: rewrite a type annotation naming a monomorphized generic
@@ -3223,24 +3278,59 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         if (!decl->inject_clone)
             continue;
 
-        // Build type map from generic params → concrete types
-        int map_count = decl->type_param_count;
-        if (map_count < 0 || (uint32_t) map_count != inst->identity.declaration_type_arg_count) {
+        // Build one substitution map from receiver and declaration dimensions.
+        int receiver_map_count = 0;
+        ClassDeclNode *generic_owner = NULL;
+        if (decl->node->type == AST_METHOD_DECL && decl->owner &&
+            (decl->owner->type == AST_CLASS_DECL || decl->owner->type == AST_STRUCT_DECL)) {
+            generic_owner = decl->owner->type == AST_CLASS_DECL ? &decl->owner->as.class_decl
+                                                                : &decl->owner->as.struct_decl;
+            receiver_map_count = generic_owner->type_param_count;
+        }
+        int declaration_map_count = decl->type_param_count;
+        if (receiver_map_count < 0 || declaration_map_count < 0 ||
+            (uint32_t) receiver_map_count != inst->identity.receiver_type_arg_count ||
+            (uint32_t) declaration_map_count != inst->identity.declaration_type_arg_count ||
+            receiver_map_count > INT_MAX - declaration_map_count) {
             mono_report_exact_type_identity(collector, inst->generic_name, NULL);
             continue;
         }
+        int map_count = receiver_map_count + declaration_map_count;
 
         XrMonoTypeMap *map = (XrMonoTypeMap *) xr_calloc(map_count, sizeof(XrMonoTypeMap));
         if (!map)
             continue;
-        for (int j = 0; j < map_count; j++) {
-            map[j].param_name = decl->type_params[j]->name;
-            map[j].concrete_type = inst->identity.declaration_type_args[j];
+        for (int j = 0; j < receiver_map_count; ++j) {
+            map[j].param_name = generic_owner->type_params[j]->name;
+            map[j].concrete_type = inst->identity.receiver_type_args[j];
             map[j].concrete_semantic_type =
+                collector->analyzer ? xa_analyzer_get_type_ref_type(
+                                          collector->analyzer, inst->identity.receiver_type_args[j])
+                                    : NULL;
+        }
+        for (int j = 0; j < declaration_map_count; ++j) {
+            int map_index = receiver_map_count + j;
+            map[map_index].param_name = decl->type_params[j]->name;
+            map[map_index].concrete_type = inst->identity.declaration_type_args[j];
+            map[map_index].concrete_semantic_type =
                 collector->analyzer
                     ? xa_analyzer_get_type_ref_type(collector->analyzer,
                                                     inst->identity.declaration_type_args[j])
                     : NULL;
+        }
+        bool shadowed_type_parameter = false;
+        for (int receiver_index = 0; receiver_index < receiver_map_count; ++receiver_index) {
+            for (int declaration_index = receiver_map_count; declaration_index < map_count;
+                 ++declaration_index) {
+                shadowed_type_parameter |=
+                    map[receiver_index].param_name && map[declaration_index].param_name &&
+                    strcmp(map[receiver_index].param_name, map[declaration_index].param_name) == 0;
+            }
+        }
+        if (shadowed_type_parameter) {
+            xr_free(map);
+            mono_report_exact_type_identity(collector, inst->generic_name, NULL);
+            continue;
         }
 
         // Clone the generic function with type substitution
@@ -3327,7 +3417,18 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             continue;
 
         if (cloned->type == AST_METHOD_DECL) {
-            if (!mono_append_method_clone(prog->arena, decl->owner, cloned)) {
+            AstNode *target_owner = decl->owner;
+            if (inst->identity.receiver_type_arg_count > 0u) {
+                XaMonoInstance *owner_instance = xa_mono_collector_find_type_instance(
+                    collector, decl->owner, inst->identity.receiver_type_args,
+                    (int) inst->identity.receiver_type_arg_count);
+                target_owner = owner_instance ? owner_instance->materialized_decl : NULL;
+                if (!target_owner) {
+                    mono_report_exact_type_identity(collector, inst->generic_name, NULL);
+                    continue;
+                }
+            }
+            if (!mono_append_method_clone(prog->arena, target_owner, cloned)) {
                 mono_report_rewrite_failure(collector, cloned, decl->name);
                 continue;
             }
@@ -3378,6 +3479,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         }
         prog->statements[insert_pos] = cloned;
         prog->count++;
+        inst->materialized_decl = cloned;
 
         // task-221 gap C (nested monomorphization fixpoint): a specialized clone
         // may itself construct other generics parameterized by the now-concrete

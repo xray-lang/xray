@@ -2665,6 +2665,38 @@ xa_generic_specialization_effect(XaInferContext *ctx, const AstNode *generic_dec
                         : XA_GENERIC_SPECIALIZATION_EFFECT_MAY_THROW;
 }
 
+static XrTypeRef **xa_open_owner_type_arg_refs(XaAnalyzer *analyzer, const AstNode *owner_decl,
+                                               int owner_arity) {
+    if (!analyzer || !analyzer->compiler_session || !owner_decl || owner_arity <= 0)
+        return NULL;
+    XrGenericParam **params = owner_decl->type == AST_CLASS_DECL
+                                  ? owner_decl->as.class_decl.type_params
+                                  : owner_decl->as.struct_decl.type_params;
+    if (!params)
+        return NULL;
+    XrTypeRef *stack_refs[8] = {0};
+    XrTypeRef **refs = owner_arity <= 8
+                           ? stack_refs
+                           : (XrTypeRef **) xr_malloc(sizeof(*refs) * (size_t) owner_arity);
+    if (!refs)
+        return NULL;
+    bool complete = true;
+    for (int i = 0; i < owner_arity; ++i) {
+        refs[i] = params[i] && params[i]->name
+                      ? xr_tref_type_param(analyzer->compiler_session, params[i]->name)
+                      : NULL;
+        if (!refs[i]) {
+            complete = false;
+            break;
+        }
+    }
+    XrTypeRef **published =
+        complete ? xr_tref_array_copy(analyzer->compiler_session, refs, owner_arity) : NULL;
+    if (refs != stack_refs)
+        xr_free(refs);
+    return published;
+}
+
 static void xa_refresh_generic_specialization_effect(AstNode *node, void *user_data) {
     XaInferContext *ctx = (XaInferContext *) user_data;
     XaGenericSpecializationFact fact;
@@ -2855,11 +2887,25 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
             int owner_arity = owner_decl->type == AST_CLASS_DECL
                                   ? owner_decl->as.class_decl.type_param_count
                                   : owner_decl->as.struct_decl.type_param_count;
-            if (owner_arity > 0 && receiver_type && XR_TYPE_IS_INSTANCE(receiver_type) &&
-                receiver_type->instance.type_arg_count == owner_arity &&
-                receiver_type->instance.type_args) {
-                receiver_type_args = xa_synthesize_type_arg_refs(
-                    ctx->analyzer, receiver_type->instance.type_args, owner_arity);
+            if (owner_arity > 0) {
+                if (receiver_type && XR_TYPE_IS_INSTANCE(receiver_type) &&
+                    receiver_type->instance.type_arg_count == owner_arity &&
+                    receiver_type->instance.type_args) {
+                    receiver_type_args = xa_synthesize_type_arg_refs(
+                        ctx->analyzer, receiver_type->instance.type_args, owner_arity);
+                } else if (call->callee && call->callee->type == AST_MEMBER_ACCESS &&
+                           call->callee->as.member_access.object &&
+                           call->callee->as.member_access.object->type == AST_THIS_EXPR) {
+                    /* Inside a generic owner template, `this` names the open
+                     *
+                     * receiver tuple. Publish those exact owner parameters now;
+ * aggregate
+                     * cloning substitutes them before the nested call
+                     *
+                     * becomes an executable specialization root. */
+                    receiver_type_args =
+                        xa_open_owner_type_arg_refs(ctx->analyzer, owner_decl, owner_arity);
+                }
                 if (receiver_type_args)
                     receiver_type_arg_count = (uint32_t) owner_arity;
             }

@@ -4608,7 +4608,7 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
 
 static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *evidence) {
     fprintf(out,
-            "payload-extra v11 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
+            "payload-extra v12 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
             "seq=%u capacity=%u bulk=%u encoding=%u "
             "json_codecs=%u object_shapes=%u object_fields=%u "
             "object_accesses=%u object_access_cases=%u object_merges=%u "
@@ -5636,7 +5636,7 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
     if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "payload-extra v11 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
+               "payload-extra v12 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
                " generic_code_sizes=%" SCNu32 " seq=%" SCNu32 " capacity=%" SCNu32 " bulk=%" SCNu32
                " encoding=%" SCNu32 " json_codecs=%" SCNu32 " object_shapes=%" SCNu32
                " object_fields=%" SCNu32 " object_accesses=%" SCNu32 " object_access_cases=%" SCNu32

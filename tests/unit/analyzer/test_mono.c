@@ -626,6 +626,7 @@ TEST(mono_collector_uses_exact_method_owner_and_effect_identity) {
     AstNode generic_method = first_method;
     AstNode *generic_methods[1] = {&generic_method};
     AstNode generic_owner = {.type = AST_STRUCT_DECL};
+    generic_owner.as.struct_decl.name = "Carrier";
     generic_owner.as.struct_decl.type_param_count = 1;
     generic_owner.as.struct_decl.methods = generic_methods;
     generic_owner.as.struct_decl.method_count = 1;
@@ -635,8 +636,30 @@ TEST(mono_collector_uses_exact_method_owner_and_effect_identity) {
     identity.receiver_type_args = receiver_args;
     identity.receiver_type_arg_count = 1u;
     ASSERT(xa_generic_specialization_fact_valid(&identity));
+    const char *generic_value_method = xa_mono_collector_add(&c, "apply", &identity, NULL);
+    ASSERT(generic_value_method != NULL);
+    ASSERT(strstr(generic_value_method, "$on$") != NULL);
+    ASSERT_EQ(c.count, 5);
+    ASSERT(c.instances[3].identity.generic_decl == &generic_owner);
+    ASSERT(c.instances[3].identity.owner_decl == NULL);
+    ASSERT_EQ(c.instances[3].identity.declaration_type_arg_count, 1u);
+    ASSERT(c.instances[4].identity.generic_decl == &generic_method);
+    ASSERT(c.instances[4].identity.owner_decl == &generic_owner);
+    ASSERT_EQ(c.instances[4].identity.receiver_type_arg_count, 1u);
+    ASSERT_EQ(c.instances[4].identity.declaration_type_arg_count, 1u);
+
+    AstNode generic_class_method = first_method;
+    AstNode *generic_class_methods[1] = {&generic_class_method};
+    AstNode generic_class_owner = {.type = AST_CLASS_DECL};
+    generic_class_owner.as.class_decl.name = "HeapCarrier";
+    generic_class_owner.as.class_decl.type_param_count = 1;
+    generic_class_owner.as.class_decl.methods = generic_class_methods;
+    generic_class_owner.as.class_decl.method_count = 1;
+    identity.generic_decl = &generic_class_method;
+    identity.owner_decl = &generic_class_owner;
+    ASSERT(xa_generic_specialization_fact_valid(&identity));
     ASSERT(xa_mono_collector_add(&c, "apply", &identity, NULL) == NULL);
-    ASSERT_EQ(c.count, 3);
+    ASSERT_EQ(c.count, 5);
     ASSERT(c.rewrite_failed);
 
     xa_mono_collector_free(&c);

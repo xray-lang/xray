@@ -79,9 +79,14 @@ enum {
      * 56: preserves the full 64-bit
      * generic specialization identity.
      * 57: splits generic specialization identity into
-     * receiver and
-     * declaration tuples and includes effect specialization. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 57,
+
+     * * receiver and
+     * declaration tuples and includes effect specialization.
+     * 58:
+     * anchors a generic value-struct method receiver tuple to the exact
+     * monomorphized class
+     * identity used by the executable method body. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 58,
 };
 
 /* Return ownership as published to the whole-program evidence.

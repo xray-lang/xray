@@ -1939,6 +1939,24 @@ static bool verify_monomorphized_class_has_generic_inst_anchor(const XgGlobalEvi
     return false;
 }
 
+static bool verify_generic_method_receiver_matches_source(const XgGlobalEvidence *ev,
+                                                          const XgGenericInstSummary *inst,
+                                                          const XgClassSummary *source_owner) {
+    if (!ev || !inst || !source_owner || inst->receiver_class_id == XG_NO_ID)
+        return false;
+    if (inst->receiver_type_arg_count == 0u)
+        return xg_verify_class_is_descendant_or_self(ev, inst->receiver_class_id,
+                                                     source_owner->class_id);
+    const XgClassSummary *receiver = verify_find_evidence_class(ev, inst->receiver_class_id);
+    return receiver && (receiver->flags & XG_CLASS_MONOMORPHIZED) != 0u &&
+           receiver->decl_kind == XG_DECL_STRUCT &&
+           receiver->generic_origin_class_id == source_owner->class_id &&
+           receiver->generic_origin_name_id != 0u &&
+           receiver->generic_type_key == inst->receiver_type_key &&
+           receiver->generic_type_arg_key_start == inst->receiver_type_arg_key_start &&
+           receiver->generic_type_arg_count == inst->receiver_type_arg_count;
+}
+
 static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len,
@@ -2007,14 +2025,23 @@ static bool verify_generic_inst_rows(const XgGlobalEvidence *ev, char *errbuf, s
                 origin_body->owner_method_id != origin_method->method_id)
                 return set_error(errbuf, errbuf_len,
                                  "AOT generic method source owner identity is stale");
-            if (!xg_verify_class_is_descendant_or_self(ev, inst->receiver_class_id,
-                                                       origin_class->class_id))
+            if (!verify_generic_method_receiver_matches_source(ev, inst, origin_class))
                 return set_error(errbuf, errbuf_len,
                                  "AOT generic method receiver is not source-owner-visible");
         }
         if (inst->specialized_func_id != XG_NO_ID &&
             !verify_find_evidence_body_by_func(ev, inst->specialized_func_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst specialized body is missing");
+        if (inst->kind == XG_GENERIC_INST_METHOD && inst->specialized_func_id != XG_NO_ID) {
+            const XgBodySummary *specialized =
+                verify_find_evidence_body_by_func(ev, inst->specialized_func_id);
+            XgClassId expected_owner = inst->receiver_type_arg_count > 0u ? inst->receiver_class_id
+                                                                          : inst->origin_class_id;
+            if (!specialized || specialized->kind != XG_BODY_METHOD ||
+                specialized->owner_class_id != expected_owner)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic method specialized body owner is stale");
+        }
         if (inst->specialized_class_id != XG_NO_ID &&
             !verify_find_evidence_class(ev, inst->specialized_class_id))
             return set_error(errbuf, errbuf_len, "AOT generic inst specialized class is missing");

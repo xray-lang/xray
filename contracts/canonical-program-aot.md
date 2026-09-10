@@ -169,9 +169,16 @@ produce distinct FunctionIds, so generic call-site resolution has no unique-name
 record exact declaration facts without becoming executable roots, and clones carry the substituted
 tuple into the nested-instantiation fixpoint. Repeated C emission remains byte-identical, strict native
 C and both VM views return the reference value 42, and no AOT-only lookup or specialization policy is
-introduced. Generic receiver-plus-method tuples, interface generic dispatch,
-parameterized/builtin constraints, generic ownership cleanup, arbitrary returned/projected READ
-places, and valid finite recursive specialization remain unqualified.
+introduced. A bounded same-module generic value-struct receiver keeps the receiver type tuple
+independent from the method declaration tuple. `Box<i64>` and `Box<bool>` have distinct nominal aggregate TypeIds;
+`readAs<U>` and a nested `forwardAs<U>` call materialize concrete method bodies on the exact
+monomorphized receiver, while the open `this` receiver remains a non-executable template edge until
+cloning substitutes it. Xglobal schema 58 and the AOT verifier match the method receiver to the
+independent monomorphized class identity; coordinated corruption of the instantiation, body-use, and
+derived AOT plans is rejected. Repeated C remains byte-identical and strict native execution returns
+42. Cross-module or re-exported generic receivers, generic heap/class receivers, interface generic
+dispatch, parameterized/builtin constraints, generic ownership cleanup, arbitrary returned/projected
+READ places, and valid finite recursive specialization remain unqualified.
 Before AOT receives a validated Program,
 the shared source-build request enforces one fail-closed module/depth/whole-graph-instance/final-byte
 budget. Requests may tighten but not expand the production defaults; E0388/E0389 exhaustion remains
@@ -231,4 +238,4 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py df427a19a20a6b6b42320b9
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c b8149f84c1f75ad8df83b26fe55ab44724867b86f7cfc377706e1cac50a9c6ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 0e94e1d45c4e48443d5f32a0db4ca214e3765bdf0f4f9fec055ebeb34058a5e7
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 181ff07ed10c87504e2b0645bfb8ac67083cb03a2ee3bc8b16a747452fa5bbb3

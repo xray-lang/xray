@@ -1493,7 +1493,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=57 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=58 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1872,15 +1872,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=57 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=57 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=57 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=57 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=58 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=58 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=58 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=58 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=57 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=58 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -8090,6 +8090,173 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
         }
     }
     ASSERT_TRUE(specialized_method_body);
+
+    xg_global_evidence_free(&evidence);
+    xg_global_evidence_free(&pre);
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(ast);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver) {
+    setup_parser_session();
+    const char *source =
+        "struct Box<R> {\n"
+        "  value: R\n"
+        "  readAs<U>(_marker: U) -> R { return this.value }\n"
+        "  forwardAs<U>(marker: U) -> R { return this.readAs<U>(marker) }\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        "  var number = Box<i64>{value: 41}\n"
+        "  var flag = Box<bool>{value: true}\n"
+        "  if (flag.forwardAs<i64>(0)) { return number.readAs(false) + 1 }\n"
+        "  return 0\n"
+        "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "generic-value-method-root.xr";
+    int topo_order[1] = {0};
+    XrModuleGraph graph = {
+        .specs = &spec,
+        .spec_count = 1,
+        .topo_order = topo_order,
+        .topo_count = 1,
+        .entry_index = 0,
+    };
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence pre = {0};
+    ASSERT_TRUE(xg_global_evidence_build_pre_monomorphization_from_module_graph(
+        &pre, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    uint32_t pre_method_roots = 0u;
+    for (uint32_t i = 0u; i < pre.ngeneric_insts; ++i) {
+        const XgGenericInstSummary *inst = &pre.generic_insts[i];
+        if (inst->kind != XG_GENERIC_INST_METHOD)
+            continue;
+        ASSERT_EQ_UINT(inst->receiver_type_arg_count, 1u);
+        ASSERT_EQ_UINT(inst->declaration_type_arg_count, 1u);
+        ASSERT_EQ_UINT(inst->receiver_class_id, inst->origin_class_id);
+        ++pre_method_roots;
+    }
+    ASSERT_EQ_UINT(pre_method_roots, 2u);
+
+    XaMonoBudget budget = xa_mono_default_budget();
+    XaMonoUsage usage = {0};
+    AstNode *roots[1] = {ast};
+    ASSERT_TRUE(xa_mono_pass(ast, roots, 1, g_iso, &budget, &usage, analyzer));
+    ASSERT_EQ_INT(xr_canon_program(ast, analyzer, g_session), XR_CANON_OK);
+    xa_analyzer_clear_diagnostics(analyzer);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+
+    XgGlobalEvidence evidence = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, analyzer));
+    ASSERT_TRUE(xg_global_evidence_merge_generic_inst_roots(&evidence, &pre));
+    uint32_t method_roots = 0u;
+    for (uint32_t i = 0u; i < evidence.ngeneric_insts; ++i) {
+        const XgGenericInstSummary *inst = &evidence.generic_insts[i];
+        if (inst->kind != XG_GENERIC_INST_METHOD)
+            continue;
+        const XgClassSummary *source_owner =
+            evidence_find_class_by_id(&evidence, inst->origin_class_id);
+        const XgClassSummary *receiver =
+            evidence_find_class_by_id(&evidence, inst->receiver_class_id);
+        const XgBodySummary *specialized =
+            evidence_find_body_by_func(&evidence, inst->specialized_func_id);
+        ASSERT_NOT_NULL(source_owner);
+        ASSERT_NOT_NULL(receiver);
+        ASSERT_NOT_NULL(specialized);
+        ASSERT_EQ_UINT(source_owner->decl_kind, XG_DECL_STRUCT);
+        ASSERT_TRUE((source_owner->flags & XG_CLASS_GENERIC_SKELETON) != 0u);
+        ASSERT_EQ_UINT(receiver->decl_kind, XG_DECL_STRUCT);
+        ASSERT_TRUE((receiver->flags & XG_CLASS_MONOMORPHIZED) != 0u);
+        ASSERT_EQ_UINT(receiver->generic_origin_class_id, source_owner->class_id);
+        ASSERT_EQ_UINT(inst->receiver_type_arg_count, 1u);
+        ASSERT_EQ_UINT(inst->declaration_type_arg_count, 1u);
+        ASSERT_EQ_UINT(inst->receiver_type_key, receiver->generic_type_key);
+        ASSERT_EQ_UINT(inst->receiver_type_arg_key_start,
+                       receiver->generic_type_arg_key_start);
+        ASSERT_EQ_UINT(specialized->owner_class_id, receiver->class_id);
+        ASSERT_TRUE(inst->specialized_func_id != inst->origin_func_id);
+        ASSERT_TRUE((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0u);
+        bool found_body_use = false;
+        for (uint32_t use_index = 0u; use_index < evidence.ngeneric_body_uses; ++use_index) {
+            const XgGenericBodyUseSummary *use = &evidence.generic_body_uses[use_index];
+            if (use->generic_inst_id != inst->generic_inst_id)
+                continue;
+            ASSERT_EQ_UINT(use->receiver_class_id, receiver->class_id);
+            ASSERT_EQ_UINT(use->receiver_type_key, receiver->generic_type_key);
+            ASSERT_EQ_UINT(use->receiver_type_arg_key_start,
+                           receiver->generic_type_arg_key_start);
+            ASSERT_EQ_UINT(use->specialized_body_func_id, specialized->func_id);
+            found_body_use = true;
+        }
+        ASSERT_TRUE(found_body_use);
+        ++method_roots;
+    }
+    ASSERT_EQ_UINT(method_roots, 3u);
+
+    /* Coordinated corruption of every derived generic row must still fail at
+     * the independent concrete-class anchor. Otherwise the verifier would
+     * merely compare several copies of the same forged receiver identity. */
+    XgGenericInstSummary *hostile_inst = NULL;
+    for (uint32_t i = 0u; i < evidence.ngeneric_insts; ++i) {
+        if (evidence.generic_insts[i].kind == XG_GENERIC_INST_METHOD &&
+            evidence.generic_insts[i].receiver_type_arg_count > 0u) {
+            hostile_inst = &evidence.generic_insts[i];
+            break;
+        }
+    }
+    ASSERT_NOT_NULL(hostile_inst);
+    XaotBundle hostile_bundle = {0};
+    ASSERT_TRUE(
+        xaot_bundle_set_global_evidence(&hostile_bundle, &evidence, XG_BUILD_NATIVE_RELEASE));
+    uint64_t forged_receiver_type_key = hostile_inst->receiver_type_key ^ UINT64_C(1);
+    ASSERT_TRUE(forged_receiver_type_key != 0u);
+    hostile_inst->receiver_type_key = forged_receiver_type_key;
+    bool forged_body_use = false;
+    for (uint32_t i = 0u; i < evidence.ngeneric_body_uses; ++i) {
+        if (evidence.generic_body_uses[i].generic_inst_id != hostile_inst->generic_inst_id)
+            continue;
+        evidence.generic_body_uses[i].receiver_type_key = forged_receiver_type_key;
+        forged_body_use = true;
+    }
+    bool forged_instantiation_plan = false;
+    for (uint32_t i = 0u; i < hostile_bundle.ngeneric_instantiation_plans; ++i) {
+        XaotGenericInstantiationPlan *plan = &hostile_bundle.generic_instantiation_plans[i];
+        if (plan->generic_inst_id != hostile_inst->generic_inst_id)
+            continue;
+        plan->receiver_type_key = forged_receiver_type_key;
+        forged_instantiation_plan = true;
+    }
+    bool forged_body_plan = false;
+    for (uint32_t i = 0u; i < hostile_bundle.ngeneric_body_plans; ++i) {
+        XaotGenericBodyPlan *plan = &hostile_bundle.generic_body_plans[i];
+        if (plan->generic_inst_id != hostile_inst->generic_inst_id)
+            continue;
+        plan->receiver_type_key = forged_receiver_type_key;
+        forged_body_plan = true;
+    }
+    ASSERT_TRUE(forged_body_use);
+    ASSERT_TRUE(forged_instantiation_plan);
+    ASSERT_TRUE(forged_body_plan);
+    hostile_bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&evidence);
+    char verifier_error[256] = {0};
+    ASSERT_FALSE(xaot_verify_global_evidence_plan(&hostile_bundle, verifier_error,
+                                                  sizeof(verifier_error)));
+    ASSERT_MSG(strstr(verifier_error,
+                      "AOT generic method receiver is not source-owner-visible") != NULL,
+               verifier_error);
+    xaot_bundle_free(&hostile_bundle);
 
     xg_global_evidence_free(&evidence);
     xg_global_evidence_free(&pre);
@@ -15884,6 +16051,7 @@ RUN_TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_bi
 RUN_TEST(global_evidence_generic_root_merge_preserves_identity_high_bits);
 RUN_TEST(global_evidence_post_mono_records_concrete_nested_generic_root);
 RUN_TEST(global_evidence_post_mono_records_concrete_generic_method_root);
+RUN_TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver);
 RUN_TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver);
 RUN_TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);

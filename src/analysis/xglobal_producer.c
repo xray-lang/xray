@@ -1271,13 +1271,18 @@ static bool producer_fill_generic_inst_identity(XgProducer *producer, XgGenericI
     inst->name_id = hash_name32(input->name);
     inst->receiver_class_id = input->receiver_class_id;
     inst->receiver_type_key =
-        is_method ? hash_generic_receiver_type_key(producer, input->receiver_owner_decl,
-                                                   input->receiver_type_args,
-                                                   (int) input->receiver_type_arg_count)
+        is_method ? (input->receiver_type_arg_count > 0u
+                         ? hash_generic_declaration_type_key(
+                               producer, generic_receiver_owner_name(input->receiver_owner_decl),
+                               input->receiver_type_args, (int) input->receiver_type_arg_count,
+                               XG_GENERIC_INST_CLASS)
+                         : hash_generic_receiver_type_key(producer, input->receiver_owner_decl,
+                                                          input->receiver_type_args,
+                                                          (int) input->receiver_type_arg_count))
                   : 0;
     inst->receiver_type_arg_key_start = hash_tref_list64_exact(
         producer, input->receiver_type_args, (int) input->receiver_type_arg_count,
-        UINT64_C(0x5847524356415247)); /* "XGRCVARG" */
+        UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
     inst->receiver_type_arg_count = (uint16_t) input->receiver_type_arg_count;
     inst->declaration_type_key =
         hash_generic_declaration_type_key(producer, input->name, input->declaration_type_args,
@@ -2587,6 +2592,56 @@ static bool producer_class_is_descendant_or_self(const XgProducer *producer, XgC
         current_id = summary->parent_class_id;
     }
     return false;
+}
+
+static bool body_type_ref_contains_type_param(const XrTypeRef *type);
+
+static bool
+producer_generic_method_receiver_matches(XgProducer *producer, XgClassId receiver_class_id,
+                                         const XgClassSummary *source_owner,
+                                         const XaGenericSpecializationFact *specialization) {
+    if (!producer || !producer->evidence || !source_owner || !specialization)
+        return false;
+    if (specialization->receiver_type_arg_count == 0u)
+        return producer_class_is_descendant_or_self(producer, receiver_class_id,
+                                                    source_owner->class_id);
+    if (!specialization->owner_decl || specialization->owner_decl->type != AST_STRUCT_DECL)
+        return false;
+    for (uint32_t i = 0u; i < specialization->receiver_type_arg_count; ++i) {
+        if (body_type_ref_contains_type_param(specialization->receiver_type_args[i])) {
+            /* An open call in the generic source body is a template edge, not
+             * an
+             * executable root. It remains anchored to the source owner;
+             *
+             * body_add_generic_inst deliberately omits it until cloning has
+             *
+             * substituted the complete concrete receiver tuple. */
+            return receiver_class_id == source_owner->class_id;
+        }
+    }
+    if (producer->allow_incomplete_exact_type_identity &&
+        receiver_class_id == source_owner->class_id)
+        return true;
+
+    XgClassNameRow *receiver_row = producer_lookup_class_row_by_id(producer, receiver_class_id);
+    const XgClassSummary *receiver =
+        receiver_row && receiver_row->summary_index < producer->evidence->nclasses
+            ? &producer->evidence->classes[receiver_row->summary_index]
+            : NULL;
+    const char *owner_name = generic_receiver_owner_name(specialization->owner_decl);
+    uint64_t expected_type_key = hash_generic_declaration_type_key(
+        producer, owner_name, specialization->receiver_type_args,
+        (int) specialization->receiver_type_arg_count, XG_GENERIC_INST_CLASS);
+    uint64_t expected_tuple_key = hash_tref_list64_exact(
+        producer, specialization->receiver_type_args, (int) specialization->receiver_type_arg_count,
+        UINT64_C(0x584744434c415247)); /* "XGDCLARG" */
+    return receiver && (receiver->flags & XG_CLASS_MONOMORPHIZED) != 0u &&
+           receiver->decl_kind == XG_DECL_STRUCT &&
+           receiver->generic_origin_class_id == source_owner->class_id &&
+           receiver->generic_origin_name_id == hash_name32(owner_name) &&
+           receiver->generic_type_key == expected_type_key &&
+           receiver->generic_type_arg_key_start == expected_tuple_key &&
+           receiver->generic_type_arg_count == specialization->receiver_type_arg_count;
 }
 
 static XgClassId producer_lookup_class(const XgProducer *p, const char *name) {
@@ -9924,8 +9979,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                     : NULL;
             if (!method || !owner_summary || owner->class_node != specialization.owner_decl ||
                 row.kind != XG_CALL_METHOD || row.receiver_static_class_id == XG_NO_ID ||
-                !producer_class_is_descendant_or_self(bc->producer, row.receiver_static_class_id,
-                                                      owner_summary->class_id)) {
+                !producer_generic_method_receiver_matches(
+                    bc->producer, row.receiver_static_class_id, owner_summary, &specialization)) {
                 bc->producer->failed = true;
                 return;
             }
@@ -13218,12 +13273,14 @@ static bool evidence_add_generic_body_deepen_rows(XgGlobalEvidence *dst,
                           call->static_target_func_id != XG_NO_ID &&
                           call->static_target_func_id != origin_body->func_id &&
                           call->static_target_func_id == specialized_body->func_id;
-    bool exact_method = inst->kind == XG_GENERIC_INST_METHOD && call->kind == XG_CALL_METHOD &&
-                        inst->receiver_class_id != XG_NO_ID &&
-                        call->receiver_static_class_id == inst->receiver_class_id &&
-                        call->method_id != XG_NO_ID && call->method_id != inst->origin_method_id &&
-                        specialized_body->owner_method_id == call->method_id &&
-                        specialized_body->owner_class_id == inst->origin_class_id;
+    bool exact_method =
+        inst->kind == XG_GENERIC_INST_METHOD && call->kind == XG_CALL_METHOD &&
+        inst->receiver_class_id != XG_NO_ID &&
+        call->receiver_static_class_id == inst->receiver_class_id && call->method_id != XG_NO_ID &&
+        call->method_id != inst->origin_method_id &&
+        specialized_body->owner_method_id == call->method_id &&
+        specialized_body->owner_class_id ==
+            (inst->receiver_type_arg_count > 0u ? inst->receiver_class_id : inst->origin_class_id);
     if (!exact_function && !exact_method)
         return true;
 
@@ -13301,7 +13358,8 @@ static bool evidence_finalize_generic_body_root(XgGlobalEvidence *evidence,
     else if (call && inst->kind == XG_GENERIC_INST_METHOD)
         return false;
     if (specialized && inst->kind == XG_GENERIC_INST_METHOD &&
-        specialized->owner_class_id != inst->origin_class_id)
+        specialized->owner_class_id !=
+            (inst->receiver_type_arg_count > 0u ? inst->receiver_class_id : inst->origin_class_id))
         return false;
     if (!call || !origin || !specialized || specialized->func_id == origin->func_id)
         return true;
@@ -13408,6 +13466,19 @@ XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
             dst_owner_body = evidence_find_matching_body(dst, src_owner_body);
         dst_call = evidence_find_matching_callsite(dst, src_call, dst_owner_body);
         mapped.root_callsite_id = dst_call ? dst_call->callsite_id : XG_NO_ID;
+        if (mapped.kind == XG_GENERIC_INST_METHOD && mapped.receiver_type_arg_count > 0u) {
+            const XgClassSummary *concrete_receiver =
+                dst_call ? evidence_find_class_by_id(dst, dst_call->receiver_static_class_id)
+                         : NULL;
+            if (!concrete_receiver || (concrete_receiver->flags & XG_CLASS_MONOMORPHIZED) == 0u ||
+                concrete_receiver->decl_kind != XG_DECL_STRUCT ||
+                concrete_receiver->generic_origin_class_id != mapped.origin_class_id ||
+                concrete_receiver->generic_type_arg_count != mapped.receiver_type_arg_count)
+                return false;
+            mapped.receiver_class_id = concrete_receiver->class_id;
+            mapped.receiver_type_key = concrete_receiver->generic_type_key;
+            mapped.receiver_type_arg_key_start = concrete_receiver->generic_type_arg_key_start;
+        }
 
         mapped.specialized_func_id = XG_NO_ID;
         mapped.specialized_class_id = XG_NO_ID;

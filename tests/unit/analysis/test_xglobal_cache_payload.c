@@ -615,7 +615,7 @@ TEST(cache_payload_parse_exposes_validated_body) {
     ASSERT_EQ_UINT(info.key_hash, xg_evidence_cache_key_hash(&expected));
     ASSERT_EQ_UINT(info.body_len, info.payload_bytes);
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-payload v2"));
-    ASSERT_NOT_NULL(strstr(payload, "xg-cache-key v1 schema=57"));
+    ASSERT_NOT_NULL(strstr(payload, "xg-cache-key v1 schema=58"));
     ASSERT_NOT_NULL(strstr(payload, "xg-cache-request v1"));
     ASSERT_NOT_NULL(strstr(info.body, "payload-count bodies=1 param_storages=2 callsites=1"));
     ASSERT_NOT_NULL(strstr(info.body, "interface_object_uses=1"));
@@ -694,7 +694,7 @@ TEST(cache_payload_roundtrips_generic_method_identity) {
 
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
-    ASSERT_NOT_NULL(strstr(payload, "payload-extra v11 generic_body_uses=1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v12 generic_body_uses=1"));
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     ASSERT_EQ_UINT(materialized.ngeneric_insts, 1);
     ASSERT_EQ_UINT(materialized.ngeneric_body_uses, 1);
@@ -901,7 +901,7 @@ TEST(cache_payload_materializes_global_evidence) {
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
     ASSERT_NOT_NULL(strstr(payload, "payload-global v1"));
-    ASSERT_NOT_NULL(strstr(payload, "payload-extra v11 generic_body_uses=1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v12 generic_body_uses=1"));
     expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     materialized_key =
@@ -960,9 +960,9 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].source_node_id, 104);
     ASSERT_EQ_UINT(materialized.interface_object_uses[0].use_kind, XG_INTERFACE_USE_REF);
 
-    char *extra_version = strstr(payload, "payload-extra v11");
+    char *extra_version = strstr(payload, "payload-extra v12");
     ASSERT_NOT_NULL(extra_version);
-    memcpy(extra_version, "payload-extra v10", strlen("payload-extra v10"));
+    memcpy(extra_version, "payload-extra v11", strlen("payload-extra v11"));
     refresh_cache_payload_hash(payload);
     XgEvidenceCachePayloadInfo stale_info;
     ASSERT(xg_evidence_cache_payload_parse(payload, &stale_info));

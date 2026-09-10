@@ -169,10 +169,17 @@ imports and namespace access through a uniquely resolved re-export produce the s
 specialization. Two distinct owners with the same method spelling and concrete tuple produce distinct
 FunctionIds, so generic call-site resolution has no unique-name fallback. Generic template bodies record exact
 declaration facts without becoming executable roots, and clones carry the substituted tuple into the
-nested-instantiation fixpoint. Reference and both VM decode policies still return 42. Generic
-receiver-plus-method tuples, interface generic dispatch, parameterized and builtin
-constraints, generic ownership cleanup, arbitrary returned/projected READ places, and valid finite
-recursive specialization remain outside this bounded slice.
+nested-instantiation fixpoint. A bounded same-module generic value-struct receiver now preserves the
+receiver type tuple independently from the method declaration tuple. `Box<i64>` and `Box<bool>` own distinct
+nominal aggregate TypeIds; `readAs<U>` and a nested `forwardAs<U>` call materialize concrete method
+bodies on the exact monomorphized receiver rather than on the source skeleton. The open `this`
+receiver fact remains a non-executable template edge until aggregate cloning substitutes it. Xglobal
+schema 58 binds each concrete method body and body-use to the matching monomorphized receiver class
+identity; incomplete or inconsistent receiver facts are rejected before Program execution.
+Reference and both VM decode policies return 42. Cross-module or re-exported generic receivers,
+generic heap/class receivers, interface generic dispatch, parameterized and builtin constraints,
+generic ownership cleanup, arbitrary returned/projected READ places, and valid finite recursive
+specialization remain outside this bounded slice.
 The source-build request carries one fail-closed budget for module count, monomorphization depth,
 whole-graph specialization count, and final Program bytes. A caller may tighten those limits but
 cannot raise them above the production defaults. Exhaustion stops before VM construction with the
@@ -203,4 +210,4 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c b0d294f7bc4bfea82e778a8bf843cb
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 8a2a3a8be32654890b048055eaf08ccc0e4fff0cc9fbb0291bc13d8f11fa2888
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 0e94e1d45c4e48443d5f32a0db4ca214e3765bdf0f4f9fec055ebeb34058a5e7
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 181ff07ed10c87504e2b0645bfb8ac67083cb03a2ee3bc8b16a747452fa5bbb3

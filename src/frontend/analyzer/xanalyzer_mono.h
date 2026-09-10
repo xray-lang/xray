@@ -138,6 +138,7 @@ typedef struct {
     const char *generic_name;              // owned diagnostic/display name
     XaGenericSpecializationFact identity;  // owns both pointer arrays
     const char *mangled_name;              // owned private executable name
+    AstNode *materialized_decl;            // borrowed arena node for this exact instance
     /* Expansion provenance. `parent` is the index of the instance whose
      * specialized body requested this one, or -1 for a site in user-written
      * code; `depth` is that chain's length. Together they reconstruct the
