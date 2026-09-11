@@ -13,6 +13,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import program_source_fixtures as source_fixtures
+import check_xr_program_h2_backend_differential as h2_differential
 
 
 GENERIC_IDENTITY_CTEST_NAMES = (
@@ -86,6 +87,12 @@ H2_AOT_BUILD_TARGETS = (
     "test_xr_program_aot",
 )
 
+H2_DIFFERENTIAL_CTEST_NAMES = (
+    "xr_program_h2_backend_differential",
+    "xr_program_h2_backend_differential_self_test",
+) + h2_differential.qualification_ctest_names()
+H2_DIFFERENTIAL_BUILD_TARGETS = h2_differential.qualification_build_targets()
+
 
 def _stable_union(*inventories: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(
@@ -93,20 +100,23 @@ def _stable_union(*inventories: tuple[str, ...]) -> tuple[str, ...]:
     ))
 
 
-# Shared semantic edits span the producer, verifier/reference oracle, and both
-# private backends. Derive the aggregate from the four owner inventories so a
-# component profile cannot grow without the daily H2 gate growing with it.
+# Shared semantic edits span the producer, verifier/reference oracle, both
+# private backends, and the cross-executor differential ratchet. Derive the
+# aggregate from every owner inventory so none can grow without the daily H2
+# gate growing with it.
 H2_CTEST_NAMES = _stable_union(
     H2_REFERENCE_CTEST_NAMES,
     H2_SOURCE_CTEST_NAMES,
     H2_VM_CTEST_NAMES,
     H2_AOT_CTEST_NAMES,
+    H2_DIFFERENTIAL_CTEST_NAMES,
 )
 H2_BUILD_TARGETS = _stable_union(
     H2_REFERENCE_BUILD_TARGETS,
     H2_SOURCE_BUILD_TARGETS,
     H2_VM_BUILD_TARGETS,
     H2_AOT_BUILD_TARGETS,
+    H2_DIFFERENTIAL_BUILD_TARGETS,
 )
 
 
@@ -140,6 +150,8 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
     "xr_program_source_contracts",
     "xr_program_source_contracts_self_test",
     "xr_program_source_fixtures_self_test",
+    "xr_program_h2_backend_differential",
+    "xr_program_h2_backend_differential_self_test",
     "xr_program_vm_contracts",
     "xr_program_vm_contracts_self_test",
     "xr_program_wave3_closure",

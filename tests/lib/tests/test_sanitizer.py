@@ -160,6 +160,11 @@ class AsanEntryPointTest(unittest.TestCase):
         self.assertIs(tests, asan_runner.canonical_profile.H2_REFERENCE_CTEST_NAMES)
         self.assertIs(targets, asan_runner.canonical_profile.H2_REFERENCE_BUILD_TARGETS)
 
+    def test_h2_aggregate_asan_profile_reuses_shared_inventory(self):
+        tests, targets = asan_runner.EXACT_PROFILES["h2"]
+        self.assertIs(tests, asan_runner.canonical_profile.H2_CTEST_NAMES)
+        self.assertIs(targets, asan_runner.canonical_profile.H2_BUILD_TARGETS)
+
     def test_h2_private_asan_profiles_reuse_shared_inventories(self):
         for name, tests, targets in (
             ("h2-source", asan_runner.canonical_profile.H2_SOURCE_CTEST_NAMES,

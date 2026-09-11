@@ -22,7 +22,7 @@ subset, while claiming the same lane name. It also had no reference from
 CMakeLists or CI: dead code that could only rot.
 
 Environment overrides:
-    XR_ASAN_PROFILE       full (default), canonical-program, h2-reference,
+    XR_ASAN_PROFILE       full (default), canonical-program, h2, h2-reference,
                           h2-source, h2-vm, h2-aot, or generic-identity
     XR_ASAN_JOBS          parallel build/test jobs (default: all cores)
     XR_ASAN_BUILD_DIR     ASan build directory (default: build-asan)
@@ -89,6 +89,10 @@ EXACT_PROFILES = {
         canonical_profile.GENERIC_IDENTITY_CTEST_NAMES,
         canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS,
     ),
+    "h2": (
+        canonical_profile.H2_CTEST_NAMES,
+        canonical_profile.H2_BUILD_TARGETS,
+    ),
     "h2-reference": (
         canonical_profile.H2_REFERENCE_CTEST_NAMES,
         canonical_profile.H2_REFERENCE_BUILD_TARGETS,
@@ -116,6 +120,7 @@ environment variables documented in this module's header.
 XR_ASAN_PROFILE choices:
     full                  complete qualifying lane (default)
     canonical-program     partial canonical Program preflight
+    h2                    partial exact H2 aggregate and differential ratchet
     h2-reference          partial CoreSpec + Reference/verifier inner loop
     h2-source             partial Program/Reference/source-owner exact gate
     h2-vm                 partial VM-private exact gate
