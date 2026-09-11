@@ -677,6 +677,14 @@ static bool vm_value_contains_class(XrVmValue value) {
     return false;
 }
 
+static bool vm_outcome_contains_class(XrVmOutcome outcome) {
+    if (outcome.kind == XR_VM_OUTCOME_RETURN)
+        return vm_value_contains_class(outcome.value);
+    if (outcome.kind == XR_VM_OUTCOME_ERROR)
+        return vm_value_contains_class(outcome.error_value);
+    return false;
+}
+
 bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out) {
     if (view_out)
         memset(view_out, 0, sizeof(*view_out));
@@ -2971,6 +2979,9 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                                      callee->parameter_count, execution->depth + 1u);
                 xr_free(arguments);
                 if (nested.kind != XR_VM_OUTCOME_RETURN) {
+                    if (vm_outcome_contains_class(nested))
+                        nested = vm_execution_outcome(execution,
+                                                      XR_VM_OUTCOME_INVALID_INVOCATION);
                     if (nested.kind == XR_VM_OUTCOME_TRAP &&
                         nested.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
                         instruction.successor_count == 1u) {
@@ -3179,7 +3190,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 result.value = instruction.operand_count == 0u
                                    ? void_value()
                                    : execution->values[instruction.operands[0]].as.value;
-                if (vm_value_contains_class(result.value))
+                if (vm_outcome_contains_class(result))
                     result = vm_execution_outcome(execution,
                                                   XR_VM_OUTCOME_INVALID_INVOCATION);
                 vm_execution_release_lease(execution);
@@ -3308,7 +3319,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     XrVmOutcome outcome =
         execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
-    if (outcome.kind == XR_VM_OUTCOME_RETURN && vm_value_contains_class(outcome.value))
+    if (vm_outcome_contains_class(outcome))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE) {
         XrVmValue detached = void_value();
