@@ -1601,6 +1601,32 @@ XrVmCodeOptions xr_vm_code_default_options(void) {
     return options;
 }
 
+static bool vm_program_operations_active(const XrValidatedProgram *program,
+                                         XrVmCodeDiagnostic *diagnostic_out) {
+    for (uint32_t function = 0u; function < program->function_count; ++function) {
+        const XrValidatedFunction *function_row = &program->functions[function];
+        for (uint32_t block = 0u; block < function_row->block_count; ++block) {
+            const XrValidatedBlock *block_row = &function_row->blocks[block];
+            for (uint32_t instruction = 0u; instruction < block_row->instruction_count;
+                 ++instruction) {
+                uint16_t operation_id = block_row->instructions[instruction].operation_id;
+                const XrCoreOperationSpec *spec = xr_core_spec_operation_by_id(operation_id);
+                if (spec && spec->vm_status == XR_CORE_COVERAGE_COMPLETE)
+                    continue;
+                if (diagnostic_out) {
+                    diagnostic_out->status = XR_VM_CODE_UNSUPPORTED_OPERATION;
+                    diagnostic_out->operation_id = operation_id;
+                    diagnostic_out->function_id = function;
+                    diagnostic_out->block_id = block;
+                    diagnostic_out->instruction_id = instruction;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *options,
                                 XrVmCode **code_out, XrVmCodeDiagnostic *diagnostic_out) {
     if (code_out)
@@ -1638,6 +1664,12 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
         return XR_VM_CODE_INSTANCE_UNAVAILABLE;
+    }
+    if (!vm_program_operations_active(program, diagnostic_out)) {
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+        (void) xr_execution_lease_release(&lease);
+        return XR_VM_CODE_UNSUPPORTED_OPERATION;
     }
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
@@ -2874,6 +2906,8 @@ const char *xr_vm_code_status_name(XrVmCodeStatus status) {
             return "ok";
         case XR_VM_CODE_INVALID_INPUT:
             return "invalid-input";
+        case XR_VM_CODE_UNSUPPORTED_OPERATION:
+            return "unsupported-operation";
         case XR_VM_CODE_INSTANCE_UNAVAILABLE:
             return "instance-unavailable";
         case XR_VM_CODE_POLICY_REJECTED:

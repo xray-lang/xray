@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Own source-test registration and publish one successful native fixture."""
+"""Own source-test registration and publish active native fixtures."""
 
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import hashlib
 import io
@@ -16,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -23,8 +25,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "tests/unit/program/xr_program_source_cases.json"
 SOURCE = ROOT / "tests/unit/program/test_xr_program_source_build.c"
+CORE_SPEC_REGISTRY = ROOT / "xisa/core/registry.json"
 IDENTIFIER = re.compile(r"[a-z][a-z0-9_]*\Z")
 LABEL = re.compile(r"[a-z][a-z0-9-]*\Z")
+OPERATION = re.compile(r"core\.[a-z][a-z0-9_.]*\Z")
 
 
 class FixtureError(ValueError):
@@ -47,10 +51,39 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
-def validate_registry(payload: object, source: str) -> dict:
+def load_core_operation_coverage(path: Path = CORE_SPEC_REGISTRY) -> dict[str, dict[str, str]]:
+    payload = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
+    if (not isinstance(payload, dict) or not isinstance(payload.get("operations"), list) or
+            not payload["operations"]):
+        raise FixtureError("CoreSpec registry requires a non-empty operations array")
+    result: dict[str, dict[str, str]] = {}
+    for operation in payload["operations"]:
+        if not isinstance(operation, dict):
+            raise FixtureError("CoreSpec operation record must be an object")
+        spelling = operation.get("spelling")
+        coverage = operation.get("coverage")
+        if (not isinstance(spelling, str) or not OPERATION.fullmatch(spelling) or
+                spelling in result or not isinstance(coverage, dict)):
+            raise FixtureError(f"invalid or duplicate CoreSpec operation: {spelling!r}")
+        backend_statuses: dict[str, str] = {}
+        for backend in ("vm", "aot"):
+            row = coverage.get(backend)
+            status = row.get("status") if isinstance(row, dict) else None
+            if not isinstance(status, str):
+                raise FixtureError(
+                    f"CoreSpec operation {spelling} lacks {backend} coverage status")
+            backend_statuses[backend] = status
+        result[spelling] = backend_statuses
+    return result
+
+
+def validate_registry(payload: object, source: str,
+                      core_operations: dict[str, dict[str, str]] | None = None) -> dict:
+    if core_operations is None:
+        core_operations = load_core_operation_coverage()
     if not isinstance(payload, dict) or set(payload) != {"schema", "cases"}:
         raise FixtureError("registry requires exactly schema and cases")
-    if type(payload["schema"]) is not int or payload["schema"] != 1:
+    if type(payload["schema"]) is not int or payload["schema"] != 2:
         raise FixtureError("unsupported source fixture registry schema")
     cases = payload["cases"]
     if not isinstance(cases, list) or not cases:
@@ -67,7 +100,8 @@ def validate_registry(payload: object, source: str) -> dict:
         fixture = case["fixture"]
         if fixture is None:
             continue
-        if not isinstance(fixture, dict) or set(fixture) != {"id", "expected_exit", "labels"}:
+        if (not isinstance(fixture, dict) or
+                set(fixture) != {"id", "expected_exit", "labels", "backends"}):
             raise FixtureError(f"invalid fixture record for {name}")
         ident = fixture["id"]
         if (not isinstance(ident, str) or not IDENTIFIER.fullmatch(ident)
@@ -82,6 +116,28 @@ def validate_registry(payload: object, source: str) -> dict:
                 or any(not isinstance(label, str) or not LABEL.fullmatch(label) for label in labels)
                 or len(labels) != len(set(labels))):
             raise FixtureError(f"fixture {ident} has invalid or duplicate labels")
+        backends = fixture["backends"]
+        if not isinstance(backends, dict) or set(backends) != {"vm", "aot"}:
+            raise FixtureError(f"fixture {ident} requires exact VM and AOT expectations")
+        for backend, expectation in backends.items():
+            if expectation == "execute":
+                continue
+            if (not isinstance(expectation, dict) or
+                    set(expectation) != {"status", "operation"} or
+                    expectation["status"] != "unsupported" or
+                    not isinstance(expectation["operation"], str) or
+                    not OPERATION.fullmatch(expectation["operation"])):
+                raise FixtureError(f"fixture {ident} has invalid {backend} expectation")
+            operation = expectation["operation"]
+            if operation not in core_operations:
+                raise FixtureError(
+                    f"fixture {ident} names unknown CoreSpec operation {operation}")
+            if core_operations[operation].get(backend) != "NOT_YET_ACTIVE":
+                raise FixtureError(
+                    f"fixture {ident} requires {operation} to be NOT_YET_ACTIVE for {backend}")
+        if backends["vm"] != backends["aot"]:
+            raise FixtureError(
+                f"fixture {ident} requires symmetric VM and AOT expectations")
     declared = re.findall(r"^\s*TEST\s*\(\s*([a-z][a-z0-9_]*)\s*\)\s*\{",
                           source, re.MULTILINE)
     if len(declared) != len(set(declared)) or set(declared) != names:
@@ -115,13 +171,38 @@ def fixture_records(registry: dict) -> list[dict]:
     return [case["fixture"] for case in registry["cases"] if case["fixture"] is not None]
 
 
+def native_fixture_records(registry: dict) -> list[dict]:
+    return [fixture for fixture in fixture_records(registry)
+            if fixture["backends"]["aot"] == "execute"]
+
+
+def pending_fixture_cases(registry: dict) -> list[tuple[dict, dict]]:
+    return [(case, case["fixture"]) for case in registry["cases"]
+            if case["fixture"] is not None and
+            any(expectation != "execute"
+                for expectation in case["fixture"]["backends"].values())]
+
+
 def native_target_names(registry: dict) -> tuple[str, ...]:
     return tuple(f'test_xr_program_{fixture["id"]}_aot_native'
-                 for fixture in fixture_records(registry))
+                 for fixture in native_fixture_records(registry))
+
+
+def pending_test_names(registry: dict) -> tuple[str, ...]:
+    return tuple(f'test_xr_program_{fixture["id"]}_backend_pending'
+                 for _, fixture in pending_fixture_cases(registry))
+
+
+def operation_constant(expectation: object) -> str:
+    if expectation == "execute":
+        return "0u"
+    assert isinstance(expectation, dict)
+    return "XR_CORE_OP_" + expectation["operation"].replace(".", "_").upper()
 
 
 def project_registry(registry: dict) -> tuple[bytes, bytes]:
     fixtures = fixture_records(registry)
+    native_fixtures = native_fixture_records(registry)
     header = ["/* Generated source-test registry. Do not edit. */",
               "#ifndef XR_PROGRAM_SOURCE_CASES_GEN_H", "#define XR_PROGRAM_SOURCE_CASES_GEN_H",
               f'#define XR_SOURCE_REGISTRY_ID "{registry_identity(registry)}"',
@@ -129,10 +210,29 @@ def project_registry(registry: dict) -> tuple[bytes, bytes]:
               "typedef enum XrSourceFixtureId {", "    XR_SOURCE_FIXTURE_NONE = 0,"]
     for fixture in fixtures:
         header.append(f'    XR_SOURCE_FIXTURE_{fixture["id"].upper()},')
-    header.extend(["} XrSourceFixtureId;",
-                   "#define XR_SOURCE_FIXTURES(X)" + (" \\" if fixtures else "")])
-    for index, fixture in enumerate(fixtures):
-        suffix = " \\" if index + 1 < len(fixtures) else ""
+    header.extend(["} XrSourceFixtureId;", "",
+                   "typedef enum XrSourceBackendKind {",
+                   "    XR_SOURCE_BACKEND_VM = 0,",
+                   "    XR_SOURCE_BACKEND_AOT,",
+                   "} XrSourceBackendKind;", "",
+                   "static uint16_t xr_source_fixture_unsupported_operation(",
+                   "    XrSourceFixtureId fixture, XrSourceBackendKind backend) {",
+                   "    switch (fixture) {"])
+    for fixture in fixtures:
+        vm_operation = operation_constant(fixture["backends"]["vm"])
+        aot_operation = operation_constant(fixture["backends"]["aot"])
+        header.extend([
+            f'        case XR_SOURCE_FIXTURE_{fixture["id"].upper()}:',
+            f"            return backend == XR_SOURCE_BACKEND_VM ? {vm_operation} : {aot_operation};",
+        ])
+    header.extend(["        case XR_SOURCE_FIXTURE_NONE:",
+                   "        default:",
+                   "            return 0u;",
+                   "    }",
+                   "}", "",
+                   "#define XR_SOURCE_FIXTURES(X)" + (" \\" if native_fixtures else "")])
+    for index, fixture in enumerate(native_fixtures):
+        suffix = " \\" if index + 1 < len(native_fixtures) else ""
         header.append(f'    X({fixture["id"]}, XR_SOURCE_FIXTURE_{fixture["id"].upper()}){suffix}')
     header.append("#define XR_SOURCE_CASES(X) \\")
     for index, case in enumerate(registry["cases"]):
@@ -142,10 +242,15 @@ def project_registry(registry: dict) -> tuple[bytes, bytes]:
         header.append(f'    X({case["name"]}, {enum}){suffix}')
     header.extend(["#endif", ""])
     cmake = ["# Generated source-native fixture registration. Do not edit."]
-    for fixture, target in zip(fixtures, native_target_names(registry)):
+    for fixture, target in zip(native_fixtures, native_target_names(registry)):
         labels = ";".join(fixture["labels"])
         cmake.append(f'add_xr_program_source_native_fixture({fixture["id"]} '
                      f'{target} {fixture["expected_exit"]} "{labels}")')
+    for (case, fixture), test_name in zip(pending_fixture_cases(registry),
+                                          pending_test_names(registry)):
+        labels = ";".join(fixture["labels"])
+        cmake.append(f'add_xr_program_source_pending_fixture({fixture["id"]} '
+                     f'{case["name"]} {test_name} "{labels}")')
     cmake.append("")
     return "\n".join(header).encode("utf-8"), "\n".join(cmake).encode("utf-8")
 
@@ -198,7 +303,7 @@ def write_stable(output: Path, content: bytes) -> bool:
 
 
 def generate_fixture(registry: dict, fixture_id: str, producer: Path, output: Path) -> bool:
-    if fixture_id not in {fixture["id"] for fixture in fixture_records(registry)}:
+    if fixture_id not in {fixture["id"] for fixture in native_fixture_records(registry)}:
         raise FixtureError(f"unknown fixture id: {fixture_id}")
     if not producer.is_file():
         raise FixtureError(f"fixture producer does not exist: {producer}")
@@ -218,21 +323,90 @@ def generate_fixture(registry: dict, fixture_id: str, producer: Path, output: Pa
         staged.unlink(missing_ok=True)
 
 
+def run_sharded(registry: dict, producer: Path, jobs: int) -> bool:
+    if not producer.is_file():
+        raise FixtureError(f"source test producer does not exist: {producer}")
+    names = [case["name"] for case in registry["cases"]]
+    worker_count = min(jobs or 8, len(names))
+    if worker_count < 1:
+        raise FixtureError("sharded source tests require at least one worker")
+
+    def run_case(name: str) -> tuple[str, subprocess.CompletedProcess[bytes] | None, str | None]:
+        try:
+            result = subprocess.run([producer, "--run-case", name], capture_output=True,
+                                    check=False, timeout=180)
+            return name, result, None
+        except subprocess.TimeoutExpired:
+            return name, None, "timed out after 180 seconds"
+
+    started = time.monotonic()
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
+        results = list(pool.map(run_case, names))
+    failures = 0
+    for name, result, error in results:
+        if error is None and result is not None and result.returncode == 0:
+            continue
+        failures += 1
+        print(f"\n=== source shard failed: {name} ===", file=sys.stderr)
+        if error is not None:
+            print(error, file=sys.stderr)
+            continue
+        output = (result.stdout + result.stderr).decode("utf-8", errors="replace")
+        print(output.rstrip(), file=sys.stderr)
+    elapsed = time.monotonic() - started
+    passed = len(names) - failures
+    print(f"source shards: {passed}/{len(names)} passed with {worker_count} workers "
+          f"in {elapsed:.2f}s")
+    return failures == 0
+
+
 class RegistryTests(unittest.TestCase):
     def setUp(self):
         self.source = "TEST(example) {\nXR_SOURCE_FIXTURE_EXAMPLE\n}\nTEST(semantic_only) {\n}\n"
-        self.payload = {"schema": 1, "cases": [
+        self.core_operations = {
+            "core.class.construct": {"vm": "NOT_YET_ACTIVE", "aot": "NOT_YET_ACTIVE"},
+            "core.class.field_load": {"vm": "NOT_YET_ACTIVE", "aot": "NOT_YET_ACTIVE"},
+            "core.constant.i64": {"vm": "COMPLETE", "aot": "COMPLETE"},
+        }
+        self.payload = {"schema": 2, "cases": [
             {"name": "example", "fixture": {"id": "example", "expected_exit": 7,
-                                             "labels": ["coroutine"]}},
+                                             "labels": ["coroutine"],
+                                             "backends": {"vm": "execute", "aot": "execute"}}},
             {"name": "semantic_only", "fixture": None}]}
 
     def test_live_registry_and_exact_projection_are_complete(self):
         registry = load_registry()
-        self.assertEqual(len(registry["cases"]), 34)
-        self.assertEqual(len(fixture_records(registry)), 22)
+        fixtures = fixture_records(registry)
+        native = native_fixture_records(registry)
+        pending = pending_fixture_cases(registry)
+        self.assertTrue(fixtures)
+        self.assertEqual(len(native) + len(pending), len(fixtures))
+        self.assertEqual(len(set(native_target_names(registry))), len(native))
+        self.assertEqual(len(set(pending_test_names(registry))), len(pending))
         header, cmake = project_registry(registry)
-        self.assertEqual(header.count(b"    X(source_owner_"), 34)
-        self.assertEqual(cmake.count(b"add_xr_program_source_native_fixture("), 22)
+        self.assertEqual(cmake.count(b"add_xr_program_source_native_fixture("), len(native))
+        self.assertEqual(cmake.count(b"add_xr_program_source_pending_fixture("), len(pending))
+        self.assertEqual(header.count(b"case XR_SOURCE_FIXTURE_"), len(fixtures) + 1)
+        for case in registry["cases"]:
+            fixture = case["fixture"]
+            enum = "XR_SOURCE_FIXTURE_" + (fixture["id"].upper() if fixture else "NONE")
+            mapping = f"    X({case['name']}, {enum})".encode("utf-8")
+            self.assertEqual(header.count(mapping), 1)
+        for fixture in fixtures:
+            vm_operation = operation_constant(fixture["backends"]["vm"])
+            aot_operation = operation_constant(fixture["backends"]["aot"])
+            mapping = (f"        case XR_SOURCE_FIXTURE_{fixture['id'].upper()}:\n"
+                       f"            return backend == XR_SOURCE_BACKEND_VM ? "
+                       f"{vm_operation} : {aot_operation};").encode("utf-8")
+            self.assertEqual(header.count(mapping), 1)
+        for fixture, target in zip(native, native_target_names(registry)):
+            registration = (f"add_xr_program_source_native_fixture({fixture['id']} "
+                            f"{target} {fixture['expected_exit']} ").encode("utf-8")
+            self.assertEqual(cmake.count(registration), 1)
+        for (case, fixture), test_name in zip(pending, pending_test_names(registry)):
+            registration = (f"add_xr_program_source_pending_fixture({fixture['id']} "
+                            f"{case['name']} {test_name} ").encode("utf-8")
+            self.assertEqual(cmake.count(registration), 1)
         with tempfile.TemporaryDirectory(prefix="xr-source-fixture-projection-") as directory:
             root = Path(directory)
             header_path, cmake_path = root / "cases.h", root / "fixtures.cmake"
@@ -272,7 +446,7 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_complete_registration_and_identity(self):
-        registry = validate_registry(self.payload, self.source)
+        registry = validate_registry(self.payload, self.source, self.core_operations)
         header, cmake = project_registry(registry)
         self.assertIn(b"XR_SOURCE_CASE_COUNT 2u", header)
         self.assertEqual(cmake.count(b"add_xr_program_source_native_fixture("), 1)
@@ -280,6 +454,20 @@ class RegistryTests(unittest.TestCase):
         changed = copy.deepcopy(registry)
         changed["cases"][0]["fixture"]["expected_exit"] = 8
         self.assertNotEqual(registry_identity(registry), registry_identity(changed))
+
+        pending = copy.deepcopy(self.payload)
+        unsupported = {"status": "unsupported", "operation": "core.class.construct"}
+        pending["cases"][0]["fixture"]["backends"] = {
+            "vm": copy.deepcopy(unsupported), "aot": copy.deepcopy(unsupported)}
+        pending_registry = validate_registry(pending, self.source, self.core_operations)
+        pending_header, pending_cmake = project_registry(pending_registry)
+        self.assertEqual(len(fixture_records(pending_registry)), 1)
+        self.assertEqual(len(native_fixture_records(pending_registry)), 0)
+        self.assertIn(b"XR_SOURCE_FIXTURE_EXAMPLE", pending_header)
+        self.assertIn(b"X(example, XR_SOURCE_FIXTURE_EXAMPLE)", pending_header)
+        self.assertIn(b"XR_CORE_OP_CORE_CLASS_CONSTRUCT", pending_header)
+        self.assertNotIn(b"add_xr_program_source_native_fixture(", pending_cmake)
+        self.assertIn(b"add_xr_program_source_pending_fixture(example example ", pending_cmake)
 
     def test_missing_duplicate_unknown_and_malformed_records_fail_closed(self):
         mutations = [lambda value: value["cases"].pop(),
@@ -289,15 +477,87 @@ class RegistryTests(unittest.TestCase):
                      lambda value: value["cases"][1].update(fixture=copy.deepcopy(value["cases"][0]["fixture"])),
                      lambda value: value["cases"][0]["fixture"].update(id="../escape"),
                      lambda value: value["cases"][0]["fixture"].update(expected_exit=True),
+                     lambda value: value["cases"][0]["fixture"].update(backends={"vm": "execute"}),
+                     lambda value: value["cases"][0]["fixture"]["backends"].update(
+                         vm={"status": "unsupported", "operation": "not-an-operation"}),
                      lambda value: value["cases"][0]["fixture"].update(extra="unknown"),
-                     lambda value: value.update(schema=2)]
+                     lambda value: value.update(schema=1)]
         for mutate in mutations:
             candidate = copy.deepcopy(self.payload)
             mutate(candidate)
             with self.assertRaises(FixtureError):
-                validate_registry(candidate, self.source)
+                validate_registry(candidate, self.source, self.core_operations)
         with self.assertRaises(FixtureError):
             json.loads('{"schema":1,"schema":1}', object_pairs_hook=_unique_object)
+
+    def test_backend_expectations_and_core_spec_operations_fail_closed(self):
+        unsupported = {"status": "unsupported", "operation": "core.class.construct"}
+
+        asymmetric = copy.deepcopy(self.payload)
+        asymmetric["cases"][0]["fixture"]["backends"] = {
+            "vm": "execute", "aot": copy.deepcopy(unsupported)}
+        with self.assertRaises(FixtureError):
+            validate_registry(asymmetric, self.source, self.core_operations)
+
+        mismatched = copy.deepcopy(self.payload)
+        mismatched["cases"][0]["fixture"]["backends"] = {
+            "vm": copy.deepcopy(unsupported),
+            "aot": {"status": "unsupported", "operation": "core.class.field_load"}}
+        with self.assertRaises(FixtureError):
+            validate_registry(mismatched, self.source, self.core_operations)
+
+        unknown = copy.deepcopy(self.payload)
+        unknown_operation = {"status": "unsupported", "operation": "core.missing.operation"}
+        unknown["cases"][0]["fixture"]["backends"] = {
+            "vm": copy.deepcopy(unknown_operation), "aot": copy.deepcopy(unknown_operation)}
+        with self.assertRaises(FixtureError):
+            validate_registry(unknown, self.source, self.core_operations)
+
+        active = copy.deepcopy(self.payload)
+        active_operation = {"status": "unsupported", "operation": "core.constant.i64"}
+        active["cases"][0]["fixture"]["backends"] = {
+            "vm": copy.deepcopy(active_operation), "aot": copy.deepcopy(active_operation)}
+        with self.assertRaises(FixtureError):
+            validate_registry(active, self.source, self.core_operations)
+
+    def test_source_fixture_binding_fails_closed_when_missing_or_mismatched(self):
+        missing = self.source.replace("XR_SOURCE_FIXTURE_EXAMPLE", "")
+        mismatched = self.source.replace("XR_SOURCE_FIXTURE_EXAMPLE",
+                                         "XR_SOURCE_FIXTURE_WRONG")
+        extra = self.source.replace("TEST(semantic_only) {\n}",
+                                    "TEST(semantic_only) {\nXR_SOURCE_FIXTURE_EXAMPLE\n}")
+        for source in (missing, mismatched, extra):
+            with self.assertRaises(FixtureError):
+                validate_registry(self.payload, source, self.core_operations)
+
+    def test_core_spec_operation_coverage_loader_rejects_hostile_records(self):
+        valid = {"operations": [{
+            "spelling": "core.class.construct",
+            "coverage": {
+                "vm": {"status": "NOT_YET_ACTIVE"},
+                "aot": {"status": "NOT_YET_ACTIVE"},
+            },
+        }]}
+        mutations = [
+            lambda value: value.update(operations={}),
+            lambda value: value.update(operations=[]),
+            lambda value: value["operations"].append(copy.deepcopy(value["operations"][0])),
+            lambda value: value["operations"][0].update(spelling="not-an-operation"),
+            lambda value: value["operations"][0]["coverage"].pop("vm"),
+            lambda value: value["operations"][0]["coverage"]["aot"].pop("status"),
+        ]
+        with tempfile.TemporaryDirectory(prefix="xr-core-operation-coverage-") as directory:
+            path = Path(directory) / "registry.json"
+            path.write_text(json.dumps(valid), encoding="utf-8")
+            self.assertEqual(load_core_operation_coverage(path), {
+                "core.class.construct": {
+                    "vm": "NOT_YET_ACTIVE", "aot": "NOT_YET_ACTIVE"}})
+            for mutate in mutations:
+                hostile = copy.deepcopy(valid)
+                mutate(hostile)
+                path.write_text(json.dumps(hostile), encoding="utf-8")
+                with self.assertRaises(FixtureError):
+                    load_core_operation_coverage(path)
 
     def test_exact_stable_publish_and_failures(self):
         with tempfile.TemporaryDirectory(prefix="xr-source-fixture-writer-") as directory:
@@ -322,7 +582,7 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(list(root.iterdir()), [output])
 
     def test_projection_check_rejects_missing_and_changed_bytes_without_writing(self):
-        registry = validate_registry(self.payload, self.source)
+        registry = validate_registry(self.payload, self.source, self.core_operations)
         with tempfile.TemporaryDirectory(prefix="xr-source-fixture-check-") as directory:
             header, cmake = Path(directory) / "cases.h", Path(directory) / "fixtures.cmake"
             for path, content in zip((header, cmake), project_registry(registry)):
@@ -344,7 +604,7 @@ class RegistryTests(unittest.TestCase):
                 path.write_bytes(original)
 
     def test_one_producer_and_failed_publication(self):
-        registry = validate_registry(self.payload, self.source)
+        registry = validate_registry(self.payload, self.source, self.core_operations)
         with tempfile.TemporaryDirectory(prefix="xr-source-fixture-producer-") as directory:
             root = Path(directory)
             producer = root / "producer"
@@ -395,12 +655,21 @@ class BuildGraphTests(unittest.TestCase):
             source = root / "tests/unit/program/test_xr_program_source_build.c"
             manifest = root / "tests/unit/program/xr_program_source_cases.json"
             support = root / "tests/unit/plan/target_profile_test_fixture.c"
-            for path in (script, source, support):
+            core_spec = root / "xisa/core/registry.json"
+            for path in (script, source, support, core_spec):
                 path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(Path(__file__), script)
-            payload = {"schema": 1, "cases": [{"name": "example", "fixture": {
-                "id": "example", "expected_exit": 7, "labels": ["coroutine"]}}]}
+            payload = {"schema": 2, "cases": [{"name": "example", "fixture": {
+                "id": "example", "expected_exit": 7, "labels": ["coroutine"],
+                "backends": {"vm": "execute", "aot": "execute"}}}]}
             manifest.write_text(json.dumps(payload), encoding="utf-8")
+            core_spec.write_text(json.dumps({"operations": [{
+                "spelling": "core.constant.i64",
+                "coverage": {
+                    "vm": {"status": "COMPLETE"},
+                    "aot": {"status": "COMPLETE"},
+                },
+            }]}), encoding="utf-8")
             source_text = ('#include "xr_program_source_cases.gen.h"\n'
                            '#define TEST(name) static void test_##name(void)\n'
                            'TEST(example) {\n    (void) XR_SOURCE_FIXTURE_EXAMPLE;\n}\n'
@@ -412,12 +681,16 @@ class BuildGraphTests(unittest.TestCase):
             (root / "CMakeLists.txt").write_text(
                 'cmake_minimum_required(VERSION 3.21)\nproject(SourceFixtureGraph C)\n'
                 'set(CMAKE_C_STANDARD 11)\nenable_testing()\n'
-                f'set(XRAY_PYTHON "{Path(sys.executable).as_posix()}")\n'
-                'file(APPEND "${CMAKE_BINARY_DIR}/configure.events" "configure\\n")\n'
-                'function(add_xray_unit_test target)\n'
-                '  add_executable(${target} ${ARGN})\n'
-                '  add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}>)\nendfunction()\n'
-                'function(xr_enable_pure_aot_symbol_map target)\nendfunction()\n'
+                 f'set(XRAY_PYTHON "{Path(sys.executable).as_posix()}")\n'
+                 'file(APPEND "${CMAKE_BINARY_DIR}/configure.events" "configure\\n")\n'
+                 'function(add_xray_unit_test target)\n'
+                 '  add_executable(${target} ${ARGN})\n'
+                 '  add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}>)\nendfunction()\n'
+                 'function(add_xray_bootstrap_executable target)\n'
+                 '  add_executable(${target} ${ARGN})\nendfunction()\n'
+                 'function(add_xray_bootstrap_unit_test target)\n'
+                 '  add_xray_unit_test(${target} ${ARGN})\nendfunction()\n'
+                 'function(xr_enable_pure_aot_symbol_map target)\nendfunction()\n'
                 'add_subdirectory(tests/unit)\n', encoding="utf-8")
             build = root / "build"
 
@@ -450,6 +723,13 @@ class BuildGraphTests(unittest.TestCase):
             self.assertEqual(command(invocation).count(verified), 1)
             self.assertNotIn(verified, command(invocation))
             self.assertEqual((build / "configure.events").read_bytes(), configure_events)
+            producer = build / "tests/unit/test_xr_program_source_build"
+            if os.name == "nt":
+                producer = producer.with_suffix(".exe")
+            sharded = command([sys.executable, str(script), "run-sharded", "--producer",
+                               str(producer),
+                               "--jobs", "2"])
+            self.assertIn("source shards: 1/1 passed with 1 workers", sharded)
 
 
 def parse_arguments(arguments: list[str]) -> argparse.Namespace:
@@ -463,6 +743,9 @@ def parse_arguments(arguments: list[str]) -> argparse.Namespace:
     generate.add_argument("--fixture", required=True, action=Once)
     generate.add_argument("--producer", type=Path, required=True, action=Once)
     generate.add_argument("--output", type=Path, required=True, action=Once)
+    sharded = commands.add_parser("run-sharded", allow_abbrev=False)
+    sharded.add_argument("--producer", type=Path, required=True, action=Once)
+    sharded.add_argument("--jobs", type=int, action=Once)
     commands.add_parser("self-test", allow_abbrev=False)
     commands.add_parser("self-test-build", allow_abbrev=False)
     return parser.parse_args(arguments)
@@ -487,8 +770,10 @@ def main(arguments: list[str] | None = None) -> int:
             else:
                 check_projection(registry, args.header, args.cmake)
                 print("source fixtures: case census and projections verified")
-        else:
+        elif args.command == "generate":
             generate_fixture(registry, args.fixture, args.producer, args.output)
+        else:
+            return 0 if run_sharded(registry, args.producer, args.jobs) else 1
     except (FixtureError, OSError, UnicodeError, json.JSONDecodeError) as error:
         print(f"source fixtures: {error}", file=sys.stderr)
         return 1

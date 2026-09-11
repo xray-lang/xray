@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "All 62 operation laws and normative KATs are frozen. The five class-reference and atomic place operations have complete contract-oracle coverage but remain explicitly NOT_YET_ACTIVE in decoder, verifier, evaluator, VM, AOT, and source execution."
+    "note": "All 62 operation laws and normative KATs are frozen. The five class-reference and atomic place operations have complete contract-oracle, decoder, verifier, reference-evaluator, and source-producer coverage; VM and AOT remain explicitly NOT_YET_ACTIVE."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -24,22 +24,16 @@
     "schema": "xisa/program/schema.json",
     "generated_coverage": "contracts/canonical-program/xrprogram-format-coverage.json",
     "semantic_admission": "COMPLETE_TASK_297",
-    "note": "W2 owns canonical bytes and bounded structural decode. W3 owns typed admission; executor coverage remains frozen for W5-W7."
+    "note": "W2 owns canonical bytes and bounded structural decode. W3 owns typed admission; VM/AOT product executor coverage remains incomplete for W5-W7."
   },
   "semantic_admission_stage": {
-    "status": "OPEN",
+    "status": "COMPLETE",
     "owner_task": 297,
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "incomplete_operations": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ],
-    "note": "The original 57 operations retain bounded verification and independent reference evaluation. The five newly frozen operations are rejected before semantic dispatch until their execution slices become active."
+    "incomplete_operations": [],
+    "note": "All 62 operations have bounded semantic verification and independent reference evaluation. Class-reference allocation, sharing, field access, and atomic exchange use private reference cells and lifecycle events without exposing backend layout."
   },
   "vm_stage": {
     "status": "OPEN",
@@ -1162,90 +1156,110 @@
       "id": "core.class.construct",
       "core_spec_contract": "construct one affine class-reference identity from exact declaration-ordered field values",
       "program_encoding": "one CLASS_REFERENCE result TypeId and exact field operands; representation and allocation remain private to each backend",
-      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "decoder_verifier_evaluator": "bounded class-reference decode, exact field verification, affine owner validation, and private reference-cell evaluation",
       "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
       "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
-      "source_producer": "the structural projection is frozen, but production fails closed until recursive source identities gain two-stage semantic-key stabilization and cycle-safe copy-contract fixed-point analysis in the execution slice",
+      "source_producer": "two-stage closed nominal registration resolves recursive field TypeIds before cycle-safe copy-contract fixed-point analysis and class construction",
       "old_owner_deletion": "aggregate plus nominal-class encoding is forbidden and has no compatibility alias",
-      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
         "xisa/program/schema.json",
         "xisa/program/xi-source-projection.json",
-        "src/program/xr_program_verify.c"
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c"
       ]
     },
     {
       "id": "core.class.share",
       "core_spec_contract": "create an independent affine owner for the same class-reference identity without consuming the source owner",
       "program_encoding": "one CLASS_REFERENCE operand and result with the same exact TypeId",
-      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "decoder_verifier_evaluator": "exact class TypeId and affine-owner verification with identity-preserving logical share evaluation",
       "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
       "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
-      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "source_producer": "source alias escape and borrowed-RHS ownership promotion produce one logical share; explicit deep copy remains core.owner.copy and move remains an identity transfer",
       "old_owner_deletion": "generic aggregate copy is not a class identity-sharing path",
-      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
         "xisa/program/schema.json",
         "xisa/program/xi-source-projection.json",
-        "src/program/xr_program_verify.c"
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c"
       ]
     },
     {
       "id": "core.class.field_load",
       "core_spec_contract": "load one declared class field as an independent scalar snapshot or an owner-rooted affine borrow",
       "program_encoding": "one CLASS_REFERENCE owner operand plus one declaration-order field ordinal",
-      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "decoder_verifier_evaluator": "declaration-ordinal field validation and scalar snapshot or owner-rooted affine borrow evaluation",
       "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
       "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
-      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "source_producer": "source field reads preserve the exact class owner root and produce the field contract selected by declaration ordinal",
       "old_owner_deletion": "aggregate projection and raw representation offsets cannot observe class fields",
-      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
         "xisa/program/schema.json",
         "xisa/program/xi-source-projection.json",
-        "src/program/xr_program_verify.c"
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c"
       ]
     },
     {
       "id": "core.class.field_place",
       "core_spec_contract": "derive one mutable field place rooted in a live exact class-reference owner",
       "program_encoding": "one CLASS_REFERENCE owner place plus one declaration-order field ordinal",
-      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "decoder_verifier_evaluator": "mutable-root, exact class TypeId, and declaration-ordinal field-place verification with confined private place evaluation",
       "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
       "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
-      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "source_producer": "owned field assignment derives a declaration-ordinal mutable place rooted in the live class owner",
       "old_owner_deletion": "generic aggregate place projection is not a class-field authority",
-      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
         "xisa/program/schema.json",
         "xisa/program/xi-source-projection.json",
-        "src/program/xr_program_verify.c"
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c"
       ]
     },
     {
       "id": "core.place.exchange",
       "core_spec_contract": "atomically replace one owned place value and return the displaced owner without an observable empty state",
       "program_encoding": "one exact typed place, one exact typed replacement owner, and one exact typed displaced result",
-      "decoder_verifier_evaluator": "NOT_YET_ACTIVE; any serialized occurrence is rejected before semantic dispatch",
+      "decoder_verifier_evaluator": "exact typed place/replacement validation and transactional exchange evaluation that returns the displaced complete value",
       "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
       "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
-      "source_producer": "the structural projection is frozen, but production fails closed until the execution slice activates",
+      "source_producer": "source owned-field replacement evaluates and owns the RHS before atomic exchange, then immediately drops the displaced owner",
       "old_owner_deletion": "take-then-store is not retained as a non-atomic compatibility lowering",
-      "status": "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE",
+      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
         "xisa/program/schema.json",
         "xisa/program/xi-source-projection.json",
-        "src/program/xr_program_verify.c"
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c"
       ]
     }
   ],

@@ -46,7 +46,7 @@ static XiFunc *lower_cleanup_source(XrVMRuntime *runtime, const char *source) {
         XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
         analyzer->current_file = "cleanup.xr";
         if (typed.program)
-            result = xi_lower_program(typed.program, runtime, false, NULL, NULL);
+            result = xi_lower_program(typed.program, runtime, false, NULL);
         else
             fprintf(stderr, "cleanup typed source rejected: %s\n",
                     typed.detail ? typed.detail : "");

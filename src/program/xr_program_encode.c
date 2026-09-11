@@ -169,6 +169,20 @@ static FunctionRef *collect_functions(const XrCoreIrProgram *program, uint32_t *
     return refs;
 }
 
+const XrCoreIrFunction *xr_program_function_by_canonical_id(const XrCoreIrProgram *program,
+                                                            uint32_t function_id) {
+    if (!program)
+        return NULL;
+    uint32_t function_count = 0u;
+    FunctionRef *functions = collect_functions(program, &function_count);
+    if (!functions)
+        return NULL;
+    const XrCoreIrFunction *function =
+        function_id < function_count ? functions[function_id].function : NULL;
+    xr_free(functions);
+    return function;
+}
+
 static ConstantRef *collect_constants(const XrCoreIrProgram *program, uint32_t *count_out) {
     uint32_t count = 0;
     for (uint32_t module = 0; module < program->module_count; ++module)

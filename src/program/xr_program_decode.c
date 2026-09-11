@@ -202,8 +202,11 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
         } else if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
             uint64_t field_count = take_uvar(&section);
             if (shape_head > XR_CORE_IR_NOMINAL_ENUM ||
-                shape_head == XR_CORE_IR_NOMINAL_CLASS ||
-                field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                shape_head == XR_CORE_IR_NOMINAL_CLASS) {
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                break;
+            }
+            if (field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                 !count_records(&section, field_count)) {
                 section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
                 break;

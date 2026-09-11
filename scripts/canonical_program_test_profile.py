@@ -23,13 +23,91 @@ GENERIC_IDENTITY_CTEST_NAMES = (
 )
 GENERIC_IDENTITY_BUILD_TARGETS = GENERIC_IDENTITY_CTEST_NAMES
 
-GENERIC_SCALAR_CLASS_NATIVE_CTEST_NAME = (
-    "test_xr_program_generic_scalar_class_aot_native"
+H2_REFERENCE_CTEST_NAMES = (
+    "test_core_spec",
+    "test_xr_program_verify",
 )
-GENERIC_SCALAR_CLASS_CTEST_NAMES = GENERIC_IDENTITY_CTEST_NAMES + (
-    GENERIC_SCALAR_CLASS_NATIVE_CTEST_NAME,
+H2_REFERENCE_BUILD_TARGETS = H2_REFERENCE_CTEST_NAMES
+
+H2_SOURCE_CTEST_NAMES = (
+    "canonical_cutover_manifests",
+    "canonical_cutover_manifests_self_test",
+    "contract_freeze",
+    "contract_freeze_injection",
+    "core_spec_registry",
+    "core_spec_registry_self_test",
+    "meta_ownership_inventory",
+    "test_core_spec",
+    "test_xr_program",
+    "test_xr_program_verify",
+    "test_xr_program_vm",
+    "test_xr_program_source_build",
+    "xr_program_schema",
+    "xr_program_schema_self_test",
+    "xr_program_semantic_coverage",
+    "xr_program_semantic_coverage_self_test",
+    "xr_program_source_contracts",
+    "xr_program_source_contracts_self_test",
+    "xr_program_source_fixtures_self_test",
 )
-GENERIC_SCALAR_CLASS_BUILD_TARGETS = GENERIC_SCALAR_CLASS_CTEST_NAMES
+H2_SOURCE_BUILD_TARGETS = (
+    "test_core_spec",
+    "test_xr_program",
+    "test_xr_program_verify",
+    "test_xr_program_vm",
+    "test_xr_program_source_build",
+)
+
+H2_VM_CTEST_NAMES = (
+    "test_core_spec",
+    "test_xr_program_verify",
+    "test_xr_program_vm",
+    "test_xr_program_vm_runtime",
+    "xr_program_vm_contracts",
+    "xr_program_vm_contracts_self_test",
+)
+H2_VM_BUILD_TARGETS = (
+    "test_core_spec",
+    "test_xr_program_verify",
+    "test_xr_program_vm",
+    "test_xr_program_vm_runtime",
+)
+
+H2_AOT_CTEST_NAMES = (
+    "test_core_spec",
+    "test_xr_program_verify",
+    "test_xr_program_aot",
+    "xr_program_aot_contracts",
+    "xr_program_aot_contracts_self_test",
+)
+H2_AOT_BUILD_TARGETS = (
+    "test_core_spec",
+    "test_xr_program_verify",
+    "test_xr_program_aot",
+)
+
+
+def _stable_union(*inventories: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(
+        item for inventory in inventories for item in inventory
+    ))
+
+
+# Shared semantic edits span the producer, verifier/reference oracle, and both
+# private backends. Derive the aggregate from the four owner inventories so a
+# component profile cannot grow without the daily H2 gate growing with it.
+H2_CTEST_NAMES = _stable_union(
+    H2_REFERENCE_CTEST_NAMES,
+    H2_SOURCE_CTEST_NAMES,
+    H2_VM_CTEST_NAMES,
+    H2_AOT_CTEST_NAMES,
+)
+H2_BUILD_TARGETS = _stable_union(
+    H2_REFERENCE_BUILD_TARGETS,
+    H2_SOURCE_BUILD_TARGETS,
+    H2_VM_BUILD_TARGETS,
+    H2_AOT_BUILD_TARGETS,
+)
 
 
 _SCRIPT_AND_EXECUTABLE_TESTS = (
@@ -97,7 +175,8 @@ def load_inventory(manifest: Path = source_fixtures.MANIFEST,
                    source: Path = source_fixtures.SOURCE) -> tuple[tuple[str, ...], tuple[str, ...]]:
     registry = source_fixtures.load_registry(manifest, source)
     native_targets = source_fixtures.native_target_names(registry)
-    tests = _SCRIPT_AND_EXECUTABLE_TESTS + native_targets
+    pending_tests = source_fixtures.pending_test_names(registry)
+    tests = _SCRIPT_AND_EXECUTABLE_TESTS + native_targets + pending_tests
     targets = _EXECUTABLE_TARGETS + tuple(_SUPPORT_BUILD_TARGET_TESTS) + native_targets
     if len(tests) != len(set(tests)) or len(targets) != len(set(targets)):
         raise source_fixtures.FixtureError("canonical profile contains duplicate registration")

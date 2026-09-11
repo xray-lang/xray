@@ -1724,15 +1724,15 @@
           "task": 295
         },
         "decoder": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "verifier": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "evaluator": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "vm": {
@@ -1754,15 +1754,15 @@
           "task": 295
         },
         "decoder": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "verifier": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "evaluator": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "vm": {
@@ -1784,15 +1784,15 @@
           "task": 295
         },
         "decoder": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "verifier": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "evaluator": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "vm": {
@@ -1814,15 +1814,15 @@
           "task": 295
         },
         "decoder": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "verifier": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "evaluator": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "vm": {
@@ -1844,15 +1844,15 @@
           "task": 295
         },
         "decoder": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "verifier": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "evaluator": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 297
         },
         "vm": {
@@ -1868,27 +1868,9 @@
   ],
   "missing_rows": {
     "spec_oracle": [],
-    "decoder": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ],
-    "verifier": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ],
-    "evaluator": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ],
+    "decoder": [],
+    "verifier": [],
+    "evaluator": [],
     "vm": [
       "core.class.construct",
       "core.class.share",

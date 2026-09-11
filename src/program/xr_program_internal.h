@@ -190,4 +190,9 @@ struct XrCoreIrProgram {
 
 void xr_program_set_diagnostic(char *diagnostic, size_t diagnostic_size, const char *format, ...);
 
+/* Resolve the canonical serialized FunctionId. The wire writer assigns IDs by
+ * globally sorting function keys, not by module storage order. */
+const XrCoreIrFunction *xr_program_function_by_canonical_id(const XrCoreIrProgram *program,
+                                                            uint32_t function_id);
+
 #endif /* XR_PROGRAM_INTERNAL_H */

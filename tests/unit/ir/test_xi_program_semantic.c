@@ -1650,7 +1650,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
         .decision = &decision,
         .target_profile = profile,
     };
-    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input, NULL);
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
@@ -2091,7 +2091,7 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
         .closure = closure,
         .decision = NULL,
     };
-    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input, NULL);
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
@@ -2158,7 +2158,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         .closure = closure,
         .decision = NULL,
     };
-    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input, NULL);
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
@@ -2639,7 +2639,7 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     ASSERT_NOT_NULL(closure);
     XiProgramSemanticInput input = {.closure = closure, .decision = NULL, .module_index = 0};
     ASSERT_TRUE(xi_program_semantic_input_is_consistent(&input, error, sizeof(error)));
-    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input, NULL);
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
@@ -2961,7 +2961,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
         .module_index = 0,
     };
     ASSERT_TRUE(xi_program_semantic_input_is_consistent(&input, error, sizeof(error)));
-    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input, NULL);
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));

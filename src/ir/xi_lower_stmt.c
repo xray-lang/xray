@@ -11,6 +11,8 @@
  * These are the larger, self-contained statement/expression lowering functions.
  */
 
+#include <stdio.h>
+
 #include "xi_lower_internal.h"
 #include "xi.h"
 #include "xi_cleanup.h"

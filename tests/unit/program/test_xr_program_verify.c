@@ -2,11 +2,17 @@
  * Task 297: XrProgram semantic verifier and independent reference evaluator.
  */
 
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "core/xr_core_spec_gen.h"
 #include "program/xr_program.h"
 #include "program/xr_program_verify.h"
 #include "program/xr_reference_evaluator.h"
 #include "runtime/abi/xr_target_machine_facts.h"
+
 #include "xr_program_existential_fixture.h"
 #include "xr_program_reborrow_fixture.h"
 #include "xr_program_callable_fixture.h"
@@ -21,11 +27,6 @@
 #include "xr_program_output_fixture.h"
 #include "xr_program_trap_fixture.h"
 #include "xr_program_construct_fixture.h"
-
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
@@ -438,6 +439,232 @@ static bool builtin_kind_offset(const XrProgramArtifact *artifact, uint16_t want
         }
     }
     return false;
+}
+
+static bool collect_dynamic_copy_contract_offsets(const XrProgramArtifact *artifact,
+                                                  size_t *offsets, size_t capacity,
+                                                  size_t *count_out) {
+    XrProgramView view;
+    if (!artifact || !offsets || !count_out ||
+        xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+            XR_PROGRAM_DECODE_OK)
+        return false;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset;
+    uint64_t total_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint32_t builtin = 0u; builtin < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++builtin)
+        for (uint32_t field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    size_t count = 0u;
+    for (uint64_t index = XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; index < total_count; ++index) {
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (count >= capacity)
+            return false;
+        offsets[count++] = cursor;
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (cursor > artifact->size || XR_CORE_IR_KEY_SIZE > artifact->size - cursor)
+            return false;
+        cursor += XR_CORE_IR_KEY_SIZE;
+        if (kind == XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE) {
+            uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t field = 0u; field < field_count; ++field)
+                (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t field = 0u; field < field_count; ++field)
+                (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            uint64_t variant_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t variant = 0u; variant < variant_count; ++variant) {
+                uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                for (uint64_t field = 0u; field < field_count; ++field)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            }
+        } else if (kind == XR_PROGRAM_TYPE_KIND_VIEW) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else if (kind == XR_PROGRAM_TYPE_KIND_CALLABLE) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else if (kind == XR_PROGRAM_TYPE_KIND_EXISTENTIAL) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else {
+            return false;
+        }
+        if (cursor > artifact->size)
+            return false;
+    }
+    *count_out = count;
+    return true;
+}
+
+typedef struct DynamicClassWireOffsets {
+    size_t kind;
+    size_t ownership;
+    size_t copy_contract;
+    size_t field_count;
+    size_t first_field_type;
+} DynamicClassWireOffsets;
+
+typedef struct DynamicAggregateWireOffsets {
+    size_t ownership;
+    size_t copy_contract;
+    size_t nominal_kind;
+} DynamicAggregateWireOffsets;
+
+static bool single_dynamic_class_wire_offsets(const XrProgramArtifact *artifact,
+                                              DynamicClassWireOffsets *offsets) {
+    XrProgramView view;
+    if (!artifact || !offsets ||
+        xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+            XR_PROGRAM_DECODE_OK)
+        return false;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset;
+    uint64_t type_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    if (type_count != XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT + 1u)
+        return false;
+    for (uint32_t builtin = 0u; builtin < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++builtin)
+        for (uint32_t field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
+        XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+        return false;
+    offsets->kind = cursor;
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
+        XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE)
+        return false;
+    offsets->ownership = cursor;
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
+        XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
+        return false;
+    offsets->copy_contract = cursor;
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) != XR_CORE_IR_COPY_EXPLICIT)
+        return false;
+    if (cursor > artifact->size || XR_CORE_IR_KEY_SIZE > artifact->size - cursor)
+        return false;
+    cursor += XR_CORE_IR_KEY_SIZE;
+    offsets->field_count = cursor;
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) != 1u)
+        return false;
+    offsets->first_field_type = cursor;
+    return test_take_uvar(artifact->bytes, artifact->size, &cursor) ==
+           XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+}
+
+static bool single_dynamic_aggregate_wire_offsets(const XrProgramArtifact *artifact,
+                                                  DynamicAggregateWireOffsets *offsets) {
+    XrProgramView view;
+    if (!artifact || !offsets ||
+        xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+            XR_PROGRAM_DECODE_OK)
+        return false;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset;
+    uint64_t type_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    if (type_count != XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT + 1u)
+        return false;
+    for (uint32_t builtin = 0u; builtin < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++builtin)
+        for (uint32_t field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
+            XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ||
+        test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
+            XR_PROGRAM_TYPE_KIND_AGGREGATE)
+        return false;
+    offsets->ownership = cursor;
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) !=
+        XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL)
+        return false;
+    offsets->copy_contract = cursor;
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) != XR_CORE_IR_COPY_TRIVIAL)
+        return false;
+    if (cursor > artifact->size || XR_CORE_IR_KEY_SIZE > artifact->size - cursor)
+        return false;
+    cursor += XR_CORE_IR_KEY_SIZE;
+    offsets->nominal_kind = cursor;
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) != XR_CORE_IR_NOMINAL_STRUCT ||
+        test_take_uvar(artifact->bytes, artifact->size, &cursor) != 1u)
+        return false;
+    return test_take_uvar(artifact->bytes, artifact->size, &cursor) == XR_CORE_TYPE_I64;
+}
+
+static bool dynamic_aggregate_nominal_offset(const XrProgramArtifact *artifact,
+                                             XrCoreIrKey wanted_key, size_t *offset_out) {
+    XrProgramView view;
+    if (!artifact || !offset_out ||
+        xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+            XR_PROGRAM_DECODE_OK)
+        return false;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset;
+    uint64_t type_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint32_t builtin = 0u; builtin < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++builtin)
+        for (uint32_t field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint64_t index = XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; index < type_count; ++index) {
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (cursor > artifact->size || XR_CORE_IR_KEY_SIZE > artifact->size - cursor)
+            return false;
+        bool wanted = memcmp(artifact->bytes + cursor, wanted_key.bytes,
+                             XR_CORE_IR_KEY_SIZE) == 0;
+        cursor += XR_CORE_IR_KEY_SIZE;
+        size_t shape_offset = cursor;
+        uint64_t shape_head = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (kind == XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE) {
+            for (uint64_t field = 0u; field < shape_head; ++field)
+                (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
+            uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            if (wanted) {
+                *offset_out = shape_offset;
+                return true;
+            }
+            for (uint64_t field = 0u; field < field_count; ++field)
+                (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
+            uint64_t variant_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t variant = 0u; variant < variant_count; ++variant) {
+                uint64_t payload_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                for (uint64_t field = 0u; field < payload_count; ++field)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            }
+        } else if (kind == XR_PROGRAM_TYPE_KIND_VIEW ||
+                   kind == XR_PROGRAM_TYPE_KIND_EXISTENTIAL) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        }
+        if (cursor > artifact->size)
+            return false;
+    }
+    return false;
+}
+
+static void expect_legacy_aggregate_class_wire_rejected(
+    const XrProgramArtifact *artifact, const DynamicAggregateWireOffsets *offsets) {
+    uint8_t *bytes = malloc(artifact->size);
+    CHECK(bytes != NULL);
+    if (!bytes)
+        return;
+    memcpy(bytes, artifact->bytes, artifact->size);
+    bytes[offsets->ownership] = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    bytes[offsets->copy_contract] = XR_CORE_IR_COPY_EXPLICIT;
+    bytes[offsets->nominal_kind] = XR_CORE_IR_NOMINAL_CLASS;
+
+    XrProgramView view;
+    CHECK(xr_program_decode_structure(bytes, artifact->size, NULL, &view, NULL, 0u) ==
+          XR_PROGRAM_DECODE_NONCANONICAL);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic diagnostic;
+    CHECK(xr_program_validate(bytes, artifact->size, NULL, &program, &diagnostic) ==
+          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+    CHECK(diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    CHECK(program == NULL);
+    free(bytes);
 }
 
 static void test_parameter_modes_and_value_categories(void) {
@@ -943,6 +1170,1013 @@ static XrProgramBuildStatus build_class_execution_hostile(XrProgramArtifact *art
     return write_typed_modules(&type, 1u, &module, 1u, artifact);
 }
 
+typedef struct ClassLifecycleLog {
+    XrReferenceLifecycleEventKind kinds[64];
+    XrReferenceLifecycleEventOrigin origins[64];
+    uint16_t type_ids[64];
+    uint64_t identities[64];
+    uint64_t related_identities[64];
+    uint32_t fields[64];
+    uint32_t count;
+} ClassLifecycleLog;
+
+static void record_class_lifecycle(void *context, const XrReferenceLifecycleEvent *event) {
+    ClassLifecycleLog *log = context;
+    if (!log || !event || log->count >= sizeof(log->kinds) / sizeof(log->kinds[0]))
+        return;
+    log->kinds[log->count] = event->kind;
+    log->origins[log->count] = event->origin;
+    log->type_ids[log->count] = event->type_id;
+    log->identities[log->count] = event->identity;
+    log->related_identities[log->count] = event->related_identity;
+    log->fields[log->count] = event->field_ordinal;
+    ++log->count;
+}
+
+static XrProgramArtifact build_class_alias_mutation_artifact(uint32_t field_ordinal) {
+    enum { CLASS_TYPE = 42 };
+    uint16_t fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput type = {
+        .key = key("class-alias:type"),
+        .local_id = CLASS_TYPE,
+        .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+        .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+        .field_types = fields,
+        .field_count = 1u,
+    };
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("class-alias:constant:7"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 7},
+        {.key = key("class-alias:constant:42"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
+    };
+    XrCoreIrKey seven = key("class-alias:value:7");
+    XrCoreIrKey forty_two = key("class-alias:value:42");
+    XrCoreIrKey original = key("class-alias:value:original");
+    XrCoreIrKey alias = key("class-alias:value:alias");
+    XrCoreIrKey place = key("class-alias:value:place");
+    XrCoreIrKey old = key("class-alias:value:old");
+    XrCoreIrKey loaded = key("class-alias:value:loaded");
+    XrCoreIrKey construct_operands[] = {seven};
+    XrCoreIrKey original_operand[] = {original};
+    XrCoreIrKey alias_operand[] = {alias};
+    XrCoreIrKey exchange_operands[] = {place, forty_two};
+    XrCoreIrKey returned[] = {loaded};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = seven,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = forty_two,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = original,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = construct_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_SHARE,
+         .result = alias,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = original_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_PLACE,
+         .result = place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = alias_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = field_ordinal},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_EXCHANGE,
+         .result = old,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = exchange_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+         .result = loaded,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = original_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = field_ordinal},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = alias_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = original_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = key("class-alias:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("class-alias:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("class-alias:module"),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_class_alias_mutation_and_lifecycle(void) {
+    XrProgramArtifact artifact = build_class_alias_mutation_artifact(0u);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        ClassLifecycleLog log = {0};
+        XrReferenceProviderBinding binding = {
+            .lifecycle_context = &log,
+            .lifecycle_event = record_class_lifecycle,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        const XrReferenceLifecycleEventKind expected[] = {
+            XR_REFERENCE_EVENT_CLASS_CONSTRUCT,
+            XR_REFERENCE_EVENT_CLASS_SHARE,
+            XR_REFERENCE_EVENT_CLASS_FIELD_PLACE,
+            XR_REFERENCE_EVENT_PLACE_EXCHANGE,
+            XR_REFERENCE_EVENT_CLASS_FIELD_LOAD,
+            XR_REFERENCE_EVENT_OWNER_DROP,
+            XR_REFERENCE_EVENT_OWNER_DROP,
+            XR_REFERENCE_EVENT_CLASS_FINALIZE,
+            XR_REFERENCE_EVENT_CLASS_RECLAIM,
+        };
+        CHECK(log.count == sizeof(expected) / sizeof(expected[0]));
+        const uint16_t class_type_id = log.type_ids[0];
+        CHECK(class_type_id != XR_CORE_TYPE_VOID);
+        for (uint32_t index = 0u;
+             index < log.count && index < sizeof(expected) / sizeof(expected[0]); ++index) {
+            CHECK(log.kinds[index] == expected[index]);
+            CHECK(log.origins[index] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION);
+            if (index != 3u)
+                CHECK(log.identities[index] == log.identities[0]);
+            CHECK(log.type_ids[index] == (index == 3u ? XR_CORE_TYPE_I64 : class_type_id));
+        }
+        CHECK(log.identities[3] == UINT64_MAX);
+        CHECK(log.related_identities[3] == UINT64_MAX);
+        CHECK(log.related_identities[1] == log.identities[0]);
+        CHECK(log.fields[2] == 0u);
+        CHECK(log.fields[4] == 0u);
+        xr_reference_outcome_dispose(&result);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    artifact = build_class_alias_mutation_artifact(1u);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&artifact);
+}
+
+static XrProgramArtifact build_class_trivial_field_snapshot_artifact(void) {
+    enum {
+        RECORD_TYPE = 42,
+        CLASS_TYPE = 43,
+    };
+    uint16_t record_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t class_fields[] = {RECORD_TYPE};
+    XrCoreIrTypeInput types[] = {
+        {.key = key("class-field-snapshot:type:record"),
+         .local_id = RECORD_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .field_types = record_fields,
+         .field_count = 1u},
+        {.key = key("class-field-snapshot:type:class"),
+         .local_id = CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = class_fields,
+         .field_count = 1u},
+    };
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("class-field-snapshot:constant:seven"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 7},
+        {.key = key("class-field-snapshot:constant:nine"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 9},
+    };
+    XrCoreIrKey seven = key("class-field-snapshot:value:seven");
+    XrCoreIrKey nine = key("class-field-snapshot:value:nine");
+    XrCoreIrKey record = key("class-field-snapshot:value:record");
+    XrCoreIrKey instance = key("class-field-snapshot:value:instance");
+    XrCoreIrKey snapshot = key("class-field-snapshot:value:snapshot");
+    XrCoreIrKey snapshot_place = key("class-field-snapshot:value:snapshot-place");
+    XrCoreIrKey item_place = key("class-field-snapshot:value:item-place");
+    XrCoreIrKey original = key("class-field-snapshot:value:original");
+    XrCoreIrKey result = key("class-field-snapshot:value:result");
+    XrCoreIrKey record_operands[] = {seven};
+    XrCoreIrKey instance_operands[] = {record};
+    XrCoreIrKey snapshot_operands[] = {instance};
+    XrCoreIrKey snapshot_place_operands[] = {snapshot};
+    XrCoreIrKey item_place_operands[] = {snapshot_place};
+    XrCoreIrKey store_operands[] = {item_place, nine};
+    XrCoreIrKey original_operands[] = {original};
+    XrCoreIrKey result_operands[] = {result};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = seven,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = nine,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = record,
+         .result_type_id = RECORD_TYPE,
+         .operands = record_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = instance,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = instance_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+         .result = snapshot,
+         .result_type_id = RECORD_TYPE,
+         .operands = snapshot_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+         .result = snapshot_place,
+         .result_type_id = RECORD_TYPE,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = snapshot_place_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_PROJECT,
+         .result = item_place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = item_place_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = store_operands,
+         .operand_count = 2u},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+         .result = original,
+         .result_type_id = RECORD_TYPE,
+         .operands = snapshot_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = original_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = snapshot_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = result_operands,
+         .operand_count = 1u},
+    };
+    XrCoreIrKey block_key = key("class-field-snapshot:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("class-field-snapshot:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("class-field-snapshot:module"),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(types, sizeof(types) / sizeof(types[0]), &module, 1u, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_class_trivial_field_load_is_snapshot(void) {
+    XrProgramArtifact artifact = build_class_trivial_field_snapshot_artifact();
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 7);
+        xr_reference_outcome_dispose(&result);
+
+        XrReferenceBudget budget = xr_reference_default_budget();
+        budget.max_value_cells = 2u;
+        result = xr_reference_evaluate(program, xr_validated_program_entry_function(program), NULL,
+                                       0u, NULL, &budget);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+        CHECK(!result.owns_dynamic_values);
+        xr_reference_outcome_dispose(&result);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+}
+
+static XrProgramArtifact build_forbidden_class_alias_artifact(uint16_t alias_operation) {
+    enum { CLASS_TYPE = 42 };
+    uint16_t fields[] = {XR_CORE_TYPE_PANIC_INFO};
+    XrCoreIrTypeInput type = {
+        .key = key("forbidden-class-alias:type"),
+        .local_id = CLASS_TYPE,
+        .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+        .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_FORBIDDEN,
+        .field_types = fields,
+        .field_count = 1u,
+    };
+    XrCoreIrConstantInput constant = {
+        .key = key("forbidden-class-alias:constant"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 42,
+    };
+    XrCoreIrKey source = key("forbidden-class-alias:value:source");
+    XrCoreIrKey alias = key("forbidden-class-alias:value:alias");
+    XrCoreIrKey result = key("forbidden-class-alias:value:result");
+    XrCoreIrValueInput arguments[] = {
+        {.key = source,
+         .type_id = CLASS_TYPE,
+         .category = XR_CORE_IR_VALUE,
+         .ownership = XR_CORE_IR_NON_OWNER},
+    };
+    XrCoreIrKey source_operand[] = {source};
+    XrCoreIrKey alias_operand[] = {alias};
+    XrCoreIrKey result_operand[] = {result};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = source_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = alias_operation,
+         .result = alias,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = source_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = alias_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = result_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = key("forbidden-class-alias:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .arguments = arguments,
+        .argument_count = 1u,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    uint16_t parameter_type = CLASS_TYPE;
+    XrParamMode parameter_mode = XR_PARAM_READ;
+    XrCoreIrFunctionInput function = {
+        .key = key("forbidden-class-alias:function"),
+        .parameter_types = &parameter_type,
+        .parameter_modes = &parameter_mode,
+        .parameter_count = 1u,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("forbidden-class-alias:module"),
+        .constants = &constant,
+        .constant_count = 1u,
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(&type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_copy_forbidden_class_can_share_but_not_clone(void) {
+    XrProgramArtifact artifact =
+        build_forbidden_class_alias_artifact(XR_CORE_OP_CORE_CLASS_SHARE);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    artifact = build_forbidden_class_alias_artifact(XR_CORE_OP_CORE_OWNER_COPY);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    xr_program_artifact_free(&artifact);
+}
+
+static XrProgramArtifact build_affine_class_exchange_artifact(bool call_before_old_drop) {
+    enum {
+        CHILD_CLASS_TYPE = 42,
+        PARENT_CLASS_TYPE = 43,
+    };
+    uint16_t child_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t parent_fields[] = {CHILD_CLASS_TYPE};
+    XrCoreIrTypeInput types[] = {
+        {.key = key("affine-class-exchange:type:child"),
+         .local_id = CHILD_CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = child_fields,
+         .field_count = 1u},
+        {.key = key("affine-class-exchange:type:parent"),
+         .local_id = PARENT_CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = parent_fields,
+         .field_count = 1u},
+    };
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("affine-class-exchange:constant:one"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 1},
+        {.key = key("affine-class-exchange:constant:two"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 2},
+        {.key = key("affine-class-exchange:constant:answer"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
+    };
+    XrCoreIrKey helper_key = key("affine-class-exchange:function:helper");
+    XrCoreIrKey helper_block_key = key("affine-class-exchange:block:helper");
+    XrCoreIrKey helper_result = key("affine-class-exchange:value:helper-result");
+    XrCoreIrKey helper_return[] = {helper_result};
+    XrCoreIrInstructionInput helper_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = helper_result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[2].key},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = helper_return,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput helper_block = {
+        .key = helper_block_key,
+        .instructions = helper_instructions,
+        .instruction_count = sizeof(helper_instructions) / sizeof(helper_instructions[0]),
+    };
+
+    XrCoreIrKey one = key("affine-class-exchange:value:one");
+    XrCoreIrKey two = key("affine-class-exchange:value:two");
+    XrCoreIrKey answer = key("affine-class-exchange:value:answer");
+    XrCoreIrKey first_child = key("affine-class-exchange:value:first-child");
+    XrCoreIrKey replacement = key("affine-class-exchange:value:replacement");
+    XrCoreIrKey parent = key("affine-class-exchange:value:parent");
+    XrCoreIrKey place = key("affine-class-exchange:value:place");
+    XrCoreIrKey old = key("affine-class-exchange:value:old");
+    XrCoreIrKey call_result = key("affine-class-exchange:value:call-result");
+    XrCoreIrKey first_child_operands[] = {one};
+    XrCoreIrKey replacement_operands[] = {two};
+    XrCoreIrKey parent_operands[] = {first_child};
+    XrCoreIrKey parent_place_operands[] = {parent};
+    XrCoreIrKey exchange_operands[] = {place, replacement};
+    XrCoreIrKey old_operands[] = {old};
+    XrCoreIrKey result_operands[] = {answer};
+    XrCoreIrInstructionInput entry_instructions[12] = {0};
+    uint32_t entry_count = 0u;
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+        .result = one,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+        .immediate.key = constants[0].key,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+        .result = two,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+        .immediate.key = constants[1].key,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+        .result = answer,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+        .immediate.key = constants[2].key,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+        .result = first_child,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = first_child_operands,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+        .result = replacement,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = replacement_operands,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+        .result = parent,
+        .result_type_id = PARENT_CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = parent_operands,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_FIELD_PLACE,
+        .result = place,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .result_category = XR_CORE_IR_PLACE,
+        .operands = parent_place_operands,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+        .immediate.field_ordinal = 0u,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_PLACE_EXCHANGE,
+        .result = old,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = exchange_operands,
+        .operand_count = 2u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    if (call_before_old_drop) {
+        entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+            .result = call_result,
+            .result_type_id = XR_CORE_TYPE_I64,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
+            .immediate.key = helper_key,
+        };
+        result_operands[0] = call_result;
+    }
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = old_operands,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = parent_place_operands,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = result_operands,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    XrCoreIrKey entry_block_key = key("affine-class-exchange:block:entry");
+    XrCoreIrBlockInput entry_block = {
+        .key = entry_block_key,
+        .instructions = entry_instructions,
+        .instruction_count = entry_count,
+    };
+    XrCoreIrFunctionInput functions[] = {
+        {.key = helper_key,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .entry_block = helper_block_key,
+         .blocks = &helper_block,
+         .block_count = 1u},
+        {.key = key("affine-class-exchange:function:entry"),
+         .result_type_id = XR_CORE_TYPE_I64,
+         .effect_mask = call_before_old_drop ? XR_CORE_EFFECT_CALL : 0u,
+         .entry_block = entry_block_key,
+         .blocks = &entry_block,
+         .block_count = 1u,
+         .flags = XR_PROGRAM_FUNCTION_ENTRY},
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("affine-class-exchange:module"),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .functions = functions,
+        .function_count = sizeof(functions) / sizeof(functions[0]),
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(types, sizeof(types) / sizeof(types[0]), &module, 1u, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_affine_class_exchange_commit_interval(void) {
+    XrProgramArtifact artifact = build_affine_class_exchange_artifact(false);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        ClassLifecycleLog log = {0};
+        XrReferenceProviderBinding binding = {
+            .lifecycle_context = &log,
+            .lifecycle_event = record_class_lifecycle,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        uint32_t exchange = UINT32_MAX;
+        for (uint32_t index = 0u; index < log.count; ++index)
+            if (log.kinds[index] == XR_REFERENCE_EVENT_PLACE_EXCHANGE)
+                exchange = index;
+        CHECK(exchange != UINT32_MAX);
+        if (exchange != UINT32_MAX) {
+            CHECK(log.type_ids[exchange] == log.type_ids[0]);
+            CHECK(log.identities[exchange] == log.identities[0]);
+            CHECK(log.related_identities[exchange] == log.identities[1]);
+        }
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    artifact = build_affine_class_exchange_artifact(true);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+}
+
+static XrProgramArtifact build_detached_aggregate_alias_artifact(void) {
+    enum {
+        INNER_TYPE = 42,
+        OUTER_TYPE = 43,
+    };
+    uint16_t inner_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t outer_fields[] = {INNER_TYPE, INNER_TYPE};
+    XrCoreIrTypeInput types[] = {
+        {.key = key("detached-alias:type:inner"),
+         .local_id = INNER_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .field_types = inner_fields,
+         .field_count = 1u},
+        {.key = key("detached-alias:type:outer"),
+         .local_id = OUTER_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .field_types = outer_fields,
+         .field_count = 2u},
+    };
+    XrCoreIrConstantInput constant = {
+        .key = key("detached-alias:constant:seven"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 7,
+    };
+    XrCoreIrKey seven = key("detached-alias:value:seven");
+    XrCoreIrKey inner = key("detached-alias:value:inner");
+    XrCoreIrKey outer = key("detached-alias:value:outer");
+    XrCoreIrKey inner_operands[] = {seven};
+    XrCoreIrKey outer_operands[] = {inner, inner};
+    XrCoreIrKey return_operands[] = {outer};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = seven,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = inner,
+         .result_type_id = INNER_TYPE,
+         .operands = inner_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = outer,
+         .result_type_id = OUTER_TYPE,
+         .operands = outer_operands,
+         .operand_count = 2u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = return_operands,
+         .operand_count = 1u},
+    };
+    XrCoreIrKey block_key = key("detached-alias:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("detached-alias:function"),
+        .result_type_id = OUTER_TYPE,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("detached-alias:module"),
+        .constants = &constant,
+        .constant_count = 1u,
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(types, 2u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_detached_aggregate_shared_carrier_dispose(void) {
+    XrProgramArtifact artifact = build_detached_aggregate_alias_artifact();
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_AGGREGATE);
+        CHECK(result.owns_dynamic_values);
+        XrReferenceAggregateView outer = {0};
+        CHECK(xr_reference_value_aggregate_view(&result.value, &outer));
+        CHECK(outer.field_count == 2u);
+        if (outer.field_count == 2u) {
+            CHECK(outer.fields[0].kind == XR_REFERENCE_VALUE_AGGREGATE);
+            CHECK(outer.fields[1].kind == XR_REFERENCE_VALUE_AGGREGATE);
+            CHECK(outer.fields[0].as.aggregate == outer.fields[1].as.aggregate);
+        }
+        xr_reference_outcome_dispose(&result);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+}
+
+static XrProgramArtifact build_class_clone_transaction_artifact(void) {
+    enum {
+        LEAF_CLASS_TYPE = 42,
+        BOX_CLASS_TYPE = 43,
+    };
+    uint16_t leaf_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t box_fields[] = {LEAF_CLASS_TYPE};
+    XrCoreIrTypeInput types[] = {
+        {.key = key("class-clone:type:leaf"),
+         .local_id = LEAF_CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = leaf_fields,
+         .field_count = 1u},
+        {.key = key("class-clone:type:box"),
+         .local_id = BOX_CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = box_fields,
+         .field_count = 1u},
+    };
+    XrCoreIrConstantInput constant = {
+        .key = key("class-clone:constant:7"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 7,
+    };
+    XrCoreIrKey seven = key("class-clone:value:7");
+    XrCoreIrKey leaf = key("class-clone:value:leaf");
+    XrCoreIrKey box = key("class-clone:value:box");
+    XrCoreIrKey copied = key("class-clone:value:copied");
+    XrCoreIrKey leaf_operands[] = {seven};
+    XrCoreIrKey box_operands[] = {leaf};
+    XrCoreIrKey box_copy_operands[] = {box};
+    XrCoreIrKey copied_operands[] = {copied};
+    XrCoreIrKey returned[] = {seven};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = seven,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = leaf,
+         .result_type_id = LEAF_CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = leaf_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = box,
+         .result_type_id = BOX_CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = box_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result = copied,
+         .result_type_id = BOX_CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = box_copy_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = copied_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = box_copy_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = key("class-clone:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("class-clone:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("class-clone:module"),
+        .constants = &constant,
+        .constant_count = 1u,
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(types, sizeof(types) / sizeof(types[0]), &module, 1u, &artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_class_clone_transaction_and_teardown_origin(void) {
+    XrProgramArtifact artifact = build_class_clone_transaction_artifact();
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        ClassLifecycleLog log = {0};
+        XrReferenceProviderBinding binding = {
+            .lifecycle_context = &log,
+            .lifecycle_event = record_class_lifecycle,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 7);
+        const XrReferenceLifecycleEventKind expected_kinds[] = {
+            XR_REFERENCE_EVENT_CLASS_CONSTRUCT,  XR_REFERENCE_EVENT_CLASS_CONSTRUCT,
+            XR_REFERENCE_EVENT_CLASS_COPY,       XR_REFERENCE_EVENT_CLASS_COPY,
+            XR_REFERENCE_EVENT_OWNER_DROP,       XR_REFERENCE_EVENT_CLASS_FINALIZE,
+            XR_REFERENCE_EVENT_OWNER_DROP,       XR_REFERENCE_EVENT_CLASS_FINALIZE,
+            XR_REFERENCE_EVENT_CLASS_RECLAIM,    XR_REFERENCE_EVENT_CLASS_RECLAIM,
+            XR_REFERENCE_EVENT_OWNER_DROP,       XR_REFERENCE_EVENT_CLASS_FINALIZE,
+            XR_REFERENCE_EVENT_OWNER_DROP,       XR_REFERENCE_EVENT_CLASS_FINALIZE,
+            XR_REFERENCE_EVENT_CLASS_RECLAIM,    XR_REFERENCE_EVENT_CLASS_RECLAIM,
+        };
+        CHECK(log.count == sizeof(expected_kinds) / sizeof(expected_kinds[0]));
+        for (uint32_t index = 0u; index < log.count; ++index)
+            CHECK(log.kinds[index] == expected_kinds[index]);
+        CHECK(log.origins[0] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION);
+        CHECK(log.origins[1] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION);
+        CHECK(log.origins[2] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION);
+        CHECK(log.origins[3] == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION);
+        CHECK(log.related_identities[2] == log.identities[1]);
+        CHECK(log.related_identities[3] == log.identities[0]);
+        CHECK(log.identities[2] != log.identities[1]);
+        CHECK(log.identities[3] != log.identities[0]);
+        CHECK(log.origins[6] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION);
+        CHECK(log.origins[7] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION);
+        CHECK(log.origins[8] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION);
+        CHECK(log.origins[12] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION);
+        CHECK(log.origins[13] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION);
+        CHECK(log.origins[14] == XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION);
+        for (uint32_t index = 0u; index < log.count; ++index)
+            CHECK(log.origins[index] != XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN);
+        xr_reference_outcome_dispose(&result);
+
+        memset(&log, 0, sizeof(log));
+        XrReferenceBudget budget = xr_reference_default_budget();
+        budget.max_value_cells = 3u;
+        result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, &budget,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_VOID);
+        CHECK(!result.owns_dynamic_values);
+        CHECK(log.count == 5u);
+        CHECK(log.kinds[0] == XR_REFERENCE_EVENT_CLASS_CONSTRUCT);
+        CHECK(log.kinds[1] == XR_REFERENCE_EVENT_CLASS_CONSTRUCT);
+        CHECK(log.kinds[2] == XR_REFERENCE_EVENT_CLASS_RECLAIM);
+        CHECK(log.origins[2] == XR_REFERENCE_EVENT_ORIGIN_CLONE_ROLLBACK);
+        CHECK(log.identities[2] != log.identities[0]);
+        CHECK(log.identities[2] != log.identities[1]);
+        CHECK(log.kinds[3] == XR_REFERENCE_EVENT_CLASS_RECLAIM);
+        CHECK(log.kinds[4] == XR_REFERENCE_EVENT_CLASS_RECLAIM);
+        CHECK(log.origins[3] == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN);
+        CHECK(log.origins[4] == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN);
+        CHECK(log.identities[3] == log.identities[0]);
+        CHECK(log.identities[4] == log.identities[1]);
+        for (uint32_t index = 0u; index < log.count; ++index) {
+            CHECK(log.kinds[index] != XR_REFERENCE_EVENT_CLASS_COPY);
+            CHECK(log.kinds[index] != XR_REFERENCE_EVENT_OWNER_DROP);
+            CHECK(log.kinds[index] != XR_REFERENCE_EVENT_CLASS_FINALIZE);
+        }
+        xr_reference_outcome_dispose(&result);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_dynamic_type_graph_rejection(void) {
     enum {
         SELF_TYPE = 41,
@@ -975,6 +2209,73 @@ static void test_dynamic_type_graph_rejection(void) {
     legacy_class.copy_contract = XR_CORE_IR_COPY_EXPLICIT;
     CHECK(build_with_type_graph(&legacy_class, 1u, NULL) == XR_PROGRAM_BUILD_INVALID_INPUT);
 
+    enum { MANAGED_OPTIONAL_TYPE = 42, MANAGED_STRUCT_TYPE = 43 };
+    uint16_t managed_class_field[] = {XR_CORE_TYPE_I64};
+    uint16_t managed_optional_payload[] = {SELF_TYPE};
+    XrCoreIrVariantInput managed_optional_variants[] = {
+        {0},
+        {.payload_types = managed_optional_payload, .payload_count = 1u},
+    };
+    uint16_t managed_struct_field[] = {MANAGED_OPTIONAL_TYPE};
+    XrCoreIrTypeInput managed_struct_types[] = {
+        {.key = key("type-graph:managed-class"),
+         .local_id = SELF_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = managed_class_field,
+         .field_count = 1u},
+        {.key = key("type-graph:managed-optional"),
+         .local_id = MANAGED_OPTIONAL_TYPE,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .variants = managed_optional_variants,
+         .variant_count = 2u},
+        {.key = key("type-graph:managed-struct"),
+         .local_id = MANAGED_STRUCT_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = managed_struct_field,
+         .field_count = 1u},
+    };
+    CHECK(build_with_type_graph(managed_struct_types, 3u, NULL) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+    managed_struct_types[2].nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    XrProgramArtifact managed_wire_artifact = {0};
+    CHECK(build_with_type_graph(managed_struct_types, 3u, &managed_wire_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    size_t managed_nominal_offset = SIZE_MAX;
+    CHECK(dynamic_aggregate_nominal_offset(&managed_wire_artifact,
+                                           managed_struct_types[2].key,
+                                           &managed_nominal_offset));
+    expect_mutated_verify(&managed_wire_artifact, managed_nominal_offset,
+                          XR_CORE_IR_NOMINAL_STRUCT, XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_TYPE);
+    xr_program_artifact_free(&managed_wire_artifact);
+
+    uint16_t legacy_wire_field[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput legacy_wire_source = {
+        .key = key("type-graph:legacy-wire-source"),
+        .local_id = SELF_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+        .copy_contract = XR_CORE_IR_COPY_TRIVIAL,
+        .field_types = legacy_wire_field,
+        .field_count = 1u,
+    };
+    XrProgramArtifact legacy_wire_artifact = {0};
+    CHECK(build_with_type_graph(&legacy_wire_source, 1u, &legacy_wire_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    DynamicAggregateWireOffsets legacy_wire_offsets;
+    CHECK(single_dynamic_aggregate_wire_offsets(&legacy_wire_artifact, &legacy_wire_offsets));
+    expect_legacy_aggregate_class_wire_rejected(&legacy_wire_artifact, &legacy_wire_offsets);
+    xr_program_artifact_free(&legacy_wire_artifact);
+
     XrCoreIrTypeInput recursive_class = legacy_class;
     recursive_class.kind = XR_CORE_IR_TYPE_CLASS_REFERENCE;
     XrProgramArtifact class_artifact = {0};
@@ -982,12 +2283,150 @@ static void test_dynamic_type_graph_rejection(void) {
     XrProgramView class_view;
     CHECK(xr_program_decode_structure(class_artifact.bytes, class_artifact.size, NULL, &class_view,
                                       NULL, 0u) == XR_PROGRAM_DECODE_OK);
-    expect_semantic_reject(&class_artifact, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    XrValidatedProgram *class_program = validate_ok(&class_artifact);
+    xr_validated_program_free(class_program);
+
+    DynamicClassWireOffsets class_offsets;
+    CHECK(single_dynamic_class_wire_offsets(&class_artifact, &class_offsets));
+    expect_mutated_verify(&class_artifact, class_offsets.kind, XR_PROGRAM_TYPE_KIND_AGGREGATE,
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    expect_mutated_verify(&class_artifact, class_offsets.kind, UINT8_C(0x7f),
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    expect_mutated_verify(&class_artifact, class_offsets.ownership,
+                          XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    expect_mutated_verify(&class_artifact, class_offsets.copy_contract, XR_CORE_IR_COPY_TRIVIAL,
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    expect_mutated_verify(&class_artifact, class_offsets.field_count, UINT8_C(2),
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    expect_mutated_verify(&class_artifact, class_offsets.first_field_type, XR_CORE_TYPE_VOID,
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    expect_mutated_verify(&class_artifact, class_offsets.first_field_type, UINT8_C(0x7f),
+                          XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    xr_program_artifact_free(&class_artifact);
+
+    enum { OPTIONAL_TYPE = 42 };
+    uint16_t recursive_optional_field[] = {OPTIONAL_TYPE};
+    uint16_t optional_payload[] = {SELF_TYPE};
+    XrCoreIrVariantInput optional_variants[] = {
+        {0},
+        {.payload_types = optional_payload, .payload_count = 1u},
+    };
+    XrCoreIrTypeInput recursive_optional_types[] = {
+        {.key = key("type-graph:recursive-optional-class"),
+         .local_id = SELF_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = recursive_optional_field,
+         .field_count = 1u},
+        {.key = key("type-graph:recursive-optional"),
+         .local_id = OPTIONAL_TYPE,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .variants = optional_variants,
+         .variant_count = 2u},
+    };
+    CHECK(build_with_type_graph(recursive_optional_types, 2u, &class_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    class_program = validate_ok(&class_artifact);
+    xr_validated_program_free(class_program);
+
+    XrCoreIrTypeInput self_justified_forbidden_types[2];
+    memcpy(self_justified_forbidden_types, recursive_optional_types,
+           sizeof(self_justified_forbidden_types));
+    self_justified_forbidden_types[0].copy_contract = XR_CORE_IR_COPY_FORBIDDEN;
+    self_justified_forbidden_types[1].copy_contract = XR_CORE_IR_COPY_FORBIDDEN;
+    CHECK(build_with_type_graph(self_justified_forbidden_types, 2u, NULL) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+
+    size_t copy_contract_offsets[2] = {0u};
+    size_t copy_contract_count = 0u;
+    CHECK(collect_dynamic_copy_contract_offsets(&class_artifact, copy_contract_offsets,
+                                                sizeof(copy_contract_offsets) /
+                                                    sizeof(copy_contract_offsets[0]),
+                                                &copy_contract_count));
+    CHECK(copy_contract_count == 2u);
+    uint8_t *forged_bytes = malloc(class_artifact.size);
+    CHECK(forged_bytes != NULL);
+    if (forged_bytes && copy_contract_count == 2u) {
+        memcpy(forged_bytes, class_artifact.bytes, class_artifact.size);
+        for (size_t index = 0u; index < copy_contract_count; ++index) {
+            CHECK(forged_bytes[copy_contract_offsets[index]] == XR_CORE_IR_COPY_EXPLICIT);
+            forged_bytes[copy_contract_offsets[index]] = XR_CORE_IR_COPY_FORBIDDEN;
+        }
+        XrProgramArtifact forged_artifact = class_artifact;
+        forged_artifact.bytes = forged_bytes;
+        expect_semantic_reject(&forged_artifact, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    }
+    free(forged_bytes);
+    xr_program_artifact_free(&class_artifact);
+
+    uint16_t forbidden_field[] = {XR_CORE_TYPE_PANIC_INFO};
+    XrCoreIrTypeInput overwritten_contract_types[] = {
+        {.key = key("type-graph:bad-copy-contract"),
+         .local_id = SELF_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = forbidden_field,
+         .field_count = 1u},
+        {.key = key("type-graph:good-copy-contract"),
+         .local_id = OPTIONAL_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT},
+    };
+    CHECK(build_with_type_graph(overwritten_contract_types, 2u, NULL) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+
+    uint16_t recursive_forbidden_payload[] = {SELF_TYPE};
+    uint16_t forbidden_leaf_payload[] = {XR_CORE_TYPE_PANIC_INFO};
+    XrCoreIrVariantInput recursive_forbidden_variants[] = {
+        {0},
+        {.payload_types = recursive_forbidden_payload, .payload_count = 1u},
+        {.payload_types = forbidden_leaf_payload, .payload_count = 1u},
+    };
+    XrCoreIrTypeInput recursive_forbidden_types[] = {
+        {.key = key("type-graph:recursive-forbidden-class"),
+         .local_id = SELF_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_FORBIDDEN,
+         .field_types = recursive_optional_field,
+         .field_count = 1u},
+        {.key = key("type-graph:recursive-forbidden-variant"),
+         .local_id = OPTIONAL_TYPE,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_FORBIDDEN,
+         .variants = recursive_forbidden_variants,
+         .variant_count = sizeof(recursive_forbidden_variants) /
+                          sizeof(recursive_forbidden_variants[0])},
+    };
+    CHECK(build_with_type_graph(recursive_forbidden_types, 2u, &class_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    class_program = validate_ok(&class_artifact);
+    xr_validated_program_free(class_program);
     xr_program_artifact_free(&class_artifact);
 
     XrProgramArtifact hostile = {0};
-    CHECK(build_class_execution_hostile(&hostile) == XR_PROGRAM_BUILD_INVALID_INPUT);
-    CHECK(hostile.bytes == NULL);
+    CHECK(build_class_execution_hostile(&hostile) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *hostile_program = validate_ok(&hostile);
+    xr_validated_program_free(hostile_program);
+    xr_program_artifact_free(&hostile);
 }
 
 static void test_scalar_operations(void) {
@@ -3269,6 +4708,7 @@ static void test_immutable_view_root_tables(void) {
 }
 
 static XrProgramBuildStatus build_program_table_artifact(bool reverse_inputs, bool bad_slot,
+                                                         bool class_implementor,
                                                          XrProgramArtifact *artifact) {
     enum {
         IMPLEMENTOR_TYPE = 70,
@@ -3300,8 +4740,14 @@ static XrProgramBuildStatus build_program_table_artifact(bool reverse_inputs, bo
     XrCoreIrTypeInput types[] = {
         {.key = key("program-table:type:implementor"),
          .local_id = IMPLEMENTOR_TYPE,
-         .kind = XR_CORE_IR_TYPE_AGGREGATE,
-         .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .kind = class_implementor ? XR_CORE_IR_TYPE_CLASS_REFERENCE
+                                   : XR_CORE_IR_TYPE_AGGREGATE,
+         .nominal_kind = class_implementor ? XR_CORE_IR_NOMINAL_CLASS
+                                           : XR_CORE_IR_NOMINAL_STRUCT,
+         .ownership = class_implementor ? XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
+                                        : XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+         .copy_contract = class_implementor ? XR_CORE_IR_COPY_EXPLICIT
+                                            : XR_CORE_IR_COPY_TRIVIAL,
          .field_types = implementor_fields,
          .field_count = 1u},
         {.key = key("program-table:type:existential-a"),
@@ -3395,13 +4841,15 @@ static XrProgramBuildStatus build_program_table_artifact(bool reverse_inputs, bo
     XrCoreIrConformanceInput conformances[] = {
         {.key = key("program-table:conformance:a"),
          .implementor_type_id = IMPLEMENTOR_TYPE,
-         .implementor_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .implementor_kind = class_implementor ? XR_CORE_IR_NOMINAL_CLASS
+                                               : XR_CORE_IR_NOMINAL_STRUCT,
          .interface_key = interface_a_key,
          .slot_functions = slot_function,
          .slot_count = 1u},
         {.key = key("program-table:conformance:b"),
          .implementor_type_id = IMPLEMENTOR_TYPE,
-         .implementor_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .implementor_kind = class_implementor ? XR_CORE_IR_NOMINAL_CLASS
+                                               : XR_CORE_IR_NOMINAL_STRUCT,
          .interface_key = interface_b_key,
          .slot_functions = slot_function,
          .slot_count = 1u},
@@ -3425,6 +4873,174 @@ static XrProgramBuildStatus build_program_table_artifact(bool reverse_inputs, bo
         .interface_count = 2u,
         .conformances = ordered_conformances,
         .conformance_count = 2u,
+        .modules = &module,
+        .module_count = 1u,
+    };
+    XrCoreIrProgram *program = NULL;
+    char diagnostic[256] = {0};
+    XrProgramBuildStatus status =
+        xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic));
+    if (status == XR_PROGRAM_BUILD_OK)
+        status = xr_program_write(program, artifact, diagnostic, sizeof(diagnostic));
+    xr_core_ir_program_free(program);
+    return status;
+}
+
+static XrProgramBuildStatus
+build_class_read_existential_copy_artifact(XrProgramArtifact *artifact) {
+    enum {
+        CLASS_TYPE = 70,
+        EXISTENTIAL_TYPE = 71,
+    };
+    XrCoreIrKey interface_key = key("existential-class-copy:interface");
+    XrCoreIrKey method_key = key("existential-class-copy:function:method");
+    XrParamMode read_mode = XR_PARAM_READ;
+    uint16_t existential_receiver = EXISTENTIAL_TYPE;
+    XrCoreIrCallableSignatureInput slot = {
+        .parameter_types = &existential_receiver,
+        .parameter_modes = &read_mode,
+        .parameter_count = 1u,
+        .has_receiver = true,
+        .receiver_mode = XR_PARAM_READ,
+        .result_type_id = XR_CORE_TYPE_VOID,
+    };
+    uint16_t class_fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput types[] = {
+        {.key = key("existential-class-copy:type:class"),
+         .local_id = CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = class_fields,
+         .field_count = 1u},
+        {.key = key("existential-class-copy:type:read"),
+         .local_id = EXISTENTIAL_TYPE,
+         .kind = XR_CORE_IR_TYPE_EXISTENTIAL,
+         .existential_interface = interface_key,
+         .interface_use_kind = XR_CORE_IR_INTERFACE_EXISTENTIAL_READ},
+    };
+    XrCoreIrKey method_receiver = key("existential-class-copy:value:receiver");
+    XrCoreIrKey method_argument_operand[] = {method_receiver};
+    XrCoreIrInstructionInput method_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = method_argument_operand,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN, .result_type_id = XR_CORE_TYPE_VOID},
+    };
+    XrCoreIrValueInput method_argument = {.key = method_receiver, .type_id = CLASS_TYPE};
+    XrCoreIrKey method_block_key = key("existential-class-copy:block:method");
+    XrCoreIrBlockInput method_block = {
+        .key = method_block_key,
+        .arguments = &method_argument,
+        .argument_count = 1u,
+        .instructions = method_instructions,
+        .instruction_count = 2u,
+    };
+    uint16_t implementation_receiver = CLASS_TYPE;
+    XrCoreIrFunctionInput method = {
+        .key = method_key,
+        .parameter_types = &implementation_receiver,
+        .parameter_modes = &read_mode,
+        .parameter_count = 1u,
+        .has_receiver = true,
+        .receiver_mode = XR_PARAM_READ,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .entry_block = method_block_key,
+        .blocks = &method_block,
+        .block_count = 1u,
+    };
+    XrCoreIrConstantInput constant = {
+        .key = key("existential-class-copy:constant:one"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 1,
+    };
+    XrCoreIrKey one = key("existential-class-copy:value:one");
+    XrCoreIrKey object = key("existential-class-copy:value:object");
+    XrCoreIrKey erased = key("existential-class-copy:value:erased");
+    XrCoreIrKey copied = key("existential-class-copy:value:copied");
+    XrCoreIrKey object_operands[] = {one};
+    XrCoreIrKey erased_operands[] = {object};
+    XrCoreIrKey copied_operands[] = {erased};
+    XrCoreIrKey return_operands[] = {object};
+    XrCoreIrInstructionInput entry_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = one,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = object,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = object_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_EXISTENTIAL_PACK,
+         .result = erased,
+         .result_type_id = EXISTENTIAL_TYPE,
+         .operands = erased_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result = copied,
+         .result_type_id = EXISTENTIAL_TYPE,
+         .operands = copied_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = return_operands,
+         .operand_count = 1u},
+    };
+    XrCoreIrKey entry_block_key = key("existential-class-copy:block:entry");
+    XrCoreIrBlockInput entry_block = {
+        .key = entry_block_key,
+        .instructions = entry_instructions,
+        .instruction_count = sizeof(entry_instructions) / sizeof(entry_instructions[0]),
+    };
+    XrCoreIrFunctionInput entry = {
+        .key = key("existential-class-copy:function:entry"),
+        .result_type_id = CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .entry_block = entry_block_key,
+        .blocks = &entry_block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrFunctionInput functions[] = {method, entry};
+    XrCoreIrModuleInput module = {
+        .key = key("existential-class-copy:module"),
+        .constants = &constant,
+        .constant_count = 1u,
+        .functions = functions,
+        .function_count = 2u,
+    };
+    XrCoreIrInterfaceInput interface = {
+        .key = interface_key,
+        .slots = &slot,
+        .slot_count = 1u,
+    };
+    XrCoreIrKey slot_function[] = {method_key};
+    XrCoreIrConformanceInput conformance = {
+        .key = key("existential-class-copy:conformance"),
+        .implementor_type_id = CLASS_TYPE,
+        .implementor_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .interface_key = interface_key,
+        .slot_functions = slot_function,
+        .slot_count = 1u,
+    };
+    XrCoreIrKey profile = key("existential-class-copy:profile");
+    uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
+    XrCoreIrProgramInput input = {
+        .semantic_profile_fingerprint = profile.bytes,
+        .required_features = &feature,
+        .required_feature_count = 1u,
+        .types = types,
+        .type_count = 2u,
+        .interfaces = &interface,
+        .interface_count = 1u,
+        .conformances = &conformance,
+        .conformance_count = 1u,
         .modules = &module,
         .module_count = 1u,
     };
@@ -3497,14 +5113,15 @@ static void test_callable_interface_conformance_tables(void) {
     XrProgramArtifact first = {0};
     XrProgramArtifact reordered = {0};
     XrProgramArtifact invalid = {0};
-    CHECK(build_program_table_artifact(false, false, &first) == XR_PROGRAM_BUILD_OK);
-    CHECK(build_program_table_artifact(true, false, &reordered) == XR_PROGRAM_BUILD_OK);
+    CHECK(build_program_table_artifact(false, false, false, &first) == XR_PROGRAM_BUILD_OK);
+    CHECK(build_program_table_artifact(true, false, false, &reordered) == XR_PROGRAM_BUILD_OK);
     CHECK(first.size != 0u && first.size == reordered.size);
     CHECK(first.size != 0u && memcmp(first.bytes, reordered.bytes, first.size) == 0);
     CHECK(xr_program_id_equal(first.id, reordered.id));
     XrValidatedProgram *program = validate_ok(&first);
     xr_validated_program_free(program);
-    CHECK(build_program_table_artifact(false, true, &invalid) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    CHECK(build_program_table_artifact(false, true, false, &invalid) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
     size_t slot_offset = first_conformance_slot_offset(&first);
     CHECK(slot_offset != SIZE_MAX && first.bytes[slot_offset] <= 1u);
     if (slot_offset != SIZE_MAX && first.bytes[slot_offset] <= 1u) {
@@ -3515,6 +5132,59 @@ static void test_callable_interface_conformance_tables(void) {
     }
     xr_program_artifact_free(&reordered);
     xr_program_artifact_free(&first);
+}
+
+static void test_class_reference_interface_conformance(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(build_program_table_artifact(false, false, true, &artifact) == XR_PROGRAM_BUILD_OK);
+    CHECK(artifact.bytes != NULL && artifact.size != 0u);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
+static void test_existential_clone_safe_subset(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceProfile profile = {.pointer_width = 64u};
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, &profile, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        xr_reference_outcome_dispose(&result);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    memset(&artifact, 0, sizeof(artifact));
+    CHECK(build_class_read_existential_copy_artifact(&artifact) == XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    if (program) {
+        ClassLifecycleLog log = {0};
+        XrReferenceProviderBinding binding = {
+            .lifecycle_context = &log,
+            .lifecycle_event = record_class_lifecycle,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_VOID);
+        CHECK(log.count == 2u);
+        CHECK(log.kinds[0] == XR_REFERENCE_EVENT_CLASS_CONSTRUCT);
+        CHECK(log.kinds[1] == XR_REFERENCE_EVENT_CLASS_RECLAIM);
+        CHECK(log.origins[1] == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN);
+        for (uint32_t index = 0u; index < log.count; ++index)
+            CHECK(log.kinds[index] != XR_REFERENCE_EVENT_CLASS_COPY);
+        xr_reference_outcome_dispose(&result);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
 }
 
 typedef struct WitnessDirectSlotOffsets {
@@ -3597,7 +5267,8 @@ static void test_witness_receiver_capability_and_interface_identity(void) {
     xr_program_artifact_free(&artifact);
 
     XrProgramArtifact interface_artifact = {0};
-    CHECK(build_program_table_artifact(false, false, &interface_artifact) == XR_PROGRAM_BUILD_OK);
+    CHECK(build_program_table_artifact(false, false, false, &interface_artifact) ==
+          XR_PROGRAM_BUILD_OK);
     size_t interface_a_slot = SIZE_MAX;
     size_t interface_b_slot = SIZE_MAX;
     uint64_t interface_a_signature = UINT64_MAX;
@@ -4611,7 +6282,7 @@ static void test_inactive_operation_fails_closed_before_semantics(void) {
     if (operation_offset != SIZE_MAX) {
         CHECK(artifact.bytes[operation_offset] == UINT8_C(0x88));
         CHECK(artifact.bytes[operation_offset + 1u] == UINT8_C(0x01));
-        expect_mutated_verify(&artifact, operation_offset, UINT8_C(0x8e),
+        expect_mutated_verify(&artifact, operation_offset, UINT8_C(0x93),
                               XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
                               XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
     }
@@ -4661,6 +6332,12 @@ int main(void) {
     test_aggregate_construct_owner_transfers();
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
+    test_class_alias_mutation_and_lifecycle();
+    test_class_trivial_field_load_is_snapshot();
+    test_detached_aggregate_shared_carrier_dispose();
+    test_class_clone_transaction_and_teardown_origin();
+    test_copy_forbidden_class_can_share_but_not_clone();
+    test_affine_class_exchange_commit_interval();
     test_scalar_operations();
     test_control_and_profile();
     test_direct_call();
@@ -4679,6 +6356,8 @@ int main(void) {
     test_typed_random_and_linear_work();
     test_immutable_view_root_tables();
     test_callable_interface_conformance_tables();
+    test_class_reference_interface_conformance();
+    test_existential_clone_safe_subset();
     test_witness_receiver_capability_and_interface_identity();
     test_existential_pack_test_project();
     test_existential_owned_read_reborrow();

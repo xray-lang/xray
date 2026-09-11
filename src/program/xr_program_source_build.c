@@ -12,6 +12,8 @@
  *   an independently retained validated program cross the owner boundary.
  */
 
+#include <stdio.h>
+
 #include "xr_program_source_build.h"
 
 #include "xr_program_from_xi.h"
@@ -477,8 +479,6 @@ static XrProgramSourceBuildStatus compile_xi_modules(XrProgramSourceBuildContext
     config.graph_modules = context->modules;
     config.graph_module_count = (int) context->module_count;
     config.global_evidence = &context->evidence;
-    config.canonical_reachable_bodies = context->reachable_bodies;
-    config.canonical_reachable_body_count = context->reachable_body_count;
     XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         int spec_index = context->graph->topo_order[topo];

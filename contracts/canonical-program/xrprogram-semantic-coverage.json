@@ -471,51 +471,45 @@
     {
       "stable_id": 142,
       "spelling": "core.class.construct",
-      "decoder": "NOT_YET_ACTIVE",
-      "verifier": "NOT_YET_ACTIVE",
-      "evaluator": "NOT_YET_ACTIVE",
-      "positive_kat": null
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     },
     {
       "stable_id": 143,
       "spelling": "core.class.share",
-      "decoder": "NOT_YET_ACTIVE",
-      "verifier": "NOT_YET_ACTIVE",
-      "evaluator": "NOT_YET_ACTIVE",
-      "positive_kat": null
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     },
     {
       "stable_id": 144,
       "spelling": "core.class.field_load",
-      "decoder": "NOT_YET_ACTIVE",
-      "verifier": "NOT_YET_ACTIVE",
-      "evaluator": "NOT_YET_ACTIVE",
-      "positive_kat": null
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     },
     {
       "stable_id": 145,
       "spelling": "core.class.field_place",
-      "decoder": "NOT_YET_ACTIVE",
-      "verifier": "NOT_YET_ACTIVE",
-      "evaluator": "NOT_YET_ACTIVE",
-      "positive_kat": null
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     },
     {
       "stable_id": 146,
       "spelling": "core.place.exchange",
-      "decoder": "NOT_YET_ACTIVE",
-      "verifier": "NOT_YET_ACTIVE",
-      "evaluator": "NOT_YET_ACTIVE",
-      "positive_kat": null
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     }
   ],
-  "incomplete_operations": [
-    "core.class.construct",
-    "core.class.share",
-    "core.class.field_load",
-    "core.class.field_place",
-    "core.place.exchange"
-  ],
+  "incomplete_operations": [],
   "negative_mutations": [
     "core-spec-identity",
     "effect-mask",

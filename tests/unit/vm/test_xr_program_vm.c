@@ -245,6 +245,68 @@ static XrValidatedProgram *build_affine_copy_program(void) {
     return validate_typed_fixture(&type, 1u, &constant, 1u, &function, 1u);
 }
 
+static XrValidatedProgram *build_inactive_class_program(void) {
+    enum { CLASS_TYPE = 63 };
+    uint16_t fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput type = {
+        .key = fixture_key("vm-class-inactive:type"),
+        .local_id = CLASS_TYPE,
+        .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+        .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+        .field_types = fields,
+        .field_count = 1u,
+    };
+    XrCoreIrConstantInput constant = {
+        .key = fixture_key("vm-class-inactive:constant"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 42,
+    };
+    XrCoreIrKey field = fixture_key("vm-class-inactive:field");
+    XrCoreIrKey object = fixture_key("vm-class-inactive:object");
+    XrCoreIrKey construct_operands[] = {field};
+    XrCoreIrKey object_operand[] = {object};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = field,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = object,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = construct_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = object_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("vm-class-inactive:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("vm-class-inactive:function"),
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_typed_fixture(&type, 1u, &constant, 1u, &function, 1u);
+}
+
 static XrValidatedProgram *build_aggregate_variant_program(bool wrong_variant) {
     enum {
         AGGREGATE_TYPE = 101,
@@ -1427,38 +1489,55 @@ static bool fingerprint_equal(XrFingerprint left, XrFingerprint right) {
 }
 
 static void compare_value(XrReferenceValue reference, XrVmValue vm) {
-    REQUIRE((unsigned) reference.kind == (unsigned) vm.kind);
     switch (reference.kind) {
         case XR_REFERENCE_VALUE_BOOL:
+            REQUIRE(vm.kind == XR_VM_VALUE_BOOL);
             REQUIRE(reference.as.boolean == vm.as.boolean);
             break;
         case XR_REFERENCE_VALUE_I64:
+            REQUIRE(vm.kind == XR_VM_VALUE_I64);
             REQUIRE(reference.as.i64 == vm.as.i64);
             break;
         case XR_REFERENCE_VALUE_U32:
+            REQUIRE(vm.kind == XR_VM_VALUE_U32);
             REQUIRE(reference.as.u32 == vm.as.u32);
             break;
         case XR_REFERENCE_VALUE_U16:
+            REQUIRE(vm.kind == XR_VM_VALUE_U16);
             REQUIRE(reference.as.u16 == vm.as.u16);
             break;
         case XR_REFERENCE_VALUE_TARGET_OS:
+            REQUIRE(vm.kind == XR_VM_VALUE_TARGET_OS);
+            REQUIRE(reference.as.target_enum == vm.as.target_enum);
+            break;
         case XR_REFERENCE_VALUE_TARGET_ARCH:
+            REQUIRE(vm.kind == XR_VM_VALUE_TARGET_ARCH);
+            REQUIRE(reference.as.target_enum == vm.as.target_enum);
+            break;
         case XR_REFERENCE_VALUE_TARGET_ABI:
+            REQUIRE(vm.kind == XR_VM_VALUE_TARGET_ABI);
+            REQUIRE(reference.as.target_enum == vm.as.target_enum);
+            break;
         case XR_REFERENCE_VALUE_TARGET_ENDIAN:
+            REQUIRE(vm.kind == XR_VM_VALUE_TARGET_ENDIAN);
             REQUIRE(reference.as.target_enum == vm.as.target_enum);
             break;
         case XR_REFERENCE_VALUE_ERROR:
+            REQUIRE(vm.kind == XR_VM_VALUE_ERROR);
             REQUIRE(reference.as.error == vm.as.error);
             break;
         case XR_REFERENCE_VALUE_PANIC_INFO:
+            REQUIRE(vm.kind == XR_VM_VALUE_PANIC_INFO);
             REQUIRE(reference.as.panic_info == vm.as.panic_info);
             break;
         case XR_REFERENCE_VALUE_AGGREGATE:
+        case XR_REFERENCE_VALUE_CLASS_REFERENCE:
         case XR_REFERENCE_VALUE_EXISTENTIAL:
         case XR_REFERENCE_VALUE_CALLABLE:
             REQUIRE(false);
             break;
         case XR_REFERENCE_VALUE_VOID:
+            REQUIRE(vm.kind == XR_VM_VALUE_VOID);
             break;
     }
 }
@@ -2287,6 +2366,35 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
     xr_validated_program_free(program);
 }
 
+static void test_inactive_operations_fail_before_dispatch(void) {
+    XrValidatedProgram *program = build_inactive_class_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t index = 0u; index < sizeof(policies) / sizeof(policies[0]); ++index) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[index];
+        XrVmCode *code = NULL;
+        XrVmCodeDiagnostic diagnostic;
+        REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) ==
+                XR_VM_CODE_UNSUPPORTED_OPERATION);
+        REQUIRE(code == NULL);
+        REQUIRE(diagnostic.status == XR_VM_CODE_UNSUPPORTED_OPERATION);
+        REQUIRE(diagnostic.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT);
+        REQUIRE(diagnostic.function_id == 0u);
+        REQUIRE(diagnostic.block_id == 0u);
+        REQUIRE(diagnostic.instruction_id == 1u);
+        REQUIRE(strcmp(xr_vm_code_status_name(diagnostic.status), "unsupported-operation") == 0);
+    }
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void test_coroutine_suspend_resume_generation_lease(void) {
     XrValidatedProgram *program = build_coroutine_program();
     XrTargetProfile *profile =
@@ -3050,6 +3158,7 @@ int main(void) {
     test_arithmetic_edges();
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();
+    test_inactive_operations_fail_before_dispatch();
     test_coroutine_suspend_resume_generation_lease();
     test_coroutine_cancel_drops_exact_live_owner();
     test_coroutine_child_provider_failure_continuations();

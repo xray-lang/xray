@@ -36,9 +36,9 @@ static void test_registry_identity_and_lookup(void) {
             CHECK(operation->aot_status == XR_CORE_COVERAGE_COMPLETE);
         } else {
             CHECK(operation->stable_id <= XR_CORE_OP_CORE_PLACE_EXCHANGE);
-            CHECK(operation->decoder_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
-            CHECK(operation->verifier_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
-            CHECK(operation->evaluator_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+            CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
+            CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
+            CHECK(operation->evaluator_status == XR_CORE_COVERAGE_COMPLETE);
             CHECK(operation->vm_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
             CHECK(operation->aot_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
         }

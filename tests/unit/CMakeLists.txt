@@ -26,6 +26,33 @@ macro(add_xray_unit_test name source)
     add_test(NAME ${name} COMMAND $<TARGET_FILE:${name}>)
 endmacro()
 
+# Compiler-owner tests need source/module/compiler state but not the finalized
+# stage-2 embedded stdlib. Keeping them on the bootstrap aggregate prevents an
+# edit to the compiler or Program producer from rebuilding every stdlib
+# bytecode and VM fastpath before the focused test can start.
+macro(add_xray_bootstrap_executable name source)
+    if(TARGET xray_core_objs AND TARGET xray_stdlib_bootstrap_core)
+        add_executable(${name} ${source} ${ARGN})
+        target_compile_definitions(${name} PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+        target_include_directories(${name} PRIVATE
+            ${XRAY_COMMON_INCLUDES}
+            ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        target_link_libraries(${name} PRIVATE
+            xray_core_objs
+            xray_stdlib_bootstrap_core)
+    else()
+        # The source-fixture build-graph self-test supplies a deliberately tiny
+        # stand-alone project without the production object aggregates.
+        add_executable(${name} ${source} ${ARGN})
+    endif()
+endmacro()
+
+macro(add_xray_bootstrap_unit_test name source)
+    add_xray_bootstrap_executable(${name} ${source} ${ARGN})
+    add_test(NAME ${name} COMMAND $<TARGET_FILE:${name}>)
+endmacro()
+
 function(add_xray_python_unit_test name file)
     add_test(NAME ${name}
         COMMAND ${XRAY_PYTHON} -m unittest discover
@@ -114,9 +141,16 @@ execute_process(
         --cmake ${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION}
     COMMAND_ERROR_IS_FATAL ANY)
 
-add_xray_unit_test(test_xr_program_source_build
+add_xray_bootstrap_executable(test_xr_program_source_build
     program/test_xr_program_source_build.c
     plan/target_profile_test_fixture.c)
+# This test owns source -> XrProgram fixtures and also exercises the reference,
+# VM, and AOT consumers. Linking the final xray_core archive made its edit/build
+# loop wait for the unrelated stage-2 stdlib bytecode and VM-fastpath
+# generators. Use the same stage-1 aggregate as xray_stdlib_bcgen: all common
+# objects plus the bootstrap embedded stdlib table. Full product and
+# embedded-stdlib tests continue to link the final archive and retain their
+# existing qualification boundary.
 target_include_directories(test_xr_program_source_build PRIVATE
     ${XR_PROGRAM_SOURCE_FIXTURE_DIR})
 add_custom_command(TARGET test_xr_program_source_build PRE_LINK
@@ -135,8 +169,13 @@ add_test(NAME xr_program_source_fixtures_build_self_test
 set_tests_properties(xr_program_source_fixtures_build_self_test PROPERTIES
     LABELS "unit;source-owner;generator;build-graph;self-test"
     TIMEOUT 60 PROCESSORS 1)
+add_test(NAME test_xr_program_source_build
+    COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} run-sharded
+        --producer $<TARGET_FILE:test_xr_program_source_build>
+        --jobs 8)
 set_tests_properties(test_xr_program_source_build PROPERTIES
-    LABELS "unit;canonical-program;source-owner;module-graph;task-302")
+    LABELS "unit;canonical-program;source-owner;module-graph;sharded;task-302"
+    TIMEOUT 600 PROCESSORS 8)
 
 add_executable(test_xr_program_fuzz_entry ../fuzz/fuzz_xr_program_decode.c)
 target_compile_definitions(test_xr_program_fuzz_entry PRIVATE FUZZ_STANDALONE)
@@ -374,10 +413,10 @@ add_test(NAME test_frontend_architecture
 add_xray_unit_test(test_analyzer analyzer/test_analyzer.c)
 add_xray_unit_test(test_effect_db analyzer/test_effect_db.c)
 add_xray_unit_test(test_xrd_effect_metadata analyzer/test_xrd_effect_metadata.c)
-add_xray_unit_test(test_mono analyzer/test_mono.c)
+add_xray_bootstrap_unit_test(test_mono analyzer/test_mono.c)
 add_xray_unit_test(test_interface_conformance analyzer/test_interface_conformance.c)
-add_xray_unit_test(test_xglobal_summary analysis/test_xglobal_summary.c)
-add_xray_unit_test(test_xglobal_cache_payload analysis/test_xglobal_cache_payload.c)
+add_xray_bootstrap_unit_test(test_xglobal_summary analysis/test_xglobal_summary.c)
+add_xray_bootstrap_unit_test(test_xglobal_cache_payload analysis/test_xglobal_cache_payload.c)
 
 # ============================================================================
 # vm/ — Instruction encoding, opcode
@@ -432,7 +471,7 @@ add_xray_unit_test(test_xi_opt ir/test_xi_opt.c)
 add_xray_unit_test(test_xi_analysis ir/test_xi_analysis.c)
 add_xray_unit_test(test_xi_cfg_edit ir/test_xi_cfg_edit.c)
 add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
-add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
+add_xray_bootstrap_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_test(NAME test_xi_pipeline_canonical
     COMMAND $<TARGET_FILE:test_xi_pipeline> --canonical)
 set_tests_properties(test_xi_pipeline_canonical PROPERTIES
@@ -586,6 +625,15 @@ function(add_xr_program_source_native_fixture fixture_id native_target expected_
             --expected-exit ${expected_exit})
     set_tests_properties(${native_target} PROPERTIES
         LABELS "unit;aot;canonical-program;source;${fixture_labels};generated-c;native;task-293")
+endfunction()
+
+function(add_xr_program_source_pending_fixture fixture_id source_case test_name fixture_labels)
+    add_test(NAME ${test_name}
+        COMMAND $<TARGET_FILE:test_xr_program_source_build> --run-case ${source_case})
+    set_tests_properties(${test_name} PROPERTIES
+        LABELS "unit;canonical-program;source;${fixture_labels};backend-pending;task-293"
+        TIMEOUT 180
+        PROCESSORS 1)
 endfunction()
 include(${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION})
 

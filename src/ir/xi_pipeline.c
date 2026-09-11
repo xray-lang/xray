@@ -10,6 +10,8 @@
  * Orchestrates: AST -> canon -> xi_lower -> xi_verify -> xi_opt -> xi_emit -> XrProto
  */
 
+#include <stdio.h>
+
 #include "xi_pipeline.h"
 #include "../base/xglobal_indices.h"
 #include "xi_semantic_snapshot.h"
@@ -1599,13 +1601,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (program_closure)
         program_input_ptr = &program_input;
 
-    XiLowerProgramReachability reachability = {
-        .bodies = cfg->canonical_reachable_bodies,
-        .body_count = cfg->canonical_reachable_body_count,
-        .canonical_class_place_receivers = cfg->mode == XI_PIPE_XR_PROGRAM_INPUT,
-    };
-    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode, program_input_ptr,
-                                  cfg->canonical_reachable_bodies ? &reachability : NULL);
+    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode, program_input_ptr);
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
     if (ir && ir->module) {

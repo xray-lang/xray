@@ -131,14 +131,6 @@ typedef struct XiPipelineConfig {
     bool preserve_wide_vector_boundaries; /* keep target-specific wide SIMD behind call edges */
     const struct XgGlobalEvidence *global_evidence; /* optional lowering-time evidence seed */
     uint32_t global_evidence_module_id;             /* 1-based module id in global evidence */
-    /* Optional entry-closed body set used only by the canonical Program
-     * producer.  The
-     * lowerer still emits the complete compiler-private module,
-     * but canonical aggregate REF
-     * receiver places are selected only in bodies
-     * that can enter this executable request. */
-    const uint8_t *canonical_reachable_bodies;
-    uint32_t canonical_reachable_body_count;
     /* Borrowed verified whole-program PSC. Each successful graph module
      * compilation retains exactly one reference and installs only the source
      * module partition selected by stable source authority. */

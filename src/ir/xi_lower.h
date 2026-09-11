@@ -147,22 +147,6 @@ typedef struct XiCleanupScope {
 
 struct XiProgramSemanticInput;
 
-/* Entry-scoped canonical-program lowering policy.  The mask is indexed by
- *
- * XgGlobalEvidence::bodies and is owned by the source build request.  It does
- * not remove or
- * weaken validation for reachable bodies; it only prevents an
- * unrelated declaration in an
- * imported source module from selecting the
- * canonical aggregate receiver ABI before that
- * declaration enters the closed
- * executable graph. */
-typedef struct XiLowerProgramReachability {
-    const uint8_t *bodies;
-    uint32_t body_count;
-    bool canonical_class_place_receivers;
-} XiLowerProgramReachability;
-
 /* ========== Lowering Context ========== */
 
 typedef struct XiLower {
@@ -297,9 +281,6 @@ typedef struct XiLower {
      * writes stable body/callsite ids directly into XiFunc/XiValue metadata. */
     const struct XgGlobalEvidence *global_evidence;
     uint32_t xg_module_id; /* 1-based module id; 0 means unavailable */
-    const uint8_t *canonical_reachable_bodies;
-    uint32_t canonical_reachable_body_count;
-    bool canonical_class_place_receivers;
     uint32_t xg_next_key_access_ordinal;
     uint32_t xg_next_sequence_access_ordinal;
     uint32_t xg_next_capacity_op_ordinal;
@@ -324,7 +305,6 @@ XR_FUNC XiFunc *xi_lower_func(const struct XaTypedProgram *program, struct XrVMR
  */
 XR_FUNC XiFunc *xi_lower_program(const struct XaTypedProgram *program, struct XrVMRuntime *isolate,
                                  bool repl_mode,
-                                 const struct XiProgramSemanticInput *program_semantics,
-                                 const XiLowerProgramReachability *reachability);
+                                 const struct XiProgramSemanticInput *program_semantics);
 
 #endif  // XI_LOWER_H

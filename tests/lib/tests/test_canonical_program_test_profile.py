@@ -27,7 +27,7 @@ SPEC.loader.exec_module(profile)
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
         self.assertEqual(len(profile.CTEST_NAMES), 60)
-        self.assertEqual(len(profile.BUILD_TARGETS), 36)
+        self.assertEqual(len(profile.BUILD_TARGETS), 23)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
         self.assertLessEqual(
@@ -58,57 +58,89 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             set(profile.GENERIC_IDENTITY_BUILD_TARGETS), set(profile.BUILD_TARGETS)
         )
 
-    def test_generic_scalar_class_adds_one_native_exact_witness(self) -> None:
-        self.assertEqual(len(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES), 5)
+    def test_h2_reference_is_an_exact_canonical_subset(self) -> None:
         self.assertEqual(
-            len(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES),
-            len(set(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES)),
+            profile.H2_REFERENCE_CTEST_NAMES,
+            ("test_core_spec", "test_xr_program_verify"),
         )
-        self.assertEqual(
-            profile.GENERIC_SCALAR_CLASS_CTEST_NAMES[:-1],
-            profile.GENERIC_IDENTITY_CTEST_NAMES,
-        )
-        self.assertEqual(
-            profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS[:-1],
-            profile.GENERIC_IDENTITY_BUILD_TARGETS,
-        )
-        self.assertEqual(
-            profile.GENERIC_SCALAR_CLASS_CTEST_NAMES[-1],
-            profile.GENERIC_SCALAR_CLASS_NATIVE_CTEST_NAME,
-        )
-        self.assertEqual(
-            profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS,
-            profile.GENERIC_SCALAR_CLASS_CTEST_NAMES,
-        )
-        self.assertIn(
-            profile.GENERIC_SCALAR_CLASS_NATIVE_CTEST_NAME,
-            profile.source_fixtures.native_target_names(
-                profile.source_fixtures.load_registry()
-            ),
+        self.assertIs(
+            profile.H2_REFERENCE_BUILD_TARGETS,
+            profile.H2_REFERENCE_CTEST_NAMES,
         )
         self.assertLessEqual(
-            set(profile.GENERIC_SCALAR_CLASS_CTEST_NAMES), set(profile.CTEST_NAMES)
+            set(profile.H2_REFERENCE_CTEST_NAMES), set(profile.CTEST_NAMES)
         )
         self.assertLessEqual(
-            set(profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS), set(profile.BUILD_TARGETS)
+            set(profile.H2_REFERENCE_BUILD_TARGETS), set(profile.BUILD_TARGETS)
         )
+
+    def test_h2_private_profiles_are_exact_canonical_subsets(self) -> None:
+        for tests, targets in (
+            (profile.H2_SOURCE_CTEST_NAMES, profile.H2_SOURCE_BUILD_TARGETS),
+            (profile.H2_VM_CTEST_NAMES, profile.H2_VM_BUILD_TARGETS),
+            (profile.H2_AOT_CTEST_NAMES, profile.H2_AOT_BUILD_TARGETS),
+        ):
+            self.assertEqual(len(tests), len(set(tests)))
+            self.assertEqual(len(targets), len(set(targets)))
+            self.assertLessEqual(set(tests), set(profile.CTEST_NAMES))
+            self.assertLessEqual(set(targets), set(profile.BUILD_TARGETS))
+
+    def test_h2_aggregate_is_the_stable_deduplicated_owner_union(self) -> None:
+        component_tests = (
+            profile.H2_REFERENCE_CTEST_NAMES,
+            profile.H2_SOURCE_CTEST_NAMES,
+            profile.H2_VM_CTEST_NAMES,
+            profile.H2_AOT_CTEST_NAMES,
+        )
+        component_targets = (
+            profile.H2_REFERENCE_BUILD_TARGETS,
+            profile.H2_SOURCE_BUILD_TARGETS,
+            profile.H2_VM_BUILD_TARGETS,
+            profile.H2_AOT_BUILD_TARGETS,
+        )
+        expected_tests = tuple(dict.fromkeys(
+            name for inventory in component_tests for name in inventory
+        ))
+        expected_targets = tuple(dict.fromkeys(
+            name for inventory in component_targets for name in inventory
+        ))
+        self.assertEqual(profile.H2_CTEST_NAMES, expected_tests)
+        self.assertEqual(profile.H2_BUILD_TARGETS, expected_targets)
+        self.assertEqual(len(profile.H2_CTEST_NAMES), 25)
+        self.assertEqual(len(profile.H2_BUILD_TARGETS), 7)
+        self.assertEqual(len(profile.H2_CTEST_NAMES), len(set(profile.H2_CTEST_NAMES)))
+        self.assertEqual(len(profile.H2_BUILD_TARGETS), len(set(profile.H2_BUILD_TARGETS)))
+        self.assertLessEqual(set(profile.H2_CTEST_NAMES), set(profile.CTEST_NAMES))
+        self.assertLessEqual(set(profile.H2_BUILD_TARGETS), set(profile.BUILD_TARGETS))
 
     def test_manifest_additions_and_removals_change_both_inventories(self) -> None:
         with tempfile.TemporaryDirectory(prefix="xr-canonical-profile-") as directory:
             manifest = Path(directory) / "cases.json"
             source = Path(directory) / "cases.c"
-            payload = {"schema": 1, "cases": [{"name": "example", "fixture": None}]}
+            payload = {"schema": 2, "cases": [{"name": "example", "fixture": None}]}
             manifest.write_text(json.dumps(payload), encoding="utf-8")
             source.write_text("TEST(example) {\n}\n", encoding="utf-8")
             without_fixture = profile.load_inventory(manifest, source)
             payload["cases"][0]["fixture"] = {"id": "example", "expected_exit": 7,
-                                              "labels": ["coroutine"]}
+                                              "labels": ["coroutine"],
+                                              "backends": {"vm": "execute", "aot": "execute"}}
             manifest.write_text(json.dumps(payload), encoding="utf-8")
             source.write_text("TEST(example) {\nXR_SOURCE_FIXTURE_EXAMPLE\n}\n", encoding="utf-8")
             with_fixture = profile.load_inventory(manifest, source)
             expected = "test_xr_program_example_aot_native"
             for old, new in zip(without_fixture, with_fixture):
                 self.assertEqual(new, old + (expected,))
+            payload["cases"][0]["fixture"]["backends"] = {
+                "vm": {"status": "unsupported", "operation": "core.class.construct"},
+                "aot": {"status": "unsupported", "operation": "core.class.construct"},
+            }
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+            pending = profile.load_inventory(manifest, source)
+            self.assertEqual(
+                pending[0],
+                without_fixture[0] + ("test_xr_program_example_backend_pending",),
+            )
+            self.assertEqual(pending[1], without_fixture[1])
             payload["cases"][0]["fixture"] = None
             manifest.write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaises(profile.source_fixtures.FixtureError):
@@ -126,6 +158,16 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         for target in targets:
             self.assertEqual(profile.CTEST_NAMES.count(target), 1)
             self.assertEqual(profile.BUILD_TARGETS.count(target), 1)
+        registered_pending = re.findall(
+            rb"^add_xr_program_source_pending_fixture\(\w+ \w+ (\w+) ",
+            cmake,
+            re.MULTILINE,
+        )
+        pending = tuple(name.decode("ascii") for name in registered_pending)
+        self.assertEqual(pending, profile.source_fixtures.pending_test_names(registry))
+        for test_name in pending:
+            self.assertEqual(profile.CTEST_NAMES.count(test_name), 1)
+            self.assertNotIn(test_name, profile.BUILD_TARGETS)
 
     def test_missing_native_target_stops_runner_before_any_build(self) -> None:
         runner = load_module("canonical_fixture_runner_under_test", ROOT / "scripts/t.py")
@@ -231,10 +273,10 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_cross_module_coroutine_aot_native",
             "test_xr_program_cross_module_static_method_coroutine_aot_native",
             "test_xr_program_multi_safepoint_aot_native",
-            "test_xr_program_ref_parameter_coroutine_aot_native",
-            "test_xr_program_read_existential_coroutine_aot_native",
-            "test_xr_program_provider_trap_cleanup_aot_native",
-            "test_xr_program_child_coroutine_trap_cleanup_aot_native",
+            "test_xr_program_ref_parameter_coroutine_backend_pending",
+            "test_xr_program_read_existential_coroutine_backend_pending",
+            "test_xr_program_provider_trap_cleanup_backend_pending",
+            "test_xr_program_child_coroutine_trap_cleanup_backend_pending",
             "meta_ownership_inventory",
             "contract_freeze",
             "contract_freeze_injection",

@@ -35,7 +35,11 @@ USAGE                                          measured, warm tree, 18 cores
     scripts/t.py infra   test-runner-only edit exact Python self-tests
     scripts/t.py t0 -R <re>  one test          ~3s   (builds only that test)
     scripts/t.py canonical  canonical Program edit preflight; exact inventory
-    scripts/t.py generic-scalar-class  scalar generic class VM/AOT preflight
+    scripts/t.py h2        shared H2 semantics; exact deduplicated aggregate
+    scripts/t.py h2-reference  CoreSpec + Reference/verifier inner loop
+    scripts/t.py h2-source  Program/Reference/source-owner exact gate
+    scripts/t.py h2-vm      VM-private exact gate
+    scripts/t.py h2-aot     AOT-private exact gate
     scripts/t.py t1      before a commit       ~1min
     scripts/t.py t2      before a push         ~4min
     scripts/t.py t3      periodic / release    everything, ~8min
@@ -227,12 +231,42 @@ EXACT_PROFILES = {
         not_covered=("remaining canonical Program proofs, broad language/runtime suites, "
                      "VM/AOT differential, full sanitizers and release qualification"),
     ),
-    "generic-scalar-class": ExactProfile(
-        tests=canonical_profile.GENERIC_SCALAR_CLASS_CTEST_NAMES,
-        targets=canonical_profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS,
+    "h2": ExactProfile(
+        tests=canonical_profile.H2_CTEST_NAMES,
+        targets=canonical_profile.H2_BUILD_TARGETS,
         include_xray=False,
-        not_covered=("remaining canonical Program proofs, broad language/runtime suites, "
-                     "full backend differential, full sanitizers and release qualification"),
+        not_covered=("the remaining canonical product and native-fixture inventory, broad "
+                     "language/runtime suites, the full t2 backend differential, full "
+                     "ASan/LSan, QEMU and release qualification"),
+    ),
+    "h2-reference": ExactProfile(
+        tests=canonical_profile.H2_REFERENCE_CTEST_NAMES,
+        targets=canonical_profile.H2_REFERENCE_BUILD_TARGETS,
+        include_xray=False,
+        not_covered=("source-to-Xi projection, source fixture matrix, VM fixed/decoded paths, "
+                     "AOT/native parity, product routes, broad contracts, full sanitizers and "
+                     "release qualification"),
+    ),
+    "h2-source": ExactProfile(
+        tests=canonical_profile.H2_SOURCE_CTEST_NAMES,
+        targets=canonical_profile.H2_SOURCE_BUILD_TARGETS,
+        include_xray=False,
+        not_covered=("VM/AOT execution of pending class-reference fixtures, product routes, "
+                     "broad language/runtime suites, full sanitizers and release qualification"),
+    ),
+    "h2-vm": ExactProfile(
+        tests=canonical_profile.H2_VM_CTEST_NAMES,
+        targets=canonical_profile.H2_VM_BUILD_TARGETS,
+        include_xray=False,
+        not_covered=("source fixture matrix, AOT/native parity, product routes, broad contracts, "
+                     "full sanitizers and release qualification"),
+    ),
+    "h2-aot": ExactProfile(
+        tests=canonical_profile.H2_AOT_CTEST_NAMES,
+        targets=canonical_profile.H2_AOT_BUILD_TARGETS,
+        include_xray=False,
+        not_covered=("source fixture matrix, VM parity, native class-reference fixtures, product "
+                     "routes, full sanitizers and release qualification"),
     ),
     "infra": ExactProfile(
         tests=("test_build_tree_lock", "test_tiered_test_runner",
@@ -676,13 +710,13 @@ def _run_main(argv: List[str]) -> int:
     # cycle.  Source loading preserves the language/compiler checks while
     # avoiding an embedded-bytecode rebuild that cannot succeed during parts of
     # the bootstrap.  Fastpaths are a VM performance layer, not a semantic one.
-    # t2/t3 explicitly gate both production configurations and reject the flag.
+    # canonical/t2/t3 explicitly gate production configuration edges and reject
+    # the flag. Narrow exact profiles identify themselves as partial preflights.
     if platform.env_flag("XR_FAST"):
-        if tier in ("t2", "t3"):
+        if tier in ("canonical", "t2", "t3"):
             print(f"{RED}Error{NC}: XR_FAST=1 is not accepted by {tier}.")
-            print(f"       {tier} gates the stdlib VM fastpaths; a tree built "
-                  "without")
-            print("       them would report a pass those tiers never established.")
+            print(f"       {tier} gates production stdlib bootstrap edges; a tree built")
+            print("       without them would report a pass that tier never established.")
             return 1
         fast_default = "build-fast-clang" if platform.IS_WINDOWS else "build-fast"
         build_dir = Path(os.environ.get("XR_BUILD_DIR", fast_default))

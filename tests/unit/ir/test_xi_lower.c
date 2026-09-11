@@ -103,7 +103,7 @@ static XiFunc *lower_source(const char *source) {
      * plans to exact source and reads it. A real compile is inside a file scope
      * at this point; this harness has to say so too. */
     analyzer->current_file = "test.xr";
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL, NULL) : NULL;
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (!typed.program) {
         fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
                 xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
@@ -192,7 +192,7 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
      * plans to exact source and reads it. A real compile is inside a file scope
      * at this point; this harness has to say so too. */
     analyzer->current_file = "test.xr";
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL, NULL) : NULL;
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (!typed.program) {
         fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
                 xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
@@ -4090,7 +4090,7 @@ static bool lower_enum_after_conversion_mutation(XrConversionKind kind, uint8_t 
         xr_compiler_session_pop_arena(&canon_scope);
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
     analyzer->current_file = "enum_witness_mutation.xr";
-    XiFunc *lowered = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL, NULL) : NULL;
+    XiFunc *lowered = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     bool rejected = lowered == NULL;
     if (lowered)
         xi_func_free(lowered);

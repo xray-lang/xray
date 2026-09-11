@@ -34,16 +34,36 @@ class FocusedSelectionTest(unittest.TestCase):
         )
         self.assertFalse(profile.include_xray)
 
-    def test_generic_scalar_class_profile_reuses_the_shared_exact_inventory(self):
-        profile = runner.EXACT_PROFILES["generic-scalar-class"]
-        self.assertIs(
-            profile.tests, runner.canonical_profile.GENERIC_SCALAR_CLASS_CTEST_NAMES
-        )
-        self.assertIs(
-            profile.targets,
-            runner.canonical_profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS,
-        )
+    def test_h2_reference_profile_reuses_the_shared_exact_inventory(self):
+        profile = runner.EXACT_PROFILES["h2-reference"]
+        self.assertIs(profile.tests, runner.canonical_profile.H2_REFERENCE_CTEST_NAMES)
+        self.assertIs(profile.targets, runner.canonical_profile.H2_REFERENCE_BUILD_TARGETS)
         self.assertFalse(profile.include_xray)
+        self.assertIn("VM", profile.not_covered)
+
+    def test_h2_aggregate_reuses_the_shared_exact_inventory(self):
+        profile = runner.EXACT_PROFILES["h2"]
+        self.assertIs(profile.tests, runner.canonical_profile.H2_CTEST_NAMES)
+        self.assertIs(profile.targets, runner.canonical_profile.H2_BUILD_TARGETS)
+        self.assertFalse(profile.include_xray)
+        self.assertIn("canonical", profile.not_covered)
+        self.assertIn("t2", profile.not_covered)
+        self.assertIn("ASan/LSan", profile.not_covered)
+
+    def test_h2_private_profiles_reuse_the_shared_exact_inventories(self):
+        for name, tests, targets in (
+            ("h2-source", runner.canonical_profile.H2_SOURCE_CTEST_NAMES,
+             runner.canonical_profile.H2_SOURCE_BUILD_TARGETS),
+            ("h2-vm", runner.canonical_profile.H2_VM_CTEST_NAMES,
+             runner.canonical_profile.H2_VM_BUILD_TARGETS),
+            ("h2-aot", runner.canonical_profile.H2_AOT_CTEST_NAMES,
+             runner.canonical_profile.H2_AOT_BUILD_TARGETS),
+        ):
+            with self.subTest(name=name):
+                profile = runner.EXACT_PROFILES[name]
+                self.assertIs(profile.tests, tests)
+                self.assertIs(profile.targets, targets)
+                self.assertFalse(profile.include_xray)
 
     def test_requested_build_dir_matches_fast_tree_selection(self):
         with mock.patch.dict(runner.os.environ, {}, clear=True), mock.patch.object(
@@ -209,6 +229,23 @@ class ProductionBuildPreflightTest(unittest.TestCase):
                 refresh.assert_not_called()
                 build.assert_not_called()
                 ctest.assert_not_called()
+                execute.assert_not_called()
+
+    def test_canonical_and_product_tiers_reject_fast_configuration(self):
+        for tier in ("canonical", "t2", "t3"):
+            with self.subTest(tier=tier), ExitStack() as stack:
+                stack.enter_context(mock.patch.dict(
+                    runner.os.environ, {"XR_FAST": "1"}, clear=True))
+                stack.enter_context(mock.patch.object(
+                    runner.sanitizer, "activate_windows_msvc_environment",
+                    return_value=True))
+                refresh = stack.enter_context(mock.patch.object(
+                    runner, "refresh_cmake_manifest"))
+                build = stack.enter_context(mock.patch.object(runner, "build_selected"))
+                execute = stack.enter_context(mock.patch.object(runner.subprocess, "call"))
+                self.assertEqual(runner._run_main(["t.py", tier]), 1)
+                refresh.assert_not_called()
+                build.assert_not_called()
                 execute.assert_not_called()
 
 

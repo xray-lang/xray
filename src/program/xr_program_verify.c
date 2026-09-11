@@ -34,13 +34,12 @@ typedef struct VerifyContext {
 } VerifyContext;
 
 static XrProgramSemanticLocation no_location(void) {
-    XrProgramSemanticLocation location = {
-        .section_id = 0,
-        .function_id = XR_PROGRAM_LOCATION_NONE,
-        .block_id = XR_PROGRAM_LOCATION_NONE,
-        .instruction_id = XR_PROGRAM_LOCATION_NONE,
-        .value_id = XR_PROGRAM_LOCATION_NONE,
-    };
+    XrProgramSemanticLocation location;
+    memset(&location, 0, sizeof(location));
+    location.function_id = XR_PROGRAM_LOCATION_NONE;
+    location.block_id = XR_PROGRAM_LOCATION_NONE;
+    location.instruction_id = XR_PROGRAM_LOCATION_NONE;
+    location.value_id = XR_PROGRAM_LOCATION_NONE;
     return location;
 }
 
@@ -49,7 +48,11 @@ static void reject(VerifyContext *context, XrProgramDiagnosticKind kind,
     if (context->diagnostic.kind != XR_PROGRAM_DIAGNOSTIC_NONE)
         return;
     context->diagnostic.kind = kind;
-    context->diagnostic.location = location;
+    context->diagnostic.location.section_id = location.section_id;
+    context->diagnostic.location.function_id = location.function_id;
+    context->diagnostic.location.block_id = location.block_id;
+    context->diagnostic.location.instruction_id = location.instruction_id;
+    context->diagnostic.location.value_id = location.value_id;
 }
 
 static bool spend(VerifyContext *context, uint64_t amount, XrProgramSemanticLocation location) {
@@ -184,7 +187,8 @@ static const XrValidatedConformance *find_conformance(const XrValidatedProgram *
 static bool type_is_nominal(const XrValidatedProgram *program, uint16_t type_id) {
     const XrValidatedType *type = xr_validated_program_type(program, type_id);
     return type &&
-           (type->kind == XR_CORE_IR_TYPE_AGGREGATE || type->kind == XR_CORE_IR_TYPE_VARIANT) &&
+           (type->kind == XR_CORE_IR_TYPE_AGGREGATE || type->kind == XR_CORE_IR_TYPE_VARIANT ||
+            type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) &&
            type->nominal_kind != XR_CORE_IR_NOMINAL_NONE;
 }
 
@@ -418,8 +422,11 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
         } else if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
             uint64_t field_count = take_uvar(&reader);
             if (shape_head > XR_CORE_IR_NOMINAL_ENUM ||
-                shape_head == XR_CORE_IR_NOMINAL_CLASS ||
-                field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                shape_head == XR_CORE_IR_NOMINAL_CLASS) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+                return false;
+            }
+            if (field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                 !spend(context, field_count, location)) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
                 return false;
@@ -540,62 +547,135 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
     }
     for (uint32_t index = 0; index < context->program->type_count; ++index) {
         const XrValidatedType *type = &context->program->types[index];
-        if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
-            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
-            return false;
-        }
-        XrCoreIrTypeOwnership derived_ownership = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
-        XrCoreIrCopyContract derived_copy = XR_CORE_IR_COPY_TRIVIAL;
-        bool has_affine_child = false;
         for (uint32_t field = 0; field < type->field_count; ++field) {
             uint16_t child = type->field_types[field];
-            if (type_is_existential_ref(context->program, child)) {
+            if (type_is_existential_ref(context->program, child) ||
+                (type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+                 type->nominal_kind == XR_CORE_IR_NOMINAL_STRUCT &&
+                 type_is_class_reference(context->program, child))) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
                 return false;
-            }
-            if (xr_validated_program_type_ownership(context->program, child) ==
-                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE) {
-                has_affine_child = true;
-                derived_ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
-                if (xr_validated_program_copy_contract(context->program, child) ==
-                    XR_CORE_IR_COPY_FORBIDDEN)
-                    derived_copy = XR_CORE_IR_COPY_FORBIDDEN;
-                else if (derived_copy == XR_CORE_IR_COPY_TRIVIAL)
-                    derived_copy = XR_CORE_IR_COPY_EXPLICIT;
             }
         }
         for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
             const XrValidatedVariant *row = &type->variants[variant];
             for (uint32_t field = 0; field < row->payload_count; ++field) {
-                uint16_t child = row->payload_types[field];
-                if (type_is_existential_ref(context->program, child)) {
+                if (type_is_existential_ref(context->program, row->payload_types[field])) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
                     return false;
                 }
-                if (xr_validated_program_type_ownership(context->program, child) ==
-                    XR_CORE_IR_TYPE_OWNERSHIP_AFFINE) {
-                    has_affine_child = true;
-                    derived_ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
-                    if (xr_validated_program_copy_contract(context->program, child) ==
-                        XR_CORE_IR_COPY_FORBIDDEN)
-                        derived_copy = XR_CORE_IR_COPY_FORBIDDEN;
-                    else if (derived_copy == XR_CORE_IR_COPY_TRIVIAL)
-                        derived_copy = XR_CORE_IR_COPY_EXPLICIT;
-                }
             }
         }
-        bool anonymous_owner_aggregate = type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
-                                         type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
-                                         !has_affine_child &&
-                                         type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
-                                         type->copy_contract == XR_CORE_IR_COPY_EXPLICIT;
-        bool structural =
-            type->kind == XR_CORE_IR_TYPE_AGGREGATE || type->kind == XR_CORE_IR_TYPE_VARIANT;
-        if (structural && !anonymous_owner_aggregate &&
-            (type->ownership != derived_ownership || type->copy_contract != derived_copy)) {
-            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
-            return false;
+    }
+    uint32_t type_count = context->program->type_count;
+    XrCoreIrTypeOwnership *derived_ownership =
+        xr_calloc(type_count ? type_count : 1u, sizeof(*derived_ownership));
+    XrCoreIrCopyContract *derived_copy =
+        xr_calloc(type_count ? type_count : 1u, sizeof(*derived_copy));
+    if (!derived_ownership || !derived_copy) {
+        xr_free(derived_copy);
+        xr_free(derived_ownership);
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+        return false;
+    }
+    for (uint32_t index = 0; index < type_count; ++index) {
+        const XrValidatedType *type = &context->program->types[index];
+        derived_ownership[index] = type->ownership;
+        derived_copy[index] = type->copy_contract;
+        if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+            derived_ownership[index] = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+            derived_copy[index] = XR_CORE_IR_COPY_EXPLICIT;
+        } else if (type->kind == XR_CORE_IR_TYPE_VARIANT ||
+                   (type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+                    !(type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
+                      type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                      type->copy_contract == XR_CORE_IR_COPY_EXPLICIT))) {
+            derived_ownership[index] = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+            derived_copy[index] = XR_CORE_IR_COPY_TRIVIAL;
         }
+    }
+    bool changed = true;
+    for (uint32_t pass = 0u; changed && pass <= type_count; ++pass) {
+        changed = false;
+        for (uint32_t index = 0; index < type_count; ++index) {
+            const XrValidatedType *type = &context->program->types[index];
+            if (type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE &&
+                type->kind != XR_CORE_IR_TYPE_AGGREGATE &&
+                type->kind != XR_CORE_IR_TYPE_VARIANT)
+                continue;
+            XrCoreIrTypeOwnership ownership = derived_ownership[index];
+            XrCoreIrCopyContract copy = derived_copy[index];
+            for (uint32_t field = 0; field < type->field_count; ++field) {
+                uint16_t child = type->field_types[field];
+                XrCoreIrTypeOwnership child_ownership =
+                    child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
+                        ? derived_ownership[child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                        : xr_validated_program_type_ownership(context->program, child);
+                XrCoreIrCopyContract child_copy =
+                    child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
+                        ? derived_copy[child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                        : xr_validated_program_copy_contract(context->program, child);
+                if (child_ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
+                    continue;
+                ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+                if (child_copy == XR_CORE_IR_COPY_FORBIDDEN)
+                    copy = XR_CORE_IR_COPY_FORBIDDEN;
+                else if (copy == XR_CORE_IR_COPY_TRIVIAL)
+                    copy = XR_CORE_IR_COPY_EXPLICIT;
+            }
+            for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
+                const XrValidatedVariant *row = &type->variants[variant];
+                for (uint32_t field = 0; field < row->payload_count; ++field) {
+                    uint16_t child = row->payload_types[field];
+                    XrCoreIrTypeOwnership child_ownership =
+                        child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
+                            ? derived_ownership[child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                            : xr_validated_program_type_ownership(context->program, child);
+                    XrCoreIrCopyContract child_copy =
+                        child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
+                            ? derived_copy[child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                            : xr_validated_program_copy_contract(context->program, child);
+                    if (child_ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
+                        continue;
+                    ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+                    if (child_copy == XR_CORE_IR_COPY_FORBIDDEN)
+                        copy = XR_CORE_IR_COPY_FORBIDDEN;
+                    else if (copy == XR_CORE_IR_COPY_TRIVIAL)
+                        copy = XR_CORE_IR_COPY_EXPLICIT;
+                }
+            }
+            if (derived_ownership[index] != ownership || derived_copy[index] != copy) {
+                derived_ownership[index] = ownership;
+                derived_copy[index] = copy;
+                changed = true;
+            }
+        }
+    }
+    bool contracts_match = !changed;
+    for (uint32_t index = 0; contracts_match && index < type_count; ++index) {
+        const XrValidatedType *type = &context->program->types[index];
+        if (type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+            type->nominal_kind == XR_CORE_IR_NOMINAL_STRUCT) {
+            for (uint32_t field = 0; contracts_match && field < type->field_count; ++field) {
+                uint16_t child = type->field_types[field];
+                XrCoreIrTypeOwnership child_ownership =
+                    child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
+                        ? derived_ownership[child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                        : xr_validated_program_type_ownership(context->program, child);
+                contracts_match = child_ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+            }
+        }
+        if (contracts_match && (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+                                type->kind == XR_CORE_IR_TYPE_AGGREGATE ||
+                                type->kind == XR_CORE_IR_TYPE_VARIANT))
+            contracts_match = type->ownership == derived_ownership[index] &&
+                              type->copy_contract == derived_copy[index];
+    }
+    xr_free(derived_copy);
+    xr_free(derived_ownership);
+    if (!contracts_match) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+        return false;
     }
     return true;
 }
@@ -724,8 +804,6 @@ static bool parse_signature(VerifyContext *context, VerifyReader *reader,
         uint64_t type_id = take_uvar(reader);
         uint64_t mode = take_uvar(reader);
         if (!type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID ||
-            (type_id <= UINT16_MAX &&
-             type_is_class_reference(context->program, (uint16_t) type_id)) ||
             mode > XR_PARAM_MOVE) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
             return false;
@@ -798,12 +876,6 @@ static bool parse_signature(VerifyContext *context, VerifyReader *reader,
     if (!type_is_runtime(context->program, result_type) ||
         !type_is_runtime(context->program, error_type) ||
         !type_is_runtime(context->program, panic_type) ||
-        (result_type <= UINT16_MAX &&
-         type_is_class_reference(context->program, (uint16_t) result_type)) ||
-        (error_type <= UINT16_MAX &&
-         type_is_class_reference(context->program, (uint16_t) error_type)) ||
-        (panic_type <= UINT16_MAX &&
-         type_is_class_reference(context->program, (uint16_t) panic_type)) ||
         (result_type <= UINT16_MAX &&
          type_is_existential_ref(context->program, (uint16_t) result_type)) ||
         (error_type <= UINT16_MAX &&
@@ -981,8 +1053,6 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         return false;
     }
     if (result_plus_one > UINT32_MAX || !type_is_runtime(context->program, result_type) ||
-        (result_type <= UINT16_MAX &&
-         type_is_class_reference(context->program, (uint16_t) result_type)) ||
         result_category > XR_CORE_IR_PLACE || result_ownership > XR_CORE_IR_OWNER ||
         (result_category == XR_CORE_IR_PLACE && result_ownership != XR_CORE_IR_NON_OWNER)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
@@ -1279,8 +1349,6 @@ static bool parse_code(VerifyContext *context, const XrProgramView *view) {
                 location.value_id = (uint32_t) value_id;
                 if (value_id != next_value || value_id >= function->value_count ||
                     !type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID ||
-                    (type_id <= UINT16_MAX &&
-                     type_is_class_reference(context->program, (uint16_t) type_id)) ||
                     category > XR_CORE_IR_PLACE || ownership > XR_CORE_IR_OWNER ||
                     (category == XR_CORE_IR_PLACE && ownership != XR_CORE_IR_NON_OWNER)) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_DEFINITION, location);
@@ -1516,7 +1584,6 @@ static bool parse_semantic_metadata(VerifyContext *context, const XrProgramView 
             !implementor || implementor_kind == XR_CORE_IR_NOMINAL_NONE ||
             implementor_kind > XR_CORE_IR_NOMINAL_ENUM ||
             (uint64_t) implementor->nominal_kind != implementor_kind ||
-            implementor->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE ||
             (implementor->kind != XR_CORE_IR_TYPE_AGGREGATE &&
              implementor->kind != XR_CORE_IR_TYPE_VARIANT &&
              implementor->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE) ||
@@ -1859,6 +1926,34 @@ static bool operand_ownership_is(const XrValidatedFunction *function,
                                  XrCoreIrOwnershipDisposition ownership) {
     return operand < instruction->operand_count &&
            function->value_ownerships[instruction->operands[operand]] == ownership;
+}
+
+static bool signature_parameter_is_class_receiver(const XrValidatedProgram *program,
+                                                   const XrValidatedSignature *signature,
+                                                   uint32_t parameter) {
+    return program && signature && signature->has_receiver && parameter == 0u &&
+           signature->parameter_count != 0u &&
+           type_is_class_reference(program, signature->parameter_types[0]);
+}
+
+static XrCoreIrValueCategory
+signature_parameter_category(const XrValidatedProgram *program,
+                             const XrValidatedSignature *signature, uint32_t parameter) {
+    return signature && parameter < signature->parameter_count &&
+                   signature->parameter_modes[parameter] == XR_PARAM_REF &&
+                   !signature_parameter_is_class_receiver(program, signature, parameter)
+               ? XR_CORE_IR_PLACE
+               : XR_CORE_IR_VALUE;
+}
+
+static XrParamMode signature_parameter_call_mode(const XrValidatedProgram *program,
+                                                 const XrValidatedSignature *signature,
+                                                 uint32_t parameter) {
+    XrParamMode mode = signature->parameter_modes[parameter];
+    return mode == XR_PARAM_REF &&
+                   signature_parameter_is_class_receiver(program, signature, parameter)
+               ? XR_PARAM_READ
+               : mode;
 }
 
 static bool call_operand_ownership_is(const XrValidatedProgram *program,
@@ -2626,7 +2721,10 @@ static bool operation_consumes_operand(const VerifyContext *context,
     if (instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT && operand_index == 0u)
         return function->value_ownerships[instruction->operands[0]] == XR_CORE_IR_OWNER;
     if (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
-        instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT)
+        instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT)
+        return function->value_ownerships[instruction->operands[operand_index]] == XR_CORE_IR_OWNER;
+    if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE && operand_index == 1u)
         return function->value_ownerships[instruction->operands[operand_index]] == XR_CORE_IR_OWNER;
     if (instruction->operation_id == XR_CORE_OP_CORE_VARIANT_PROJECT && operand_index == 0u)
         return instruction->result_ownership == XR_CORE_IR_OWNER;
@@ -2639,6 +2737,29 @@ static bool operation_consumes_operand(const VerifyContext *context,
     uint32_t prefix = call_operand_prefix(instruction->operation_id);
     return operand_index >= prefix && operand_index - prefix < callee->parameter_count &&
            callee->parameter_modes[operand_index - prefix] == XR_PARAM_MOVE;
+}
+
+static bool exchange_old_owner_disposition(const XrValidatedInstruction *instruction,
+                                           uint32_t operand_index) {
+    if (!instruction)
+        return false;
+    if ((instruction->operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
+         instruction->operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
+         instruction->operation_id == XR_CORE_OP_CORE_RETURN) &&
+        operand_index == 0u)
+        return true;
+    return instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE && operand_index == 1u;
+}
+
+static bool instruction_can_escape_exchange_commit(const XrValidatedInstruction *instruction) {
+    if (!instruction)
+        return true;
+    if (instruction_is_terminator(instruction->operation_id))
+        return true;
+    const XrCoreOperationSpec *operation =
+        xr_core_spec_operation_by_id(instruction->operation_id);
+    return !operation ||
+           (operation->effect_mask & (XR_CORE_EFFECT_ALL & ~XR_CORE_EFFECT_TARGET_QUERY)) != 0u;
 }
 
 static const XrValidatedInstruction *affine_borrow_definition(const XrValidatedFunction *function,
@@ -2655,14 +2776,14 @@ static const XrValidatedInstruction *affine_borrow_definition(const XrValidatedF
     return instruction->result_id == value_id ? instruction : NULL;
 }
 
-static bool frame_stable_non_owner_callable(VerifyContext *context,
-                                            const XrValidatedFunction *function,
-                                            uint32_t value_id) {
+static bool frame_stable_non_owner_reference(VerifyContext *context,
+                                             const XrValidatedFunction *function,
+                                             uint32_t value_id, XrCoreIrTypeKind expected_kind) {
     if (!context || !function || value_id >= function->value_count)
         return false;
     const XrValidatedType *initial_type =
         xr_validated_program_type(context->program, function->value_types[value_id]);
-    if (!initial_type || initial_type->kind != XR_CORE_IR_TYPE_CALLABLE ||
+    if (!initial_type || initial_type->kind != expected_kind ||
         function->value_categories[value_id] != XR_CORE_IR_VALUE ||
         function->value_ownerships[value_id] != XR_CORE_IR_NON_OWNER)
         return false;
@@ -2688,7 +2809,8 @@ static bool frame_stable_non_owner_callable(VerifyContext *context,
             break;
         }
         const XrValidatedInstruction *definition = affine_borrow_definition(function, candidate);
-        if (definition && definition->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK &&
+        if (expected_kind == XR_CORE_IR_TYPE_CALLABLE && definition &&
+            definition->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK &&
             definition->operand_count == 0u) {
             has_frame_anchor = true;
             continue;
@@ -2709,7 +2831,10 @@ static bool frame_stable_non_owner_callable(VerifyContext *context,
             break;
         }
         if (block_id == function->entry_block && argument_index < function->parameter_count &&
-            function->parameter_modes[argument_index] == XR_PARAM_READ) {
+            (function->parameter_modes[argument_index] == XR_PARAM_READ ||
+             (expected_kind == XR_CORE_IR_TYPE_CLASS_REFERENCE && argument_index == 0u &&
+              function->has_receiver &&
+              function->parameter_modes[argument_index] == XR_PARAM_REF))) {
             has_frame_anchor = true;
             continue;
         }
@@ -2752,11 +2877,29 @@ static bool frame_stable_non_owner_callable(VerifyContext *context,
     return valid && has_frame_anchor;
 }
 
+static bool frame_stable_non_owner_callable(VerifyContext *context,
+                                            const XrValidatedFunction *function,
+                                            uint32_t value_id) {
+    return frame_stable_non_owner_reference(context, function, value_id,
+                                            XR_CORE_IR_TYPE_CALLABLE);
+}
+
+static bool frame_stable_non_owner_class_reference(VerifyContext *context,
+                                                   const XrValidatedFunction *function,
+                                                   uint32_t value_id) {
+    return frame_stable_non_owner_reference(context, function, value_id,
+                                            XR_CORE_IR_TYPE_CLASS_REFERENCE);
+}
+
 /* Places are verifier-confined aliases. Resolve every projected place to the
  * value whose storage
  * it names so moving or dropping that owner invalidates
  * the complete place tree without a
  * runtime tag or executor-private pointer. */
+static uint32_t scoped_affine_borrow_owner(VerifyContext *context,
+                                           const XrValidatedFunction *function,
+                                           uint32_t value_id, uint32_t block_id);
+
 static uint32_t scoped_place_root(const XrValidatedFunction *function, uint32_t value_id,
                                   uint32_t block_id) {
     for (uint32_t depth = 0u; depth < function->value_count; ++depth) {
@@ -2766,6 +2909,8 @@ static uint32_t scoped_place_root(const XrValidatedFunction *function, uint32_t 
         const XrValidatedInstruction *definition = affine_borrow_definition(function, value_id);
         if (!definition || definition->operand_count != 1u)
             return value_id;
+        if (definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE)
+            return definition->operands[0];
         if (definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT) {
             value_id = definition->operands[0];
             continue;
@@ -2932,6 +3077,21 @@ static uint32_t scoped_affine_borrow_owner(VerifyContext *context,
             return value_id;
 
         const XrValidatedInstruction *definition = affine_borrow_definition(function, value_id);
+        if (definition &&
+            (definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE ||
+             (definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_LOAD &&
+              xr_validated_program_type_ownership(context->program,
+                                                  function->value_types[value_id]) ==
+                  XR_CORE_IR_TYPE_OWNERSHIP_AFFINE))) {
+            if (definition->operand_count != 1u)
+                return XR_PROGRAM_LOCATION_NONE;
+            uint32_t receiver = definition->operands[0];
+            if (receiver >= function->value_count)
+                return XR_PROGRAM_LOCATION_NONE;
+            if (function->value_ownerships[receiver] == XR_CORE_IR_OWNER)
+                return receiver;
+            return scoped_affine_borrow_owner(context, function, receiver, block_id);
+        }
         if (definition && definition->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ)
             return definition->operand_count == 1u ? definition->operands[0]
                                                    : XR_PROGRAM_LOCATION_NONE;
@@ -3530,6 +3690,20 @@ static bool verify_cleanup_reason_flow(VerifyContext *context, const XrValidated
     return valid;
 }
 
+static bool class_receiver_is_rooted(VerifyContext *context,
+                                     const XrValidatedFunction *function, uint32_t value_id,
+                                     uint32_t block_id) {
+    if (!context || !function || value_id >= function->value_count ||
+        !type_is_class_reference(context->program, function->value_types[value_id]) ||
+        function->value_categories[value_id] != XR_CORE_IR_VALUE)
+        return false;
+    if (function->value_ownerships[value_id] == XR_CORE_IR_OWNER ||
+        scoped_affine_borrow_owner(context, function, value_id, block_id) !=
+            XR_PROGRAM_LOCATION_NONE)
+        return true;
+    return frame_stable_non_owner_class_reference(context, function, value_id);
+}
+
 static bool verify_operation(VerifyContext *context, uint32_t function_id, uint32_t block_id,
                              uint32_t instruction_id, uint32_t *local_effects,
                              uint32_t *local_capabilities, bool *consumed) {
@@ -3551,7 +3725,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
     *local_capabilities |= spec->capability_mask;
     XrCoreIrValueCategory expected_result_category =
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
-                instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT
+                instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
+                instruction->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE
             ? XR_CORE_IR_PLACE
             : XR_CORE_IR_VALUE;
     if (instruction->result_category != expected_result_category) {
@@ -3565,6 +3740,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         instruction->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT ||
         instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
         instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CLASS_SHARE ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE ||
         instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_VARIANT_PROJECT ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
@@ -3596,6 +3774,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT;
     for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
@@ -4007,10 +4186,17 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 bool stable_ref = mode != XR_PARAM_REF || !place_definition;
                 if (place_definition &&
                     (place_definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
-                     place_definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT) &&
+                     place_definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
+                     place_definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE) &&
                     place_definition->operand_count == 1u) {
-                    uint32_t owner =
-                        scoped_place_root(function, instruction->operands[operand], block_id);
+                    uint32_t owner = place_definition->operation_id ==
+                                             XR_CORE_OP_CORE_CLASS_FIELD_PLACE
+                                         ? scoped_affine_borrow_owner(
+                                               context, function,
+                                               instruction->operands[operand], block_id)
+                                         : scoped_place_root(function,
+                                                             instruction->operands[operand],
+                                                             block_id);
                     uint32_t owner_live_count = 0u;
                     for (uint32_t live = 0u; live < safepoint->live_value_count; ++live)
                         owner_live_count += safepoint->live_value_ids[live] == owner;
@@ -4071,6 +4257,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             const XrValidatedFunction *callee = &context->program->functions[callee_id];
+            const XrValidatedSignature *callee_signature =
+                &context->program->signatures[callee->signature_id];
             const XrValidatedCoroutineSafepoint *safepoint =
                 &function->coroutine_safepoints[safepoint_id];
             const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
@@ -4127,10 +4315,13 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
                 uint32_t operand_value = instruction->operands[parameter];
                 XrParamMode mode = callee->parameter_modes[parameter];
-                XrCoreIrValueCategory category =
-                    mode == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+                bool class_receiver = signature_parameter_is_class_receiver(
+                    context->program, callee_signature, parameter);
+                XrCoreIrValueCategory category = signature_parameter_category(
+                    context->program, callee_signature, parameter);
                 uint32_t owned_read_live_count = 0u;
-                if (mode == XR_PARAM_READ && operand_value < function->value_count &&
+                if ((mode == XR_PARAM_READ || (class_receiver && mode == XR_PARAM_REF)) &&
+                    operand_value < function->value_count &&
                     function->value_ownerships[operand_value] == XR_CORE_IR_OWNER)
                     for (uint32_t live = 0u; live < safepoint->live_value_count; ++live)
                         owned_read_live_count +=
@@ -4155,24 +4346,36 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                         context, function, instruction->operands[parameter]);
                     supported_read |= owned_read;
                 }
+                if (class_receiver && mode == XR_PARAM_REF)
+                    supported_read =
+                        class_receiver_is_rooted(context, function, operand_value, block_id) &&
+                        (function->value_ownerships[operand_value] == XR_CORE_IR_NON_OWNER ||
+                         owned_read);
                 const XrValidatedInstruction *place_definition =
-                    mode == XR_PARAM_REF
+                    mode == XR_PARAM_REF && !class_receiver
                         ? affine_borrow_definition(function, instruction->operands[parameter])
                         : NULL;
-                bool stable_ref = mode != XR_PARAM_REF || !place_definition;
+                bool stable_ref = mode != XR_PARAM_REF || class_receiver || !place_definition;
                 if (place_definition &&
                     (place_definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
-                     place_definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT) &&
+                     place_definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
+                     place_definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE) &&
                     place_definition->operand_count == 1u) {
-                    uint32_t owner =
-                        scoped_place_root(function, instruction->operands[parameter], block_id);
+                    uint32_t owner = place_definition->operation_id ==
+                                             XR_CORE_OP_CORE_CLASS_FIELD_PLACE
+                                         ? scoped_affine_borrow_owner(
+                                               context, function,
+                                               instruction->operands[parameter], block_id)
+                                         : scoped_place_root(function,
+                                                             instruction->operands[parameter],
+                                                             block_id);
                     uint32_t owner_live_count = 0u;
                     for (uint32_t live = 0u; live < safepoint->live_value_count; ++live)
                         owner_live_count += safepoint->live_value_ids[live] == owner;
                     stable_ref = owner < function->value_count && owner_live_count == 1u &&
                                  function->value_categories[owner] == XR_CORE_IR_VALUE;
                 }
-                if ((!supported_read && mode != XR_PARAM_REF) || !stable_ref ||
+                if ((!supported_read && (mode != XR_PARAM_REF || class_receiver)) || !stable_ref ||
                     !operand_type_is(function, instruction, parameter,
                                      callee->parameter_types[parameter]) ||
                     !operand_category_is(function, instruction, parameter, category) ||
@@ -4244,6 +4447,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             const XrValidatedFunction *callee =
                 &context->program->functions[instruction->immediate.function_id];
+            const XrValidatedSignature *callee_signature =
+                &context->program->signatures[callee->signature_id];
             if (callee->error_type_id != XR_CORE_TYPE_VOID ||
                 (callee->panic_type_id != XR_CORE_TYPE_VOID &&
                  callee->panic_type_id != XR_CORE_TYPE_PANIC_INFO) ||
@@ -4260,11 +4465,11 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 if (!operand_type_is(function, instruction, argument,
                                      callee->parameter_types[argument]) ||
                     !operand_category_is(function, instruction, argument,
-                                         callee->parameter_modes[argument] == XR_PARAM_REF
-                                             ? XR_CORE_IR_PLACE
-                                             : XR_CORE_IR_VALUE) ||
+                                         signature_parameter_category(
+                                             context->program, callee_signature, argument)) ||
                     !call_operand_ownership_is(context->program, function, instruction, argument,
-                                               callee->parameter_modes[argument],
+                                               signature_parameter_call_mode(
+                                                   context->program, callee_signature, argument),
                                                callee->parameter_types[argument])) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                     return false;
@@ -4376,6 +4581,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             const XrValidatedFunction *callee =
                 &context->program->functions[instruction->immediate.function_id];
+            const XrValidatedSignature *callee_signature =
+                &context->program->signatures[callee->signature_id];
             bool has_error = callee->error_type_id != XR_CORE_TYPE_VOID;
             bool has_panic = callee->panic_type_id != XR_CORE_TYPE_VOID;
             uint32_t typed_successors =
@@ -4439,11 +4646,11 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 if (!operand_type_is(function, instruction, argument,
                                      callee->parameter_types[argument]) ||
                     !operand_category_is(function, instruction, argument,
-                                         callee->parameter_modes[argument] == XR_PARAM_REF
-                                             ? XR_CORE_IR_PLACE
-                                             : XR_CORE_IR_VALUE) ||
+                                         signature_parameter_category(
+                                             context->program, callee_signature, argument)) ||
                     !call_operand_ownership_is(context->program, function, instruction, argument,
-                                               callee->parameter_modes[argument],
+                                               signature_parameter_call_mode(
+                                                   context->program, callee_signature, argument),
                                                callee->parameter_types[argument])) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                     return false;
@@ -4690,6 +4897,75 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             return true;
+        case XR_CORE_OP_CORE_CLASS_CONSTRUCT: {
+            const XrValidatedType *type =
+                xr_validated_program_type(context->program, instruction->result_type_id);
+            if (!type || type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+                instruction->operand_count != type->field_count ||
+                instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_category != XR_CORE_IR_VALUE ||
+                instruction->result_ownership != XR_CORE_IR_OWNER) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            for (uint32_t field = 0; field < type->field_count; ++field) {
+                if (!operand_type_is(function, instruction, field, type->field_types[field]) ||
+                    !operand_category_is(function, instruction, field, XR_CORE_IR_VALUE) ||
+                    !operand_ownership_is(
+                        function, instruction, field,
+                        ownership_for_type(context->program, type->field_types[field]))) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_CLASS_SHARE: {
+            const XrValidatedType *type =
+                xr_validated_program_type(context->program, instruction->result_type_id);
+            uint32_t source = instruction->operand_count == 1u ? instruction->operands[0]
+                                                                : XR_PROGRAM_LOCATION_NONE;
+            if (!type || type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+                !expect_shape(context, instruction, location, 1u, 0u,
+                              XR_CORE_IR_IMMEDIATE_NONE, instruction->result_type_id, true) ||
+                !operand_type_is(function, instruction, 0u, instruction->result_type_id) ||
+                !operand_category_is(function, instruction, 0u, XR_CORE_IR_VALUE) ||
+                instruction->result_category != XR_CORE_IR_VALUE ||
+                instruction->result_ownership != XR_CORE_IR_OWNER ||
+                !class_receiver_is_rooted(context, function, source, block_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_CLASS_FIELD_LOAD:
+        case XR_CORE_OP_CORE_CLASS_FIELD_PLACE: {
+            bool place = instruction->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE;
+            uint32_t receiver =
+                instruction->operand_count == 1u ? instruction->operands[0]
+                                                  : XR_PROGRAM_LOCATION_NONE;
+            const XrValidatedType *type =
+                receiver < function->value_count
+                    ? xr_validated_program_type(context->program,
+                                                function->value_types[receiver])
+                    : NULL;
+            uint32_t ordinal = instruction->immediate.field_ordinal;
+            if (!type || type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+                instruction->operand_count != 1u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE || ordinal >= type->field_count ||
+                instruction->result_type_id != type->field_types[ordinal] ||
+                instruction->result_category != (place ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE) ||
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER ||
+                !operand_category_is(function, instruction, 0u, XR_CORE_IR_VALUE) ||
+                !class_receiver_is_rooted(context, function, receiver, block_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
         case XR_CORE_OP_CORE_PLACE_LOCAL:
             if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
                               instruction->result_type_id, true) ||
@@ -4767,6 +5043,28 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 !place_definition ||
                 place_definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL ||
                 function->value_blocks[instruction->operands[0]] != block_id) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_PLACE_EXCHANGE: {
+            uint16_t place_type =
+                instruction->operand_count == 2u
+                    ? function->value_types[instruction->operands[0]]
+                    : XR_CORE_TYPE_VOID;
+            XrCoreIrOwnershipDisposition expected =
+                ownership_for_type(context->program, place_type);
+            if (!expect_shape(context, instruction, location, 2u, 0u,
+                              XR_CORE_IR_IMMEDIATE_NONE, place_type, true) ||
+                !operand_type_is(function, instruction, 1u, place_type) ||
+                !operand_category_is(function, instruction, 0u, XR_CORE_IR_PLACE) ||
+                !operand_category_is(function, instruction, 1u, XR_CORE_IR_VALUE) ||
+                !operand_ownership_is(function, instruction, 1u, expected) ||
+                instruction->result_category != XR_CORE_IR_VALUE ||
+                instruction->result_ownership != expected ||
+                scoped_place_root(function, instruction->operands[0], block_id) ==
+                    XR_PROGRAM_LOCATION_NONE) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
@@ -5289,9 +5587,10 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
         return false;
     }
     for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
-        XrCoreIrValueCategory expected = function->parameter_modes[parameter] == XR_PARAM_REF
-                                             ? XR_CORE_IR_PLACE
-                                             : XR_CORE_IR_VALUE;
+        const XrValidatedSignature *signature =
+            &context->program->signatures[function->signature_id];
+        XrCoreIrValueCategory expected =
+            signature_parameter_category(context->program, signature, parameter);
         XrCoreIrOwnershipDisposition expected_ownership =
             function->parameter_modes[parameter] == XR_PARAM_MOVE
                 ? ownership_for_type(context->program, function->parameter_types[parameter])
@@ -5325,7 +5624,8 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
             (!definition || (definition->operation_id != XR_CORE_OP_CORE_AGGREGATE_PROJECT &&
                              definition->operation_id != XR_CORE_OP_CORE_VARIANT_PROJECT &&
                              definition->operation_id != XR_CORE_OP_CORE_EXISTENTIAL_PROJECT &&
-                             definition->operation_id != XR_CORE_OP_CORE_PLACE_LOAD))) {
+                             definition->operation_id != XR_CORE_OP_CORE_PLACE_LOAD &&
+                             definition->operation_id != XR_CORE_OP_CORE_CLASS_FIELD_LOAD))) {
             location.value_id = value;
             reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
             return false;
@@ -5334,19 +5634,26 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     uint32_t local_effects = 0;
     uint32_t local_capabilities = 0;
     uint32_t suspension_count = 0u;
-    bool *consumed = xr_calloc(function->value_count ? function->value_count : 1u, sizeof(bool));
-    if (!consumed) {
+    size_t value_capacity = function->value_count ? function->value_count : 1u;
+    bool *consumed = xr_calloc(value_capacity, sizeof(bool));
+    bool *exchange_pending = xr_calloc(value_capacity, sizeof(bool));
+    if (!consumed || !exchange_pending) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+        xr_free(exchange_pending);
+        xr_free(consumed);
         return false;
     }
     for (uint32_t block_id = 0; block_id < function->block_count; ++block_id) {
         memset(consumed, 0, (size_t) function->value_count * sizeof(bool));
+        memset(exchange_pending, 0, (size_t) function->value_count * sizeof(bool));
+        uint32_t exchange_pending_count = 0u;
         XrValidatedBlock *block = &function->blocks[block_id];
         location.block_id = block_id;
         if (block->instruction_count == 0 ||
             !instruction_is_terminator(
                 block->instructions[block->instruction_count - 1u].operation_id)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+            xr_free(exchange_pending);
             xr_free(consumed);
             return false;
         }
@@ -5365,20 +5672,63 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
                 instruction_is_terminator(block->instructions[instruction_id].operation_id)) {
                 location.instruction_id = instruction_id;
                 reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+                xr_free(exchange_pending);
                 xr_free(consumed);
                 return false;
             }
             if (!verify_operation(context, function_id, block_id, instruction_id, &local_effects,
                                   &local_capabilities, consumed)) {
+                xr_free(exchange_pending);
                 xr_free(consumed);
                 return false;
             }
+            const XrValidatedInstruction *instruction = &block->instructions[instruction_id];
+            for (uint32_t operand = 0u; operand < instruction->operand_count; ++operand) {
+                uint32_t value_id = instruction->operands[operand];
+                if (!exchange_pending[value_id])
+                    continue;
+                uint32_t occurrences = 0u;
+                for (uint32_t candidate = 0u; candidate < instruction->operand_count; ++candidate)
+                    occurrences += instruction->operands[candidate] == value_id;
+                if (occurrences != 1u || !exchange_old_owner_disposition(instruction, operand)) {
+                    location.instruction_id = instruction_id;
+                    location.value_id = value_id;
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+                    xr_free(exchange_pending);
+                    xr_free(consumed);
+                    return false;
+                }
+                exchange_pending[value_id] = false;
+                --exchange_pending_count;
+            }
+            if (exchange_pending_count != 0u &&
+                instruction_can_escape_exchange_commit(instruction)) {
+                location.instruction_id = instruction_id;
+                reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+                xr_free(exchange_pending);
+                xr_free(consumed);
+                return false;
+            }
+            if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE &&
+                instruction->result_ownership == XR_CORE_IR_OWNER) {
+                exchange_pending[instruction->result_id] = true;
+                ++exchange_pending_count;
+            }
+        }
+        if (exchange_pending_count != 0u) {
+            location.instruction_id = block->instruction_count - 1u;
+            reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+            xr_free(exchange_pending);
+            xr_free(consumed);
+            return false;
         }
         if (!verify_owner_block_closure(context, function_id, block_id, consumed)) {
+            xr_free(exchange_pending);
             xr_free(consumed);
             return false;
         }
     }
+    xr_free(exchange_pending);
     xr_free(consumed);
     if (suspension_count != function->coroutine_safepoint_count) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
@@ -5497,7 +5847,10 @@ XrProgramVerifyStatus xr_program_validate(const uint8_t *bytes, size_t size,
                                           XrValidatedProgram **program_out,
                                           XrProgramDiagnostic *diagnostic_out) {
     XrProgramVerifyBudget selected = budget ? *budget : xr_program_verify_default_budget();
-    VerifyContext context = {.budget = selected, .diagnostic = {.location = no_location()}};
+    VerifyContext context;
+    memset(&context, 0, sizeof(context));
+    context.budget = selected;
+    context.diagnostic.location = no_location();
     XrProgramView view;
     uint8_t expected_fingerprint[XR_PROGRAM_DIGEST_SIZE];
     if (program_out)

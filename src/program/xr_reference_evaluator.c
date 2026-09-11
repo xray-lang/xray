@@ -20,6 +20,10 @@
 
 typedef struct XrReferenceExistentialValue XrReferenceExistentialValue;
 typedef struct XrReferenceCallableValue XrReferenceCallableValue;
+typedef struct XrReferenceClassValue XrReferenceClassValue;
+typedef struct DetachedDisposeState DetachedDisposeState;
+
+static bool class_value_is_live(const XrReferenceClassValue *value, uint16_t type_id);
 
 typedef struct EvalContext {
     const XrValidatedProgram *program;
@@ -31,6 +35,10 @@ typedef struct EvalContext {
     struct XrReferenceAggregateValue **aggregates;
     uint32_t aggregate_count;
     uint32_t aggregate_capacity;
+    XrReferenceClassValue **classes;
+    uint32_t class_count;
+    uint32_t class_capacity;
+    uint64_t next_class_identity;
     XrReferenceExistentialValue **existentials;
     uint32_t existential_count;
     uint32_t existential_capacity;
@@ -39,12 +47,33 @@ typedef struct EvalContext {
     uint32_t callable_capacity;
 } EvalContext;
 
+static void drop_class_value(EvalContext *context, XrReferenceClassValue *value,
+                             XrReferenceLifecycleEventOrigin origin,
+                             DetachedDisposeState *dispose_state);
+static void drop_reference_value(EvalContext *context, XrReferenceValue *value,
+                                 XrReferenceLifecycleEventOrigin origin,
+                                 DetachedDisposeState *dispose_state);
+
 typedef struct XrReferenceAggregateValue {
     uint16_t type_id;
     uint32_t variant_ordinal;
     XrReferenceValue *fields;
     uint32_t field_count;
+    bool detached;
+    bool dispose_queued;
+    struct XrReferenceAggregateValue *dispose_next;
 } XrReferenceAggregateValue;
+
+struct XrReferenceClassValue {
+    uint16_t type_id;
+    uint16_t reserved16;
+    uint32_t owner_count;
+    uint32_t field_count;
+    uint64_t identity;
+    XrReferenceValue *fields;
+    bool alive;
+    bool detached;
+};
 
 typedef struct EvalPlace {
     XrReferenceValue value;
@@ -66,6 +95,9 @@ struct XrReferenceExistentialValue {
     uint32_t conformance_id;
     EvalRuntimeValue payload;
     EvalPlace owned_storage;
+    bool detached;
+    bool dispose_queued;
+    XrReferenceExistentialValue *dispose_next;
 };
 
 struct XrReferenceCallableValue {
@@ -74,6 +106,15 @@ struct XrReferenceCallableValue {
     uint32_t function_id;
     bool has_capture;
     XrReferenceValue capture;
+    bool detached;
+    bool dispose_queued;
+    XrReferenceCallableValue *dispose_next;
+};
+
+struct DetachedDisposeState {
+    XrReferenceAggregateValue *aggregates;
+    XrReferenceExistentialValue *existentials;
+    XrReferenceCallableValue *callables;
 };
 
 struct XrReferenceExecution {
@@ -178,6 +219,9 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
                 return value.kind == XR_REFERENCE_VALUE_CALLABLE && value.as.callable &&
                        ((const XrReferenceCallableValue *) value.as.callable)->callable_type_id ==
                            type_id;
+            if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE)
+                return value.kind == XR_REFERENCE_VALUE_CLASS_REFERENCE &&
+                       class_value_is_live(value.as.class_reference, type_id);
             return (type->kind == XR_CORE_IR_TYPE_AGGREGATE ||
                     type->kind == XR_CORE_IR_TYPE_VARIANT) &&
                    value.kind == XR_REFERENCE_VALUE_AGGREGATE && value.as.aggregate &&
@@ -222,6 +266,206 @@ static XrReferenceAggregateValue *allocate_aggregate(EvalContext *context, uint1
     context->aggregates[context->aggregate_count++] = aggregate;
     context->aggregate_cell_count += field_count;
     return aggregate;
+}
+
+static bool function_parameter_is_class_receiver(const XrValidatedProgram *program,
+                                                 const XrValidatedFunction *function,
+                                                 uint32_t parameter) {
+    if (!program || !function || !function->has_receiver || parameter != 0u ||
+        function->parameter_count == 0u)
+        return false;
+    const XrValidatedType *type =
+        xr_validated_program_type(program, function->parameter_types[0]);
+    return type && type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+}
+
+static XrCoreIrValueCategory function_parameter_category(const XrValidatedProgram *program,
+                                                         const XrValidatedFunction *function,
+                                                         uint32_t parameter) {
+    return function->parameter_modes[parameter] == XR_PARAM_REF &&
+                   !function_parameter_is_class_receiver(program, function, parameter)
+               ? XR_CORE_IR_PLACE
+               : XR_CORE_IR_VALUE;
+}
+
+static void emit_lifecycle_event(EvalContext *context, XrReferenceLifecycleEvent event) {
+    if (!context || !context->providers || !context->providers->lifecycle_event)
+        return;
+    context->providers->lifecycle_event(context->providers->lifecycle_context, &event);
+}
+
+static void emit_lifecycle(EvalContext *context, XrReferenceLifecycleEventKind kind,
+                           XrReferenceLifecycleEventOrigin origin,
+                           const XrReferenceClassValue *value, uint64_t related_identity,
+                           uint32_t field_ordinal) {
+    XrReferenceLifecycleEvent event = {
+        .kind = kind,
+        .origin = origin,
+        .type_id = value ? value->type_id : XR_CORE_TYPE_VOID,
+        .field_ordinal = field_ordinal,
+        .identity = value ? value->identity : UINT64_MAX,
+        .related_identity = related_identity,
+    };
+    emit_lifecycle_event(context, event);
+}
+
+static void emit_place_exchange(EvalContext *context, uint16_t type_id, XrReferenceValue previous,
+                                XrReferenceValue replacement) {
+    const XrReferenceClassValue *previous_class =
+        previous.kind == XR_REFERENCE_VALUE_CLASS_REFERENCE ? previous.as.class_reference : NULL;
+    const XrReferenceClassValue *replacement_class =
+        replacement.kind == XR_REFERENCE_VALUE_CLASS_REFERENCE ? replacement.as.class_reference
+                                                               : NULL;
+    emit_lifecycle_event(context, (XrReferenceLifecycleEvent) {
+                                      .kind = XR_REFERENCE_EVENT_PLACE_EXCHANGE,
+                                      .origin = XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION,
+                                      .type_id = type_id,
+                                      .field_ordinal = UINT32_MAX,
+                                      .identity = previous_class ? previous_class->identity
+                                                                 : UINT64_MAX,
+                                      .related_identity = replacement_class
+                                                              ? replacement_class->identity
+                                                              : UINT64_MAX,
+                                  });
+}
+
+static XrReferenceClassValue *allocate_class(EvalContext *context, uint16_t type_id,
+                                             uint32_t field_count) {
+    if (!context || (uint64_t) field_count >
+                        context->budget.max_value_cells - context->aggregate_cell_count)
+        return NULL;
+    if (context->class_count == context->class_capacity) {
+        uint32_t capacity = context->class_capacity ? context->class_capacity * 2u : 8u;
+        if (capacity < context->class_count ||
+            (size_t) capacity > SIZE_MAX / sizeof(*context->classes))
+            return NULL;
+        XrReferenceClassValue **grown =
+            xr_realloc(context->classes, (size_t) capacity * sizeof(*context->classes));
+        if (!grown)
+            return NULL;
+        context->classes = grown;
+        context->class_capacity = capacity;
+    }
+    XrReferenceClassValue *value = xr_calloc(1u, sizeof(*value));
+    if (!value)
+        return NULL;
+    if (field_count != 0u) {
+        value->fields = xr_calloc(field_count, sizeof(*value->fields));
+        if (!value->fields) {
+            xr_free(value);
+            return NULL;
+        }
+    }
+    value->type_id = type_id;
+    value->field_count = field_count;
+    value->owner_count = 1u;
+    value->identity = ++context->next_class_identity;
+    value->alive = true;
+    context->classes[context->class_count++] = value;
+    context->aggregate_cell_count += field_count;
+    return value;
+}
+
+static bool class_value_is_live(const XrReferenceClassValue *value, uint16_t type_id) {
+    return value && value->alive && value->owner_count != 0u && value->type_id == type_id &&
+           (value->field_count == 0u || value->fields);
+}
+
+static void drop_class_value(EvalContext *context, XrReferenceClassValue *value,
+                             XrReferenceLifecycleEventOrigin origin,
+                             DetachedDisposeState *dispose_state) {
+    if (!value || !value->alive || value->owner_count == 0u)
+        return;
+    emit_lifecycle(context, XR_REFERENCE_EVENT_OWNER_DROP, origin, value, UINT64_MAX, UINT32_MAX);
+    if (--value->owner_count != 0u)
+        return;
+    emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_FINALIZE, origin, value, UINT64_MAX,
+                   UINT32_MAX);
+    for (uint32_t field = value->field_count; field != 0u; --field) {
+        XrReferenceValue *nested = &value->fields[field - 1u];
+        drop_reference_value(context, nested, XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION,
+                             dispose_state);
+    }
+    xr_free(value->fields);
+    value->fields = NULL;
+    value->field_count = 0u;
+    value->alive = false;
+    emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_RECLAIM, origin, value, UINT64_MAX,
+                   UINT32_MAX);
+    if (!context)
+        xr_free(value);
+}
+
+static void drop_reference_value(EvalContext *context, XrReferenceValue *value,
+                                 XrReferenceLifecycleEventOrigin origin,
+                                 DetachedDisposeState *dispose_state) {
+    if (!value)
+        return;
+    switch (value->kind) {
+        case XR_REFERENCE_VALUE_CLASS_REFERENCE:
+            drop_class_value(context,
+                             (XrReferenceClassValue *) (void *) value->as.class_reference, origin,
+                             dispose_state);
+            break;
+        case XR_REFERENCE_VALUE_AGGREGATE:
+            if (value->as.aggregate) {
+                XrReferenceAggregateValue *aggregate =
+                    (XrReferenceAggregateValue *) (void *) value->as.aggregate;
+                if (dispose_state && aggregate->dispose_queued)
+                    break;
+                if (dispose_state) {
+                    aggregate->dispose_queued = true;
+                    aggregate->dispose_next = dispose_state->aggregates;
+                    dispose_state->aggregates = aggregate;
+                }
+                for (uint32_t field = aggregate->field_count; field != 0u; --field)
+                    drop_reference_value(context, &aggregate->fields[field - 1u], origin,
+                                         dispose_state);
+                if (!context && !dispose_state) {
+                    xr_free(aggregate->fields);
+                    xr_free(aggregate);
+                }
+            }
+            break;
+        case XR_REFERENCE_VALUE_EXISTENTIAL:
+            if (value->as.existential) {
+                XrReferenceExistentialValue *existential =
+                    (XrReferenceExistentialValue *) (void *) value->as.existential;
+                if (dispose_state && existential->dispose_queued)
+                    break;
+                if (dispose_state) {
+                    existential->dispose_queued = true;
+                    existential->dispose_next = dispose_state->existentials;
+                    dispose_state->existentials = existential;
+                }
+                if (existential->owned_storage.initialized)
+                    drop_reference_value(context, &existential->owned_storage.value, origin,
+                                         dispose_state);
+                if (!context && !dispose_state)
+                    xr_free(existential);
+            }
+            break;
+        case XR_REFERENCE_VALUE_CALLABLE:
+            if (value->as.callable) {
+                XrReferenceCallableValue *callable =
+                    (XrReferenceCallableValue *) (void *) value->as.callable;
+                if (dispose_state && callable->dispose_queued)
+                    break;
+                if (dispose_state) {
+                    callable->dispose_queued = true;
+                    callable->dispose_next = dispose_state->callables;
+                    dispose_state->callables = callable;
+                }
+                if (callable->has_capture)
+                    drop_reference_value(context, &callable->capture, origin, dispose_state);
+                if (!context && !dispose_state)
+                    xr_free(callable);
+            }
+            break;
+        default:
+            break;
+    }
+    *value = void_value();
 }
 
 static XrReferenceExistentialValue *allocate_existential(EvalContext *context) {
@@ -340,120 +584,7 @@ static bool witness_receiver_argument(const XrReferenceExistentialValue *carrier
     return argument->category == XR_CORE_IR_VALUE;
 }
 
-static bool clone_reference_value(EvalContext *context, XrReferenceValue source, uint16_t type_id,
-                                  XrReferenceValue *output) {
-    const XrValidatedType *type = xr_validated_program_type(context->program, type_id);
-    if (!type) {
-        *output = source;
-        return true;
-    }
-    if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
-        if (source.kind != XR_REFERENCE_VALUE_EXISTENTIAL || !source.as.existential)
-            return false;
-        *output = source;
-        return true;
-    }
-    if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
-        if (source.kind != XR_REFERENCE_VALUE_CALLABLE || !source.as.callable)
-            return false;
-        const XrReferenceCallableValue *source_callable = source.as.callable;
-        XrReferenceCallableValue *copy = allocate_callable(context);
-        if (!copy)
-            return false;
-        *copy = *source_callable;
-        if (copy->has_capture &&
-            !clone_reference_value(context, source_callable->capture,
-                                   source_callable->capture_type_id, &copy->capture))
-            return false;
-        output->kind = XR_REFERENCE_VALUE_CALLABLE;
-        output->as.callable = copy;
-        return true;
-    }
-    if (type->kind != XR_CORE_IR_TYPE_AGGREGATE && type->kind != XR_CORE_IR_TYPE_VARIANT)
-        return false;
-    const XrReferenceAggregateValue *source_aggregate = source.as.aggregate;
-    if (!source_aggregate || source_aggregate->type_id != type_id)
-        return false;
-    XrReferenceAggregateValue *copy = allocate_aggregate(
-        context, type_id, source_aggregate->variant_ordinal, source_aggregate->field_count);
-    if (!copy)
-        return false;
-    for (uint32_t field = 0; field < source_aggregate->field_count; ++field) {
-        uint16_t field_type = XR_CORE_TYPE_VOID;
-        if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
-            if (field >= type->field_count)
-                return false;
-            field_type = type->field_types[field];
-        } else {
-            if (source_aggregate->variant_ordinal >= type->variant_count ||
-                field >= type->variants[source_aggregate->variant_ordinal].payload_count)
-                return false;
-            field_type = type->variants[source_aggregate->variant_ordinal].payload_types[field];
-        }
-        if (!clone_reference_value(context, source_aggregate->fields[field], field_type,
-                                   &copy->fields[field]))
-            return false;
-    }
-    output->kind = XR_REFERENCE_VALUE_AGGREGATE;
-    output->as.aggregate = copy;
-    return true;
-}
-
-static void dispose_detached_reference_value(XrReferenceValue *value) {
-    if (!value || value->kind != XR_REFERENCE_VALUE_AGGREGATE || !value->as.aggregate)
-        return;
-    XrReferenceAggregateValue *aggregate =
-        (XrReferenceAggregateValue *) (void *) value->as.aggregate;
-    for (uint32_t field = 0u; field < aggregate->field_count; ++field)
-        dispose_detached_reference_value(&aggregate->fields[field]);
-    xr_free(aggregate->fields);
-    xr_free(aggregate);
-    *value = void_value();
-}
-
-static bool detach_reference_value(XrReferenceValue source, XrReferenceValue *output) {
-    if (!output)
-        return false;
-    *output = void_value();
-    if (source.kind == XR_REFERENCE_VALUE_EXISTENTIAL || source.kind == XR_REFERENCE_VALUE_CALLABLE)
-        return false;
-    if (source.kind != XR_REFERENCE_VALUE_AGGREGATE) {
-        *output = source;
-        return true;
-    }
-    const XrReferenceAggregateValue *source_aggregate = source.as.aggregate;
-    if (!source_aggregate || (source_aggregate->field_count != 0u && !source_aggregate->fields))
-        return false;
-#if SIZE_MAX < UINT64_MAX
-    if ((size_t) source_aggregate->field_count > SIZE_MAX / sizeof(*source_aggregate->fields))
-        return false;
-#endif
-    XrReferenceAggregateValue *aggregate = xr_calloc(1u, sizeof(*aggregate));
-    if (!aggregate)
-        return false;
-    if (source_aggregate->field_count != 0u) {
-        aggregate->fields = xr_calloc(source_aggregate->field_count, sizeof(*aggregate->fields));
-        if (!aggregate->fields) {
-            xr_free(aggregate);
-            return false;
-        }
-    }
-    aggregate->type_id = source_aggregate->type_id;
-    aggregate->variant_ordinal = source_aggregate->variant_ordinal;
-    aggregate->field_count = source_aggregate->field_count;
-    XrReferenceValue detached = {
-        .kind = XR_REFERENCE_VALUE_AGGREGATE,
-        .as.aggregate = aggregate,
-    };
-    for (uint32_t field = 0u; field < aggregate->field_count; ++field) {
-        if (!detach_reference_value(source_aggregate->fields[field], &aggregate->fields[field])) {
-            dispose_detached_reference_value(&detached);
-            return false;
-        }
-    }
-    *output = detached;
-    return true;
-}
+#include "xr_reference_clone.inc.c"
 
 bool xr_reference_value_aggregate_view(const XrReferenceValue *value,
                                        XrReferenceAggregateView *view_out) {
@@ -475,24 +606,44 @@ void xr_reference_outcome_dispose(XrReferenceOutcome *outcome) {
     if (!outcome)
         return;
     if (outcome->owns_dynamic_values) {
-        dispose_detached_reference_value(&outcome->value);
-        dispose_detached_reference_value(&outcome->error_value);
-        dispose_detached_reference_value(&outcome->panic_value);
+        DetachedDisposeState state = {0};
+        dispose_detached_reference_value(&state, &outcome->value);
+        dispose_detached_reference_value(&state, &outcome->error_value);
+        dispose_detached_reference_value(&state, &outcome->panic_value);
+        free_detached_dispose_state(&state);
     }
     memset(outcome, 0, sizeof(*outcome));
 }
 
-static void free_aggregates(EvalContext *context) {
+static void free_eval_arena(EvalContext *context) {
+    for (uint32_t index = 0; index < context->class_count; ++index) {
+        XrReferenceClassValue *value = context->classes[index];
+        if (!value || value->detached)
+            continue;
+        if (value->alive)
+            emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_RECLAIM,
+                           XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN, value, UINT64_MAX,
+                           UINT32_MAX);
+        xr_free(value->fields);
+        xr_free(value);
+    }
     for (uint32_t index = 0; index < context->aggregate_count; ++index) {
+        if (context->aggregates[index]->detached)
+            continue;
         xr_free(context->aggregates[index]->fields);
         xr_free(context->aggregates[index]);
     }
     xr_free(context->aggregates);
-    for (uint32_t index = 0; index < context->existential_count; ++index)
-        xr_free(context->existentials[index]);
+    xr_free(context->classes);
+    for (uint32_t index = 0; index < context->existential_count; ++index) {
+        if (!context->existentials[index]->detached)
+            xr_free(context->existentials[index]);
+    }
     xr_free(context->existentials);
-    for (uint32_t index = 0; index < context->callable_count; ++index)
-        xr_free(context->callables[index]);
+    for (uint32_t index = 0; index < context->callable_count; ++index) {
+        if (!context->callables[index]->detached)
+            xr_free(context->callables[index]);
+    }
     xr_free(context->callables);
 }
 
@@ -626,7 +777,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
     for (uint32_t index = 0; index < argument_count; ++index) {
         XrCoreIrValueCategory expected =
-            function->parameter_modes[index] == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+            function_parameter_category(context->program, function, index);
         if (arguments[index].category != expected)
             return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
         if (expected == XR_CORE_IR_PLACE &&
@@ -1190,18 +1341,98 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value.as.callable = carrier;
                     break;
                 }
-                case XR_CORE_OP_CORE_OWNER_COPY:
-                    if (!clone_reference_value(context, values[instruction->operands[0]].as.value,
-                                               instruction->result_type_id, &produced.as.value)) {
-                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                case XR_CORE_OP_CORE_OWNER_COPY: {
+                    CloneStatus clone_status = clone_reference_value(
+                        context, values[instruction->operands[0]].as.value,
+                        instruction->result_type_id, &produced.as.value);
+                    if (clone_status != CLONE_STATUS_OK) {
+                        result = outcome(clone_failure_outcome_kind(clone_status), context);
                         goto done;
                     }
                     break;
+                }
                 case XR_CORE_OP_CORE_OWNER_MOVE:
                     produced.as.value = values[instruction->operands[0]].as.value;
                     break;
-                case XR_CORE_OP_CORE_OWNER_DROP:
+                case XR_CORE_OP_CORE_OWNER_DROP: {
+                    drop_reference_value(context,
+                                         &values[instruction->operands[0]].as.value,
+                                         XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, NULL);
                     break;
+                }
+                case XR_CORE_OP_CORE_CLASS_CONSTRUCT: {
+                    XrReferenceClassValue *value =
+                        allocate_class(context, instruction->result_type_id,
+                                       instruction->operand_count);
+                    if (!value) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    for (uint32_t field = 0; field < instruction->operand_count; ++field)
+                        value->fields[field] = values[instruction->operands[field]].as.value;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_CLASS_REFERENCE;
+                    produced.as.value.as.class_reference = value;
+                    emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_CONSTRUCT,
+                                   XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, UINT64_MAX,
+                                   UINT32_MAX);
+                    break;
+                }
+                case XR_CORE_OP_CORE_CLASS_SHARE: {
+                    XrReferenceClassValue *value =
+                        (XrReferenceClassValue *) (void *)
+                            values[instruction->operands[0]].as.value.as.class_reference;
+                    if (!value || !value->alive || value->owner_count == UINT32_MAX) {
+                        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
+                        goto done;
+                    }
+                    ++value->owner_count;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_CLASS_REFERENCE;
+                    produced.as.value.as.class_reference = value;
+                    emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_SHARE,
+                                   XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, value->identity,
+                                   UINT32_MAX);
+                    break;
+                }
+                case XR_CORE_OP_CORE_CLASS_FIELD_LOAD: {
+                    XrReferenceClassValue *value =
+                        (XrReferenceClassValue *) (void *)
+                            values[instruction->operands[0]].as.value.as.class_reference;
+                    if (!value || !value->alive ||
+                        instruction->immediate.field_ordinal >= value->field_count) {
+                        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
+                        goto done;
+                    }
+                    CloneStatus load_status = class_field_load_value(
+                        context, value, instruction->immediate.field_ordinal,
+                        instruction->result_type_id, &produced.as.value);
+                    if (load_status != CLONE_STATUS_OK) {
+                        result = outcome(clone_failure_outcome_kind(load_status), context);
+                        goto done;
+                    }
+                    emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_FIELD_LOAD,
+                                   XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, UINT64_MAX,
+                                   instruction->immediate.field_ordinal);
+                    break;
+                }
+                case XR_CORE_OP_CORE_CLASS_FIELD_PLACE: {
+                    XrReferenceClassValue *value =
+                        (XrReferenceClassValue *) (void *)
+                            values[instruction->operands[0]].as.value.as.class_reference;
+                    if (!value || !value->alive ||
+                        instruction->immediate.field_ordinal >= value->field_count) {
+                        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
+                        goto done;
+                    }
+                    places[instruction->result_id].alias =
+                        &value->fields[instruction->immediate.field_ordinal];
+                    places[instruction->result_id].initialized = true;
+                    produced.category = XR_CORE_IR_PLACE;
+                    produced.as.place = &places[instruction->result_id];
+                    emit_lifecycle(context, XR_REFERENCE_EVENT_CLASS_FIELD_PLACE,
+                                   XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, UINT64_MAX,
+                                   instruction->immediate.field_ordinal);
+                    break;
+                }
                 case XR_CORE_OP_CORE_PLACE_LOCAL:
                     places[instruction->result_id].alias =
                         &values[instruction->operands[0]].as.value;
@@ -1234,6 +1465,16 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         *eval_place_value(values[instruction->operands[0]].as.place);
                     values[instruction->operands[0]].as.place->initialized = false;
                     break;
+                case XR_CORE_OP_CORE_PLACE_EXCHANGE: {
+                    XrReferenceValue *place =
+                        eval_place_value(values[instruction->operands[0]].as.place);
+                    produced.as.value = *place;
+                    XrReferenceValue replacement = values[instruction->operands[1]].as.value;
+                    *place = replacement;
+                    emit_place_exchange(context, instruction->result_type_id, produced.as.value,
+                                        replacement);
+                    break;
+                }
                 case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
                     XrReferenceAggregateValue *aggregate =
                         allocate_aggregate(context, instruction->result_type_id, UINT32_MAX,
@@ -1468,12 +1709,18 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
            operation_id == XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ ||
            operation_id == XR_CORE_OP_CORE_CALLABLE_PACK ||
+           operation_id == XR_CORE_OP_CORE_OWNER_COPY ||
            operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
+           operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT ||
+           operation_id == XR_CORE_OP_CORE_CLASS_SHARE ||
+           operation_id == XR_CORE_OP_CORE_CLASS_FIELD_LOAD ||
+           operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
            operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
            operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
            operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
+           operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_SUSPEND ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
@@ -1615,9 +1862,8 @@ static bool reference_child_execution_create(XrReferenceExecution *parent,
     for (; target_argument < function->parameter_count; ++target_argument, ++source_argument) {
         uint32_t source = instruction->operands[source_argument];
         uint32_t target = function->blocks[function->entry_block].argument_ids[target_argument];
-        XrCoreIrValueCategory expected = function->parameter_modes[target_argument] == XR_PARAM_REF
-                                             ? XR_CORE_IR_PLACE
-                                             : XR_CORE_IR_VALUE;
+        XrCoreIrValueCategory expected = function_parameter_category(
+            parent->context->program, function, target_argument);
         XrReferenceValue value = expected == XR_CORE_IR_PLACE && parent->values[source].as.place
                                      ? *eval_place_value_const(parent->values[source].as.place)
                                      : parent->values[source].as.value;
@@ -1705,7 +1951,8 @@ bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
     execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
     for (uint32_t argument = 0; argument < argument_count; ++argument) {
         uint32_t value_id = function->blocks[function->entry_block].argument_ids[argument];
-        if (function->parameter_modes[argument] == XR_PARAM_REF ||
+        if ((function->parameter_modes[argument] == XR_PARAM_REF &&
+             !function_parameter_is_class_receiver(program, function, argument)) ||
             !reference_value_matches_type(program, arguments[argument],
                                           function->parameter_types[argument])) {
             xr_reference_execution_free(execution);
@@ -2069,11 +2316,133 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->initialized[instruction->result_id] = true;
                 break;
             }
+            case XR_CORE_OP_CORE_OWNER_COPY: {
+                XrReferenceValue copy = void_value();
+                CloneStatus clone_status = clone_reference_value(
+                    execution->context,
+                    execution->values[instruction->operands[0]].as.value,
+                    instruction->result_type_id, &copy);
+                if (clone_status != CLONE_STATUS_OK) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution,
+                                             clone_failure_outcome_kind(clone_status));
+                }
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = copy,
+                };
+                execution->initialized[instruction->result_id] = true;
+                break;
+            }
             case XR_CORE_OP_CORE_OWNER_MOVE:
                 execution->values[instruction->result_id] =
                     execution->values[instruction->operands[0]];
                 execution->initialized[instruction->result_id] = true;
                 break;
+            case XR_CORE_OP_CORE_CLASS_CONSTRUCT: {
+                XrReferenceClassValue *value = allocate_class(
+                    execution->context, instruction->result_type_id, instruction->operand_count);
+                if (!value) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution, XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+                }
+                for (uint32_t field = 0u; field < instruction->operand_count; ++field)
+                    value->fields[field] =
+                        execution->values[instruction->operands[field]].as.value;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        {
+                            .kind = XR_REFERENCE_VALUE_CLASS_REFERENCE,
+                            .as.class_reference = value,
+                        },
+                };
+                execution->initialized[instruction->result_id] = true;
+                emit_lifecycle(execution->context, XR_REFERENCE_EVENT_CLASS_CONSTRUCT,
+                               XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, UINT64_MAX,
+                               UINT32_MAX);
+                break;
+            }
+            case XR_CORE_OP_CORE_CLASS_SHARE: {
+                XrReferenceClassValue *value =
+                    (XrReferenceClassValue *) (void *)
+                        execution->values[instruction->operands[0]].as.value.as.class_reference;
+                if (!value || !value->alive || value->owner_count == UINT32_MAX) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution,
+                                             XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+                }
+                ++value->owner_count;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value =
+                        {
+                            .kind = XR_REFERENCE_VALUE_CLASS_REFERENCE,
+                            .as.class_reference = value,
+                        },
+                };
+                execution->initialized[instruction->result_id] = true;
+                emit_lifecycle(execution->context, XR_REFERENCE_EVENT_CLASS_SHARE,
+                               XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, value->identity,
+                               UINT32_MAX);
+                break;
+            }
+            case XR_CORE_OP_CORE_CLASS_FIELD_LOAD: {
+                XrReferenceClassValue *value =
+                    (XrReferenceClassValue *) (void *)
+                        execution->values[instruction->operands[0]].as.value.as.class_reference;
+                uint32_t field = instruction->immediate.field_ordinal;
+                if (!value || !value->alive || field >= value->field_count) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution,
+                                             XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+                }
+                XrReferenceValue loaded = void_value();
+                CloneStatus load_status = class_field_load_value(
+                    execution->context, value, field, instruction->result_type_id, &loaded);
+                if (load_status != CLONE_STATUS_OK) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution,
+                                             clone_failure_outcome_kind(load_status));
+                }
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = loaded,
+                };
+                execution->initialized[instruction->result_id] = true;
+                emit_lifecycle(execution->context, XR_REFERENCE_EVENT_CLASS_FIELD_LOAD,
+                               XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, UINT64_MAX,
+                               field);
+                break;
+            }
+            case XR_CORE_OP_CORE_CLASS_FIELD_PLACE: {
+                XrReferenceClassValue *value =
+                    (XrReferenceClassValue *) (void *)
+                        execution->values[instruction->operands[0]].as.value.as.class_reference;
+                uint32_t field = instruction->immediate.field_ordinal;
+                if (!value || !value->alive || field >= value->field_count) {
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    return execution_outcome(execution,
+                                             XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+                }
+                execution->places[instruction->result_id].alias = &value->fields[field];
+                execution->places[instruction->result_id].initialized = true;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_PLACE,
+                    .as.place = &execution->places[instruction->result_id],
+                };
+                execution->initialized[instruction->result_id] = true;
+                emit_lifecycle(execution->context, XR_REFERENCE_EVENT_CLASS_FIELD_PLACE,
+                               XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, value, UINT64_MAX,
+                               field);
+                break;
+            }
             case XR_CORE_OP_CORE_PLACE_LOCAL:
                 execution->places[instruction->result_id].alias =
                     &execution->values[instruction->operands[0]].as.value;
@@ -2120,6 +2489,22 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->values[instruction->operands[0]].as.place->initialized = false;
                 execution->initialized[instruction->result_id] = true;
                 break;
+            case XR_CORE_OP_CORE_PLACE_EXCHANGE: {
+                XrReferenceValue *place =
+                    eval_place_value(execution->values[instruction->operands[0]].as.place);
+                XrReferenceValue previous = *place;
+                XrReferenceValue replacement =
+                    execution->values[instruction->operands[1]].as.value;
+                *place = replacement;
+                execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                    .category = XR_CORE_IR_VALUE,
+                    .as.value = previous,
+                };
+                execution->initialized[instruction->result_id] = true;
+                emit_place_exchange(execution->context, instruction->result_type_id, previous,
+                                    replacement);
+                break;
+            }
             case XR_CORE_OP_CORE_PROVIDER_CALL: {
                 const XrValidatedBlock *trap_target =
                     instruction->successor_count == 1u
@@ -2387,8 +2772,12 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 }
                 break;
             }
-            case XR_CORE_OP_CORE_OWNER_DROP:
+            case XR_CORE_OP_CORE_OWNER_DROP: {
+                drop_reference_value(execution->context,
+                                     &execution->values[instruction->operands[0]].as.value,
+                                     XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION, NULL);
                 break;
+            }
             case XR_CORE_OP_CORE_CANCEL_PUBLISH:
                 execution->finished = true;
                 reference_execution_release_lease(execution);
@@ -2471,7 +2860,7 @@ void xr_reference_execution_free(XrReferenceExecution *execution) {
     reference_execution_release_lease(execution);
     if (execution->owns_context && execution->context) {
         XrValidatedProgram *program = (XrValidatedProgram *) execution->context->program;
-        free_aggregates(execution->context);
+        free_eval_arena(execution->context);
         xr_free(execution->context);
         xr_validated_program_free(program);
     }
@@ -2512,7 +2901,8 @@ xr_reference_evaluate_bound(const XrValidatedProgram *program, uint32_t function
         return outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, &context);
     for (uint32_t index = 0; index < argument_count; ++index) {
         if (index >= function->parameter_count ||
-            function->parameter_modes[index] == XR_PARAM_REF) {
+            (function->parameter_modes[index] == XR_PARAM_REF &&
+             !function_parameter_is_class_receiver(program, function, index))) {
             xr_free(runtime_arguments);
             return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
         }
@@ -2523,7 +2913,8 @@ xr_reference_evaluate_bound(const XrValidatedProgram *program, uint32_t function
         evaluate_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
     if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
-        result.value.kind == XR_REFERENCE_VALUE_AGGREGATE) {
+        (result.value.kind == XR_REFERENCE_VALUE_AGGREGATE ||
+         result.value.kind == XR_REFERENCE_VALUE_CLASS_REFERENCE)) {
         XrReferenceValue detached = void_value();
         if (detach_reference_value(result.value, &detached)) {
             result.value = detached;
@@ -2537,7 +2928,8 @@ xr_reference_evaluate_bound(const XrValidatedProgram *program, uint32_t function
          result.value.kind == XR_REFERENCE_VALUE_CALLABLE))
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     if (result.kind == XR_REFERENCE_OUTCOME_ERROR &&
-        result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE) {
+        (result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE ||
+         result.error_value.kind == XR_REFERENCE_VALUE_CLASS_REFERENCE)) {
         XrReferenceValue detached = void_value();
         if (detach_reference_value(result.error_value, &detached)) {
             result.error_value = detached;
@@ -2553,7 +2945,7 @@ xr_reference_evaluate_bound(const XrValidatedProgram *program, uint32_t function
     if (result.kind == XR_REFERENCE_OUTCOME_PANIC &&
         result.panic_value.kind != XR_REFERENCE_VALUE_PANIC_INFO)
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
-    free_aggregates(&context);
+    free_eval_arena(&context);
     return result;
 }
 

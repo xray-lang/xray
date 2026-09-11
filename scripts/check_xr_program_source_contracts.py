@@ -91,6 +91,12 @@ def validate_native_fixtures(root: Path, unit_cmake: str, owner_test: str) -> No
         rb"^add_xr_program_source_native_fixture\(\w+ (\w+) ", registration, re.MULTILINE)
     require(tuple(name.decode("ascii") for name in registered_targets) == native_targets,
             "source native projection does not cover the complete manifest")
+    pending_tests = source_fixtures.pending_test_names(registry)
+    registered_pending = re.findall(
+        rb"^add_xr_program_source_pending_fixture\(\w+ \w+ (\w+) ", registration,
+        re.MULTILINE)
+    require(tuple(name.decode("ascii") for name in registered_pending) == pending_tests,
+            "source pending-backend projection does not cover the complete manifest")
     require(header.count(b"    X(source_owner_") == len(registry["cases"]),
             "source case projection does not cover the complete manifest")
     for token in (
@@ -103,6 +109,10 @@ def validate_native_fixtures(root: Path, unit_cmake: str, owner_test: str) -> No
         "add_test(NAME xr_program_source_fixtures_self_test",
         "add_custom_command(TARGET test_xr_program_source_build PRE_LINK",
         "COMMAND ${XRAY_PYTHON} ${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} check",
+        "add_test(NAME test_xr_program_source_build",
+        "${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} run-sharded",
+        "--producer $<TARGET_FILE:test_xr_program_source_build>",
+        "--jobs 8",
     ):
         require(token in unit_cmake, f"source fixture registration lacks {token}")
     include = "include(${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION})"
@@ -132,12 +142,28 @@ def validate_native_fixtures(root: Path, unit_cmake: str, owner_test: str) -> No
         '${fixture_labels};generated-c;native;task-293',
     ):
         require(token in functions[0], f"source native fixture binding lacks {token}")
+    pending_functions = re.findall(
+        r"function\(add_xr_program_source_pending_fixture fixture_id source_case test_name "
+        r"fixture_labels\)(.*?)endfunction\(\)", unit_cmake, re.DOTALL)
+    require(len(pending_functions) == 1,
+            "source pending backends require one fixture registration owner")
+    for token in (
+        "add_test(NAME ${test_name}",
+        "$<TARGET_FILE:test_xr_program_source_build> --run-case ${source_case}",
+        '${fixture_labels};backend-pending;task-293',
+        "TIMEOUT 180",
+    ):
+        require(token in pending_functions[0],
+                f"source pending-backend fixture binding lacks {token}")
     for token in (
         '#include "xr_program_source_cases.gen.h"',
         "XR_SOURCE_FIXTURES(SELECT_SOURCE_FIXTURE)",
         "XR_SOURCE_CASES(RUN_SOURCE_CASE)",
         "strcmp(argv[4], XR_SOURCE_REGISTRY_ID) != 0",
-        "selected_source_fixture == XR_SOURCE_FIXTURE_NONE ? XR_SOURCE_CASE_COUNT : 1u",
+        'strcmp(argv[1], "--run-case") == 0',
+        "selected_source_case",
+        "selected_source_fixture == XR_SOURCE_FIXTURE_NONE && !selected_source_case",
+        "? XR_SOURCE_CASE_COUNT",
     ):
         require(token in owner_test, f"source fixture dispatch lacks {token}")
 
@@ -584,7 +610,7 @@ def validate(root: Path) -> None:
     canonical_coroutine_indirect_call = {"core.coroutine.call.indirect"}
     canonical_coroutine_suspend = {"core.coroutine.suspend"}
     canonical_coroutine_cancel = {"core.cancel.publish"}
-    inactive_class_contracts = {
+    program_reference_class_contracts = {
         "core.class.construct",
         "core.class.share",
         "core.class.field_load",
@@ -657,8 +683,8 @@ def validate(root: Path) -> None:
            for operation in canonical_source_output},
         **{operation: "COMPLETE_W7_WAVE5_BOOLEAN" for operation in canonical_boolean},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
-        **{operation: "CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE"
-           for operation in inactive_class_contracts},
+        **{operation: "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE"
+           for operation in program_reference_class_contracts},
     }
     require(set(expected_status) == registry_ids,
             "source gate status partition does not cover the CoreSpec registry")
@@ -666,6 +692,11 @@ def validate(root: Path) -> None:
         require(rows[operation]["status"] == status,
                 f"operation has wrong source status: {operation}: "
                 f"expected {status}, got {rows[operation]['status']}")
+        if status == "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE":
+            require(rows[operation].get("vm_implementation", "").startswith("NOT_YET_ACTIVE"),
+                    f"operation VM status text is not fail-closed: {operation}")
+            require(rows[operation].get("aot_lowering", "").startswith("NOT_YET_ACTIVE"),
+                    f"operation AOT status text is not fail-closed: {operation}")
         evidence = rows[operation].get("evidence")
         if status == "FROZEN_WALKING_SKELETON":
             require(evidence == [], f"frozen operation gained evidence: {operation}")
@@ -683,10 +714,16 @@ def validate(root: Path) -> None:
         "core.class.field_place",
         "core.place.exchange",
     ]
-    for stage in ("semantic_admission_stage", "vm_stage", "aot_stage"):
+    semantic_stage = matrix.get("semantic_admission_stage")
+    require(isinstance(semantic_stage, dict) and
+            semantic_stage.get("status") == "COMPLETE",
+            "semantic_admission_stage must be COMPLETE after Program/Reference activation")
+    require(semantic_stage.get("incomplete_operations") == [],
+            "semantic_admission_stage incomplete operation set must be empty")
+    for stage in ("vm_stage", "aot_stage"):
         stage_row = matrix.get(stage)
         require(isinstance(stage_row, dict) and stage_row.get("status") == "OPEN",
-                f"{stage} must remain OPEN while operations are inactive")
+                f"{stage} must remain OPEN while backend operations are inactive")
         require(stage_row.get("incomplete_operations") == expected_incomplete,
                 f"{stage} incomplete operation set drifted")
 
@@ -758,6 +795,9 @@ def self_test(root: Path) -> None:
             ('add_executable(${native_target} "${generated_c}")',
              'add_executable(${native_target} "other.c")'),
             ("TARGET test_xr_program_source_build PRE_LINK", "TARGET other PRE_LINK"),
+            ("${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} run-sharded",
+             "${XR_PROGRAM_SOURCE_FIXTURE_SCRIPT} run-serial"),
+            ("--jobs 8", "--jobs 1"),
         ):
             try:
                 validate_native_fixtures(target, original_cmake.replace(before, after), source_test)
@@ -765,6 +805,19 @@ def self_test(root: Path) -> None:
                 pass
             else:
                 raise ContractError(f"incorrect native fixture registration was accepted: {before}")
+        for before, after in (
+            ('strcmp(argv[1], "--run-case") == 0',
+             'strcmp(argv[1], "--single-case") == 0'),
+            ("selected_source_fixture == XR_SOURCE_FIXTURE_NONE && !selected_source_case",
+             "selected_source_fixture == XR_SOURCE_FIXTURE_NONE || !selected_source_case"),
+        ):
+            try:
+                validate_native_fixtures(target, original_cmake,
+                                         source_test.replace(before, after))
+            except ContractError:
+                pass
+            else:
+                raise ContractError(f"incorrect source case selector was accepted: {before}")
         manifest = target / "tests/unit/program/xr_program_source_cases.json"
         original_manifest = manifest.read_text(encoding="utf-8")
         value = json.loads(original_manifest)
@@ -791,6 +844,36 @@ def self_test(root: Path) -> None:
             pass
         else:
             raise ContractError("incomplete Wave 1 operation was accepted")
+        matrix.write_text(original_matrix, encoding="utf-8")
+        class_operation_index = next(
+            index for index, row in enumerate(matrix_value["operations"])
+            if row["id"] == "core.class.construct"
+        )
+        matrix_mutations = (
+            ("class operation status",
+             lambda value: value["operations"][class_operation_index].update(
+                 status="CORE_SPEC_FROZEN_EXECUTION_NOT_YET_ACTIVE")),
+            ("semantic admission stage",
+             lambda value: value["semantic_admission_stage"].update(status="OPEN")),
+            ("VM stage",
+             lambda value: value["vm_stage"].update(status="COMPLETE")),
+            ("AOT incomplete set",
+             lambda value: value["aot_stage"].update(incomplete_operations=[])),
+            ("VM operation status text",
+             lambda value: value["operations"][class_operation_index].update(
+                 vm_implementation="COMPLETE")),
+        )
+        for label, mutate in matrix_mutations:
+            matrix_value = json.loads(original_matrix)
+            mutate(matrix_value)
+            matrix.write_text(json.dumps(matrix_value, ensure_ascii=False, indent=2) + "\n",
+                              encoding="utf-8")
+            try:
+                validate(target)
+            except ContractError:
+                pass
+            else:
+                raise ContractError(f"incorrect {label} was accepted")
         matrix.write_text(original_matrix, encoding="utf-8")
         producer = target / "src/program/xr_program_from_xi.c"
         original_producer = producer.read_text(encoding="utf-8")

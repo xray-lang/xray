@@ -41,7 +41,7 @@ class AsanEntryPointTest(unittest.TestCase):
             self.assertEqual(
                 asan_runner.main(["run_asan_focused.py", "--help"]), 0)
         self.assertIn("usage: run_asan_focused.py", output.getvalue())
-        self.assertIn("generic-scalar-class", output.getvalue())
+        self.assertIn("h2-source", output.getvalue())
         lock.assert_not_called()
         run.assert_not_called()
 
@@ -155,14 +155,24 @@ class AsanEntryPointTest(unittest.TestCase):
         self.assertIs(tests, asan_runner.canonical_profile.GENERIC_IDENTITY_CTEST_NAMES)
         self.assertIs(targets, asan_runner.canonical_profile.GENERIC_IDENTITY_BUILD_TARGETS)
 
-    def test_generic_scalar_class_asan_profile_reuses_shared_inventory(self):
-        tests, targets = asan_runner.EXACT_PROFILES["generic-scalar-class"]
-        self.assertIs(
-            tests, asan_runner.canonical_profile.GENERIC_SCALAR_CLASS_CTEST_NAMES
-        )
-        self.assertIs(
-            targets, asan_runner.canonical_profile.GENERIC_SCALAR_CLASS_BUILD_TARGETS
-        )
+    def test_h2_reference_asan_profile_reuses_shared_inventory(self):
+        tests, targets = asan_runner.EXACT_PROFILES["h2-reference"]
+        self.assertIs(tests, asan_runner.canonical_profile.H2_REFERENCE_CTEST_NAMES)
+        self.assertIs(targets, asan_runner.canonical_profile.H2_REFERENCE_BUILD_TARGETS)
+
+    def test_h2_private_asan_profiles_reuse_shared_inventories(self):
+        for name, tests, targets in (
+            ("h2-source", asan_runner.canonical_profile.H2_SOURCE_CTEST_NAMES,
+             asan_runner.canonical_profile.H2_SOURCE_BUILD_TARGETS),
+            ("h2-vm", asan_runner.canonical_profile.H2_VM_CTEST_NAMES,
+             asan_runner.canonical_profile.H2_VM_BUILD_TARGETS),
+            ("h2-aot", asan_runner.canonical_profile.H2_AOT_CTEST_NAMES,
+             asan_runner.canonical_profile.H2_AOT_BUILD_TARGETS),
+        ):
+            with self.subTest(name=name):
+                actual_tests, actual_targets = asan_runner.EXACT_PROFILES[name]
+                self.assertIs(actual_tests, tests)
+                self.assertIs(actual_targets, targets)
 
 
 class CacheInspectionTest(unittest.TestCase):

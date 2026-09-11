@@ -26,6 +26,7 @@ typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_ERROR,
     XR_REFERENCE_VALUE_PANIC_INFO,
     XR_REFERENCE_VALUE_AGGREGATE,
+    XR_REFERENCE_VALUE_CLASS_REFERENCE,
     XR_REFERENCE_VALUE_EXISTENTIAL,
     XR_REFERENCE_VALUE_CALLABLE,
 } XrReferenceValueKind;
@@ -41,6 +42,7 @@ typedef struct XrReferenceValue {
         uint32_t error;
         uint32_t panic_info;
         const void *aggregate;
+        const void *class_reference;
         const void *existential;
         const void *callable;
     } as;
@@ -77,6 +79,38 @@ typedef bool (*XrReferenceProviderOutputWrite)(void *context, uint32_t requireme
                                                uint32_t operation_index, const uint8_t *bytes,
                                                size_t size);
 
+typedef enum XrReferenceLifecycleEventKind {
+    XR_REFERENCE_EVENT_CLASS_CONSTRUCT = 1,
+    XR_REFERENCE_EVENT_CLASS_SHARE,
+    XR_REFERENCE_EVENT_CLASS_COPY,
+    XR_REFERENCE_EVENT_CLASS_FIELD_LOAD,
+    XR_REFERENCE_EVENT_CLASS_FIELD_PLACE,
+    XR_REFERENCE_EVENT_PLACE_EXCHANGE,
+    XR_REFERENCE_EVENT_OWNER_DROP,
+    XR_REFERENCE_EVENT_CLASS_FINALIZE,
+    XR_REFERENCE_EVENT_CLASS_RECLAIM,
+} XrReferenceLifecycleEventKind;
+
+typedef enum XrReferenceLifecycleEventOrigin {
+    XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION = 1,
+    XR_REFERENCE_EVENT_ORIGIN_FIELD_FINALIZATION,
+    XR_REFERENCE_EVENT_ORIGIN_CLONE_ROLLBACK,
+    XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN,
+} XrReferenceLifecycleEventOrigin;
+
+typedef struct XrReferenceLifecycleEvent {
+    XrReferenceLifecycleEventKind kind;
+    XrReferenceLifecycleEventOrigin origin;
+    uint16_t type_id;
+    uint16_t reserved16;
+    uint32_t field_ordinal;
+    uint64_t identity;
+    uint64_t related_identity;
+} XrReferenceLifecycleEvent;
+
+typedef void (*XrReferenceLifecycleEventHandler)(
+    void *context, const XrReferenceLifecycleEvent *event);
+
 typedef struct XrReferenceProviderBinding {
     void *context;
     XrReferenceProviderCallI64Unary call_i64_unary;
@@ -84,6 +118,8 @@ typedef struct XrReferenceProviderBinding {
     XrReferenceProviderCallBoolI64Unary call_bool_i64_unary;
     XrReferenceProviderCallOptionalI64PairNullary call_optional_i64_pair_nullary;
     XrReferenceProviderOutputWrite output_write;
+    void *lifecycle_context;
+    XrReferenceLifecycleEventHandler lifecycle_event;
 } XrReferenceProviderBinding;
 
 typedef enum XrReferenceOutcomeKind {
@@ -140,9 +176,10 @@ XR_FUNC XrReferenceOutcome xr_reference_evaluate_bound(
     const XrValidatedProgram *program, uint32_t function_id, const XrReferenceValue *arguments,
     uint32_t argument_count, const XrReferenceProfile *profile, const XrReferenceBudget *budget,
     const XrReferenceProviderBinding *providers);
-/* Aggregate values returned by the one-shot evaluator are detached from its
- * private arena. Views
- * borrow that storage until the outcome is disposed. */
+/* Aggregate and class-reference values returned by the one-shot evaluator are
+ * detached from its private arena. Views borrow aggregate storage until the
+ * outcome is disposed. Host-side outcome disposal is outside the semantic
+ * lifecycle event trace. */
 XR_FUNC bool xr_reference_value_aggregate_view(const XrReferenceValue *value,
                                                XrReferenceAggregateView *view_out);
 XR_FUNC void xr_reference_outcome_dispose(XrReferenceOutcome *outcome);
