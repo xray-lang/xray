@@ -78,6 +78,8 @@ H2_AOT_CTEST_NAMES = (
     "test_core_spec",
     "test_xr_program_verify",
     "test_xr_program_aot",
+    "test_xr_program_panic_defer_cleanup_aot_native",
+    "test_xr_program_ref_parameter_coroutine_aot_native",
     "xr_program_aot_contracts",
     "xr_program_aot_contracts_self_test",
 )
@@ -85,6 +87,8 @@ H2_AOT_BUILD_TARGETS = (
     "test_core_spec",
     "test_xr_program_verify",
     "test_xr_program_aot",
+    "test_xr_program_panic_defer_cleanup_aot_native",
+    "test_xr_program_ref_parameter_coroutine_aot_native",
 )
 
 H2_DIFFERENTIAL_CTEST_NAMES = (

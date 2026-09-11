@@ -45,6 +45,8 @@ class FocusedSelectionTest(unittest.TestCase):
         profile = runner.EXACT_PROFILES["h2"]
         self.assertIs(profile.tests, runner.canonical_profile.H2_CTEST_NAMES)
         self.assertIs(profile.targets, runner.canonical_profile.H2_BUILD_TARGETS)
+        self.assertEqual(len(profile.tests), 29)
+        self.assertEqual(len(profile.targets), 9)
         self.assertFalse(profile.include_xray)
         self.assertIn("canonical", profile.not_covered)
         self.assertIn("t2", profile.not_covered)
@@ -258,14 +260,37 @@ class AutoRoutingTest(unittest.TestCase):
         self.assert_route("infra", "scripts/t.py",
                           "tests/lib/tests/test_t_runner.py")
 
-    def test_canonical_private_program_paths_use_exact_profile(self):
-        self.assert_route("canonical", "src/program/xr_program_verify.c",
-                          "src/aot/program/xr_backend_ir_verify.c",
-                          "tests/unit/program/test_xr_program.c",
-                          "scripts/program_source_fixtures.py")
+    def test_pure_h2_program_vm_aot_verifier_and_source_paths_use_aggregate(self):
+        paths = (
+            "src/program/xr_program_encode.c",
+            "src/vm/xr_program_vm.c",
+            "src/aot/program/xr_backend_ir_verify.c",
+            "src/program/xr_program_verify.c",
+            "src/program/xr_program_source_build.c",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                self.assert_route("h2", path)
+        self.assert_route("h2", *paths)
+
+    def test_h2_owned_tests_and_contract_checkers_use_aggregate(self):
+        self.assert_route(
+            "h2",
+            "tests/unit/core/test_core_spec.c",
+            "tests/unit/program/test_xr_program_source_build.c",
+            "tests/unit/program/xr_program_panic_fixture.h",
+            "tests/unit/vm/test_xr_program_vm_runtime.c",
+            "tests/unit/aot/test_xr_program_aot_class.inc.c",
+            "scripts/check_xr_program_h2_backend_differential.py",
+            "tests/lib/tests/test_h2_backend_differential.py",
+        )
+
+    def test_canonical_only_program_governance_keeps_exact_profile(self):
+        self.assert_route("canonical", "scripts/program_source_fixtures.py",
+                          "tests/unit/program/xr_program_source_cases.json")
 
     def test_documentation_does_not_widen_an_owned_change(self):
-        self.assert_route("canonical", "src/program/xr_program_verify.c",
+        self.assert_route("h2", "src/program/xr_program_verify.c",
                           "contracts/canonical-program-vm.md")
 
     def test_backend_and_general_source_changes_keep_broad_floors(self):
@@ -273,9 +298,22 @@ class AutoRoutingTest(unittest.TestCase):
         self.assert_route("t2", "CMakeLists.txt")
         self.assert_route("t1", "src/frontend/parser/xparse.c")
 
-    def test_unknown_or_mixed_paths_conservatively_escalate(self):
+    def test_h2_mixed_with_canonical_only_paths_returns_to_canonical(self):
+        self.assert_route("canonical", "src/program/xr_program_verify.c",
+                          "scripts/program_source_fixtures.py")
+
+    def test_h2_mixed_with_cross_domain_or_unknown_paths_escalates_to_t2(self):
+        self.assert_route("t2", "src/program/xr_program_verify.c",
+                          "src/frontend/parser/xparse.c")
+        self.assert_route("t2", "src/vm/xr_program_vm.c", "new-root-tool.py")
+        self.assert_route("t2", "src/aot/program/xr_backend_ir.c",
+                          "src/aot/xi_cgen.c")
+        self.assert_route("t2", "src/program/xr_program_source_build.c",
+                          "xisa/core/registry.json")
+
+    def test_unknown_or_non_h2_mixed_paths_keep_existing_conservative_floor(self):
         self.assert_route("t1", "new-root-tool.py")
-        self.assert_route("t1", "scripts/t.py", "src/program/xr_program.c")
+        self.assert_route("t1", "scripts/t.py", "src/frontend/parser/xparse.c")
 
     def test_clean_and_documentation_only_changes_use_bounded_t0(self):
         self.assert_route("t0")
