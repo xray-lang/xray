@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "All 62 operation laws and normative KATs are frozen. The five class-reference and atomic place operations have complete contract-oracle, decoder, verifier, reference-evaluator, and source-producer coverage; VM and AOT remain explicitly NOT_YET_ACTIVE."
+    "note": "All 62 operation laws and normative KATs are frozen, and every operation has complete Program, Reference, VM, AOT, and source-producer coverage."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -24,7 +24,7 @@
     "schema": "xisa/program/schema.json",
     "generated_coverage": "contracts/canonical-program/xrprogram-format-coverage.json",
     "semantic_admission": "COMPLETE_TASK_297",
-    "note": "W2 owns canonical bytes and bounded structural decode. W3 owns typed admission; VM/AOT product executor coverage remains incomplete for W5-W7."
+    "note": "W2 owns canonical bytes and bounded structural decode. W3 owns typed admission, and both product executors consume the same validated program without reconstructing source semantics."
   },
   "semantic_admission_stage": {
     "status": "COMPLETE",
@@ -36,7 +36,7 @@
     "note": "All 62 operations have bounded semantic verification and independent reference evaluation. Class-reference allocation, sharing, field access, and atomic exchange use private reference cells and lifecycle events without exposing backend layout."
   },
   "vm_stage": {
-    "status": "OPEN",
+    "status": "COMPLETE",
     "owner_task": 299,
     "input_authority": "XrValidatedProgram",
     "execution_authority": "XrInstance",
@@ -46,31 +46,19 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "incomplete_operations": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ],
-    "note": "The original 57 operations retain differential VM coverage. The five newly frozen operations have no VM handler and remain NOT_YET_ACTIVE."
+    "incomplete_operations": [],
+    "note": "All 62 operations execute from XrValidatedProgram in both private VM views. Class references use backend-private handles with exact owner, identity, field-place, exchange, and finalization behavior."
   },
   "aot_stage": {
-    "status": "OPEN",
+    "status": "COMPLETE",
     "owner_task": 300,
     "input_authority": "XrValidatedProgram",
     "compile_authority": "XrValidatedProgram + XrTargetProfile",
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "incomplete_operations": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ],
-    "note": "The original 57 operations retain verified BackendIR and portable C11 lowering. The five newly frozen operations have no BackendIR admission or emitter case and remain NOT_YET_ACTIVE."
+    "incomplete_operations": [],
+    "note": "All 62 operations have verified BackendIR and portable C11 lowering. Class-reference behavior is checked in BackendIR and by compiling and running the generated strict-C11 program."
   },
   "operations": [
     {
@@ -1157,11 +1145,11 @@
       "core_spec_contract": "construct one affine class-reference identity from exact declaration-ordered field values",
       "program_encoding": "one CLASS_REFERENCE result TypeId and exact field operands; representation and allocation remain private to each backend",
       "decoder_verifier_evaluator": "bounded class-reference decode, exact field verification, affine owner validation, and private reference-cell evaluation",
-      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
-      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "vm_implementation": "private refcounted class handle constructed from exact declaration-ordered Program fields in both VM views",
+      "aot_lowering": "verified BackendIR class construction lowered to a private aligned heap object with exact transferred fields",
       "source_producer": "two-stage closed nominal registration resolves recursive field TypeIds before cycle-safe copy-contract fixed-point analysis and class construction",
       "old_owner_deletion": "aggregate plus nominal-class encoding is forbidden and has no compatibility alias",
-      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
+      "status": "COMPLETE_H2_CLASS_REFERENCE_EXECUTION",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
@@ -1171,7 +1159,11 @@
         "src/program/xr_program_verify.c",
         "src/program/xr_reference_evaluator.c",
         "tests/unit/program/test_xr_program_source_build.c",
-        "tests/unit/program/test_xr_program_verify.c"
+        "tests/unit/program/test_xr_program_verify.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_class.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot_class.inc.c"
       ]
     },
     {
@@ -1179,11 +1171,11 @@
       "core_spec_contract": "create an independent affine owner for the same class-reference identity without consuming the source owner",
       "program_encoding": "one CLASS_REFERENCE operand and result with the same exact TypeId",
       "decoder_verifier_evaluator": "exact class TypeId and affine-owner verification with identity-preserving logical share evaluation",
-      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
-      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "vm_implementation": "private class-handle share increments one exact referent owner count without consuming the source",
+      "aot_lowering": "BackendIR preserves the exact class TypeId and generated C increments the private object owner count before alias publication",
       "source_producer": "source alias escape and borrowed-RHS ownership promotion produce one logical share; explicit deep copy remains core.owner.copy and move remains an identity transfer",
       "old_owner_deletion": "generic aggregate copy is not a class identity-sharing path",
-      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
+      "status": "COMPLETE_H2_CLASS_REFERENCE_EXECUTION",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
@@ -1193,7 +1185,11 @@
         "src/program/xr_program_verify.c",
         "src/program/xr_reference_evaluator.c",
         "tests/unit/program/test_xr_program_source_build.c",
-        "tests/unit/program/test_xr_program_verify.c"
+        "tests/unit/program/test_xr_program_verify.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_class.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot_class.inc.c"
       ]
     },
     {
@@ -1201,11 +1197,11 @@
       "core_spec_contract": "load one declared class field as an independent scalar snapshot or an owner-rooted affine borrow",
       "program_encoding": "one CLASS_REFERENCE owner operand plus one declaration-order field ordinal",
       "decoder_verifier_evaluator": "declaration-ordinal field validation and scalar snapshot or owner-rooted affine borrow evaluation",
-      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
-      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "vm_implementation": "exact declaration-ordinal load returns a scalar snapshot or an owner-rooted affine carrier from the private handle",
+      "aot_lowering": "BackendIR verifies the receiver and ordinal, then generated C reads the exact private object field",
       "source_producer": "source field reads preserve the exact class owner root and produce the field contract selected by declaration ordinal",
       "old_owner_deletion": "aggregate projection and raw representation offsets cannot observe class fields",
-      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
+      "status": "COMPLETE_H2_CLASS_REFERENCE_EXECUTION",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
@@ -1215,7 +1211,11 @@
         "src/program/xr_program_verify.c",
         "src/program/xr_reference_evaluator.c",
         "tests/unit/program/test_xr_program_source_build.c",
-        "tests/unit/program/test_xr_program_verify.c"
+        "tests/unit/program/test_xr_program_verify.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_class.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot_class.inc.c"
       ]
     },
     {
@@ -1223,11 +1223,11 @@
       "core_spec_contract": "derive one mutable field place rooted in a live exact class-reference owner",
       "program_encoding": "one CLASS_REFERENCE owner place plus one declaration-order field ordinal",
       "decoder_verifier_evaluator": "mutable-root, exact class TypeId, and declaration-ordinal field-place verification with confined private place evaluation",
-      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
-      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "vm_implementation": "private place carrier retains the exact live class root and declaration ordinal without exposing an address",
+      "aot_lowering": "BackendIR confines the place to the function and generated C represents it as a private owner-plus-field selector",
       "source_producer": "owned field assignment derives a declaration-ordinal mutable place rooted in the live class owner",
       "old_owner_deletion": "generic aggregate place projection is not a class-field authority",
-      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
+      "status": "COMPLETE_H2_CLASS_REFERENCE_EXECUTION",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
@@ -1237,7 +1237,11 @@
         "src/program/xr_program_verify.c",
         "src/program/xr_reference_evaluator.c",
         "tests/unit/program/test_xr_program_source_build.c",
-        "tests/unit/program/test_xr_program_verify.c"
+        "tests/unit/program/test_xr_program_verify.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_class.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot_class.inc.c"
       ]
     },
     {
@@ -1245,11 +1249,11 @@
       "core_spec_contract": "atomically replace one owned place value and return the displaced owner without an observable empty state",
       "program_encoding": "one exact typed place, one exact typed replacement owner, and one exact typed displaced result",
       "decoder_verifier_evaluator": "exact typed place/replacement validation and transactional exchange evaluation that returns the displaced complete value",
-      "vm_implementation": "NOT_YET_ACTIVE; no handler exists",
-      "aot_lowering": "NOT_YET_ACTIVE; no BackendIR admission or generated-C case exists",
+      "vm_implementation": "typed private-place exchange installs the replacement and returns the complete displaced value in one handler",
+      "aot_lowering": "verified BackendIR exchange lowers to a typed temporary followed by one private field replacement with exact ownership transfer",
       "source_producer": "source owned-field replacement evaluates and owns the RHS before atomic exchange, then immediately drops the displaced owner",
       "old_owner_deletion": "take-then-store is not retained as a non-atomic compatibility lowering",
-      "status": "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE",
+      "status": "COMPLETE_H2_CLASS_REFERENCE_EXECUTION",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
@@ -1259,7 +1263,11 @@
         "src/program/xr_program_verify.c",
         "src/program/xr_reference_evaluator.c",
         "tests/unit/program/test_xr_program_source_build.c",
-        "tests/unit/program/test_xr_program_verify.c"
+        "tests/unit/program/test_xr_program_verify.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_class.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot_class.inc.c"
       ]
     }
   ],

@@ -1736,11 +1736,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -1766,11 +1766,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -1796,11 +1796,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -1826,11 +1826,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -1856,11 +1856,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -1871,19 +1871,7 @@
     "decoder": [],
     "verifier": [],
     "evaluator": [],
-    "vm": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ],
-    "aot": [
-      "core.class.construct",
-      "core.class.share",
-      "core.class.field_load",
-      "core.class.field_place",
-      "core.place.exchange"
-    ]
+    "vm": [],
+    "aot": []
   }
 }

@@ -91,18 +91,8 @@
     {
       "id": "vm-baseline",
       "coverage_key": "vm",
-      "state": "expected-unsupported",
-      "pending_witness": {
-        "source": "tests/unit/vm/test_xr_program_vm.c",
-        "function": "test_inactive_operations_fail_before_dispatch",
-        "ordered_tokens": [
-          "XR_VM_DECODE_BASELINE_VIEW",
-          "XR_VM_DECODE_FIXED_ROWS",
-          "XR_VM_CODE_UNSUPPORTED_OPERATION",
-          "diagnostic.status == XR_VM_CODE_UNSUPPORTED_OPERATION",
-          "diagnostic.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT"
-        ]
-      },
+      "state": "execute",
+      "pending_witness": null,
       "active_command": {
         "binary": "vm",
         "arguments": ["--h2-class-differential", "baseline"],
@@ -122,18 +112,8 @@
     {
       "id": "vm-fixed",
       "coverage_key": "vm",
-      "state": "expected-unsupported",
-      "pending_witness": {
-        "source": "tests/unit/vm/test_xr_program_vm.c",
-        "function": "test_inactive_operations_fail_before_dispatch",
-        "ordered_tokens": [
-          "XR_VM_DECODE_BASELINE_VIEW",
-          "XR_VM_DECODE_FIXED_ROWS",
-          "XR_VM_CODE_UNSUPPORTED_OPERATION",
-          "diagnostic.status == XR_VM_CODE_UNSUPPORTED_OPERATION",
-          "diagnostic.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT"
-        ]
-      },
+      "state": "execute",
+      "pending_witness": null,
       "active_command": {
         "binary": "vm",
         "arguments": ["--h2-class-differential", "fixed"],
@@ -153,18 +133,8 @@
     {
       "id": "aot-backendir",
       "coverage_key": "aot",
-      "state": "expected-unsupported",
-      "pending_witness": {
-        "source": "tests/unit/program/test_xr_program_source_build.c",
-        "function": "assert_aot_rejects_inactive_operation",
-        "ordered_tokens": [
-          "xr_backend_ir_build",
-          "XR_BACKEND_UNSUPPORTED_OPERATION",
-          "diagnostic.status, XR_BACKEND_UNSUPPORTED_OPERATION",
-          "diagnostic.operation_id, expected_operation",
-          "spec->aot_status, XR_CORE_COVERAGE_NOT_YET_ACTIVE"
-        ]
-      },
+      "state": "execute",
+      "pending_witness": null,
       "active_command": {
         "binary": "aot",
         "arguments": ["--h2-class-differential", "backend-ir"],
@@ -184,18 +154,8 @@
     {
       "id": "aot-generated-c-native",
       "coverage_key": "aot",
-      "state": "expected-unsupported",
-      "pending_witness": {
-        "source": "tests/unit/program/test_xr_program_source_build.c",
-        "function": "assert_aot_rejects_inactive_operation",
-        "ordered_tokens": [
-          "xr_backend_ir_build",
-          "XR_BACKEND_UNSUPPORTED_OPERATION",
-          "diagnostic.status, XR_BACKEND_UNSUPPORTED_OPERATION",
-          "diagnostic.operation_id, expected_operation",
-          "spec->aot_status, XR_CORE_COVERAGE_NOT_YET_ACTIVE"
-        ]
-      },
+      "state": "execute",
+      "pending_witness": null,
       "active_command": {
         "binary": "aot",
         "arguments": ["--h2-class-differential", "generated-c-native"],
