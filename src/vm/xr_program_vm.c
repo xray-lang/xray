@@ -465,8 +465,28 @@ static uint32_t witness_function_id(const XrValidatedProgram *program,
     return function_id < program->function_count ? function_id : XR_PROGRAM_LOCATION_NONE;
 }
 
+static bool function_parameter_is_class_receiver(const XrValidatedProgram *program,
+                                                 const XrValidatedFunction *function,
+                                                 uint32_t parameter) {
+    if (!program || !function || !function->has_receiver || parameter != 0u ||
+        function->parameter_count == 0u)
+        return false;
+    const XrValidatedType *type =
+        xr_validated_program_type(program, function->parameter_types[0]);
+    return type && type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+}
+
+static XrCoreIrValueCategory function_parameter_category(const XrValidatedProgram *program,
+                                                         const XrValidatedFunction *function,
+                                                         uint32_t parameter) {
+    return function->parameter_modes[parameter] == XR_PARAM_REF &&
+                   !function_parameter_is_class_receiver(program, function, parameter)
+               ? XR_CORE_IR_PLACE
+               : XR_CORE_IR_VALUE;
+}
+
 static bool witness_receiver_argument(const XrVmExistentialValue *carrier,
-                                      XrParamMode receiver_mode, XrVmRuntimeValue *argument) {
+                                       XrParamMode receiver_mode, XrVmRuntimeValue *argument) {
     if (!carrier || !argument)
         return false;
     if (receiver_mode == XR_PARAM_REF) {
@@ -958,7 +978,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
         return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
     for (uint32_t index = 0; index < argument_count; ++index) {
         XrCoreIrValueCategory expected =
-            function->parameter_modes[index] == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+            function_parameter_category(context->code->program, function, index);
         if (arguments[index].category != expected ||
             (expected == XR_CORE_IR_PLACE &&
              (!arguments[index].as.place || !arguments[index].as.place->initialized)))
@@ -2176,9 +2196,8 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
     for (; target_argument < function->parameter_count; ++target_argument, ++source_argument) {
         uint32_t source = instruction->operands[source_argument];
         uint32_t target = function->blocks[function->entry_block].argument_ids[target_argument];
-        XrCoreIrValueCategory expected = function->parameter_modes[target_argument] == XR_PARAM_REF
-                                             ? XR_CORE_IR_PLACE
-                                             : XR_CORE_IR_VALUE;
+        XrCoreIrValueCategory expected = function_parameter_category(
+            parent->context.code->program, function, target_argument);
         XrVmValue value = expected == XR_CORE_IR_PLACE && parent->values[source].as.place
                               ? *vm_place_value_const(parent->values[source].as.place)
                               : parent->values[source].as.value;
@@ -2340,7 +2359,8 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
     hash_u32(&execution->context.trace, function_id);
     for (uint32_t argument = 0; argument < argument_count; ++argument) {
         uint32_t value_id = function->blocks[function->entry_block].argument_ids[argument];
-        if (function->parameter_modes[argument] == XR_PARAM_REF ||
+        if ((function->parameter_modes[argument] == XR_PARAM_REF &&
+             !function_parameter_is_class_receiver(code->program, function, argument)) ||
             !value_matches_type(code->program, arguments[argument],
                                 function->parameter_types[argument])) {
             xr_vm_execution_free(execution);
@@ -3307,7 +3327,8 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     }
     for (uint32_t index = 0; index < argument_count; ++index) {
         if (index >= function->parameter_count ||
-            function->parameter_modes[index] == XR_PARAM_REF) {
+            (function->parameter_modes[index] == XR_PARAM_REF &&
+             !function_parameter_is_class_receiver(code->program, function, index))) {
             xr_free(runtime_arguments);
             free_aggregates(&context);
             (void) xr_execution_lease_release(&lease);
