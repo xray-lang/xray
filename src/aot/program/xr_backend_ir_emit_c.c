@@ -1137,50 +1137,87 @@ static const XrBackendInstruction *backend_value_instruction(const XrBackendFunc
 
 typedef struct XrCoroutineRefFrameSlot {
     bool uses_slot;
+    bool class_field;
     uint32_t owner;
     uint32_t live;
+    uint32_t class_field_ordinal;
     uint32_t projection_count;
 } XrCoroutineRefFrameSlot;
 
+typedef struct XrCoroutineRefContext {
+    const XrBackendIR *ir;
+    const XrBackendFunction *function;
+    const XrBackendInstruction *call;
+    const XrBackendCoroutineSafepoint *point;
+    uint32_t live_operand_start;
+} XrCoroutineRefContext;
+
 // A child can retain projected places while suspended. Preserve their common
 // storage root once in the parent frame and rebuild each exact field address.
-static bool coroutine_ref_parameter_frame_slot(const XrBackendFunction *function,
-                                               const XrBackendInstruction *call,
-                                               const XrBackendCoroutineSafepoint *point,
-                                               uint32_t live_operand_start, uint32_t parameter,
+static bool coroutine_ref_parameter_frame_slot(const XrCoroutineRefContext *context,
+                                               uint32_t parameter,
                                                XrCoroutineRefFrameSlot *slot_out) {
-    if (!function || !call || !point || !slot_out || parameter >= call->operand_count)
+    if (!context || !context->ir || !context->function || !context->call || !context->point ||
+        !slot_out || parameter >= context->call->operand_count)
         return false;
+    const XrBackendFunction *function = context->function;
+    const XrBackendInstruction *call = context->call;
+    const XrBackendCoroutineSafepoint *point = context->point;
     *slot_out = (XrCoroutineRefFrameSlot) {0};
     uint32_t place = call->operands[parameter];
     for (uint32_t depth = 0u; depth < function->value_count; ++depth) {
-        if (place >= function->value_count || function->value_categories[place] != XR_CORE_IR_PLACE)
+        if (place >= function->value_count ||
+            function->value_categories[place] != XR_CORE_IR_PLACE ||
+            function->value_ownerships[place] != XR_CORE_IR_NON_OWNER)
             return false;
         const XrBackendInstruction *definition = backend_value_instruction(function, place);
         if (!definition)
             return depth == 0u;
         if (definition->operand_count != 1u || !definition->operands ||
-            definition->operands[0] >= function->value_count)
+            definition->operands[0] >= function->value_count ||
+            definition->result_type_id != function->value_types[place])
             return false;
-        if (definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT &&
-            definition->immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD) {
+        uint32_t owner = definition->operands[0];
+        if (definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT) {
+            const XrValidatedType *aggregate =
+                xr_validated_program_type(context->ir->program, function->value_types[owner]);
+            if (definition->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD || !aggregate ||
+                aggregate->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                definition->immediate.field_ordinal >= aggregate->field_count ||
+                aggregate->field_types[definition->immediate.field_ordinal] !=
+                    function->value_types[place])
+                return false;
             place = definition->operands[0];
             ++slot_out->projection_count;
             continue;
         }
-        if (definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL)
-            return false;
-        uint32_t owner = definition->operands[0];
         uint32_t occurrence = 0u;
         for (uint32_t live = 0u; live < point->live_value_count; ++live) {
-            if (call->operands[live_operand_start + live] != owner)
+            uint32_t operand = context->live_operand_start + live;
+            if (operand >= call->operand_count || call->operands[operand] != owner)
                 continue;
             ++occurrence;
             slot_out->live = live;
         }
-        if (occurrence != 1u || function->value_categories[owner] != XR_CORE_IR_VALUE ||
-            function->value_types[owner] != function->value_types[place])
+        if (occurrence != 1u || function->value_categories[owner] != XR_CORE_IR_VALUE)
             return false;
+        if (definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE) {
+            const XrValidatedType *class_type =
+                xr_validated_program_type(context->ir->program, function->value_types[owner]);
+            if (definition->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD || !class_type ||
+                class_type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+                function->value_ownerships[owner] != XR_CORE_IR_OWNER ||
+                definition->immediate.field_ordinal >= class_type->field_count ||
+                class_type->field_types[definition->immediate.field_ordinal] !=
+                    function->value_types[place])
+                return false;
+            slot_out->class_field = true;
+            slot_out->class_field_ordinal = definition->immediate.field_ordinal;
+        } else if (definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL ||
+                   definition->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+                   function->value_types[owner] != function->value_types[place]) {
+            return false;
+        }
         slot_out->uses_slot = true;
         slot_out->owner = owner;
         return true;
@@ -1188,11 +1225,19 @@ static bool coroutine_ref_parameter_frame_slot(const XrBackendFunction *function
     return false;
 }
 
-static bool emit_coroutine_ref_frame_transfers(CBuffer *buffer, const XrBackendFunction *function,
+static bool emit_coroutine_ref_frame_transfers(CBuffer *buffer, const XrBackendIR *ir,
+                                               const XrBackendFunction *function,
                                                const XrBackendFunction *callee,
                                                const XrBackendInstruction *call, bool restore) {
     uint32_t safepoint = call->immediate.coroutine_call.safepoint_id;
     const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
+    XrCoroutineRefContext context = {
+        .ir = ir,
+        .function = function,
+        .call = call,
+        .point = point,
+        .live_operand_start = callee->parameter_count,
+    };
     uint8_t *transferred =
         point->live_value_count ? xr_calloc(point->live_value_count, sizeof(*transferred)) : NULL;
     if (point->live_value_count != 0u && !transferred)
@@ -1202,8 +1247,7 @@ static bool emit_coroutine_ref_frame_transfers(CBuffer *buffer, const XrBackendF
         if (callee->parameter_modes[parameter] != XR_PARAM_REF)
             continue;
         XrCoroutineRefFrameSlot slot;
-        if (!coroutine_ref_parameter_frame_slot(function, call, point, callee->parameter_count,
-                                                parameter, &slot)) {
+        if (!coroutine_ref_parameter_frame_slot(&context, parameter, &slot)) {
             emitted = false;
             break;
         }
@@ -1237,25 +1281,43 @@ static bool emit_coroutine_ref_place(CBuffer *buffer, const XrBackendFunction *f
         fields[depth] = definition->immediate.field_ordinal;
         projected = definition->operands[0];
     }
+    const XrBackendInstruction *root = backend_value_instruction(function, projected);
+    if (!root || root->operand_count != 1u || !root->operands || root->operands[0] != slot->owner ||
+        (slot->class_field && (root->operation_id != XR_CORE_OP_CORE_CLASS_FIELD_PLACE ||
+                               root->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD ||
+                               root->immediate.field_ordinal != slot->class_field_ordinal)) ||
+        (!slot->class_field && root->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL)) {
+        xr_free(fields);
+        return false;
+    }
     bool emitted =
         append_format(buffer, "        v%u = &frame->live_%u_%u", place, safepoint, slot->live);
+    if (emitted && slot->class_field)
+        emitted = append_format(buffer, "->f%u", slot->class_field_ordinal);
     for (uint32_t depth = slot->projection_count; emitted && depth != 0u; --depth)
         emitted = append_format(buffer, ".f%u", fields[depth - 1u]);
     xr_free(fields);
     return emitted && append_text(buffer, ";\n");
 }
 
-static bool emit_coroutine_ref_bindings(CBuffer *buffer, const XrBackendFunction *function,
+static bool emit_coroutine_ref_bindings(CBuffer *buffer, const XrBackendIR *ir,
+                                        const XrBackendFunction *function,
                                         const XrBackendFunction *callee,
                                         const XrBackendInstruction *call) {
     uint32_t safepoint = call->immediate.coroutine_call.safepoint_id;
     const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint];
+    XrCoroutineRefContext context = {
+        .ir = ir,
+        .function = function,
+        .call = call,
+        .point = point,
+        .live_operand_start = callee->parameter_count,
+    };
     for (uint32_t parameter = 0u; parameter < callee->parameter_count; ++parameter) {
         if (callee->parameter_modes[parameter] != XR_PARAM_REF)
             continue;
         XrCoroutineRefFrameSlot slot;
-        if (!coroutine_ref_parameter_frame_slot(function, call, point, callee->parameter_count,
-                                                parameter, &slot))
+        if (!coroutine_ref_parameter_frame_slot(&context, parameter, &slot))
             return false;
         if (slot.uses_slot && !emit_coroutine_ref_place(buffer, function, &slot,
                                                         call->operands[parameter], safepoint))
@@ -1979,8 +2041,8 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
     const XrBackendFunction *callee = &ir->functions[callee_id];
     const XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint_id];
     uint32_t implicit_result = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
-    if (!emit_coroutine_ref_frame_transfers(buffer, function, callee, instruction, false) ||
-        !emit_coroutine_ref_bindings(buffer, function, callee, instruction))
+    if (!emit_coroutine_ref_frame_transfers(buffer, ir, function, callee, instruction, false) ||
+        !emit_coroutine_ref_bindings(buffer, ir, function, callee, instruction))
         return false;
     if (!append_format(buffer,
                        "        if (!frame->child_active_%u) {\n"
@@ -2018,7 +2080,7 @@ static bool emit_coroutine_call(CBuffer *buffer, const XrBackendIR *ir,
     }
     if (!append_text(buffer, ");\n"))
         return false;
-    if (!emit_coroutine_ref_frame_transfers(buffer, function, callee, instruction, true))
+    if (!emit_coroutine_ref_frame_transfers(buffer, ir, function, callee, instruction, true))
         return false;
     if (!append_format(buffer, "        if (child_%u.kind == UINT32_C(5)) {\n", instruction_id))
         return false;

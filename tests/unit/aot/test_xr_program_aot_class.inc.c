@@ -182,6 +182,192 @@ static XrValidatedProgram *build_class_reference_copy_program(void) {
     return build_class_reference_program_with_alias(XR_CORE_OP_CORE_OWNER_COPY);
 }
 
+static XrValidatedProgram *build_class_ref_coroutine_program(void) {
+    (void) xr_program_ref_coroutine_fixture_write;
+    XrProgramRefCoroutineChild child;
+    xr_program_ref_coroutine_child_init(&child);
+    XrProgramRefCoroutineParent parent;
+    xr_program_ref_coroutine_parent_init(&parent, child.function.key);
+    for (uint32_t field = 0u; field < 2u; ++field) {
+        parent.entry_instructions[1u + field] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CLASS_FIELD_PLACE,
+            .result = parent.call_operands[field],
+            .result_type_id = XR_CORE_TYPE_I64,
+            .result_category = XR_CORE_IR_PLACE,
+            .operands = parent.owner_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+            .immediate.field_ordinal = field,
+        };
+    }
+    parent.entry_instructions[3] = parent.entry_instructions[4];
+    parent.blocks[0].instruction_count = 4u;
+    uint16_t fields[] = {XR_CORE_TYPE_I64, XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput type = {
+        .key = fixture_key("aot-class-ref-coroutine:type"),
+        .local_id = XR_PROGRAM_REF_COROUTINE_AGGREGATE,
+        .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+        .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+        .field_types = fields,
+        .field_count = 2u,
+    };
+    XrCoreIrInstructionInput main_return = {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
+    };
+    XrCoreIrBlockInput main_block = {
+        .key = fixture_key("aot-class-ref-coroutine:main:block"),
+        .instructions = &main_return,
+        .instruction_count = 1u,
+    };
+    XrCoreIrFunctionInput main_function = {
+        .key = fixture_key("aot-class-ref-coroutine:main"),
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .entry_block = main_block.key,
+        .blocks = &main_block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    parent.function.flags = 0u;
+    XrCoreIrFunctionInput functions[] = {main_function, parent.function, child.function};
+    return validate_program(&type, 1u, NULL, 0u, functions, 3u);
+}
+
+static XrBackendInstruction *find_class_ref_coroutine_operation(XrBackendFunction *function,
+                                                                uint16_t operation,
+                                                                uint32_t ordinal) {
+    uint32_t found = 0u;
+    XrBackendInstruction *result = NULL;
+    for (uint32_t block = 0u; block < function->block_count; ++block) {
+        for (uint32_t instruction = 0u;
+             instruction < function->blocks[block].instruction_count; ++instruction) {
+            XrBackendInstruction *candidate = &function->blocks[block].instructions[instruction];
+            if (candidate->operation_id != operation || found++ != ordinal)
+                continue;
+            result = candidate;
+        }
+    }
+    return result;
+}
+
+static uint32_t count_c_fragment(const char *text, const char *fragment) {
+    uint32_t count = 0u;
+    size_t length = strlen(fragment);
+    for (const char *found = strstr(text, fragment); found;
+         found = strstr(found + length, fragment))
+        ++count;
+    return count;
+}
+
+static XrBackendFunction *find_class_ref_coroutine_parent(XrBackendIR *ir) {
+    for (uint32_t function = 0u; function < ir->function_count; ++function) {
+        XrBackendFunction *candidate = &ir->functions[function];
+        if (find_class_ref_coroutine_operation(
+                candidate, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED, 0u))
+            return candidate;
+    }
+    return NULL;
+}
+
+static void test_class_ref_coroutine_frame_root(void) {
+    XrValidatedProgram *program = build_class_ref_coroutine_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrBackendFunction *parent = find_class_ref_coroutine_parent(ir);
+    REQUIRE(parent != NULL);
+    XrBackendInstruction *left = find_class_ref_coroutine_operation(
+        parent, XR_CORE_OP_CORE_CLASS_FIELD_PLACE, 0u);
+    XrBackendInstruction *right = find_class_ref_coroutine_operation(
+        parent, XR_CORE_OP_CORE_CLASS_FIELD_PLACE, 1u);
+    XrBackendInstruction *call = find_class_ref_coroutine_operation(
+        parent, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED, 0u);
+    REQUIRE(left && right && call && parent->coroutine_safepoint_count == 1u);
+    XrBackendCoroutineSafepoint *point = &parent->coroutine_safepoints[0];
+    REQUIRE(point->live_value_count == 1u && call->operand_count == 4u);
+    uint32_t owner = point->live_value_ids[0];
+    REQUIRE(left->operands[0] == owner && right->operands[0] == owner);
+
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    XrBackendStatus emission = xr_backend_ir_emit_c(ir, false, &generated, &diagnostic);
+    if (emission != XR_BACKEND_OK)
+        fprintf(stderr, "class ref coroutine emission failed: status=%s op=%u f=%u b=%u i=%u\n",
+                xr_backend_status_name(emission), diagnostic.operation_id,
+                diagnostic.function_id, diagnostic.block_id, diagnostic.instruction_id);
+    REQUIRE(emission == XR_BACKEND_OK);
+    char fragment[128];
+    uint16_t class_type_id = parent->value_types[owner];
+    (void) snprintf(fragment, sizeof(fragment), "XrAotType%u live_0_0;",
+                    class_type_id);
+    REQUIRE(count_c_fragment(generated.bytes, fragment) == 1u);
+    (void) snprintf(fragment, sizeof(fragment), "XrAotType%u live_0_1;", class_type_id);
+    REQUIRE(strstr(generated.bytes, fragment) == NULL);
+    (void) snprintf(fragment, sizeof(fragment), "v%u = &frame->live_0_0->f0;",
+                    left->result_id);
+    REQUIRE(count_c_fragment(generated.bytes, fragment) == 1u);
+    (void) snprintf(fragment, sizeof(fragment), "v%u = &frame->live_0_0->f1;",
+                    right->result_id);
+    REQUIRE(count_c_fragment(generated.bytes, fragment) == 1u);
+    (void) snprintf(fragment, sizeof(fragment), "v%u = frame->live_0_0;", owner);
+    REQUIRE(count_c_fragment(generated.bytes, fragment) != 0u);
+    (void) snprintf(fragment, sizeof(fragment),
+                    "v%u = frame->live_0_0;\n        v%u = frame->live_0_0;", owner,
+                    owner);
+    REQUIRE(strstr(generated.bytes, fragment) == NULL);
+    (void) snprintf(fragment, sizeof(fragment),
+                    "frame->live_0_0 = v%u;\n        v%u = &frame->live_0_0->f0;", owner,
+                    left->result_id);
+    REQUIRE(count_c_fragment(generated.bytes, fragment) == 1u);
+
+    uint32_t saved_live_operand = call->operands[2];
+    call->operands[2] = left->result_id;
+    require_coroutine_backend_rejected(ir, "missing class owner live root");
+    call->operands[2] = saved_live_operand;
+    require_coroutine_backend_restored(ir);
+
+    uint32_t duplicated_live[] = {owner, owner};
+    uint32_t *saved_live_values = point->live_value_ids;
+    point->live_value_ids = duplicated_live;
+    point->live_value_count = 2u;
+    require_coroutine_backend_rejected(ir, "duplicate class owner live root");
+    point->live_value_ids = saved_live_values;
+    point->live_value_count = 1u;
+    require_coroutine_backend_restored(ir);
+
+    uint32_t saved_ordinal = right->immediate.field_ordinal;
+    right->immediate.field_ordinal = 2u;
+    require_coroutine_backend_rejected(ir, "class ref ordinal");
+    right->immediate.field_ordinal = saved_ordinal;
+    require_coroutine_backend_restored(ir);
+
+    uint16_t saved_result_type = right->result_type_id;
+    uint16_t saved_value_type = parent->value_types[right->result_id];
+    uint8_t saved_representation = parent->value_representations[right->result_id];
+    right->result_type_id = XR_CORE_TYPE_BOOL;
+    parent->value_types[right->result_id] = XR_CORE_TYPE_BOOL;
+    parent->value_representations[right->result_id] = XR_BACKEND_VALUE_BOOL_U8;
+    require_coroutine_backend_rejected(ir, "class ref field type");
+    right->result_type_id = saved_result_type;
+    parent->value_types[right->result_id] = saved_value_type;
+    parent->value_representations[right->result_id] = saved_representation;
+    require_coroutine_backend_restored(ir);
+
+    uint32_t saved_root = right->operands[0];
+    right->operands[0] = left->result_id;
+    require_coroutine_backend_rejected(ir, "class ref non-owner root");
+    right->operands[0] = saved_root;
+    require_coroutine_backend_restored(ir);
+
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static XrValidatedProgram *build_nested_class_reference_program(void) {
     uint16_t leaf_fields[] = {XR_CORE_TYPE_I64};
     uint16_t parent_fields[] = {XR_H2_CLASS_TYPE};
