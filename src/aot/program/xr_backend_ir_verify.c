@@ -798,6 +798,22 @@ static bool coroutine_ref_argument_is_frame_stable(const XrBackendIR *ir,
             place = base;
             continue;
         }
+        if (definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE) {
+            const XrValidatedType *class_type =
+                xr_validated_program_type(ir->program, function->value_types[base]);
+            if (definition->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD || !class_type ||
+                class_type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+                function->value_categories[base] != XR_CORE_IR_VALUE ||
+                function->value_ownerships[base] != XR_CORE_IR_OWNER ||
+                definition->immediate.field_ordinal >= class_type->field_count ||
+                class_type->field_types[definition->immediate.field_ordinal] !=
+                    function->value_types[place])
+                return false;
+            uint32_t live_count = 0u;
+            for (uint32_t live = 0u; live < point->live_value_count; ++live)
+                live_count += point->live_value_ids[live] == base;
+            return live_count == 1u;
+        }
         if (definition->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL ||
             definition->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
             function->value_categories[base] != XR_CORE_IR_VALUE ||

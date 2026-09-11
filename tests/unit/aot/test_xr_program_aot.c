@@ -20,6 +20,7 @@
 #include "../program/xr_program_assert_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
 #include "../program/xr_program_coroutine_branch_fixture.h"
+#include "../program/xr_program_ref_coroutine_fixture.h"
 #include "../program/xr_program_coroutine_trap_fixture.h"
 #include "../program/xr_program_cleanup_graph_fixture.h"
 #include "../program/xr_program_output_fixture.h"
@@ -3057,6 +3058,7 @@ int main(int argc, char **argv) {
         test_provider_output_lowering_and_mutation();
         test_pipe_provider_lowering();
         test_class_reference_semantics_lowering_and_events();
+        test_class_ref_coroutine_frame_root();
         puts("canonical XrProgram AOT tests passed");
         retire_instance(&instance);
     }
