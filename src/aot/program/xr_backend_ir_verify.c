@@ -340,6 +340,18 @@ typedef struct BackendOwnerCheck {
     uint32_t live_count;
 } BackendOwnerCheck;
 
+static bool backend_parameter_is_class_receiver(const XrBackendIR *ir,
+                                                const XrBackendFunction *function,
+                                                uint32_t parameter) {
+    if (!ir || !function || !function->parameter_types || !function->parameter_modes ||
+        !function->parameter_count || parameter != 0u ||
+        function->parameter_modes[0] != XR_PARAM_REF)
+        return false;
+    const XrValidatedType *type =
+        xr_validated_program_type(ir->program, function->parameter_types[0]);
+    return type && type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+}
+
 static bool backend_value_definitions(BackendOwnerCheck *check) {
     const XrBackendFunction *function = check->function;
     for (uint32_t b = 0u; b < function->block_count; ++b) {
@@ -396,6 +408,8 @@ static uint32_t backend_local_owner_root(const BackendOwnerCheck *check, uint32_
             case XR_CORE_OP_CORE_PLACE_LOCAL:
             case XR_CORE_OP_CORE_PLACE_PROJECT:
             case XR_CORE_OP_CORE_PLACE_LOAD:
+            case XR_CORE_OP_CORE_CLASS_FIELD_LOAD:
+            case XR_CORE_OP_CORE_CLASS_FIELD_PLACE:
             case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
             case XR_CORE_OP_CORE_VARIANT_PROJECT:
             case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT:
@@ -423,6 +437,9 @@ static bool backend_operand_consumed(const BackendOwnerCheck *check,
             return operand == 0u;
         case XR_CORE_OP_CORE_PLACE_STORE:
             return operand == 1u;
+        case XR_CORE_OP_CORE_PLACE_EXCHANGE:
+            return operand == 1u;
+        case XR_CORE_OP_CORE_CLASS_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
             return true;
@@ -1070,6 +1087,9 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_PLACE_LOAD:
         case XR_CORE_OP_CORE_PLACE_STORE:
         case XR_CORE_OP_CORE_PLACE_TAKE:
+        case XR_CORE_OP_CORE_CLASS_CONSTRUCT:
+        case XR_CORE_OP_CORE_CLASS_SHARE:
+        case XR_CORE_OP_CORE_PLACE_EXCHANGE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
@@ -1122,6 +1142,8 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
         case XR_CORE_OP_CORE_PLACE_PROJECT:
+        case XR_CORE_OP_CORE_CLASS_FIELD_LOAD:
+        case XR_CORE_OP_CORE_CLASS_FIELD_PLACE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD;
         case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
         case XR_CORE_OP_CORE_VARIANT_TEST:
@@ -1253,7 +1275,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         }
         for (uint32_t value = 0; value < function->value_count; ++value) {
             uint8_t expected = 0u;
-            if (!xr_backend_representation_for_type(function->value_types[value], &expected) ||
+            if (!xr_backend_representation_for_program_type(
+                    ir->program, function->value_types[value], &expected) ||
                 function->value_categories[value] > XR_CORE_IR_PLACE ||
                 function->value_ownerships[value] > XR_CORE_IR_OWNER ||
                 expected != function->value_representations[value]) {
@@ -1529,9 +1552,11 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
             return false;
         }
         for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
-            XrCoreIrValueCategory expected = function->parameter_modes[parameter] == XR_PARAM_REF
-                                                 ? XR_CORE_IR_PLACE
-                                                 : XR_CORE_IR_VALUE;
+            XrCoreIrValueCategory expected =
+                function->parameter_modes[parameter] == XR_PARAM_REF &&
+                        !backend_parameter_is_class_receiver(ir, function, parameter)
+                    ? XR_CORE_IR_PLACE
+                    : XR_CORE_IR_VALUE;
             if (entry->argument_types[parameter] != function->parameter_types[parameter] ||
                 entry->argument_categories[parameter] != expected) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,

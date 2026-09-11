@@ -25,6 +25,7 @@
 #include "../program/xr_program_output_fixture.h"
 #include "../program/xr_program_pipe_fixture.h"
 #include "../program/xr_program_trap_fixture.h"
+#include "../test_win_compat.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2766,6 +2767,50 @@ static void test_pipe_provider_lowering(void) {
     xr_validated_program_free(program);
 }
 
+#include "test_xr_program_aot_class.inc.c"
+
+static void test_class_reference_semantics_lowering_and_events(void) {
+    XrValidatedProgram *program = build_class_reference_program();
+    require_class_reference_oracle(program);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    require_class_field_finalization_lowering(profile);
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic diagnostic;
+    XrBackendIR *ir = NULL;
+    XrBackendStatus status = xr_backend_ir_build(program, profile, &options, &ir, &diagnostic);
+    REQUIRE(status == XR_BACKEND_OK);
+    REQUIRE(ir != NULL && xr_backend_ir_verify(ir, &diagnostic));
+    REQUIRE(ir->instruction_count == 10u);
+    XrGeneratedC first = {0};
+    XrGeneratedC second = {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &first, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &second, &diagnostic) == XR_BACKEND_OK);
+    (void) "strict-native-host-run";
+    (void) "h2-class-differential";
+    REQUIRE(first.size == second.size && memcmp(first.bytes, second.bytes, first.size) == 0);
+    REQUIRE(xr_fingerprint_equal(first.source_digest, second.source_digest));
+    REQUIRE(strstr(first.bytes, "typedef XrAotClass42 *XrAotType42;") != NULL);
+    REQUIRE(strstr(first.bytes, "struct XrAotClass42 {") != NULL);
+    REQUIRE(strstr(first.bytes, "struct XrAotType42 {") == NULL);
+    REQUIRE(strstr(first.bytes, "xr_aot_class_drop_42") != NULL);
+    REQUIRE(strstr(first.bytes, ".type_id = UINT16_C(2)") != NULL);
+    REQUIRE(strstr(first.bytes, ".has_i64_exchange = UINT8_C(1)") != NULL);
+    REQUIRE(strstr(first.bytes, "XrVm") == NULL);
+    xr_generated_c_free(&second);
+    xr_generated_c_free(&first);
+    xr_backend_ir_free(ir);
+    XrValidatedProgram *copy_program = build_class_reference_copy_program();
+    ir = NULL;
+    status = xr_backend_ir_build(copy_program, profile, &options, &ir, &diagnostic);
+    REQUIRE(status == XR_BACKEND_UNSUPPORTED_OPERATION && ir == NULL);
+    REQUIRE(diagnostic.operation_id == XR_CORE_OP_CORE_OWNER_COPY);
+    xr_validated_program_free(copy_program);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void write_generated_fixture(const char *path, const XrValidatedProgram *program,
                                     const XrTargetProfile *profile, bool standalone_main) {
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
@@ -2863,6 +2908,19 @@ static void seal_native_file(const char *path, const XrValidatedProgram *program
 }
 
 int main(int argc, char **argv) {
+    xr_test_suppress_dialogs();
+    bool class_differential = argc == 3 &&
+                              strcmp(argv[1], "--h2-class-differential") == 0;
+    if (class_differential && strcmp(argv[2], "backend-ir") == 0) {
+        test_class_reference_semantics_lowering_and_events();
+        puts(XR_H2_AOT_BACKEND_RECORD);
+        return 0;
+    }
+    if (class_differential && strcmp(argv[2], "generated-c-native") == 0) {
+        test_class_reference_semantics_lowering_and_events();
+        REQUIRE(run_class_generated_c_native());
+        return 0;
+    }
     REQUIRE(argc >= 1 && argc <= 3);
     bool seal_mode = argc == 3 && strcmp(argv[1], "--seal") == 0;
     bool invoke_object_mode = argc == 3 && strcmp(argv[2], "sealed-invoke-object") == 0;
@@ -2990,6 +3048,7 @@ int main(int argc, char **argv) {
         test_witness_invoke_trap_continuation_lowering_and_mutation();
         test_provider_output_lowering_and_mutation();
         test_pipe_provider_lowering();
+        test_class_reference_semantics_lowering_and_events();
         puts("canonical XrProgram AOT tests passed");
         retire_instance(&instance);
     }
