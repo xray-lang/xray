@@ -99,6 +99,13 @@ typedef struct XrXiCleanupProjectionStorage {
     uint32_t trap_instruction_count;
 } XrXiCleanupProjectionStorage;
 
+typedef struct XrXiImplicitTrapCleanupStorage {
+    XrCoreIrValueInput *arguments;
+    uint32_t argument_count;
+    XrCoreIrInstructionInput *instructions;
+    uint32_t instruction_count;
+} XrXiImplicitTrapCleanupStorage;
+
 typedef struct XrXiCleanupChainNode {
     const XiCleanupBoundary *boundary;
     uint32_t parent;
@@ -197,6 +204,9 @@ typedef struct XrXiFunctionStorage {
     XrXiCleanupProjectionStorage *cleanup_projections;
     uint32_t cleanup_projection_count;
     uint32_t cleanup_projection_capacity;
+    XrXiImplicitTrapCleanupStorage *implicit_trap_cleanups;
+    uint32_t implicit_trap_cleanup_count;
+    uint32_t implicit_trap_cleanup_capacity;
     XrXiCleanupChainNode *cleanup_chain_nodes;
     uint32_t cleanup_chain_node_count;
     XrXiCleanupHandlerChainNode *cleanup_handler_chain_nodes;
@@ -554,6 +564,21 @@ static XrCoreIrKey cleanup_trap_result_key(const XrXiFunctionStorage *function,
                                            uint32_t instruction) {
     return key_from_key_and_u32(UINT8_C(0x5e), cleanup_trap_block_key(function, projection),
                                 instruction);
+}
+
+static XrCoreIrKey implicit_trap_cleanup_block_key(const XrXiFunctionStorage *function,
+                                                   const XiBlock *source,
+                                                   uint32_t instruction) {
+    XrCoreIrKey source_key = key_from_key_and_u32(
+        UINT8_C(0x65), function->key, source ? source->id : UINT32_MAX);
+    return key_from_key_and_u32(UINT8_C(0x66), source_key, instruction);
+}
+
+static XrCoreIrKey implicit_trap_cleanup_argument_key(const XrXiFunctionStorage *function,
+                                                      const XiBlock *source,
+                                                      uint32_t instruction, uint32_t argument) {
+    return key_from_key_and_u32(
+        UINT8_C(0x67), implicit_trap_cleanup_block_key(function, source, instruction), argument);
 }
 
 static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value) {
@@ -6670,6 +6695,18 @@ static void free_context(XrXiBuildContext *context) {
                 xr_free(cleanup->trap_argument_sources);
             }
             xr_free(function->cleanup_projections);
+            for (uint32_t cleanup_index = 0u;
+                 cleanup_index < function->implicit_trap_cleanup_count; ++cleanup_index) {
+                XrXiImplicitTrapCleanupStorage *cleanup =
+                    &function->implicit_trap_cleanups[cleanup_index];
+                for (uint32_t instruction = 0u;
+                     cleanup->instructions && instruction < cleanup->instruction_count;
+                     ++instruction)
+                    free_instruction_input(&cleanup->instructions[instruction]);
+                xr_free(cleanup->instructions);
+                xr_free(cleanup->arguments);
+            }
+            xr_free(function->implicit_trap_cleanups);
             xr_free(function->cleanup_points);
             xr_free(function->cleanup_chain_nodes);
             xr_free(function->cleanup_handler_chain_nodes);
@@ -14210,6 +14247,268 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
     return XR_PROGRAM_BUILD_OK;
 }
 
+typedef struct XrXiLiveOwner {
+    XrCoreIrKey key;
+    uint16_t type_id;
+    XrCoreIrValueCategory category;
+    bool live;
+} XrXiLiveOwner;
+
+static XrProgramBuildStatus implicit_trap_add_owner(XrXiLiveOwner *owners, uint32_t capacity,
+                                                    uint32_t *owner_count, XrCoreIrKey key,
+                                                    uint16_t type_id,
+                                                    XrCoreIrValueCategory category,
+                                                    char *diagnostic, size_t diagnostic_size) {
+    if (!owners || !owner_count || *owner_count >= capacity)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    for (uint32_t owner = 0u; owner < *owner_count; ++owner)
+        if (xr_core_ir_key_equal(owners[owner].key, key))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "implicit trap cleanup owner has multiple definitions");
+    if (type_id == XR_CORE_TYPE_VOID || category != XR_CORE_IR_VALUE)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "implicit trap cleanup owner has no exact value contract");
+    owners[(*owner_count)++] = (XrXiLiveOwner) {
+        .key = key,
+        .type_id = type_id,
+        .category = category,
+        .live = true,
+    };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus implicit_trap_consume_owners(
+    const XrXiBuildContext *context, const XrXiBlockStorage *source_storage,
+    const XrCoreIrBlockInput *source, const XrCoreIrInstructionInput *instruction,
+    uint32_t instruction_index, XrXiLiveOwner *owners, uint32_t owner_count, char *diagnostic,
+    size_t diagnostic_size) {
+    for (uint32_t operand = 0u; operand < instruction->operand_count; ++operand) {
+        if (!input_operation_consumes_operand(context, source_storage, source->instruction_count,
+                                              instruction, operand))
+            continue;
+        for (uint32_t owner = 0u; owner < owner_count; ++owner) {
+            if (!xr_core_ir_key_equal(owners[owner].key, instruction->operands[operand]))
+                continue;
+            if (!owners[owner].live)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "implicit trap cleanup owner is consumed more than once before i%u",
+                            instruction_index);
+            owners[owner].live = false;
+            break;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus collect_implicit_trap_live_owners(
+    const XrXiBuildContext *context, const XrXiBlockStorage *source_storage,
+    const XrCoreIrBlockInput *source, uint32_t instruction_index, XrXiLiveOwner **owners_out,
+    uint32_t *owner_count_out, char *diagnostic, size_t diagnostic_size) {
+    if (owners_out)
+        *owners_out = NULL;
+    if (owner_count_out)
+        *owner_count_out = 0u;
+    if (!context || !source_storage || !source || !owners_out || !owner_count_out ||
+        instruction_index >= source->instruction_count)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint64_t capacity_wide = (uint64_t) source->argument_count + instruction_index;
+    if (capacity_wide > UINT32_MAX || capacity_wide > SIZE_MAX / sizeof(XrXiLiveOwner))
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t capacity = (uint32_t) capacity_wide;
+    XrXiLiveOwner *owners = capacity ? xr_calloc(capacity, sizeof(*owners)) : NULL;
+    if (capacity && !owners)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t owner_count = 0u;
+    XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
+    for (uint32_t argument = 0u; argument < source->argument_count; ++argument) {
+        const XrCoreIrValueInput *candidate = &source->arguments[argument];
+        if (candidate->ownership != XR_CORE_IR_OWNER)
+            continue;
+        status = implicit_trap_add_owner(owners, capacity, &owner_count, candidate->key,
+                                         candidate->type_id, candidate->category, diagnostic,
+                                         diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            break;
+    }
+    for (uint32_t index = 0u; index < instruction_index && status == XR_PROGRAM_BUILD_OK;
+         ++index) {
+        const XrCoreIrInstructionInput *candidate = &source->instructions[index];
+        status = implicit_trap_consume_owners(context, source_storage, source, candidate, index,
+                                              owners, owner_count, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            break;
+        if (candidate->result_type_id != XR_CORE_TYPE_VOID &&
+            candidate->result_ownership == XR_CORE_IR_OWNER)
+            status = implicit_trap_add_owner(owners, capacity, &owner_count, candidate->result,
+                                             candidate->result_type_id,
+                                             candidate->result_category, diagnostic,
+                                             diagnostic_size);
+    }
+    if (status != XR_PROGRAM_BUILD_OK) {
+        xr_free(owners);
+        return status;
+    }
+    uint32_t live_count = 0u;
+    for (uint32_t owner = 0u; owner < owner_count; ++owner)
+        live_count += owners[owner].live ? 1u : 0u;
+    if (live_count == 0u) {
+        xr_free(owners);
+        return XR_PROGRAM_BUILD_OK;
+    }
+    *owners_out = owners;
+    *owner_count_out = owner_count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus materialize_implicit_owner_trap_cleanup(
+    XrXiFunctionStorage *function, XrXiBlockStorage *source_storage,
+    XrCoreIrBlockInput *source, uint32_t instruction_index, XrXiLiveOwner *owners,
+    uint32_t owner_count, XrCoreIrBlockInput *output, char *diagnostic,
+    size_t diagnostic_size) {
+    if (!function || !source_storage || !source_storage->xi || !source || !owners || !output ||
+        instruction_index >= source->instruction_count ||
+        function->implicit_trap_cleanup_count >= function->implicit_trap_cleanup_capacity)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrCoreIrInstructionInput *provider = &source_storage->instructions[instruction_index];
+    if (provider->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL || provider->successor_count != 0u)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t live_count = 0u;
+    for (uint32_t owner = 0u; owner < owner_count; ++owner)
+        live_count += owners[owner].live ? 1u : 0u;
+    if (live_count == 0u || live_count > UINT32_MAX - 2u ||
+        provider->operand_count > UINT32_MAX - live_count)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+
+    XrXiImplicitTrapCleanupStorage *cleanup =
+        &function->implicit_trap_cleanups[function->implicit_trap_cleanup_count++];
+    cleanup->argument_count = live_count;
+    cleanup->instruction_count = live_count + 2u;
+    cleanup->arguments = xr_calloc(live_count, sizeof(*cleanup->arguments));
+    cleanup->instructions = xr_calloc(cleanup->instruction_count, sizeof(*cleanup->instructions));
+    if (!cleanup->arguments || !cleanup->instructions)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+
+    XrCoreIrKey block =
+        implicit_trap_cleanup_block_key(function, source_storage->xi, instruction_index);
+    XrCoreIrKey *block_arguments = xr_calloc(live_count, sizeof(*block_arguments));
+    if (!block_arguments)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    cleanup->instructions[0] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = block_arguments,
+        .operand_count = live_count,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+    };
+    uint32_t target_argument = 0u;
+    for (uint32_t owner = 0u; owner < owner_count; ++owner) {
+        if (!owners[owner].live)
+            continue;
+        XrCoreIrKey argument = implicit_trap_cleanup_argument_key(
+            function, source_storage->xi, instruction_index, target_argument);
+        cleanup->arguments[target_argument] = (XrCoreIrValueInput) {
+            .key = argument,
+            .type_id = owners[owner].type_id,
+            .category = owners[owner].category,
+            .ownership = XR_CORE_IR_OWNER,
+        };
+        block_arguments[target_argument] = argument;
+        XrCoreIrKey *drop_operand = xr_calloc(1u, sizeof(*drop_operand));
+        if (!drop_operand)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *drop_operand = argument;
+        cleanup->instructions[target_argument + 1u] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .operands = drop_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+        ++target_argument;
+    }
+    cleanup->instructions[live_count + 1u] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_TRAP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+        .immediate.u32 = 7u,
+    };
+
+    uint32_t provider_operand_count = provider->operand_count + live_count;
+    XrCoreIrKey *provider_operands = xr_calloc(provider_operand_count, sizeof(*provider_operands));
+    XrCoreIrKey *provider_successors = xr_calloc(1u, sizeof(*provider_successors));
+    if (!provider_operands || !provider_successors) {
+        xr_free(provider_successors);
+        xr_free(provider_operands);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (provider->operand_count)
+        memcpy(provider_operands, provider->operands,
+               (size_t) provider->operand_count * sizeof(*provider_operands));
+    target_argument = 0u;
+    for (uint32_t owner = 0u; owner < owner_count; ++owner)
+        if (owners[owner].live)
+            provider_operands[provider->operand_count + target_argument++] = owners[owner].key;
+    *provider_successors = block;
+    xr_free((void *) provider->operands);
+    provider->operands = provider_operands;
+    provider->operand_count = provider_operand_count;
+    provider->successors = provider_successors;
+    provider->successor_count = 1u;
+
+    output->key = block;
+    output->arguments = cleanup->arguments;
+    output->argument_count = cleanup->argument_count;
+    output->instructions = cleanup->instructions;
+    output->instruction_count = cleanup->instruction_count;
+    (void) diagnostic;
+    (void) diagnostic_size;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus materialize_implicit_owner_trap_cleanups(
+    const XrXiBuildContext *context, XrXiFunctionStorage *function, uint32_t original_block_count,
+    uint32_t block_capacity, uint32_t *output_block_index, uint32_t *cleanup_count,
+    char *diagnostic, size_t diagnostic_size) {
+    if (!context || !function || !output_block_index || !cleanup_count ||
+        *output_block_index < original_block_count)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *cleanup_count = 0u;
+    for (uint32_t block_index = 0u; block_index < original_block_count; ++block_index) {
+        XrCoreIrBlockInput *source = &function->blocks[block_index];
+        const XiBlock *xi_block = cleanup_projection_xi_block_for_key(function, source->key);
+        XrXiBlockStorage *source_storage = find_block_storage(function, xi_block);
+        if (!source_storage || !source_storage->emission_ready)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        for (uint32_t instruction = 0u; instruction < source->instruction_count; ++instruction) {
+            XrCoreIrInstructionInput *candidate = &source_storage->instructions[instruction];
+            if (candidate->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL ||
+                candidate->successor_count != 0u)
+                continue;
+            XrXiLiveOwner *owners = NULL;
+            uint32_t owner_count = 0u;
+            XrProgramBuildStatus status = collect_implicit_trap_live_owners(
+                context, source_storage, source, instruction, &owners, &owner_count, diagnostic,
+                diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+            if (!owners)
+                continue;
+            if (*output_block_index >= block_capacity) {
+                xr_free(owners);
+                return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+            }
+            status = materialize_implicit_owner_trap_cleanup(
+                function, source_storage, source, instruction, owners, owner_count,
+                &function->blocks[(*output_block_index)++], diagnostic, diagnostic_size);
+            xr_free(owners);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+            ++*cleanup_count;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildContext *context,
                                                              const XiFunc *function,
                                                              const XiBlock *block) {
@@ -14769,6 +15068,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         }
     }
     uint32_t cleanup_projection_upper_bound = storage->cleanup_point_count;
+    uint32_t implicit_trap_cleanup_upper_bound = 0u;
     for (uint32_t block = 0u; block < xi->nblocks; ++block) {
         const XiBlock *source_block = xi->blocks[block];
         const XrXiBlockStorage *source_storage = find_block_storage(storage, source_block);
@@ -14781,6 +15081,11 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                                                           &boundary))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "reachable Xi value has no cleanup projection bound");
+            if (resolved_provider_native_call(context, xi, source_block->values[value])) {
+                if (implicit_trap_cleanup_upper_bound == UINT32_MAX)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                ++implicit_trap_cleanup_upper_bound;
+            }
             if (!boundary)
                 continue;
             if (cleanup_projection_upper_bound == UINT32_MAX)
@@ -14789,11 +15094,23 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         }
     }
     if (synthetic_cancel_count > UINT32_MAX - xi->nblocks ||
-        cleanup_projection_upper_bound > UINT32_MAX - xi->nblocks - synthetic_cancel_count)
+        cleanup_projection_upper_bound > UINT32_MAX - xi->nblocks - synthetic_cancel_count ||
+        implicit_trap_cleanup_upper_bound >
+            UINT32_MAX - xi->nblocks - synthetic_cancel_count - cleanup_projection_upper_bound)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-    uint32_t block_capacity = xi->nblocks + synthetic_cancel_count + cleanup_projection_upper_bound;
+    uint32_t block_capacity = xi->nblocks + synthetic_cancel_count +
+                              cleanup_projection_upper_bound +
+                              implicit_trap_cleanup_upper_bound;
     storage->blocks = xr_calloc(block_capacity, sizeof(*storage->blocks));
     if (!storage->blocks)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    storage->implicit_trap_cleanup_capacity = implicit_trap_cleanup_upper_bound;
+    storage->implicit_trap_cleanups =
+        implicit_trap_cleanup_upper_bound
+            ? xr_calloc(implicit_trap_cleanup_upper_bound,
+                        sizeof(*storage->implicit_trap_cleanups))
+            : NULL;
+    if (implicit_trap_cleanup_upper_bound && !storage->implicit_trap_cleanups)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     output->blocks = storage->blocks;
 
@@ -15304,6 +15621,15 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
     if (cleanup_trap_projection_count > UINT32_MAX - output->block_count)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
     output->block_count += cleanup_trap_projection_count;
+    uint32_t implicit_trap_cleanup_count = 0u;
+    status = materialize_implicit_owner_trap_cleanups(
+        context, storage, original_block_count, block_capacity, &output_block_index,
+        &implicit_trap_cleanup_count, diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    if (implicit_trap_cleanup_count > UINT32_MAX - output->block_count)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    output->block_count += implicit_trap_cleanup_count;
     if (output->coroutine_safepoint_count != 0u) {
         for (uint32_t safepoint = 0u; safepoint < output->coroutine_safepoint_count; ++safepoint) {
             const XiCoroSuspendPoint *point = coroutine_point_for_safepoint(storage, safepoint);
