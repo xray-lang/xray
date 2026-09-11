@@ -235,9 +235,10 @@ EXACT_PROFILES = {
         tests=canonical_profile.H2_CTEST_NAMES,
         targets=canonical_profile.H2_BUILD_TARGETS,
         include_xray=False,
-        not_covered=("the remaining canonical product and native-fixture inventory, broad "
-                     "language/runtime suites, the full t2 backend differential, full "
-                     "ASan/LSan, QEMU and release qualification"),
+        not_covered=("H2.3/H2.4 exit, graph-copy and cycle cases, the remaining canonical "
+                     "product/native-fixture inventory, broad language/runtime suites, the "
+                     "full t2 backend differential, full ASan/LSan, QEMU and release "
+                     "qualification"),
     ),
     "h2-reference": ExactProfile(
         tests=canonical_profile.H2_REFERENCE_CTEST_NAMES,

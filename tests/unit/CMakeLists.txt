@@ -66,6 +66,8 @@ add_xray_python_unit_test(test_build_tree_lock test_buildlock.py)
 add_xray_python_unit_test(test_tiered_test_runner test_t_runner.py)
 add_xray_python_unit_test(test_canonical_program_test_profile
     test_canonical_program_test_profile.py)
+add_xray_python_unit_test(xr_program_h2_backend_differential_self_test
+    test_h2_backend_differential.py)
 
 # ============================================================================
 # value/ — Value system
@@ -905,6 +907,22 @@ else()
 endif()
 set_tests_properties(test_xr_program_aot PROPERTIES
     LABELS "unit;aot;canonical-program;backendir;translation-validation;task-300")
+
+# The manifest keeps this gate in exact expected-unsupported mode until both
+# backend owners explicitly activate their probe protocol.  Once active, the
+# same CTest invokes these existing executables and compares all four executor
+# records with the frozen Reference oracle. The AOT generated-C mode owns a
+# real strict-C11 compile and host-run; emitting or scanning C alone cannot
+# produce a qualifying record.
+add_test(NAME xr_program_h2_backend_differential
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_h2_backend_differential.py
+        --vm $<TARGET_FILE:test_xr_program_vm>
+        --aot $<TARGET_FILE:test_xr_program_aot>)
+set_tests_properties(xr_program_h2_backend_differential PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    LABELS "unit;canonical-program;differential;vm;aot;generated-c;native;task-307"
+    TIMEOUT 180 PROCESSORS 1)
 
 add_executable(xr_program_allocation_fixture_writer
     aot/xr_program_allocation_fixture_writer.c

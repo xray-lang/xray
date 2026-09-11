@@ -1,0 +1,215 @@
+{
+  "schema": 1,
+  "phase": "H2.2",
+  "required_observables": [
+    "value",
+    "outcome",
+    "identity",
+    "drop-events"
+  ],
+  "operations": [
+    {"stable_id": 142, "spelling": "core.class.construct"},
+    {"stable_id": 143, "spelling": "core.class.share"},
+    {"stable_id": 144, "spelling": "core.class.field_load"},
+    {"stable_id": 145, "spelling": "core.class.field_place"},
+    {"stable_id": 146, "spelling": "core.place.exchange"}
+  ],
+  "oracle": {
+    "scenario": "class-alias-mutation-lifecycle",
+    "outcome": {"kind": "return"},
+    "value": {"kind": "i64", "data": 42},
+    "identities": {"constructed": "class-0", "shared": "class-0"},
+    "events": [
+      {"kind": "class-construct", "identity": "class-0"},
+      {"kind": "class-share", "identity": "class-0", "related": "class-0"},
+      {"kind": "class-field-place", "identity": "class-0", "field": 0},
+      {
+        "kind": "place-exchange",
+        "type": "i64",
+        "old": {"value": 7, "identity": "none"},
+        "replacement": {"value": 42, "identity": "none"}
+      },
+      {"kind": "class-field-load", "identity": "class-0", "field": 0},
+      {"kind": "owner-drop", "identity": "class-0"},
+      {"kind": "owner-drop", "identity": "class-0"},
+      {"kind": "class-finalize", "identity": "class-0"},
+      {"kind": "class-reclaim", "identity": "class-0"}
+    ]
+  },
+  "reference_evidence": {
+    "source": "tests/unit/program/test_xr_program_verify.c",
+    "function": "test_class_alias_mutation_and_lifecycle",
+    "ordered_tokens": [
+      "XR_REFERENCE_OUTCOME_RETURN",
+      "XR_REFERENCE_VALUE_I64",
+      "result.value.as.i64 == 42",
+      "XR_REFERENCE_EVENT_CLASS_CONSTRUCT",
+      "XR_REFERENCE_EVENT_CLASS_SHARE",
+      "XR_REFERENCE_EVENT_CLASS_FIELD_PLACE",
+      "XR_REFERENCE_EVENT_PLACE_EXCHANGE",
+      "XR_REFERENCE_EVENT_CLASS_FIELD_LOAD",
+      "XR_REFERENCE_EVENT_OWNER_DROP",
+      "XR_REFERENCE_EVENT_OWNER_DROP",
+      "XR_REFERENCE_EVENT_CLASS_FINALIZE",
+      "XR_REFERENCE_EVENT_CLASS_RECLAIM",
+      "log.type_ids[index] == (index == 3u ? XR_CORE_TYPE_I64 : class_type_id)",
+      "log.identities[3] == UINT64_MAX",
+      "log.related_identities[3] == UINT64_MAX",
+      "log.related_identities[1] == log.identities[0]"
+    ]
+  },
+  "reference_program_evidence": {
+    "source": "tests/unit/program/test_xr_program_verify.c",
+    "function": "build_class_alias_mutation_artifact",
+    "ordered_tokens": [
+      ".value.i64 = 7",
+      ".value.i64 = 42",
+      "XrCoreIrKey exchange_operands[] = {place, forty_two};",
+      "XR_CORE_OP_CORE_PLACE_EXCHANGE",
+      ".result = old",
+      ".result_type_id = XR_CORE_TYPE_I64",
+      ".operands = exchange_operands"
+    ]
+  },
+  "qualification": {
+    "ctests": [
+      "test_xr_program_verify",
+      "test_xr_program_source_build",
+      "test_xr_program_vm",
+      "test_xr_program_vm_runtime",
+      "test_xr_program_aot"
+    ],
+    "targets": [
+      "test_xr_program_verify",
+      "test_xr_program_source_build",
+      "test_xr_program_vm",
+      "test_xr_program_vm_runtime",
+      "test_xr_program_aot"
+    ]
+  },
+  "executors": [
+    {
+      "id": "vm-baseline",
+      "coverage_key": "vm",
+      "state": "expected-unsupported",
+      "pending_witness": {
+        "source": "tests/unit/vm/test_xr_program_vm.c",
+        "function": "test_inactive_operations_fail_before_dispatch",
+        "ordered_tokens": [
+          "XR_VM_DECODE_BASELINE_VIEW",
+          "XR_VM_DECODE_FIXED_ROWS",
+          "XR_VM_CODE_UNSUPPORTED_OPERATION",
+          "diagnostic.status == XR_VM_CODE_UNSUPPORTED_OPERATION",
+          "diagnostic.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT"
+        ]
+      },
+      "active_command": {
+        "binary": "vm",
+        "arguments": ["--h2-class-differential", "baseline"],
+        "route": "vm-baseline-view"
+      },
+      "active_evidence": {
+        "source": "tests/unit/vm/test_xr_program_vm.c",
+        "function": "test_class_reference_semantics_differential",
+        "ordered_tokens": [
+          "XR_VM_DECODE_BASELINE_VIEW",
+          "XR_VM_OUTCOME_RETURN",
+          "XR_VM_VALUE_I64",
+          "h2-class-differential"
+        ]
+      }
+    },
+    {
+      "id": "vm-fixed",
+      "coverage_key": "vm",
+      "state": "expected-unsupported",
+      "pending_witness": {
+        "source": "tests/unit/vm/test_xr_program_vm.c",
+        "function": "test_inactive_operations_fail_before_dispatch",
+        "ordered_tokens": [
+          "XR_VM_DECODE_BASELINE_VIEW",
+          "XR_VM_DECODE_FIXED_ROWS",
+          "XR_VM_CODE_UNSUPPORTED_OPERATION",
+          "diagnostic.status == XR_VM_CODE_UNSUPPORTED_OPERATION",
+          "diagnostic.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT"
+        ]
+      },
+      "active_command": {
+        "binary": "vm",
+        "arguments": ["--h2-class-differential", "fixed"],
+        "route": "vm-fixed-rows"
+      },
+      "active_evidence": {
+        "source": "tests/unit/vm/test_xr_program_vm.c",
+        "function": "test_class_reference_semantics_differential",
+        "ordered_tokens": [
+          "XR_VM_DECODE_FIXED_ROWS",
+          "XR_VM_OUTCOME_RETURN",
+          "XR_VM_VALUE_I64",
+          "h2-class-differential"
+        ]
+      }
+    },
+    {
+      "id": "aot-backendir",
+      "coverage_key": "aot",
+      "state": "expected-unsupported",
+      "pending_witness": {
+        "source": "tests/unit/program/test_xr_program_source_build.c",
+        "function": "assert_aot_rejects_inactive_operation",
+        "ordered_tokens": [
+          "xr_backend_ir_build",
+          "XR_BACKEND_UNSUPPORTED_OPERATION",
+          "diagnostic.status, XR_BACKEND_UNSUPPORTED_OPERATION",
+          "diagnostic.operation_id, expected_operation",
+          "spec->aot_status, XR_CORE_COVERAGE_NOT_YET_ACTIVE"
+        ]
+      },
+      "active_command": {
+        "binary": "aot",
+        "arguments": ["--h2-class-differential", "backend-ir"],
+        "route": "aot-backendir"
+      },
+      "active_evidence": {
+        "source": "tests/unit/aot/test_xr_program_aot.c",
+        "function": "test_class_reference_semantics_lowering_and_events",
+        "ordered_tokens": [
+          "xr_backend_ir_build",
+          "XR_BACKEND_OK",
+          "xr_backend_ir_emit_c",
+          "h2-class-differential"
+        ]
+      }
+    },
+    {
+      "id": "aot-generated-c-native",
+      "coverage_key": "aot",
+      "state": "expected-unsupported",
+      "pending_witness": {
+        "source": "tests/unit/program/test_xr_program_source_build.c",
+        "function": "assert_aot_rejects_inactive_operation",
+        "ordered_tokens": [
+          "xr_backend_ir_build",
+          "XR_BACKEND_UNSUPPORTED_OPERATION",
+          "diagnostic.status, XR_BACKEND_UNSUPPORTED_OPERATION",
+          "diagnostic.operation_id, expected_operation",
+          "spec->aot_status, XR_CORE_COVERAGE_NOT_YET_ACTIVE"
+        ]
+      },
+      "active_command": {
+        "binary": "aot",
+        "arguments": ["--h2-class-differential", "generated-c-native"],
+        "route": "aot-generated-c-strict-native-host-run"
+      },
+      "active_evidence": {
+        "source": "tests/unit/aot/test_xr_program_aot.c",
+        "function": "test_class_reference_semantics_lowering_and_events",
+        "ordered_tokens": [
+          "xr_backend_ir_emit_c",
+          "strict-native-host-run",
+          "h2-class-differential"
+        ]
+      }
+    }
+  ]
+}

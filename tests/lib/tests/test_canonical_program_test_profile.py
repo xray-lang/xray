@@ -26,7 +26,7 @@ SPEC.loader.exec_module(profile)
 
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
-        self.assertEqual(len(profile.CTEST_NAMES), 60)
+        self.assertEqual(len(profile.CTEST_NAMES), 62)
         self.assertEqual(len(profile.BUILD_TARGETS), 23)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
@@ -91,12 +91,14 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             profile.H2_SOURCE_CTEST_NAMES,
             profile.H2_VM_CTEST_NAMES,
             profile.H2_AOT_CTEST_NAMES,
+            profile.H2_DIFFERENTIAL_CTEST_NAMES,
         )
         component_targets = (
             profile.H2_REFERENCE_BUILD_TARGETS,
             profile.H2_SOURCE_BUILD_TARGETS,
             profile.H2_VM_BUILD_TARGETS,
             profile.H2_AOT_BUILD_TARGETS,
+            profile.H2_DIFFERENTIAL_BUILD_TARGETS,
         )
         expected_tests = tuple(dict.fromkeys(
             name for inventory in component_tests for name in inventory
@@ -106,12 +108,20 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         ))
         self.assertEqual(profile.H2_CTEST_NAMES, expected_tests)
         self.assertEqual(profile.H2_BUILD_TARGETS, expected_targets)
-        self.assertEqual(len(profile.H2_CTEST_NAMES), 25)
+        self.assertEqual(len(profile.H2_CTEST_NAMES), 27)
         self.assertEqual(len(profile.H2_BUILD_TARGETS), 7)
         self.assertEqual(len(profile.H2_CTEST_NAMES), len(set(profile.H2_CTEST_NAMES)))
         self.assertEqual(len(profile.H2_BUILD_TARGETS), len(set(profile.H2_BUILD_TARGETS)))
         self.assertLessEqual(set(profile.H2_CTEST_NAMES), set(profile.CTEST_NAMES))
         self.assertLessEqual(set(profile.H2_BUILD_TARGETS), set(profile.BUILD_TARGETS))
+        self.assertLessEqual(
+            set(profile.h2_differential.qualification_ctest_names()),
+            set(profile.H2_CTEST_NAMES),
+        )
+        self.assertLessEqual(
+            set(profile.h2_differential.qualification_build_targets()),
+            set(profile.H2_BUILD_TARGETS),
+        )
 
     def test_manifest_additions_and_removals_change_both_inventories(self) -> None:
         with tempfile.TemporaryDirectory(prefix="xr-canonical-profile-") as directory:
