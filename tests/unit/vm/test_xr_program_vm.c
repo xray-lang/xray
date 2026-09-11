@@ -800,7 +800,7 @@ static XrValidatedProgram *build_class_error_program(bool aggregate_error,
             .flags = XR_PROGRAM_FUNCTION_ENTRY,
         };
     }
-    return validate_typed_fixture(types, sizeof(types) / sizeof(types[0]), &constant, 1u, functions,
+    return validate_typed_fixture(types, aggregate_error ? 2u : 1u, &constant, 1u, functions,
                                   function_count);
 }
 
