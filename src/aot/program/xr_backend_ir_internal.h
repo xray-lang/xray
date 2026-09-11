@@ -24,6 +24,7 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_ERROR_U32,
     XR_BACKEND_VALUE_PANIC_U32,
     XR_BACKEND_VALUE_AGGREGATE,
+    XR_BACKEND_VALUE_CLASS_HANDLE,
 } XrBackendValueRepresentation;
 
 typedef struct XrBackendInstruction {
@@ -135,6 +136,9 @@ struct XrBackendIR {
 };
 
 XR_FUNC bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representation_out);
+XR_FUNC bool xr_backend_representation_for_program_type(const XrValidatedProgram *program,
+                                                         uint16_t type_id,
+                                                         uint8_t *representation_out);
 XR_FUNC XrBackendId xr_backend_compute_id(void);
 XR_FUNC XrOptimizationPolicyId
 xr_backend_compute_optimization_policy_id(const XrBackendOptions *options);

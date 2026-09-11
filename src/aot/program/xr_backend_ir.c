@@ -85,6 +85,11 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_PLACE_STORE:
         case XR_CORE_OP_CORE_PLACE_PROJECT:
         case XR_CORE_OP_CORE_PLACE_TAKE:
+        case XR_CORE_OP_CORE_CLASS_CONSTRUCT:
+        case XR_CORE_OP_CORE_CLASS_SHARE:
+        case XR_CORE_OP_CORE_CLASS_FIELD_LOAD:
+        case XR_CORE_OP_CORE_CLASS_FIELD_PLACE:
+        case XR_CORE_OP_CORE_PLACE_EXCHANGE:
             return true;
         default:
             return false;
@@ -224,6 +229,73 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
     return true;
 }
 
+bool xr_backend_representation_for_program_type(const XrValidatedProgram *program,
+                                                uint16_t type_id,
+                                                uint8_t *representation_out) {
+    const XrValidatedType *type = xr_validated_program_type(program, type_id);
+    if (type && type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+        if (representation_out)
+            *representation_out = XR_BACKEND_VALUE_CLASS_HANDLE;
+        return true;
+    }
+    return xr_backend_representation_for_type(type_id, representation_out);
+}
+
+static bool class_graph_is_acyclic(const XrValidatedProgram *program, uint32_t index,
+                                   uint8_t *state) {
+    if (state[index] == 2u)
+        return true;
+    if (state[index] == 1u)
+        return false;
+    state[index] = 1u;
+    const XrValidatedType *type = &program->types[index];
+    for (uint32_t field = 0u; field < type->field_count; ++field) {
+        const XrValidatedType *child =
+            xr_validated_program_type(program, type->field_types[field]);
+        if (!child || child->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
+            continue;
+        uint32_t child_index = child->type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+        if (child_index >= program->type_count ||
+            !class_graph_is_acyclic(program, child_index, state))
+            return false;
+    }
+    state[index] = 2u;
+    return true;
+}
+
+static XrBackendStatus class_storage_status(const XrValidatedProgram *program) {
+    if (!program)
+        return XR_BACKEND_INVALID_INPUT;
+    bool has_class = false;
+    for (uint32_t index = 0u; index < program->type_count; ++index) {
+        const XrValidatedType *type = &program->types[index];
+        if (type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
+            continue;
+        has_class = true;
+        for (uint32_t field = 0u; field < type->field_count; ++field) {
+            uint16_t field_type_id = type->field_types[field];
+            if (xr_validated_program_type_ownership(program, field_type_id) !=
+                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
+                continue;
+            const XrValidatedType *field_type =
+                xr_validated_program_type(program, field_type_id);
+            if (!field_type || field_type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
+                return XR_BACKEND_UNSUPPORTED_OPERATION;
+        }
+    }
+    if (!has_class)
+        return XR_BACKEND_OK;
+    uint8_t *state = xr_calloc(program->type_count ? program->type_count : 1u, sizeof(*state));
+    if (!state)
+        return XR_BACKEND_OUT_OF_MEMORY;
+    bool acyclic = true;
+    for (uint32_t index = 0u; acyclic && index < program->type_count; ++index)
+        if (program->types[index].kind == XR_CORE_IR_TYPE_CLASS_REFERENCE)
+            acyclic = class_graph_is_acyclic(program, index, state);
+    xr_free(state);
+    return acyclic ? XR_BACKEND_OK : XR_BACKEND_UNSUPPORTED_OPERATION;
+}
+
 XrBackendOptions xr_backend_default_options(void) {
     return (XrBackendOptions) {.schema_version = XR_BACKEND_IR_SCHEMA_VERSION,
                                .optimization_policy = XR_BACKEND_OPTIMIZATION_PORTABLE,
@@ -348,7 +420,9 @@ static bool lower_block(const XrValidatedBlock *source, XrBackendBlock *destinat
     return true;
 }
 
-static bool lower_function(const XrValidatedFunction *source, XrBackendFunction *destination) {
+static bool lower_function(const XrValidatedProgram *program,
+                           const XrValidatedFunction *source,
+                           XrBackendFunction *destination) {
     destination->parameter_count = source->parameter_count;
     destination->result_type_id = source->result_type_id;
     destination->result_ownership = source->result_ownership;
@@ -405,8 +479,9 @@ static bool lower_function(const XrValidatedFunction *source, XrBackendFunction 
         if (!destination->value_representations)
             return false;
         for (uint32_t value = 0; value < source->value_count; ++value) {
-            if (!xr_backend_representation_for_type(source->value_types[value],
-                                                    &destination->value_representations[value]))
+            if (!xr_backend_representation_for_program_type(
+                    program, source->value_types[value],
+                    &destination->value_representations[value]))
                 return false;
         }
     }
@@ -574,6 +649,12 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INVALID_INPUT;
     }
+    XrBackendStatus class_status = class_storage_status(program);
+    if (class_status != XR_BACKEND_OK) {
+        xr_backend_set_diagnostic(diagnostic_out, class_status,
+                                  XR_CORE_OP_CORE_CLASS_CONSTRUCT, 0u, 0u, 0u);
+        return class_status;
+    }
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     XrExecutionId execution_id;
     if (!machine || !xr_execution_id_compute(program, profile, &execution_id)) {
@@ -645,7 +726,14 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
                  ++instruction) {
                 uint16_t operation_id =
                     source->blocks[block].instructions[instruction].operation_id;
-                if (!operation_is_supported(operation_id)) {
+                const XrValidatedInstruction *operation =
+                    &source->blocks[block].instructions[instruction];
+                const XrValidatedType *result_type =
+                    xr_validated_program_type(program, operation->result_type_id);
+                bool deferred_class_copy = operation_id == XR_CORE_OP_CORE_OWNER_COPY &&
+                                           result_type &&
+                                           result_type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+                if (!operation_is_supported(operation_id) || deferred_class_copy) {
                     xr_backend_ir_free(ir);
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION,
                                               operation_id, function, block, instruction);
@@ -654,7 +742,8 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
             }
         }
         if (blocks > options->max_blocks || instructions > options->max_instructions ||
-            values > options->max_values || !lower_function(source, &ir->functions[function])) {
+            values > options->max_values ||
+            !lower_function(program, source, &ir->functions[function])) {
             xr_backend_ir_free(ir);
             XrBackendStatus status = blocks > options->max_blocks ||
                                              instructions > options->max_instructions ||

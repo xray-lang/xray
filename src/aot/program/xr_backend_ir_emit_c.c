@@ -166,6 +166,20 @@ static bool emit_allocation_profile_abi(CBuffer *buffer, const XrBackendIR *ir) 
     return append_text(buffer, "\n");
 }
 
+static bool type_is_class_reference(const XrBackendIR *ir, uint16_t type_id) {
+    const XrValidatedType *type =
+        ir ? xr_validated_program_type(ir->program, type_id) : NULL;
+    return type && type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+}
+
+static bool parameter_is_class_receiver(const XrBackendIR *ir,
+                                        const XrBackendFunction *function,
+                                        uint32_t parameter) {
+    return function && parameter == 0u && function->parameter_count != 0u &&
+           function->parameter_modes[0] == XR_PARAM_REF &&
+           type_is_class_reference(ir, function->parameter_types[0]);
+}
+
 static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_t index,
                                  uint8_t *state) {
     if (state[index] == 2u)
@@ -177,6 +191,7 @@ static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_
     for (uint32_t field = 0; field < type->field_count; ++field) {
         uint16_t child = type->field_types[field];
         if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+            !type_is_class_reference(ir, child) &&
             !emit_type_definition(buffer, ir, child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, state))
             return false;
     }
@@ -184,9 +199,28 @@ static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_
         for (uint32_t field = 0; field < type->variants[variant].payload_count; ++field) {
             uint16_t child = type->variants[variant].payload_types[field];
             if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+                !type_is_class_reference(ir, child) &&
                 !emit_type_definition(buffer, ir, child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, state))
                 return false;
         }
+    }
+    if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+        if (!append_format(buffer,
+                           "struct XrAotClass%u {\n"
+                           "    uint32_t owners;\n"
+                           "    uint64_t identity;\n",
+                           type->type_id))
+            return false;
+        for (uint32_t field = 0; field < type->field_count; ++field) {
+            char storage[32];
+            const char *name = type_c_name(type->field_types[field], storage);
+            if (!name || !append_format(buffer, "    %s f%u;\n", name, field))
+                return false;
+        }
+        if (!append_text(buffer, "};\n\n"))
+            return false;
+        state[index] = 2u;
+        return true;
     }
     if (!append_format(buffer, "struct XrAotType%u {\n", type->type_id))
         return false;
@@ -241,8 +275,16 @@ static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_
 
 static bool emit_type_definitions(CBuffer *buffer, const XrBackendIR *ir) {
     for (uint32_t index = 0; index < ir->program->type_count; ++index) {
-        if (!append_format(buffer, "typedef struct XrAotType%u XrAotType%u;\n",
-                           ir->program->types[index].type_id, ir->program->types[index].type_id))
+        const XrValidatedType *type = &ir->program->types[index];
+        bool emitted = type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE
+                           ? append_format(buffer,
+                                           "typedef struct XrAotClass%u XrAotClass%u;\n"
+                                           "typedef XrAotClass%u *XrAotType%u;\n",
+                                           type->type_id, type->type_id, type->type_id,
+                                           type->type_id)
+                           : append_format(buffer, "typedef struct XrAotType%u XrAotType%u;\n",
+                                           type->type_id, type->type_id);
+        if (!emitted)
             return false;
     }
     if (ir->program->type_count != 0u && !append_text(buffer, "\n"))
@@ -257,6 +299,8 @@ static bool emit_type_definitions(CBuffer *buffer, const XrBackendIR *ir) {
     xr_free(state);
     return emitted;
 }
+
+#include "xr_backend_ir_emit_class.inc.c"
 
 static const char *outcome_field(uint16_t type_id) {
     switch (type_id) {
@@ -295,11 +339,18 @@ static bool conformance_id(const XrValidatedProgram *program, uint16_t concrete_
     return false;
 }
 
+static bool has_class_reference_types(const XrBackendIR *ir) {
+    for (uint32_t index = 0u; ir && index < ir->program->type_count; ++index)
+        if (ir->program->types[index].kind == XR_CORE_IR_TYPE_CLASS_REFERENCE)
+            return true;
+    return false;
+}
+
 static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, bool *arena,
                          bool *output) {
     *checked = false;
     *wrapping = false;
-    *arena = false;
+    *arena = has_class_reference_types(ir);
     *output = false;
     for (uint32_t function = 0; function < ir->function_count; ++function) {
         const XrBackendFunction *fn = &ir->functions[function];
@@ -385,6 +436,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     bool arena = false;
     bool output = false;
     scan_helpers(ir, &checked, &wrapping, &arena, &output);
+    bool classes = has_class_reference_types(ir);
     XrAotHostedClockBindings clock = hosted_clock_bindings(ir);
     XrAotHostedPipeBindings pipe = hosted_pipe_bindings(ir);
     bool host_clock = standalone_main &&
@@ -433,11 +485,12 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                     "requirement, uint32_t operation, const uint8_t *bytes, size_t size);\n\n"))
         return false;
     if (arena) {
-        if (!emit_allocation_profile_abi(buffer, ir) ||
+        if ((classes && !emit_class_lifecycle_abi(buffer)) ||
+            !emit_allocation_profile_abi(buffer, ir) ||
             !append_text(buffer,
                          "typedef union XrAotAllocation XrAotAllocation;\n"
                          "union XrAotAllocation {\n"
-                         "    struct { XrAotAllocation *next; } link;\n"
+                         "    struct { XrAotAllocation *next; XrAotAllocation *previous; } link;\n"
                          "    uint8_t align_u8;\n"
                          "    uint16_t align_u16;\n"
                          "    uint32_t align_u32;\n"
@@ -452,7 +505,13 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                          "    XrAotProviderCallBoolI64Unary provider_call_bool_i64_unary;\n"
                          "    XrAotProviderCallOptionalI64PairNullary "
                          "provider_call_optional_i64_pair_nullary;\n"
-                         "    XrAotProviderOutputWrite provider_output_write;\n"
+                         "    XrAotProviderOutputWrite provider_output_write;\n") ||
+            (classes &&
+             !append_text(buffer,
+                          "    void *lifecycle_context;\n"
+                          "    XrAotLifecycleEventHandler lifecycle_event;\n"
+                          "    uint64_t next_class_identity;\n")) ||
+            !append_text(buffer,
                          "} XrAotContext;\n\n"
                          "static inline void *xr_aot_alloc(XrAotContext *context, size_t size) "
                          "{\n"
@@ -461,10 +520,32 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                          "    XrAotAllocation *allocation = "
                          "(XrAotAllocation *)malloc(sizeof(XrAotAllocation) + size);\n"
                          "    if (!allocation) return NULL;\n"
+                         "    allocation->link.previous = NULL;\n"
                          "    allocation->link.next = context->allocations;\n"
+                         "    if (context->allocations) "
+                         "context->allocations->link.previous = allocation;\n"
                          "    context->allocations = allocation;\n"
                          "    return (void *)(allocation + 1);\n"
                          "}\n"
+                         "static inline void xr_aot_free(XrAotContext *context, void *payload) "
+                         "{\n"
+                         "    if (!context || !payload) return;\n"
+                         "    XrAotAllocation *allocation = ((XrAotAllocation *)payload) - 1;\n"
+                         "    if (allocation->link.previous) "
+                         "allocation->link.previous->link.next = allocation->link.next;\n"
+                         "    else context->allocations = allocation->link.next;\n"
+                         "    if (allocation->link.next) "
+                         "allocation->link.next->link.previous = allocation->link.previous;\n"
+                         "    free(allocation);\n"
+                         "}\n") ||
+            (classes &&
+             !append_text(buffer,
+                          "static inline void xr_aot_lifecycle_emit(\n"
+                          "    XrAotContext *context, XrAotLifecycleEvent event) {\n"
+                          "    if (context && context->lifecycle_event)\n"
+                          "        context->lifecycle_event(context->lifecycle_context, &event);\n"
+                          "}\n")) ||
+            !append_text(buffer,
                          "static inline void xr_aot_context_destroy(XrAotContext *context) "
                          "{\n"
                          "    XrAotAllocation *allocation = context->allocations;\n"
@@ -959,7 +1040,10 @@ static bool emit_coroutine_frame_definition(CBuffer *buffer, const XrBackendIR *
     for (uint32_t parameter = 0u; parameter < function->parameter_count; ++parameter) {
         char storage[32];
         const char *type = type_c_name(function->parameter_types[parameter], storage);
-        const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF ? " *" : "";
+        const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF &&
+                                      !parameter_is_class_receiver(ir, function, parameter)
+                                  ? " *"
+                                  : "";
         if (!type || !append_format(buffer, "    %s%s parameter_%u;\n", type, pointer, parameter))
             return false;
     }
@@ -1198,7 +1282,10 @@ static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *fu
         const char *name = type_c_name(function->parameter_types[parameter], storage);
         if (!name)
             return false;
-        const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF ? " *" : "";
+        const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF &&
+                                      !parameter_is_class_receiver(ir, function, parameter)
+                                  ? " *"
+                                  : "";
         if (!append_format(buffer, ", %s%s p%u", name, pointer, parameter))
             return false;
     }
@@ -1396,7 +1483,11 @@ static bool emit_witness_call_cases(CBuffer *buffer, const XrBackendIR *ir,
                            conformance_id, receiver_value, conformance->implementor_type_id,
                            instruction_id, callee_id))
             return false;
-        if (callee->parameter_modes[0] == XR_PARAM_REF) {
+        if (callee->parameter_modes[0] == XR_PARAM_REF &&
+            type_is_class_reference(ir, conformance->implementor_type_id)) {
+            if (!append_format(buffer, "*(const %s *)v%u.data", receiver_type, receiver_value))
+                return false;
+        } else if (callee->parameter_modes[0] == XR_PARAM_REF) {
             if (!append_format(buffer, "(%s *)v%u.data", receiver_type, receiver_value))
                 return false;
         } else if (!append_format(buffer, "*(const %s *)v%u.data", receiver_type, receiver_value)) {
@@ -2496,12 +2587,25 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  instruction->result_id, instruction->result_type_id, target_id,
                                  instruction->result_id);
         }
+        case XR_CORE_OP_CORE_CLASS_CONSTRUCT:
+            return emit_class_construct(buffer, instruction);
+        case XR_CORE_OP_CORE_CLASS_SHARE:
+            return emit_class_share(buffer, instruction);
+        case XR_CORE_OP_CORE_CLASS_FIELD_LOAD:
+            return emit_class_field_load(buffer, ir, function, instruction);
+        case XR_CORE_OP_CORE_CLASS_FIELD_PLACE:
+            return emit_class_field_place(buffer, ir, function, instruction);
+        case XR_CORE_OP_CORE_PLACE_EXCHANGE:
+            return emit_place_exchange(buffer, ir, function, instruction);
         case XR_CORE_OP_CORE_OWNER_COPY:
             return emit_owner_copy(buffer, ir, instruction);
         case XR_CORE_OP_CORE_OWNER_MOVE:
             return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
                                  instruction->operands[0]);
         case XR_CORE_OP_CORE_OWNER_DROP:
+            if (type_is_class_reference(
+                    ir, function->value_types[instruction->operands[0]]))
+                return emit_class_owner_drop(buffer, function, instruction);
             return append_format(buffer, "        (void)v%u;\n", instruction->operands[0]);
         case XR_CORE_OP_CORE_PLACE_LOCAL:
             return append_format(buffer, "        v%u = &v%u;\n", instruction->result_id,
@@ -3173,6 +3277,8 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
         }
     }
     bool emitted = emit_prelude(&buffer, ir, standalone_main);
+    if (emitted && has_class_reference_types(ir))
+        emitted = emit_class_drop_helpers(&buffer, ir);
     emitted = emitted && emit_copy_helpers(&buffer, ir);
     emitted = emitted && emit_coroutine_frames(&buffer, ir);
     for (uint32_t function = 0; emitted && function < ir->function_count; ++function)
