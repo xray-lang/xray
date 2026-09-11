@@ -329,11 +329,22 @@ static void require_class_reference_oracle(const XrValidatedProgram *program) {
     xr_reference_outcome_dispose(&outcome);
 }
 
+static bool append_c_string_literal(FILE *output, const char *text) {
+    if (!output || !text || fputc('"', output) == EOF)
+        return false;
+    for (const unsigned char *cursor = (const unsigned char *) text; *cursor; ++cursor) {
+        if ((*cursor == '"' || *cursor == '\\') && fputc('\\', output) == EOF)
+            return false;
+        if (fputc(*cursor, output) == EOF)
+            return false;
+    }
+    return fputc('"', output) != EOF;
+}
+
 static bool append_class_native_harness(FILE *output, uint32_t entry_function,
                                         uint16_t class_type_id) {
-    return fprintf(
-               output,
-               "\n#include <stdio.h>\n"
+    if (fprintf(output,
+                "\n#include <stdio.h>\n"
                "typedef struct XrH2NativeLog { XrAotLifecycleEvent events[9]; "
                "uint32_t count; } XrH2NativeLog;\n"
                "static void xr_h2_native_event(void *opaque, const XrAotLifecycleEvent *event) "
@@ -372,10 +383,25 @@ static bool append_class_native_harness(FILE *output, uint32_t entry_function,
                "log.events[3].old_i64 != INT64_C(7) || "
                "log.events[3].replacement_i64 != INT64_C(42)) return 15;\n"
                "    xr_aot_context_destroy(&context);\n"
-               "    puts(\"%s\");\n"
+               "    puts(",
+                entry_function, class_type_id) <= 0 ||
+        !append_c_string_literal(output, XR_H2_AOT_NATIVE_RECORD))
+        return false;
+    return fprintf(output,
+               ");\n"
                "    return 0;\n"
-               "}\n",
-               entry_function, class_type_id, XR_H2_AOT_NATIVE_RECORD) > 0;
+               "}\n") > 0;
+}
+
+static void require_native_record_c_literal_escaping(void) {
+    FILE *output = tmpfile();
+    REQUIRE(output != NULL);
+    REQUIRE(append_c_string_literal(output, "{\"schema\":1}"));
+    REQUIRE(fflush(output) == 0 && fseek(output, 0, SEEK_SET) == 0);
+    char bytes[32] = {0};
+    REQUIRE(fread(bytes, 1u, sizeof(bytes) - 1u, output) == strlen("\"{\\\"schema\\\":1}\""));
+    REQUIRE(strcmp(bytes, "\"{\\\"schema\\\":1}\"") == 0);
+    REQUIRE(fclose(output) == 0);
 }
 
 static bool write_class_native_source(const char *path) {
