@@ -661,6 +661,116 @@ static void assert_aot_fixture_backend_contract(const XrValidatedProgram *progra
     xr_backend_ir_free(ir);
 }
 
+static void assert_vm_panic_cleanup_policy(XrInstance *instance, uint32_t entry,
+                                           PipeCloseSequenceProbe *probe,
+                                           XrVmDecodePolicy policy) {
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    options.decode_policy = policy;
+    XrVmCodeDiagnostic diagnostic;
+    XrVmCode *code = NULL;
+    ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+    ASSERT_NOT_NULL(code);
+    ASSERT_EQ_INT(diagnostic.status, XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_decode_policy(code), policy);
+
+    probe->calls = 0u;
+    XrVmOutcome outcome = xr_vm_code_execute(code, instance, entry, NULL, 0u);
+    const int outcome_kind = (int)outcome.kind;
+    const int panic_kind = (int)outcome.panic_value.kind;
+    const uint32_t panic_info = outcome.panic_value.as.panic_info;
+    const uint32_t close_calls = probe->calls;
+    xr_vm_outcome_dispose(&outcome);
+    xr_vm_code_free(code);
+
+    if (outcome_kind != XR_VM_OUTCOME_PANIC || panic_kind != XR_VM_VALUE_PANIC_INFO ||
+        panic_info != XR_ASSERTION_FAILURE_CONDITION_FALSE || close_calls != 2u) {
+        fprintf(stderr,
+                "VM panic cleanup mismatch: policy=%d outcome=%d panic_kind=%d panic_info=%u "
+                "close_calls=%u\n",
+                (int)policy, outcome_kind, panic_kind, (unsigned)panic_info,
+                (unsigned)close_calls);
+    }
+    ASSERT_EQ_INT(outcome_kind, XR_VM_OUTCOME_PANIC);
+    ASSERT_EQ_INT(panic_kind, XR_VM_VALUE_PANIC_INFO);
+    ASSERT_EQ_UINT(panic_info, XR_ASSERTION_FAILURE_CONDITION_FALSE);
+    ASSERT_EQ_UINT(close_calls, 2u);
+}
+
+static void assert_vm_panic_cleanup(XrInstance *instance, uint32_t entry,
+                                    PipeCloseSequenceProbe *probe) {
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t index = 0u; index < sizeof(policies) / sizeof(policies[0]); ++index) {
+        assert_vm_panic_cleanup_policy(instance, entry, probe, policies[index]);
+    }
+}
+
+static void assert_aot_panic_cleanup(const XrValidatedProgram *program,
+                                     const XrTargetProfile *profile, uint32_t entry,
+                                     XrSourceFixtureId fixture) {
+    ASSERT_LT(entry, program->function_count);
+    ASSERT_EQ_UINT(program->functions[entry].panic_type_id, XR_CORE_TYPE_PANIC_INFO);
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic diagnostic;
+    XrBackendIR *ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic), XR_BACKEND_OK);
+    ASSERT_NOT_NULL(ir);
+    ASSERT_EQ_INT(diagnostic.status, XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(ir, &diagnostic));
+
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_NOT_NULL(generated.bytes);
+    ASSERT_NOT_NULL(repeated.bytes);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NULL(strstr(generated.bytes, "int main(void)"));
+
+    const char *output_path = source_fixture_output_path(fixture);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_TRUE(
+            fprintf(output,
+                    "\ntypedef struct XrPanicCleanupProbe {\n"
+                    "    uint32_t close_calls;\n"
+                    "} XrPanicCleanupProbe;\n\n"
+                    "static int xr_test_pipe_close(void *opaque, uint32_t requirement, \n"
+                    "                              uint32_t operation, int64_t handle, \n"
+                    "                              uint8_t *result) {\n"
+                    "    static const int64_t expected[] = {INT64_C(2147483646), "
+                    "INT64_C(2147483647)};\n"
+                    "    XrPanicCleanupProbe *probe = (XrPanicCleanupProbe *)opaque;\n"
+                    "    if (!probe || !result || requirement != UINT32_C(0) || \n"
+                    "        operation != UINT32_C(0) || probe->close_calls >= UINT32_C(2) || \n"
+                    "        handle != expected[probe->close_calls]) return 1;\n"
+                    "    *result = UINT8_C(1);\n"
+                    "    ++probe->close_calls;\n"
+                    "    return 0;\n"
+                    "}\n\n"
+                    "int main(void) {\n"
+                    "    XrPanicCleanupProbe probe = {0};\n"
+                    "    XrAotContext context = {.provider_context = &probe, \n"
+                    "                            .provider_call_bool_i64_unary = "
+                    "xr_test_pipe_close};\n"
+                    "    uint32_t panic = UINT32_C(0);\n"
+                    "    XrAotOutcome outcome = xr_aot_fn_%u(&context, &panic);\n"
+                    "    if (outcome.kind != UINT32_C(3)) return 241;\n"
+                    "    if (panic != UINT32_C(%u)) return 242;\n"
+                    "    if (probe.close_calls != UINT32_C(2)) return 243;\n"
+                    "    xr_aot_context_destroy(&context);\n"
+                    "    return 173;\n"
+                    "}\n",
+                    entry, (unsigned) XR_ASSERTION_FAILURE_CONDITION_FALSE) > 0);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+}
+
 static uint32_t program_operation_successor_count(const XrValidatedProgram *program,
                                                   uint16_t operation_id, uint32_t successor_count) {
     uint32_t count = 0u;
@@ -4932,17 +5042,15 @@ TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors) {
 
     XrProgramProviderRequirementView requirement = {0};
     ASSERT_TRUE(xr_validated_program_provider_requirement(product.program, 0u, &requirement));
-    PipeProviderProbe probe = {
-        .read_handle = 2147483646,
-        .write_handle = 2147483647,
-        .close_results = {true, true},
-    };
+    static const int64_t expected_handles[] = {INT64_C(2147483646), INT64_C(2147483647)};
+    PipeCloseSequenceProbe probe;
+    pipe_close_sequence_reset(&probe, expected_handles, 2u);
     XrProviderOperationBinding operation = {
         .operation_id = requirement.operation_ids[0],
         .trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
         .context = &probe,
     };
-    operation.entry.bool_i64_unary = pipe_close_provider_probe;
+    operation.entry.bool_i64_unary = pipe_close_sequence_probe;
     XrProviderBinding provider = {
         .contract_id = requirement.contract_id,
         .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL,
@@ -4969,6 +5077,7 @@ TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors) {
     ASSERT_NOT_NULL(instance);
     uint32_t entry = xr_validated_program_entry_function(product.program);
 
+    pipe_close_sequence_reset(&probe, expected_handles, 2u);
     XrExecutionLease lease = {0};
     ASSERT_TRUE(xr_execution_instance_acquire(instance, &lease));
     XrReferenceProviderBinding reference_binding = {
@@ -4980,17 +5089,13 @@ TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors) {
     ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_PANIC);
     ASSERT_EQ_INT(reference.panic_value.kind, XR_REFERENCE_VALUE_PANIC_INFO);
     ASSERT_EQ_UINT(reference.panic_value.as.panic_info, XR_ASSERTION_FAILURE_CONDITION_FALSE);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
+    ASSERT_EQ_UINT(probe.calls, 2u);
     xr_reference_outcome_dispose(&reference);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
-    PipeProviderProbe reference_probe = probe;
-    assert_vm_rejects_inactive_operation(instance, product.program,
-                                         XR_CORE_OP_CORE_CLASS_FIELD_LOAD);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_rejects_inactive_operation(product.program, profile,
-                                          XR_CORE_OP_CORE_CLASS_FIELD_LOAD);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
+    assert_vm_panic_cleanup(instance, entry, &probe);
+    assert_aot_panic_cleanup(product.program, profile, entry,
+                             XR_SOURCE_FIXTURE_PANIC_DEFER_CLEANUP);
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
