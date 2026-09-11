@@ -4369,11 +4369,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -4436,11 +4436,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -4505,11 +4505,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -4574,11 +4574,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -4643,11 +4643,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }

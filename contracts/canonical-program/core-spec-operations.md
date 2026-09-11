@@ -64,11 +64,11 @@ Unknown feature IDs, operation IDs, type rules, and arithmetic kinds fail closed
 | 138 | `core.coroutine.call.sealed` | coroutine-call-terminator | `(P..., suspend-edge-values..., cancel-edge-values..., trap-edge-values...) -> void` | call, cancel, suspend | scheduler-suspension | logical-child-coroutine-control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
 | 140 | `core.coroutine.suspend` | coroutine-terminator | `(request-values..., suspend-edge-values..., cancel-edge-values...) -> void` | cancel, suspend | scheduler-suspension | logical-coroutine-suspension-request | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
 | 141 | `core.coroutine.call.indirect` | coroutine-call-terminator | `(C, P..., suspend-edge-values..., cancel-edge-values..., trap-edge-values...) -> void` | call, cancel, suspend | scheduler-suspension | logical-dynamic-child-coroutine-control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
-| 142 | `core.class.construct` | class-reference | `(T...) -> C` | - | none | logical-class-reference | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=NOT_YET_ACTIVE, aot=NOT_YET_ACTIVE |
-| 143 | `core.class.share` | class-reference | `(C) -> C` | - | none | logical-class-alias | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=NOT_YET_ACTIVE, aot=NOT_YET_ACTIVE |
-| 144 | `core.class.field_load` | class-reference | `(C) -> T` | - | none | logical-class-field-read | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=NOT_YET_ACTIVE, aot=NOT_YET_ACTIVE |
-| 145 | `core.class.field_place` | class-reference | `(C) -> T` | - | none | logical-class-field-place | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=NOT_YET_ACTIVE, aot=NOT_YET_ACTIVE |
-| 146 | `core.place.exchange` | place | `(T, T) -> T` | - | none | logical-atomic-place-exchange | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=NOT_YET_ACTIVE, aot=NOT_YET_ACTIVE |
+| 142 | `core.class.construct` | class-reference | `(T...) -> C` | - | none | logical-class-reference | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 143 | `core.class.share` | class-reference | `(C) -> C` | - | none | logical-class-alias | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 144 | `core.class.field_load` | class-reference | `(C) -> T` | - | none | logical-class-field-read | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 145 | `core.class.field_place` | class-reference | `(C) -> T` | - | none | logical-class-field-place | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 146 | `core.place.exchange` | place | `(T, T) -> T` | - | none | logical-atomic-place-exchange | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
 
 ## Normative arithmetic rules
 

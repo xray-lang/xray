@@ -485,51 +485,45 @@
     {
       "stable_id": 142,
       "spelling": "core.class.construct",
-      "vm": "NOT_YET_ACTIVE",
-      "baseline_view": "NOT_YET_ACTIVE",
-      "fixed_row_view": "NOT_YET_ACTIVE",
-      "differential_oracle": null
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
     },
     {
       "stable_id": 143,
       "spelling": "core.class.share",
-      "vm": "NOT_YET_ACTIVE",
-      "baseline_view": "NOT_YET_ACTIVE",
-      "fixed_row_view": "NOT_YET_ACTIVE",
-      "differential_oracle": null
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
     },
     {
       "stable_id": 144,
       "spelling": "core.class.field_load",
-      "vm": "NOT_YET_ACTIVE",
-      "baseline_view": "NOT_YET_ACTIVE",
-      "fixed_row_view": "NOT_YET_ACTIVE",
-      "differential_oracle": null
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
     },
     {
       "stable_id": 145,
       "spelling": "core.class.field_place",
-      "vm": "NOT_YET_ACTIVE",
-      "baseline_view": "NOT_YET_ACTIVE",
-      "fixed_row_view": "NOT_YET_ACTIVE",
-      "differential_oracle": null
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
     },
     {
       "stable_id": 146,
       "spelling": "core.place.exchange",
-      "vm": "NOT_YET_ACTIVE",
-      "baseline_view": "NOT_YET_ACTIVE",
-      "fixed_row_view": "NOT_YET_ACTIVE",
-      "differential_oracle": null
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
     }
   ],
-  "incomplete_operations": [
-    "core.class.construct",
-    "core.class.share",
-    "core.class.field_load",
-    "core.class.field_place",
-    "core.place.exchange"
-  ],
+  "incomplete_operations": [],
   "profile_matrix": [
     "lp64-x86_64-windows",
     "ilp32-wasm32-wasi"

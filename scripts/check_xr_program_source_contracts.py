@@ -683,7 +683,7 @@ def validate(root: Path) -> None:
            for operation in canonical_source_output},
         **{operation: "COMPLETE_W7_WAVE5_BOOLEAN" for operation in canonical_boolean},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
-        **{operation: "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE"
+        **{operation: "COMPLETE_H2_CLASS_REFERENCE_EXECUTION"
            for operation in program_reference_class_contracts},
     }
     require(set(expected_status) == registry_ids,
@@ -692,11 +692,13 @@ def validate(root: Path) -> None:
         require(rows[operation]["status"] == status,
                 f"operation has wrong source status: {operation}: "
                 f"expected {status}, got {rows[operation]['status']}")
-        if status == "PROGRAM_REFERENCE_COMPLETE_BACKENDS_NOT_YET_ACTIVE":
-            require(rows[operation].get("vm_implementation", "").startswith("NOT_YET_ACTIVE"),
-                    f"operation VM status text is not fail-closed: {operation}")
-            require(rows[operation].get("aot_lowering", "").startswith("NOT_YET_ACTIVE"),
-                    f"operation AOT status text is not fail-closed: {operation}")
+        if status == "COMPLETE_H2_CLASS_REFERENCE_EXECUTION":
+            require(not rows[operation].get("vm_implementation", "").startswith(
+                        "NOT_YET_ACTIVE"),
+                    f"operation VM implementation remains inactive: {operation}")
+            require(not rows[operation].get("aot_lowering", "").startswith(
+                        "NOT_YET_ACTIVE"),
+                    f"operation AOT lowering remains inactive: {operation}")
         evidence = rows[operation].get("evidence")
         if status == "FROZEN_WALKING_SKELETON":
             require(evidence == [], f"frozen operation gained evidence: {operation}")
@@ -707,13 +709,6 @@ def validate(root: Path) -> None:
             require(isinstance(relative, str) and (root / relative).is_file(),
                     f"active operation has missing evidence: {operation}: {relative}")
 
-    expected_incomplete = [
-        "core.class.construct",
-        "core.class.share",
-        "core.class.field_load",
-        "core.class.field_place",
-        "core.place.exchange",
-    ]
     semantic_stage = matrix.get("semantic_admission_stage")
     require(isinstance(semantic_stage, dict) and
             semantic_stage.get("status") == "COMPLETE",
@@ -722,10 +717,10 @@ def validate(root: Path) -> None:
             "semantic_admission_stage incomplete operation set must be empty")
     for stage in ("vm_stage", "aot_stage"):
         stage_row = matrix.get(stage)
-        require(isinstance(stage_row, dict) and stage_row.get("status") == "OPEN",
-                f"{stage} must remain OPEN while backend operations are inactive")
-        require(stage_row.get("incomplete_operations") == expected_incomplete,
-                f"{stage} incomplete operation set drifted")
+        require(isinstance(stage_row, dict) and stage_row.get("status") == "COMPLETE",
+                f"{stage} must be COMPLETE after class-reference activation")
+        require(stage_row.get("incomplete_operations") == [],
+                f"{stage} incomplete operation set must be empty")
 
 
 def self_test(root: Path) -> None:
@@ -856,12 +851,13 @@ def self_test(root: Path) -> None:
             ("semantic admission stage",
              lambda value: value["semantic_admission_stage"].update(status="OPEN")),
             ("VM stage",
-             lambda value: value["vm_stage"].update(status="COMPLETE")),
+             lambda value: value["vm_stage"].update(status="OPEN")),
             ("AOT incomplete set",
-             lambda value: value["aot_stage"].update(incomplete_operations=[])),
+             lambda value: value["aot_stage"].update(
+                 incomplete_operations=["core.class.construct"])),
             ("VM operation status text",
              lambda value: value["operations"][class_operation_index].update(
-                 vm_implementation="COMPLETE")),
+                 vm_implementation="NOT_YET_ACTIVE; no handler exists")),
         )
         for label, mutate in matrix_mutations:
             matrix_value = json.loads(original_matrix)
