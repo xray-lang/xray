@@ -687,8 +687,7 @@ static XrValidatedProgram *build_class_trivial_snapshot_program(void) {
                                   sizeof(constants) / sizeof(constants[0]), &function, 1u);
 }
 
-static XrValidatedProgram *build_class_error_program(bool aggregate_error,
-                                                     bool propagated_error) {
+static XrValidatedProgram *build_propagated_class_error_program(bool aggregate_error) {
     enum {
         CLASS_TYPE = 63,
         AGGREGATE_TYPE = 64,
@@ -718,13 +717,58 @@ static XrValidatedProgram *build_class_error_program(bool aggregate_error,
         .kind = XR_CORE_IR_CONSTANT_I64,
         .value.i64 = 7,
     };
+    uint16_t error_type = aggregate_error ? AGGREGATE_TYPE : CLASS_TYPE;
+    XrCoreIrKey error_argument = fixture_key("vm-class-error:argument");
+    XrCoreIrKey error_operand[] = {error_argument};
+    XrCoreIrValueInput error_block_argument = {
+        .key = error_argument,
+        .type_id = error_type,
+        .ownership = XR_CORE_IR_OWNER,
+    };
+    XrCoreIrInstructionInput error_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = error_operand,
+         .operand_count = 1u},
+        {
+        .operation_id = XR_CORE_OP_CORE_ERROR_PUBLISH,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = error_operand,
+        .operand_count = 1u,
+        },
+    };
+
+    XrCoreIrKey error_function_key = fixture_key("vm-class-error:function:error");
+    XrCoreIrKey error_block_key = fixture_key("vm-class-error:block:error");
+    XrCoreIrBlockInput error_block = {
+        .key = error_block_key,
+        .arguments = &error_block_argument,
+        .argument_count = 1u,
+        .instructions = error_instructions,
+        .instruction_count = sizeof(error_instructions) / sizeof(error_instructions[0]),
+    };
+    uint16_t error_parameter = error_type;
+    XrParamMode error_parameter_mode = XR_PARAM_MOVE;
+    XrCoreIrFunctionInput functions[2] = {
+        {.key = error_function_key,
+         .parameter_types = &error_parameter,
+         .parameter_modes = &error_parameter_mode,
+         .parameter_count = 1u,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .error_type_id = error_type,
+         .effect_mask = XR_CORE_EFFECT_ERROR,
+         .entry_block = error_block_key,
+         .blocks = &error_block,
+         .block_count = 1u},
+    };
+
     XrCoreIrKey scalar = fixture_key("vm-class-error:scalar");
     XrCoreIrKey object = fixture_key("vm-class-error:object");
     XrCoreIrKey aggregate = fixture_key("vm-class-error:aggregate");
     XrCoreIrKey scalar_operand[] = {scalar};
     XrCoreIrKey object_operand[] = {object};
     XrCoreIrKey aggregate_operand[] = {aggregate};
-    XrCoreIrInstructionInput error_instructions[4] = {
+    XrCoreIrInstructionInput entry_instructions[5] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = scalar,
          .result_type_id = XR_CORE_TYPE_I64,
@@ -737,9 +781,9 @@ static XrValidatedProgram *build_class_error_program(bool aggregate_error,
          .operands = scalar_operand,
          .operand_count = 1u},
     };
-    uint32_t error_instruction_count = 2u;
+    uint32_t entry_instruction_count = 2u;
     if (aggregate_error) {
-        error_instructions[error_instruction_count++] = (XrCoreIrInstructionInput) {
+        entry_instructions[entry_instruction_count++] = (XrCoreIrInstructionInput) {
             .operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
             .result = aggregate,
             .result_type_id = AGGREGATE_TYPE,
@@ -748,60 +792,37 @@ static XrValidatedProgram *build_class_error_program(bool aggregate_error,
             .operand_count = 1u,
         };
     }
-    error_instructions[error_instruction_count++] = (XrCoreIrInstructionInput) {
-        .operation_id = XR_CORE_OP_CORE_ERROR_PUBLISH,
+    entry_instructions[entry_instruction_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
         .result_type_id = XR_CORE_TYPE_VOID,
         .operands = aggregate_error ? aggregate_operand : object_operand,
         .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
+        .immediate.key = error_function_key,
     };
-
-    XrCoreIrKey error_function_key = fixture_key("vm-class-error:function:error");
-    XrCoreIrKey error_block_key = fixture_key("vm-class-error:block:error");
-    XrCoreIrBlockInput error_block = {
-        .key = error_block_key,
-        .instructions = error_instructions,
-        .instruction_count = error_instruction_count,
+    entry_instructions[entry_instruction_count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
     };
-    uint16_t error_type = aggregate_error ? AGGREGATE_TYPE : CLASS_TYPE;
-    XrCoreIrFunctionInput functions[2] = {
-        {.key = error_function_key,
-         .result_type_id = XR_CORE_TYPE_VOID,
-         .error_type_id = error_type,
-         .effect_mask = XR_CORE_EFFECT_ERROR,
-         .entry_block = error_block_key,
-         .blocks = &error_block,
-         .block_count = 1u,
-         .flags = propagated_error ? 0u : XR_PROGRAM_FUNCTION_ENTRY},
-    };
-    uint32_t function_count = 1u;
     XrCoreIrKey entry_block_key = fixture_key("vm-class-error:block:entry");
     XrCoreIrKey entry_function_key = fixture_key("vm-class-error:function:entry");
-    XrCoreIrInstructionInput entry_instructions[] = {
-        {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
-         .result_type_id = XR_CORE_TYPE_VOID,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
-         .immediate.key = error_function_key},
-        {.operation_id = XR_CORE_OP_CORE_RETURN, .result_type_id = XR_CORE_TYPE_VOID},
-    };
     XrCoreIrBlockInput entry_block = {
         .key = entry_block_key,
         .instructions = entry_instructions,
-        .instruction_count = sizeof(entry_instructions) / sizeof(entry_instructions[0]),
+        .instruction_count = entry_instruction_count,
     };
-    if (propagated_error) {
-        functions[function_count++] = (XrCoreIrFunctionInput) {
-            .key = entry_function_key,
-            .result_type_id = XR_CORE_TYPE_VOID,
-            .error_type_id = error_type,
-            .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_ERROR,
-            .entry_block = entry_block_key,
-            .blocks = &entry_block,
-            .block_count = 1u,
-            .flags = XR_PROGRAM_FUNCTION_ENTRY,
-        };
-    }
+    functions[1] = (XrCoreIrFunctionInput) {
+        .key = entry_function_key,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .error_type_id = error_type,
+        .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_ERROR,
+        .entry_block = entry_block_key,
+        .blocks = &entry_block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
     return validate_typed_fixture(types, aggregate_error ? 2u : 1u, &constant, 1u, functions,
-                                  function_count);
+                                  sizeof(functions) / sizeof(functions[0]));
 }
 
 static XrValidatedProgram *build_aggregate_variant_program(bool wrong_variant) {
@@ -3120,33 +3141,36 @@ static void test_class_error_outcomes_fail_closed(void) {
     const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW,
                                          XR_VM_DECODE_FIXED_ROWS};
     for (uint32_t aggregate_error = 0u; aggregate_error != 2u; ++aggregate_error) {
-        for (uint32_t propagated_error = 0u; propagated_error != 2u; ++propagated_error) {
-            XrValidatedProgram *program =
-                build_class_error_program(aggregate_error != 0u, propagated_error != 0u);
-            XrTargetProfile *profile =
-                xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-            REQUIRE(program != NULL && profile != NULL);
-            TestProviderBindings bindings;
-            build_provider_bindings(profile, &bindings);
-            XrInstance *instance = create_instance(program, profile, &bindings, 1u);
-            for (uint32_t policy = 0u; policy < sizeof(policies) / sizeof(policies[0]); ++policy) {
-                XrVmCodeOptions options = xr_vm_code_default_options();
-                options.decode_policy = policies[policy];
-                XrVmCode *code = NULL;
-                XrVmCodeDiagnostic diagnostic;
-                REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
-                XrVmOutcome result = xr_vm_code_execute(
-                    code, instance, xr_validated_program_entry_function(program), NULL, 0u);
-                REQUIRE(result.kind == XR_VM_OUTCOME_INVALID_INVOCATION);
-                REQUIRE(result.error_value.kind == XR_VM_VALUE_VOID);
-                REQUIRE(!result.owns_dynamic_values);
-                xr_vm_outcome_dispose(&result);
-                xr_vm_code_free(code);
-            }
-            retire_and_free(&instance);
-            xr_target_profile_free(profile);
-            xr_validated_program_free(program);
+        XrValidatedProgram *program =
+            build_propagated_class_error_program(aggregate_error != 0u);
+        XrTargetProfile *profile =
+            xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(program != NULL && profile != NULL);
+        TestProviderBindings bindings;
+        build_provider_bindings(profile, &bindings);
+        XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+        for (uint32_t policy = 0u; policy < sizeof(policies) / sizeof(policies[0]); ++policy) {
+            ClassLifecycleLog log = {0};
+            XrVmCodeOptions options = xr_vm_code_default_options();
+            options.decode_policy = policies[policy];
+            options.lifecycle_context = &log;
+            options.lifecycle_event = record_vm_class_lifecycle;
+            XrVmCode *code = NULL;
+            XrVmCodeDiagnostic diagnostic;
+            REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+            XrVmOutcome result = xr_vm_code_execute(
+                code, instance, xr_validated_program_entry_function(program), NULL, 0u);
+            REQUIRE(result.kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+            REQUIRE(result.error_value.kind == XR_VM_VALUE_VOID);
+            REQUIRE(!result.owns_dynamic_values);
+            REQUIRE(log.vm_count == 1u);
+            REQUIRE(log.vm[0].kind == XR_VM_EVENT_CLASS_CONSTRUCT);
+            xr_vm_outcome_dispose(&result);
+            xr_vm_code_free(code);
         }
+        retire_and_free(&instance);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
     }
 }
 
