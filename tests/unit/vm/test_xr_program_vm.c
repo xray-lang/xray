@@ -245,11 +245,11 @@ static XrValidatedProgram *build_affine_copy_program(void) {
     return validate_typed_fixture(&type, 1u, &constant, 1u, &function, 1u);
 }
 
-static XrValidatedProgram *build_inactive_class_program(void) {
+static XrValidatedProgram *build_class_alias_mutation_program(void) {
     enum { CLASS_TYPE = 63 };
     uint16_t fields[] = {XR_CORE_TYPE_I64};
     XrCoreIrTypeInput type = {
-        .key = fixture_key("vm-class-inactive:type"),
+        .key = fixture_key("vm-class-alias:type"),
         .local_id = CLASS_TYPE,
         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
@@ -258,27 +258,77 @@ static XrValidatedProgram *build_inactive_class_program(void) {
         .field_types = fields,
         .field_count = 1u,
     };
-    XrCoreIrConstantInput constant = {
-        .key = fixture_key("vm-class-inactive:constant"),
-        .type_id = XR_CORE_TYPE_I64,
-        .kind = XR_CORE_IR_CONSTANT_I64,
-        .value.i64 = 42,
+    XrCoreIrConstantInput constants[] = {
+        {.key = fixture_key("vm-class-alias:constant:7"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 7},
+        {.key = fixture_key("vm-class-alias:constant:42"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
     };
-    XrCoreIrKey field = fixture_key("vm-class-inactive:field");
-    XrCoreIrKey object = fixture_key("vm-class-inactive:object");
-    XrCoreIrKey construct_operands[] = {field};
+    XrCoreIrKey seven = fixture_key("vm-class-alias:seven");
+    XrCoreIrKey forty_two = fixture_key("vm-class-alias:forty-two");
+    XrCoreIrKey object = fixture_key("vm-class-alias:object");
+    XrCoreIrKey alias = fixture_key("vm-class-alias:alias");
+    XrCoreIrKey place = fixture_key("vm-class-alias:place");
+    XrCoreIrKey old = fixture_key("vm-class-alias:old");
+    XrCoreIrKey loaded = fixture_key("vm-class-alias:loaded");
+    XrCoreIrKey construct_operands[] = {seven};
     XrCoreIrKey object_operand[] = {object};
+    XrCoreIrKey alias_operand[] = {alias};
+    XrCoreIrKey exchange_operands[] = {place, forty_two};
+    XrCoreIrKey returned[] = {loaded};
     XrCoreIrInstructionInput instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
-         .result = field,
+         .result = seven,
          .result_type_id = XR_CORE_TYPE_I64,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
-         .immediate.key = constant.key},
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = forty_two,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
         {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
          .result = object,
          .result_type_id = CLASS_TYPE,
          .result_ownership = XR_CORE_IR_OWNER,
          .operands = construct_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_SHARE,
+         .result = alias,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = object_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_PLACE,
+         .result = place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = alias_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_EXCHANGE,
+         .result = old,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = exchange_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+         .result = loaded,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = object_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = alias_operand,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
@@ -288,23 +338,353 @@ static XrValidatedProgram *build_inactive_class_program(void) {
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
     };
-    XrCoreIrKey block_key = fixture_key("vm-class-inactive:block");
+    XrCoreIrKey block_key = fixture_key("vm-class-alias:block");
     XrCoreIrBlockInput block = {
         .key = block_key,
         .instructions = instructions,
         .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
     };
     XrCoreIrFunctionInput function = {
-        .key = fixture_key("vm-class-inactive:function"),
-        .result_type_id = XR_CORE_TYPE_VOID,
+        .key = fixture_key("vm-class-alias:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
         .entry_block = block_key,
         .blocks = &block,
         .block_count = 1u,
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
-    return validate_typed_fixture(&type, 1u, &constant, 1u, &function, 1u);
+    return validate_typed_fixture(&type, 1u, constants,
+                                  sizeof(constants) / sizeof(constants[0]), &function, 1u);
+}
+
+static XrValidatedProgram *build_class_owned_exchange_program(bool self_assignment) {
+    enum {
+        CHILD_CLASS_TYPE = 63,
+        PARENT_CLASS_TYPE = 64,
+    };
+    uint16_t child_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t parent_fields[] = {CHILD_CLASS_TYPE};
+    XrCoreIrTypeInput types[] = {
+        {.key = fixture_key("vm-owned-exchange:type:child"),
+         .local_id = CHILD_CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = child_fields,
+         .field_count = 1u},
+        {.key = fixture_key("vm-owned-exchange:type:parent"),
+         .local_id = PARENT_CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = parent_fields,
+         .field_count = 1u},
+    };
+    XrCoreIrConstantInput constants[] = {
+        {.key = fixture_key("vm-owned-exchange:constant:7"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 7},
+        {.key = fixture_key("vm-owned-exchange:constant:42"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
+    };
+    XrCoreIrKey seven = fixture_key("vm-owned-exchange:seven");
+    XrCoreIrKey forty_two = fixture_key("vm-owned-exchange:forty-two");
+    XrCoreIrKey original_child = fixture_key("vm-owned-exchange:original-child");
+    XrCoreIrKey parent = fixture_key("vm-owned-exchange:parent");
+    XrCoreIrKey borrowed = fixture_key("vm-owned-exchange:borrowed");
+    XrCoreIrKey replacement = fixture_key("vm-owned-exchange:replacement");
+    XrCoreIrKey place = fixture_key("vm-owned-exchange:place");
+    XrCoreIrKey old = fixture_key("vm-owned-exchange:old");
+    XrCoreIrKey current = fixture_key("vm-owned-exchange:current");
+    XrCoreIrKey loaded = fixture_key("vm-owned-exchange:loaded");
+    XrCoreIrKey seven_operand[] = {seven};
+    XrCoreIrKey forty_two_operand[] = {forty_two};
+    XrCoreIrKey parent_construct_operands[] = {original_child};
+    XrCoreIrKey parent_operand[] = {parent};
+    XrCoreIrKey borrowed_operand[] = {borrowed};
+    XrCoreIrKey exchange_operands[] = {place, replacement};
+    XrCoreIrKey old_operand[] = {old};
+    XrCoreIrKey current_operand[] = {current};
+    XrCoreIrKey returned[] = {loaded};
+    XrCoreIrInstructionInput instructions[16] = {0};
+    uint32_t count = 0u;
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+        .result = seven,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+        .immediate.key = constants[0].key,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+        .result = forty_two,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+        .immediate.key = constants[1].key,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+        .result = original_child,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = seven_operand,
+        .operand_count = 1u,
+    };
+    if (!self_assignment) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+            .result = replacement,
+            .result_type_id = CHILD_CLASS_TYPE,
+            .result_ownership = XR_CORE_IR_OWNER,
+            .operands = forty_two_operand,
+            .operand_count = 1u,
+        };
+    }
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+        .result = parent,
+        .result_type_id = PARENT_CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = parent_construct_operands,
+        .operand_count = 1u,
+    };
+    if (self_assignment) {
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+            .result = borrowed,
+            .result_type_id = CHILD_CLASS_TYPE,
+            .operands = parent_operand,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+            .immediate.field_ordinal = 0u,
+        };
+        instructions[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CLASS_SHARE,
+            .result = replacement,
+            .result_type_id = CHILD_CLASS_TYPE,
+            .result_ownership = XR_CORE_IR_OWNER,
+            .operands = borrowed_operand,
+            .operand_count = 1u,
+        };
+    }
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_FIELD_PLACE,
+        .result = place,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .result_category = XR_CORE_IR_PLACE,
+        .operands = parent_operand,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+        .immediate.field_ordinal = 0u,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_PLACE_EXCHANGE,
+        .result = old,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .result_ownership = XR_CORE_IR_OWNER,
+        .operands = exchange_operands,
+        .operand_count = 2u,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = old_operand,
+        .operand_count = 1u,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+        .result = current,
+        .result_type_id = CHILD_CLASS_TYPE,
+        .operands = parent_operand,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+        .immediate.field_ordinal = 0u,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+        .result = loaded,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .operands = current_operand,
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+        .immediate.field_ordinal = 0u,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = parent_operand,
+        .operand_count = 1u,
+    };
+    instructions[count++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = returned,
+        .operand_count = 1u,
+    };
+    XrCoreIrKey block_key = fixture_key(self_assignment ? "vm-self-exchange:block"
+                                                             : "vm-owned-exchange:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = count,
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key(self_assignment ? "vm-self-exchange:function"
+                                           : "vm-owned-exchange:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_typed_fixture(types, sizeof(types) / sizeof(types[0]), constants,
+                                  sizeof(constants) / sizeof(constants[0]), &function, 1u);
+}
+
+static XrValidatedProgram *build_class_trivial_snapshot_program(void) {
+    enum {
+        RECORD_TYPE = 63,
+        CLASS_TYPE = 64,
+    };
+    uint16_t record_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t class_fields[] = {RECORD_TYPE};
+    XrCoreIrTypeInput types[] = {
+        {.key = fixture_key("vm-class-snapshot:type:record"),
+         .local_id = RECORD_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .field_types = record_fields,
+         .field_count = 1u},
+        {.key = fixture_key("vm-class-snapshot:type:class"),
+         .local_id = CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = class_fields,
+         .field_count = 1u},
+    };
+    XrCoreIrConstantInput constants[] = {
+        {.key = fixture_key("vm-class-snapshot:constant:7"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 7},
+        {.key = fixture_key("vm-class-snapshot:constant:9"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 9},
+    };
+    XrCoreIrKey seven = fixture_key("vm-class-snapshot:seven");
+    XrCoreIrKey nine = fixture_key("vm-class-snapshot:nine");
+    XrCoreIrKey record = fixture_key("vm-class-snapshot:record");
+    XrCoreIrKey instance = fixture_key("vm-class-snapshot:instance");
+    XrCoreIrKey snapshot = fixture_key("vm-class-snapshot:snapshot");
+    XrCoreIrKey snapshot_place = fixture_key("vm-class-snapshot:snapshot-place");
+    XrCoreIrKey item_place = fixture_key("vm-class-snapshot:item-place");
+    XrCoreIrKey original = fixture_key("vm-class-snapshot:original");
+    XrCoreIrKey result = fixture_key("vm-class-snapshot:result");
+    XrCoreIrKey record_operands[] = {seven};
+    XrCoreIrKey instance_operands[] = {record};
+    XrCoreIrKey instance_operand[] = {instance};
+    XrCoreIrKey snapshot_operand[] = {snapshot};
+    XrCoreIrKey snapshot_place_operand[] = {snapshot_place};
+    XrCoreIrKey store_operands[] = {item_place, nine};
+    XrCoreIrKey original_operand[] = {original};
+    XrCoreIrKey returned[] = {result};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = seven,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = nine,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = record,
+         .result_type_id = RECORD_TYPE,
+         .operands = record_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = instance,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = instance_operands,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+         .result = snapshot,
+         .result_type_id = RECORD_TYPE,
+         .operands = instance_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+         .result = snapshot_place,
+         .result_type_id = RECORD_TYPE,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = snapshot_operand,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_PROJECT,
+         .result = item_place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = snapshot_place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = store_operands,
+         .operand_count = 2u},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+         .result = original,
+         .result_type_id = RECORD_TYPE,
+         .operands = instance_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = original_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = instance_operand,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u},
+    };
+    XrCoreIrKey block_key = fixture_key("vm-class-snapshot:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("vm-class-snapshot:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_typed_fixture(types, sizeof(types) / sizeof(types[0]), constants,
+                                  sizeof(constants) / sizeof(constants[0]), &function, 1u);
 }
 
 static XrValidatedProgram *build_aggregate_variant_program(bool wrong_variant) {
@@ -2366,29 +2746,253 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
     xr_validated_program_free(program);
 }
 
-static void test_inactive_operations_fail_before_dispatch(void) {
-    XrValidatedProgram *program = build_inactive_class_program();
+typedef struct ClassLifecycleLog {
+    XrReferenceLifecycleEvent reference[32];
+    XrVmLifecycleEvent vm[32];
+    uint32_t reference_count;
+    uint32_t vm_count;
+} ClassLifecycleLog;
+
+static void record_reference_class_lifecycle(void *context,
+                                             const XrReferenceLifecycleEvent *event) {
+    ClassLifecycleLog *log = context;
+    REQUIRE(log != NULL && event != NULL && log->reference_count < 32u);
+    log->reference[log->reference_count++] = *event;
+}
+
+static void record_vm_class_lifecycle(void *context, const XrVmLifecycleEvent *event) {
+    ClassLifecycleLog *log = context;
+    REQUIRE(log != NULL && event != NULL && log->vm_count < 32u);
+    log->vm[log->vm_count++] = *event;
+}
+
+static void require_class_alias_vm_oracle(const ClassLifecycleLog *log, XrVmOutcome result) {
+    static const XrVmLifecycleEventKind expected[] = {
+        XR_VM_EVENT_CLASS_CONSTRUCT, XR_VM_EVENT_CLASS_SHARE,
+        XR_VM_EVENT_CLASS_FIELD_PLACE, XR_VM_EVENT_PLACE_EXCHANGE,
+        XR_VM_EVENT_CLASS_FIELD_LOAD, XR_VM_EVENT_OWNER_DROP,
+        XR_VM_EVENT_OWNER_DROP, XR_VM_EVENT_CLASS_FINALIZE,
+        XR_VM_EVENT_CLASS_RECLAIM,
+    };
+    REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+    REQUIRE(result.value.kind == XR_VM_VALUE_I64);
+    REQUIRE(result.value.as.i64 == 42);
+    REQUIRE(log->vm_count == sizeof(expected) / sizeof(expected[0]));
+    uint64_t identity = log->vm[0].identity;
+    REQUIRE(identity != UINT64_MAX);
+    for (uint32_t index = 0u; index < log->vm_count; ++index) {
+        REQUIRE(log->vm[index].kind == expected[index]);
+        REQUIRE(log->vm[index].origin == XR_VM_EVENT_ORIGIN_PROGRAM_OPERATION);
+        if (index != 3u)
+            REQUIRE(log->vm[index].identity == identity);
+    }
+    REQUIRE(log->vm[1].related_identity == identity);
+    REQUIRE(log->vm[2].field_ordinal == 0u);
+    REQUIRE(log->vm[3].type_id == XR_CORE_TYPE_I64);
+    REQUIRE(log->vm[3].identity == UINT64_MAX);
+    REQUIRE(log->vm[3].related_identity == UINT64_MAX);
+    REQUIRE(log->vm[3].previous_value_kind == XR_VM_VALUE_I64);
+    REQUIRE(log->vm[3].replacement_value_kind == XR_VM_VALUE_I64);
+    REQUIRE(log->vm[3].previous_i64 == 7);
+    REQUIRE(log->vm[3].replacement_i64 == 42);
+    REQUIRE(log->vm[4].field_ordinal == 0u);
+}
+
+static void require_class_alias_reference_oracle(const ClassLifecycleLog *log,
+                                                 XrReferenceOutcome result) {
+    static const XrReferenceLifecycleEventKind expected[] = {
+        XR_REFERENCE_EVENT_CLASS_CONSTRUCT, XR_REFERENCE_EVENT_CLASS_SHARE,
+        XR_REFERENCE_EVENT_CLASS_FIELD_PLACE, XR_REFERENCE_EVENT_PLACE_EXCHANGE,
+        XR_REFERENCE_EVENT_CLASS_FIELD_LOAD, XR_REFERENCE_EVENT_OWNER_DROP,
+        XR_REFERENCE_EVENT_OWNER_DROP, XR_REFERENCE_EVENT_CLASS_FINALIZE,
+        XR_REFERENCE_EVENT_CLASS_RECLAIM,
+    };
+    REQUIRE(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+    REQUIRE(result.value.kind == XR_REFERENCE_VALUE_I64);
+    REQUIRE(result.value.as.i64 == 42);
+    REQUIRE(log->reference_count == sizeof(expected) / sizeof(expected[0]));
+    uint64_t identity = log->reference[0].identity;
+    REQUIRE(identity != UINT64_MAX);
+    for (uint32_t index = 0u; index < log->reference_count; ++index) {
+        REQUIRE(log->reference[index].kind == expected[index]);
+        REQUIRE(log->reference[index].origin ==
+                XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION);
+        if (index != 3u)
+            REQUIRE(log->reference[index].identity == identity);
+    }
+    REQUIRE(log->reference[1].related_identity == identity);
+    REQUIRE(log->reference[2].field_ordinal == 0u);
+    REQUIRE(log->reference[3].type_id == XR_CORE_TYPE_I64);
+    REQUIRE(log->reference[3].identity == UINT64_MAX);
+    REQUIRE(log->reference[3].related_identity == UINT64_MAX);
+    REQUIRE(log->reference[4].field_ordinal == 0u);
+}
+
+static XrVmOutcome execute_class_alias_vm(XrValidatedProgram *program, XrInstance *instance,
+                                          XrVmDecodePolicy policy, ClassLifecycleLog *log) {
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    options.decode_policy = policy;
+    options.lifecycle_context = log;
+    options.lifecycle_event = record_vm_class_lifecycle;
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic diagnostic;
+    REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+    XrVmOutcome result = xr_vm_code_execute(
+        code, instance, xr_validated_program_entry_function(program), NULL, 0u);
+    xr_vm_code_free(code);
+    return result;
+}
+
+static void test_class_reference_semantics_differential(void) {
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW,
+                                         XR_VM_DECODE_FIXED_ROWS};
+    XrValidatedProgram *program = build_class_alias_mutation_program();
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     TestProviderBindings bindings;
     build_provider_bindings(profile, &bindings);
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
-    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    ClassLifecycleLog reference_log = {0};
+    XrReferenceProviderBinding reference_binding = {
+        .lifecycle_context = &reference_log,
+        .lifecycle_event = record_reference_class_lifecycle,
+    };
+    XrReferenceOutcome reference = xr_reference_evaluate_bound(
+        program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+        &reference_binding);
+    require_class_alias_reference_oracle(&reference_log, reference);
+    xr_reference_outcome_dispose(&reference);
     for (uint32_t index = 0u; index < sizeof(policies) / sizeof(policies[0]); ++index) {
+        ClassLifecycleLog log = {0};
+        XrVmOutcome result = execute_class_alias_vm(program, instance, policies[index], &log);
+        REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+        REQUIRE(result.value.kind == XR_VM_VALUE_I64);
+        require_class_alias_vm_oracle(&log, result);
+        REQUIRE(log.vm_count == reference_log.reference_count);
+        for (uint32_t event = 0u; event < log.vm_count; ++event) {
+            REQUIRE((uint32_t) log.vm[event].kind ==
+                    (uint32_t) reference_log.reference[event].kind);
+            REQUIRE((uint32_t) log.vm[event].origin ==
+                    (uint32_t) reference_log.reference[event].origin);
+            REQUIRE(log.vm[event].type_id == reference_log.reference[event].type_id);
+            REQUIRE(log.vm[event].field_ordinal ==
+                    reference_log.reference[event].field_ordinal);
+            REQUIRE(log.vm[event].identity == reference_log.reference[event].identity);
+            REQUIRE(log.vm[event].related_identity ==
+                    reference_log.reference[event].related_identity);
+        }
+    }
+    static const char probe_argument[] = "--h2-class-differential";
+    REQUIRE(probe_argument[0] == '-');
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_class_owned_exchange_and_self_assignment(void) {
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW,
+                                         XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t self_assignment = 0u; self_assignment != 2u; ++self_assignment) {
+        XrValidatedProgram *program =
+            build_class_owned_exchange_program(self_assignment != 0u);
+        XrTargetProfile *profile =
+            xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(program != NULL && profile != NULL);
+        TestProviderBindings bindings;
+        build_provider_bindings(profile, &bindings);
+        XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+        ClassLifecycleLog reference_log = {0};
+        XrReferenceProviderBinding reference_binding = {
+            .lifecycle_context = &reference_log,
+            .lifecycle_event = record_reference_class_lifecycle,
+        };
+        XrReferenceOutcome reference = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL,
+            &reference_binding);
+        REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+        REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
+        REQUIRE(reference.value.as.i64 == (self_assignment ? 7 : 42));
+        uint32_t exchange = UINT32_MAX;
+        for (uint32_t event = 0u; event < reference_log.reference_count; ++event)
+            if (reference_log.reference[event].kind == XR_REFERENCE_EVENT_PLACE_EXCHANGE)
+                exchange = event;
+        REQUIRE(exchange != UINT32_MAX);
+        REQUIRE(reference_log.reference[exchange].type_id != XR_CORE_TYPE_VOID);
+        REQUIRE(reference_log.reference[exchange].identity != UINT64_MAX);
+        REQUIRE(reference_log.reference[exchange].related_identity != UINT64_MAX);
+        REQUIRE((reference_log.reference[exchange].identity ==
+                 reference_log.reference[exchange].related_identity) ==
+                (self_assignment != 0u));
+        REQUIRE(reference_log.reference[exchange + 1u].kind ==
+                XR_REFERENCE_EVENT_OWNER_DROP);
+        if (self_assignment)
+            REQUIRE(reference_log.reference[exchange + 2u].kind ==
+                    XR_REFERENCE_EVENT_CLASS_FIELD_LOAD);
+        else {
+            REQUIRE(reference_log.reference[exchange + 2u].kind ==
+                    XR_REFERENCE_EVENT_CLASS_FINALIZE);
+            REQUIRE(reference_log.reference[exchange + 3u].kind ==
+                    XR_REFERENCE_EVENT_CLASS_RECLAIM);
+        }
+        for (uint32_t policy = 0u; policy < sizeof(policies) / sizeof(policies[0]); ++policy) {
+            ClassLifecycleLog log = {0};
+            XrVmOutcome result =
+                execute_class_alias_vm(program, instance, policies[policy], &log);
+            REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+            REQUIRE(result.value.kind == XR_VM_VALUE_I64);
+            REQUIRE(result.value.as.i64 == (self_assignment ? 7 : 42));
+            REQUIRE(log.vm_count == reference_log.reference_count);
+            for (uint32_t event = 0u; event < log.vm_count; ++event) {
+                REQUIRE((uint32_t) log.vm[event].kind ==
+                        (uint32_t) reference_log.reference[event].kind);
+                REQUIRE((uint32_t) log.vm[event].origin ==
+                        (uint32_t) reference_log.reference[event].origin);
+                REQUIRE(log.vm[event].type_id == reference_log.reference[event].type_id);
+                REQUIRE(log.vm[event].field_ordinal ==
+                        reference_log.reference[event].field_ordinal);
+                REQUIRE(log.vm[event].identity == reference_log.reference[event].identity);
+                REQUIRE(log.vm[event].related_identity ==
+                        reference_log.reference[event].related_identity);
+            }
+        }
+        xr_reference_outcome_dispose(&reference);
+        retire_and_free(&instance);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+    }
+}
+
+static void test_class_trivial_field_load_is_snapshot_and_bounded(void) {
+    XrValidatedProgram *program = build_class_trivial_snapshot_program();
+    run_program(program, false, NULL, NULL, 0u, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 7u);
+    XrReferenceBudget reference_budget = xr_reference_default_budget();
+    reference_budget.max_value_cells = 2u;
+    XrReferenceOutcome reference = xr_reference_evaluate(
+        program, xr_validated_program_entry_function(program), NULL, 0u, NULL,
+        &reference_budget);
+    REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+    xr_reference_outcome_dispose(&reference);
+
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW,
+                                         XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t policy = 0u; policy < sizeof(policies) / sizeof(policies[0]); ++policy) {
         XrVmCodeOptions options = xr_vm_code_default_options();
-        options.decode_policy = policies[index];
+        options.decode_policy = policies[policy];
+        options.max_value_cells = 2u;
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic diagnostic;
-        REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) ==
-                XR_VM_CODE_UNSUPPORTED_OPERATION);
-        REQUIRE(code == NULL);
-        REQUIRE(diagnostic.status == XR_VM_CODE_UNSUPPORTED_OPERATION);
-        REQUIRE(diagnostic.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT);
-        REQUIRE(diagnostic.function_id == 0u);
-        REQUIRE(diagnostic.block_id == 0u);
-        REQUIRE(diagnostic.instruction_id == 1u);
-        REQUIRE(strcmp(xr_vm_code_status_name(diagnostic.status), "unsupported-operation") == 0);
+        REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+        XrVmOutcome result = xr_vm_code_execute(
+            code, instance, xr_validated_program_entry_function(program), NULL, 0u);
+        REQUIRE(result.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
+        xr_vm_code_free(code);
     }
     retire_and_free(&instance);
     xr_target_profile_free(profile);
@@ -3140,7 +3744,53 @@ static void test_aggregate_construct_owner_transfers(void) {
     REQUIRE(executed > 0u);
 }
 
-int main(void) {
+static int run_h2_class_differential_probe(const char *mode) {
+    bool fixed = strcmp(mode, "fixed") == 0;
+    REQUIRE(fixed || strcmp(mode, "baseline") == 0);
+    XrValidatedProgram *program = build_class_alias_mutation_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(program != NULL && profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    ClassLifecycleLog log = {0};
+    XrVmOutcome result = execute_class_alias_vm(
+        program, instance,
+        fixed ? XR_VM_DECODE_FIXED_ROWS : XR_VM_DECODE_BASELINE_VIEW, &log);
+    require_class_alias_vm_oracle(&log, result);
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+
+    printf("{\"schema\":1,\"executor\":\"%s\",\"route\":\"%s\",\"oracle\":{"
+           "\"scenario\":\"class-alias-mutation-lifecycle\","
+           "\"outcome\":{\"kind\":\"return\"},"
+           "\"value\":{\"kind\":\"i64\",\"data\":42},"
+           "\"identities\":{\"constructed\":\"class-0\",\"shared\":\"class-0\"},"
+           "\"events\":["
+           "{\"kind\":\"class-construct\",\"identity\":\"class-0\"},"
+           "{\"kind\":\"class-share\",\"identity\":\"class-0\","
+           "\"related\":\"class-0\"},"
+           "{\"kind\":\"class-field-place\",\"identity\":\"class-0\",\"field\":0},"
+           "{\"kind\":\"place-exchange\",\"type\":\"i64\","
+           "\"old\":{\"value\":7,\"identity\":\"none\"},"
+           "\"replacement\":{\"value\":42,\"identity\":\"none\"}},"
+           "{\"kind\":\"class-field-load\",\"identity\":\"class-0\",\"field\":0},"
+           "{\"kind\":\"owner-drop\",\"identity\":\"class-0\"},"
+           "{\"kind\":\"owner-drop\",\"identity\":\"class-0\"},"
+           "{\"kind\":\"class-finalize\",\"identity\":\"class-0\"},"
+           "{\"kind\":\"class-reclaim\",\"identity\":\"class-0\"}]}}\n",
+           fixed ? "vm-fixed" : "vm-baseline",
+           fixed ? "vm-fixed-rows" : "vm-baseline-view");
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 3 && strcmp(argv[1], "--h2-class-differential") == 0)
+        return run_h2_class_differential_probe(argv[2]);
+    if (argc != 1)
+        return 2;
     test_coroutine_self_edge_parallel_arguments();
     test_reason_private_cleanup_graph_differential();
     test_aggregate_construct_owner_transfers();
@@ -3158,7 +3808,9 @@ int main(void) {
     test_arithmetic_edges();
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();
-    test_inactive_operations_fail_before_dispatch();
+    test_class_reference_semantics_differential();
+    test_class_owned_exchange_and_self_assignment();
+    test_class_trivial_field_load_is_snapshot_and_bounded();
     test_coroutine_suspend_resume_generation_lease();
     test_coroutine_cancel_drops_exact_live_owner();
     test_coroutine_child_provider_failure_continuations();

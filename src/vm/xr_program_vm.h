@@ -26,6 +26,41 @@ typedef enum XrVmQuickeningPolicy {
     XR_VM_QUICKENING_NONE = 0,
 } XrVmQuickeningPolicy;
 
+typedef enum XrVmLifecycleEventKind {
+    XR_VM_EVENT_CLASS_CONSTRUCT = 1,
+    XR_VM_EVENT_CLASS_SHARE,
+    XR_VM_EVENT_CLASS_COPY,
+    XR_VM_EVENT_CLASS_FIELD_LOAD,
+    XR_VM_EVENT_CLASS_FIELD_PLACE,
+    XR_VM_EVENT_PLACE_EXCHANGE,
+    XR_VM_EVENT_OWNER_DROP,
+    XR_VM_EVENT_CLASS_FINALIZE,
+    XR_VM_EVENT_CLASS_RECLAIM,
+} XrVmLifecycleEventKind;
+
+typedef enum XrVmLifecycleEventOrigin {
+    XR_VM_EVENT_ORIGIN_PROGRAM_OPERATION = 1,
+    XR_VM_EVENT_ORIGIN_FIELD_FINALIZATION,
+    XR_VM_EVENT_ORIGIN_CLONE_ROLLBACK,
+    XR_VM_EVENT_ORIGIN_DOMAIN_TEARDOWN,
+} XrVmLifecycleEventOrigin;
+
+typedef struct XrVmLifecycleEvent {
+    XrVmLifecycleEventKind kind;
+    XrVmLifecycleEventOrigin origin;
+    uint16_t type_id;
+    uint16_t reserved16;
+    uint32_t field_ordinal;
+    uint64_t identity;
+    uint64_t related_identity;
+    uint32_t previous_value_kind;
+    uint32_t replacement_value_kind;
+    int64_t previous_i64;
+    int64_t replacement_i64;
+} XrVmLifecycleEvent;
+
+typedef void (*XrVmLifecycleEventHandler)(void *context, const XrVmLifecycleEvent *event);
+
 typedef struct XrVmCodeOptions {
     uint32_t schema_version;
     uint8_t decode_policy;
@@ -34,6 +69,9 @@ typedef struct XrVmCodeOptions {
     uint64_t max_steps;
     uint32_t max_value_cells;
     uint32_t max_call_depth;
+    /* Optional semantic observer. It never participates in code identity. */
+    void *lifecycle_context;
+    XrVmLifecycleEventHandler lifecycle_event;
 } XrVmCodeOptions;
 
 typedef enum XrVmValueKind {
@@ -49,6 +87,7 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_ERROR,
     XR_VM_VALUE_PANIC_INFO,
     XR_VM_VALUE_AGGREGATE,
+    XR_VM_VALUE_CLASS_REFERENCE,
     XR_VM_VALUE_EXISTENTIAL,
     XR_VM_VALUE_CALLABLE,
 } XrVmValueKind;
@@ -64,6 +103,7 @@ typedef struct XrVmValue {
         uint32_t error;
         uint32_t panic_info;
         const void *aggregate;
+        const void *class_reference;
         const void *existential;
         const void *callable;
     } as;
