@@ -284,8 +284,11 @@ static void require_class_field_finalization_lowering(const XrTargetProfile *pro
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
     REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
-    REQUIRE(strstr(generated.bytes,
-                   "xr_aot_class_drop_42(xr_ctx, value->f0, UINT32_C(2));") != NULL);
+    char drop[96];
+    (void) snprintf(drop, sizeof(drop),
+                    "xr_aot_class_drop_%u(xr_ctx, value->f0, UINT32_C(2));",
+                    program->types[0].type_id);
+    REQUIRE(strstr(generated.bytes, drop) != NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
     xr_reference_outcome_dispose(&outcome);
@@ -310,11 +313,12 @@ static void require_class_reference_oracle(const XrValidatedProgram *program) {
     REQUIRE(outcome.kind == XR_REFERENCE_OUTCOME_RETURN);
     REQUIRE(outcome.value.kind == XR_REFERENCE_VALUE_I64 && outcome.value.as.i64 == 42);
     REQUIRE(log.count == 9u && log.events[0].identity != UINT64_MAX);
+    uint16_t class_type_id = program->types[0].type_id;
     for (uint32_t index = 0u; index < log.count; ++index) {
         REQUIRE(log.events[index].kind == kinds[index]);
         REQUIRE(log.events[index].origin == XR_REFERENCE_EVENT_ORIGIN_PROGRAM_OPERATION);
         REQUIRE(log.events[index].type_id ==
-                (index == 3u ? XR_CORE_TYPE_I64 : XR_H2_CLASS_TYPE));
+                (index == 3u ? XR_CORE_TYPE_I64 : class_type_id));
         if (index != 3u)
             REQUIRE(log.events[index].identity == log.events[0].identity);
     }
@@ -325,7 +329,8 @@ static void require_class_reference_oracle(const XrValidatedProgram *program) {
     xr_reference_outcome_dispose(&outcome);
 }
 
-static bool append_class_native_harness(FILE *output, uint32_t entry_function) {
+static bool append_class_native_harness(FILE *output, uint32_t entry_function,
+                                        uint16_t class_type_id) {
     return fprintf(
                output,
                "\n#include <stdio.h>\n"
@@ -354,7 +359,7 @@ static bool append_class_native_harness(FILE *output, uint32_t entry_function) {
                "        if (log.events[index].kind != kinds[index] || "
                "log.events[index].origin != UINT32_C(1) || "
                "log.events[index].type_id != (index == UINT32_C(3) ? "
-               "UINT16_C(2) : UINT16_C(42))) return 12;\n"
+               "UINT16_C(2) : UINT16_C(%u))) return 12;\n"
                "        if (index != UINT32_C(3) && log.events[index].identity != identity) "
                "return 13;\n"
                "    }\n"
@@ -370,7 +375,7 @@ static bool append_class_native_harness(FILE *output, uint32_t entry_function) {
                "    puts(\"%s\");\n"
                "    return 0;\n"
                "}\n",
-               entry_function, XR_H2_AOT_NATIVE_RECORD) > 0;
+               entry_function, class_type_id, XR_H2_AOT_NATIVE_RECORD) > 0;
 }
 
 static bool write_class_native_source(const char *path) {
@@ -385,7 +390,8 @@ static bool write_class_native_source(const char *path) {
     if (output) {
         written = fwrite(generated.bytes, 1u, generated.size, output) == generated.size &&
                   append_class_native_harness(output,
-                                              xr_validated_program_entry_function(program));
+                                              xr_validated_program_entry_function(program),
+                                              program->types[0].type_id);
         bool closed = fclose(output) == 0;
         written = written && closed;
     } else {

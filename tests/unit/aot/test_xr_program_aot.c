@@ -2791,10 +2791,17 @@ static void test_class_reference_semantics_lowering_and_events(void) {
     (void) "h2-class-differential";
     REQUIRE(first.size == second.size && memcmp(first.bytes, second.bytes, first.size) == 0);
     REQUIRE(xr_fingerprint_equal(first.source_digest, second.source_digest));
-    REQUIRE(strstr(first.bytes, "typedef XrAotClass42 *XrAotType42;") != NULL);
-    REQUIRE(strstr(first.bytes, "struct XrAotClass42 {") != NULL);
-    REQUIRE(strstr(first.bytes, "struct XrAotType42 {") == NULL);
-    REQUIRE(strstr(first.bytes, "xr_aot_class_drop_42") != NULL);
+    uint16_t class_type_id = program->types[0].type_id;
+    char expected[96];
+    (void) snprintf(expected, sizeof(expected), "typedef XrAotClass%u *XrAotType%u;",
+                    class_type_id, class_type_id);
+    REQUIRE(strstr(first.bytes, expected) != NULL);
+    (void) snprintf(expected, sizeof(expected), "struct XrAotClass%u {", class_type_id);
+    REQUIRE(strstr(first.bytes, expected) != NULL);
+    (void) snprintf(expected, sizeof(expected), "struct XrAotType%u {", class_type_id);
+    REQUIRE(strstr(first.bytes, expected) == NULL);
+    (void) snprintf(expected, sizeof(expected), "xr_aot_class_drop_%u", class_type_id);
+    REQUIRE(strstr(first.bytes, expected) != NULL);
     REQUIRE(strstr(first.bytes, ".type_id = UINT16_C(2)") != NULL);
     REQUIRE(strstr(first.bytes, ".has_i64_exchange = UINT8_C(1)") != NULL);
     REQUIRE(strstr(first.bytes, "XrVm") == NULL);
