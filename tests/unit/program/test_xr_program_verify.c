@@ -1087,7 +1087,8 @@ static XrProgramBuildStatus build_with_type_graph(const XrCoreIrTypeInput *types
     return status;
 }
 
-static XrProgramBuildStatus build_class_execution_hostile(XrProgramArtifact *artifact) {
+static XrProgramBuildStatus build_class_execution_hostile(bool wrapping_arithmetic,
+                                                          XrProgramArtifact *artifact) {
     enum { CLASS_TYPE = 42 };
     XrCoreIrTypeInput type = {
         .key = key("class-hostile:type"),
@@ -1100,6 +1101,19 @@ static XrProgramBuildStatus build_class_execution_hostile(XrProgramArtifact *art
     XrCoreIrKey parameter = key("class-hostile:value:parameter");
     XrCoreIrKey copied = key("class-hostile:value:copied");
     XrCoreIrKey moved = key("class-hostile:value:moved");
+    XrCoreIrKey one = key("class-hostile:value:one");
+    XrCoreIrKey two = key("class-hostile:value:two");
+    XrCoreIrKey sum = key("class-hostile:value:sum");
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("class-hostile:constant:one"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 1},
+        {.key = key("class-hostile:constant:two"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 2},
+    };
     XrCoreIrValueInput argument = {
         .key = parameter,
         .type_id = CLASS_TYPE,
@@ -1109,12 +1123,30 @@ static XrProgramBuildStatus build_class_execution_hostile(XrProgramArtifact *art
     XrCoreIrKey parameter_operand[] = {parameter};
     XrCoreIrKey copied_operand[] = {copied};
     XrCoreIrKey moved_operand[] = {moved};
+    XrCoreIrKey arithmetic_operands[] = {one, two};
     XrCoreIrInstructionInput instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = parameter_operand,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = one,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = two,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_ADD_I64,
+         .result = sum,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = arithmetic_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = wrapping_arithmetic ? 1u : 0u},
         {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
          .result = copied,
          .result_type_id = CLASS_TYPE,
@@ -1157,6 +1189,7 @@ static XrProgramBuildStatus build_class_execution_hostile(XrProgramArtifact *art
         .parameter_count = 1u,
         .result_type_id = CLASS_TYPE,
         .result_ownership = XR_CORE_IR_OWNER,
+        .effect_mask = XR_CORE_EFFECT_TRAP,
         .entry_block = block_key,
         .blocks = &block,
         .block_count = 1u,
@@ -1164,6 +1197,8 @@ static XrProgramBuildStatus build_class_execution_hostile(XrProgramArtifact *art
     };
     XrCoreIrModuleInput module = {
         .key = key("class-hostile:module"),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
         .functions = &function,
         .function_count = 1u,
     };
@@ -2423,9 +2458,13 @@ static void test_dynamic_type_graph_rejection(void) {
     xr_program_artifact_free(&class_artifact);
 
     XrProgramArtifact hostile = {0};
-    CHECK(build_class_execution_hostile(&hostile) == XR_PROGRAM_BUILD_OK);
+    CHECK(build_class_execution_hostile(true, &hostile) == XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *hostile_program = validate_ok(&hostile);
     xr_validated_program_free(hostile_program);
+    xr_program_artifact_free(&hostile);
+
+    CHECK(build_class_execution_hostile(false, &hostile) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&hostile, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
     xr_program_artifact_free(&hostile);
 }
 
@@ -5727,7 +5766,7 @@ static void test_coroutine_child_trap_requires_recoverable_cleanup_inputs(void) 
         {XR_PROGRAM_COROUTINE_TRAP_TRUNCATED_INPUT, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
         {XR_PROGRAM_COROUTINE_TRAP_EXTRA_INPUT, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
         {XR_PROGRAM_COROUTINE_TRAP_PAYLOAD_WITHOUT_EDGE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
-        {XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_CANCEL_OWNER, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
+        {XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_CANCEL_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
         {XR_PROGRAM_COROUTINE_TRAP_MOVED_CALLER_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
         {XR_PROGRAM_COROUTINE_TRAP_DUPLICATE_LIVE_VALUE, XR_PROGRAM_DIAGNOSTIC_COROUTINE},
     };

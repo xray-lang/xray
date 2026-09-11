@@ -248,6 +248,7 @@ static void xr_construct_finish(XrConstructFixture *fixture, XrProgramConstructC
     fixture->operands[fixture->instruction_count - 1u][1] = fixture->values[XR_CONSTRUCT_SECOND];
     instruction->operand_count = 2u;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+    instruction->immediate.u32 = 1u;
     if (!trivial)
         (void) xr_construct_op(fixture, XR_CORE_OP_CORE_OWNER_DROP, XR_CORE_TYPE_VOID,
                                XR_CONSTRUCT_RESULT, XR_CONSTRUCT_OUTER_VALUE, false);

@@ -3704,6 +3704,23 @@ static bool class_receiver_is_rooted(VerifyContext *context,
     return frame_stable_non_owner_class_reference(context, function, value_id);
 }
 
+static bool verify_no_live_owner_at_implicit_exit(VerifyContext *context,
+                                                  const XrValidatedFunction *function,
+                                                  uint32_t block_id, uint32_t instruction_id,
+                                                  uint32_t pending_result_id, const bool *consumed,
+                                                  XrProgramSemanticLocation location) {
+    for (uint32_t value = 0u; value < function->value_count; ++value) {
+        if (value == pending_result_id || function->value_blocks[value] != block_id ||
+            function->value_ownerships[value] != XR_CORE_IR_OWNER || consumed[value] ||
+            !value_is_available(function, block_id, instruction_id, value))
+            continue;
+        location.value_id = value;
+        reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+        return false;
+    }
+    return true;
+}
+
 static bool verify_operation(VerifyContext *context, uint32_t function_id, uint32_t block_id,
                              uint32_t instruction_id, uint32_t *local_effects,
                              uint32_t *local_capabilities, bool *consumed) {
@@ -3857,6 +3874,11 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
+            if (instruction->immediate.u32 == 0u &&
+                !verify_no_live_owner_at_implicit_exit(context, function, block_id,
+                                                       instruction_id, instruction->result_id,
+                                                       consumed, location))
+                return false;
             return true;
         case XR_CORE_OP_CORE_DIV_I64:
             if (!expect_shape(context, instruction, location, 2, 0, XR_CORE_IR_IMMEDIATE_U32,
@@ -3867,7 +3889,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
-            return true;
+            return verify_no_live_owner_at_implicit_exit(context, function, block_id,
+                                                         instruction_id, instruction->result_id,
+                                                         consumed, location);
         case XR_CORE_OP_CORE_LOGICAL_NOT:
             if (!expect_shape(context, instruction, location, 1u, 0u, XR_CORE_IR_IMMEDIATE_NONE,
                               XR_CORE_TYPE_BOOL, true) ||
@@ -4738,19 +4762,34 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             return true;
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
-                                XR_CORE_TYPE_U16, true);
+                                XR_CORE_TYPE_U16, true) &&
+                   verify_no_live_owner_at_implicit_exit(
+                       context, function, block_id, instruction_id, instruction->result_id,
+                       consumed, location);
         case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
-                                XR_CORE_TYPE_TARGET_OS, true);
+                                XR_CORE_TYPE_TARGET_OS, true) &&
+                   verify_no_live_owner_at_implicit_exit(
+                       context, function, block_id, instruction_id, instruction->result_id,
+                       consumed, location);
         case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
-                                XR_CORE_TYPE_TARGET_ARCH, true);
+                                XR_CORE_TYPE_TARGET_ARCH, true) &&
+                   verify_no_live_owner_at_implicit_exit(
+                       context, function, block_id, instruction_id, instruction->result_id,
+                       consumed, location);
         case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
-                                XR_CORE_TYPE_TARGET_ABI, true);
+                                XR_CORE_TYPE_TARGET_ABI, true) &&
+                   verify_no_live_owner_at_implicit_exit(
+                       context, function, block_id, instruction_id, instruction->result_id,
+                       consumed, location);
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
-                                XR_CORE_TYPE_TARGET_ENDIAN, true);
+                                XR_CORE_TYPE_TARGET_ENDIAN, true) &&
+                   verify_no_live_owner_at_implicit_exit(
+                       context, function, block_id, instruction_id, instruction->result_id,
+                       consumed, location);
         case XR_CORE_OP_CORE_PROVIDER_CALL: {
             bool has_trap_edge = instruction->successor_count != 0u;
             const XrValidatedBlock *trap_target = NULL;
@@ -4805,6 +4844,10 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                         return false;
                     }
                 }
+            } else if (!verify_no_live_owner_at_implicit_exit(
+                           context, function, block_id, instruction_id, instruction->result_id,
+                           consumed, location)) {
+                return false;
             }
             return true;
         }
@@ -4817,7 +4860,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
-            return true;
+            return verify_no_live_owner_at_implicit_exit(context, function, block_id,
+                                                         instruction_id, instruction->result_id,
+                                                         consumed, location);
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             const XrValidatedType *callable =
                 xr_validated_program_type(context->program, instruction->result_type_id);
