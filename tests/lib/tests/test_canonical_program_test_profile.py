@@ -85,6 +85,16 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             self.assertLessEqual(set(tests), set(profile.CTEST_NAMES))
             self.assertLessEqual(set(targets), set(profile.BUILD_TARGETS))
 
+    def test_h2_aot_executes_the_two_active_lifecycle_native_witnesses(self) -> None:
+        required = {
+            "test_xr_program_panic_defer_cleanup_aot_native",
+            "test_xr_program_ref_parameter_coroutine_aot_native",
+        }
+        self.assertLessEqual(required, set(profile.H2_AOT_CTEST_NAMES))
+        self.assertLessEqual(required, set(profile.H2_AOT_BUILD_TARGETS))
+        self.assertTrue(required.isdisjoint(profile.H2_VM_CTEST_NAMES))
+        self.assertTrue(required.isdisjoint(profile.H2_SOURCE_BUILD_TARGETS))
+
     def test_h2_aggregate_is_the_stable_deduplicated_owner_union(self) -> None:
         component_tests = (
             profile.H2_REFERENCE_CTEST_NAMES,
@@ -108,8 +118,8 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         ))
         self.assertEqual(profile.H2_CTEST_NAMES, expected_tests)
         self.assertEqual(profile.H2_BUILD_TARGETS, expected_targets)
-        self.assertEqual(len(profile.H2_CTEST_NAMES), 27)
-        self.assertEqual(len(profile.H2_BUILD_TARGETS), 7)
+        self.assertEqual(len(profile.H2_CTEST_NAMES), 29)
+        self.assertEqual(len(profile.H2_BUILD_TARGETS), 9)
         self.assertEqual(len(profile.H2_CTEST_NAMES), len(set(profile.H2_CTEST_NAMES)))
         self.assertEqual(len(profile.H2_BUILD_TARGETS), len(set(profile.H2_BUILD_TARGETS)))
         self.assertLessEqual(set(profile.H2_CTEST_NAMES), set(profile.CTEST_NAMES))

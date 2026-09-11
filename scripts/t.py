@@ -283,6 +283,17 @@ EXACT_PROFILES = {
 INFRA_EDIT_PATH = re.compile(
     r"^(scripts/t\.py|tests/lib/xraytest/buildlock\.py|"
     r"tests/lib/tests/test_(t_runner|buildlock)\.py)$")
+H2_EDIT_PATH = re.compile(
+    r"^(src/program/|src/aot/program/|src/vm/xr_program_vm\.(c|h)$|"
+    r"tests/unit/core/test_core_spec\.c$|"
+    r"tests/unit/program/(test_xr_program(_source_build|_verify)?\.c|"
+    r"xr_program_[^/]+_fixture\.h|xr_program_h2_backend_differential\.json)$|"
+    r"tests/unit/vm/(test_xr_program_vm(_runtime)?\.c|"
+    r"xr_program_vm_embedded_fixture\.h)$|"
+    r"tests/unit/aot/test_xr_program_aot(_class\.inc)?\.c$|"
+    r"scripts/check_xr_program_(semantics|source_contracts|vm_contracts|"
+    r"aot_contracts|h2_backend_differential)\.py$|"
+    r"tests/lib/tests/test_h2_backend_differential\.py$)")
 CANONICAL_EDIT_PATH = re.compile(
     r"^(src/program/|src/aot/program/|src/vm/xr_(program_vm|typed_)|"
     r"src/execution/xr_|tests/unit/program/|tests/unit/vm/.*xr_program|"
@@ -337,8 +348,15 @@ def choose_run_for_paths(changed: Sequence[str]) -> Tuple[str, str]:
     if all(INFRA_EDIT_PATH.search(path) for path in substantive):
         return "infra", "test-runner infrastructure is fully owned by the infra profile"
 
+    h2_owned = [bool(H2_EDIT_PATH.search(path)) for path in substantive]
+    if all(h2_owned):
+        return "h2", "H2 Program and private-backend paths have an exact aggregate profile"
+
     if all(CANONICAL_EDIT_PATH.search(path) for path in substantive):
         return "canonical", "canonical Program private paths have an exact profile"
+
+    if any(h2_owned):
+        return "t2", "H2 paths are mixed with an unowned or cross-domain change"
 
     if any(BACKEND_TOUCHED.search(path) for path in substantive):
         return "t2", "backend, runtime, ISA or build-graph change"
