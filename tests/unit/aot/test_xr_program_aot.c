@@ -2775,6 +2775,7 @@ static void test_class_reference_semantics_lowering_and_events(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
+    require_native_record_c_literal_escaping();
     require_class_field_finalization_lowering(profile);
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic diagnostic;
