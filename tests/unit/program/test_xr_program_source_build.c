@@ -473,6 +473,8 @@ static void field_ref_cleanup_check_reference(XrInstance *instance, uint32_t ent
             ASSERT_EQ_INT(outcome.kind, XR_REFERENCE_OUTCOME_RETURN);
             ASSERT_EQ_INT(outcome.value.kind, XR_REFERENCE_VALUE_I64);
             ASSERT_EQ_INT(outcome.value.as.i64, INT64_C(6442450958));
+            /* The native AOT gate observes the Reference value through an 8-bit process exit. */
+            ASSERT_EQ_UINT((uint64_t) outcome.value.as.i64 & UINT64_C(0xff), 14u);
         } else if (mode->expected == XR_BACKEND_EXECUTION_CANCELLED) {
             ASSERT_EQ_INT(outcome.kind, XR_REFERENCE_OUTCOME_CANCELLED);
         } else {
