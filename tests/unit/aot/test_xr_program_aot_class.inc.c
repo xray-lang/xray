@@ -413,6 +413,21 @@ static bool file_is_empty(const char *path) {
     return empty;
 }
 
+static void report_h2_file(const char *label, const char *path) {
+    FILE *input = fopen(path, "rb");
+    fprintf(stderr, "generated-C native %s (%s):\n", label, path);
+    if (!input) {
+        fputs("<unavailable>\n", stderr);
+        return;
+    }
+    uint8_t bytes[1024];
+    size_t size = 0u;
+    while ((size = fread(bytes, 1u, sizeof(bytes), input)) != 0u)
+        (void) fwrite(bytes, 1u, size, stderr);
+    (void) fclose(input);
+    fputc('\n', stderr);
+}
+
 static bool publish_exact_file(const char *path, const char *expected) {
     FILE *input = fopen(path, "rb");
     if (!input)
@@ -443,7 +458,7 @@ static bool run_class_generated_c_native(void) {
     (void) snprintf(source, sizeof(source), "xr-h2-class-%d.c", pid);
 #ifdef _WIN32
     (void) snprintf(executable, sizeof(executable), "xr-h2-class-%d.exe", pid);
-    const char *default_compiler = "clang";
+    const char *default_compiler = "C:/Program Files/LLVM/bin/clang.exe";
 #else
     (void) snprintf(executable, sizeof(executable), "xr-h2-class-%d", pid);
     const char *default_compiler = "cc";
@@ -456,27 +471,63 @@ static bool run_class_generated_c_native(void) {
     (void) remove(output);
     (void) remove(errors);
     (void) remove(compile_log);
-    const char *configured = getenv("CC");
+    const char *configured = getenv("XRAY_H2_C_COMPILER");
+    if (!configured || !configured[0])
+        configured = getenv("CC");
     const char *compiler = configured && configured[0] ? configured : default_compiler;
     char command[640];
+#ifdef _WIN32
+    int length = snprintf(
+        command, sizeof(command),
+        "\"%s\" -std=c11 -pedantic-errors -Wall -Wextra -Werror -fuse-ld=lld "
+        "%s -o %s >%s 2>&1",
+        compiler, source, executable, compile_log);
+#else
     int length = snprintf(command, sizeof(command),
-                          "%s -std=c11 -pedantic-errors -Wall -Wextra -Werror %s -o %s >%s 2>&1",
+                          "\"%s\" -std=c11 -pedantic-errors -Wall -Wextra -Werror "
+                          "%s -o %s >%s 2>&1",
                           compiler, source, executable, compile_log);
-    bool success = length > 0 && (size_t) length < sizeof(command) &&
-                   write_class_native_source(source) && system(command) == 0;
+#endif
+    bool source_written = write_class_native_source(source);
+    int compile_status = source_written && length > 0 && (size_t) length < sizeof(command)
+                             ? system(command)
+                             : -1;
+    bool success = compile_status == 0;
+    if (!source_written)
+        fputs("generated-C native source emission failed\n", stderr);
+    else if (compile_status != 0) {
+        fprintf(stderr, "generated-C native compile exit=%d command=%s\n", compile_status,
+                command);
+        report_h2_file("compiler output", compile_log);
+    }
+    int run_status = -1;
 #ifdef _WIN32
     if (success) {
         length = snprintf(command, sizeof(command), "%s >%s 2>%s", executable, output, errors);
-        success = length > 0 && (size_t) length < sizeof(command) && system(command) == 0;
+        run_status = length > 0 && (size_t) length < sizeof(command) ? system(command) : -1;
+        success = run_status == 0;
     }
 #else
     if (success) {
         length = snprintf(command, sizeof(command), "./%s >%s 2>%s", executable, output, errors);
-        success = length > 0 && (size_t) length < sizeof(command) && system(command) == 0;
+        run_status = length > 0 && (size_t) length < sizeof(command) ? system(command) : -1;
+        success = run_status == 0;
     }
 #endif
-    if (success)
-        success = file_is_empty(errors) && publish_exact_file(output, XR_H2_AOT_NATIVE_RECORD);
+    if (compile_status == 0 && run_status != 0) {
+        fprintf(stderr, "generated-C native execution exit=%d command=%s\n", run_status,
+                command);
+        report_h2_file("stdout", output);
+        report_h2_file("stderr", errors);
+    }
+    if (success && !file_is_empty(errors)) {
+        report_h2_file("unexpected stderr", errors);
+        success = false;
+    }
+    if (success && !publish_exact_file(output, XR_H2_AOT_NATIVE_RECORD)) {
+        report_h2_file("non-exact stdout", output);
+        success = false;
+    }
     (void) remove(source);
     (void) remove(executable);
     (void) remove(output);
