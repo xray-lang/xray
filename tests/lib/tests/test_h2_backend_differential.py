@@ -36,17 +36,79 @@ class H2BackendDifferentialTests(unittest.TestCase):
     def encoded(record):
         return (json.dumps(record, separators=(",", ":")) + "\n").encode("utf-8")
 
-    def test_repository_manifest_is_honest_pending_and_reference_is_real(self):
-        document = gate.validate_manifest(self.manifest(), self.registry())
+    @staticmethod
+    def synthetic_evidence_sources(document):
+        evidence_by_function = {}
+        evidence_records = [
+            document["reference_evidence"],
+            document["reference_program_evidence"],
+        ]
+        for executor in document["executors"]:
+            if executor["pending_witness"] is not None:
+                evidence_records.append(executor["pending_witness"])
+            evidence_records.append(executor["active_evidence"])
+        for evidence in evidence_records:
+            key = (evidence["source"], evidence["function"])
+            tokens = evidence_by_function.setdefault(key, [])
+            tokens.extend(evidence["ordered_tokens"])
+
+        sources = {}
+        for index, ((source, function), tokens) in enumerate(evidence_by_function.items()):
+            body = "\n".join(f"    /* {token} */" for token in tokens)
+            sources.setdefault(source, []).append(
+                f"static void {function}(void) {{\n{body}\n}}\n"
+                f"static void invoke_{index}(void) {{ {function}(); }}\n"
+            )
+        return {source: "\n".join(bodies) for source, bodies in sources.items()}
+
+    def validate_with_synthetic_evidence(self, document, registry, sources=None):
+        evidence_sources = sources or self.synthetic_evidence_sources(document)
+        with mock.patch.object(
+            gate,
+            "load_source",
+            side_effect=lambda _root, relative: evidence_sources[relative],
+        ):
+            return gate.validate_manifest(copy.deepcopy(document), copy.deepcopy(registry))
+
+    def synthetic_pending(self):
+        document = self.manifest()
+        registry = self.registry()
+        for executor in document["executors"]:
+            executor["state"] = "expected-unsupported"
+            is_vm = executor["coverage_key"] == "vm"
+            executor["pending_witness"] = {
+                "source": ("tests/unit/vm/test_xr_program_vm.c" if is_vm
+                           else "tests/unit/aot/test_xr_program_aot.c"),
+                "function": ("test_inactive_operations_fail_before_dispatch" if is_vm
+                             else "test_inactive_operations_fail_before_lowering"),
+                "ordered_tokens": list(gate.VM_PENDING_TOKENS if is_vm
+                                       else gate.AOT_PENDING_TOKENS),
+            }
+        for operation in registry["operations"]:
+            if operation.get("stable_id") not in {stable_id for stable_id, _ in gate.EXPECTED_OPERATIONS}:
+                continue
+            operation["coverage"]["vm"]["status"] = "NOT_YET_ACTIVE"
+            operation["coverage"]["aot"]["status"] = "NOT_YET_ACTIVE"
+        return document, registry
+
+    def test_repository_manifest_is_all_execute_and_registry_complete(self):
+        manifest = self.manifest()
+        registry = self.registry()
+        document = self.validate_with_synthetic_evidence(manifest, registry)
         self.assertEqual(
             [executor["id"] for executor in document["executors"]],
             list(gate.EXECUTOR_IDS),
         )
         self.assertEqual(
             {executor["state"] for executor in document["executors"]},
-            {"expected-unsupported"},
+            {"execute"},
         )
-        self.assertEqual(gate.check(), (0, 4))
+        self.assertTrue(all(executor["pending_witness"] is None
+                            for executor in document["executors"]))
+        coverage = gate.operation_coverage(registry)
+        for stable_id, _ in gate.EXPECTED_OPERATIONS:
+            self.assertEqual(coverage[stable_id]["vm"], "COMPLETE")
+            self.assertEqual(coverage[stable_id]["aot"], "COMPLETE")
 
     def test_operation_and_oracle_drift_fail_closed(self):
         for mutate, message in (
@@ -72,11 +134,13 @@ class H2BackendDifferentialTests(unittest.TestCase):
         registry = self.registry()
         operation = next(item for item in registry["operations"]
                          if item["stable_id"] == 142)
-        operation["coverage"]["vm"]["status"] = "COMPLETE"
+        operation["coverage"]["vm"]["status"] = "NOT_YET_ACTIVE"
         with self.assertRaisesRegex(gate.GateError, "disagrees with CoreSpec"):
             gate.validate_manifest(self.manifest(), registry)
 
     def test_pending_witness_cannot_be_missing_or_weakened(self):
+        document, registry = self.synthetic_pending()
+        self.validate_with_synthetic_evidence(document, registry)
         for mutate, message in (
             (lambda executor: executor.update(pending_witness=None), "lacks exact rejection"),
             (lambda executor: executor["pending_witness"]["ordered_tokens"].pop(),
@@ -85,10 +149,24 @@ class H2BackendDifferentialTests(unittest.TestCase):
              "lacks function"),
         ):
             with self.subTest(message=message):
-                document = self.manifest()
-                mutate(document["executors"][0])
+                hostile = copy.deepcopy(document)
+                sources = self.synthetic_evidence_sources(hostile)
+                mutate(hostile["executors"][0])
                 with self.assertRaisesRegex(gate.GateError, message):
-                    gate.validate_manifest(document, self.registry())
+                    self.validate_with_synthetic_evidence(hostile, registry, sources)
+
+    def test_synthetic_pending_state_rejects_asymmetric_or_complete_coverage(self):
+        document, registry = self.synthetic_pending()
+        document["executors"][0]["state"] = "execute"
+        document["executors"][0]["pending_witness"] = None
+        with self.assertRaisesRegex(gate.GateError, "disagrees with CoreSpec"):
+            self.validate_with_synthetic_evidence(document, registry)
+
+        document, registry = self.synthetic_pending()
+        operation = next(item for item in registry["operations"] if item["stable_id"] == 142)
+        operation["coverage"]["aot"]["status"] = "COMPLETE"
+        with self.assertRaisesRegex(gate.GateError, "disagrees with CoreSpec"):
+            self.validate_with_synthetic_evidence(document, registry)
 
     def test_reference_evidence_tokens_are_a_non_weakenable_minimum(self):
         document = self.manifest()
@@ -117,11 +195,11 @@ class H2BackendDifferentialTests(unittest.TestCase):
         document = self.manifest()
         document["qualification"]["ctests"].remove("test_xr_program_vm_runtime")
         with self.assertRaisesRegex(gate.GateError, "omits a required existing CTest"):
-            gate.validate_manifest(document, self.registry())
+            self.validate_with_synthetic_evidence(document, self.registry())
         document = self.manifest()
         document["qualification"]["targets"].append("test_xr_program_aot")
         with self.assertRaisesRegex(gate.GateError, "duplicates"):
-            gate.validate_manifest(document, self.registry())
+            self.validate_with_synthetic_evidence(document, self.registry())
 
     def test_probe_record_requires_exact_schema_route_and_oracle(self):
         identifier = "vm-baseline"

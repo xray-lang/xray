@@ -577,13 +577,28 @@ static void assert_vm_rejects_inactive_operation(XrInstance *instance,
     }
 }
 
-static void assert_vm_rejects_fixture_inactive_operation(XrInstance *instance,
-                                                         const XrValidatedProgram *program,
-                                                         XrSourceFixtureId fixture) {
+static void assert_vm_fixture_backend_contract(XrInstance *instance,
+                                               const XrValidatedProgram *program,
+                                               XrSourceFixtureId fixture) {
     uint16_t expected_operation =
         xr_source_fixture_unsupported_operation(fixture, XR_SOURCE_BACKEND_VM);
-    ASSERT_TRUE(expected_operation != 0u);
-    assert_vm_rejects_inactive_operation(instance, program, expected_operation);
+    if (expected_operation != 0u) {
+        assert_vm_rejects_inactive_operation(instance, program, expected_operation);
+        return;
+    }
+
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t index = 0u; index < sizeof(policies) / sizeof(policies[0]); ++index) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[index];
+        XrVmCodeDiagnostic diagnostic;
+        XrVmCode *code = NULL;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+        ASSERT_NOT_NULL(code);
+        ASSERT_EQ_INT(diagnostic.status, XR_VM_CODE_OK);
+        ASSERT_EQ_INT(xr_vm_code_decode_policy(code), policies[index]);
+        xr_vm_code_free(code);
+    }
 }
 
 static void assert_aot_rejects_inactive_operation(const XrValidatedProgram *program,
@@ -606,13 +621,44 @@ static void assert_aot_rejects_inactive_operation(const XrValidatedProgram *prog
         ASSERT_EQ_INT(spec->aot_status, XR_CORE_COVERAGE_NOT_YET_ACTIVE);
 }
 
-static void assert_aot_rejects_fixture_inactive_operation(const XrValidatedProgram *program,
-                                                          const XrTargetProfile *profile,
-                                                          XrSourceFixtureId fixture) {
+static void assert_aot_fixture_backend_contract(const XrValidatedProgram *program,
+                                                const XrTargetProfile *profile,
+                                                XrSourceFixtureId fixture) {
     uint16_t expected_operation =
         xr_source_fixture_unsupported_operation(fixture, XR_SOURCE_BACKEND_AOT);
-    ASSERT_TRUE(expected_operation != 0u);
-    assert_aot_rejects_inactive_operation(program, profile, expected_operation);
+    if (expected_operation != 0u) {
+        assert_aot_rejects_inactive_operation(program, profile, expected_operation);
+        return;
+    }
+
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic diagnostic;
+    XrBackendIR *ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic), XR_BACKEND_OK);
+    ASSERT_NOT_NULL(ir);
+    ASSERT_EQ_INT(diagnostic.status, XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(ir, &diagnostic));
+
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_NOT_NULL(generated.bytes);
+    ASSERT_NOT_NULL(repeated.bytes);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int main(void)"));
+
+    const char *output_path = source_fixture_output_path(fixture);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
 }
 
 static uint32_t program_operation_successor_count(const XrValidatedProgram *program,
@@ -1855,11 +1901,10 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
-    assert_vm_rejects_fixture_inactive_operation(instance, program,
+    assert_vm_fixture_backend_contract(instance, program,
                                                  XR_SOURCE_FIXTURE_GENERIC_CONSTRAINT_METHOD);
-    assert_aot_rejects_fixture_inactive_operation(program, profile,
+    assert_aot_fixture_backend_contract(program, profile,
                                                   XR_SOURCE_FIXTURE_GENERIC_CONSTRAINT_METHOD);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_GENERIC_CONSTRAINT_METHOD));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -2634,11 +2679,10 @@ TEST(source_owner_generic_scalar_class_specializations_are_exact_class_reference
     ASSERT_EQ_INT(xr_execution_instance_create(&binding, &instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
-    assert_vm_rejects_fixture_inactive_operation(instance, program,
+    assert_vm_fixture_backend_contract(instance, program,
                                                  XR_SOURCE_FIXTURE_GENERIC_SCALAR_CLASS);
-    assert_aot_rejects_fixture_inactive_operation(program, profile,
+    assert_aot_fixture_backend_contract(program, profile,
                                                   XR_SOURCE_FIXTURE_GENERIC_SCALAR_CLASS);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_GENERIC_SCALAR_CLASS));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -3972,13 +4016,12 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
     ProviderTrapCleanupProbe reference_probe = probe;
-    assert_vm_rejects_fixture_inactive_operation(instance, first.program,
+    assert_vm_fixture_backend_contract(instance, first.program,
                                                  XR_SOURCE_FIXTURE_PROVIDER_TRAP_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_rejects_fixture_inactive_operation(first.program, profile,
+    assert_aot_fixture_backend_contract(first.program, profile,
                                                   XR_SOURCE_FIXTURE_PROVIDER_TRAP_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_PROVIDER_TRAP_CLEANUP));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4099,13 +4142,12 @@ TEST(source_owner_child_coroutine_provider_failure_composes_static_cleanup) {
     uint32_t entry = xr_validated_program_entry_function(product.program);
     child_cleanup_check_reference(instance, entry, &probe);
     ChildCleanupProbe reference_probe = probe;
-    assert_vm_rejects_fixture_inactive_operation(
+    assert_vm_fixture_backend_contract(
         instance, product.program, XR_SOURCE_FIXTURE_CHILD_COROUTINE_TRAP_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_rejects_fixture_inactive_operation(
+    assert_aot_fixture_backend_contract(
         product.program, profile, XR_SOURCE_FIXTURE_CHILD_COROUTINE_TRAP_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_CHILD_COROUTINE_TRAP_CLEANUP));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4226,13 +4268,12 @@ TEST(source_owner_shared_branching_cleanup_projects_private_cancel_graph) {
     uint32_t entry = xr_validated_program_entry_function(product.program);
     branching_cleanup_check_reference(instance, entry, &probe);
     BranchingCleanupProbe reference_probe = probe;
-    assert_vm_rejects_fixture_inactive_operation(instance, product.program,
+    assert_vm_fixture_backend_contract(instance, product.program,
                                                  XR_SOURCE_FIXTURE_BRANCHING_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_rejects_fixture_inactive_operation(product.program, profile,
+    assert_aot_fixture_backend_contract(product.program, profile,
                                                   XR_SOURCE_FIXTURE_BRANCHING_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_BRANCHING_CLEANUP));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4325,13 +4366,12 @@ TEST(source_owner_nested_cleanup_projects_reason_chain) {
     uint32_t entry = xr_validated_program_entry_function(product.program);
     nested_cleanup_check_reference(instance, entry, &probe);
     BranchingCleanupProbe reference_probe = probe;
-    assert_vm_rejects_fixture_inactive_operation(instance, product.program,
+    assert_vm_fixture_backend_contract(instance, product.program,
                                                  XR_SOURCE_FIXTURE_NESTED_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_rejects_fixture_inactive_operation(product.program, profile,
+    assert_aot_fixture_backend_contract(product.program, profile,
                                                   XR_SOURCE_FIXTURE_NESTED_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_NESTED_CLEANUP));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4575,15 +4615,14 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_EQ_UINT(probe.close_calls, 2u);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
-    assert_vm_rejects_fixture_inactive_operation(instance, first.program,
+    assert_vm_fixture_backend_contract(instance, first.program,
                                                  XR_SOURCE_FIXTURE_PIPE_PROVIDER);
     ASSERT_EQ_UINT(probe.open_calls, 1u);
     ASSERT_EQ_UINT(probe.close_calls, 2u);
-    assert_aot_rejects_fixture_inactive_operation(first.program, profile,
+    assert_aot_fixture_backend_contract(first.program, profile,
                                                   XR_SOURCE_FIXTURE_PIPE_PROVIDER);
     ASSERT_EQ_UINT(probe.open_calls, 1u);
     ASSERT_EQ_UINT(probe.close_calls, 2u);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_PROVIDER));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4710,13 +4749,12 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     ASSERT_EQ_UINT(probe.close_calls, 2u);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
-    assert_vm_rejects_fixture_inactive_operation(instance, first.program,
+    assert_vm_fixture_backend_contract(instance, first.program,
                                                  XR_SOURCE_FIXTURE_PIPE_CLOSE_FAILURE);
     ASSERT_EQ_UINT(probe.close_calls, 2u);
-    assert_aot_rejects_fixture_inactive_operation(first.program, profile,
+    assert_aot_fixture_backend_contract(first.program, profile,
                                                   XR_SOURCE_FIXTURE_PIPE_CLOSE_FAILURE);
     ASSERT_EQ_UINT(probe.close_calls, 2u);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_CLOSE_FAILURE));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4845,13 +4883,12 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
 
     assert_uncaught_reference_error(first.program, instance, entry, entry_function->error_type_id,
                                     &probe);
-    assert_vm_rejects_fixture_inactive_operation(instance, first.program,
+    assert_vm_fixture_backend_contract(instance, first.program,
                                                  XR_SOURCE_FIXTURE_PIPE_UNCAUGHT_ERROR);
     ASSERT_EQ_UINT(probe.close_calls, 2u);
-    assert_aot_rejects_fixture_inactive_operation(first.program, profile,
+    assert_aot_fixture_backend_contract(first.program, profile,
                                                   XR_SOURCE_FIXTURE_PIPE_UNCAUGHT_ERROR);
     ASSERT_EQ_UINT(probe.close_calls, 2u);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_UNCAUGHT_ERROR));
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -5155,13 +5192,12 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
     xr_reference_execution_free(reference_cancel);
 
     PipeProviderProbe reference_probe = probe;
-    assert_vm_rejects_fixture_inactive_operation(instance, first.program,
+    assert_vm_fixture_backend_contract(instance, first.program,
                                                  XR_SOURCE_FIXTURE_PIPE_CANCEL_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_rejects_fixture_inactive_operation(first.program, profile,
+    assert_aot_fixture_backend_contract(first.program, profile,
                                                   XR_SOURCE_FIXTURE_PIPE_CANCEL_CLEANUP);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_CANCEL_CLEANUP));
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
@@ -5557,14 +5593,13 @@ TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspens
 
     field_ref_cleanup_check_reference(instance, entry, &cleanup_probe);
     FieldRefCleanupProbe reference_probe = cleanup_probe;
-    assert_vm_rejects_fixture_inactive_operation(instance, first.program,
+    assert_vm_fixture_backend_contract(instance, first.program,
                                                  XR_SOURCE_FIXTURE_REF_PARAMETER_COROUTINE);
     ASSERT_EQ_INT(memcmp(&cleanup_probe, &reference_probe, sizeof(cleanup_probe)), 0);
 
-    assert_aot_rejects_fixture_inactive_operation(first.program, profile,
+    assert_aot_fixture_backend_contract(first.program, profile,
                                                   XR_SOURCE_FIXTURE_REF_PARAMETER_COROUTINE);
     ASSERT_EQ_INT(memcmp(&cleanup_probe, &reference_probe, sizeof(cleanup_probe)), 0);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_REF_PARAMETER_COROUTINE));
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
@@ -5679,9 +5714,9 @@ static bool run_read_existential_coroutine_reference(XrValidatedProgram *program
         xr_reference_execution_step(reference_cancel).kind != XR_REFERENCE_OUTCOME_SUSPENDED ||
         xr_reference_execution_cancel(reference_cancel).kind != XR_REFERENCE_OUTCOME_CANCELLED)
         goto cleanup;
-    assert_vm_rejects_fixture_inactive_operation(
+    assert_vm_fixture_backend_contract(
         instance, program, XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE);
-    assert_aot_rejects_fixture_inactive_operation(
+    assert_aot_fixture_backend_contract(
         program, profile, XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE);
     ok = true;
 cleanup:
@@ -5729,7 +5764,8 @@ TEST(source_owner_keeps_read_existential_root_across_child_suspension) {
     ReadExistentialCoroutineProbe probe;
     ASSERT_TRUE(inspect_read_existential_coroutine(first.program, &probe));
     ASSERT_TRUE(run_read_existential_coroutine_reference(first.program, profile, probe.entry));
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE));
+    ASSERT_TRUE(source_fixture_output_path(XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE) ==
+                selected_source_output);
 cleanup:
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
@@ -5908,13 +5944,12 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
 
     assert_affine_reference_executions(instance, entry, &probe);
     PipeCloseSequenceProbe reference_probe = probe;
-    assert_vm_rejects_fixture_inactive_operation(instance, product.program,
+    assert_vm_fixture_backend_contract(instance, product.program,
                                                  XR_SOURCE_FIXTURE_AFFINE_COROUTINE_RESULT);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_rejects_fixture_inactive_operation(product.program, profile,
+    assert_aot_fixture_backend_contract(product.program, profile,
                                                   XR_SOURCE_FIXTURE_AFFINE_COROUTINE_RESULT);
     ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    ASSERT_NULL(source_fixture_output_path(XR_SOURCE_FIXTURE_AFFINE_COROUTINE_RESULT));
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);

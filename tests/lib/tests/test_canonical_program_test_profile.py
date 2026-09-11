@@ -27,7 +27,7 @@ SPEC.loader.exec_module(profile)
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
         self.assertEqual(len(profile.CTEST_NAMES), 62)
-        self.assertEqual(len(profile.BUILD_TARGETS), 23)
+        self.assertEqual(len(profile.BUILD_TARGETS), 36)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
         self.assertLessEqual(
@@ -145,7 +145,18 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
                 "aot": {"status": "unsupported", "operation": "core.class.construct"},
             }
             manifest.write_text(json.dumps(payload), encoding="utf-8")
-            pending = profile.load_inventory(manifest, source)
+            inactive = {
+                "core.class.construct": {
+                    "vm": "NOT_YET_ACTIVE",
+                    "aot": "NOT_YET_ACTIVE",
+                },
+            }
+            with mock.patch.object(
+                profile.source_fixtures,
+                "load_core_operation_coverage",
+                return_value=inactive,
+            ):
+                pending = profile.load_inventory(manifest, source)
             self.assertEqual(
                 pending[0],
                 without_fixture[0] + ("test_xr_program_example_backend_pending",),
@@ -283,10 +294,10 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_cross_module_coroutine_aot_native",
             "test_xr_program_cross_module_static_method_coroutine_aot_native",
             "test_xr_program_multi_safepoint_aot_native",
-            "test_xr_program_ref_parameter_coroutine_backend_pending",
-            "test_xr_program_read_existential_coroutine_backend_pending",
-            "test_xr_program_provider_trap_cleanup_backend_pending",
-            "test_xr_program_child_coroutine_trap_cleanup_backend_pending",
+            "test_xr_program_ref_parameter_coroutine_aot_native",
+            "test_xr_program_read_existential_coroutine_aot_native",
+            "test_xr_program_provider_trap_cleanup_aot_native",
+            "test_xr_program_child_coroutine_trap_cleanup_aot_native",
             "meta_ownership_inventory",
             "contract_freeze",
             "contract_freeze_injection",
