@@ -665,6 +665,18 @@ static bool detach_vm_value(XrVmValue source, XrVmValue *output) {
     return true;
 }
 
+static bool vm_value_contains_class(XrVmValue value) {
+    if (value.kind == XR_VM_VALUE_CLASS_REFERENCE)
+        return true;
+    if (value.kind != XR_VM_VALUE_AGGREGATE || !value.as.aggregate)
+        return false;
+    const XrVmAggregateValue *aggregate = value.as.aggregate;
+    for (uint32_t field = 0u; field < aggregate->field_count; ++field)
+        if (vm_value_contains_class(aggregate->fields[field]))
+            return true;
+    return false;
+}
+
 bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out) {
     if (view_out)
         memset(view_out, 0, sizeof(*view_out));
@@ -3167,6 +3179,9 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 result.value = instruction.operand_count == 0u
                                    ? void_value()
                                    : execution->values[instruction.operands[0]].as.value;
+                if (vm_value_contains_class(result.value))
+                    result = vm_execution_outcome(execution,
+                                                  XR_VM_OUTCOME_INVALID_INVOCATION);
                 vm_execution_release_lease(execution);
                 return result;
             }
@@ -3293,6 +3308,8 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     XrVmOutcome outcome =
         execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
+    if (outcome.kind == XR_VM_OUTCOME_RETURN && vm_value_contains_class(outcome.value))
+        outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE) {
         XrVmValue detached = void_value();
         if (detach_vm_value(outcome.value, &detached)) {
