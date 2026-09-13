@@ -10,6 +10,7 @@
  */
 
 #include "xi_emit_internal.h"
+#include "xi_emit_vm_gen.h"
 #include "xi_own.h"
 #include "../analysis/xglobal_summary.h"
 #include "../runtime/value/xtype.h"
@@ -666,6 +667,16 @@ XR_FUNC void xi_emit_sum_inject(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 }
 
+/* A nullable subject is the closed Optional<T> sum in the tagged VM
+ * representation, the same two-variant shape XrProgram maps the type to:
+ * variant 0 (None) is the null tag and variant 1 (Some) carries the payload
+ * as the value itself. Its tag test is therefore a null test and its payload
+ * projection is the subject register. Enum variants keep their field-carried
+ * tag and payload fields. */
+static bool subject_is_tagged_optional(const XiValue *subject) {
+    return subject && subject->type && subject->type->is_nullable;
+}
+
 XR_FUNC void xi_emit_variant_test(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!v || v->nargs != 1 || !v->args[0] || v->aux_int < 0 ||
         (uint64_t) v->aux_int > UINT32_MAX || ctx->next_reg >= MAX_REGS) {
@@ -675,6 +686,22 @@ XR_FUNC void xi_emit_variant_test(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg source = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    if (subject_is_tagged_optional(v->args[0])) {
+        if (v->aux_int > 1) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        emit_inst(ctx, CREATE_ABC(OP_ISNULL_SET, dst, source, 0));
+        if (v->aux_int == 1) {
+            OpCode negate = xi_emit_vm_template_opcode(XI_NOT);
+            if (negate == OP_NOP) {
+                emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+                return;
+            }
+            emit_inst(ctx, CREATE_ABC(negate, dst, dst, 0));
+        }
+        return;
+    }
     XiEmitReg expected = (XiEmitReg) ctx->next_reg++;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
@@ -693,6 +720,15 @@ XR_FUNC void xi_emit_variant_project(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg source = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    if (subject_is_tagged_optional(v->args[0])) {
+        if (xi_variant_projection_variant(v) != 1u || field != 0u) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        if (dst != source)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, source, 0));
+        return;
+    }
     emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, source, (uint16_t) (field + 1u)));
 }
 

@@ -1007,7 +1007,7 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
         return merged.complete ? merged : arc_return_null_join();
     }
 
-    if (value->op == XI_CONST && value->type && value->type->kind == XR_KIND_NULL)
+    if (xi_value_is_null_constant(value))
         return arc_return_null_join();
     if (value->op == XI_CONST || value->op == XI_GET_SHARED || value->op == XI_IMPORT_REF)
         return arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);

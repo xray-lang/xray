@@ -2463,7 +2463,7 @@ static bool sr_param_is_call_bound_place(const XiValue *v) {
 }
 
 static bool sr_value_is_null_const(const XiValue *v) {
-    return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_NULL;
+    return xi_value_is_null_constant(v);
 }
 
 static bool sr_compare_uses_null(const XiValue *user) {

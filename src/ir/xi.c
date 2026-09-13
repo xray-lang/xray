@@ -858,6 +858,14 @@ static void block_append_value(XiBlock *blk, XiValue *v) {
     blk->values[blk->nvalues++] = v;
 }
 
+XR_FUNC bool xi_value_is_null_constant(const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->op == XI_CONST)
+        return v->type && v->type->kind == XR_KIND_NULL;
+    return v->op == XI_SUM_INJECT && v->aux_int == 0 && v->nargs == 0;
+}
+
 XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, uint16_t nargs) {
     XiValue *v = value_alloc(f, blk, op, type, nargs);
     if (!v)

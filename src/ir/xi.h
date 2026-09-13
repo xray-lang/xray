@@ -1730,6 +1730,13 @@ static inline bool xi_err_check_has_arc_cleanups(const XiValue *v) {
     return v && v->op == XI_ERR_CHECK && v->nargs != 0;
 }
 
+/* Whether a value is the null constant, in either of the two shapes lowering
+ * produces: a bare XI_CONST of the null type, or the None injection of a
+ * closed Optional<T> that a null literal is retyped into at a nullable
+ * boundary. Every pass that treats "compared against null" or "returns null"
+ * specially asks this one question, so both shapes stay one value. */
+XR_FUNC bool xi_value_is_null_constant(const XiValue *v);
+
 static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
 }
