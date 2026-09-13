@@ -1818,6 +1818,40 @@ static XrType *resolve_generic_value_struct_mono_instance(XaAnalyzer *analyzer,
     return result;
 }
 
+/* The standard library module whose exported class declares a prelude type,
+ * or NULL when the prelude type has no xray declaration. */
+static const char *prelude_declaration_module(const char *name) {
+    if (!name)
+        return NULL;
+#define XR_BUILTIN_PRELUDE_DECLARATION(type_name, module_name)                                    \
+    if (strcmp(name, type_name) == 0)                                                             \
+        return (module_name);
+#include "../../../stdlib/prelude/builtin_symbols.def"
+    return NULL;
+}
+
+/* Bind a bare prelude name to its standard library declaration. A prelude
+ * type such as Path is one nominal class: the annotation `p: Path` written
+ * without an import and the `Path` a module exports through
+ * `import { Path } from path` must carry the same XrClassInfo, because class
+ * identity is decided by that declaration reference and never by the display
+ * name. Returns NULL when the declaring module is not in the compilation
+ * graph, in which case nothing in this compilation carries the declaration
+ * either and the declaration-less prelude form stays self-consistent. */
+static XrType *resolve_prelude_declaration_in_analyzer(XaAnalyzer *analyzer, const char *name) {
+    const char *module_name = prelude_declaration_module(name);
+    if (!module_name)
+        return NULL;
+    XrHashMap *exports = resolve_graph_export_symbols(analyzer, module_name);
+    XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, name) : NULL;
+    if (!export_sym || export_sym->kind != XA_SYM_CLASS)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, export_sym);
+    if (!links || !links->class_info)
+        return NULL;
+    return xr_type_new_instance(analyzer->isolate, links->class_info);
+}
+
 static XrType *resolve_in_analyzer_uncached(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     if (!tref)
         return xr_type_new_error(NULL);
@@ -1850,6 +1884,9 @@ static XrType *resolve_in_analyzer_uncached(XaAnalyzer *analyzer, const XrTypeRe
         XrType *cls = resolve_type_ref_symbol_type(analyzer, tref->name);
         if (cls)
             return cls;
+        XrType *declared = resolve_prelude_declaration_in_analyzer(analyzer, tref->name);
+        if (declared)
+            return declared;
         XrType *known = resolve_known_named(analyzer->isolate, tref->name);
         if (known)
             return known;

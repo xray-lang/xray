@@ -61,6 +61,15 @@
  *   XR_BUILTIN_IFACE(name, arity)
  *       Built-in constraint interface usable in `T: Name` and `implements`.
  *
+ *   XR_BUILTIN_PRELUDE_DECLARATION(name, module)
+ *       A prelude type whose declaration is an exported class of a standard
+ *       library module written in xray. The name is one nominal type: when
+ *       that module is part of the compilation graph, the resolver binds the
+ *       bare prelude name to the exported declaration's identity, so an
+ *       annotation without an import and a value typed through the module's
+ *       exports are the same class. Outside that graph the name keeps the
+ *       declaration-less prelude form.
+ *
  *   XR_BUILTIN_UNDEFINED_HINT(name, hint)
  *       Not a symbol: a name that is *deliberately absent* and that users keep
  *       reaching for. When resolution of this name fails, the resolver reports
@@ -85,6 +94,9 @@
 #endif
 #ifndef XR_BUILTIN_IFACE
 #define XR_BUILTIN_IFACE(name, arity)
+#endif
+#ifndef XR_BUILTIN_PRELUDE_DECLARATION
+#define XR_BUILTIN_PRELUDE_DECLARATION(name, module)
 #endif
 #ifndef XR_BUILTIN_UNDEFINED_HINT
 #define XR_BUILTIN_UNDEFINED_HINT(name, hint)
@@ -117,6 +129,11 @@ XR_BUILTIN_PRELUDE_TYPE("Set",           1, XR_TSET,      GENERIC_1)
 XR_BUILTIN_PRELUDE_TYPE("Slice",         1, 0,            GENERIC_1)
 XR_BUILTIN_PRELUDE_TYPE("StringBuilder", 0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Thread",        1, XR_TTHREAD,   GENERIC_1)
+
+/* ========== Prelude types declared in the standard library ==========
+ * Path is a nominal owner for filesystem paths whose construction and
+ * algorithms live in stdlib/path/path.xr as `export class Path`. */
+XR_BUILTIN_PRELUDE_DECLARATION("Path", "path")
 
 /* ========== Resolver-known type heads ==========
  * Constructed by the analyzer rather than through the prelude symbol table. */
@@ -232,4 +249,5 @@ XR_BUILTIN_UNDEFINED_HINT("Box",
 #undef XR_BUILTIN_ENUM
 #undef XR_BUILTIN_ENUM_VARIANT
 #undef XR_BUILTIN_IFACE
+#undef XR_BUILTIN_PRELUDE_DECLARATION
 #undef XR_BUILTIN_UNDEFINED_HINT
