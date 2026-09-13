@@ -1453,6 +1453,24 @@ XaDiagnostic *xa_analyzer_get_diagnostics(XaAnalyzer *analyzer, int *count) {
     return analyzer->diagnostics;
 }
 
+int xa_analyzer_print_errors(XaAnalyzer *analyzer, const char *fallback_path) {
+    int errors = 0;
+    if (!analyzer)
+        return 0;
+    for (XaDiagnostic *diagnostic = analyzer->diagnostics; diagnostic;
+         diagnostic = diagnostic->next) {
+        if (diagnostic->severity != XR_DIAG_SEV_ERROR)
+            continue;
+        errors++;
+        const char *file = diagnostic->location.file ? diagnostic->location.file
+                           : fallback_path                ? fallback_path
+                                                          : "<module>";
+        fprintf(stderr, "%s:%u:%u: error: %s\n", file, diagnostic->location.line,
+                diagnostic->location.column, diagnostic->message ? diagnostic->message : "");
+    }
+    return errors;
+}
+
 void xa_analyzer_clear_diagnostics(XaAnalyzer *analyzer) {
     if (!analyzer)
         return;

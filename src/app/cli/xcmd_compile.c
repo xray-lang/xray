@@ -127,15 +127,7 @@ static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
             xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
             spec->export_symbols =
                 xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
-            int diagnostic_count = 0;
-            XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
-            for (XaDiagnostic *diag = diagnostics; diag; diag = diag->next) {
-                if (diag->severity != XR_DIAG_SEV_ERROR)
-                    continue;
-                error_count++;
-                fprintf(stderr, "%s:%d:%d: error: %s\n", spec->source_path, diag->location.line,
-                        diag->location.column, diag->message);
-            }
+            error_count += xa_analyzer_print_errors(analyzer, spec->source_path);
             xa_analyzer_clear_diagnostics(analyzer);
         }
         if (error_count > 0) {

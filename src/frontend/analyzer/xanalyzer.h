@@ -445,6 +445,11 @@ XR_FUNC XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *
 // API: Diagnostics
 XR_FUNC XaDiagnostic *xa_analyzer_get_diagnostics(XaAnalyzer *analyzer, int *count);
 XR_FUNC void xa_analyzer_clear_diagnostics(XaAnalyzer *analyzer);
+/* Print every error diagnostic to stderr as `file:line:column: error: message`.
+ * A diagnostic names its own file when it was raised against another module's
+ * declaration; one that carries no file is attributed to `fallback_path`.
+ * Returns the number of errors printed. */
+XR_FUNC int xa_analyzer_print_errors(XaAnalyzer *analyzer, const char *fallback_path);
 
 // API: Type checking
 XR_FUNC bool xa_analyzer_check_assignment(XaAnalyzer *analyzer, XrType *target, XrType *source,

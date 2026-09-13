@@ -100,16 +100,8 @@ static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrMod
         spec->export_symbols =
             xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
 
-        int diag_count = 0;
-        XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
-        for (XaDiagnostic *d = diags; d; d = d->next) {
-            if (d->severity == XR_DIAG_SEV_ERROR) {
-                graph_errors++;
-                fprintf(stderr, "%s:%d:%d: error: %s\n",
-                        spec->source_path ? spec->source_path : spec->canonical, d->location.line,
-                        d->location.column, d->message);
-            }
-        }
+        graph_errors += xa_analyzer_print_errors(
+            analyzer, spec->source_path ? spec->source_path : spec->canonical);
         xa_analyzer_clear_diagnostics(analyzer);
     }
 

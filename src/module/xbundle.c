@@ -90,19 +90,6 @@ static XrModuleGraph *bundle_build_graph(XrCompilerSession *session, XrModuleRes
     return graph;
 }
 
-static void bundle_report_diagnostics(XaAnalyzer *analyzer, const char *source_path,
-                                      int *error_count) {
-    int count = 0;
-    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &count);
-    for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next) {
-        if (diagnostic->severity != XR_DIAG_SEV_ERROR)
-            continue;
-        (*error_count)++;
-        fprintf(stderr, "%s:%d:%d: error: %s\n", source_path ? source_path : "<bundle>",
-                diagnostic->location.line, diagnostic->location.column, diagnostic->message);
-    }
-}
-
 /* Analyze every module of the graph, the entry included, so each export
  * table is published and every generic instantiation site is typed before
  * any module is lowered: specialization is graph-wide, and a clone requested
@@ -121,13 +108,12 @@ static XaAnalyzer *bundle_analyze_graph(XrCompilerSession *session, XrModuleGrap
             continue;
 
         xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
-        int errors = 0;
-        bundle_report_diagnostics(analyzer, spec->source_path, &errors);
+        int errors = xa_analyzer_print_errors(analyzer, spec->source_path);
         if (errors == 0) {
             XrHashMap *exports = NULL;
             if (!xa_analyzer_collect_export_symbols_checked(analyzer, (XrAstNode *) spec->ast,
                                                             &exports)) {
-                bundle_report_diagnostics(analyzer, spec->source_path, &errors);
+                errors = xa_analyzer_print_errors(analyzer, spec->source_path);
                 if (errors == 0)
                     errors = 1;
             } else {

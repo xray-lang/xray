@@ -149,21 +149,6 @@ bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
     return compile_to_file_impl(session, source_file, output_file, flags, authority);
 }
 
-/* Report every analyzer error of one module under its own source path. */
-static int report_module_errors(XaAnalyzer *analyzer, const char *source_path) {
-    int count = 0;
-    int errors = 0;
-    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &count);
-    for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next) {
-        if (diagnostic->severity != XR_DIAG_SEV_ERROR)
-            continue;
-        errors++;
-        fprintf(stderr, "%s:%d:%d: error: %s\n", source_path ? source_path : "<stdlib>",
-                diagnostic->location.line, diagnostic->location.column, diagnostic->message);
-    }
-    return errors;
-}
-
 /* Analyze every module of the graph, entry included, so each declaration
  * carries its exact nominal identity and every export table is populated
  * before any module is lowered. */
@@ -183,12 +168,12 @@ static XaAnalyzer *analyze_module_graph(XrCompilerSession *session, XrModuleGrap
             break;
         }
         xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
-        errors += report_module_errors(analyzer, spec->source_path);
+        errors += xa_analyzer_print_errors(analyzer, spec->source_path);
         if (errors == 0) {
             XrHashMap *exports = NULL;
             if (!xa_analyzer_collect_export_symbols_checked(analyzer, (XrAstNode *) spec->ast,
                                                             &exports)) {
-                errors += report_module_errors(analyzer, spec->source_path);
+                errors += xa_analyzer_print_errors(analyzer, spec->source_path);
                 if (errors == 0)
                     errors = 1;
             } else {

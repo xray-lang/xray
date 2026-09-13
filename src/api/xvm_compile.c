@@ -258,20 +258,6 @@ void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation) {
     memset(compilation, 0, sizeof(*compilation));
 }
 
-static int report_module_analysis_errors(XaAnalyzer *analyzer, const char *source_path) {
-    int count = 0;
-    int errors = 0;
-    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &count);
-    for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next) {
-        if (diagnostic->severity != XR_DIAG_SEV_ERROR)
-            continue;
-        errors++;
-        fprintf(stderr, "%s:%d:%d: error: %s\n", source_path ? source_path : "<module>",
-                diagnostic->location.line, diagnostic->location.column, diagnostic->message);
-    }
-    return errors;
-}
-
 /* Specialize the generics of an analyzed module graph: run the graph-wide
  * monomorphization pass over every module, then analyze every module again so
  * the clones it materialized in their declaring modules are typed and
@@ -296,7 +282,7 @@ static bool specialize_module_graph(XrCompilerSession *session, XaAnalyzer *shar
         graph->entry_index >= 0 && graph->entry_index < graph->spec_count
             ? &graph->specs[graph->entry_index]
             : NULL;
-    int errors = report_module_analysis_errors(shared_analyzer, entry ? entry->source_path : NULL);
+    int errors = xa_analyzer_print_errors(shared_analyzer, entry ? entry->source_path : NULL);
     xa_analyzer_clear_diagnostics(shared_analyzer);
     if (!mono_ok || errors > 0)
         return false;
@@ -306,12 +292,12 @@ static bool specialize_module_graph(XrCompilerSession *session, XaAnalyzer *shar
         if (!spec->ast || !spec->source_path)
             continue;
         xa_analyzer_analyze(shared_analyzer, spec->source_path, (XrAstNode *) spec->ast);
-        errors = report_module_analysis_errors(shared_analyzer, spec->source_path);
+        errors = xa_analyzer_print_errors(shared_analyzer, spec->source_path);
         if (errors == 0) {
             XrHashMap *exports = NULL;
             if (!xa_analyzer_collect_export_symbols_checked(shared_analyzer,
                                                             (XrAstNode *) spec->ast, &exports)) {
-                errors = report_module_analysis_errors(shared_analyzer, spec->source_path);
+                errors = xa_analyzer_print_errors(shared_analyzer, spec->source_path);
                 if (errors == 0)
                     errors = 1;
             } else {
