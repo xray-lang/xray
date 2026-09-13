@@ -843,6 +843,9 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     ctx.target_data_layout = compiler_session
                                  ? xr_compiler_session_target_data_layout(compiler_session)
                                  : xr_target_data_layout_host();
+    ctx.bind_module_positions =
+        !compiler_session ||
+        xr_compiler_session_compile_unit_identity(compiler_session).kind != XR_COMPILE_UNIT_STDLIB;
     if (!ctx.target_data_layout) {
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;

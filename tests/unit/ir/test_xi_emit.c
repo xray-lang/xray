@@ -17,6 +17,7 @@
 #include "../../../src/plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../../../src/shared/xr_exact_scalar_registry.h"
 #include "../../../include/xray_vm.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1764,6 +1765,67 @@ TEST(emit_local_addr_pins_source_slot) {
     xi_func_free(f);
 }
 
+/* An import reference resolved to a position in the compile graph binds
+ * that position only for a program unit, whose runtime module table is laid
+ * out in the same order. A standard library unit is embedded and loaded by
+ * name into programs whose tables the graph never saw, so it must reach its
+ * imports by module name. */
+TEST(emit_import_ref_binds_by_name_for_stdlib_units) {
+    XrVMRuntime *isolate = new_test_isolate();
+    TEST_REQUIRE(isolate != NULL);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    TEST_REQUIRE(session != NULL);
+    static const XrCompileUnitIdentity identities[2] = {
+        {.kind = XR_COMPILE_UNIT_MEMORY,
+         .module_identity = "memory-module-v1:id=25:import-binding-program-v1"},
+        {.kind = XR_COMPILE_UNIT_STDLIB,
+         .module_identity = "stdlib-module-v1:module=4:yaml:path=12:yaml/yaml.xr",
+         .stdlib_module_name = "yaml"},
+    };
+    for (int unit = 0; unit < 2; unit++) {
+        bool library = identities[unit].kind == XR_COMPILE_UNIT_STDLIB;
+        TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, &identities[unit]));
+        XiFunc *f = make_func("import_binding", &stub_int);
+        XiBlock *entry = f->entry;
+        XiImportRef *ref =
+            (XiImportRef *) xi_func_arena_alloc(f, (uint32_t) sizeof(XiImportRef));
+        TEST_REQUIRE(ref != NULL);
+        memset(ref, 0, sizeof(*ref));
+        ref->module_path = "io";
+        ref->resolved_mod_index = 4;
+        ref->resolved_shared_slot = -1;
+        ref->resolved_export_slot = -1;
+        ref->exact_target_spec_index = -1;
+        ref->psc_dependency_index = XI_PSC_ROW_NONE;
+        ref->resolution_attempted = true;
+        XiValue *module = xi_value_new(f, entry, XI_IMPORT_REF, &stub_int, 0);
+        TEST_REQUIRE(module != NULL);
+        module->aux = ref;
+        xi_block_set_return(entry, module);
+
+        XrProto *proto = NULL;
+        TEST_REQUIRE(xi_emit(f, isolate, &proto) == XI_EMIT_OK && proto != NULL);
+        bool by_position = false;
+        bool by_name = false;
+        for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
+            XrInstruction instruction = PROTO_CODE(proto, pc);
+            OpCode op = GET_OPCODE(instruction);
+            if (op == OP_LOAD_MODULE) {
+                TEST_REQUIRE(GETARG_Bx(instruction) == 4);
+                by_position = true;
+            } else if (op == OP_IMPORT) {
+                by_name = true;
+            }
+        }
+        TEST_REQUIRE(by_position == !library);
+        TEST_REQUIRE(by_name == library);
+        xr_instruction_unit_free(proto);
+        xi_func_free(f);
+        TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, NULL));
+    }
+    xray_vm_delete(isolate);
+}
+
 TEST(emit_assertion_action_scratch_has_explicit_ownership) {
     XrVMRuntime *isolate = new_test_isolate();
     TEST_REQUIRE(isolate != NULL);
@@ -1878,6 +1940,7 @@ int main(void) {
 
     /* Basic emission */
     run_class_descriptor_constants_use_opaque_pointer_identity();
+    run_emit_import_ref_binds_by_name_for_stdlib_units();
     run_emit_return_const_int();
     run_emit_return_void();
     run_emit_target_layout_queries_use_canonical_target_layout();

@@ -1513,31 +1513,33 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
 
-    /* Try emit-time resolution if not already resolved */
-    if (ref->resolved_mod_index < 0)
-        try_emit_time_resolve(ctx, ref);
+    if (ctx->bind_module_positions) {
+        /* Try emit-time resolution if not already resolved */
+        if (ref->resolved_mod_index < 0)
+            try_emit_time_resolve(ctx, ref);
 
-    /* Selective import: OP_LOAD_MODULE_SLOT */
-    if (ref->resolved_mod_index >= 0 && ref->resolved_export_slot >= 0 && ref->member_name) {
-        uint16_t mod_arg = 0;
-        uint16_t slot_arg = 0;
-        if (!xi_emit_index_to_arg(ctx, ref->resolved_mod_index, XI_EMIT_ERR_TOO_MANY_CONSTS,
-                                  &mod_arg) ||
-            !xi_emit_index_to_arg(ctx, ref->resolved_export_slot, XI_EMIT_ERR_TOO_MANY_CONSTS,
-                                  &slot_arg))
+        /* Selective import: OP_LOAD_MODULE_SLOT */
+        if (ref->resolved_mod_index >= 0 && ref->resolved_export_slot >= 0 && ref->member_name) {
+            uint16_t mod_arg = 0;
+            uint16_t slot_arg = 0;
+            if (!xi_emit_index_to_arg(ctx, ref->resolved_mod_index, XI_EMIT_ERR_TOO_MANY_CONSTS,
+                                      &mod_arg) ||
+                !xi_emit_index_to_arg(ctx, ref->resolved_export_slot,
+                                      XI_EMIT_ERR_TOO_MANY_CONSTS, &slot_arg))
+                return;
+            emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, mod_arg, slot_arg));
             return;
-        emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, mod_arg, slot_arg));
-        return;
+        }
+
+        /* Whole-module import: OP_LOAD_MODULE */
+        if (ref->resolved_mod_index >= 0 && !ref->member_name) {
+            emit_inst(ctx, CREATE_ABx(OP_LOAD_MODULE, dst, ref->resolved_mod_index));
+            return;
+        }
     }
 
-    /* Whole-module import: OP_LOAD_MODULE */
-    if (ref->resolved_mod_index >= 0 && !ref->member_name) {
-        emit_inst(ctx, CREATE_ABx(OP_LOAD_MODULE, dst, ref->resolved_mod_index));
-        return;
-    }
-
-    /* Fallback: OP_IMPORT for stdlib/native modules not in the graph,
-     * or when module_table is unavailable (REPL). */
+    /* By name: stdlib/native modules not in the graph, a REPL without a
+     * module table, or a library unit whose loading program is unknown. */
     int mod_idx = add_const_string(ctx, ref->module_path);
     if (ctx->status != XI_EMIT_OK)
         return;

@@ -183,6 +183,15 @@ typedef struct {
     } *owner_saves;
     uint32_t nowner_saves;
     uint32_t owner_save_cap;
+
+    /* Whether an import reference may be emitted as a position in the runtime
+     * module table.  A program compiled with its own module graph runs
+     * against a table laid out in that graph's topological order, so the
+     * position resolved from the graph is exact.  A standard library unit is
+     * embedded and loaded by name into whichever program imports it; the
+     * graph it was compiled in says nothing about that program's table, so
+     * its imports bind by module name at load time instead. */
+    bool bind_module_positions;
 } EmitCtx;
 
 /* VM class instances are allocated before their constructor body runs.  Every
