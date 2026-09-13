@@ -3460,17 +3460,27 @@ static bool body_owned_local_rebind_is_scalar(XgBodyCollect *bc, const char *nam
     }
 }
 
-static const XrCoreIntrinsicDesc *body_variable_core_intrinsic(XgBodyCollect *bc,
-                                                               const VariableNode *variable) {
+/* The analyzer's registration of a global builtin function (`copy`, `len`,
+ * `chr`, the `Array`/`Map`/`Set` constructors, the core intrinsics ...) is
+ * the one statement of which callees are sealed language operations: the
+ * compiler runs them without a user body or callee summary.  Source spelling
+ * never grants that identity, so user functions with the same name remain
+ * ordinary declared targets. */
+static XaSymbol *body_variable_builtin_function(XgBodyCollect *bc, const VariableNode *variable) {
     XaSymbol *symbol;
-    XaSymbolLinks *links;
 
     if (!bc || !bc->producer || !bc->producer->analyzer || !variable || variable->symbol_id == 0)
         return NULL;
     symbol = xa_analyzer_symbol_by_id(bc->producer->analyzer, variable->symbol_id);
     if (!symbol || symbol->kind != XA_SYM_FUNCTION || !symbol->is_builtin)
         return NULL;
-    links = xa_analyzer_get_links(bc->producer->analyzer, symbol);
+    return symbol;
+}
+
+static const XrCoreIntrinsicDesc *body_variable_core_intrinsic(XgBodyCollect *bc,
+                                                               const VariableNode *variable) {
+    XaSymbol *symbol = body_variable_builtin_function(bc, variable);
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
     return links ? xr_core_intrinsic_by_id(links->core_builtin_id) : NULL;
 }
 
@@ -4308,6 +4318,8 @@ static uint32_t body_capabilities_for_builtin_member_constructor(const MemberAcc
     return body_capabilities_for_builtin_constructor(member->name);
 }
 
+/* Name lookup for the analyzer-free evidence producer only; with an analyzer
+ * the builtin registration itself identifies a sealed callee. */
 static bool body_global_builtin_call_is_leaf_intrinsic(const char *name, int arg_count) {
     if (!name)
         return false;
@@ -9908,28 +9920,25 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             generic_kind = XG_GENERIC_INST_CLASS;
             generic_origin_decl_id = class_summary->decl_id;
             generic_origin_class_id = class_row->class_id;
-        } else if (body_global_builtin_call_is_leaf_intrinsic(callee_name,
-                                                              call->as.call_expr.arg_count)) {
-            row.kind = XG_CALL_NATIVE;
-            row.method_id = (XgMethodId) callee_name_id;
-            row.method_name_id = callee_name_id;
-            if (strcmp(callee_name, "typeName") == 0)
-                bc->metadata_use_bits |= XG_METADATA_TYPENAME;
-        } else if (body_variable_core_intrinsic(bc, &callee->as.variable)) {
-            /* A resolved core identity is a sealed language operation: the
-             * compiler runs it without a user body or callee summary. Source
-             * spelling never grants that identity, so user functions with the
-             * same name remain ordinary declared targets. */
-            row.kind = XG_CALL_NATIVE;
-            row.method_id = (XgMethodId) callee_name_id;
-            row.method_name_id = callee_name_id;
         } else if (body_variable_is_stdlib_native_function(bc, &callee->as.variable)) {
+            /* A module-owned native crosses the native boundary; it is
+             * distinguished from a language builtin before the general
+             * builtin test below. */
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
             bc->capability_bits |= XG_CAP_NATIVE;
             row.kind = XG_CALL_NATIVE;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
+        } else if (body_variable_builtin_function(bc, &callee->as.variable) ||
+                   (!bc->producer->analyzer &&
+                    body_global_builtin_call_is_leaf_intrinsic(callee_name,
+                                                               call->as.call_expr.arg_count))) {
+            row.kind = XG_CALL_NATIVE;
+            row.method_id = (XgMethodId) callee_name_id;
+            row.method_name_id = callee_name_id;
+            if (strcmp(callee_name, "typeName") == 0)
+                bc->metadata_use_bits |= XG_METADATA_TYPENAME;
         }
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const XaSelection *member_selection =

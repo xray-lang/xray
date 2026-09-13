@@ -507,6 +507,17 @@ row names the declared class and no callee at all; a method identity on such a
 row is refused as stale, and a class that does declare an instance constructor
 keeps the ordinary method callsite and composes that body's effects.
 
+A call whose callee the analyzer registered as a language builtin function
+(`copy`, `len`, `chr`, the `Array`/`Map`/`Set` constructors, the core
+intrinsics, ...) is that same sealed native callsite: the analyzer's builtin
+registration is the one statement of which global callees run without a user
+body, so the evidence producer classifies by the resolved symbol, never by
+spelling, and a user function with a builtin's name stays an ordinary declared
+target. A module-owned native reached through a stdlib import is distinguished
+first and keeps its native-boundary effect, escape, and capability bits.
+Leaving a builtin call on the open closure kind made every body that reaches
+it through a callable target set unprovable.
+
 SemanticPlan schema 49 names local and imported construction without erasing
 their module boundary. A local construction target names only the declaration:
 the instance result and the class object loaded from its unique local shared
