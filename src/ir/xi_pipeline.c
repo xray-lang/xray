@@ -412,6 +412,44 @@ static int xi_pipeline_coro_plan_function_suspendability(const XrSemanticPlan *p
     return result;
 }
 
+/* Suspendability of a dependency class constructor from the dependency's
+ * frozen plan: the unique constructor function of the source class, whose
+ * parameter count includes the instance and therefore equals the call's
+ * operand count. A class without a declared constructor has the compiler's
+ * allocation-only constructor, which takes no argument and never suspends. */
+static int xi_pipeline_coro_plan_constructor_suspendability(const XrSemanticPlan *plan,
+                                                            const XiClassData *class_data,
+                                                            uint32_t source_class,
+                                                            uint32_t operand_count) {
+    uint16_t constructor_member = UINT16_MAX;
+    for (uint16_t i = 0; i < class_data->nmethod; i++) {
+        if (!class_data->methods || !class_data->methods[i].is_constructor ||
+            class_data->methods[i].is_static)
+            continue;
+        if (constructor_member != UINT16_MAX)
+            return -1;
+        constructor_member = i;
+    }
+    const XrSemanticFunctionRecord *constructor = NULL;
+    uint32_t constructor_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_function_count(plan); i++) {
+        const XrSemanticFunctionRecord *candidate = xr_semantic_plan_function(plan, i);
+        if (!candidate || candidate->source_class != source_class ||
+            candidate->source_kind != XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR)
+            continue;
+        if (constructor)
+            return -1;
+        constructor = candidate;
+        constructor_index = i;
+    }
+    if (constructor_member == UINT16_MAX)
+        return !constructor && operand_count == 1 ? 0 : -1;
+    if (!constructor || constructor->source_member_ordinal != constructor_member ||
+        constructor->parameter_count != operand_count)
+        return -1;
+    return xi_pipeline_coro_plan_function_suspendability(plan, constructor_index);
+}
+
 /* VM emission detaches dependency function children after freezing their
  * SemanticPlan. A later module can still import one of those classes, but it
  * must not infer constructor suspendability from the now-empty child array or
@@ -473,33 +511,8 @@ static int xi_pipeline_coro_imported_constructor_suspendability(const XiFunc *cu
         !xr_stable_id_equal(semantic_export->exported_entity, semantic_class->id))
         return -1;
 
-    uint16_t constructor_member = UINT16_MAX;
-    for (uint16_t i = 0; i < class_data->nmethod; i++) {
-        if (!class_data->methods || !class_data->methods[i].is_constructor ||
-            class_data->methods[i].is_static)
-            continue;
-        if (constructor_member != UINT16_MAX)
-            return -1;
-        constructor_member = i;
-    }
-    const XrSemanticFunctionRecord *constructor = NULL;
-    uint32_t constructor_index = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; i < xr_semantic_plan_function_count(plan); i++) {
-        const XrSemanticFunctionRecord *candidate = xr_semantic_plan_function(plan, i);
-        if (!candidate || candidate->source_class != source_class ||
-            candidate->source_kind != XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR)
-            continue;
-        if (constructor)
-            return -1;
-        constructor = candidate;
-        constructor_index = i;
-    }
-    if (constructor_member == UINT16_MAX)
-        return !constructor && call->nargs == 1 ? 0 : -1;
-    if (!constructor || constructor->source_member_ordinal != constructor_member ||
-        constructor->parameter_count != call->nargs)
-        return -1;
-    return xi_pipeline_coro_plan_function_suspendability(plan, constructor_index);
+    return xi_pipeline_coro_plan_constructor_suspendability(plan, class_data, source_class,
+                                                            call->nargs);
 }
 
 /* Resolve a method whose dependency Xi children were detached after bytecode
@@ -556,6 +569,12 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
         (!static_method && (semantic_class->flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) == 0))
         return -1;
 
+    /* `Namespace.Class(args)` lowers to the constructor member called on the
+     * class value; it is the same constructor the selective-import form
+     * reaches through its export binding. */
+    if (static_method && strcmp((const char *) call->aux, "constructor") == 0)
+        return xi_pipeline_coro_plan_constructor_suspendability(plan, class_data, source_class,
+                                                                call->nargs);
     uint16_t member = UINT16_MAX;
     for (uint16_t i = 0; i < class_data->nmethod; i++) {
         const XiClassMethod *candidate = class_data->methods ? &class_data->methods[i] : NULL;

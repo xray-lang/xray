@@ -941,8 +941,9 @@ TEST(imported_static_method_uses_exact_cross_module_evidence) {
 
 /* The compile driver emits a dependency before its dependants are compiled,
  * which detaches the dependency's Xi children from its module init. A static
- * method of an imported value struct must still be classified for the
- * consumer's coroutine lowering, from the dependency's frozen semantic plan,
+ * method of an imported value struct, and the constructor of an imported
+ * class named through its module, must still be classified for the
+ * consumer's coroutine lowering from the dependency's frozen semantic plan,
  * exactly as an instance method is. */
 TEST(imported_static_method_resolves_after_dependency_emission) {
     static const char library_source[] =
@@ -952,13 +953,24 @@ TEST(imported_static_method_resolves_after_dependency_emission) {
         "    return Pair{lanes: copy(lanes)}\n"
         "  }\n"
         "  first() -> i64 { return this.lanes[0] }\n"
+        "}\n"
+        "export class Counter {\n"
+        "  private _count: Atomic<i64>\n"
+        "  constructor(start: i64) { this._count = Atomic<i64>(start) }\n"
+        "  value() -> i64 { return this._count.load() }\n"
         "}\n";
-    /* The call sits in the module initializer: unlike a named function it
+    /* Each call sits in the module initializer: unlike a named function it
      * carries no closed analyzer suspension summary, so classification has
      * to come from the dependency's plan. */
-    static const char consumer_source[] =
+    static const char *const consumer_sources[2] = {
         "import \"./library\" as library\n"
-        "var first = library.Pair.make([3, 4]).first()\n";
+        "var first = library.Pair.make([3, 4]).first()\n",
+        "import \"./library\" as library\n"
+        "var counter = library.Counter(3)\n"
+        "var value = counter.value()\n",
+    };
+    for (int consumer = 0; consumer < 2; consumer++) {
+    const char *consumer_source = consumer_sources[consumer];
     XrVMConfig vm_config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&vm_config);
     ASSERT_NOT_NULL(isolate);
@@ -994,6 +1006,7 @@ TEST(imported_static_method_resolves_after_dependency_emission) {
     ASSERT_EQ_PTR(xr_compiler_session_attach_isolate(isolate, original_session), session);
     xr_compiler_session_delete(session);
     xray_vm_delete(isolate);
+    }
 }
 
 TEST_MAIN_BEGIN()
