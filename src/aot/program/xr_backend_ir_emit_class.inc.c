@@ -61,57 +61,122 @@ static bool emit_generated_class_event(CBuffer *buffer,
         event->old_i64 ? 1u : 0u, old_i64, replacement_i64);
 }
 
-static bool emit_class_drop_helpers(CBuffer *buffer, const XrBackendIR *ir) {
-    for (uint32_t index = 0u; index < ir->program->type_count; ++index) {
-        const XrValidatedType *type = &ir->program->types[index];
-        if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE &&
-            !append_format(buffer,
-                           "static inline void xr_aot_class_drop_%u("
-                           "XrAotContext *, XrAotType%u, uint32_t);\n",
-                           type->type_id, type->type_id))
-            return false;
-    }
-    if (!append_text(buffer, "\n"))
-        return false;
-    for (uint32_t index = 0u; index < ir->program->type_count; ++index) {
-        const XrValidatedType *type = &ir->program->types[index];
-        if (type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
-            continue;
-        if (!append_format(
-                buffer,
-                "static inline void xr_aot_class_drop_%u(XrAotContext *xr_ctx, "
-                "XrAotType%u value, uint32_t origin) {\n"
-                "    if (!xr_ctx || !value || value->owners == UINT32_C(0)) return;\n"
-                "    xr_aot_lifecycle_emit(xr_ctx, (XrAotLifecycleEvent){"
-                ".kind = UINT32_C(7), .origin = origin, .type_id = UINT16_C(%u), "
-                ".field_ordinal = UINT32_MAX, .identity = value->identity, "
-                ".related_identity = UINT64_MAX});\n"
-                "    if (--value->owners != UINT32_C(0)) return;\n"
-                "    xr_aot_lifecycle_emit(xr_ctx, (XrAotLifecycleEvent){"
-                ".kind = UINT32_C(8), .origin = origin, .type_id = UINT16_C(%u), "
-                ".field_ordinal = UINT32_MAX, .identity = value->identity, "
-                ".related_identity = UINT64_MAX});\n",
-                type->type_id, type->type_id, type->type_id, type->type_id))
-            return false;
-        for (uint32_t field = type->field_count; field != 0u; --field) {
-            uint16_t field_type_id = type->field_types[field - 1u];
-            if (type_is_class_reference(ir, field_type_id) &&
-                !append_format(buffer,
-                               "    xr_aot_class_drop_%u(xr_ctx, value->f%u, UINT32_C(2));\n",
-                               field_type_id, field - 1u))
-                return false;
+/* Whether an instruction releases an owner of a class value through the
+ * generated drop helper. The emitter and the helper reachability scan ask
+ * this one predicate so the set of helpers emitted is exactly the set called. */
+static bool instruction_drops_class_owner(const XrBackendIR *ir, const XrBackendFunction *function,
+                                          const XrBackendInstruction *instruction) {
+    return instruction->operation_id == XR_CORE_OP_CORE_OWNER_DROP &&
+           type_is_class_reference(ir, function->value_types[instruction->operands[0]]);
+}
+
+/* Whether any function releases a class owner, which is the only reason the
+ * generated unit defines xr_aot_free and the per-class drop helpers. */
+static bool has_class_owner_drops(const XrBackendIR *ir) {
+    for (uint32_t function = 0; function < ir->function_count; ++function) {
+        const XrBackendFunction *fn = &ir->functions[function];
+        for (uint32_t block = 0; block < fn->block_count; ++block) {
+            const XrBackendBlock *row = &fn->blocks[block];
+            for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction)
+                if (instruction_drops_class_owner(ir, fn, &row->instructions[instruction]))
+                    return true;
         }
-        if (!append_format(
-                buffer,
-                "    xr_aot_lifecycle_emit(xr_ctx, (XrAotLifecycleEvent){"
-                ".kind = UINT32_C(9), .origin = origin, .type_id = UINT16_C(%u), "
-                ".field_ordinal = UINT32_MAX, .identity = value->identity, "
-                ".related_identity = UINT64_MAX});\n"
-                "    xr_aot_free(xr_ctx, value);\n"
-                "}\n\n",
-                type->type_id))
+    }
+    return false;
+}
+
+/* Mark the drop helper of type_id and, transitively, of every class-typed
+ * field it releases. A helper that no drop reaches is never emitted: the
+ * generated translation unit is compiled with every warning fatal, and a
+ * static function without a caller is one. */
+static void mark_class_drop_reachable(const XrBackendIR *ir, uint16_t type_id, bool *reachable) {
+    for (uint32_t index = 0u; index < ir->program->type_count; ++index) {
+        const XrValidatedType *type = &ir->program->types[index];
+        if (type->type_id != type_id || type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+            reachable[index])
+            continue;
+        reachable[index] = true;
+        for (uint32_t field = 0u; field < type->field_count; ++field)
+            if (type_is_class_reference(ir, type->field_types[field]))
+                mark_class_drop_reachable(ir, type->field_types[field], reachable);
+    }
+}
+
+static bool emit_class_drop_helper(CBuffer *buffer, const XrBackendIR *ir,
+                                   const XrValidatedType *type);
+
+static bool emit_class_drop_helpers(CBuffer *buffer, const XrBackendIR *ir) {
+    bool *reachable = (bool *) xr_calloc(ir->program->type_count ? ir->program->type_count : 1u,
+                                         sizeof(*reachable));
+    if (!reachable)
+        return false;
+    for (uint32_t function = 0; function < ir->function_count; ++function) {
+        const XrBackendFunction *fn = &ir->functions[function];
+        for (uint32_t block = 0; block < fn->block_count; ++block) {
+            const XrBackendBlock *row = &fn->blocks[block];
+            for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction) {
+                const XrBackendInstruction *op = &row->instructions[instruction];
+                if (instruction_drops_class_owner(ir, fn, op))
+                    mark_class_drop_reachable(ir, fn->value_types[op->operands[0]], reachable);
+            }
+        }
+    }
+    bool emitted = true;
+    for (uint32_t index = 0u; emitted && index < ir->program->type_count; ++index) {
+        const XrValidatedType *type = &ir->program->types[index];
+        if (reachable[index])
+            emitted = append_format(buffer,
+                                    "static inline void xr_aot_class_drop_%u("
+                                    "XrAotContext *, XrAotType%u, uint32_t);\n",
+                                    type->type_id, type->type_id);
+    }
+    emitted = emitted && append_text(buffer, "\n");
+    for (uint32_t index = 0u; emitted && index < ir->program->type_count; ++index) {
+        const XrValidatedType *type = &ir->program->types[index];
+        if (!reachable[index])
+            continue;
+        emitted = emit_class_drop_helper(buffer, ir, type);
+    }
+    xr_free(reachable);
+    return emitted;
+}
+
+static bool emit_class_drop_helper(CBuffer *buffer, const XrBackendIR *ir,
+                                   const XrValidatedType *type) {
+    if (!append_format(
+            buffer,
+            "static inline void xr_aot_class_drop_%u(XrAotContext *xr_ctx, "
+            "XrAotType%u value, uint32_t origin) {\n"
+            "    if (!xr_ctx || !value || value->owners == UINT32_C(0)) return;\n"
+            "    xr_aot_lifecycle_emit(xr_ctx, (XrAotLifecycleEvent){"
+            ".kind = UINT32_C(7), .origin = origin, .type_id = UINT16_C(%u), "
+            ".field_ordinal = UINT32_MAX, .identity = value->identity, "
+            ".related_identity = UINT64_MAX});\n"
+            "    if (--value->owners != UINT32_C(0)) return;\n"
+            "    xr_aot_lifecycle_emit(xr_ctx, (XrAotLifecycleEvent){"
+            ".kind = UINT32_C(8), .origin = origin, .type_id = UINT16_C(%u), "
+            ".field_ordinal = UINT32_MAX, .identity = value->identity, "
+            ".related_identity = UINT64_MAX});\n",
+            type->type_id, type->type_id, type->type_id, type->type_id))
+        return false;
+    for (uint32_t field = type->field_count; field != 0u; --field) {
+        uint16_t field_type_id = type->field_types[field - 1u];
+        if (type_is_class_reference(ir, field_type_id) &&
+            !append_format(buffer,
+                           "    xr_aot_class_drop_%u(xr_ctx, value->f%u, UINT32_C(2));\n",
+                           field_type_id, field - 1u))
             return false;
     }
+    if (!append_format(
+            buffer,
+            "    xr_aot_lifecycle_emit(xr_ctx, (XrAotLifecycleEvent){"
+            ".kind = UINT32_C(9), .origin = origin, .type_id = UINT16_C(%u), "
+            ".field_ordinal = UINT32_MAX, .identity = value->identity, "
+            ".related_identity = UINT64_MAX});\n"
+            "    xr_aot_free(xr_ctx, value);\n"
+            "}\n\n",
+            type->type_id))
+        return false;
     return true;
 }
 

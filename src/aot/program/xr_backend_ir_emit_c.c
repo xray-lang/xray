@@ -437,6 +437,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     bool output = false;
     scan_helpers(ir, &checked, &wrapping, &arena, &output);
     bool classes = has_class_reference_types(ir);
+    bool class_drops = classes && has_class_owner_drops(ir);
     XrAotHostedClockBindings clock = hosted_clock_bindings(ir);
     XrAotHostedPipeBindings pipe = hosted_pipe_bindings(ir);
     bool host_clock = standalone_main &&
@@ -526,18 +527,25 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                          "context->allocations->link.previous = allocation;\n"
                          "    context->allocations = allocation;\n"
                          "    return (void *)(allocation + 1);\n"
-                         "}\n"
-                         "static inline void xr_aot_free(XrAotContext *context, void *payload) "
-                         "{\n"
-                         "    if (!context || !payload) return;\n"
-                         "    XrAotAllocation *allocation = ((XrAotAllocation *)payload) - 1;\n"
-                         "    if (allocation->link.previous) "
-                         "allocation->link.previous->link.next = allocation->link.next;\n"
-                         "    else context->allocations = allocation->link.next;\n"
-                         "    if (allocation->link.next) "
-                         "allocation->link.next->link.previous = allocation->link.previous;\n"
-                         "    free(allocation);\n"
                          "}\n") ||
+            /* Individual frees are only issued by class drop helpers; every
+             * other program releases its arena wholesale in
+             * xr_aot_context_destroy. Emitting the helper without a caller
+             * fails -Werror=unused-function on toolchains that warn for
+             * unused static inline functions in the main translation unit. */
+            (class_drops &&
+             !append_text(buffer,
+                          "static inline void xr_aot_free(XrAotContext *context, void *payload) "
+                          "{\n"
+                          "    if (!context || !payload) return;\n"
+                          "    XrAotAllocation *allocation = ((XrAotAllocation *)payload) - 1;\n"
+                          "    if (allocation->link.previous) "
+                          "allocation->link.previous->link.next = allocation->link.next;\n"
+                          "    else context->allocations = allocation->link.next;\n"
+                          "    if (allocation->link.next) "
+                          "allocation->link.next->link.previous = allocation->link.previous;\n"
+                          "    free(allocation);\n"
+                          "}\n")) ||
             (classes &&
              !append_text(buffer,
                           "static inline void xr_aot_lifecycle_emit(\n"
@@ -2665,8 +2673,7 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
                                  instruction->operands[0]);
         case XR_CORE_OP_CORE_OWNER_DROP:
-            if (type_is_class_reference(
-                    ir, function->value_types[instruction->operands[0]]))
+            if (instruction_drops_class_owner(ir, function, instruction))
                 return emit_class_owner_drop(buffer, function, instruction);
             return append_format(buffer, "        (void)v%u;\n", instruction->operands[0]);
         case XR_CORE_OP_CORE_PLACE_LOCAL:
@@ -3339,7 +3346,7 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
         }
     }
     bool emitted = emit_prelude(&buffer, ir, standalone_main);
-    if (emitted && has_class_reference_types(ir))
+    if (emitted && has_class_reference_types(ir) && has_class_owner_drops(ir))
         emitted = emit_class_drop_helpers(&buffer, ir);
     emitted = emitted && emit_copy_helpers(&buffer, ir);
     emitted = emitted && emit_coroutine_frames(&buffer, ir);
