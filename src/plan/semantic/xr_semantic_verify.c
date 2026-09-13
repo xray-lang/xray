@@ -6149,6 +6149,11 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
         const XrSemanticTypeRecord *callee_result =
             callee && callee->return_type < match->type_count ? &match->types[callee->return_type]
                                                               : NULL;
+        const XrSemanticParameterRecord *callee_variadic =
+            xr_semantic_callee_variadic_parameter(match, callee);
+        bool call_shape_complete =
+            operation &&
+            xr_semantic_source_call_shape_complete(match, callee, operation->operand_count);
         const char *source_module = NULL;
         const char *selector = NULL;
         bool exact_source_call =
@@ -6160,8 +6165,7 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             !callee || !xr_stable_id_equal(source_export->exported_entity, callee->id) ||
             !exact_source_call || !source_module || !selector ||
             strcmp(source_module, plan->dependencies[target->dependency].module_path) != 0 ||
-            strcmp(selector, source_export->name) != 0 || callee->parameter_count == UINT16_MAX ||
-            operation->operand_count != (uint16_t) (callee->parameter_count + 1u) ||
+            strcmp(selector, source_export->name) != 0 || !call_shape_complete ||
             !caller_result || !callee_result ||
             !xr_stable_id_equal(caller_result->id, callee_result->id) ||
             (semantic_operation_coroutine_state_count(plan, target->operation) == 1) !=
@@ -6198,6 +6202,8 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             continue;
         }
         for (uint32_t ordinal = 0; target_valid && ordinal < callee->parameter_count; ordinal++) {
+            if (callee_variadic && ordinal + 1u == callee->parameter_count)
+                break; /* the variadic row admits no single operand */
             uint32_t parameter_index = callee->parameter_begin + ordinal;
             uint32_t operand_index = operation->operand_begin + ordinal + 1u;
             const XrSemanticParameterRecord *parameter = parameter_index < match->parameter_count

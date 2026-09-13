@@ -316,4 +316,34 @@ static inline bool xr_semantic_parameter_type_admits_argument(
     return false;
 }
 
+/* The variadic parameter of a callee, or NULL when the callee packs nothing.
+ * Only the last declared parameter can be variadic. */
+static inline const XrSemanticParameterRecord *
+xr_semantic_callee_variadic_parameter(const XrSemanticPlan *callee_plan,
+                                      const XrSemanticFunctionRecord *callee) {
+    if (!callee_plan || !callee || callee->parameter_count == 0 ||
+        callee->parameter_count == UINT16_MAX)
+        return NULL;
+    const XrSemanticParameterRecord *last = xr_semantic_plan_parameter(
+        callee_plan, callee->parameter_begin + callee->parameter_count - 1u);
+    return last && (last->flags & XR_SEM_PARAMETER_VARIADIC) != 0 ? last : NULL;
+}
+
+/* Whether a call carries the operands its callee declares. The operand count
+ * includes the callee value itself. A variadic callee receives its trailing
+ * arguments as individual operands and packs them, so the call carries the
+ * callee plus at least the fixed parameters; every other callee is called
+ * with exactly its parameters. The builder that records a cross-module call
+ * target and the verifier that checks one ask this single question, and both
+ * leave the variadic parameter row without a single operand to admit. */
+static inline bool xr_semantic_source_call_shape_complete(const XrSemanticPlan *callee_plan,
+                                                          const XrSemanticFunctionRecord *callee,
+                                                          uint32_t operand_count) {
+    if (!callee || callee->parameter_count == UINT16_MAX)
+        return false;
+    if (xr_semantic_callee_variadic_parameter(callee_plan, callee))
+        return operand_count >= callee->parameter_count;
+    return operand_count == (uint32_t) callee->parameter_count + 1u;
+}
+
 #endif  // XR_SEMANTIC_TYPE_ADMISSION_SHAPE_H

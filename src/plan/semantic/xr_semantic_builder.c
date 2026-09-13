@@ -3604,8 +3604,7 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
     const uint8_t *suspendable = plan_suspendability(ctx, dependency_plan);
     if (!exported || exported->kind != XR_SEM_SOURCE_EXPORT_FUNCTION || !callee ||
         !xr_stable_id_equal(exported->exported_entity, callee->id) || !suspendable ||
-        callee->parameter_count == UINT16_MAX ||
-        value->nargs != (uint16_t) (callee->parameter_count + 1u) ||
+        !xr_semantic_source_call_shape_complete(dependency_plan, callee, value->nargs) ||
         (value->op == XI_CALL_METHOD &&
          (call->metadata_count != 1 ||
           strcmp(ctx->plan->metadata[call->metadata_begin], exported->name) != 0)) ||

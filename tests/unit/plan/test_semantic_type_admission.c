@@ -20,6 +20,8 @@ typedef struct TestSemanticPlan {
     uint32_t type_count;
     const uint32_t *children;
     uint32_t child_count;
+    const XrSemanticParameterRecord *parameters;
+    uint32_t parameter_count;
 } TestSemanticPlan;
 
 bool xr_stable_id_equal(XrStableId left, XrStableId right) {
@@ -40,6 +42,12 @@ const uint32_t *xr_semantic_plan_type_children(const XrSemanticPlan *plan, uint3
     if (count)
         *count = fixture->child_count;
     return fixture->children;
+}
+
+const XrSemanticParameterRecord *xr_semantic_plan_parameter(const XrSemanticPlan *plan,
+                                                            uint32_t index) {
+    const TestSemanticPlan *fixture = (const TestSemanticPlan *) plan;
+    return index < fixture->parameter_count ? &fixture->parameters[index] : NULL;
 }
 
 int main(void) {
@@ -191,6 +199,41 @@ int main(void) {
         (const XrSemanticPlan *) &callee, &handle_union, &const_listener, XR_PARAM_REF));
     REQUIRE(!xr_semantic_parameter_type_admits_argument(
         (const XrSemanticPlan *) &callee, &handle_union, &different_element, XR_PARAM_READ));
+
+    /* A call across a module edge carries the callee plus exactly the fixed
+     * parameters of an ordinary callee; a variadic callee packs its trailing
+     * arguments itself and is called with the callee plus at least the fixed
+     * parameters, the variadic row admitting no single operand. */
+    const XrSemanticParameterRecord variadic_parameters[] = {
+        {.function = 0, .ordinal = 0, .flags = XR_SEM_PARAMETER_REQUIRED},
+        {.function = 0, .ordinal = 1, .flags = XR_SEM_PARAMETER_VARIADIC},
+    };
+    const TestSemanticPlan variadic_plan = {
+        .parameters = variadic_parameters,
+        .parameter_count = 2,
+    };
+    const XrSemanticFunctionRecord variadic_callee = {.parameter_begin = 0, .parameter_count = 2};
+    const XrSemanticFunctionRecord fixed_callee = {.parameter_begin = 0, .parameter_count = 1};
+    REQUIRE(xr_semantic_callee_variadic_parameter((const XrSemanticPlan *) &variadic_plan,
+                                                  &variadic_callee) == &variadic_parameters[1]);
+    REQUIRE(xr_semantic_callee_variadic_parameter((const XrSemanticPlan *) &variadic_plan,
+                                                  &fixed_callee) == NULL);
+    REQUIRE(!xr_semantic_source_call_shape_complete((const XrSemanticPlan *) &variadic_plan,
+                                                    &variadic_callee, 1));
+    REQUIRE(xr_semantic_source_call_shape_complete((const XrSemanticPlan *) &variadic_plan,
+                                                   &variadic_callee, 2));
+    REQUIRE(xr_semantic_source_call_shape_complete((const XrSemanticPlan *) &variadic_plan,
+                                                   &variadic_callee, 5));
+    REQUIRE(!xr_semantic_source_call_shape_complete((const XrSemanticPlan *) &variadic_plan,
+                                                    &fixed_callee, 1));
+    REQUIRE(xr_semantic_source_call_shape_complete((const XrSemanticPlan *) &variadic_plan,
+                                                   &fixed_callee, 2));
+    REQUIRE(!xr_semantic_source_call_shape_complete((const XrSemanticPlan *) &variadic_plan,
+                                                    &fixed_callee, 3));
+    const XrSemanticFunctionRecord unknown_callee = {.parameter_begin = 0,
+                                                     .parameter_count = UINT16_MAX};
+    REQUIRE(!xr_semantic_source_call_shape_complete((const XrSemanticPlan *) &variadic_plan,
+                                                    &unknown_callee, 1));
 
     printf("Semantic type admission tests passed\n");
     return 0;
