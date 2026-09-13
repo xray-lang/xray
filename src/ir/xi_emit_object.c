@@ -1514,12 +1514,20 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     if (ctx->bind_module_positions) {
-        /* Try emit-time resolution if not already resolved */
-        if (ref->resolved_mod_index < 0)
+        /* A graph-resolved export slot is a position in the target's compiled
+         * export list; only a module whose runtime table is that list may be
+         * read by position. Emit-time resolution reads the slot from the live
+         * module instead and is exact for any target. */
+        bool graph_slot = ref->resolved_mod_index >= 0;
+        if (!graph_slot)
             try_emit_time_resolve(ctx, ref);
+        bool slot_positional =
+            !graph_slot || !ref->resolved_module ||
+            xi_module_exports_are_positional(ref->resolved_module);
 
         /* Selective import: OP_LOAD_MODULE_SLOT */
-        if (ref->resolved_mod_index >= 0 && ref->resolved_export_slot >= 0 && ref->member_name) {
+        if (slot_positional && ref->resolved_mod_index >= 0 && ref->resolved_export_slot >= 0 &&
+            ref->member_name) {
             uint16_t mod_arg = 0;
             uint16_t slot_arg = 0;
             if (!xi_emit_index_to_arg(ctx, ref->resolved_mod_index, XI_EMIT_ERR_TOO_MANY_CONSTS,

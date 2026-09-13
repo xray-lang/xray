@@ -8,6 +8,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_emit.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/class/xclass_descriptor.h"
@@ -1826,6 +1827,72 @@ TEST(emit_import_ref_binds_by_name_for_stdlib_units) {
     xray_vm_delete(isolate);
 }
 
+/* A selective import resolved to a position in the target's compiled export
+ * list may be read by position only when the target's runtime export table
+ * is that list. A standard library module is loaded by name and may carry
+ * native members ahead of its source exports, so a program reaches one of
+ * its members by name even though the program itself binds positions. */
+TEST(emit_selective_import_reads_stdlib_members_by_name) {
+    XrVMRuntime *isolate = new_test_isolate();
+    TEST_REQUIRE(isolate != NULL);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    TEST_REQUIRE(session != NULL);
+    static const XrCompileUnitIdentity program = {
+        .kind = XR_COMPILE_UNIT_MEMORY,
+        .module_identity = "memory-module-v1:id=27:selective-import-program-v1"};
+    static const char *const target_identities[2] = {
+        "module-id-v1:kind=7:project:namespace=8:acme-app:path=17:src/net/client.xr",
+        "stdlib-module-v1:module=3:sys:path=10:sys/sys.xr",
+    };
+    TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, &program));
+    for (int target = 0; target < 2; target++) {
+        bool stdlib_target = target == 1;
+        XiFunc *f = make_func("selective_import", &stub_int);
+        XiBlock *entry = f->entry;
+        XiFunc *target_root = make_func("target_init", &stub_void);
+        XiModule *target_module = xi_module_new("target.xr", "target", target_root);
+        TEST_REQUIRE(target_module != NULL);
+        TEST_REQUIRE(xi_module_set_identity(target_module, target_identities[target]));
+        XiImportRef *ref =
+            (XiImportRef *) xi_func_arena_alloc(f, (uint32_t) sizeof(XiImportRef));
+        TEST_REQUIRE(ref != NULL);
+        memset(ref, 0, sizeof(*ref));
+        ref->module_path = "sys";
+        ref->member_name = "OsMutex";
+        ref->resolved_mod_index = 2;
+        ref->resolved_shared_slot = 0;
+        ref->resolved_export_slot = 3;
+        ref->resolved_module = target_module;
+        ref->exact_target_spec_index = -1;
+        ref->psc_dependency_index = XI_PSC_ROW_NONE;
+        ref->resolution_attempted = true;
+        XiValue *member = xi_value_new(f, entry, XI_IMPORT_REF, &stub_int, 0);
+        TEST_REQUIRE(member != NULL);
+        member->aux = ref;
+        xi_block_set_return(entry, member);
+
+        XrProto *proto = NULL;
+        TEST_REQUIRE(xi_emit(f, isolate, &proto) == XI_EMIT_OK && proto != NULL);
+        bool by_slot = false;
+        bool by_name = false;
+        for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
+            OpCode op = GET_OPCODE(PROTO_CODE(proto, pc));
+            if (op == OP_LOAD_MODULE_SLOT)
+                by_slot = true;
+            else if (op == OP_IMPORT)
+                by_name = true;
+        }
+        TEST_REQUIRE(by_slot == !stdlib_target);
+        TEST_REQUIRE(by_name == stdlib_target);
+        xr_instruction_unit_free(proto);
+        xi_module_free(target_module);
+        xi_func_free(target_root);
+        xi_func_free(f);
+    }
+    TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, NULL));
+    xray_vm_delete(isolate);
+}
+
 TEST(emit_assertion_action_scratch_has_explicit_ownership) {
     XrVMRuntime *isolate = new_test_isolate();
     TEST_REQUIRE(isolate != NULL);
@@ -1941,6 +2008,7 @@ int main(void) {
     /* Basic emission */
     run_class_descriptor_constants_use_opaque_pointer_identity();
     run_emit_import_ref_binds_by_name_for_stdlib_units();
+    run_emit_selective_import_reads_stdlib_members_by_name();
     run_emit_return_const_int();
     run_emit_return_void();
     run_emit_target_layout_queries_use_canonical_target_layout();

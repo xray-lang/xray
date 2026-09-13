@@ -1157,6 +1157,13 @@ XR_FUNC bool xi_module_set_identity(XiModule *mod, const char *identity) {
     return true;
 }
 
+XR_FUNC bool xi_module_exports_are_positional(const XiModule *mod) {
+    XrModuleIdentityKind kind = 0;
+    if (!mod || !mod->identity || !xr_module_identity_valid(mod->identity, &kind))
+        return false;
+    return kind != XR_MODULE_IDENTITY_STDLIB;
+}
+
 XR_FUNC void xi_module_free(XiModule *mod) {
     if (!mod)
         return;

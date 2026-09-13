@@ -114,6 +114,13 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
 /* Replace the durable identity. Untyped, malformed, or missing identities fail closed. */
 XR_FUNC bool xi_module_set_identity(XiModule *mod, const char *identity);
 
+/* Whether the module's runtime export table is its own compiled export list.
+ * A standard library module is loaded by name into the running program and
+ * may carry native members registered ahead of its source exports, so a
+ * position computed from the compiled export list does not name the same
+ * member at run time. Every other module's table is exactly what it compiled. */
+XR_FUNC bool xi_module_exports_are_positional(const XiModule *mod);
+
 /* Free a module and its metadata arrays (does NOT free init/functions). */
 XR_FUNC void xi_module_free(XiModule *mod);
 
