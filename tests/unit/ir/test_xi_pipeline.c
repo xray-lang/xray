@@ -216,7 +216,7 @@ static XrProto *compile_source_with_module_graph(const char *namespace_id, const
     for (int topo = 0; topo < graph->topo_count; ++topo) {
         int index = graph->topo_order[topo];
         XrModuleSpec *spec = &graph->specs[index];
-        if (index == graph->entry_index || !spec->ast)
+        if (!spec->ast)
             continue;
         xa_analyzer_analyze(analyzer, spec->source_path, spec->ast);
         int diagnostic_count = 0;

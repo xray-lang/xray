@@ -19,6 +19,10 @@
 #include "../base/xlog.h"
 #include "../frontend/codegen/xcompiler.h"
 #include "../frontend/codegen/xcompiler_context.h"
+#include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_mono.h"
+#include "../base/xhashmap.h"
+#include "../base/xmalloc.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
 #include "../ir/xi.h"
@@ -254,15 +258,85 @@ void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation) {
     memset(compilation, 0, sizeof(*compilation));
 }
 
+static int report_module_analysis_errors(XaAnalyzer *analyzer, const char *source_path) {
+    int count = 0;
+    int errors = 0;
+    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &count);
+    for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next) {
+        if (diagnostic->severity != XR_DIAG_SEV_ERROR)
+            continue;
+        errors++;
+        fprintf(stderr, "%s:%d:%d: error: %s\n", source_path ? source_path : "<module>",
+                diagnostic->location.line, diagnostic->location.column, diagnostic->message);
+    }
+    return errors;
+}
+
+/* Specialize the generics of an analyzed module graph: run the graph-wide
+ * monomorphization pass over every module, then analyze every module again so
+ * the clones it materialized in their declaring modules are typed and
+ * published in those modules' export tables. */
+static bool specialize_module_graph(XrCompilerSession *session, XaAnalyzer *shared_analyzer,
+                                    XrModuleGraph *graph) {
+    AstNode **roots = (AstNode **) xr_calloc((size_t) graph->topo_count, sizeof(*roots));
+    if (!roots)
+        return false;
+    int root_count = 0;
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        const XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
+        if (spec->ast)
+            roots[root_count++] = spec->ast;
+    }
+    XaMonoBudget mono_budget = xa_mono_default_budget();
+    XaMonoUsage mono_usage = {0};
+    bool mono_ok = xa_mono_graph_pass(roots, root_count, xr_compiler_session_vm_host(session),
+                                      &mono_budget, &mono_usage, shared_analyzer);
+    xr_free(roots);
+    const XrModuleSpec *entry =
+        graph->entry_index >= 0 && graph->entry_index < graph->spec_count
+            ? &graph->specs[graph->entry_index]
+            : NULL;
+    int errors = report_module_analysis_errors(shared_analyzer, entry ? entry->source_path : NULL);
+    xa_analyzer_clear_diagnostics(shared_analyzer);
+    if (!mono_ok || errors > 0)
+        return false;
+
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
+        if (!spec->ast || !spec->source_path)
+            continue;
+        xa_analyzer_analyze(shared_analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        errors = report_module_analysis_errors(shared_analyzer, spec->source_path);
+        if (errors == 0) {
+            XrHashMap *exports = NULL;
+            if (!xa_analyzer_collect_export_symbols_checked(shared_analyzer,
+                                                            (XrAstNode *) spec->ast, &exports)) {
+                errors = report_module_analysis_errors(shared_analyzer, spec->source_path);
+                if (errors == 0)
+                    errors = 1;
+            } else {
+                if (spec->export_symbols)
+                    xr_hashmap_free(spec->export_symbols);
+                spec->export_symbols = exports;
+            }
+        }
+        xa_analyzer_clear_diagnostics(shared_analyzer);
+        if (errors > 0)
+            return false;
+    }
+    return true;
+}
+
 bool xr_compile_module_graph_dependencies(XrCompilerSession *session,
-                                          XaAnalyzer *shared_analyzer,
-                                          const XrModuleGraph *graph,
+                                          XaAnalyzer *shared_analyzer, XrModuleGraph *graph,
                                           XrCompiledModuleGraph *out) {
     if (!out)
         return false;
     memset(out, 0, sizeof(*out));
     if (!session || !shared_analyzer || !graph || graph->topo_count <= 0 ||
         !graph->topo_order)
+        return false;
+    if (!specialize_module_graph(session, shared_analyzer, graph))
         return false;
     out->count = graph->topo_count;
     out->modules = (XiModule **) xr_calloc((size_t) out->count, sizeof(*out->modules));

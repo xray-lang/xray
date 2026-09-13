@@ -103,8 +103,12 @@ static void bundle_report_diagnostics(XaAnalyzer *analyzer, const char *source_p
     }
 }
 
-static XaAnalyzer *bundle_analyze_dependency_exports(XrCompilerSession *session,
-                                                     XrModuleGraph *graph) {
+/* Analyze every module of the graph, the entry included, so each export
+ * table is published and every generic instantiation site is typed before
+ * any module is lowered: specialization is graph-wide, and a clone requested
+ * by the entry is materialized in the dependency that declares the generic,
+ * which is compiled first. */
+static XaAnalyzer *bundle_analyze_graph(XrCompilerSession *session, XrModuleGraph *graph) {
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer)
         return NULL;
@@ -113,7 +117,7 @@ static XaAnalyzer *bundle_analyze_dependency_exports(XrCompilerSession *session,
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int index = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[index];
-        if (index == graph->entry_index || !spec->ast)
+        if (!spec->ast)
             continue;
 
         xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
@@ -144,16 +148,15 @@ fail:
 
 static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaAnalyzer *analyzer,
                                  XrModuleGraph *graph, XrBundleFlags flags, XrBundle *bundle) {
-    XiModule **graph_modules =
-        (XiModule **) xr_calloc((size_t) graph->topo_count, sizeof(XiModule *));
-    XrProto **compiled = (XrProto **) xr_calloc((size_t) graph->topo_count, sizeof(XrProto *));
-    if (!graph_modules || !compiled) {
-        xr_free(graph_modules);
-        xr_free(compiled);
+    XrCompiledModuleGraph compilation;
+    if (!xr_compile_module_graph_dependencies(session, analyzer, graph, &compilation)) {
+        xr_log_warning("bundle", "dependency compilation failed: %s",
+                       bundle->entry_path ? bundle->entry_path : "?");
         return false;
     }
 
     bool complete = false;
+    XrProto *entry_proto = NULL;
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int index = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[index];
@@ -161,7 +164,12 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
         /* An external module occupies its topological slot without carrying
          * bytecode: the runtime supplies its body, and the entry only has to
          * name it well enough for xr_module_import to find it again. That name
-         * is the import specifier, never the canonical identity. */
+         * is the import specifier, never the canonical identity.  An embedded
+         * Xray layer is external only at run time: the dependency compilation
+         * above published its Xi module so dependants resolve source-owned
+         * call targets and consume the exact borrow/effect/storage contracts,
+         * while its bytecode body still comes from the runtime's embedded
+         * stdlib and is not duplicated in this bundle. */
         bool external = spec->kind == XR_MOD_STDLIB ||
                         (spec->kind == XR_MOD_PACKAGE && !(flags & XR_BUNDLE_STATIC_PACKAGES));
         if (external) {
@@ -173,14 +181,7 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
             }
             if (!bundle_add_entry(bundle, import_name, NULL, 0, spec->kind))
                 goto cleanup;
-            /* An embedded Xray layer is external only at run time.  Compile
-             * it far enough to publish its Xi module while walking the graph
-             * so dependants resolve source-owned call targets and consume the
-             * exact borrow/effect/storage contracts.  The bytecode body still
-             * comes from the runtime's embedded stdlib and is not duplicated
-             * in this bundle. */
-            if (!spec->ast || !spec->source_path)
-                continue;
+            continue;
         }
         if (!spec->ast || !spec->source_path) {
             xr_log_warning("bundle", "source-backed module is incomplete: %s",
@@ -188,17 +189,17 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
             goto cleanup;
         }
 
-        XrProto *proto =
-            xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path, graph,
-                                    graph_modules, graph->topo_count, &graph_modules[ti],
-                                    &spec->authority);
+        XrProto *proto = compilation.units[ti];
+        if (index == graph->entry_index) {
+            entry_proto = xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path,
+                                                  graph, compilation.modules, compilation.count,
+                                                  &compilation.modules[ti], &spec->authority);
+            proto = entry_proto;
+        }
         if (!proto) {
             xr_log_warning("bundle", "compilation failed: %s", spec->source_path);
             goto cleanup;
         }
-        compiled[ti] = proto;
-        if (external)
-            continue;
         size_t bc_size = 0;
         uint8_t *bc = xr_bootstrap_container_write(X, proto, 0, &bc_size, NULL);
         if (!bc) {
@@ -220,11 +221,9 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
     complete = bundle->entry_index >= 0;
 
 cleanup:
-    for (int ti = 0; ti < graph->topo_count; ti++)
-        if (compiled[ti])
-            xr_free_code(X, compiled[ti]);
-    xr_free(compiled);
-    xr_free(graph_modules);
+    if (entry_proto)
+        xr_free_code(X, entry_proto);
+    xr_compiled_module_graph_dispose(&compilation);
     return complete;
 }
 
@@ -266,7 +265,7 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file,
     XrModuleResolver *resolver = xr_module_resolver_new(&rcfg);
     XrModuleGraph *graph =
         resolver ? bundle_build_graph(session, resolver, entry_file, authority) : NULL;
-    XaAnalyzer *graph_analyzer = graph ? bundle_analyze_dependency_exports(session, graph) : NULL;
+    XaAnalyzer *graph_analyzer = graph ? bundle_analyze_graph(session, graph) : NULL;
     XrModuleGraph *previous_graph = xr_compiler_session_module_graph(session);
     if (!resolver || !graph || !graph_analyzer) {
         if (graph_analyzer) {

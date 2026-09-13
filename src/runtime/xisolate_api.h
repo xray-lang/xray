@@ -148,9 +148,16 @@ XR_FUNC XrProto *xr_compile_source_in_graph(
     const char *source_file, const struct XrModuleGraph *graph, struct XiModule **graph_modules,
     int graph_module_count, struct XiModule **out_module,
     const struct XrModuleIdentityAuthority *authority);
-XR_FUNC bool xr_compile_module_graph_dependencies(
-    struct XrCompilerSession *session, struct XaAnalyzer *shared_analyzer,
-    const struct XrModuleGraph *graph, XrCompiledModuleGraph *out);
+/* Compile every dependency of a module graph whose modules, the entry
+ * included, were all analyzed by `shared_analyzer`. Generics are specialized
+ * graph-wide first: an instantiation in one module materializes its clone in
+ * the module that declares the generic, so every module is re-analyzed and its
+ * export table republished before the first dependency is lowered. Analyzer
+ * errors are printed under their module's source path. */
+XR_FUNC bool xr_compile_module_graph_dependencies(struct XrCompilerSession *session,
+                                                  struct XaAnalyzer *shared_analyzer,
+                                                  struct XrModuleGraph *graph,
+                                                  XrCompiledModuleGraph *out);
 XR_FUNC void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation);
 XR_FUNC XrProto *xr_compile_source_with_path(struct XrCompilerSession *session, const char *source,
                                              const char *source_file,
