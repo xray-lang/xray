@@ -4645,8 +4645,15 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
-                          XR_VM_CODE_OK);
+    XrVmCodeStatus vm_status = xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic);
+    if (vm_status != XR_VM_CODE_OK)
+        fprintf(stderr,
+                "program VM code build failed: status=%d operation=%u function=%u block=%u "
+                "instruction=%u\n",
+                (int) vm_status, (unsigned) vm_diagnostic.operation_id,
+                (unsigned) vm_diagnostic.function_id, (unsigned) vm_diagnostic.block_id,
+                (unsigned) vm_diagnostic.instruction_id);
+    PIPELINE_TEST_REQUIRE(vm_status == XR_VM_CODE_OK);
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance,
                                         xr_validated_program_entry_function(validated), NULL, 0u);
     PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
