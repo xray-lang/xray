@@ -2591,6 +2591,7 @@ static bool producer_class_is_descendant_or_self(const XgProducer *producer, XgC
 }
 
 static bool body_type_ref_contains_type_param(const XrTypeRef *type);
+static bool body_type_args_contain_type_param(XrTypeRef **type_args, int type_arg_count);
 
 static bool
 producer_generic_method_receiver_matches(XgProducer *producer, XgClassId receiver_class_id,
@@ -5158,6 +5159,14 @@ static bool body_type_key_is_pod_array_lane(uint32_t type_key) {
     }
     for (uint32_t i = 0; i < sizeof(float_widths) / sizeof(float_widths[0]); i++) {
         if (type_key == hash_synthetic_width_tref32(XR_TREF_SCALAR, float_widths[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool body_type_args_contain_type_param(XrTypeRef **type_args, int type_arg_count) {
+    for (int i = 0; i < type_arg_count; i++) {
+        if (type_args && body_type_ref_contains_type_param(type_args[i]))
             return true;
     }
     return false;
@@ -10274,7 +10283,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 };
                 if (!body_add_generic_inst(bc, &input))
                     bc->producer->failed = true;
-            } else {
+            } else if (!body_type_args_contain_type_param(call->as.call_expr.type_args,
+                                                          syntactic_generic_type_arg_count)) {
+                /* An instantiation whose tuple is still open, such as
+                 * RouteMatch<T> constructed inside Router<T>, is a template
+                 * edge of the generic source body rather than an executable
+                 * root: the analyzer publishes its specialization on the clone
+                 * once the concrete tuple is substituted. Only a closed tuple
+                 * without a fact is a missing publication. */
                 bc->producer->failed = true;
             }
         }
