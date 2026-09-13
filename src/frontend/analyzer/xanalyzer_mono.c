@@ -2742,10 +2742,15 @@ static uint32_t mono_imported_nominal_symbol_id(const StructLiteralNode *literal
     return namespace_object->as.variable.symbol_id;
 }
 
-static bool mono_program_append(AstNode *root, AstNode *statement) {
+/* Insert `statement` at `index`, shifting later statements right.  Imports
+ * bind at their program position, so a compiler-private import must precede
+ * the first statement that reads its alias. */
+static bool mono_program_insert(AstNode *root, int index, AstNode *statement) {
     if (!root || root->type != AST_PROGRAM || !statement || !root->as.program.arena)
         return false;
     ProgramNode *program = &root->as.program;
+    if (index < 0 || index > program->count)
+        return false;
     if (program->count >= program->capacity) {
         int capacity = program->capacity > 0 ? program->capacity * 2 : 8;
         AstNode **statements =
@@ -2757,7 +2762,11 @@ static bool mono_program_append(AstNode *root, AstNode *statement) {
         program->statements = statements;
         program->capacity = capacity;
     }
-    program->statements[program->count++] = statement;
+    if (index < program->count)
+        memmove(&program->statements[index + 1], &program->statements[index],
+                (size_t) (program->count - index) * sizeof(AstNode *));
+    program->statements[index] = statement;
+    program->count++;
     return true;
 }
 
@@ -2850,7 +2859,8 @@ static const char *mono_append_specialized_import(AstNode *root, uint32_t import
             private_stmt->as.import_stmt.members =
                 (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), 1u);
             if (!private_stmt->as.import_stmt.module_name ||
-                !private_stmt->as.import_stmt.members || !mono_program_append(root, private_stmt))
+                !private_stmt->as.import_stmt.members ||
+                !mono_program_insert(root, stmt_index + 1, private_stmt))
                 return NULL;
             private_stmt->as.import_stmt.member_count = 1;
             target_import = &private_stmt->as.import_stmt;
