@@ -1255,6 +1255,11 @@
   :vm-bytecode (driver xi_emit_variant_construct)
   :aot-c (driver xicgen_variant_construct))
 
+(lower xi.sum.inject
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_sum_inject))
+
 (lower xi.variant.test
   :match ()
   :required-targets (vm-bytecode aot-c)

@@ -642,6 +642,30 @@ XR_FUNC void xi_emit_variant_construct(EmitCtx *ctx, XiValue *v, XiEmitReg dst) 
     xi_emit_call_method(ctx, &call, dst);
 }
 
+/* Optional<T> injection in the tagged VM representation. None is the null
+ * tag and Some(T) is the payload register itself: select_rep already keeps
+ * both the operand and the result tagged, so no boxing happens here. */
+XR_FUNC void xi_emit_sum_inject(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || !v->type || !v->type->is_nullable || (v->aux_int != 0 && v->aux_int != 1) ||
+        (v->aux_int == 0 && v->nargs != 0) || (v->aux_int == 1 && v->nargs != 1)) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    if (v->aux_int == 0) {
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+        return;
+    }
+    if (!v->args || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    if (dst != src)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+}
+
 XR_FUNC void xi_emit_variant_test(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!v || v->nargs != 1 || !v->args[0] || v->aux_int < 0 ||
         (uint64_t) v->aux_int > UINT32_MAX || ctx->next_reg >= MAX_REGS) {

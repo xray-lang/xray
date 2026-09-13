@@ -171,8 +171,8 @@ compatibility opcode, reserved hole, or second bounds owner.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 35dd3030a7fd4b40c8f3b76e053cea5202b9e21418c3b7af51c0715dde586cef
-anchor-sha256: xisa/xi/lowering.def 2a5a75b893790028f75fb5b61d11a8c0e6a085ea52f9af4776e646e95fb45c1e
+anchor-sha256: xisa/xi/ops.def c0656cbe20539c8f2748d74b211c5b8bd8cf579c6b23f53157fd617f9dd1699f
+anchor-sha256: xisa/xi/lowering.def ab2ef2e839ef587b3c826bce89b74dbb851477cbad6ae0e9e12a24d4aae06e50
 anchor-sha256: src/ir/xi_cleanup.c c6fb49d7e811f54637160b605a79c5301a528085d24ecca9c690820290e6fd83
 anchor-sha256: src/ir/xi_cleanup.h 7149fdf5ffcfed5c6904882f5e06889368bd1a6912db5580c65486c280279a0e
 anchor-sha256: tests/unit/ir/test_xi_cleanup.c 01b4edf0bf215e3099c1157f7282c7bb4d4cd72e54133c50eaabda5218210d51
