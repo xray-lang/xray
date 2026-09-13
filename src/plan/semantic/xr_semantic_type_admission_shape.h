@@ -135,14 +135,19 @@ xr_semantic_type_is_nullable_widening(const XrSemanticTypeRecord *value_type,
 }
 
 /* Null has no payload to convert. It may cross a call boundary only when the
- * frozen parameter describes a nullable reference representation. Unknown and
- * value types stay unclaimed even if a malformed row carries those flags. */
+ * frozen parameter describes a nullable reference representation: null is
+ * one of the values that carrier already encodes, exactly the judgement the
+ * nullable widening above makes for a definite value. Value semantics do not
+ * change the carrier -- a structural object is copied on assignment yet
+ * still lives behind a reference, which is why the row is both a value type
+ * and reference capable -- so the two rules ask about the carrier and nothing
+ * else. Unknown types and value aggregates with inline storage, which are
+ * never reference capable, stay unclaimed. */
 static inline bool xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecord *operand_type,
                                                        const XrSemanticTypeRecord *parameter_type) {
     return operand_type && parameter_type && operand_type->kind == (uint32_t) XR_KIND_NULL &&
            parameter_type->kind != (uint32_t) XR_KIND_UNKNOWN &&
-           (parameter_type->flags &
-            (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_REFERENCE_CAPABLE)) ==
+           (parameter_type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE)) ==
                (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE);
 }
 

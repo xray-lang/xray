@@ -54,8 +54,22 @@ int main(void) {
     parameter.flags = XR_SEM_TYPE_REFERENCE_CAPABLE;
     REQUIRE(!xr_semantic_null_inhabits_parameter(&null_type, &parameter));
 
+    /* A structural object has value semantics but lives behind a reference,
+     * so its row is both a value type and reference capable; null is one of
+     * the values that carrier encodes, exactly as for the definite-value
+     * widening. */
+    parameter.kind = XR_KIND_STRUCT_OBJECT;
     parameter.flags = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_VALUE;
+    REQUIRE(xr_semantic_null_inhabits_parameter(&null_type, &parameter));
+    REQUIRE(xr_semantic_parameter_leaf_type_admits_argument(&parameter, &null_type,
+                                                            XR_PARAM_READ));
+
+    /* A value aggregate with inline storage is never reference capable and
+     * has no carrier for null. */
+    parameter.kind = XR_KIND_INSTANCE;
+    parameter.flags = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_AGGREGATE_EXACT;
     REQUIRE(!xr_semantic_null_inhabits_parameter(&null_type, &parameter));
+    parameter.kind = XR_KIND_ARRAY;
 
     parameter.kind = XR_KIND_UNKNOWN;
     parameter.flags = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE;
