@@ -30,6 +30,8 @@
 #include "program/xr_reference_evaluator.h"
 #include "program/xr_validated_program_internal.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
+#include "runtime/value/xchunk.h"
+#include "runtime/xisolate_api.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/xr_program_vm.h"
 #include "xray_vm.h"
@@ -104,30 +106,17 @@ static bool analyze_all_modules(ImportedCallableFixture *fixture) {
     return true;
 }
 
-static bool build_imported_callable_fixture(ImportedCallableFixture *fixture,
-                                            XrCompilerSession *session, XrVMRuntime *isolate,
+/* Write the two module sources into a fresh directory, build and sort their
+ * graph, and analyze every module so its exports are published. Leaves the
+ * fixture ready for either the Xi pipeline or the compile driver. */
+static bool prepare_imported_callable_graph(ImportedCallableFixture *fixture,
+                                            XrCompilerSession *session,
                                             bool fail_after_source_write,
-                                            const char *library_source_override,
-                                            const char *consumer_source_override,
-                                            char *created_directory, size_t created_directory_size) {
+                                            const char *selected_library_source,
+                                            const char *selected_consumer_source,
+                                            char *created_directory,
+                                            size_t created_directory_size) {
     static unsigned int serial;
-    static const char library_source[] =
-        "fn bump(value: i64) -> i64 { return value + 1 }\n"
-        "export fn identity(value: i64) -> i64 { return value }\n"
-        "export fn increment(value: i64) -> i64 { return bump(value) }\n";
-    static const char consumer_source[] =
-        "import { identity, increment } from \"./library\"\n"
-        "fn apply(flag: bool, value: i64) -> i64 {\n"
-        "  var action = identity\n"
-        "  if (flag) { action = increment }\n"
-        "  return action(value)\n"
-        "}\n"
-        "fn root() -> i64 { return apply(true, 41) }\n";
-    const char *selected_library_source =
-        library_source_override ? library_source_override : library_source;
-    const char *selected_consumer_source =
-        consumer_source_override ? consumer_source_override : consumer_source;
-
     if (!fixture)
         return false;
     if (created_directory && created_directory_size != 0u)
@@ -191,6 +180,37 @@ static bool build_imported_callable_fixture(ImportedCallableFixture *fixture,
     xa_analyzer_set_graph(fixture->analyzer, fixture->graph);
     if (!analyze_all_modules(fixture))
         goto fail;
+    return true;
+
+fail:
+    destroy_imported_callable_fixture(fixture);
+    return false;
+}
+
+static bool build_imported_callable_fixture(ImportedCallableFixture *fixture,
+                                            XrCompilerSession *session, XrVMRuntime *isolate,
+                                            bool fail_after_source_write,
+                                            const char *library_source_override,
+                                            const char *consumer_source_override,
+                                            char *created_directory, size_t created_directory_size) {
+    static const char library_source[] =
+        "fn bump(value: i64) -> i64 { return value + 1 }\n"
+        "export fn identity(value: i64) -> i64 { return value }\n"
+        "export fn increment(value: i64) -> i64 { return bump(value) }\n";
+    static const char consumer_source[] =
+        "import { identity, increment } from \"./library\"\n"
+        "fn apply(flag: bool, value: i64) -> i64 {\n"
+        "  var action = identity\n"
+        "  if (flag) { action = increment }\n"
+        "  return action(value)\n"
+        "}\n"
+        "fn root() -> i64 { return apply(true, 41) }\n";
+    if (!prepare_imported_callable_graph(
+            fixture, session, fail_after_source_write,
+            library_source_override ? library_source_override : library_source,
+            consumer_source_override ? consumer_source_override : consumer_source,
+            created_directory, created_directory_size))
+        return false;
 
     AstNode *roots[2] = {0};
     for (int topo = 0; topo < fixture->graph->topo_count; ++topo)
@@ -919,6 +939,63 @@ TEST(imported_static_method_uses_exact_cross_module_evidence) {
     xray_vm_delete(isolate);
 }
 
+/* The compile driver emits a dependency before its dependants are compiled,
+ * which detaches the dependency's Xi children from its module init. A static
+ * method of an imported value struct must still be classified for the
+ * consumer's coroutine lowering, from the dependency's frozen semantic plan,
+ * exactly as an instance method is. */
+TEST(imported_static_method_resolves_after_dependency_emission) {
+    static const char library_source[] =
+        "export struct Pair {\n"
+        "  lanes: [i64; 2]\n"
+        "  static make(lanes: [i64; 2]) -> Pair {\n"
+        "    return Pair{lanes: copy(lanes)}\n"
+        "  }\n"
+        "  first() -> i64 { return this.lanes[0] }\n"
+        "}\n";
+    /* The call sits in the module initializer: unlike a named function it
+     * carries no closed analyzer suspension summary, so classification has
+     * to come from the dependency's plan. */
+    static const char consumer_source[] =
+        "import \"./library\" as library\n"
+        "var first = library.Pair.make([3, 4]).first()\n";
+    XrVMConfig vm_config = {0};
+    XrVMRuntime *isolate = xray_vm_new_full(&vm_config);
+    ASSERT_NOT_NULL(isolate);
+    XrCompilerSession *original_session = xr_compiler_session_current_for_isolate(isolate);
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    ASSERT_NOT_NULL(session);
+    ASSERT_EQ_PTR(xr_compiler_session_attach_isolate(isolate, session), original_session);
+
+    ImportedCallableFixture *fixture = &g_active_fixture;
+    ASSERT_TRUE(prepare_imported_callable_graph(fixture, session, false, library_source,
+                                                consumer_source, NULL, 0u));
+    XrCompilerSessionOperationScope operation = {0};
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &operation));
+    xr_compiler_session_set_module_graph(session, fixture->graph);
+    XrCompiledModuleGraph compilation = {0};
+    ASSERT_TRUE(xr_compile_module_graph_dependencies(session, fixture->analyzer, fixture->graph,
+                                                     &compilation));
+    XrModuleSpec *entry = &fixture->graph->specs[fixture->graph->entry_index];
+    XiModule *entry_module = NULL;
+    XrProto *proto = xr_compile_ast_in_graph(session, fixture->analyzer, entry->ast,
+                                             entry->source_path, fixture->graph,
+                                             compilation.modules, compilation.count,
+                                             &entry_module, &entry->authority);
+    ASSERT_NOT_NULL(proto);
+    ASSERT_NOT_NULL(entry_module);
+
+    xr_instruction_unit_free(proto);
+    xr_compiled_module_graph_dispose(&compilation);
+    xr_compiler_session_set_module_graph(session, NULL);
+    ASSERT_TRUE(xr_compiler_session_operation_succeed(&operation));
+    destroy_imported_callable_fixture(fixture);
+    ASSERT_EQ_PTR(xr_compiler_session_attach_isolate(isolate, original_session), session);
+    xr_compiler_session_delete(session);
+    xray_vm_delete(isolate);
+}
+
 TEST_MAIN_BEGIN()
 g_generated_c_path = argc == 2 ? argv[1] : NULL;
 if (argc > 2)
@@ -928,5 +1005,6 @@ destroy_imported_callable_fixture(&g_active_fixture);
 RUN_TEST(test_imported_callable_multi_target_program);
 destroy_imported_callable_fixture(&g_active_fixture);
 RUN_TEST(imported_static_method_uses_exact_cross_module_evidence);
+RUN_TEST(imported_static_method_resolves_after_dependency_emission);
 destroy_imported_callable_fixture(&g_active_fixture);
 TEST_MAIN_END()

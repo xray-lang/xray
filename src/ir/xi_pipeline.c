@@ -52,7 +52,6 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 static bool xi_env_is_enabled(const char *name) {
     const char *env = getenv(name);
@@ -507,7 +506,11 @@ static int xi_pipeline_coro_imported_constructor_suspendability(const XiFunc *cu
  * emission through the same frozen class/member relation the SemanticPlan
  * later verifies. The dependency plan's closed local call graph decides
  * whether lowering must reserve a state; the caller plan independently checks
- * that state against the dependency plan before publication. */
+ * that state against the dependency plan before publication.
+ *
+ * An instance receiver names the instance method row; a class receiver names
+ * a static method, which the plan records as a static-method function of the
+ * same source class and member ordinal. */
 static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCoroResolverCtx *ctx,
                                                              const XiValue *call) {
     if (!ctx || !ctx->cfg || !ctx->cfg->graph_modules || !call || call->op != XI_CALL_METHOD ||
@@ -515,9 +518,11 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
         return -1;
     const XiValue *receiver = xi_pipeline_coro_unwrap_identity(call->args[0]);
     const XrType *receiver_type = receiver ? receiver->type : NULL;
-    if (!receiver_type || receiver_type->kind != XR_KIND_INSTANCE ||
+    if (!receiver_type ||
+        (receiver_type->kind != XR_KIND_INSTANCE && receiver_type->kind != XR_KIND_CLASS) ||
         !receiver_type->instance.class_ref || receiver_type->instance.class_ref->xg_class_id == 0)
         return -1;
+    const bool static_method = receiver_type->kind == XR_KIND_CLASS;
 
     const XiModule *module = NULL;
     const XiClassData *class_data = NULL;
@@ -543,16 +548,19 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
         return -1;
     const XrSemanticSourceClassRecord *semantic_class =
         xr_semantic_plan_source_class(plan, source_class);
+    /* Instance dispatch needs the class to exist at run time; a static
+     * method is a plain function of the declaring class and is admitted for
+     * value aggregates whose instances never carry a runtime type. */
     if (!semantic_class || semantic_class->ordinal != source_class || !semantic_class->name ||
         !class_data->class_name || strcmp(semantic_class->name, class_data->class_name) != 0 ||
-        (semantic_class->flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) == 0)
+        (!static_method && (semantic_class->flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) == 0))
         return -1;
 
     uint16_t member = UINT16_MAX;
     for (uint16_t i = 0; i < class_data->nmethod; i++) {
         const XiClassMethod *candidate = class_data->methods ? &class_data->methods[i] : NULL;
-        if (!candidate || candidate->is_constructor || candidate->is_static || !candidate->name ||
-            strcmp(candidate->name, (const char *) call->aux) != 0)
+        if (!candidate || candidate->is_constructor || candidate->is_static != static_method ||
+            !candidate->name || strcmp(candidate->name, (const char *) call->aux) != 0)
             continue;
         if (member != UINT16_MAX)
             return -1;
@@ -560,6 +568,27 @@ static int xi_pipeline_coro_dependency_method_suspendability(const XiPipelineCor
     }
     if (member == UINT16_MAX)
         return -1;
+    if (static_method) {
+        /* The class receiver is not an argument of the static function. */
+        const XrSemanticFunctionRecord *function = NULL;
+        uint32_t function_index = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t i = 0; i < xr_semantic_plan_function_count(plan); i++) {
+            const XrSemanticFunctionRecord *candidate = xr_semantic_plan_function(plan, i);
+            if (!candidate || candidate->source_kind != XR_SEM_SOURCE_FUNCTION_STATIC_METHOD ||
+                candidate->source_class != source_class ||
+                candidate->source_member_ordinal != member ||
+                candidate->parameter_count != call->nargs - 1u || !candidate->name ||
+                strcmp(candidate->name, (const char *) call->aux) != 0)
+                continue;
+            if (function)
+                return -1;
+            function = candidate;
+            function_index = i;
+        }
+        if (!function)
+            return -1;
+        return xi_pipeline_coro_plan_function_suspendability(plan, function_index);
+    }
     const uint8_t expected_flags =
         (uint8_t) (XR_SEM_SOURCE_METHOD_INSTANCE |
                    ((semantic_class->flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) != 0
