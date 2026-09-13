@@ -1587,7 +1587,7 @@ static bool verify_operand_contract(const XrSemanticOperationRecord *operation,
         operand->ownership_action > XR_SEM_OPERAND_CONSUME ||
         !xr_param_mode_is_valid((XrParamMode) operand->parameter_mode) ||
         !xr_call_arg_access_is_valid((XrCallArgAccess) operand->access) ||
-        operand->origin > XI_PLACE_ORIGIN_PROJECTION_TEMP ||
+        !xi_place_origin_is_valid(operand->origin) ||
         operand->lifetime > XI_PLACE_LIFETIME_CALL_BOUND ||
         operand->escape > XI_PLACE_ESCAPE_THREAD ||
         (operand->flags & ~(XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE)) != 0 ||
@@ -3749,8 +3749,7 @@ static bool verify_direct_local_managed_aggregate_boundaries(
             ((operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0
                  ? ((parameter->flags & XR_SEM_PARAMETER_READ_PLACE) == 0 ||
                     operand->flags != (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) ||
-                    operand->origin == XI_PLACE_ORIGIN_NONE ||
-                    operand->origin > XI_PLACE_ORIGIN_PROJECTION_TEMP ||
+                    !xi_place_origin_is_borrowable(operand->origin) ||
                     operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND)
                  : (operand->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
                     operand->origin != XI_PLACE_ORIGIN_NONE ||
@@ -6252,8 +6251,7 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             else if (read && addressable && (parameter->flags & XR_SEM_PARAMETER_READ_PLACE) == 0)
                 disagreement = "read-argument-place-unauthorized";
             else if (read && addressable &&
-                     (operand->origin == XI_PLACE_ORIGIN_NONE ||
-                      operand->origin > XI_PLACE_ORIGIN_PROJECTION_TEMP ||
+                     (!xi_place_origin_is_borrowable(operand->origin) ||
                       operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
                       operand->escape != XI_PLACE_ESCAPE_NONE ||
                       operand->ownership_action != XR_SEM_OPERAND_BORROW))

@@ -245,6 +245,19 @@ typedef enum XiPlaceOrigin {
     XI_PLACE_ORIGIN_DIRECT_VALUE = 4,
 } XiPlaceOrigin;
 
+/* Whether a frozen operand record names a place origin this enum defines.
+ * Verifiers ask this instead of comparing against the last member by name, so
+ * a new origin is admitted everywhere the moment it is declared here. */
+static inline bool xi_place_origin_is_valid(uint8_t origin) {
+    return origin <= XI_PLACE_ORIGIN_DIRECT_VALUE;
+}
+
+/* A place origin that names storage a borrowed call-bound READ place can
+ * point into: anything but the absent origin. */
+static inline bool xi_place_origin_is_borrowable(uint8_t origin) {
+    return origin != XI_PLACE_ORIGIN_NONE && xi_place_origin_is_valid(origin);
+}
+
 /* XI_LOCAL_ADDR normally takes the address of args[0]'s caller-local storage.
  * These flags permit native backends to borrow an underlying place only when
  * lowering retained explicit source-place provenance.  In particular, a local
