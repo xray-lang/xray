@@ -1734,17 +1734,6 @@ static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
 }
 
-/* A direct value temporary owns independent call-bound storage.  It is not a
- * borrowed
- * field/pointer projection even though both shapes use LOCAL_ADDR in
- * Xi's physical call ABI. */
-static inline bool xi_value_is_fresh_direct_storage(const XiValue *v) {
-    if (!v || xi_var_id_is_valid(v->var_id))
-        return false;
-    return v->op == XI_AGG_NEW || v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST ||
-           xi_copy_is_value_clone(v);
-}
-
 static inline bool xi_copy_is_cell_read(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_CELL_READ;
 }
@@ -1818,6 +1807,20 @@ static inline const XiValue *xi_value_trace_referent(const XiValue *v) {
     while (xi_value_forwards_referent(v) && v->nargs >= 1)
         v = v->args[0];
     return v;
+}
+
+/* A direct value temporary owns independent call-bound storage.  It is not a
+ * borrowed field/pointer projection even though both shapes use LOCAL_ADDR in
+ * Xi's physical call ABI.  The question is asked of the value's provenance,
+ * so it looks through representation changes: select_rep may wrap the fresh
+ * aggregate in a BOX or UNBOX before the place that borrows it, and that
+ * adapter neither creates nor borrows storage of its own. */
+static inline bool xi_value_is_fresh_direct_storage(const XiValue *v) {
+    const XiValue *source = xi_value_trace_repr(v);
+    if (!source || xi_var_id_is_valid(source->var_id))
+        return false;
+    return source->op == XI_AGG_NEW || source->op == XI_FIXED_ARRAY_NEW ||
+           source->op == XI_FIXED_BYTES_CONST || xi_copy_is_value_clone(source);
 }
 
 /*
