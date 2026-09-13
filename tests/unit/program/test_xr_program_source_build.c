@@ -980,6 +980,14 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
     if (xr_temp_dir_create("xray-program-source-build", fixture->directory,
                            sizeof(fixture->directory)) != 0)
         goto fail;
+    /* The directory doubles as the script identity authority root. The graph
+     * canonicalizes the entry path it is handed and compares it against this
+     * root byte for byte, so the root itself must be the physical path: on
+     * macOS TMPDIR lives under /var, which resolves to /private/var. */
+    char absolute_directory[XR_TEST_PATH_MAX] = {0};
+    if (!xr_test_realpath_buf(fixture->directory, absolute_directory, sizeof(absolute_directory)))
+        goto fail;
+    memcpy(fixture->directory, absolute_directory, strlen(absolute_directory) + 1u);
     int entry_length = snprintf(fixture->entry_path, sizeof(fixture->entry_path), "%s/main.xr",
                                 fixture->directory);
     if (entry_length < 0 || (size_t) entry_length >= sizeof(fixture->entry_path) ||

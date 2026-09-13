@@ -21,6 +21,7 @@
 #include "program/xr_program.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef enum XrProgramCoroutineTrapMutation {
