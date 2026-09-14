@@ -39,7 +39,7 @@
 #include "../base/xsource_cache.h"
 #include "../toolchain/xcompiler_session.h"
 
-typedef struct DostringGraphState {
+typedef struct ProgramGraphState {
     XrModuleGraph *graph;
     XaAnalyzer *analyzer;
     XrModuleRegistry *registry;
@@ -48,14 +48,14 @@ typedef struct DostringGraphState {
     XrModule **owned_module_table;
     XrCompiledModuleGraph compilation;
     XrProgramImage image;
-} DostringGraphState;
+} ProgramGraphState;
 
 static XrSourceCache *ensure_script_source_cache(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     return xr_compiler_session_ensure_source_cache(session);
 }
 
-static void dostring_graph_cleanup(XrCompilerSession *session, DostringGraphState *state) {
+static void program_graph_cleanup(XrCompilerSession *session, ProgramGraphState *state) {
     if (!state)
         return;
     if (session)
@@ -76,11 +76,11 @@ static void dostring_graph_cleanup(XrCompilerSession *session, DostringGraphStat
     memset(state, 0, sizeof(*state));
 }
 
-static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrModuleGraph *graph,
-                                               XaAnalyzer **out_analyzer) {
+static bool analyze_program_graph(XrCompilerSession *session, XrModuleGraph *graph,
+                                  XaAnalyzer **out_analyzer) {
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer) {
-        fprintf(stderr, "Error: cannot create analyzer for eval module graph\n");
+        fprintf(stderr, "Error: cannot create analyzer for the program module graph\n");
         return false;
     }
 
@@ -102,8 +102,8 @@ static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrMod
         spec->export_symbols =
             xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
 
-        graph_errors += xa_analyzer_print_errors(
-            analyzer, spec->source_path ? spec->source_path : spec->canonical);
+        graph_errors += xa_analyzer_print_errors(analyzer, spec->source_path ? spec->source_path
+                                                                             : spec->canonical);
         xa_analyzer_clear_diagnostics(analyzer);
     }
 
@@ -117,8 +117,8 @@ static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrMod
     return true;
 }
 
-static bool preload_graph_modules_for_dostring(XrVMRuntime *isolate, XrModuleGraph *graph,
-                                               DostringGraphState *state) {
+static bool preload_program_modules(XrVMRuntime *isolate, XrModuleGraph *graph,
+                                    ProgramGraphState *state) {
     XrModuleRegistry *registry = state->registry;
     int nmod = graph->topo_count;
     if (!registry || nmod <= 1)
@@ -137,10 +137,14 @@ static bool preload_graph_modules_for_dostring(XrVMRuntime *isolate, XrModuleGra
     return true;
 }
 
-static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *session,
-                                       const char *source,
-                                       const XrModuleIdentityAuthority *authority,
-                                       DostringGraphState *state) {
+/* Build, analyze and compile the module graph of a program given as
+ * in-memory source or as a file, and install its image so every module it
+ * imports runs as compiled for it. A program that imports nothing has no
+ * graph to speak of and leaves `state` empty; its entry compiles alone. */
+static bool prepare_program_graph(XrVMRuntime *isolate, XrCompilerSession *session,
+                                  const char *source, const char *filename,
+                                  const XrModuleIdentityAuthority *authority,
+                                  ProgramGraphState *state) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     if (!registry || !resolver)
@@ -151,8 +155,10 @@ static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *
         return true;
 
     char *err = NULL;
-    if (xr_module_graph_build_source(graph, authority, source, &err) != 0) {
-        fprintf(stderr, "Error: %s\n", err ? err : "failed to build eval module graph");
+    int built = filename ? xr_module_graph_build(graph, filename, authority, &err)
+                         : xr_module_graph_build_source(graph, authority, source, &err);
+    if (built != 0) {
+        fprintf(stderr, "Error: %s\n", err ? err : "failed to build the program module graph");
         xr_free(err);
         xr_module_graph_free(graph);
         return false;
@@ -175,15 +181,15 @@ static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *
     memset(state, 0, sizeof(*state));
     state->graph = graph;
     state->registry = registry;
-    if (!analyze_graph_exports_for_dostring(session, graph, &state->analyzer)) {
-        dostring_graph_cleanup(session, state);
+    if (!analyze_program_graph(session, graph, &state->analyzer)) {
+        program_graph_cleanup(session, state);
         return false;
     }
 
     xr_compiler_session_set_module_graph(session, graph);
     if (!xr_compile_module_graph_dependencies(session, state->analyzer, graph,
                                               &state->compilation)) {
-        dostring_graph_cleanup(session, state);
+        program_graph_cleanup(session, state);
         return false;
     }
     /* The modules the script imports run as compiled for it: the image
@@ -192,13 +198,13 @@ static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *
      * the one that loads, not the runtime's embedded copy or a fresh
      * per-file compilation. */
     if (!xr_program_image_build(isolate, graph, &state->compilation, &state->image)) {
-        fprintf(stderr, "Error: cannot build the program image for the eval module graph\n");
-        dostring_graph_cleanup(session, state);
+        fprintf(stderr, "Error: cannot build the program image for the module graph\n");
+        program_graph_cleanup(session, state);
         return false;
     }
     xr_program_image_install(&state->image, registry);
-    if (!preload_graph_modules_for_dostring(isolate, graph, state)) {
-        dostring_graph_cleanup(session, state);
+    if (!preload_program_modules(isolate, graph, state)) {
+        program_graph_cleanup(session, state);
         return false;
     }
     return true;
@@ -296,14 +302,15 @@ static char *read_file_source(const char *filename) {
 
 /* ========== Execution API ========== */
 
-int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
-                        const XrModuleIdentityAuthority *authority) {
-    xray_api_checkr(isolate != NULL, "xr_isolate_dostring: NULL isolate", -1);
-    xray_api_checkr(source != NULL, "xr_isolate_dostring: NULL source", -1);
-    xray_api_checkr(authority != NULL && authority->kind == XR_MODULE_IDENTITY_MEMORY &&
-                        xr_module_identity_authority_valid(authority),
-                    "xr_isolate_dostring: invalid memory module authority", -1);
-
+/* Run one program: the in-memory `source` under a memory authority, or the
+ * file `filename` under a file authority. The program's module graph is
+ * compiled as a whole and its image installed before the entry runs; the
+ * entry is the graph's own syntax, which graph-wide specialization rewrote
+ * and the shared analyzer typed. With `out_proto` the executed code is handed
+ * back instead of freed, for a debugger that resumes into it. */
+static int run_program(XrVMRuntime *isolate, const char *source, const char *filename,
+                       const XrModuleIdentityAuthority *authority, void **out_proto) {
+    const char *label = filename ? filename : authority->namespace_id;
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     if (!session) {
         fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
@@ -314,41 +321,66 @@ int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
         fprintf(stderr, "Compiler unavailable: compiler session is busy\n");
         return -1;
     }
-    DostringGraphState graph_state = {0};
-    if (!prepare_graph_for_dostring(isolate, session, source, authority, &graph_state)) {
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+    ProgramGraphState graph_state = {0};
+    if (!prepare_program_graph(isolate, session, source, filename, authority, &graph_state)) {
+        (void) xr_compiler_session_operation_fail(&operation_scope,
+                                                  XR_COMPILER_SESSION_OPERATION_FATAL);
         return -1;
     }
     XrProto *code = NULL;
     if (graph_state.graph) {
-        /* The graph's entry syntax is the program: it is what graph-wide
-         * specialization rewrote and what the shared analyzer typed. */
         XrModuleSpec *entry = &graph_state.graph->specs[graph_state.graph->entry_index];
         XiModule *entry_module = NULL;
         code = xr_compile_ast_in_graph(session, graph_state.analyzer, entry->ast,
-                                       entry->canonical, graph_state.graph,
-                                       graph_state.compilation.modules,
+                                       filename ? entry->source_path : entry->canonical,
+                                       graph_state.graph, graph_state.compilation.modules,
                                        graph_state.compilation.count, &entry_module, authority);
     } else {
-        code = xr_compile_source_with_path(session, source, authority->namespace_id, authority);
+        code = xr_compile_source_with_path(session, source, label, authority);
     }
     if (code == NULL) {
-        dostring_graph_cleanup(session, &graph_state);
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        program_graph_cleanup(session, &graph_state);
+        (void) xr_compiler_session_operation_fail(&operation_scope,
+                                                  XR_COMPILER_SESSION_OPERATION_FATAL);
         fprintf(stderr, "Compilation error\n");
         return -1;
     }
 
-    int result = execute_and_dump(isolate, code, authority->namespace_id);
+    int result = execute_and_dump(isolate, code, label);
 
-    xr_free_code(isolate, code);
-    dostring_graph_cleanup(session, &graph_state);
+    if (out_proto)
+        *out_proto = code;
+    else
+        xr_free_code(isolate, code);
+    program_graph_cleanup(session, &graph_state);
 
     if (!xr_compiler_session_operation_succeed(&operation_scope))
         return -1;
+    return result;
+}
 
+int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
+                        const XrModuleIdentityAuthority *authority) {
+    xray_api_checkr(isolate != NULL, "xr_isolate_dostring: NULL isolate", -1);
+    xray_api_checkr(source != NULL, "xr_isolate_dostring: NULL source", -1);
+    xray_api_checkr(authority != NULL && authority->kind == XR_MODULE_IDENTITY_MEMORY &&
+                        xr_module_identity_authority_valid(authority),
+                    "xr_isolate_dostring: invalid memory module authority", -1);
+    return run_program(isolate, source, NULL, authority, NULL);
+}
+
+static int run_program_file(XrVMRuntime *isolate, const char *filename,
+                            const XrModuleIdentityAuthority *authority, void **out_proto) {
+    char *source = read_file_source(filename);
+    if (source == NULL) {
+        fprintf(stderr, "Cannot open file: %s\n", filename);
+        return -1;
+    }
+    XrSourceCache *source_cache = ensure_script_source_cache(isolate);
+    if (source_cache)
+        xr_source_cache_add(source_cache, filename, source);
+    int result = run_program(isolate, source, filename, authority, out_proto);
+    xr_free(source);
     return result;
 }
 
@@ -359,36 +391,7 @@ int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename,
     xray_api_checkr(authority != NULL && authority->kind != XR_MODULE_IDENTITY_MEMORY &&
                         xr_module_identity_authority_valid(authority),
                     "xr_isolate_dofile: file module authority is required", -1);
-
-    char *source = read_file_source(filename);
-    if (source == NULL) {
-        fprintf(stderr, "Cannot open file: %s\n", filename);
-        return -1;
-    }
-
-    XrSourceCache *source_cache = ensure_script_source_cache(isolate);
-    if (source_cache) {
-        xr_source_cache_add(source_cache, filename, source);
-    }
-
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    if (!session) {
-        fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
-        xr_free(source);
-        return -1;
-    }
-    XrProto *code = xr_compile_source_with_path(session, source, filename, authority);
-    if (code == NULL) {
-        xr_free(source);
-        return -1;
-    }
-
-    int result = execute_and_dump(isolate, code, filename);
-
-    xr_free_code(isolate, code);
-    xr_free(source);
-
-    return result;
+    return run_program_file(isolate, filename, authority, NULL);
 }
 
 // Debug version: compile and execute but don't free code (for debug resume)
@@ -400,39 +403,5 @@ int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename,
     xray_api_checkr(authority != NULL && authority->kind != XR_MODULE_IDENTITY_MEMORY &&
                         xr_module_identity_authority_valid(authority),
                     "xr_isolate_dofile_debug: file module authority is required", -1);
-
-    char *source = read_file_source(filename);
-    if (source == NULL) {
-        fprintf(stderr, "Cannot open file: %s\n", filename);
-        return -1;
-    }
-
-    XrSourceCache *source_cache = ensure_script_source_cache(isolate);
-    if (source_cache) {
-        xr_source_cache_add(source_cache, filename, source);
-    }
-
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    if (!session) {
-        fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
-        xr_free(source);
-        return -1;
-    }
-    XrProto *code = xr_compile_source_with_path(session, source, filename, authority);
-    if (code == NULL) {
-        xr_free(source);
-        return -1;
-    }
-
-    int result = xr_execute(isolate, code);
-
-    if (out_proto) {
-        *out_proto = code;
-    } else {
-        xr_free_code(isolate, code);
-    }
-
-    xr_free(source);
-
-    return result;
+    return run_program_file(isolate, filename, authority, out_proto);
 }
