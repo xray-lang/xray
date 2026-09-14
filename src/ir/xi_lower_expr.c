@@ -7651,6 +7651,18 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
     return value;
 }
 
+/* An Array intrinsic is a frozen, exactly typed allocation: the plan records
+ * its element storage and refuses anything less. An erased body -- a generic
+ * template whose element is still a type parameter -- has no concrete storage
+ * to freeze, so its allocation stays an ordinary builtin call by name; the
+ * emitter handles both spellings alike. */
+static void lower_mark_array_intrinsic(XiValue *v, uint8_t kind, struct XrType *result_type) {
+    uint8_t storage = xi_array_intrinsic_storage_from_type(result_type);
+    v->array_element_storage = storage;
+    if (storage > XR_ELEM_ANY)
+        v->array_intrinsic_kind = kind;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -7812,8 +7824,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->args[0] = cap;
             v->aux = (void *) "array_with_capacity";
             v->aux_int = xi_array_cfield_from_type(result_type);
-            v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_WITH_CAPACITY;
-            v->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
+            lower_mark_array_intrinsic(v, XI_ARRAY_INTRINSIC_WITH_CAPACITY, result_type);
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;
@@ -10230,8 +10241,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             v->args[1] = fill;
             v->aux = (void *) "array_filled_new";
             v->aux_int = xi_array_cfield_from_type(result_type);
-            v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_FILLED_NEW;
-            v->array_element_storage = xi_array_intrinsic_storage_from_type(result_type);
+            lower_mark_array_intrinsic(v, XI_ARRAY_INTRINSIC_FILLED_NEW, result_type);
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;
