@@ -140,7 +140,7 @@ export class WorkQueue<T> {
 
     constructor(shards: i64 = 1, capacity: i64 = 256) {
         this._lock = _SpinLock()
-        this._items = Array<T>(capacity > 0 ? capacity : 1)
+        this._items = Array.withCapacity(capacity > 0 ? capacity : 1)
         this._shards = shards > 0 ? shards : 1
         this._closed = Atomic<bool>(false)
     }
