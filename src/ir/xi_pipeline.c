@@ -455,11 +455,21 @@ static int xi_pipeline_coro_plan_constructor_suspendability(const XrSemanticPlan
  * must not infer constructor suspendability from the now-empty child array or
  * from the class/member spelling. Join the resolver's exact module, export and
  * shared-slot binding to the dependency's independently verified class and
- * function records instead. */
+ * function records instead.
+ *
+ * The construction has two spellings with one meaning: a call of the imported
+ * class value, and the constructor member called on that value, which is how
+ * a qualified `Namespace.Class(args)` and a compiler-private specialization
+ * import lower. Either way operand zero is the class value bound by the
+ * import and the operand count includes it. */
 static int xi_pipeline_coro_imported_constructor_suspendability(const XiFunc *current,
                                                                 const XiValue *call) {
-    if (!current || !call || call->op != XI_CALL || call->nargs < 1 ||
-        !xi_value_is_constructor_call(call))
+    if (!current || !call || call->nargs < 1)
+        return -1;
+    bool call_form = call->op == XI_CALL && xi_value_is_constructor_call(call);
+    bool member_form = call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0 &&
+                       strcmp((const char *) call->aux, "constructor") == 0;
+    if (!call_form && !member_form)
         return -1;
     const XiImportRef *ref = xi_value_import_ref(current, call->args[0]);
     const XiModule *module = ref ? ref->resolved_module : NULL;
