@@ -14,6 +14,7 @@
 
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
+#include "xray_vm.h"
 #include "../base/xchecks.h"
 #include "../base/xfileio.h"
 #include "../base/xlog.h"
@@ -27,8 +28,10 @@
 #include "../frontend/parser/xparse.h"
 #include "../ir/xi.h"
 #include "../ir/xi_module.h"
+#include "../module/xmodule.h"
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
+#include "../module/xproto_codec.h"
 #include "../os/os_thread.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
@@ -227,26 +230,6 @@ XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, XaAnalyzer *shared_
                                 graph_module_count, out_module, shared_analyzer);
 }
 
-XrProto *xr_compile_source_in_graph(XrCompilerSession *session, XaAnalyzer *shared_analyzer,
-                                    const char *source, const char *source_file,
-                                    const XrModuleGraph *graph, XiModule **graph_modules,
-                                    int graph_module_count, XiModule **out_module,
-                                    const XrModuleIdentityAuthority *authority) {
-    if (out_module)
-        *out_module = NULL;
-    if (!compile_session_available(session, "compile_source_in_graph") || !shared_analyzer ||
-        !source || !graph || !graph_modules || graph_module_count <= 0 || !out_module ||
-        !authority)
-        return NULL;
-    AstNode *ast = xr_parse_with_source(session, source, source_file);
-    if (!ast)
-        return NULL;
-    XrProto *proto = compile_ast_internal(session, ast, source_file, authority, graph, graph_modules,
-                                          graph_module_count, out_module, shared_analyzer);
-    xr_program_destroy(ast);
-    return proto;
-}
-
 void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation) {
     if (!compilation)
         return;
@@ -348,6 +331,78 @@ bool xr_compile_module_graph_dependencies(XrCompilerSession *session,
 failure:
     xr_compiled_module_graph_dispose(out);
     return false;
+}
+
+bool xr_program_image_build(XrVMRuntime *X, const XrModuleGraph *graph,
+                            const XrCompiledModuleGraph *compilation, XrProgramImage *out) {
+    if (!out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (!X || !graph || !compilation || graph->topo_count <= 0 || !graph->topo_order ||
+        compilation->count != graph->topo_count)
+        return false;
+    out->modules =
+        (XrBytecodeModule *) xr_calloc((size_t) graph->topo_count, sizeof(*out->modules));
+    if (!out->modules)
+        return false;
+    out->count = (size_t) graph->topo_count;
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int index = graph->topo_order[ti];
+        const XrModuleSpec *spec = &graph->specs[index];
+        XrBytecodeModule *module = &out->modules[ti];
+        /* An in-memory entry has no import name; it keeps its canonical
+         * identity, which nothing imports. */
+        const char *name = xr_module_spec_import_name(spec);
+        if (!name)
+            name = spec->canonical;
+        if (!name)
+            goto failure;
+        module->path = xr_strdup(name);
+        if (!module->path)
+            goto failure;
+        XrProto *unit = index == graph->entry_index ? NULL : compilation->units[ti];
+        if (!unit)
+            continue;
+        size_t size = 0;
+        uint8_t *bytecode =
+            spec->kind == XR_MOD_STDLIB
+                ? xr_bootstrap_container_write_stdlib(X, name, unit, 0, &size, NULL)
+                : xr_bootstrap_container_write(X, unit, 0, &size, NULL);
+        if (!bytecode)
+            goto failure;
+        module->bytecode = bytecode;
+        module->bytecode_size = size;
+    }
+    return true;
+
+failure:
+    xr_program_image_dispose(out);
+    return false;
+}
+
+void xr_program_image_install(XrProgramImage *image, XrModuleRegistry *registry) {
+    if (!image || !registry || image->registry)
+        return;
+    image->registry = registry;
+    image->previous_modules = registry->embedded_modules;
+    image->previous_count = registry->embedded_module_count;
+    registry->embedded_modules = image->modules;
+    registry->embedded_module_count = image->count;
+}
+
+void xr_program_image_dispose(XrProgramImage *image) {
+    if (!image)
+        return;
+    if (image->registry && image->registry->embedded_modules == image->modules) {
+        image->registry->embedded_modules = image->previous_modules;
+        image->registry->embedded_module_count = image->previous_count;
+    }
+    for (size_t i = 0; image->modules && i < image->count; i++) {
+        xr_free((void *) image->modules[i].path);
+        xr_free((void *) image->modules[i].bytecode);
+    }
+    xr_free(image->modules);
+    memset(image, 0, sizeof(*image));
 }
 
 XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,

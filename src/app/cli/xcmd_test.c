@@ -332,23 +332,35 @@ static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
 
     xr_compiler_session_set_module_graph(session, graph);
 
-    XrModule **mod_table = NULL;
-    if (!xr_module_graph_preload(X, graph, &mod_table)) {
-        snprintf(err_buf, err_buf_sz, "module dependency initialization failed");
-        xr_compiler_session_set_module_graph(session, NULL);
-        xa_analyzer_set_graph(analyzer, NULL);
-        xa_analyzer_free(analyzer);
-        xr_module_graph_free(graph);
-        return 1;
-    }
-    registry->module_table = mod_table;
-    registry->module_table_count = graph->topo_count;
-
     if (out_graph)
         *out_graph = graph;
     if (out_analyzer)
         *out_analyzer = analyzer;
     return 0;
+}
+
+/* Load the dependencies of a compiled test graph into the registry's
+ * topological module table. The program image is installed first, so every
+ * module the test imports runs as compiled for this test file: a standard
+ * library layer or file module specialized by it, not the runtime's embedded
+ * copy or a fresh per-file compilation. */
+static bool load_test_module_graph(XrVMRuntime *X, XrModuleGraph *graph,
+                                   const XrCompiledModuleGraph *compilation, XrProgramImage *image,
+                                   char *err_buf, size_t err_buf_sz) {
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
+    if (!registry || !xr_program_image_build(X, graph, compilation, image)) {
+        snprintf(err_buf, err_buf_sz, "program image construction failed");
+        return false;
+    }
+    xr_program_image_install(image, registry);
+    XrModule **mod_table = NULL;
+    if (!xr_module_graph_preload(X, graph, &mod_table)) {
+        snprintf(err_buf, err_buf_sz, "module dependency initialization failed");
+        return false;
+    }
+    registry->module_table = mod_table;
+    registry->module_table_count = graph->topo_count;
+    return true;
 }
 
 /* ========== Run Single Test File ========== */
@@ -378,6 +390,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
     XrCompiledModuleGraph graph_compilation = {0};
+    XrProgramImage program_image = {0};
     XrCompilerSessionOperationScope compile_operation = {0};
     char graph_error[256] = "";
     if (!xr_compiler_session_operation_begin(session, &compile_operation)) {
@@ -413,33 +426,46 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         result->errors = 1;
         goto cleanup_graph;
     }
-
-    // Read + Parse + Compile
-    char *source = xr_cli_read_file(filepath);
-    if (!source) {
+    if (active_graph && !load_test_module_graph(X, active_graph, &graph_compilation,
+                                                &program_image, graph_error,
+                                                sizeof(graph_error))) {
         result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg), "cannot read file");
+        snprintf(result->error_msg, sizeof(result->error_msg), "%s", graph_error);
         result->errors = 1;
         goto cleanup_graph;
     }
 
-    AstNode *ast = xr_parse_with_source(session, source, filepath);
-    if (!ast) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg), "parse failed");
-        result->errors = 1;
-        goto cleanup_source;
+    /* A graph owns the entry syntax: it is what graph-wide specialization
+     * rewrote and what the shared analyzer typed, so it is what compiles. A
+     * single-file test with no graph is parsed here. */
+    char *source = NULL;
+    AstNode *ast = NULL;
+    if (!active_graph) {
+        source = xr_cli_read_file(filepath);
+        if (!source) {
+            result->has_error = true;
+            snprintf(result->error_msg, sizeof(result->error_msg), "cannot read file");
+            result->errors = 1;
+            goto cleanup_graph;
+        }
+        ast = xr_parse_with_source(session, source, filepath);
+        if (!ast) {
+            result->has_error = true;
+            snprintf(result->error_msg, sizeof(result->error_msg), "parse failed");
+            result->errors = 1;
+            goto cleanup_source;
+        }
     }
 
     XiModule *entry_module = NULL;
-    const char *compile_path = active_graph
-                                   ? active_graph->specs[active_graph->entry_index].source_path
-                                   : filepath;
-    XrProto *proto = active_graph
-                         ? xr_compile_ast_in_graph(
-                               session, active_graph_analyzer, ast, compile_path, active_graph,
-                               graph_compilation.modules, graph_compilation.count, &entry_module,
-                               &entry_authority)
+    XrModuleSpec *entry_spec =
+        active_graph ? &active_graph->specs[active_graph->entry_index] : NULL;
+    XrProto *proto = entry_spec
+                         ? xr_compile_ast_in_graph(session, active_graph_analyzer, entry_spec->ast,
+                                                   entry_spec->source_path, active_graph,
+                                                   graph_compilation.modules,
+                                                   graph_compilation.count, &entry_module,
+                                                   &entry_authority)
                          : xr_compile_ast_with_source(session, ast, filepath, &entry_authority);
     if (!proto) {
         result->has_error = true;
@@ -571,7 +597,8 @@ cleanup_suite:
     xr_test_suite_free(suite);
     xr_free_code(X, proto);
 cleanup_ast:
-    xr_program_destroy(ast);
+    if (ast)
+        xr_program_destroy(ast);
 cleanup_source:
     xr_free(source);
 cleanup_graph:
@@ -579,6 +606,7 @@ cleanup_graph:
         (void) xr_compiler_session_operation_fail(
             &compile_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
     xr_compiler_session_set_module_graph(session, NULL);
+    xr_program_image_dispose(&program_image);
     xr_compiled_module_graph_dispose(&graph_compilation);
     if (active_graph_analyzer) {
         xa_analyzer_set_graph(active_graph_analyzer, NULL);

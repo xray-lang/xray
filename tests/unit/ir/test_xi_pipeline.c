@@ -246,9 +246,9 @@ static XrProto *compile_source_with_module_graph(const char *namespace_id, const
     }
     XrModuleSpec *entry = &graph->specs[graph->entry_index];
     XiModule *entry_module = NULL;
-    proto = xr_compile_source_in_graph(session, analyzer, source, entry->canonical, graph,
-                                       compilation.modules, compilation.count, &entry_module,
-                                       &authority);
+    proto = xr_compile_ast_in_graph(session, analyzer, entry->ast, entry->canonical, graph,
+                                    compilation.modules, compilation.count, &entry_module,
+                                    &authority);
     if (!proto)
         fprintf(stderr, "module graph entry compilation failed\n");
 

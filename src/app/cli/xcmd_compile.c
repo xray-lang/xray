@@ -226,9 +226,10 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     const XrModuleIdentityAuthority *entry_authority = &entry_spec->authority;
     if (graph_analyzer) {
         XiModule *entry_module = NULL;
-        proto = xr_compile_source_in_graph(
-            session, graph_analyzer, source, entry_spec->source_path, graph,
-            graph_compilation.modules, graph_compilation.count, &entry_module, entry_authority);
+        proto = xr_compile_ast_in_graph(session, graph_analyzer, entry_spec->ast,
+                                        entry_spec->source_path, graph,
+                                        graph_compilation.modules, graph_compilation.count,
+                                        &entry_module, entry_authority);
     } else {
         proto = xr_compile_source_with_path(session, source, input_file, entry_authority);
     }

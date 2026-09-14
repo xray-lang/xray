@@ -1951,6 +1951,8 @@ set_tests_properties(test_stdlib_generators_content_stable PROPERTIES
 add_xray_unit_test(test_api_defense api/test_api_defense.c)
 add_xray_unit_test(test_dostring_module_defaults api/test_dostring_module_defaults.c)
 set_tests_properties(test_dostring_module_defaults PROPERTIES LABELS "api;modules;defaults")
+add_xray_unit_test(test_dostring_program_image api/test_dostring_program_image.c)
+set_tests_properties(test_dostring_program_image PROPERTIES LABELS "api;modules;generics")
 add_test(
     NAME test_api_inventory_param_modes
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_param_modes.py

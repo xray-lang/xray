@@ -20,6 +20,7 @@
 #include "../base/xlog.h"
 #include "xproto_codec.h"
 #include "../runtime/xisolate_api.h"
+#include "xray_vm.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../ir/xi_module.h"
@@ -135,6 +136,7 @@ fail:
 static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaAnalyzer *analyzer,
                                  XrModuleGraph *graph, XrBundleFlags flags, XrBundle *bundle) {
     XrCompiledModuleGraph compilation;
+    XrProgramImage image = {0};
     if (!xr_compile_module_graph_dependencies(session, analyzer, graph, &compilation)) {
         xr_log_warning("bundle", "dependency compilation failed: %s",
                        bundle->entry_path ? bundle->entry_path : "?");
@@ -143,61 +145,54 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
 
     bool complete = false;
     XrProto *entry_proto = NULL;
+    if (!xr_program_image_build(X, graph, &compilation, &image)) {
+        xr_log_warning("bundle", "program image failed: %s",
+                       bundle->entry_path ? bundle->entry_path : "?");
+        goto cleanup;
+    }
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int index = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[index];
+        XrBytecodeModule *module = &image.modules[ti];
 
-        /* An external module occupies its topological slot without carrying
-         * bytecode: the runtime supplies its body, and the entry only has to
-         * name it well enough for xr_module_import to find it again. That name
-         * is the import specifier, never the canonical identity.  An embedded
-         * Xray layer is external only at run time: the dependency compilation
-         * above published its Xi module so dependants resolve source-owned
-         * call targets and consume the exact borrow/effect/storage contracts,
-         * while its bytecode body still comes from the runtime's embedded
-         * stdlib and is not duplicated in this bundle. */
-        bool external = spec->kind == XR_MOD_STDLIB ||
-                        (spec->kind == XR_MOD_PACKAGE && !(flags & XR_BUNDLE_STATIC_PACKAGES));
-        if (external) {
-            const char *import_name = xr_module_spec_import_name(spec);
-            if (!import_name) {
-                xr_log_warning("bundle", "external module has no import name: %s",
+        /* The bundle is the program image plus the entry. A package left
+         * dynamic occupies its slot under its import name without bytecode:
+         * the runtime resolves it at run time. */
+        bool dynamic_package =
+            spec->kind == XR_MOD_PACKAGE && !(flags & XR_BUNDLE_STATIC_PACKAGES);
+        const uint8_t *bc = dynamic_package ? NULL : module->bytecode;
+        size_t bc_size = dynamic_package ? 0 : module->bytecode_size;
+        uint8_t *entry_bc = NULL;
+        if (index == graph->entry_index) {
+            if (!spec->ast || !spec->source_path) {
+                xr_log_warning("bundle", "entry module is incomplete: %s",
                                spec->canonical ? spec->canonical : "?");
                 goto cleanup;
             }
-            if (!bundle_add_entry(bundle, import_name, NULL, 0, spec->kind))
+            entry_proto = xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path,
+                                                  graph, compilation.modules, compilation.count,
+                                                  &compilation.modules[ti], &spec->authority);
+            if (!entry_proto) {
+                xr_log_warning("bundle", "compilation failed: %s", spec->source_path);
                 goto cleanup;
-            continue;
-        }
-        if (!spec->ast || !spec->source_path) {
+            }
+            entry_bc = xr_bootstrap_container_write(X, entry_proto, 0, &bc_size, NULL);
+            if (!entry_bc) {
+                xr_log_warning("bundle", "bytecode serialization failed: %s", spec->source_path);
+                goto cleanup;
+            }
+            bc = entry_bc;
+        } else if (spec->kind == XR_MOD_FILE && !bc) {
             xr_log_warning("bundle", "source-backed module is incomplete: %s",
                            spec->canonical ? spec->canonical : "?");
             goto cleanup;
         }
 
-        XrProto *proto = compilation.units[ti];
-        if (index == graph->entry_index) {
-            entry_proto = xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path,
-                                                  graph, compilation.modules, compilation.count,
-                                                  &compilation.modules[ti], &spec->authority);
-            proto = entry_proto;
-        }
-        if (!proto) {
-            xr_log_warning("bundle", "compilation failed: %s", spec->source_path);
-            goto cleanup;
-        }
-        size_t bc_size = 0;
-        uint8_t *bc = xr_bootstrap_container_write(X, proto, 0, &bc_size, NULL);
-        if (!bc) {
-            xr_log_warning("bundle", "bytecode serialization failed: %s", spec->source_path);
-            goto cleanup;
-        }
-
         int bundle_index = bundle->count;
-        bool added = bundle_add_entry(bundle, spec->source_path, bc, bc_size, spec->kind);
-        xr_free(bc);
+        bool added = bundle_add_entry(bundle, module->path, bc, bc_size, spec->kind);
+        xr_free(entry_bc);
         if (!added) {
-            xr_log_warning("bundle", "cannot add bytecode module: %s", spec->source_path);
+            xr_log_warning("bundle", "cannot add bytecode module: %s", module->path);
             goto cleanup;
         }
         if (index == graph->entry_index)
@@ -209,6 +204,7 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
 cleanup:
     if (entry_proto)
         xr_free_code(X, entry_proto);
+    xr_program_image_dispose(&image);
     xr_compiled_module_graph_dispose(&compilation);
     return complete;
 }

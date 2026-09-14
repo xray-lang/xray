@@ -889,11 +889,34 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     char *owned_source = NULL;
     bool embedded_bytecode = false;
 
+    /* A program compiles every source-backed stdlib module of its graph as
+     * part of itself: generics the program instantiates are specialized into
+     * the module that declares them, so the module's script layer is specific
+     * to the program. A bundle carries that layer under the module's import
+     * name, and it takes precedence over the runtime's own copy, which was
+     * compiled once for no program in particular. */
+    const XrBytecodeModule *program_layer = find_embedded_module(registry, module_name);
+    if (program_layer) {
+        XrBootstrapContainerError bc_error;
+        code = xr_bootstrap_container_read(isolate, program_layer->bytecode,
+                                           program_layer->bytecode_size, &bc_error);
+        if (!code) {
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_log_warning("module", "failed to load the program's script layer for '%s': %d",
+                           module_name, bc_error);
+            return false;
+        }
+        embedded_bytecode = true;
+        XR_DBG_MODULE("load_script_extension: loaded the program's script layer for %s",
+                      module_name);
+    }
+
 #ifndef XR_STDLIB_FROM_FILE
     // Prefer embedded bytecode: bytecode-only embedders can execute pure-Xray
     // stdlib modules without linking the compiler or reading from disk.
     size_t embedded_bc_size = 0;
-    const uint8_t *embedded_bc = xr_get_embedded_stdlib_bytecode(module_name, &embedded_bc_size);
+    const uint8_t *embedded_bc =
+        code ? NULL : xr_get_embedded_stdlib_bytecode(module_name, &embedded_bc_size);
     if (embedded_bc && embedded_bc_size > 0) {
         XrBootstrapContainerError bc_error;
         code = xr_bootstrap_container_read(isolate, embedded_bc, embedded_bc_size, &bc_error);

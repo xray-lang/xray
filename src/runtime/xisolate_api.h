@@ -143,11 +143,6 @@ XR_FUNC XrProto *xr_compile_ast_in_graph(struct XrCompilerSession *session,
                                          struct XiModule **graph_modules, int graph_module_count,
                                          struct XiModule **out_module,
                                          const struct XrModuleIdentityAuthority *authority);
-XR_FUNC XrProto *xr_compile_source_in_graph(
-    struct XrCompilerSession *session, struct XaAnalyzer *shared_analyzer, const char *source,
-    const char *source_file, const struct XrModuleGraph *graph, struct XiModule **graph_modules,
-    int graph_module_count, struct XiModule **out_module,
-    const struct XrModuleIdentityAuthority *authority);
 /* Compile every dependency of a module graph whose modules, the entry
  * included, were all analyzed by `shared_analyzer`. Generics are specialized
  * graph-wide first: an instantiation in one module materializes its clone in
@@ -159,6 +154,27 @@ XR_FUNC bool xr_compile_module_graph_dependencies(struct XrCompilerSession *sess
                                                   struct XrModuleGraph *graph,
                                                   XrCompiledModuleGraph *out);
 XR_FUNC void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation);
+
+/* The modules a compiled graph supplies to the program that runs it, in the
+ * graph's topological order: the image of each non-entry module's compiled
+ * initializer under the name the runtime imports it by -- the source path of
+ * a file module, the import name of a standard library or package module. A
+ * module whose body the runtime supplies natively occupies its slot without
+ * bytecode. Installed in a module registry, the images take precedence over
+ * the runtime's embedded copies, so a standard library layer specialized for
+ * this program runs as compiled for it. */
+typedef struct XrProgramImage {
+    struct XrBytecodeModule *modules;
+    size_t count;
+    struct XrModuleRegistry *registry; /* registry the image is installed in, or NULL */
+    const struct XrBytecodeModule *previous_modules;
+    size_t previous_count;
+} XrProgramImage;
+XR_FUNC bool xr_program_image_build(XrVMRuntime *X, const struct XrModuleGraph *graph,
+                                    const XrCompiledModuleGraph *compilation,
+                                    XrProgramImage *out);
+XR_FUNC void xr_program_image_install(XrProgramImage *image, struct XrModuleRegistry *registry);
+XR_FUNC void xr_program_image_dispose(XrProgramImage *image);
 XR_FUNC XrProto *xr_compile_source_with_path(struct XrCompilerSession *session, const char *source,
                                              const char *source_file,
                                              const struct XrModuleIdentityAuthority *authority);
@@ -166,10 +182,6 @@ XR_FUNC int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
                                 const struct XrModuleIdentityAuthority *authority);
 XR_FUNC int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename,
                               const struct XrModuleIdentityAuthority *authority);
-XR_FUNC int xr_isolate_dofile_in_graph(
-    XrVMRuntime *isolate, const char *filename,
-    const struct XrModuleIdentityAuthority *authority, struct XaAnalyzer *shared_analyzer,
-    const struct XrModuleGraph *graph, struct XiModule **graph_modules, int graph_module_count);
 XR_FUNC int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename,
                                     const struct XrModuleIdentityAuthority *authority,
                                     void **out_proto);
