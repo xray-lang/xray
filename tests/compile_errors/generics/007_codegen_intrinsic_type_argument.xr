@@ -1,0 +1,10 @@
+// A codegen control takes its type from the value handed to it. An explicit
+// type argument states the same fact a second time and has no lowering, so
+// the spelling is rejected here rather than failing inside the IR pipeline.
+import codegen
+
+fn guarded(value: i64) -> i64 {
+    return codegen.opaque<i64>(value)
+}
+
+print(guarded(7))

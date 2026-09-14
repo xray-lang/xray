@@ -1,0 +1,2 @@
+--> 7:20 E0356
+'codegen.opaque' takes no explicit type argument; its type is the type of the value passed to it

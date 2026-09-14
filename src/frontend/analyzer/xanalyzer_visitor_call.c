@@ -637,8 +637,26 @@ static bool xa_codegen_opaque_type_supported(const XrType *type) {
 
 static void xa_check_codegen_intrinsic_call(XaInferContext *ctx, AstNode *node, CallExprNode *call,
                                             const XaIntrinsicDesc *desc) {
-    if (!ctx || !ctx->analyzer || !node || !call || !desc ||
-        desc->id != XA_INTRINSIC_CODEGEN_OPAQUE || call->arg_count != 1 || !call->arguments[0])
+    if (!ctx || !ctx->analyzer || !node || !call || !desc)
+        return;
+    /* A codegen control takes its type from the value handed to it, so an
+     * explicit type argument states that same fact a second time and has no
+     * lowering of its own. Reject the spelling here: left alone it reaches
+     * the IR as a call nothing can lower, which surfaces as an internal
+     * pipeline failure instead of a diagnostic the author can act on. */
+    if (desc->family == XA_INTRINSIC_FAMILY_CODEGEN && call->type_arg_count > 0) {
+        const AstNode *at = call->callee && call->callee->line > 0 ? call->callee : node;
+        XrLocation loc = {.file = ctx->file_path, .line = at->line, .column = at->column};
+        char msg[224];
+        snprintf(msg, sizeof(msg),
+                 "'%s' takes no explicit type argument; its type is the type of the value passed "
+                 "to it",
+                 desc->key ? desc->key : "codegen intrinsic");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+        return;
+    }
+    if (desc->id != XA_INTRINSIC_CODEGEN_OPAQUE || call->arg_count != 1 || !call->arguments[0])
         return;
     XrType *type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[0]);
     if (xa_codegen_opaque_type_supported(type))
