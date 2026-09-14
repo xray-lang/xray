@@ -7363,6 +7363,22 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     "Thread handles can only be created by sys.Thread.spawn", &loc);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
+            /* A class is constructed by its name: the callee names the
+             * declaration, or an import of it. A variable that merely holds
+             * a class value is not a construction site, and no plan could
+             * name the class the call allocates. */
+            if (fn_sym && (fn_sym->kind == XA_SYM_VARIABLE || fn_sym->kind == XA_SYM_PARAMETER)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "'%s' holds a class value and cannot be called; construct the class by "
+                         "its name",
+                         class_name);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
             XaSymbol *class_sym = fn_sym && fn_sym->kind == XA_SYM_CLASS ? fn_sym : NULL;
             if (!class_sym)
                 class_sym = xa_lookup_visible_symbol(ctx, class_name);

@@ -2745,6 +2745,40 @@ TEST(analyzer_module_declared_prelude_types_are_not_bare_constructors) {
     setup_pool();
 }
 
+/* A class is constructed by its name. A variable or parameter that merely
+ * holds a class value is not a construction site -- no frozen plan could name
+ * the class such a call allocates -- so the call is refused where it is
+ * written, with the fix, instead of failing deep in the pipeline. */
+TEST(analyzer_class_value_held_in_a_variable_is_not_callable) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "class Widget {\n"
+                         "    n: i64\n"
+                         "    constructor(n: i64) { this.n = n }\n"
+                         "}\n"
+                         "var W = Widget\n"
+                         "var direct = Widget(1)\n"
+                         "var indirect = W(2)\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "class_value_call.xr", program);
+    int diagnostic_count = 0;
+    int refused = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(a, &diagnostic_count); diag;
+         diag = diag->next) {
+        if (diag->severity != XR_DIAG_SEV_ERROR)
+            continue;
+        ASSERT(diag->code == XR_ERR_ANALYZE_NOT_CALLABLE);
+        ASSERT(diag->location.line == 7);
+        ASSERT(strstr(diag->message, "construct the class by its name") != NULL);
+        refused++;
+    }
+    ASSERT(refused == 1);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -8152,6 +8186,7 @@ int main(void) {
     RUN_TEST(analyzer_stored_function_value_defaults_may_throw);
     RUN_TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations);
     RUN_TEST(analyzer_module_declared_prelude_types_are_not_bare_constructors);
+    RUN_TEST(analyzer_class_value_held_in_a_variable_is_not_callable);
     RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_enum_record_construction_publishes_slot_plan);
