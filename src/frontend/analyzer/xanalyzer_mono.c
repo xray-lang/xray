@@ -22,6 +22,7 @@
 
 #include "xanalyzer_mono.h"
 #include "xanalyzer.h"
+#include "xanalyzer_visitor_internal.h"
 #include "xa_node_table.h"
 #include "xa_selection.h"
 #include "../../base/xarena.h"
@@ -2742,34 +2743,6 @@ static uint32_t mono_imported_nominal_symbol_id(const StructLiteralNode *literal
     return namespace_object->as.variable.symbol_id;
 }
 
-/* Insert `statement` at `index`, shifting later statements right.  Imports
- * bind at their program position, so a compiler-private import must precede
- * the first statement that reads its alias. */
-static bool mono_program_insert(AstNode *root, int index, AstNode *statement) {
-    if (!root || root->type != AST_PROGRAM || !statement || !root->as.program.arena)
-        return false;
-    ProgramNode *program = &root->as.program;
-    if (index < 0 || index > program->count)
-        return false;
-    if (program->count >= program->capacity) {
-        int capacity = program->capacity > 0 ? program->capacity * 2 : 8;
-        AstNode **statements =
-            (AstNode **) xr_arena_alloc_array(program->arena, sizeof(AstNode *), (size_t) capacity);
-        if (!statements)
-            return false;
-        if (program->statements && program->count > 0)
-            memcpy(statements, program->statements, (size_t) program->count * sizeof(AstNode *));
-        program->statements = statements;
-        program->capacity = capacity;
-    }
-    if (index < program->count)
-        memmove(&program->statements[index + 1], &program->statements[index],
-                (size_t) (program->count - index) * sizeof(AstNode *));
-    program->statements[index] = statement;
-    program->count++;
-    return true;
-}
-
 static AstNode *mono_private_type_path(AstNode *root, XaAnalyzer *analyzer, const char *name,
                                        const AstNode *source) {
     XrArena *arena = root && root->type == AST_PROGRAM ? root->as.program.arena : NULL;
@@ -2842,43 +2815,9 @@ static const char *mono_append_specialized_import(AstNode *root, uint32_t import
             return NULL;
         (void) snprintf(alias, alias_size, "__xr_mono_import_%" PRIu32 "_%d_%s", imported_symbol_id,
                         target_spec_index, export_name);
-
-        ImportStmtNode *target_import = import;
-        if (namespace_import) {
-            AstNode *private_stmt = (AstNode *) xr_arena_alloc(arena, sizeof(AstNode));
-            if (!private_stmt)
-                return NULL;
-            memset(private_stmt, 0, sizeof(*private_stmt));
-            private_stmt->type = AST_IMPORT_STMT;
-            private_stmt->node_id =
-                xr_compiler_session_next_ast_node_id(analyzer->compiler_session);
-            private_stmt->line = stmt->line;
-            private_stmt->column = stmt->column;
-            private_stmt->as.import_stmt.module_name = xr_arena_strdup(arena, import->module_name);
-            private_stmt->as.import_stmt.is_quoted = import->is_quoted;
-            private_stmt->as.import_stmt.members =
-                (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), 1u);
-            if (!private_stmt->as.import_stmt.module_name ||
-                !private_stmt->as.import_stmt.members ||
-                !mono_program_insert(root, stmt_index + 1, private_stmt))
-                return NULL;
-            private_stmt->as.import_stmt.member_count = 1;
-            target_import = &private_stmt->as.import_stmt;
-        } else {
-            int grown_count = import->member_count + 1;
-            ImportMember *grown =
-                (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), grown_count);
-            if (!grown)
-                return NULL;
-            memcpy(grown, import->members, (size_t) import->member_count * sizeof(ImportMember));
-            import->members = grown;
-            import->member_count = grown_count;
-        }
-        ImportMember *specialized = &target_import->members[target_import->member_count - 1];
-        memset(specialized, 0, sizeof(*specialized));
-        specialized->name = xr_arena_strdup(arena, export_name);
-        specialized->alias = alias;
-        if (!specialized->name)
+        ImportMember *specialized = xa_program_add_import_member(root, analyzer, stmt_index, NULL,
+                                                                 export_name, alias, NULL);
+        if (!specialized)
             return NULL;
         specialized->has_private_target = true;
         specialized->private_target_spec_index = target_spec_index;

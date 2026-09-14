@@ -3423,28 +3423,247 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
     return graph->specs[idx].export_symbols;
 }
 
+/* The export a compiler-private import member binds: the named export of the
+ * graph module the member records. A member the monomorphizer made also
+ * records the generic origin and the exact specialization declaration and is
+ * checked against both; a member the default-argument binder made records at
+ * most the exact declaration of a plain export. */
 static XaSymbol *resolve_private_import_target(XaAnalyzer *analyzer, const ImportMember *member) {
     XrModuleGraph *graph = analyzer ? (XrModuleGraph *) analyzer->graph : NULL;
     if (!graph || !member || !member->has_private_target || member->private_target_spec_index < 0 ||
-        member->private_target_spec_index >= graph->spec_count || !member->name ||
-        !member->private_generic_decl || !member->private_target_decl)
+        member->private_target_spec_index >= graph->spec_count || !member->name)
         return NULL;
     XrModuleSpec *target = &graph->specs[member->private_target_spec_index];
-    if (!xr_module_spec_owns_top_level_decl(target, member->private_generic_decl) ||
-        !xr_module_spec_owns_top_level_decl(target, member->private_target_decl))
+    if (target->export_symbols_invalid || !target->export_symbols)
         return NULL;
-    XaSymbol *symbol = target->export_symbols
-                           ? (XaSymbol *) xr_hashmap_get(target->export_symbols, member->name)
-                           : NULL;
+    XaSymbol *symbol = (XaSymbol *) xr_hashmap_get(target->export_symbols, member->name);
     XaSymbolLinks *links = symbol ? xa_analyzer_get_links(analyzer, symbol) : NULL;
-    bool exact_declaration = links && (links->function_decl_node == member->private_target_decl ||
-                                       links->nominal_decl_node == member->private_target_decl);
-    XaGenericSpecializationFact fact;
-    if (target->export_symbols_invalid || !symbol || !exact_declaration ||
-        !xa_analyzer_get_generic_specialization(analyzer, member->private_target_decl, &fact) ||
-        fact.generic_decl != member->private_generic_decl)
+    if (!symbol || !links)
         return NULL;
+    if (member->private_target_decl &&
+        (!xr_module_spec_owns_top_level_decl(target, member->private_target_decl) ||
+         (links->function_decl_node != member->private_target_decl &&
+          links->nominal_decl_node != member->private_target_decl)))
+        return NULL;
+    if (member->private_generic_decl) {
+        XaGenericSpecializationFact fact;
+        if (!member->private_target_decl ||
+            !xr_module_spec_owns_top_level_decl(target, member->private_generic_decl) ||
+            !xa_analyzer_get_generic_specialization(analyzer, member->private_target_decl, &fact) ||
+            fact.generic_decl != member->private_generic_decl)
+            return NULL;
+    }
     return symbol;
+}
+
+XR_FUNC bool xa_program_insert_statement(AstNode *root, int index, AstNode *statement) {
+    if (!root || root->type != AST_PROGRAM || !statement || !root->as.program.arena)
+        return false;
+    ProgramNode *program = &root->as.program;
+    if (index < 0 || index > program->count)
+        return false;
+    if (program->count >= program->capacity) {
+        int capacity = program->capacity > 0 ? program->capacity * 2 : 8;
+        AstNode **statements =
+            (AstNode **) xr_arena_alloc_array(program->arena, sizeof(AstNode *), (size_t) capacity);
+        if (!statements)
+            return false;
+        if (program->statements && program->count > 0)
+            memcpy(statements, program->statements, (size_t) program->count * sizeof(AstNode *));
+        program->statements = statements;
+        program->capacity = capacity;
+    }
+    if (index < program->count)
+        memmove(&program->statements[index + 1], &program->statements[index],
+                (size_t) (program->count - index) * sizeof(AstNode *));
+    program->statements[index] = statement;
+    program->count++;
+    return true;
+}
+
+XR_FUNC ImportMember *xa_program_add_import_member(AstNode *root, XaAnalyzer *analyzer,
+                                                   int import_index, const char *fallback_specifier,
+                                                   const char *name, const char *alias,
+                                                   AstNode **out_import) {
+    if (out_import)
+        *out_import = NULL;
+    if (!root || root->type != AST_PROGRAM || !analyzer || !name || !alias ||
+        import_index >= root->as.program.count || (import_index < 0 && !fallback_specifier))
+        return NULL;
+    ProgramNode *program = &root->as.program;
+    XrArena *arena = program->arena;
+    AstNode *stmt = import_index >= 0 ? program->statements[import_index] : NULL;
+    if (!arena || (stmt && stmt->type != AST_IMPORT_STMT))
+        return NULL;
+    ImportStmtNode *import = stmt ? &stmt->as.import_stmt : NULL;
+    ImportStmtNode *target = import;
+    AstNode *target_node = stmt;
+    if (!import || import->member_count == 0) {
+        /* A namespace import stays as written; the member gets its own
+         * selective statement right after it, which is already ahead of every
+         * statement that can read the alias. A module the program does not
+         * import at all gets that statement first in the program, under the
+         * specifier the caller supplies. */
+        AstNode *private_stmt = (AstNode *) xr_arena_alloc(arena, sizeof(AstNode));
+        if (!private_stmt)
+            return NULL;
+        memset(private_stmt, 0, sizeof(*private_stmt));
+        private_stmt->type = AST_IMPORT_STMT;
+        private_stmt->node_id = xr_compiler_session_next_ast_node_id(analyzer->compiler_session);
+        if (stmt) {
+            private_stmt->line = stmt->line;
+            private_stmt->column = stmt->column;
+            private_stmt->end_line = stmt->end_line;
+            private_stmt->end_column = stmt->end_column;
+        } else {
+            private_stmt->line = 1;
+            private_stmt->column = 1;
+            private_stmt->end_line = 1;
+            private_stmt->end_column = 1;
+        }
+        private_stmt->as.import_stmt.module_name =
+            xr_arena_strdup(arena, import ? import->module_name : fallback_specifier);
+        private_stmt->as.import_stmt.is_quoted = import ? import->is_quoted : true;
+        private_stmt->as.import_stmt.members =
+            (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), 1u);
+        if (!private_stmt->as.import_stmt.module_name || !private_stmt->as.import_stmt.members ||
+            !xa_program_insert_statement(root, import ? import_index + 1 : 0, private_stmt))
+            return NULL;
+        private_stmt->as.import_stmt.member_count = 1;
+        target = &private_stmt->as.import_stmt;
+        target_node = private_stmt;
+    } else {
+        int grown_count = import->member_count + 1;
+        ImportMember *grown =
+            (ImportMember *) xr_arena_alloc_array(arena, sizeof(ImportMember), grown_count);
+        if (!grown)
+            return NULL;
+        memcpy(grown, import->members, (size_t) import->member_count * sizeof(ImportMember));
+        import->members = grown;
+        import->member_count = grown_count;
+    }
+    ImportMember *member = &target->members[target->member_count - 1];
+    memset(member, 0, sizeof(*member));
+    member->name = xr_arena_strdup(arena, name);
+    member->alias = xr_arena_strdup(arena, alias);
+    if (!member->name || !member->alias)
+        return NULL;
+    if (out_import)
+        *out_import = target_node;
+    return member;
+}
+
+XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, ImportMember *member,
+                                           XrHashMap *graph_exports) {
+    if (!ctx || !node || node->type != AST_IMPORT_STMT || !member)
+        return NULL;
+    ImportStmtNode *import = &node->as.import_stmt;
+    XaSymbol *sym = NULL;
+    if (xa_freestanding_profile_enabled(ctx->analyzer) &&
+        (!import->is_quoted || xa_freestanding_stdlib_module_known(import->module_name)) &&
+        !xa_freestanding_stdlib_member_allowed(import->module_name, member->name)) {
+        char feature[192];
+        snprintf(feature, sizeof(feature), "%s.%s", import->module_name ? import->module_name : "?",
+                 member->name);
+        xa_freestanding_report_unavailable(
+            ctx, node, feature,
+            xa_freestanding_stdlib_member_reject_suggestion(import->module_name));
+    }
+    const char *local_name = member->alias ? member->alias : member->name;
+    XaSymbol *export_sym =
+        member->has_private_target
+            ? resolve_private_import_target(ctx->analyzer, member)
+            : (graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL);
+    const XaBuiltinObjectShape *builtin_object_shape =
+        export_sym || member->has_private_target
+            ? NULL
+            : xa_builtin_get_object_shape(import->module_name, member->name);
+    const XaBuiltinEnum *builtin_enum =
+        export_sym || member->has_private_target
+            ? NULL
+            : xa_builtin_get_enum_type(import->module_name, member->name);
+
+    // Register each imported member as its exported semantic kind.
+    XaSymbolKind imported_kind = export_sym             ? export_sym->kind
+                                 : builtin_object_shape ? XA_SYM_TYPE_ALIAS
+                                 : builtin_enum         ? XA_SYM_ENUM
+                                                        : XA_SYM_IMPORT;
+    sym = xa_symbol_new(local_name, imported_kind);
+    if (sym) {
+        sym->is_imported = true;
+        sym->is_const = true;
+        if (export_sym) {
+            sym->is_static = export_sym->is_static;
+            sym->is_private = export_sym->is_private;
+            sym->is_protected = export_sym->is_protected;
+            sym->is_override = export_sym->is_override;
+            sym->is_builtin = export_sym->is_builtin;
+            sym->receiver_mode = export_sym->receiver_mode;
+            sym->passing_mode = export_sym->passing_mode;
+            sym->alias_type = export_sym->alias_type;
+        }
+        sym->location.line = node->line;
+        xa_visit_add_symbol_checked(ctx, sym, 0);
+        member->symbol_id = sym->id;
+
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        if (links) {
+            XrType *member_type = NULL;
+            const char *builtin_sig = NULL;
+
+            // Priority 1: resolve from graph exports (user modules)
+            if (export_sym) {
+                xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
+                member_type = links->type;
+            }
+
+            // Priority 2: resolve from builtin module signatures (stdlib)
+            if (!member_type && !member->has_private_target) {
+                builtin_sig =
+                    xa_builtin_get_module_func_signature(import->module_name, member->name);
+                if (builtin_sig) {
+                    if (builtin_sig[0] == ':') {
+                        const char *type_str = builtin_sig + 1;
+                        while (*type_str == ' ')
+                            type_str++;
+                        member_type =
+                            xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                    } else {
+                        member_type =
+                            xa_builtin_parse_full_signature(ctx->analyzer->isolate, builtin_sig);
+                    }
+                }
+            }
+
+            if (!member_type && builtin_object_shape) {
+                member_type =
+                    xa_builtin_object_shape_decl_type(ctx->analyzer->isolate, builtin_object_shape);
+                sym->alias_type = member_type;
+            }
+            if (!member_type && builtin_enum) {
+                member_type = xa_builtin_enum_decl_type(ctx->analyzer->isolate, builtin_enum,
+                                                        &links->enum_info);
+            }
+
+            if (!export_sym && member->has_private_target) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
+                    "compiler-private specialization target is missing or inexact", &loc);
+            } else if (!export_sym && !builtin_sig && !builtin_object_shape && !builtin_enum) {
+                xa_report_unknown_stdlib_member(ctx, node, import->module_name, member->name);
+            }
+
+            if (!export_sym) {
+                links->type = member_type ? member_type : xr_type_new_unknown(NULL);
+                links->declared_type = links->type;
+            }
+            links->module_name = import->module_name;
+            links->import_member_name = member->name;
+        }
+    }
+    return sym;
 }
 
 // Helper: collect import statement (register module variable in symbol table)
@@ -3486,117 +3705,8 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         // For selective import: import { a, b } from "module"
         XrHashMap *graph_exports = resolve_graph_export_symbols(ctx->analyzer, import->module_name);
 
-        for (int i = 0; i < import->member_count; i++) {
-            ImportMember *member = &import->members[i];
-            if (xa_freestanding_profile_enabled(ctx->analyzer) &&
-                (!import->is_quoted || xa_freestanding_stdlib_module_known(import->module_name)) &&
-                !xa_freestanding_stdlib_member_allowed(import->module_name, member->name)) {
-                char feature[192];
-                snprintf(feature, sizeof(feature), "%s.%s",
-                         import->module_name ? import->module_name : "?", member->name);
-                xa_freestanding_report_unavailable(
-                    ctx, node, feature,
-                    xa_freestanding_stdlib_member_reject_suggestion(import->module_name));
-            }
-            const char *local_name = member->alias ? member->alias : member->name;
-            XaSymbol *export_sym =
-                member->has_private_target
-                    ? resolve_private_import_target(ctx->analyzer, member)
-                    : (graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name)
-                                     : NULL);
-            const XaBuiltinObjectShape *builtin_object_shape =
-                export_sym || member->has_private_target
-                    ? NULL
-                    : xa_builtin_get_object_shape(import->module_name, member->name);
-            const XaBuiltinEnum *builtin_enum =
-                export_sym || member->has_private_target
-                    ? NULL
-                    : xa_builtin_get_enum_type(import->module_name, member->name);
-
-            // Register each imported member as its exported semantic kind.
-            XaSymbolKind imported_kind = export_sym             ? export_sym->kind
-                                         : builtin_object_shape ? XA_SYM_TYPE_ALIAS
-                                         : builtin_enum         ? XA_SYM_ENUM
-                                                                : XA_SYM_IMPORT;
-            XaSymbol *sym = xa_symbol_new(local_name, imported_kind);
-            if (sym) {
-                sym->is_imported = true;
-                sym->is_const = true;
-                if (export_sym) {
-                    sym->is_static = export_sym->is_static;
-                    sym->is_private = export_sym->is_private;
-                    sym->is_protected = export_sym->is_protected;
-                    sym->is_override = export_sym->is_override;
-                    sym->is_builtin = export_sym->is_builtin;
-                    sym->receiver_mode = export_sym->receiver_mode;
-                    sym->passing_mode = export_sym->passing_mode;
-                    sym->alias_type = export_sym->alias_type;
-                }
-                sym->location.line = node->line;
-                xa_visit_add_symbol_checked(ctx, sym, 0);
-                member->symbol_id = sym->id;
-
-                XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-                if (links) {
-                    XrType *member_type = NULL;
-                    const char *builtin_sig = NULL;
-
-                    // Priority 1: resolve from graph exports (user modules)
-                    if (export_sym) {
-                        xa_symbol_links_copy_export_metadata(ctx->analyzer, links,
-                                                             &export_sym->links);
-                        member_type = links->type;
-                    }
-
-                    // Priority 2: resolve from builtin module signatures (stdlib)
-                    if (!member_type && !member->has_private_target) {
-                        builtin_sig =
-                            xa_builtin_get_module_func_signature(import->module_name, member->name);
-                        if (builtin_sig) {
-                            if (builtin_sig[0] == ':') {
-                                const char *type_str = builtin_sig + 1;
-                                while (*type_str == ' ')
-                                    type_str++;
-                                member_type =
-                                    xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
-                            } else {
-                                member_type = xa_builtin_parse_full_signature(
-                                    ctx->analyzer->isolate, builtin_sig);
-                            }
-                        }
-                    }
-
-                    if (!member_type && builtin_object_shape) {
-                        member_type = xa_builtin_object_shape_decl_type(ctx->analyzer->isolate,
-                                                                        builtin_object_shape);
-                        sym->alias_type = member_type;
-                    }
-                    if (!member_type && builtin_enum) {
-                        member_type = xa_builtin_enum_decl_type(ctx->analyzer->isolate,
-                                                                builtin_enum, &links->enum_info);
-                    }
-
-                    if (!export_sym && member->has_private_target) {
-                        XrLocation loc = {
-                            .file = ctx->file_path, .line = node->line, .column = node->column};
-                        xa_analyzer_add_diagnostic(
-                            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
-                            "compiler-private specialization target is missing or inexact", &loc);
-                    } else if (!export_sym && !builtin_sig && !builtin_object_shape &&
-                               !builtin_enum) {
-                        xa_report_unknown_stdlib_member(ctx, node, import->module_name,
-                                                        member->name);
-                    }
-
-                    if (!export_sym) {
-                        links->type = member_type ? member_type : xr_type_new_unknown(NULL);
-                        links->declared_type = links->type;
-                    }
-                    links->module_name = import->module_name;
-                    links->import_member_name = member->name;
-                }
-            }
-        }
+        for (int i = 0; i < import->member_count; i++)
+            xa_declare_import_member(ctx, node, &import->members[i], graph_exports);
     }
 }
 
@@ -8315,6 +8425,7 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     if (!ctx)
         return;
     ctx->file_path = analyzer->current_file;
+    ctx->program = ast->type == AST_PROGRAM ? ast : NULL;
 
     xa_reset_scope_move_states(analyzer->global_scope);
 

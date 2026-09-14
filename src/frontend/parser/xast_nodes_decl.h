@@ -278,8 +278,11 @@ typedef struct ImportMember {
     char *name;          // Original name
     char *alias;         // Alias (optional, import { foo as bar })
     uint32_t symbol_id;  // Analyzer-assigned unique ID (for upvalue capture)
-    // Monomorphizer-owned direct binding. Parsed source leaves this false. Generated calls carry
-    // graph/declaration authority without exporting a mangled specialization through a facade.
+    // Compiler-owned direct binding to one export of a graph module. Parsed
+    // source leaves this false. The monomorphizer binds a specialization it
+    // materialized, recording its generic origin and exact declaration; the
+    // default-argument binder binds the export a cloned default names,
+    // recording at most the exact declaration.
     bool has_private_target;
     int32_t private_target_spec_index;
     struct AstNode *private_generic_decl;

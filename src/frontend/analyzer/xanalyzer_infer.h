@@ -79,6 +79,9 @@ typedef struct XaInferVar {
 // Inference context (for a single file/function)
 typedef struct XaInferContext {
     XaAnalyzer *analyzer;
+    /* The program being analyzed, or NULL for a fragment; the root that
+     * compiler-owned import edits are made to. */
+    AstNode *program;
     XaFlowBuilder *flow;
     XaFlowCache *cache;
 

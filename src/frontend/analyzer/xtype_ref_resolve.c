@@ -1072,6 +1072,47 @@ bool xa_consteval_expr(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out
     return ok;
 }
 
+bool xa_consteval_fold_node(AstNode *node, const XrCtValue *value) {
+    if (!node || !value || !xr_ct_value_kind_is_scalar(value->kind))
+        return false;
+    memset(&node->as, 0, sizeof(node->as));
+    node->as.literal.escape_mode = XR_LITERAL_ESCAPED;
+    node->as.literal.source_form = XR_LITERAL_INLINE;
+    switch (value->kind) {
+        case XR_CT_INT:
+            node->type = AST_LITERAL_INT;
+            node->as.literal.kind = LITERAL_KIND_INT;
+            node->as.literal.int_bits = (uint64_t) value->as.int_val;
+            node->as.literal.raw_value.int_val = value->as.int_val;
+            break;
+        case XR_CT_FLOAT:
+            node->type = AST_LITERAL_FLOAT;
+            node->as.literal.kind = LITERAL_KIND_FLOAT;
+            node->as.literal.raw_value.float_val = value->as.float_val;
+            break;
+        case XR_CT_BOOL:
+            node->type = value->as.bool_val ? AST_LITERAL_TRUE : AST_LITERAL_FALSE;
+            node->as.literal.kind = LITERAL_KIND_BOOL;
+            node->as.literal.raw_value.bool_val = value->as.bool_val;
+            break;
+        case XR_CT_STRING:
+            node->type = AST_LITERAL_STRING;
+            node->as.literal.kind = LITERAL_KIND_STRING;
+            node->as.literal.raw_value.string_val = value->as.string_val;
+            break;
+        case XR_CT_CHAR:
+            node->type = AST_LITERAL_RUNE;
+            node->as.literal.kind = LITERAL_KIND_RUNE;
+            node->as.literal.raw_value.rune_val = value->as.rune_val;
+            break;
+        default:
+            node->type = AST_LITERAL_NULL;
+            node->as.literal.kind = LITERAL_KIND_NULL;
+            break;
+    }
+    return true;
+}
+
 bool xa_consteval_int_expr(XaAnalyzer *analyzer, const AstNode *expr, int64_t *out_value,
                            const char **out_error) {
     XrCtValue value = {0};

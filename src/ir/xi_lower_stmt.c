@@ -4338,15 +4338,18 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         if (xi_lower_import_member_is_type_only(l, m))
             continue;
 
-        /* Create XI_IMPORT_REF carrying module path and member name */
-        struct XrType *type = xr_type_new_unknown(NULL);
-        int var_id = xi_lower_var_create(l, m->symbol_id, local_name, type);
+        /* Create XI_IMPORT_REF carrying module path and member name. The
+         * value has the type the prescan gave the binding, so the store and
+         * every load of the slot agree with it. */
+        int var_id = xi_lower_var_create(l, m->symbol_id, local_name, xr_type_new_unknown(NULL));
         int slot = var_id >= 0 && var_id < l->var_cap ? l->shared_map[var_id] : -1;
         XiImportRef *ref = slot >= 0 && slot < l->var_cap ? l->shared_slot_imports[slot] : NULL;
         if (!ref) {
             l->had_error = true;
             return;
         }
+        struct XrType *type =
+            l->vars[var_id].type ? l->vars[var_id].type : xr_type_new_unknown(NULL);
 
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
         if (!v)

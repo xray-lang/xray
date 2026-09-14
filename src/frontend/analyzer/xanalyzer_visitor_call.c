@@ -863,7 +863,11 @@ static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, Ast
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
-    XrType *instance = xa_semantic_constructor_instance(ctx, call, semantic_type_id, NULL);
+    /* The import shares the declaring module's class declaration, so the
+     * instance names it: a value built here is the same nominal class the
+     * declaring module's own parameters and fields are typed with. */
+    XrType *instance = xa_semantic_constructor_instance(ctx, call, semantic_type_id,
+                                                        links ? links->class_info : NULL);
     if (!instance)
         return NULL;
     if (semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN && call->arg_count > 1 &&
@@ -5353,93 +5357,17 @@ typedef struct XaDefaultArgBindCtx {
     const char *module_name;
 } XaDefaultArgBindCtx;
 
-/* Owner scope for imports materialized by xa_default_arg_import_export_symbol.
- * Hangs off global_scope so analyzer teardown reclaims it, but is never made
- * anyone's parent: lexical resolution walks upward only, so the names living
- * here stay invisible to user code. */
-static XaScope *xa_default_arg_import_scope(XaAnalyzer *analyzer) {
-    if (!analyzer || !analyzer->global_scope)
-        return NULL;
-    if (!analyzer->default_arg_import_scope)
-        analyzer->default_arg_import_scope = xa_scope_new(XA_SCOPE_GLOBAL, analyzer->global_scope);
-    return analyzer->default_arg_import_scope;
-}
-
-/* Re-import a foreign export symbol into the current analysis so a cloned
- * default expression can be stamped with an id that resolves here. Mirrors
- * what a selective `import { name } from module` materializes: a caller-local
- * symbol of the exported kind whose links copy the export metadata and record
- * the module/member identity for lowering and lazy re-resolution. Reuses a
- * previously materialized symbol for the same name and declaring file. */
-static XaSymbol *xa_default_arg_import_export_symbol(XaDefaultArgBindCtx *bind,
-                                                     XaSymbol *export_sym, const char *name) {
-    XR_DCHECK(bind && bind->ctx && bind->ctx->analyzer, "defarg import: bind context required");
-    XR_DCHECK(export_sym && name, "defarg import: export symbol and name required");
-    XaAnalyzer *analyzer = bind->ctx->analyzer;
-    XaScope *scope = xa_default_arg_import_scope(analyzer);
-    if (!scope)
-        return NULL;
-
-    XaSymbol *reused = xa_default_arg_find_decl_file_symbol(analyzer, scope, bind->decl_file, name);
-    if (reused)
-        return reused;
-
-    XaSymbol *sym = xa_symbol_new(name, export_sym->kind);
-    if (!sym)
-        return NULL;
-    sym->is_imported = true;
-    sym->is_const = true;
-    sym->is_static = export_sym->is_static;
-    sym->is_private = export_sym->is_private;
-    sym->is_protected = export_sym->is_protected;
-    sym->is_override = export_sym->is_override;
-    sym->is_builtin = export_sym->is_builtin;
-    sym->receiver_mode = export_sym->receiver_mode;
-    sym->passing_mode = export_sym->passing_mode;
-    sym->alias_type = export_sym->alias_type;
-    xa_scope_add_symbol(scope, sym);
-
-    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-    if (links) {
-        xa_symbol_links_copy_export_metadata(analyzer, links, &export_sym->links);
-        /* The exporting module records neither how the caller spells the
-         * module nor, for some stdlib modules, its own file path; both are
-         * needed for caller-side re-resolution and for reuse keying. */
-        if (bind->module_name)
-            links->module_name = bind->module_name;
-        links->import_member_name = sym->name;
-        if (!links->file_path)
-            links->file_path = bind->decl_file;
-    }
-    return sym;
-}
-
 /* Resolve a name spelled in a default expression against the declaring
- * module: its export table first, then the declarations of its file.
- * `out_exported` reports which of the two answered. */
-static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, const char *name,
-                                                   bool *out_exported) {
-    if (out_exported)
-        *out_exported = false;
+ * module: its export table first, then the declarations of its file. The
+ * graph's modules are analyzed by one analyzer, so an export symbol is the
+ * declaration itself. */
+static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, const char *name) {
     if (!bind || !bind->ctx || !bind->ctx->analyzer || !name)
         return NULL;
     XaAnalyzer *analyzer = bind->ctx->analyzer;
-    if (bind->exports) {
-        XaSymbol *sym = (XaSymbol *) xr_hashmap_get(bind->exports, name);
-        if (sym) {
-            if (out_exported)
-                *out_exported = true;
-            /* Export maps are built by the exporting module's analyzer. Only
-             * a symbol the current registry resolves back to itself carries
-             * an id that is meaningful in this analysis; anything else must
-             * be re-imported, never id-stamped across id spaces. */
-            if (xa_scope_lookup_by_id(analyzer->global_scope, sym->id) == sym)
-                return sym;
-            XaSymbol *imported = xa_default_arg_import_export_symbol(bind, sym, name);
-            if (imported)
-                return imported;
-        }
-    }
+    XaSymbol *sym = bind->exports ? (XaSymbol *) xr_hashmap_get(bind->exports, name) : NULL;
+    if (sym)
+        return sym;
     return xa_default_arg_find_decl_file_symbol(analyzer, analyzer->global_scope, bind->decl_file,
                                                 name);
 }
@@ -5484,47 +5412,81 @@ XR_FUNC void xa_report_default_private_reference(XaAnalyzer *analyzer, const cha
                                &loc);
 }
 
-/* A default-argument expression cloned from a declaring module may name a symbol
- * exported by that module: a class constructor like `DialOptions()`, an exported
- * helper the default calls, an enum member. The export table hands back the
- * DECLARING analyzer's symbol, whose id belongs to that analyzer's registry and
- * is meaningless here, so stamping it onto the cloned node leaves the reference
- * unresolved (or aliased onto an unrelated caller symbol). Materialize a
- * caller-local import view instead: a fresh symbol with a caller-owned id, the
- * exported metadata copied in, and the cross-module identity recorded so that
- * lowering resolves it through the module export table via XI_IMPORT_REF. */
-static XaSymbol *xa_default_arg_materialize_import(XaDefaultArgBindCtx *bind, const char *name,
+/* The compiler-private import through which a cloned default reaches an
+ * export of the declaring module. It is an ordinary selective import member
+ * of the caller's program, added to the caller's own import of that module
+ * (or right after its namespace import), bound to the export by graph spec
+ * and declaration, and declared in the file scope at once so the clone can
+ * be typed in this same pass. Lowering then binds it like any other import,
+ * in a shared slot the frozen plan can name as a call target; nothing is
+ * resolved by a bare name at run time. One member serves every default that
+ * names the same export. */
+static ImportMember *xa_default_arg_private_import(XaDefaultArgBindCtx *bind, const char *name,
                                                    XaSymbol *export_sym) {
-    if (!bind || !bind->ctx || !bind->ctx->analyzer || !name || !export_sym)
+    if (!bind || !bind->ctx || !bind->ctx->analyzer || !name || !export_sym || !bind->exports)
         return NULL;
-    XaAnalyzer *analyzer = bind->ctx->analyzer;
-    XaScope *scope = xa_default_arg_import_scope(analyzer);
-    if (!scope)
+    XaInferContext *ctx = bind->ctx;
+    XaAnalyzer *analyzer = ctx->analyzer;
+    XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
+    AstNode *root = ctx->program;
+    if (!graph || !root || root->type != AST_PROGRAM)
         return NULL;
+    int spec_index = -1;
+    for (int i = 0; i < graph->spec_count; i++) {
+        if (graph->specs[i].export_symbols == bind->exports) {
+            spec_index = i;
+            break;
+        }
+    }
+    if (spec_index < 0)
+        return NULL;
+    XaSymbolLinks *export_links = xa_analyzer_get_links(analyzer, export_sym);
+    AstNode *decl = export_links
+                        ? (export_links->function_decl_node ? export_links->function_decl_node
+                                                            : export_links->nominal_decl_node)
+                        : NULL;
 
-    XaSymbol *local = xa_symbol_new(name, export_sym->kind);
-    if (!local)
-        return NULL;
-    local->is_imported = true;
-    local->is_const = true;
-    local->is_static = export_sym->is_static;
-    local->is_private = export_sym->is_private;
-    local->is_protected = export_sym->is_protected;
-    local->is_builtin = export_sym->is_builtin;
-    local->passing_mode = export_sym->passing_mode;
-    xa_scope_add_symbol(scope, local);
+    ProgramNode *program = &root->as.program;
+    int import_index = -1;
+    for (int i = 0; i < program->count; i++) {
+        AstNode *stmt = program->statements[i];
+        if (!stmt || stmt->type != AST_IMPORT_STMT)
+            continue;
+        ImportStmtNode *import = &stmt->as.import_stmt;
+        for (int m = 0; m < import->member_count; m++) {
+            ImportMember *member = &import->members[m];
+            if (member->has_private_target && !member->private_generic_decl &&
+                member->private_target_spec_index == spec_index && member->symbol_id != 0 &&
+                member->name && strcmp(member->name, name) == 0)
+                return member;
+        }
+        if (import_index < 0 &&
+            resolve_graph_export_symbols(analyzer, import->module_name) == bind->exports)
+            import_index = i;
+    }
 
-    xa_symbol_links_copy_export_metadata(analyzer, &local->links, &export_sym->links);
-    /* copy_export_metadata carries the declaring analyzer's identity strings
-     * verbatim; overwrite them with caller-visible strings that outlive this
-     * pass. The member name is the exported name (== the reference spelling);
-     * the module and declaration file come from the bound call site. */
-    if (bind->module_name)
-        local->links.module_name = bind->module_name;
-    local->links.import_member_name = name;
-    if (bind->decl_file)
-        local->links.file_path = bind->decl_file;
-    return local;
+    XrArena *arena = program->arena;
+    size_t alias_size = strlen(name) + 48u;
+    char *alias = arena ? (char *) xr_arena_alloc(arena, alias_size) : NULL;
+    if (!alias)
+        return NULL;
+    (void) snprintf(alias, alias_size, "__xr_default_import_%d_%s", spec_index, name);
+    AstNode *import_node = NULL;
+    ImportMember *member = xa_program_add_import_member(root, analyzer, import_index,
+                                                        graph->specs[spec_index].source_path, name,
+                                                        alias, &import_node);
+    if (!member || !import_node)
+        return NULL;
+    member->has_private_target = true;
+    member->private_target_spec_index = spec_index;
+    member->private_target_decl = decl;
+
+    XaAnalyzerFileScope file_scope;
+    bool pushed = xa_analyzer_push_file_scope(analyzer, ctx->file_path, &file_scope);
+    XaSymbol *sym = xa_declare_import_member(ctx, import_node, member, NULL);
+    if (pushed)
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+    return sym ? member : NULL;
 }
 
 /* Visit every name a default expression spells. The traversal is the one
@@ -5636,35 +5598,51 @@ static void xa_bind_default_arg_variable(AstNode *node, void *user_data) {
     XaDefaultArgBindCtx *bind = (XaDefaultArgBindCtx *) user_data;
     if (!node->as.variable.name)
         return;
-    bool exported = false;
-    XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name, &exported);
+    XaAnalyzer *analyzer = bind->ctx->analyzer;
+    XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name);
     if (sym) {
         /* The lookup returns a symbol from the declaring module (its export
          * table or declaration file). When the default argument is expanded
          * at a call in that SAME file the symbol is directly referenceable
-         * here, so keep its id. Across a module boundary it is not: even when
-         * a whole-program (AOT) analysis leaves the declaring symbol's id
-         * valid in the shared registry, that symbol is the declaration
-         * itself, not an import binding, and the caller unit cannot lower it.
-         * Materialize a caller-local import view so the reference resolves
-         * and lowering emits an XI_IMPORT_REF. */
+         * here, so keep its id. Across a module boundary the declaration is
+         * not a binding of this unit: an export is reached through a
+         * compiler-private import of it, and a private scalar constant is
+         * carried across as its value. */
         const char *caller_file = bind->ctx->file_path;
         bool cross_module = !(caller_file && bind->decl_file &&
                               xa_default_arg_path_matches(caller_file, bind->decl_file));
-        if (cross_module) {
-            if (!xa_default_symbol_reachable_from_caller(bind->ctx->analyzer, sym, exported)) {
-                xa_report_default_private_reference(bind->ctx->analyzer, bind->decl_file, node);
-                return;
-            }
-            XaSymbol *local = xa_default_arg_materialize_import(bind, node->as.variable.name, sym);
-            if (local)
-                node->as.variable.symbol_id = local->id;
-        } else {
+        if (!cross_module) {
             node->as.variable.symbol_id = sym->id;
-            XaSymbolLinks *links = xa_analyzer_get_links(bind->ctx->analyzer, sym);
+            XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
             if (links && !links->module_name && bind->module_name)
                 links->module_name = bind->module_name;
+            return;
         }
+        if (!xa_default_symbol_reachable_from_caller(analyzer, sym, sym->is_exported)) {
+            xa_report_default_private_reference(analyzer, bind->decl_file, node);
+            return;
+        }
+        if (sym->is_exported && !sym->is_builtin) {
+            ImportMember *member = xa_default_arg_private_import(bind, node->as.variable.name, sym);
+            if (!member) {
+                XrLocation loc = {
+                    .file = bind->decl_file, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_INTERNAL,
+                                           "compiler could not import the export a default "
+                                           "value names",
+                                           &loc);
+                return;
+            }
+            node->as.variable.name = member->alias;
+            node->as.variable.symbol_id = member->symbol_id;
+            return;
+        }
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        XrCtValue value = links ? links->ct_value : (XrCtValue) {0};
+        if (links && !links->has_ct_value && links->const_initializer)
+            (void) xa_consteval_expr(analyzer, links->const_initializer, &value, NULL);
+        if (!xa_consteval_fold_node(node, &value))
+            xa_report_default_private_reference(analyzer, bind->decl_file, node);
         return;
     }
     XaSymbol *current =

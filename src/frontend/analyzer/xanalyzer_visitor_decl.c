@@ -233,45 +233,8 @@ XR_FUNC void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults
         XrCtValue value = {0};
         const char *ct_error = NULL;
         if (xa_consteval_expr(ctx->analyzer, defaults[i], &value, &ct_error) &&
-            xr_ct_value_kind_is_scalar(value.kind)) {
-            AstNode *folded = defaults[i];
-            memset(&folded->as, 0, sizeof(folded->as));
-            folded->as.literal.escape_mode = XR_LITERAL_ESCAPED;
-            folded->as.literal.source_form = XR_LITERAL_INLINE;
-            switch (value.kind) {
-                case XR_CT_INT:
-                    folded->type = AST_LITERAL_INT;
-                    folded->as.literal.kind = LITERAL_KIND_INT;
-                    folded->as.literal.int_bits = (uint64_t) value.as.int_val;
-                    folded->as.literal.raw_value.int_val = value.as.int_val;
-                    break;
-                case XR_CT_FLOAT:
-                    folded->type = AST_LITERAL_FLOAT;
-                    folded->as.literal.kind = LITERAL_KIND_FLOAT;
-                    folded->as.literal.raw_value.float_val = value.as.float_val;
-                    break;
-                case XR_CT_BOOL:
-                    folded->type = value.as.bool_val ? AST_LITERAL_TRUE : AST_LITERAL_FALSE;
-                    folded->as.literal.kind = LITERAL_KIND_BOOL;
-                    folded->as.literal.raw_value.bool_val = value.as.bool_val;
-                    break;
-                case XR_CT_STRING:
-                    folded->type = AST_LITERAL_STRING;
-                    folded->as.literal.kind = LITERAL_KIND_STRING;
-                    folded->as.literal.raw_value.string_val = value.as.string_val;
-                    break;
-                case XR_CT_CHAR:
-                    folded->type = AST_LITERAL_RUNE;
-                    folded->as.literal.kind = LITERAL_KIND_RUNE;
-                    folded->as.literal.raw_value.rune_val = value.as.rune_val;
-                    break;
-                default:
-                    folded->type = AST_LITERAL_NULL;
-                    folded->as.literal.kind = LITERAL_KIND_NULL;
-                    break;
-            }
+            xa_consteval_fold_node(defaults[i], &value))
             continue;
-        }
         /* The default stays an expression the caller evaluates. A caller in
          * another module reaches this module only through its export table,
          * so every name the default spells must be reachable from there. */

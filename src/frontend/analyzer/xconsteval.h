@@ -82,6 +82,10 @@ static inline bool xr_ct_value_kind_is_scalar(XrCtValueKind kind) {
     }
 }
 
+/* Rewrite an expression node in place into the literal of a scalar
+ * compile-time value, keeping its source position. False for a value no
+ * literal node can carry; the node is then untouched. */
+XR_FUNC bool xa_consteval_fold_node(struct AstNode *node, const XrCtValue *value);
 XR_FUNC bool xa_consteval_expr(struct XaAnalyzer *analyzer, const struct AstNode *expr,
                                XrCtValue *out_value, const char **out_error);
 

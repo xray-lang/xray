@@ -26,6 +26,8 @@
 #include "runtime/xisolate_api.h"
 #include "module/xmodule_identity.h"
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 
 static const XrModuleIdentityAuthority k_program_image_memory_authority = {
     .kind = XR_MODULE_IDENTITY_MEMORY,
@@ -75,8 +77,66 @@ TEST(dostring_keeps_native_exports_under_program_script_layer) {
                   0);
 }
 
+/* A default argument that calls an export of its own module, or names an
+ * exported record constant, is filled by the caller through a compiler-private
+ * import of that export: a real import binding in a shared slot, which the
+ * frozen plan names as a call target. Both the namespace-qualified and the
+ * selective spelling of the callee take the same path, and one private member
+ * serves every default naming the same export. */
+static bool write_program_file(const char *path, const char *source) {
+    FILE *file = fopen(path, "wb");
+    if (!file)
+        return false;
+    size_t size = strlen(source);
+    bool written = fwrite(source, 1u, size, file) == size;
+    return fclose(file) == 0 && written;
+}
+
+TEST(dofile_fills_defaults_that_call_exports_of_their_module) {
+    char template[] = "/tmp/xray_dofile_defaults_XXXXXX";
+    char *directory = xr_test_mkdtemp(template);
+    ASSERT(directory != NULL);
+    char resolved_directory[4096];
+    ASSERT(xr_test_realpath_buf(directory, resolved_directory, sizeof(resolved_directory)) != NULL);
+    char library_path[4352];
+    char entry_path[4352];
+    snprintf(library_path, sizeof(library_path), "%s/lib.xr", resolved_directory);
+    snprintf(entry_path, sizeof(entry_path), "%s/main.xr", resolved_directory);
+    ASSERT(write_program_file(library_path,
+                              "export type Opts = { indent: i64 }\n"
+                              "export const DEFAULT_OPTS: Opts = { indent: 2 }\n"
+                              "export fn mk(n: i64 = 5) -> Opts { return { indent: n } }\n"
+                              "export fn viaCall(o: Opts = mk()) -> i64 { return o.indent }\n"
+                              "export fn viaArg(o: Opts = mk(9)) -> i64 { return o.indent }\n"
+                              "export fn viaConst(o: Opts = DEFAULT_OPTS) -> i64 { return "
+                              "o.indent }\n"));
+    ASSERT(write_program_file(entry_path, "import \"./lib\" as lib\n"
+                                          "import { viaCall, viaConst } from \"./lib\"\n"
+                                          "assert(lib.viaCall() == 5)\n"
+                                          "assert(lib.viaArg() == 9)\n"
+                                          "assert(lib.viaConst() == 2)\n"
+                                          "assert(viaCall() == 5)\n"
+                                          "assert(viaConst() == 2)\n"
+                                          "assert(lib.viaCall(lib.DEFAULT_OPTS) == 2)\n"));
+
+    XrVMConfig params = {0};
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT(iso != NULL);
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_SCRIPT,
+        .physical_root = resolved_directory,
+    };
+    int rc = xr_isolate_dofile(iso, entry_path, &authority);
+    xray_vm_delete(iso);
+    xr_test_unlink(library_path);
+    xr_test_unlink(entry_path);
+    xr_test_rmdir(resolved_directory);
+    ASSERT_EQ_INT(rc, 0);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("api/dostring-program-image");
+RUN_TEST(dofile_fills_defaults_that_call_exports_of_their_module);
 RUN_TEST(dostring_runs_specialized_stdlib_generic_class);
 RUN_TEST(dostring_runs_specialized_generic_through_selective_import);
 RUN_TEST(dostring_keeps_native_exports_under_program_script_layer);

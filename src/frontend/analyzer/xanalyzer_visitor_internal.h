@@ -288,6 +288,21 @@ XR_FUNC bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int
 XR_FUNC bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *expr,
                                                  bool *out_pointer_borrow);
 XR_FUNC bool xa_node_uses_symbol_name(AstNode *node, const char *name);
+/* Compiler-owned edits of a program's import list, shared by the
+ * monomorphizer and the default-argument binder (xanalyzer_visitor.c).
+ * Imports bind at their program position, so a member is always added to,
+ * or right after, an import that already precedes every reader. */
+XR_FUNC bool xa_program_insert_statement(AstNode *root, int index, AstNode *statement);
+XR_FUNC ImportMember *xa_program_add_import_member(AstNode *root, XaAnalyzer *analyzer,
+                                                   int import_index,
+                                                   const char *fallback_specifier,
+                                                   const char *name, const char *alias,
+                                                   AstNode **out_import);
+/* Declare the file-scope symbol of one selective import member, the way the
+ * collection pass declares every member; a member added after collection is
+ * declared through this at the point it is added. */
+XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node,
+                                           ImportMember *member, XrHashMap *graph_exports);
 /* Parameter defaults are evaluated by the caller (defined in
  * xanalyzer_visitor_call.c): the traversal over the names a default spells,
  * the rule for which of those names a caller in another module can reach, and

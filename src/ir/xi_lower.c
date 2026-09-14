@@ -2634,18 +2634,17 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     const char *mname = m->alias ? m->alias : m->name;
                     if (!mname || xi_lower_import_member_is_type_only(l, m))
                         continue;
-                    XrType *import_type = l->type_any;
-                    if (m->has_private_target) {
-                        import_type = xi_lower_declared_symbol_type(l, m->symbol_id);
-                        if (!import_type || (import_type->kind != XR_KIND_FUNCTION &&
-                                             import_type->kind != XR_KIND_CLASS &&
-                                             import_type->kind != XR_KIND_INSTANCE)) {
-                            l->had_error = true;
-                            prescan_slot_meta_free(&slot_meta);
-                            return;
-                        }
-                    }
-                    int vid = xi_lower_var_create(l, m->symbol_id, mname, import_type);
+                    /* A value export binds with its declared type, as a
+                     * namespace-qualified read of the same member does, so a
+                     * frozen argument built from it carries that type. A
+                     * class or function export binds untyped: the plan names
+                     * the callee through the import itself, not a type. */
+                    XrType *import_type = xi_lower_declared_symbol_type(l, m->symbol_id);
+                    if (import_type && (import_type->kind == XR_KIND_CLASS ||
+                                        import_type->kind == XR_KIND_FUNCTION))
+                        import_type = NULL;
+                    int vid = xi_lower_var_create(l, m->symbol_id, mname,
+                                                  import_type ? import_type : l->type_any);
                     XR_DCHECK(vid >= 0 && vid < l->var_cap,
                               "prescan_top_level_bindings: var_id overflow (import member)");
                     l->shared_map[vid] = (int16_t) next_shared;

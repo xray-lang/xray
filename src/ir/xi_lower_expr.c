@@ -344,25 +344,6 @@ static XiValue *xi_lower_builtin_module_function_ref(XiLower *l, uint32_t sid,
     return xi_lower_emit_import_ref(l, module_name, member_name, links->type, line);
 }
 
-/* A caller-local symbol materialized by the analyzer for a cross-module
- * default-argument reference has no storage in this unit; its module identity
- * was recorded on the symbol links. Resolve it through the module export table
- * like a namespace member so the exported class/function/value is produced at
- * the call. Named imports never reach here: lower_import_stmt binds them to a
- * local SSA value, so lower_variable finds storage first. */
-static XiValue *xi_lower_imported_symbol_ref(XiLower *l, uint32_t sid, int line) {
-    if (!l || !l->analyzer || sid == 0)
-        return NULL;
-    XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, sid);
-    if (!sym || !sym->is_imported)
-        return NULL;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-    if (!links || !links->module_name || !links->import_member_name)
-        return NULL;
-    return xi_lower_emit_import_ref(l, links->module_name, links->import_member_name, links->type,
-                                    line);
-}
-
 static const char *xi_lower_export_module_for_symbol(XiLower *l, XaSymbol *target,
                                                      const char *export_name) {
     if (!l || !l->analyzer || !target || !export_name)
@@ -1526,10 +1507,6 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         XiValue *module_func = xi_lower_builtin_module_function_ref(l, sid, name, (int) node->line);
         if (module_func)
             return module_func;
-
-        XiValue *imported = xi_lower_imported_symbol_ref(l, sid, (int) node->line);
-        if (imported)
-            return imported;
 
         XiValue *builtin_class = xi_lower_emit_builtin_class(l, name, node->line);
         if (builtin_class)
