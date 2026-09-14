@@ -1,0 +1,42 @@
+// A call in return position cannot replace the frame while a cleanup is
+// pending: `defer` runs after the callee returns, so `return f(x)` is an
+// ordinary call there. Covered for a callee with a closed target set (the
+// parameter) and for one without any (an array element), since only the
+// latter reaches the tail-call marking at all.
+
+class Gate {
+    held: bool
+    handlers: Array<fn(i64) -> string>
+    constructor() {
+        this.held = false
+        this.handlers = [fn(v: i64) -> string { return "a" }, fn(v: i64) -> string { return "b" }]
+    }
+    ref useWith(f: fn(i64) -> string) -> string? {
+        if (this.held) { return null }
+        this.held = true
+        defer { this.held = false }
+        return f(1)
+    }
+    ref useHandler(i: i64) -> string? {
+        if (this.held) { return null }
+        this.held = true
+        defer { this.held = false }
+        return this.handlers[i](1)
+    }
+}
+
+@test fn defer_runs_after_a_returned_parameter_call() {
+    var g = Gate()
+    assertEqual(g.useWith(fn(v: i64) -> string { return "a" }), "a")
+    assertEqual(g.held, false)
+    assertEqual(g.useWith(fn(v: i64) -> string { return "b" }), "b")
+    assertEqual(g.held, false)
+}
+
+@test fn defer_runs_after_a_returned_indirect_call() {
+    var g = Gate()
+    assertEqual(g.useHandler(0), "a")
+    assertEqual(g.held, false)
+    assertEqual(g.useHandler(1), "b")
+    assertEqual(g.held, false)
+}

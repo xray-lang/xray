@@ -3953,6 +3953,12 @@ static void lower_return(XiLower *l, AstNode *node) {
         bool is_direct_call = !return_is_unit && (ret->values[0]->type == AST_CALL_EXPR);
         if (is_direct_call && l->try_depth != 0 && xi_lower_call_may_throw(l, ret->values[0], NULL))
             is_direct_call = false;
+        /* A pending cleanup runs after the callee returns, so the call cannot
+         * replace this frame. Decided here, on the call itself: the return
+         * value below may be a conversion wrapped around the call, and a flag
+         * withdrawn from the wrapper would leave the call marked. */
+        if (is_direct_call && xi_lower_cleanup_has_active_site(l))
+            is_direct_call = false;
         /* A `T(args)` construction lowers to an XI_CALL_METHOD whose aux is
          * "constructor". Constructors must materialize and return the new
          * object, so they are never tail calls (and AOT has no TAIL_CALL). */
@@ -3979,7 +3985,6 @@ static void lower_return(XiLower *l, AstNode *node) {
     }
 
     if (xi_lower_cleanup_has_active_site(l) && val) {
-        val->flags &= (uint16_t) ~XI_FLAG_TAIL;
         XiValue *frozen = xi_value_new(l->func, l->cur_block, XI_COPY, val->type, 1);
         if (!frozen) {
             l->had_error = true;
