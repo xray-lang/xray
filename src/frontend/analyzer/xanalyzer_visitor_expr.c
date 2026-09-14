@@ -741,17 +741,36 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
     return NULL;
 }
 
-static XrType *xa_static_capacity_method_type(XaInferContext *ctx, AstNode *object,
+/* `Array.withCapacity(n)` carries no element evidence of its own: the element
+ * type is the one the surrounding context expects, exactly as a generic
+ * constructor's arguments are read from `var b: Box<int> = Box()`. An
+ * annotated variable, a typed field, a return position and a parameter all
+ * provide that context; without one the call has no element type, and the
+ * intrinsic's element storage could not be frozen, so it is refused here
+ * rather than later as an inexact intrinsic. */
+static XrType *xa_static_capacity_method_type(XaInferContext *ctx, AstNode *node, AstNode *object,
                                               const char *name) {
     if (!object || object->type != AST_VARIABLE || !name || strcmp(name, "withCapacity") != 0)
         return NULL;
     const char *type_name = object->as.variable.name;
     XrVMRuntime *X = ctx->analyzer->isolate;
-    if (strcmp(type_name, "Array") == 0) {
-        XrType *elem = xr_type_new_unknown(X);
-        return xa_function_type1(ctx, xr_type_new_int(X), xr_type_new_array(X, elem));
+    if (strcmp(type_name, "Array") != 0)
+        return NULL;
+    XrType *expected = ctx->expected_type;
+    XrType *elem = expected && XR_TYPE_IS_ARRAY(expected) && expected->container.element_type &&
+                           !XR_TYPE_IS_UNKNOWN(expected->container.element_type)
+                       ? expected->container.element_type
+                       : NULL;
+    if (!elem) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
+                                   "cannot infer the element type of Array.withCapacity(); give "
+                                   "the result a typed context such as `var xs: Array<i64> = "
+                                   "Array.withCapacity(n)`",
+                                   &loc);
+        return xr_type_new_error(X);
     }
-    return NULL;
+    return xa_function_type1(ctx, xr_type_new_int(X), xr_type_new_array(X, elem));
 }
 
 static XrType *xa_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *object) {
@@ -2111,7 +2130,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (xa_freestanding_reject_string_member(ctx, node, obj_type, ma->name))
         return xr_type_new_error(ctx->analyzer->isolate);
 
-    XrType *static_capacity_fn = xa_static_capacity_method_type(ctx, ma->object, ma->name);
+    XrType *static_capacity_fn = xa_static_capacity_method_type(ctx, node, ma->object, ma->name);
     if (static_capacity_fn)
         return static_capacity_fn;
 

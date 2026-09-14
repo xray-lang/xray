@@ -3794,17 +3794,15 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
 
     /* Propagate reified generic elem_tid when there is an explicit type
      * annotation on a container literal (e.g. var a: Array<int> = [1,2]).
-     * Only the annotation distinguishes typed from untyped containers. */
+     * Only the annotation distinguishes typed from untyped containers. An
+     * array factory needs no such help: the analyzer typed it from the same
+     * annotation, as it does in every other typed context. */
     if (node->as.var_decl.type_annotation && type) {
-        bool is_array_factory = init_val->op == XI_CALL_BUILTIN &&
-                                init_val->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY;
-        if ((init_val->op == XI_ARRAY_NEW || is_array_factory) &&
+        if (init_val->op == XI_ARRAY_NEW &&
             (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type)) && type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
             init_val->type = type;
             init_val->aux_int = (int64_t) (tid << 2);
-            if (is_array_factory)
-                init_val->array_element_storage = (uint8_t) xr_tid_to_elem_type(tid);
         } else if (init_val->op == XI_SET_NEW && type->kind == XR_KIND_SET &&
                    type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
