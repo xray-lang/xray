@@ -3553,6 +3553,20 @@ XR_FUNC ImportMember *xa_program_add_import_member(AstNode *root, XaAnalyzer *an
     return member;
 }
 
+/* The symbol this import statement bound under `name` in the current scope
+ * on an earlier analysis of the same file, or NULL on the first analysis.
+ * `symbol_id` is the id the statement's own node recorded then. */
+static XaSymbol *xa_import_symbol_to_reuse(XaInferContext *ctx, uint32_t symbol_id,
+                                           const char *name) {
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->current_scope || symbol_id == 0 || !name)
+        return NULL;
+    XaSymbol *bound = xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
+    if (!bound || bound->scope != ctx->analyzer->current_scope || !bound->name ||
+        strcmp(bound->name, name) != 0)
+        return NULL;
+    return bound;
+}
+
 XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, ImportMember *member,
                                            XrHashMap *graph_exports) {
     if (!ctx || !node || node->type != AST_IMPORT_STMT || !member)
@@ -3588,7 +3602,14 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
                                  : builtin_object_shape ? XA_SYM_TYPE_ALIAS
                                  : builtin_enum         ? XA_SYM_ENUM
                                                         : XA_SYM_IMPORT;
-    sym = xa_symbol_new(local_name, imported_kind);
+    /* A re-analysis keeps the member's symbol, and with it the id that use
+     * sites already cache, so they observe the export's refreshed signature
+     * instead of the binding the first pass copied. */
+    sym = xa_import_symbol_to_reuse(ctx, member->symbol_id, local_name);
+    if (sym)
+        sym->kind = imported_kind;
+    else
+        sym = xa_symbol_new(local_name, imported_kind);
     if (sym) {
         sym->is_imported = true;
         sym->is_const = true;
@@ -3687,7 +3708,9 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     if (import->member_count == 0) {
         const char *var_name = import->alias ? import->alias : import->module_name;
 
-        XaSymbol *sym = xa_symbol_new(var_name, XA_SYM_MODULE);
+        XaSymbol *sym = xa_import_symbol_to_reuse(ctx, import->symbol_id, var_name);
+        if (!sym)
+            sym = xa_symbol_new(var_name, XA_SYM_MODULE);
         if (sym) {
             sym->location.line = node->line;
             xa_visit_add_symbol_checked(ctx, sym, 0);

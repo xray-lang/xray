@@ -1,0 +1,16 @@
+// An exported function whose return type is an instantiation of the
+// module's own generic class, called through a selective import. The
+// importer's binding is declared again after the graph is specialized; it
+// keeps its symbol, so the call sites that already resolved to it read the
+// export's refreshed signature rather than the pre-specialization one.
+
+import { boxOf } from "./modules/generic_box_lib"
+
+@test fn selective_import_of_an_export_returning_an_instantiation() {
+    var b = boxOf(6)
+    assertEqual(b.get(), 6)
+}
+
+@test fn result_flows_into_a_generic_method_of_the_instantiation() {
+    assertEqual(boxOf(7).lock<i64>(fn(v: i64) -> i64 { return v + 1 }), 8)
+}

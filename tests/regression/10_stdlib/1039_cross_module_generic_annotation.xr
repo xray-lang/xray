@@ -1,0 +1,28 @@
+// A generic class declared by another module is instantiated here and named
+// by its instantiation in annotations: parameters, variables and return
+// types spell `Box<i64>` while the clone itself lives in the declaring
+// module. The importer reaches it through a compiler-private import, the
+// same binding a construction of the same instantiation uses. A generic
+// method of the clone is a plain member of that concrete class.
+
+import { Box, boxOf } from "./modules/generic_box_lib"
+
+fn get(b: Box<i64>) -> i64 { return b.get() }
+
+fn rebox(v: i64) -> Box<i64> {
+    var b: Box<i64> = Box<i64>(v)
+    return b
+}
+
+@test fn annotation_names_a_foreign_instantiation() {
+    assertEqual(get(Box<i64>(3)), 3)
+    assertEqual(get(rebox(4)), 4)
+    assertEqual(get(boxOf(5)), 5)
+    assertEqual(boxOf(8).get(), 8)
+}
+
+@test fn generic_method_of_a_foreign_instantiation() {
+    var b: Box<i64> = boxOf(6)
+    assertEqual(b.lock<i64>(fn(v: i64) -> i64 { return v * 2 }), 12)
+    assertEqual(b.lock<string>(fn(v: i64) -> string { return "v${v}" }), "v6")
+}
