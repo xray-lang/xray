@@ -5565,13 +5565,15 @@ XR_FUNC void xa_default_expr_for_each_variable(AstNode *node, XaDefaultExprVaria
             break;
         case AST_ARRAY_LITERAL:
             for (int i = 0; i < node->as.array_literal.count; i++)
-                xa_default_expr_for_each_variable(node->as.array_literal.elements[i], fn, user_data);
+                xa_default_expr_for_each_variable(node->as.array_literal.elements[i], fn,
+                                                  user_data);
             xa_default_expr_for_each_variable(node->as.array_literal.repeat_value, fn, user_data);
             xa_default_expr_for_each_variable(node->as.array_literal.repeat_count, fn, user_data);
             break;
         case AST_TUPLE_LITERAL:
             for (int i = 0; i < node->as.tuple_literal.count; i++)
-                xa_default_expr_for_each_variable(node->as.tuple_literal.elements[i], fn, user_data);
+                xa_default_expr_for_each_variable(node->as.tuple_literal.elements[i], fn,
+                                                  user_data);
             break;
         case AST_SPREAD_EXPR:
             xa_default_expr_for_each_variable(node->as.spread_expr.expr, fn, user_data);
@@ -5607,7 +5609,8 @@ XR_FUNC void xa_default_expr_for_each_variable(AstNode *node, XaDefaultExprVaria
             break;
         case AST_STRUCT_LITERAL:
             for (int i = 0; i < node->as.struct_literal.field_count; i++)
-                xa_default_expr_for_each_variable(node->as.struct_literal.field_values[i], fn, user_data);
+                xa_default_expr_for_each_variable(node->as.struct_literal.field_values[i], fn,
+                                                  user_data);
             break;
         case AST_OPTIONAL_CHAIN:
             xa_default_expr_for_each_variable(node->as.optional_chain.object, fn, user_data);

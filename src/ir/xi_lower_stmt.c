@@ -3798,8 +3798,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * array factory needs no such help: the analyzer typed it from the same
      * annotation, as it does in every other typed context. */
     if (node->as.var_decl.type_annotation && type) {
-        if (init_val->op == XI_ARRAY_NEW &&
-            (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type)) && type->container.element_type) {
+        if (init_val->op == XI_ARRAY_NEW && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type)) &&
+            type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
             init_val->type = type;
             init_val->aux_int = (int64_t) (tid << 2);

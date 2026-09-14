@@ -6151,9 +6151,8 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                                                               : NULL;
         const XrSemanticParameterRecord *callee_variadic =
             xr_semantic_callee_variadic_parameter(match, callee);
-        bool call_shape_complete =
-            operation &&
-            xr_semantic_source_call_shape_complete(match, callee, operation->operand_count);
+        bool call_shape_complete = operation && xr_semantic_source_call_shape_complete(
+                                                    match, callee, operation->operand_count);
         const char *source_module = NULL;
         const char *selector = NULL;
         bool exact_source_call =
@@ -6165,9 +6164,8 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             !callee || !xr_stable_id_equal(source_export->exported_entity, callee->id) ||
             !exact_source_call || !source_module || !selector ||
             strcmp(source_module, plan->dependencies[target->dependency].module_path) != 0 ||
-            strcmp(selector, source_export->name) != 0 || !call_shape_complete ||
-            !caller_result || !callee_result ||
-            !xr_stable_id_equal(caller_result->id, callee_result->id) ||
+            strcmp(selector, source_export->name) != 0 || !call_shape_complete || !caller_result ||
+            !callee_result || !xr_stable_id_equal(caller_result->id, callee_result->id) ||
             (semantic_operation_coroutine_state_count(plan, target->operation) == 1) !=
                 (suspendable[target->dependency][source_export->function] != 0) ||
             !xr_stable_id_equal(target->export_identity, source_export->id) ||

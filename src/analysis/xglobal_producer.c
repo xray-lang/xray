@@ -9931,9 +9931,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
         } else if (body_variable_builtin_function(bc, &callee->as.variable) ||
-                   (!bc->producer->analyzer &&
-                    body_global_builtin_call_is_leaf_intrinsic(callee_name,
-                                                               call->as.call_expr.arg_count))) {
+                   (!bc->producer->analyzer && body_global_builtin_call_is_leaf_intrinsic(
+                                                   callee_name, call->as.call_expr.arg_count))) {
             row.kind = XG_CALL_NATIVE;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;

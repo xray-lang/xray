@@ -1463,8 +1463,8 @@ int xa_analyzer_print_errors(XaAnalyzer *analyzer, const char *fallback_path) {
             continue;
         errors++;
         const char *file = diagnostic->location.file ? diagnostic->location.file
-                           : fallback_path                ? fallback_path
-                                                          : "<module>";
+                           : fallback_path           ? fallback_path
+                                                     : "<module>";
         fprintf(stderr, "%s:%u:%u: error: %s\n", file, diagnostic->location.line,
                 diagnostic->location.column, diagnostic->message ? diagnostic->message : "");
     }
