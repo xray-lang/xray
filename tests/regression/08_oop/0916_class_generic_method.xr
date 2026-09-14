@@ -1,0 +1,35 @@
+// A generic method declared by a generic class is called on a concrete
+// instantiation of that class: the receiver names its exact concrete
+// aggregate and the method clone attaches to it. Chained through a second
+// instantiation, and mixed with a generic method on a concrete class.
+
+class Cell<T> {
+    value: T
+    constructor(value: T) { this.value = value }
+    map<U>(f: fn(T) -> U) -> Cell<U> { return Cell<U>(f(this.value)) }
+    with<U>(other: U) -> string { return "${this.value}|${other}" }
+}
+
+class Counter {
+    n: i64
+    constructor(n: i64) { this.n = n }
+    apply<U>(f: fn(i64) -> U) -> U { return f(this.n) }
+}
+
+@test fn generic_method_on_a_generic_class_instance() {
+    var c = Cell<i64>(4)
+    assertEqual(c.map<string>(fn(v: i64) -> string { return "v${v}" }).value, "v4")
+    assertEqual(c.map<i64>(fn(v: i64) -> i64 { return v * 3 }).map<i64>(fn(v: i64) -> i64 { return v + 3 }).value, 15)
+}
+
+@test fn generic_method_type_argument_independent_of_the_receiver() {
+    var c = Cell<string>("k")
+    assertEqual(c.with<i64>(7), "k|7")
+    assertEqual(c.with<bool>(true), "k|true")
+}
+
+@test fn generic_method_on_a_concrete_class() {
+    var k = Counter(5)
+    assertEqual(k.apply<string>(fn(v: i64) -> string { return "n=${v}" }), "n=5")
+    assertEqual(k.apply<i64>(fn(v: i64) -> i64 { return v * 2 }), 10)
+}

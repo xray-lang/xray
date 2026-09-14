@@ -2606,7 +2606,8 @@ producer_generic_method_receiver_matches(XgProducer *producer, XgClassId receive
     if (specialization->receiver_type_arg_count == 0u)
         return producer_class_is_descendant_or_self(producer, receiver_class_id,
                                                     source_owner->class_id);
-    if (!specialization->owner_decl || specialization->owner_decl->type != AST_STRUCT_DECL)
+    if (!specialization->owner_decl || (specialization->owner_decl->type != AST_STRUCT_DECL &&
+                                        specialization->owner_decl->type != AST_CLASS_DECL))
         return false;
     for (uint32_t i = 0u; i < specialization->receiver_type_arg_count; ++i) {
         if (body_type_ref_contains_type_param(specialization->receiver_type_args[i])) {
@@ -2636,7 +2637,7 @@ producer_generic_method_receiver_matches(XgProducer *producer, XgClassId receive
         source_decl->nominal_key, expected_tuple_key,
         (uint16_t) specialization->receiver_type_arg_count, XG_GENERIC_INST_CLASS);
     return receiver && (receiver->flags & XG_CLASS_MONOMORPHIZED) != 0u &&
-           receiver->decl_kind == XG_DECL_STRUCT &&
+           receiver->decl_kind == source_owner->decl_kind &&
            receiver->generic_origin_class_id == source_owner->class_id &&
            receiver->generic_origin_nominal_key == source_decl->nominal_key &&
            receiver->generic_type_key == expected_type_key &&

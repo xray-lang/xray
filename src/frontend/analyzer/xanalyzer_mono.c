@@ -1597,16 +1597,16 @@ static bool mono_specialization_supported(const XaGenericSpecializationFact *ide
     const ClassDeclNode *owner = identity->owner_decl->type == AST_CLASS_DECL
                                      ? &identity->owner_decl->as.class_decl
                                      : &identity->owner_decl->as.struct_decl;
+    /* A concrete owner -- declared without type parameters, or a class the
+     * graph-wide pass already specialized -- carries its generic methods as
+     * ordinary members: each instantiation is an adjacent concrete method
+     * clone of that one owner. */
     if (owner->type_param_count == 0)
-        return identity->receiver_type_arg_count == 0u && !owner->is_generic_skeleton &&
-               !owner->is_monomorphized;
-    /* The first executable generic-receiver slice is a value struct. Generic
-     * classes need
-     * separate heap identity and owned-field lifetime work; do
-     * not admit them through the
-     * value path. */
-    return identity->owner_decl->type == AST_STRUCT_DECL &&
-           identity->receiver_type_arg_count == (uint32_t) owner->type_param_count &&
+        return identity->receiver_type_arg_count == 0u && !owner->is_generic_skeleton;
+    /* A generic receiver names its exact concrete aggregate: the method is
+     * executable only on that instantiation, which the graph-wide pass
+     * materializes as one concrete owner before the method clone attaches. */
+    return identity->receiver_type_arg_count == (uint32_t) owner->type_param_count &&
            !owner->is_monomorphized;
 }
 
@@ -1823,42 +1823,6 @@ static XaMonoInstance *xa_mono_collector_find_type_instance(XaMonoCollector *col
             return &collector->instances[i];
     }
     return NULL;
-}
-
-static const char *xa_mono_collector_lookup_type(XaMonoCollector *collector,
-                                                 const AstNode *generic_decl, XrTypeRef **type_args,
-                                                 int type_arg_count) {
-    XaMonoInstance *instance =
-        xa_mono_collector_find_type_instance(collector, generic_decl, type_args, type_arg_count);
-    return instance ? instance->mangled_name : NULL;
-}
-
-// task-221 gap C: rewrite a type annotation naming a monomorphized generic
-// instance (e.g. RouteMatch<int>) to its mangled name (RouteMatch$i64), so a
-// specialized method/function's declared return/param/var types match the
-// specialized values its body constructs. Recurses into nested type arguments
-// first. The mangled name is owned by the collector and lives for the compile.
-static void mono_rewrite_type_ref(XrTypeRef *tref, XaMonoCollector *collector) {
-    if (!tref)
-        return;
-    for (int i = 0; i < tref->nchildren; i++)
-        mono_rewrite_type_ref(tref->children[i], collector);
-    if (tref->kind == XR_TREF_GENERIC && tref->name && tref->nchildren > 0) {
-        const AstNode *generic_decl = mono_exact_generic_type_decl(collector, tref);
-        const char *mangled =
-            xa_mono_collector_lookup_type(collector, generic_decl, tref->children, tref->nchildren);
-        if (mangled) {
-            // The collector's mangled_name is freed when the mono pass ends, but
-            // this type ref must survive into post-monomorphization analysis and
-            // cgen; copy it (compile-lifetime, matching inject_mono_decls' clone
-            // naming via xr_strdup).
-            tref->kind = XR_TREF_NAMED;
-            tref->name = xr_strdup(mangled);
-            tref->children = NULL;
-            tref->nchildren = 0;
-            collector->tref_rewrite_count++;
-        }
-    }
 }
 
 /* ========== Mono Pass Collect + Instantiate + Rewrite ========== */
@@ -2870,6 +2834,72 @@ static bool mono_get_specialization(XaMonoCollector *collector, const AstNode *n
 }
 
 // Phase 3: Rewrite call sites — replace callee name with mangled name
+/* The import binding through which the current root names `generic_name`:
+ * the symbol of the selective import member spelled that way. A type is
+ * only nameable through such an import; a namespace-qualified type is not a
+ * language form. */
+static uint32_t mono_type_import_symbol(const AstNode *root, const char *generic_name) {
+    if (!root || root->type != AST_PROGRAM || !generic_name)
+        return 0u;
+    const ProgramNode *program = &root->as.program;
+    for (int i = 0; i < program->count; i++) {
+        const AstNode *stmt = program->statements[i];
+        if (!stmt || stmt->type != AST_IMPORT_STMT)
+            continue;
+        const ImportStmtNode *import = &stmt->as.import_stmt;
+        for (int m = 0; m < import->member_count; m++) {
+            const ImportMember *member = &import->members[m];
+            const char *local = member->alias ? member->alias : member->name;
+            if (local && !member->has_private_target && strcmp(local, generic_name) == 0)
+                return member->symbol_id;
+        }
+    }
+    return 0u;
+}
+
+/* Rewrite a type annotation naming a monomorphized generic instance
+ * (RouteMatch<int>) to the concrete class it names (RouteMatch$i64), so a
+ * specialized declaration's types match the specialized values its body
+ * constructs. Nested type arguments rewrite first. A clone declared in
+ * another module is named through a compiler-private import of it, the same
+ * binding a call site of the same specialization uses; the annotation then
+ * spells that import's alias. */
+static void mono_rewrite_type_ref(XrTypeRef *tref, XaGenericRegistry *registry,
+                                  XaMonoCollector *collector) {
+    if (!tref)
+        return;
+    for (int i = 0; i < tref->nchildren; i++)
+        mono_rewrite_type_ref(tref->children[i], registry, collector);
+    if (tref->kind != XR_TREF_GENERIC || !tref->name || tref->nchildren <= 0)
+        return;
+    const AstNode *generic_decl = mono_exact_generic_type_decl(collector, tref);
+    XaMonoInstance *instance = xa_mono_collector_find_type_instance(
+        collector, generic_decl, tref->children, tref->nchildren);
+    if (!instance)
+        return;
+    const char *spelled = instance->mangled_name;
+    XaGenericDecl *decl = registry_find_decl(registry, generic_decl);
+    if (decl && decl->defining_root != collector->rewrite_root) {
+        uint32_t imported_symbol_id = mono_type_import_symbol(collector->rewrite_root, tref->name);
+        spelled = imported_symbol_id
+                      ? mono_append_specialized_import(collector->rewrite_root, imported_symbol_id,
+                                                       decl, &instance->identity,
+                                                       instance->mangled_name, collector->analyzer)
+                      : NULL;
+        if (!spelled) {
+            mono_report_rewrite_failure(collector, NULL, tref->name);
+            return;
+        }
+    }
+    /* The collector's names are freed when the pass ends, but this type ref
+     * must survive into post-monomorphization analysis and cgen. */
+    tref->kind = XR_TREF_NAMED;
+    tref->name = xr_strdup(spelled);
+    tref->children = NULL;
+    tref->nchildren = 0;
+    collector->tref_rewrite_count++;
+}
+
 static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                                XaMonoCollector *collector,
                                const XaMonoImportAliases *import_aliases) {
@@ -3137,7 +3167,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-            mono_rewrite_type_ref(node->as.var_decl.type_annotation, collector);
+            mono_rewrite_type_ref(node->as.var_decl.type_annotation, registry, collector);
             rewrite_call_sites(node->as.var_decl.initializer, registry, collector, import_aliases);
             break;
         case AST_ASSIGNMENT:
@@ -3170,17 +3200,19 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
-            mono_rewrite_type_ref(node->as.function_decl.return_type, collector);
+            mono_rewrite_type_ref(node->as.function_decl.return_type, registry, collector);
             for (int i = 0; i < node->as.function_decl.param_count; i++)
                 if (node->as.function_decl.params[i])
-                    mono_rewrite_type_ref(node->as.function_decl.params[i]->type, collector);
+                    mono_rewrite_type_ref(node->as.function_decl.params[i]->type, registry,
+                                          collector);
             rewrite_call_sites(node->as.function_decl.body, registry, collector, import_aliases);
             break;
         case AST_METHOD_DECL:
-            mono_rewrite_type_ref(node->as.method_decl.return_type, collector);
+            mono_rewrite_type_ref(node->as.method_decl.return_type, registry, collector);
             for (int i = 0; i < node->as.method_decl.param_count; i++)
                 if (node->as.method_decl.params[i])
-                    mono_rewrite_type_ref(node->as.method_decl.params[i]->type, collector);
+                    mono_rewrite_type_ref(node->as.method_decl.params[i]->type, registry,
+                                          collector);
             rewrite_call_sites(node->as.method_decl.body, registry, collector, import_aliases);
             for (int i = 0; i < node->as.method_decl.base_arg_count; i++)
                 rewrite_call_sites(node->as.method_decl.base_args[i], registry, collector,
@@ -3212,7 +3244,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         }
         case AST_FIELD_DECL:
-            mono_rewrite_type_ref(node->as.field_decl.field_type, collector);
+            mono_rewrite_type_ref(node->as.field_decl.field_type, registry, collector);
             rewrite_call_sites(node->as.field_decl.initializer, registry, collector,
                                import_aliases);
             break;
@@ -3230,7 +3262,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             EnumMemberNode *em = &node->as.enum_member;
             for (int i = 0; i < em->payload_count; i++)
                 if (em->payload_types)
-                    mono_rewrite_type_ref(em->payload_types[i], collector);
+                    mono_rewrite_type_ref(em->payload_types[i], registry, collector);
             break;
         }
         case AST_ARRAY_LITERAL:
