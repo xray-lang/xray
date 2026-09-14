@@ -2660,6 +2660,61 @@ TEST(analyzer_stored_function_value_defaults_may_throw) {
     setup_pool();
 }
 
+/* A caller fills the defaults of the callables it omits arguments to, and a
+ * caller in another module reaches the declaring module only through its
+ * export table. An exported callable may therefore spell only exported
+ * declarations or scalar constants in a default; a private record const or a
+ * private helper call is refused at the declaration, before any caller can
+ * compile it into a null import. Private callables and same-module use keep
+ * their private defaults. */
+static int count_private_default_diagnostics(XaAnalyzer *a, const char *file) {
+    int diagnostic_count = 0;
+    int found = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(a, &diagnostic_count); diag;
+         diag = diag->next) {
+        if (diag->severity != XR_DIAG_SEV_ERROR || diag->code != XR_ERR_ANALYZE_VISIBILITY)
+            continue;
+        if (!diag->location.file || strcmp(diag->location.file, file) != 0 ||
+            !strstr(diag->message, "does not export"))
+            return -1;
+        found++;
+    }
+    return found;
+}
+
+TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "type Opts = { indent: i64 }\n"
+                         "const PRIVATE_OPTS: Opts = { indent: 2 }\n"
+                         "export const PUBLIC_OPTS: Opts = { indent: 3 }\n"
+                         "const FACTOR: i64 = 7\n"
+                         "fn makeOpts() -> Opts { return { indent: 4 } }\n"
+                         "export fn make() -> Opts { return { indent: 5 } }\n"
+                         "export fn viaPrivateConst(o: Opts = PRIVATE_OPTS) -> i64 { return "
+                         "o.indent }\n"
+                         "export fn viaPrivateCall(o: Opts = makeOpts()) -> i64 { return "
+                         "o.indent }\n"
+                         "export fn viaPublicConst(o: Opts = PUBLIC_OPTS) -> i64 { return "
+                         "o.indent }\n"
+                         "export fn viaPublicCall(o: Opts = make()) -> i64 { return o.indent }\n"
+                         "export fn viaScalar(x: i64, factor: i64 = FACTOR) -> i64 { return x * "
+                         "factor }\n"
+                         "fn privateCallable(o: Opts = PRIVATE_OPTS) -> i64 { return o.indent }\n"
+                         "export class Widget {\n"
+                         "    n: i64\n"
+                         "    constructor(n: i64 = PRIVATE_OPTS.indent) { this.n = n }\n"
+                         "}\n"
+                         "print(privateCallable(), viaPrivateConst(), Widget().n)\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "exported_defaults.xr", program);
+    ASSERT(count_private_default_diagnostics(a, "exported_defaults.xr") == 3);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -8065,6 +8120,7 @@ int main(void) {
     RUN_TEST(analyzer_effect_inference_handles_redundant_try_catch);
     RUN_TEST(analyzer_deprecated_message_reaches_use_diagnostic);
     RUN_TEST(analyzer_stored_function_value_defaults_may_throw);
+    RUN_TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations);
     RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_enum_record_construction_publishes_slot_plan);

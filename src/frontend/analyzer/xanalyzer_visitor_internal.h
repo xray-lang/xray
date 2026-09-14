@@ -288,6 +288,22 @@ XR_FUNC bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int
 XR_FUNC bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *expr,
                                                  bool *out_pointer_borrow);
 XR_FUNC bool xa_node_uses_symbol_name(AstNode *node, const char *name);
+/* Parameter defaults are evaluated by the caller (defined in
+ * xanalyzer_visitor_call.c): the traversal over the names a default spells,
+ * the rule for which of those names a caller in another module can reach, and
+ * the diagnostic raised against the declaring file when one cannot. */
+typedef void (*XaDefaultExprVariableFn)(AstNode *variable, void *user_data);
+XR_FUNC void xa_default_expr_for_each_variable(AstNode *node, XaDefaultExprVariableFn fn,
+                                               void *user_data);
+XR_FUNC bool xa_default_symbol_reachable_from_caller(XaAnalyzer *analyzer, XaSymbol *sym,
+                                                     bool exported);
+XR_FUNC void xa_report_default_private_reference(XaAnalyzer *analyzer, const char *decl_file,
+                                                 const AstNode *reference);
+/* Type the parameter defaults of a callable being declared, fold the scalar
+ * consteval ones into literals, and check the rest against the reachability
+ * rule when the callable is exported (xanalyzer_visitor_decl.c). */
+XR_FUNC void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults,
+                                         XrType **param_types, int count, bool exported_callable);
 XR_FUNC bool xa_path_is_same_or_nested(const char *path, const char *prefix);
 XR_FUNC bool xa_pointer_expr_has_owner_borrow(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_symbol_used_after_current_statement(XaInferContext *ctx, const XaSymbol *symbol);

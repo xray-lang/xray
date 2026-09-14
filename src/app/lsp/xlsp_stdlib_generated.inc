@@ -774,6 +774,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
     {"comment", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
     {"cdata", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
     {"XML_DEFAULT_OPTIONS", XLSP_SYM_CONSTANT, "XmlOptions", "", NULL, 0},
+    {"XML_DEFAULT_WRITE_OPTIONS", XLSP_SYM_CONSTANT, "XmlWriteOptions", "", NULL, 0},
     {"XmlName", XLSP_SYM_CLASS, "type XmlName", "Class type", NULL, 0},
     {"XmlAttribute", XLSP_SYM_CLASS, "type XmlAttribute", "Class type", NULL, 0},
     {"XmlNode", XLSP_SYM_CLASS, "type XmlNode", "Enum type", NULL, 0},
@@ -782,7 +783,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
     {"XmlError", XLSP_SYM_CLASS, "type XmlError", "Enum type", NULL, 0},
     {"XmlParseReport", XLSP_SYM_CLASS, "type XmlParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_XML_SYMBOL_COUNT 26
+#define GEN_XLSP_STDLIB_XML_SYMBOL_COUNT 27
 
 // yaml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {

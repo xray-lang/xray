@@ -196,7 +196,7 @@ export const XML_DEFAULT_OPTIONS: XmlOptions = {
     validateEntities: true
 }
 
-const XML_DEFAULT_WRITE_OPTIONS: XmlWriteOptions = {
+export const XML_DEFAULT_WRITE_OPTIONS: XmlWriteOptions = {
     indent: 0,
     declaration: true,
     encoding: "UTF-8"

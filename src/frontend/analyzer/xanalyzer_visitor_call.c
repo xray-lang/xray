@@ -5414,13 +5414,21 @@ static XaSymbol *xa_default_arg_import_export_symbol(XaDefaultArgBindCtx *bind,
     return sym;
 }
 
-static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, const char *name) {
+/* Resolve a name spelled in a default expression against the declaring
+ * module: its export table first, then the declarations of its file.
+ * `out_exported` reports which of the two answered. */
+static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, const char *name,
+                                                   bool *out_exported) {
+    if (out_exported)
+        *out_exported = false;
     if (!bind || !bind->ctx || !bind->ctx->analyzer || !name)
         return NULL;
     XaAnalyzer *analyzer = bind->ctx->analyzer;
     if (bind->exports) {
         XaSymbol *sym = (XaSymbol *) xr_hashmap_get(bind->exports, name);
         if (sym) {
+            if (out_exported)
+                *out_exported = true;
             /* Export maps are built by the exporting module's analyzer. Only
              * a symbol the current registry resolves back to itself carries
              * an id that is meaningful in this analysis; anything else must
@@ -5434,6 +5442,46 @@ static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, co
     }
     return xa_default_arg_find_decl_file_symbol(analyzer, analyzer->global_scope, bind->decl_file,
                                                 name);
+}
+
+/* A caller evaluates the defaults of the callables it omits arguments to, and
+ * it reaches the declaring module only through that module's export table.
+ * A scalar constant is carried across as its compile-time value instead, so
+ * it needs no export. Anything else the default spells must be exported: a
+ * private declaration would otherwise be imported by a name the module never
+ * publishes and read back as null at run time. */
+XR_FUNC bool xa_default_symbol_reachable_from_caller(XaAnalyzer *analyzer, XaSymbol *sym,
+                                                     bool exported) {
+    if (exported || !sym || sym->is_builtin)
+        return true;
+    if (!sym->is_const)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    if (!links)
+        return false;
+    XrCtValue value = links->ct_value;
+    if (!links->has_ct_value &&
+        (!links->const_initializer ||
+         !xa_consteval_expr(analyzer, links->const_initializer, &value, NULL)))
+        return false;
+    return xr_ct_value_kind_is_scalar(value.kind);
+}
+
+XR_FUNC void xa_report_default_private_reference(XaAnalyzer *analyzer, const char *decl_file,
+                                                 const AstNode *reference) {
+    char message[256];
+    snprintf(message, sizeof(message),
+             "default value refers to '%s', which its module does not export; a caller "
+             "evaluates the default and can only reach exported declarations or scalar "
+             "constants",
+             reference->as.variable.name ? reference->as.variable.name : "<name>");
+    XrLocation loc = {.file = decl_file,
+                      .line = reference->line,
+                      .column = reference->column,
+                      .end_line = reference->end_line,
+                      .end_column = reference->end_column};
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_VISIBILITY, message,
+                               &loc);
 }
 
 /* A default-argument expression cloned from a declaring module may name a symbol
@@ -5479,138 +5527,150 @@ static XaSymbol *xa_default_arg_materialize_import(XaDefaultArgBindCtx *bind, co
     return local;
 }
 
-static void xa_bind_default_arg_export_symbols(AstNode *node, XaDefaultArgBindCtx *bind) {
-    if (!node || !bind)
+/* Visit every name a default expression spells. The traversal is the one
+ * statement of which expression forms a default may take; the declaration
+ * check and the call-site binder both drive it. */
+XR_FUNC void xa_default_expr_for_each_variable(AstNode *node, XaDefaultExprVariableFn fn,
+                                               void *user_data) {
+    if (!node || !fn)
         return;
     if (node->type >= AST_BINARY_ADD && node->type <= AST_BINARY_OR) {
-        xa_bind_default_arg_export_symbols(node->as.binary.left, bind);
-        xa_bind_default_arg_export_symbols(node->as.binary.right, bind);
+        xa_default_expr_for_each_variable(node->as.binary.left, fn, user_data);
+        xa_default_expr_for_each_variable(node->as.binary.right, fn, user_data);
         return;
     }
     if (node->type >= AST_UNARY_NEG && node->type <= AST_UNARY_BNOT) {
-        xa_bind_default_arg_export_symbols(node->as.unary.operand, bind);
+        xa_default_expr_for_each_variable(node->as.unary.operand, fn, user_data);
         return;
     }
     switch (node->type) {
         case AST_VARIABLE:
-            if (node->as.variable.name) {
-                XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name);
-                if (sym) {
-                    /* The lookup returns a symbol from the declaring module
-                     * (its export table or declaration file). When the default
-                     * argument is expanded at a call in that SAME file the symbol
-                     * is directly referenceable here, so keep its id. Across a
-                     * module boundary it is not: even when a whole-program (AOT)
-                     * analysis leaves the declaring symbol's id valid in the
-                     * shared registry, that symbol is the declaration itself, not
-                     * an import binding, and the caller unit cannot lower it.
-                     * Materialize a caller-local import view so the reference
-                     * resolves and lowering emits an XI_IMPORT_REF. */
-                    const char *caller_file = bind->ctx->file_path;
-                    bool cross_module =
-                        !(caller_file && bind->decl_file &&
-                          xa_default_arg_path_matches(caller_file, bind->decl_file));
-                    if (cross_module) {
-                        XaSymbol *local =
-                            xa_default_arg_materialize_import(bind, node->as.variable.name, sym);
-                        if (local)
-                            node->as.variable.symbol_id = local->id;
-                    } else {
-                        node->as.variable.symbol_id = sym->id;
-                        XaSymbolLinks *links = xa_analyzer_get_links(bind->ctx->analyzer, sym);
-                        if (links && !links->module_name && bind->module_name)
-                            links->module_name = bind->module_name;
-                    }
-                    break;
-                }
-                XaSymbol *current = node->as.variable.symbol_id
-                                        ? xa_scope_lookup_by_id(bind->ctx->analyzer->global_scope,
-                                                                node->as.variable.symbol_id)
-                                        : NULL;
-                if (!xa_default_arg_symbol_is_from_decl_file(
-                        bind->ctx->analyzer, current, bind->decl_file, node->as.variable.name))
-                    node->as.variable.symbol_id = 0;
-            }
+            fn(node, user_data);
             break;
         case AST_MEMBER_ACCESS:
-            xa_bind_default_arg_export_symbols(node->as.member_access.object, bind);
+            xa_default_expr_for_each_variable(node->as.member_access.object, fn, user_data);
             break;
         case AST_CALL_EXPR:
-            xa_bind_default_arg_export_symbols(node->as.call_expr.callee, bind);
+            xa_default_expr_for_each_variable(node->as.call_expr.callee, fn, user_data);
             for (int i = 0; i < node->as.call_expr.arg_count; i++)
-                xa_bind_default_arg_export_symbols(node->as.call_expr.arguments[i], bind);
+                xa_default_expr_for_each_variable(node->as.call_expr.arguments[i], fn, user_data);
             break;
         case AST_GROUPING:
-            xa_bind_default_arg_export_symbols(node->as.grouping, bind);
+            xa_default_expr_for_each_variable(node->as.grouping, fn, user_data);
             break;
         case AST_TERNARY:
-            xa_bind_default_arg_export_symbols(node->as.ternary.condition, bind);
-            xa_bind_default_arg_export_symbols(node->as.ternary.true_expr, bind);
-            xa_bind_default_arg_export_symbols(node->as.ternary.false_expr, bind);
+            xa_default_expr_for_each_variable(node->as.ternary.condition, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.ternary.true_expr, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.ternary.false_expr, fn, user_data);
             break;
         case AST_ARRAY_LITERAL:
             for (int i = 0; i < node->as.array_literal.count; i++)
-                xa_bind_default_arg_export_symbols(node->as.array_literal.elements[i], bind);
-            xa_bind_default_arg_export_symbols(node->as.array_literal.repeat_value, bind);
-            xa_bind_default_arg_export_symbols(node->as.array_literal.repeat_count, bind);
+                xa_default_expr_for_each_variable(node->as.array_literal.elements[i], fn, user_data);
+            xa_default_expr_for_each_variable(node->as.array_literal.repeat_value, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.array_literal.repeat_count, fn, user_data);
             break;
         case AST_TUPLE_LITERAL:
             for (int i = 0; i < node->as.tuple_literal.count; i++)
-                xa_bind_default_arg_export_symbols(node->as.tuple_literal.elements[i], bind);
+                xa_default_expr_for_each_variable(node->as.tuple_literal.elements[i], fn, user_data);
             break;
         case AST_SPREAD_EXPR:
-            xa_bind_default_arg_export_symbols(node->as.spread_expr.expr, bind);
+            xa_default_expr_for_each_variable(node->as.spread_expr.expr, fn, user_data);
             break;
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < node->as.object_literal.count; i++) {
-                xa_bind_default_arg_export_symbols(node->as.object_literal.keys[i], bind);
-                xa_bind_default_arg_export_symbols(node->as.object_literal.values[i], bind);
+                xa_default_expr_for_each_variable(node->as.object_literal.keys[i], fn, user_data);
+                xa_default_expr_for_each_variable(node->as.object_literal.values[i], fn, user_data);
             }
             break;
         case AST_MAP_LITERAL:
             for (int i = 0; i < node->as.map_literal.count; i++) {
-                xa_bind_default_arg_export_symbols(node->as.map_literal.keys[i], bind);
-                xa_bind_default_arg_export_symbols(node->as.map_literal.values[i], bind);
+                xa_default_expr_for_each_variable(node->as.map_literal.keys[i], fn, user_data);
+                xa_default_expr_for_each_variable(node->as.map_literal.values[i], fn, user_data);
             }
             break;
         case AST_SET_LITERAL:
             for (int i = 0; i < node->as.set_literal.count; i++)
-                xa_bind_default_arg_export_symbols(node->as.set_literal.elements[i], bind);
+                xa_default_expr_for_each_variable(node->as.set_literal.elements[i], fn, user_data);
             break;
         case AST_INDEX_GET:
-            xa_bind_default_arg_export_symbols(node->as.index_get.array, bind);
-            xa_bind_default_arg_export_symbols(node->as.index_get.index, bind);
+            xa_default_expr_for_each_variable(node->as.index_get.array, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.index_get.index, fn, user_data);
             break;
         case AST_SLICE_EXPR:
-            xa_bind_default_arg_export_symbols(node->as.slice_expr.source, bind);
-            xa_bind_default_arg_export_symbols(node->as.slice_expr.start, bind);
-            xa_bind_default_arg_export_symbols(node->as.slice_expr.end, bind);
+            xa_default_expr_for_each_variable(node->as.slice_expr.source, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.slice_expr.start, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.slice_expr.end, fn, user_data);
             break;
         case AST_NEW_EXPR:
             for (int i = 0; i < node->as.new_expr.arg_count; i++)
-                xa_bind_default_arg_export_symbols(node->as.new_expr.arguments[i], bind);
+                xa_default_expr_for_each_variable(node->as.new_expr.arguments[i], fn, user_data);
             break;
         case AST_STRUCT_LITERAL:
             for (int i = 0; i < node->as.struct_literal.field_count; i++)
-                xa_bind_default_arg_export_symbols(node->as.struct_literal.field_values[i], bind);
+                xa_default_expr_for_each_variable(node->as.struct_literal.field_values[i], fn, user_data);
             break;
         case AST_OPTIONAL_CHAIN:
-            xa_bind_default_arg_export_symbols(node->as.optional_chain.object, bind);
-            xa_bind_default_arg_export_symbols(node->as.optional_chain.index, bind);
+            xa_default_expr_for_each_variable(node->as.optional_chain.object, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.optional_chain.index, fn, user_data);
             break;
         case AST_RANGE:
-            xa_bind_default_arg_export_symbols(node->as.range.start, bind);
-            xa_bind_default_arg_export_symbols(node->as.range.end, bind);
+            xa_default_expr_for_each_variable(node->as.range.start, fn, user_data);
+            xa_default_expr_for_each_variable(node->as.range.end, fn, user_data);
             break;
         case AST_IS_EXPR:
-            xa_bind_default_arg_export_symbols(node->as.is_expr.expr, bind);
+            xa_default_expr_for_each_variable(node->as.is_expr.expr, fn, user_data);
             break;
         case AST_AS_EXPR:
-            xa_bind_default_arg_export_symbols(node->as.as_expr.expr, bind);
+            xa_default_expr_for_each_variable(node->as.as_expr.expr, fn, user_data);
             break;
         default:
             break;
     }
+}
+
+/* Bind one name of a cloned default expression for the call-site binder. */
+static void xa_bind_default_arg_variable(AstNode *node, void *user_data) {
+    XaDefaultArgBindCtx *bind = (XaDefaultArgBindCtx *) user_data;
+    if (!node->as.variable.name)
+        return;
+    bool exported = false;
+    XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name, &exported);
+    if (sym) {
+        /* The lookup returns a symbol from the declaring module (its export
+         * table or declaration file). When the default argument is expanded
+         * at a call in that SAME file the symbol is directly referenceable
+         * here, so keep its id. Across a module boundary it is not: even when
+         * a whole-program (AOT) analysis leaves the declaring symbol's id
+         * valid in the shared registry, that symbol is the declaration
+         * itself, not an import binding, and the caller unit cannot lower it.
+         * Materialize a caller-local import view so the reference resolves
+         * and lowering emits an XI_IMPORT_REF. */
+        const char *caller_file = bind->ctx->file_path;
+        bool cross_module = !(caller_file && bind->decl_file &&
+                              xa_default_arg_path_matches(caller_file, bind->decl_file));
+        if (cross_module) {
+            if (!xa_default_symbol_reachable_from_caller(bind->ctx->analyzer, sym, exported)) {
+                xa_report_default_private_reference(bind->ctx->analyzer, bind->decl_file, node);
+                return;
+            }
+            XaSymbol *local = xa_default_arg_materialize_import(bind, node->as.variable.name, sym);
+            if (local)
+                node->as.variable.symbol_id = local->id;
+        } else {
+            node->as.variable.symbol_id = sym->id;
+            XaSymbolLinks *links = xa_analyzer_get_links(bind->ctx->analyzer, sym);
+            if (links && !links->module_name && bind->module_name)
+                links->module_name = bind->module_name;
+        }
+        return;
+    }
+    XaSymbol *current =
+        node->as.variable.symbol_id
+            ? xa_scope_lookup_by_id(bind->ctx->analyzer->global_scope, node->as.variable.symbol_id)
+            : NULL;
+    if (!xa_default_arg_symbol_is_from_decl_file(bind->ctx->analyzer, current, bind->decl_file,
+                                                 node->as.variable.name))
+        node->as.variable.symbol_id = 0;
 }
 
 static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *call,
@@ -5667,7 +5727,7 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
     };
     for (int i = call->arg_count; i < param_count; i++) {
         new_args[i] = xr_ast_clone_session(links->param_defaults[i], sess);
-        xa_bind_default_arg_export_symbols(new_args[i], &bind);
+        xa_default_expr_for_each_variable(new_args[i], xa_bind_default_arg_variable, &bind);
     }
     call->arguments = new_args;
     call->arg_accesses = new_accesses;

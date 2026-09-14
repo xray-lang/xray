@@ -65,6 +65,23 @@ struct XrCtValue {
     } as;
 };
 
+/* A scalar compile-time value: one that a literal AST node can carry
+ * verbatim, so it can be folded in place or published across modules
+ * without naming its declaration. */
+static inline bool xr_ct_value_kind_is_scalar(XrCtValueKind kind) {
+    switch (kind) {
+        case XR_CT_INT:
+        case XR_CT_FLOAT:
+        case XR_CT_BOOL:
+        case XR_CT_STRING:
+        case XR_CT_CHAR:
+        case XR_CT_NULL:
+            return true;
+        default:
+            return false;
+    }
+}
+
 XR_FUNC bool xa_consteval_expr(struct XaAnalyzer *analyzer, const struct AstNode *expr,
                                XrCtValue *out_value, const char **out_error);
 
