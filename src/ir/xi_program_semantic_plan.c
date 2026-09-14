@@ -14,6 +14,7 @@
 #include "xi_ops_gen.h"
 #include "xi_own.h"
 #include "xi_program_semantic.h"
+#include "../plan/semantic/xr_semantic_class_shape.h"
 #include "../plan/semantic/xr_semantic_plan_internal.h"
 #include "../plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../plan/semantic/xr_semantic_verify.h"
@@ -242,17 +243,7 @@ static bool semantic_source_class_is_exact(const XrSemanticPlan *plan, const XiF
                                            const XrSemanticSourceClassRecord *source_class) {
     const XiModule *module = root ? root->module : NULL;
     uint8_t expected_flags =
-        aggregate_source
-            ? (uint8_t) ((aggregate_source->explicit_final ? XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL
-                                                           : 0u) |
-                         (aggregate_source->needs_runtime_type ? XR_SEM_SOURCE_CLASS_RUNTIME_TYPE
-                                                               : 0u) |
-                         ((aggregate_source->is_generic_skeleton ||
-                           aggregate_source->is_monomorphized ||
-                           aggregate_source->mono_type_arg_count != 0)
-                              ? XR_SEM_SOURCE_CLASS_GENERIC
-                              : 0u))
-            : 0u;
+        aggregate_source ? xr_semantic_source_class_flags(aggregate_source) : 0u;
     return module && aggregate_source && source_class &&
            semantic_source_module_key_is_exact(plan, root, source_class->module) &&
            source_class->module_path && module->identity &&

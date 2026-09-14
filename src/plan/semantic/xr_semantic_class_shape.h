@@ -64,12 +64,24 @@ xr_semantic_class_object_operation_is_exact(const XrSemanticOperationRecord *ope
            operation->view_source_parameter == -1;
 }
 
+/* The semantic flags of one Xi class declaration. Only an open template is
+ * generic: a monomorphized instantiation is a concrete class that the
+ * graph-wide specialization pass materialized exactly once, in the module
+ * declaring the template, so it freezes one object identity like any other
+ * declaration. The builder publishes these bits and the program plan re-derives
+ * them from the same declaration, so neither may spell the rule on its own. */
+static inline uint8_t xr_semantic_source_class_flags(const XiClassData *source) {
+    return (uint8_t) ((source->explicit_final ? XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL : 0u) |
+                      (source->needs_runtime_type ? XR_SEM_SOURCE_CLASS_RUNTIME_TYPE : 0u) |
+                      (source->is_generic_skeleton ? XR_SEM_SOURCE_CLASS_GENERIC : 0u));
+}
+
 /* Whether the plan's source-class table names one frozen declaration at this
- * index. A generic skeleton or a monomorphized instantiation has no single
- * frozen object identity, and a row whose own ordinal disagrees with the index
- * it sits at names nothing, so neither is any caller's to claim. Every judgement
- * below asks this one question rather than restating it, so a declaration one
- * layer accepts cannot be a declaration another layer refuses. */
+ * index. An open generic template has no single frozen object identity, and a
+ * row whose own ordinal disagrees with the index it sits at names nothing, so
+ * neither is any caller's to claim. Every judgement below asks this one
+ * question rather than restating it, so a declaration one layer accepts cannot
+ * be a declaration another layer refuses. */
 static inline bool xr_semantic_class_declaration_is_frozen(const XrSemanticPlan *plan,
                                                            uint32_t source_class) {
     if (!plan || source_class == XR_SEMANTIC_INDEX_NONE ||

@@ -1608,13 +1608,7 @@ static bool build_source_classes(XrSemanticBuildContext *ctx, const XiFunc *root
             return fail(ctx, "XR_SEM_0019", "source-class parent name is incomplete");
         record->ordinal = c;
         record->method_count = source->nmethod;
-        record->flags =
-            (uint8_t) ((source->explicit_final ? XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL : 0u) |
-                       (source->needs_runtime_type ? XR_SEM_SOURCE_CLASS_RUNTIME_TYPE : 0u) |
-                       ((source->is_generic_skeleton || source->is_monomorphized ||
-                         source->mono_type_arg_count != 0)
-                            ? XR_SEM_SOURCE_CLASS_GENERIC
-                            : 0u));
+        record->flags = xr_semantic_source_class_flags(source);
         XrTextBuilder key = {0};
         bool valid =
             record->name &&
