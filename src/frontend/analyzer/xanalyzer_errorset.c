@@ -601,6 +601,14 @@ static bool symbol_has_function_type(XaSymbol *sym) {
     return true;
 }
 
+/* A function-typed binding whose value can differ between control-flow paths:
+ * a `var` or a parameter, never a constant. Every other binding holds one
+ * target for its whole lifetime, so a join has nothing to reconcile for it. */
+static bool function_value_binding_is_rebindable(XaSymbol *sym) {
+    return sym && (sym->kind == XA_SYM_VARIABLE || sym->kind == XA_SYM_PARAMETER) &&
+           !sym->is_const && sym->is_rebindable && symbol_has_function_type(sym);
+}
+
 static FunctionValueTarget function_value_target_none(void) {
     FunctionValueTarget target;
     target.symbol = NULL;
@@ -1737,6 +1745,15 @@ static void merge_function_value_path_states(ErrorSetCtx *ctx, const FunctionVal
     }
 
     for (int i = 0; i < count; i++) {
+        XaSymbol *sym = lookup_symbol_by_id(ctx, ids[i]);
+        if (!sym) {
+            invalidate_function_value_alias_target(ctx, ids[i]);
+            continue;
+        }
+        /* A binding no path can reassign still holds its base target after
+         * the join; only a rebindable one needs the meet of the path answers. */
+        if (!function_value_binding_is_rebindable(sym))
+            continue;
         FunctionValueTarget merged = state_lookup_function_value_target(path_states[0], ids[i]);
         for (int p = 1; p < path_count && function_value_target_is_exact(merged); p++) {
             merged = function_value_target_merge(
@@ -1744,10 +1761,6 @@ static void merge_function_value_path_states(ErrorSetCtx *ctx, const FunctionVal
         }
         invalidate_function_value_alias_target(ctx, ids[i]);
         if (!function_value_target_is_exact(merged))
-            continue;
-        XaSymbol *sym = lookup_symbol_by_id(ctx, ids[i]);
-        if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
-            !symbol_has_function_type(sym))
             continue;
         set_function_value_alias_target(ctx, sym, merged);
     }
@@ -1768,8 +1781,7 @@ static void merge_function_value_loop_state(ErrorSetCtx *ctx, const FunctionValu
 
 static void track_function_value_alias_mutation(ErrorSetCtx *ctx, XaSymbol *sym) {
     if (!ctx || ctx->function_value_mutation_depth <= 0 || !sym || sym->id == 0 ||
-        sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
-        !symbol_has_function_type(sym))
+        !function_value_binding_is_rebindable(sym))
         return;
     for (int i = 0; i < ctx->function_value_mutation_count; i++) {
         if (ctx->function_value_mutation_ids[i] == sym->id)
@@ -1923,8 +1935,7 @@ static void record_function_value_assignment(ErrorSetCtx *ctx, AssignmentNode *a
 
     if (ctx->function_value_control_depth != 0 || !function_value_target_is_exact(target))
         return;
-    if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
-        !symbol_has_function_type(sym))
+    if (!function_value_binding_is_rebindable(sym))
         return;
     set_function_value_alias_target(ctx, sym, target);
 }

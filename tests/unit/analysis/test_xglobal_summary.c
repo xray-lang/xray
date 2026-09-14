@@ -9804,6 +9804,87 @@ TEST(global_evidence_closes_suspending_callable_parameter_targets) {
     teardown_parser_session();
 }
 
+/* A callable parameter keeps its closed target set across a control-flow
+ * join: nothing on either path rebinds it, so the callsite after the `if`
+ * still names exactly the closure every caller passes. */
+TEST(global_evidence_keeps_callable_parameter_targets_across_a_branch_join) {
+    setup_parser_session();
+    const char *source = "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
+                         "    var bound = value\n"
+                         "    if (value > 100) { bound = 100 }\n"
+                         "    return body(bound)\n"
+                         "}\n"
+                         "fn twice(value: i64) -> i64 { return value * 2 }\n"
+                         "fn answer() -> i64 { return apply(21, twice) }\n";
+    XgGlobalEvidence ev = {0};
+    XaAnalyzer *analyzer = NULL;
+
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, NULL));
+    const XgBodySummary *apply = evidence_find_body_by_name(&ev, "apply");
+    const XgBodySummary *twice = evidence_find_body_by_name(&ev, "twice");
+    ASSERT_NOT_NULL(apply);
+    ASSERT_NOT_NULL(twice);
+    ASSERT_EQ_UINT(apply->callsite_count, 1u);
+
+    const XgCallsiteSummary *call = xg_global_evidence_find_callsite(&ev, apply->callsite_start);
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(call->kind, XG_CALL_CLOSURE);
+    ASSERT_TRUE((call->flags & XG_CALL_TARGET_SET_VERIFIED) != 0u);
+
+    const XgCallableTargetSummary *targets = NULL;
+    uint32_t target_count = 0u;
+    ASSERT_TRUE(xg_global_evidence_callable_targets(&ev, call, &targets, &target_count));
+    ASSERT_EQ_UINT(target_count, 1u);
+    ASSERT_EQ_UINT(targets[0].target_func_id, twice->func_id);
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
+/* A function-valued local rebound on one path meets the targets of both
+ * paths at the join: the callsite after the `if` names the caller's closure
+ * and the one the branch assigned, and nothing else. */
+TEST(global_evidence_meets_callable_targets_of_a_local_rebound_on_a_branch) {
+    setup_parser_session();
+    const char *source = "fn twice(value: i64) -> i64 { return value * 2 }\n"
+                         "fn thrice(value: i64) -> i64 { return value * 3 }\n"
+                         "fn apply(value: i64, body: fn(i64) -> i64) -> i64 {\n"
+                         "    var chosen = body\n"
+                         "    if (value > 100) { chosen = thrice }\n"
+                         "    return chosen(value)\n"
+                         "}\n"
+                         "fn answer() -> i64 { return apply(21, twice) }\n";
+    XgGlobalEvidence ev = {0};
+    XaAnalyzer *analyzer = NULL;
+
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, NULL));
+    const XgBodySummary *apply = evidence_find_body_by_name(&ev, "apply");
+    const XgBodySummary *twice = evidence_find_body_by_name(&ev, "twice");
+    const XgBodySummary *thrice = evidence_find_body_by_name(&ev, "thrice");
+    ASSERT_NOT_NULL(apply);
+    ASSERT_NOT_NULL(twice);
+    ASSERT_NOT_NULL(thrice);
+    ASSERT_EQ_UINT(apply->callsite_count, 1u);
+
+    const XgCallsiteSummary *call = xg_global_evidence_find_callsite(&ev, apply->callsite_start);
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(call->kind, XG_CALL_CLOSURE);
+
+    const XgCallableTargetSummary *targets = NULL;
+    uint32_t target_count = 0u;
+    ASSERT_TRUE(xg_global_evidence_callable_targets(&ev, call, &targets, &target_count));
+    ASSERT_EQ_UINT(target_count, 2u);
+    XgFuncId low = twice->func_id < thrice->func_id ? twice->func_id : thrice->func_id;
+    XgFuncId high = twice->func_id < thrice->func_id ? thrice->func_id : twice->func_id;
+    ASSERT_EQ_UINT(targets[0].target_func_id, low);
+    ASSERT_EQ_UINT(targets[1].target_func_id, high);
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls) {
     setup_parser_session();
     const char *source = "extern \"C\" { fn cos(x: f64) -> f64 }\n"
@@ -16353,6 +16434,8 @@ RUN_TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_bou
 RUN_TEST(global_evidence_composes_recursive_direct_call_effects);
 RUN_TEST(global_evidence_closes_transitive_named_nested_function_calls);
 RUN_TEST(global_evidence_closes_suspending_callable_parameter_targets);
+RUN_TEST(global_evidence_keeps_callable_parameter_targets_across_a_branch_join);
+RUN_TEST(global_evidence_meets_callable_targets_of_a_local_rebound_on_a_branch);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_producer_resolves_method_callsite_receivers);
 RUN_TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_methods);
