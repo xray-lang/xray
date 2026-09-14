@@ -648,6 +648,9 @@ TEST(mono_collector_uses_exact_method_owner_and_effect_identity) {
     ASSERT_EQ(c.instances[4].identity.receiver_type_arg_count, 1u);
     ASSERT_EQ(c.instances[4].identity.declaration_type_arg_count, 1u);
 
+    /* A generic method on a generic class instantiation is admitted the same
+     * way as on a generic struct: the concrete class instantiation and the
+     * method clone are both collected. */
     AstNode generic_class_method = first_method;
     AstNode *generic_class_methods[1] = {&generic_class_method};
     AstNode generic_class_owner = {.type = AST_CLASS_DECL};
@@ -658,9 +661,18 @@ TEST(mono_collector_uses_exact_method_owner_and_effect_identity) {
     identity.generic_decl = &generic_class_method;
     identity.owner_decl = &generic_class_owner;
     ASSERT(xa_generic_specialization_fact_valid(&identity));
-    ASSERT(xa_mono_collector_add(&c, "apply", &identity, NULL) == NULL);
-    ASSERT_EQ(c.count, 5);
-    ASSERT(c.rewrite_failed);
+    const char *generic_class_method_name = xa_mono_collector_add(&c, "apply", &identity, NULL);
+    ASSERT(generic_class_method_name != NULL);
+    ASSERT(strstr(generic_class_method_name, "$on$") != NULL);
+    ASSERT_EQ(c.count, 7);
+    ASSERT(c.instances[5].identity.generic_decl == &generic_class_owner);
+    ASSERT(c.instances[5].identity.owner_decl == NULL);
+    ASSERT_EQ(c.instances[5].identity.declaration_type_arg_count, 1u);
+    ASSERT(c.instances[6].identity.generic_decl == &generic_class_method);
+    ASSERT(c.instances[6].identity.owner_decl == &generic_class_owner);
+    ASSERT_EQ(c.instances[6].identity.receiver_type_arg_count, 1u);
+    ASSERT_EQ(c.instances[6].identity.declaration_type_arg_count, 1u);
+    ASSERT(!c.rewrite_failed);
 
     xa_mono_collector_free(&c);
 }
