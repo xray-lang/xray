@@ -131,9 +131,19 @@ XR_BUILTIN_PRELUDE_TYPE("StringBuilder", 0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Thread",        1, XR_TTHREAD,   GENERIC_1)
 
 /* ========== Prelude types declared in the standard library ==========
- * Path is a nominal owner for filesystem paths whose construction and
- * algorithms live in stdlib/path/path.xr as `export class Path`. */
-XR_BUILTIN_PRELUDE_DECLARATION("Path", "path")
+ * A prelude name whose declaration lives in a standard library module: the
+ * name resolves in type position without an import, to that one nominal
+ * class, while a value -- construction above all -- is reached only through
+ * the declaring module, `import sys` then `sys.OsMutex()`. Path is a nominal
+ * owner for filesystem paths whose construction and algorithms live in
+ * stdlib/path/path.xr as `export class Path`; the OS-thread locks live in
+ * stdlib/sys/sys.xr. */
+XR_BUILTIN_PRELUDE_DECLARATION("OsBarrier", "sys")
+XR_BUILTIN_PRELUDE_DECLARATION("OsCondvar", "sys")
+XR_BUILTIN_PRELUDE_DECLARATION("OsMutex",   "sys")
+XR_BUILTIN_PRELUDE_DECLARATION("OsOnce",    "sys")
+XR_BUILTIN_PRELUDE_DECLARATION("OsRwLock",  "sys")
+XR_BUILTIN_PRELUDE_DECLARATION("Path",      "path")
 
 /* ========== Resolver-known type heads ==========
  * Constructed by the analyzer rather than through the prelude symbol table. */

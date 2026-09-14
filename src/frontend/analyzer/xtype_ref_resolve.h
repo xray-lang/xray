@@ -43,6 +43,10 @@ XR_FUNC struct XrType *xr_tref_resolve(struct XrVMRuntime *X, const struct XrTyp
  * Use this whenever a constraint or generic type argument needs to participate
  * in subclass relationships; the bare xr_tref_resolve() loses inheritance
  * information because it always allocates a brand-new class XrType. */
+/* The standard library module that declares a prelude type name, or NULL for
+ * a prelude type the runtime itself provides. Such a name resolves in type
+ * position without an import; its values are reached only through the module. */
+XR_FUNC const char *xa_prelude_declaration_module(const char *name);
 XR_FUNC struct XrType *xr_tref_resolve_in_analyzer(struct XaAnalyzer *analyzer,
                                                    const struct XrTypeRef *tref);
 

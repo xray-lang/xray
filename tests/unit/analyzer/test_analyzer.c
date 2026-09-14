@@ -2715,6 +2715,36 @@ TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations) {
     setup_pool();
 }
 
+/* A prelude type declared by a standard library module -- Path by path, the
+ * OS locks by sys -- is a type name everywhere, but its values come from the
+ * declaring module: a bare `OsMutex()` names nothing, and says which import
+ * would. A runtime-provided prelude type such as Atomic stays constructible. */
+TEST(analyzer_module_declared_prelude_types_are_not_bare_constructors) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "var m = OsMutex()\n"
+                         "var p = Path(\"/tmp\")\n"
+                         "var counter = Atomic<i64>(0)\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "prelude_declarations.xr", program);
+    int diagnostic_count = 0;
+    int undeclared = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(a, &diagnostic_count); diag;
+         diag = diag->next) {
+        if (diag->severity != XR_DIAG_SEV_ERROR)
+            continue;
+        ASSERT(diag->code == XR_ERR_ANALYZE_UNDEFINED_VAR);
+        ASSERT(strstr(diag->message, diag->location.line == 1 ? "import sys" : "import path") !=
+               NULL);
+        undeclared++;
+    }
+    ASSERT(undeclared == 2);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -8121,6 +8151,7 @@ int main(void) {
     RUN_TEST(analyzer_deprecated_message_reaches_use_diagnostic);
     RUN_TEST(analyzer_stored_function_value_defaults_may_throw);
     RUN_TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations);
+    RUN_TEST(analyzer_module_declared_prelude_types_are_not_bare_constructors);
     RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_enum_record_construction_publishes_slot_plan);

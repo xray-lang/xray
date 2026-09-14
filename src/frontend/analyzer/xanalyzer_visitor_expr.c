@@ -1132,12 +1132,25 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     if (!sym) {
         /* Prelude type names used as constructors (e.g. Atomic(0)) are not
          * declared as variables but are valid call targets. Suppress the
-         * undeclared-variable error; the call visitor infers the return type. */
+         * undeclared-variable error; the call visitor infers the return type.
+         * A prelude type declared by a standard library module is only a
+         * type name here: its values come from the declaring module, so a
+         * bare `OsMutex()` names nothing until `sys` is imported. */
         XrVMRuntime *X = ctx->analyzer->isolate;
-        if (X) {
-            const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
-            if (symbols && xr_prelude_lookup_type(symbols, name, strlen(name)))
+        const XrPreludeSymbols *symbols = X ? xr_prelude_get_symbols(X) : NULL;
+        if (symbols && xr_prelude_lookup_type(symbols, name, strlen(name))) {
+            const char *declaring_module = xa_prelude_declaration_module(name);
+            if (!declaring_module)
                 return xr_type_new_unknown(NULL);
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Undeclared variable '%s': the type is a prelude name, but its values come "
+                     "from module '%s'; write `import %s` and `%s.%s(...)`",
+                     name, declaring_module, declaring_module, declaring_module, name);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_UNDEFINED_VAR, msg, &loc);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
 
         // Undeclared variable — detect common cross-language mistakes

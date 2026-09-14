@@ -1820,7 +1820,7 @@ static XrType *resolve_generic_value_struct_mono_instance(XaAnalyzer *analyzer,
 
 /* The standard library module whose exported class declares a prelude type,
  * or NULL when the prelude type has no xray declaration. */
-static const char *prelude_declaration_module(const char *name) {
+const char *xa_prelude_declaration_module(const char *name) {
     if (!name)
         return NULL;
 #define XR_BUILTIN_PRELUDE_DECLARATION(type_name, module_name)                                    \
@@ -1839,7 +1839,7 @@ static const char *prelude_declaration_module(const char *name) {
  * graph, in which case nothing in this compilation carries the declaration
  * either and the declaration-less prelude form stays self-consistent. */
 static XrType *resolve_prelude_declaration_in_analyzer(XaAnalyzer *analyzer, const char *name) {
-    const char *module_name = prelude_declaration_module(name);
+    const char *module_name = xa_prelude_declaration_module(name);
     if (!module_name)
         return NULL;
     XrHashMap *exports = resolve_graph_export_symbols(analyzer, module_name);
