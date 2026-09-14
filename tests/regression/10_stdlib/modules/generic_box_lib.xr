@@ -10,3 +10,16 @@ export class Box<T> {
 export fn boxOf(value: i64) -> Box<i64> {
     return Box<i64>(value)
 }
+
+export class Pair<A, B> {
+    first: A
+    second: B
+    constructor(first: A, second: B) {
+        this.first = first
+        this.second = second
+    }
+}
+
+export fn pairOf(first: i64, second: string) -> Pair<i64, string> {
+    return Pair<i64, string>(first, second)
+}

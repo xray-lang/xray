@@ -9,6 +9,9 @@ import { boxOf } from "./modules/generic_box_lib"
 @test fn selective_import_of_an_export_returning_an_instantiation() {
     var b = boxOf(6)
     assertEqual(b.get(), 6)
+    /* The field type is substituted from the instance's own declaration:
+     * this module imports only boxOf, so `Box` is bound to no local name. */
+    assertEqual(b.value, 6)
 }
 
 @test fn result_flows_into_a_generic_method_of_the_instantiation() {

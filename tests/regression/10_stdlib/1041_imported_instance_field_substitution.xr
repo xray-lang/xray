@@ -1,0 +1,26 @@
+// The type arguments of an instance are substituted into its member types
+// from the instance's own declaration, not from whatever the reading module
+// happens to have bound under the class's display name. This module imports
+// only the functions, so `Box` and `Pair` are bound to no local name here,
+// and a field read must still see the concrete element type.
+
+import { boxOf, pairOf } from "./modules/generic_box_lib"
+
+@test fn field_of_an_instance_whose_class_is_not_imported() {
+    var b = boxOf(6)
+    assertEqual(b.value, 6)
+    assertEqual(b.get(), 6)
+}
+
+@test fn field_read_flows_into_an_inferred_binding() {
+    var b = boxOf(7)
+    var v = b.value
+    assertEqual(v, 7)
+    assertEqual(v + 1, 8)
+}
+
+@test fn two_type_parameters_substitute_positionally() {
+    var p = pairOf(3, "three")
+    assertEqual(p.first, 3)
+    assertEqual(p.second, "three")
+}

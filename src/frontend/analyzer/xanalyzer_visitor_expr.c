@@ -2814,8 +2814,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);
             if (member_links && member_links->type) {
                 XrType *member_type = member_links->type;
-                XaSymbol *class_sym =
-                    xa_scope_lookup(ctx->analyzer->current_scope, obj_type->instance.class_name);
+                /* The instance already names its declaration, so the type
+                 * parameters come from there -- never from a lookup of the
+                 * display name in the reader's scope. A module that imports
+                 * only a function returning Box<i64> never binds `Box`, and
+                 * that must not leave the field types standing as the
+                 * declaration's own parameters. This is the same source the
+                 * interface branch above reads. */
+                XaSymbol *class_sym = class_info->declaration_symbol;
                 XaSymbolLinks *class_links =
                     class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
                 int type_param_count =
