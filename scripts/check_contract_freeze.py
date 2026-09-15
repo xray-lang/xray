@@ -865,6 +865,8 @@ CONTRACT_SPECS = (
             "tests/unit/program/xr_program_coroutine_branch_fixture.h",
             "tests/unit/program/xr_program_vm_fixture_writer.c",
             "tests/unit/program/test_xr_program_source_build.c",
+            "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+            "tests/unit/program/xr_program_source_cases.json",
         ),
     ),
     ContractSpec(
@@ -892,6 +894,8 @@ CONTRACT_SPECS = (
             "tests/unit/program/xr_program_cleanup_graph_fixture.h",
             "tests/unit/program/xr_program_coroutine_branch_fixture.h",
             "tests/unit/program/test_xr_program_source_build.c",
+            "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
+            "tests/unit/program/xr_program_source_cases.json",
         ),
     ),
 )

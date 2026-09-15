@@ -203,12 +203,23 @@ an inner registration discovered from a cold outer handler keeps its outer-handl
 closed owner payload, and cleanup-local branch place across Reference and both VM decode policies.
 This test-build decomposition changes no VM semantics or supported capability.
 
+Source fixture execution includes both VM decode policies, exact provider traces,
+typed return/error payloads, and cancellation at every declared suspension point.
+Construction of a private code view alone does not satisfy an execute expectation.
+A suspended child may transfer a class result inside the private execution tree:
+the parent adopts the child's carrier storage before destroying its frame and
+publishes the result on the verified normal edge. This is distinct from exporting
+class carriers to the host, which still fails closed at the public step/cancel
+boundary. The affine Pipe source proves normal return and four cancellation points,
+including class finalization/reclamation before frame disposal and no implicit copy.
+A separate invocation of the same child as a host entry verifies export rejection.
+
 anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h 44cab32da792042b788f5282f91a042f2c6deb76c65bf7be69c242cc36003c54
 anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h a69072ef2f14b4b1350dcdeb9a5facaf9ee36b4a04c5bf1b18f09727f5b3aa50
 anchor-sha256: CMakeLists.txt 5cbe10e2f0599c8f4db286797f119e4fdea855f12adea2f89e4ccd420543511b
 anchor-sha256: xisa/core/registry.json aa317e48543dd4d9c2d2808e9dbaa5745338df790ca7aa4a8e7604892755269d
 anchor-sha256: src/vm/xr_program_vm.h 18a60ac662d9be6377df0aa103cf971420da95a5c016cb10e3b25249413f365e
-anchor-sha256: src/vm/xr_program_vm.c ec658bfde0b99f5eb8df256b90892352a420e31422ba0ea7018a8dbf93a20baa
+anchor-sha256: src/vm/xr_program_vm.c ce35068a409b0a9a2138052dcc4280e317741eea2e1362b767463a3143df6e8c
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
 anchor-sha256: src/program/xr_program_verify.c fbc0f4d9b167efd73d068f3a013833ff0d424de38d7edfd43a7a0411debaa9ad
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
@@ -221,4 +232,6 @@ anchor-sha256: tests/unit/vm/test_xr_program_vm.c ac8e075604762f23d4743809c07696
 anchor-sha256: tests/unit/vm/test_xr_program_vm_runtime.c 75e731e0d36264735ad2f9625206b2ec323e14de9101f91d32827fdffbcce570
 anchor-sha256: tests/unit/vm/xr_program_vm_embedded_fixture.h 50d0314588ccc1e02c71fe8cf06f656ac559be97be1cc60c688da9e26bfcd0e4
 anchor-sha256: tests/unit/program/xr_program_vm_fixture_writer.c 9e8418945a6b029c67e4d85d76d6603a68f0c77f72cab8ff5a3b6f37691865ab
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 3c8916f1e8ccbeffdbe712f46e2ddd5941cbd9161fff4a4c460fd4a1a3e5b690
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 5cc66cc7b2541f775fb72a59126333ba6737f87633124a25ede97d86dbd89a46
+anchor-sha256: tests/unit/program/xr_program_source_cleanup_checks.inc.c 76ff7c2a6af7f1a6ddec6edd991ac22aa53d08ef7b9e326baec1d474d0969873
+anchor-sha256: tests/unit/program/xr_program_source_cases.json 69d65e71071b0e3be5758757dbdacbb5c0b17f1a2bb4ae9de5f27fd38b4d6796

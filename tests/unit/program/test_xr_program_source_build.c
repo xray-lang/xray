@@ -599,6 +599,12 @@ static void assert_vm_fixture_backend_contract(XrInstance *instance,
         ASSERT_NOT_NULL(code);
         ASSERT_EQ_INT(diagnostic.status, XR_VM_CODE_OK);
         ASSERT_EQ_INT(xr_vm_code_decode_policy(code), policies[index]);
+        XrVmOutcome outcome = xr_vm_code_execute(
+            code, instance, xr_validated_program_entry_function(program), NULL, 0u);
+        ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_RETURN);
+        ASSERT_EQ_INT(outcome.value.kind, XR_VM_VALUE_I64);
+        ASSERT_EQ_INT(outcome.value.as.i64, 42);
+        xr_vm_outcome_dispose(&outcome);
         xr_vm_code_free(code);
     }
 }
@@ -1057,6 +1063,8 @@ static bool source_build_fixture_add_facade(SourceBuildFixture *fixture,
     return facade_length >= 0 && (size_t) facade_length < sizeof(fixture->facade_path) &&
            write_source_file(fixture->facade_path, facade_source);
 }
+
+#include "xr_program_source_cleanup_checks.inc.c"
 
 static void assert_products_equal(const XrProgramSourceProduct *first,
                                   const XrProgramSourceProduct *second) {
@@ -4231,13 +4239,29 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     xr_reference_outcome_dispose(&reference);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
-    ProviderTrapCleanupProbe reference_probe = probe;
-    assert_vm_fixture_backend_contract(instance, first.program,
-                                                 XR_SOURCE_FIXTURE_PROVIDER_TRAP_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_fixture_backend_contract(first.program, profile,
-                                                  XR_SOURCE_FIXTURE_PROVIDER_TRAP_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[policy];
+        XrVmCode *code = NULL;
+        XrVmCodeDiagnostic diagnostic;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+        probe.events = 0u;
+        probe.clock_calls = 0u;
+        probe.close_calls = 0u;
+        XrVmOutcome outcome = xr_vm_code_execute(code, instance, entry, NULL, 0u);
+        ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_TRAP);
+        ASSERT_EQ_INT(outcome.trap, XR_VM_TRAP_PROVIDER_CALL_FAILED);
+        ASSERT_EQ_UINT(probe.events, 5u);
+        ASSERT_EQ_UINT(probe.clock_calls, 1u);
+        ASSERT_EQ_UINT(probe.close_calls, 4u);
+        xr_vm_outcome_dispose(&outcome);
+        xr_vm_code_free(code);
+    }
+    assert_aot_provider_trap_cleanup(
+        first.program, profile, entry, clock_requirement, io_requirement,
+        source_fixture_output_path(XR_SOURCE_FIXTURE_PROVIDER_TRAP_CLEANUP));
+
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4357,13 +4381,12 @@ TEST(source_owner_child_coroutine_provider_failure_composes_static_cleanup) {
                   XR_EXECUTION_OK);
     uint32_t entry = xr_validated_program_entry_function(product.program);
     child_cleanup_check_reference(instance, entry, &probe);
-    ChildCleanupProbe reference_probe = probe;
-    assert_vm_fixture_backend_contract(
-        instance, product.program, XR_SOURCE_FIXTURE_CHILD_COROUTINE_TRAP_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_fixture_backend_contract(
-        product.program, profile, XR_SOURCE_FIXTURE_CHILD_COROUTINE_TRAP_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
+    child_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_BASELINE_VIEW);
+    child_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_FIXED_ROWS);
+    assert_aot_child_cleanup(
+        product.program, profile, clock_requirement, io_requirement,
+        source_fixture_output_path(XR_SOURCE_FIXTURE_CHILD_COROUTINE_TRAP_CLEANUP));
+
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4483,13 +4506,11 @@ TEST(source_owner_shared_branching_cleanup_projects_private_cancel_graph) {
                   XR_EXECUTION_OK);
     uint32_t entry = xr_validated_program_entry_function(product.program);
     branching_cleanup_check_reference(instance, entry, &probe);
-    BranchingCleanupProbe reference_probe = probe;
-    assert_vm_fixture_backend_contract(instance, product.program,
-                                                 XR_SOURCE_FIXTURE_BRANCHING_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_fixture_backend_contract(product.program, profile,
-                                                  XR_SOURCE_FIXTURE_BRANCHING_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
+    branching_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_BASELINE_VIEW);
+    branching_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_FIXED_ROWS);
+    assert_aot_branching_cleanup(product.program, profile,
+                                 source_fixture_output_path(XR_SOURCE_FIXTURE_BRANCHING_CLEANUP));
+
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4581,13 +4602,11 @@ TEST(source_owner_nested_cleanup_projects_reason_chain) {
                   XR_EXECUTION_OK);
     uint32_t entry = xr_validated_program_entry_function(product.program);
     nested_cleanup_check_reference(instance, entry, &probe);
-    BranchingCleanupProbe reference_probe = probe;
-    assert_vm_fixture_backend_contract(instance, product.program,
-                                                 XR_SOURCE_FIXTURE_NESTED_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_fixture_backend_contract(product.program, profile,
-                                                  XR_SOURCE_FIXTURE_NESTED_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
+    nested_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_BASELINE_VIEW);
+    nested_cleanup_check_vm(instance, entry, &probe, XR_VM_DECODE_FIXED_ROWS);
+    assert_aot_nested_cleanup(product.program, profile,
+                              source_fixture_output_path(XR_SOURCE_FIXTURE_NESTED_CLEANUP));
+
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4831,14 +4850,24 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_EQ_UINT(probe.close_calls, 2u);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
-    assert_vm_fixture_backend_contract(instance, first.program,
-                                                 XR_SOURCE_FIXTURE_PIPE_PROVIDER);
-    ASSERT_EQ_UINT(probe.open_calls, 1u);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
-    assert_aot_fixture_backend_contract(first.program, profile,
-                                                  XR_SOURCE_FIXTURE_PIPE_PROVIDER);
-    ASSERT_EQ_UINT(probe.open_calls, 1u);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[policy];
+        XrVmCode *code = NULL;
+        XrVmCodeDiagnostic diagnostic;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+        XrVmOutcome outcome = xr_vm_code_execute(code, instance, entry, NULL, 0u);
+        ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_RETURN);
+        ASSERT_EQ_INT(outcome.value.kind, XR_VM_VALUE_I64);
+        ASSERT_EQ_INT(outcome.value.as.i64, 1);
+        ASSERT_EQ_UINT(probe.close_calls, (policy + 2u) * 2u);
+        ASSERT_EQ_UINT(probe.open_calls, policy + 2u);
+        xr_vm_outcome_dispose(&outcome);
+        xr_vm_code_free(code);
+    }
+    assert_aot_fixture_backend_contract(first.program, profile, XR_SOURCE_FIXTURE_PIPE_PROVIDER);
+
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -4965,12 +4994,24 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     ASSERT_EQ_UINT(probe.close_calls, 2u);
     ASSERT_TRUE(xr_execution_lease_release(&lease));
 
-    assert_vm_fixture_backend_contract(instance, first.program,
-                                                 XR_SOURCE_FIXTURE_PIPE_CLOSE_FAILURE);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[policy];
+        XrVmCode *code = NULL;
+        XrVmCodeDiagnostic diagnostic;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+        XrVmOutcome outcome = xr_vm_code_execute(code, instance, entry, NULL, 0u);
+        ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_RETURN);
+        ASSERT_EQ_INT(outcome.value.kind, XR_VM_VALUE_I64);
+        ASSERT_EQ_INT(outcome.value.as.i64, 1);
+        ASSERT_EQ_UINT(probe.close_calls, (policy + 2u) * 2u);
+        xr_vm_outcome_dispose(&outcome);
+        xr_vm_code_free(code);
+    }
     assert_aot_fixture_backend_contract(first.program, profile,
-                                                  XR_SOURCE_FIXTURE_PIPE_CLOSE_FAILURE);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
+                                        XR_SOURCE_FIXTURE_PIPE_CLOSE_FAILURE);
+
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -5099,12 +5140,10 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
 
     assert_uncaught_reference_error(first.program, instance, entry, entry_function->error_type_id,
                                     &probe);
-    assert_vm_fixture_backend_contract(instance, first.program,
-                                                 XR_SOURCE_FIXTURE_PIPE_UNCAUGHT_ERROR);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
-    assert_aot_fixture_backend_contract(first.program, profile,
-                                                  XR_SOURCE_FIXTURE_PIPE_UNCAUGHT_ERROR);
-    ASSERT_EQ_UINT(probe.close_calls, 2u);
+    assert_uncaught_vm_error(instance, entry, entry_function->error_type_id, &probe);
+    write_uncaught_error_aot(first.program, profile, entry, entry_function->error_type_id,
+                             source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_UNCAUGHT_ERROR));
+
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
     ASSERT_EQ_INT(xr_execution_instance_retire(instance, &execution_diagnostic), XR_EXECUTION_OK);
@@ -5402,13 +5441,34 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
     ASSERT_EQ_UINT(probe.close_calls, 4u);
     xr_reference_execution_free(reference_cancel);
 
-    PipeProviderProbe reference_probe = probe;
-    assert_vm_fixture_backend_contract(instance, first.program,
-                                                 XR_SOURCE_FIXTURE_PIPE_CANCEL_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_fixture_backend_contract(first.program, profile,
-                                                  XR_SOURCE_FIXTURE_PIPE_CANCEL_CLEANUP);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[policy];
+        probe.close_calls = 0u;
+        XrVmCode *code = NULL;
+        XrVmCodeDiagnostic vm_diagnostic;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &vm_diagnostic), XR_VM_CODE_OK);
+        XrVmExecution *vm = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm));
+        ASSERT_EQ_INT(xr_vm_execution_step(vm).kind, XR_VM_OUTCOME_SUSPENDED);
+        XrVmOutcome vm_return = xr_vm_execution_step(vm);
+        ASSERT_EQ_INT(vm_return.kind, XR_VM_OUTCOME_RETURN);
+        ASSERT_EQ_INT(vm_return.value.kind, XR_VM_VALUE_I64);
+        ASSERT_EQ_INT(vm_return.value.as.i64, 42);
+        ASSERT_EQ_UINT(probe.close_calls, 2u);
+        xr_vm_execution_free(vm);
+
+        XrVmExecution *vm_cancel = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm_cancel));
+        ASSERT_EQ_INT(xr_vm_execution_step(vm_cancel).kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED);
+        ASSERT_EQ_UINT(probe.close_calls, 4u);
+        xr_vm_execution_free(vm_cancel);
+        xr_vm_code_free(code);
+    }
+    assert_aot_pipe_cancel_cleanup(
+        first.program, profile, source_fixture_output_path(XR_SOURCE_FIXTURE_PIPE_CANCEL_CLEANUP));
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
@@ -5803,14 +5863,143 @@ TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspens
     ASSERT_NOT_NULL(instance);
 
     field_ref_cleanup_check_reference(instance, entry, &cleanup_probe);
-    FieldRefCleanupProbe reference_probe = cleanup_probe;
-    assert_vm_fixture_backend_contract(instance, first.program,
-                                                 XR_SOURCE_FIXTURE_REF_PARAMETER_COROUTINE);
-    ASSERT_EQ_INT(memcmp(&cleanup_probe, &reference_probe, sizeof(cleanup_probe)), 0);
-
-    assert_aot_fixture_backend_contract(first.program, profile,
-                                                  XR_SOURCE_FIXTURE_REF_PARAMETER_COROUTINE);
-    ASSERT_EQ_INT(memcmp(&cleanup_probe, &reference_probe, sizeof(cleanup_probe)), 0);
+    field_ref_cleanup_check_vm(instance, entry, &cleanup_probe, XR_VM_DECODE_BASELINE_VIEW);
+    field_ref_cleanup_check_vm(instance, entry, &cleanup_probe, XR_VM_DECODE_FIXED_ROWS);
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendIR *backend_ir = NULL;
+    ASSERT_EQ_INT(
+        xr_backend_ir_build(first.program, profile, &options, &backend_ir, &backend_diagnostic),
+        XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &repeated, &backend_diagnostic),
+                  XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int64_t * parameter_0"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int64_t * parameter_1"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int64_t * parameter_2"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_i64_nullary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
+    XrBackendFunction *backend_parent = &backend_ir->functions[entry];
+    XrBackendInstruction *backend_call = NULL;
+    for (uint32_t block = 0u; block < backend_parent->block_count; ++block)
+        for (uint32_t instruction = 0u;
+             instruction < backend_parent->blocks[block].instruction_count; ++instruction)
+            if (backend_parent->blocks[block].instructions[instruction].operation_id ==
+                XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
+                ASSERT_NULL(backend_call);
+                backend_call = &backend_parent->blocks[block].instructions[instruction];
+            }
+    ASSERT_NOT_NULL(backend_call);
+    ASSERT_EQ_UINT(backend_parent->coroutine_safepoint_count, 1u);
+    XrBackendCoroutineSafepoint *backend_point = &backend_parent->coroutine_safepoints[0];
+    ASSERT_EQ_UINT(backend_point->live_value_count, 3u);
+    uint32_t backend_child_id = backend_call->immediate.coroutine_call.function_id;
+    ASSERT_LT(backend_child_id, backend_ir->function_count);
+    uint32_t backend_parameter_count = backend_ir->functions[backend_child_id].parameter_count;
+    ASSERT_EQ_UINT(backend_parameter_count, 3u);
+    ASSERT_LT(backend_parameter_count + 1u, backend_call->operand_count);
+    uint32_t saved_live = backend_point->live_value_ids[0];
+    uint32_t saved_operand = backend_call->operands[backend_parameter_count];
+    backend_point->live_value_ids[0] = backend_call->operands[0];
+    backend_call->operands[backend_parameter_count] = backend_call->operands[0];
+    ASSERT_FALSE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    ASSERT_EQ_INT(backend_diagnostic.status, XR_BACKEND_INVARIANT_REJECTED);
+    backend_point->live_value_ids[0] = saved_live;
+    backend_call->operands[backend_parameter_count] = saved_operand;
+    ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    uint32_t projected_place = backend_call->operands[1];
+    ASSERT_LT(projected_place, function->value_count);
+    ASSERT_NE(function->value_positions[projected_place], 0u);
+    uint32_t project_block = function->value_blocks[projected_place];
+    uint32_t project_position = function->value_positions[projected_place] - 1u;
+    ASSERT_LT(project_block, backend_parent->block_count);
+    ASSERT_LT(project_position, backend_parent->blocks[project_block].instruction_count);
+    XrBackendInstruction *backend_project =
+        &backend_parent->blocks[project_block].instructions[project_position];
+    ASSERT_EQ_UINT(backend_project->result_id, projected_place);
+    ASSERT_EQ_UINT(backend_project->operation_id, XR_CORE_OP_CORE_CLASS_FIELD_PLACE);
+    uint32_t saved_ordinal = backend_project->immediate.field_ordinal;
+    backend_project->immediate.field_ordinal = class_type->field_count;
+    ASSERT_FALSE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    ASSERT_EQ_INT(backend_diagnostic.status, XR_BACKEND_INVARIANT_REJECTED);
+    backend_project->immediate.field_ordinal = saved_ordinal;
+    ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
+    const char *output_path = source_fixture_output_path(XR_SOURCE_FIXTURE_REF_PARAMETER_COROUTINE);
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_TRUE(
+            fprintf(output,
+                    "\nstatic uint32_t xr_probe_mode;\n"
+                    "static uint32_t xr_probe_count;\n"
+                    "static int64_t xr_probe_events[3];\n"
+                    "static int xr_probe_clock(void *context, uint32_t requirement, "
+                    "uint32_t operation, int64_t *result) {\n"
+                    "    (void)context;\n"
+                    "    if (requirement != UINT32_C(%u) || operation != 0 || !result || "
+                    "xr_probe_count != 0) return 1;\n"
+                    "    xr_probe_events[xr_probe_count++] = 0;\n"
+                    "    if (xr_probe_mode == 1) return 1;\n"
+                    "    *result = INT64_C(42);\n"
+                    "    return 0;\n"
+                    "}\n"
+                    "static int xr_probe_close(void *context, uint32_t requirement, "
+                    "uint32_t operation, int64_t handle, uint8_t *result) {\n"
+                    "    (void)context;\n"
+                    "    if (requirement != UINT32_C(%u) || operation != 0 || !result || "
+                    "xr_probe_count >= 3) return 1;\n"
+                    "    xr_probe_events[xr_probe_count++] = handle;\n"
+                    "    *result = UINT8_C(1);\n"
+                    "    return 0;\n"
+                    "}\n"
+                    "int main(void) {\n"
+                    "    static const uint32_t expected_kind[3] = {0, 2, 3};\n"
+                    "    static const uint32_t expected_count[3] = {3, 3, 2};\n"
+                    "    static const int64_t expected_events[3][3] = {\n"
+                    "        {0, INT64_C(2147483649), INT64_C(2147483652)},\n"
+                    "        {0, INT64_C(2147483649), INT64_C(2147483652)},\n"
+                    "        {INT64_C(2147483647), INT64_C(2147483649), 0},\n"
+                    "    };\n"
+                    "    for (xr_probe_mode = 0; xr_probe_mode < 3; ++xr_probe_mode) {\n"
+                    "        xr_probe_count = 0;\n"
+                    "        XrAotEntryCoroutineFrame frame;\n"
+                    "        xr_aot_entry_coroutine_frame_initialize(&frame);\n"
+                    "        frame.context.provider_call_i64_nullary = xr_probe_clock;\n"
+                    "        frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                    "        XrBackendNativeOutcome outcome = "
+                    "xr_aot_entry_coroutine_step(&frame);\n"
+                    "        if (outcome.kind != 1 || outcome.state_id != 1 || "
+                    "outcome.safepoint_id != 0 || xr_probe_count != 0) return 255;\n"
+                    "        outcome = xr_probe_mode == 2 "
+                    "? xr_aot_entry_coroutine_cancel(&frame) "
+                    ": xr_aot_entry_coroutine_step(&frame);\n"
+                    "        xr_aot_entry_coroutine_frame_dispose(&frame);\n"
+                    "        if (outcome.kind != expected_kind[xr_probe_mode]) return 254;\n"
+                    "        if (outcome.kind == 0 && "
+                    "outcome.value != INT64_C(6442450958)) return 253;\n"
+                    "        if (outcome.kind == 2 && outcome.safepoint_id != 7) return 252;\n"
+                    "        if (xr_probe_count != expected_count[xr_probe_mode]) return 251;\n"
+                    "        for (uint32_t event = 0; event < xr_probe_count; ++event) {\n"
+                    "            if (xr_probe_events[event] != "
+                    "expected_events[xr_probe_mode][event]) return 250;\n"
+                    "        }\n"
+                    "    }\n"
+                    "    return 230;\n"
+                    "}\n",
+                    clock_requirement, io_requirement) > 0);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);
@@ -5891,7 +6080,7 @@ static bool inspect_read_existential_coroutine(const XrValidatedProgram *program
            owner_type->interface_id == borrow_type->interface_id;
 }
 
-static bool run_read_existential_coroutine_reference(XrValidatedProgram *program,
+static bool run_read_existential_coroutine_executors(XrValidatedProgram *program,
                                                      XrTargetProfile *profile, uint32_t entry) {
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -5907,7 +6096,12 @@ static bool run_read_existential_coroutine_reference(XrValidatedProgram *program
     bool ok = false;
     XrReferenceExecution *reference = NULL;
     XrReferenceExecution *reference_cancel = NULL;
+    XrVmCode *code = NULL;
+    XrVmExecution *vm = NULL;
+    XrVmExecution *vm_cancel = NULL;
     XrReferenceOutcome reference_outcome;
+    XrVmOutcome vm_outcome;
+    XrVmCodeDiagnostic vm_diagnostic;
     if (!xr_reference_execution_create(instance, entry, NULL, 0u, NULL, &reference))
         goto cleanup;
     reference_outcome = xr_reference_execution_step(reference);
@@ -5925,22 +6119,139 @@ static bool run_read_existential_coroutine_reference(XrValidatedProgram *program
         xr_reference_execution_step(reference_cancel).kind != XR_REFERENCE_OUTCOME_SUSPENDED ||
         xr_reference_execution_cancel(reference_cancel).kind != XR_REFERENCE_OUTCOME_CANCELLED)
         goto cleanup;
-    assert_vm_fixture_backend_contract(
-        instance, program, XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE);
-    assert_aot_fixture_backend_contract(
-        program, profile, XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[policy];
+        if (xr_vm_code_build(instance, &options, &code, &vm_diagnostic) != XR_VM_CODE_OK ||
+            !xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm))
+            goto cleanup;
+        vm_outcome = xr_vm_execution_step(vm);
+        if (vm_outcome.kind != XR_VM_OUTCOME_SUSPENDED || vm_outcome.state_id != 1u ||
+            vm_outcome.safepoint_id != 0u)
+            goto cleanup;
+        vm_outcome = xr_vm_execution_step(vm);
+        if (vm_outcome.kind != XR_VM_OUTCOME_RETURN || vm_outcome.value.kind != XR_VM_VALUE_I64 ||
+            vm_outcome.value.as.i64 != 42)
+            goto cleanup;
+        xr_vm_execution_free(vm);
+        vm = NULL;
+        if (!xr_vm_execution_create(code, instance, entry, NULL, 0u, &vm_cancel) ||
+            xr_vm_execution_step(vm_cancel).kind != XR_VM_OUTCOME_SUSPENDED ||
+            xr_vm_execution_cancel(vm_cancel).kind != XR_VM_OUTCOME_CANCELLED)
+            goto cleanup;
+        xr_vm_execution_free(vm_cancel);
+        vm_cancel = NULL;
+        xr_vm_code_free(code);
+        code = NULL;
+    }
     ok = true;
 cleanup:
     if (reference)
         xr_reference_execution_free(reference);
     if (reference_cancel)
         xr_reference_execution_free(reference_cancel);
+    if (vm)
+        xr_vm_execution_free(vm);
+    if (vm_cancel)
+        xr_vm_execution_free(vm_cancel);
+    if (code)
+        xr_vm_code_free(code);
     bool lifecycle_ok = xr_execution_instance_begin_drain(instance, &diagnostic) == XR_EXECUTION_OK;
     lifecycle_ok =
         xr_execution_instance_retire(instance, &diagnostic) == XR_EXECUTION_OK && lifecycle_ok;
     lifecycle_ok =
         xr_execution_instance_free(&instance, &diagnostic) == XR_EXECUTION_OK && lifecycle_ok;
     return ok && lifecycle_ok;
+}
+
+static bool write_read_existential_coroutine_aot(const XrGeneratedC *generated,
+                                                 XrSourceFixtureId fixture_id) {
+    if (!source_fixture_output_path(fixture_id))
+        return true;
+    FILE *output = fopen(source_fixture_output_path(fixture_id), "wb");
+    if (!output)
+        return false;
+    bool ok =
+        fwrite(generated->bytes, 1u, generated->size, output) == generated->size &&
+        fprintf(output, "\nint main(void) {\n"
+                        "    XrAotEntryCoroutineFrame resumed;\n"
+                        "    xr_aot_entry_coroutine_frame_initialize(&resumed);\n"
+                        "    XrBackendNativeOutcome outcome = "
+                        "xr_aot_entry_coroutine_step(&resumed);\n"
+                        "    if (outcome.kind != UINT32_C(1) || outcome.state_id != UINT32_C(1) || "
+                        "outcome.safepoint_id != UINT32_C(0)) return 255;\n"
+                        "    outcome = xr_aot_entry_coroutine_step(&resumed);\n"
+                        "    if (outcome.kind != UINT32_C(0) || outcome.value != INT64_C(42)) "
+                        "return 254;\n"
+                        "    xr_aot_entry_coroutine_frame_dispose(&resumed);\n"
+                        "    XrAotEntryCoroutineFrame cancelled;\n"
+                        "    xr_aot_entry_coroutine_frame_initialize(&cancelled);\n"
+                        "    outcome = xr_aot_entry_coroutine_step(&cancelled);\n"
+                        "    if (outcome.kind != UINT32_C(1)) return 253;\n"
+                        "    outcome = xr_aot_entry_coroutine_cancel(&cancelled);\n"
+                        "    if (outcome.kind != UINT32_C(3) || outcome.state_id != UINT32_C(1)) "
+                        "return 252;\n"
+                        "    xr_aot_entry_coroutine_frame_dispose(&cancelled);\n"
+                        "    return 231;\n"
+                        "}\n") > 0;
+    return fclose(output) == 0 && ok;
+}
+
+static bool emit_read_existential_coroutine_aot(const XrValidatedProgram *program,
+                                                const XrTargetProfile *profile,
+                                                const ReadExistentialCoroutineProbe *probe,
+                                                XrSourceFixtureId fixture_id) {
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic diagnostic;
+    XrBackendIR *ir = NULL;
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    bool ok = false;
+    if (xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) != XR_BACKEND_OK ||
+        !xr_backend_ir_translation_validate(ir, &diagnostic) ||
+        xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) != XR_BACKEND_OK ||
+        xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) != XR_BACKEND_OK ||
+        generated.size != repeated.size ||
+        memcmp(generated.bytes, repeated.bytes, generated.size) != 0 ||
+        !strstr(generated.bytes, "child_active_0") || strstr(generated.bytes, "TargetPlan"))
+        goto cleanup;
+    XrBackendFunction *parent = &ir->functions[probe->entry];
+    XrBackendInstruction *call = NULL;
+    for (uint32_t block = 0u; block < parent->block_count; ++block) {
+        XrBackendBlock *candidate_block = &parent->blocks[block];
+        for (uint32_t instruction = 0u; instruction < candidate_block->instruction_count;
+             ++instruction) {
+            XrBackendInstruction *candidate = &candidate_block->instructions[instruction];
+            if (candidate->operation_id != XR_CORE_OP_CORE_COROUTINE_CALL_SEALED)
+                continue;
+            if (call)
+                goto cleanup;
+            call = candidate;
+        }
+    }
+    if (!call || parent->coroutine_safepoint_count != 1u ||
+        parent->coroutine_safepoints[0].live_value_count != 1u)
+        goto cleanup;
+    XrBackendCoroutineSafepoint *point = &parent->coroutine_safepoints[0];
+    uint32_t parameter_count = ir->functions[probe->child_id].parameter_count;
+    if (parameter_count != 1u || parameter_count >= call->operand_count)
+        goto cleanup;
+    uint32_t saved_live = point->live_value_ids[0];
+    uint32_t saved_operand = call->operands[parameter_count];
+    point->live_value_ids[0] = call->operands[0];
+    call->operands[parameter_count] = call->operands[0];
+    bool rejected = !xr_backend_ir_verify(ir, &diagnostic) &&
+                    diagnostic.status == XR_BACKEND_INVARIANT_REJECTED;
+    point->live_value_ids[0] = saved_live;
+    call->operands[parameter_count] = saved_operand;
+    ok = rejected && xr_backend_ir_verify(ir, &diagnostic) &&
+         write_read_existential_coroutine_aot(&generated, fixture_id);
+cleanup:
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    return ok;
 }
 
 TEST(source_owner_keeps_read_existential_root_across_child_suspension) {
@@ -5974,25 +6285,15 @@ TEST(source_owner_keeps_read_existential_root_across_child_suspension) {
     assert_products_equal(&first, &second);
     ReadExistentialCoroutineProbe probe;
     ASSERT_TRUE(inspect_read_existential_coroutine(first.program, &probe));
-    ASSERT_TRUE(run_read_existential_coroutine_reference(first.program, profile, probe.entry));
-    ASSERT_TRUE(source_fixture_output_path(XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE) ==
-                selected_source_output);
+    ASSERT_TRUE(run_read_existential_coroutine_executors(first.program, profile, probe.entry));
+    ASSERT_TRUE(emit_read_existential_coroutine_aot(first.program, profile, &probe,
+                                                    XR_SOURCE_FIXTURE_READ_EXISTENTIAL_COROUTINE));
 cleanup:
     xr_program_source_product_free(&second);
     xr_program_source_product_free(&first);
     xr_target_profile_free(profile);
     source_build_fixture_free(&fixture);
 }
-
-static const uint32_t affine_coroutine_states[] = {1u, 1u, 2u, 3u};
-static const uint32_t affine_coroutine_safepoints[] = {0u, 0u, 1u, 2u};
-static const uint32_t affine_coroutine_closes_before[] = {0u, 0u, 2u, 2u};
-static const int64_t affine_coroutine_close_handles[] = {
-    2147483644,
-    2147483645,
-    2147483646,
-    2147483647,
-};
 
 static void assert_affine_reference_executions(XrInstance *instance, uint32_t entry,
                                                PipeCloseSequenceProbe *probe) {
@@ -6154,13 +6455,33 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
     ASSERT_NOT_NULL(instance);
 
     assert_affine_reference_executions(instance, entry, &probe);
-    PipeCloseSequenceProbe reference_probe = probe;
-    assert_vm_fixture_backend_contract(instance, product.program,
-                                                 XR_SOURCE_FIXTURE_AFFINE_COROUTINE_RESULT);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
-    assert_aot_fixture_backend_contract(product.program, profile,
-                                                  XR_SOURCE_FIXTURE_AFFINE_COROUTINE_RESULT);
-    ASSERT_EQ_INT(memcmp(&probe, &reference_probe, sizeof(probe)), 0);
+    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policies[policy];
+        SourceVmCleanupLifecycle lifecycle = {0};
+        options.lifecycle_context = &lifecycle;
+        options.lifecycle_event = record_vm_cleanup_lifecycle;
+        XrVmCode *code = NULL;
+        XrVmCodeDiagnostic diagnostic;
+        ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+        assert_affine_vm_executions(code, instance, entry, &probe, &lifecycle);
+        pipe_close_sequence_reset(&probe, affine_coroutine_close_handles, 2u);
+        XrVmExecution *host_execution = NULL;
+        ASSERT_TRUE(xr_vm_execution_create(code, instance, child_id, NULL, 0u, &host_execution));
+        ASSERT_EQ_INT(xr_vm_execution_step(host_execution).kind, XR_VM_OUTCOME_SUSPENDED);
+        ASSERT_EQ_INT(xr_vm_execution_step(host_execution).kind, XR_VM_OUTCOME_SUSPENDED);
+        XrVmOutcome exported = xr_vm_execution_step(host_execution);
+        ASSERT_EQ_INT(exported.kind, XR_VM_OUTCOME_INVALID_INVOCATION);
+        ASSERT_EQ_INT(exported.value.kind, XR_VM_VALUE_VOID);
+        ASSERT_EQ_UINT(probe.calls, 2u);
+        xr_vm_outcome_dispose(&exported);
+        xr_vm_execution_free(host_execution);
+        xr_vm_code_free(code);
+    }
+    assert_aot_affine_coroutine_cleanup(
+        product.program, profile,
+        source_fixture_output_path(XR_SOURCE_FIXTURE_AFFINE_COROUTINE_RESULT));
 
     ASSERT_EQ_INT(xr_execution_instance_begin_drain(instance, &execution_diagnostic),
                   XR_EXECUTION_OK);

@@ -2484,7 +2484,7 @@ static bool vm_materialize_suspension_edge(XrVmExecution *execution, uint32_t su
     return true;
 }
 
-XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
+static XrVmOutcome vm_execution_step(XrVmExecution *execution) {
     if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
         return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
     if (execution->suspended && !execution->child &&
@@ -2999,9 +2999,6 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                                      callee->parameter_count, execution->depth + 1u);
                 xr_free(arguments);
                 if (nested.kind != XR_VM_OUTCOME_RETURN) {
-                    if (vm_outcome_contains_class(nested))
-                        nested = vm_execution_outcome(execution,
-                                                      XR_VM_OUTCOME_INVALID_INVOCATION);
                     if (nested.kind == XR_VM_OUTCOME_TRAP &&
                         nested.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
                         instruction.successor_count == 1u) {
@@ -3097,7 +3094,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 const XrValidatedFunction *callee =
                     &execution->context.code->program->functions[callee_id];
                 uint64_t child_steps = execution->child->context.steps;
-                XrVmOutcome child = xr_vm_execution_step(execution->child);
+                XrVmOutcome child = vm_execution_step(execution->child);
                 uint64_t child_delta = execution->child->context.steps - child_steps;
                 if (child_delta >
                     execution->context.code->options.max_steps - execution->context.steps) {
@@ -3210,9 +3207,6 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 result.value = instruction.operand_count == 0u
                                    ? void_value()
                                    : execution->values[instruction.operands[0]].as.value;
-                if (vm_outcome_contains_class(result))
-                    result = vm_execution_outcome(execution,
-                                                  XR_VM_OUTCOME_INVALID_INVOCATION);
                 vm_execution_release_lease(execution);
                 return result;
             }
@@ -3224,7 +3218,7 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
     }
 }
 
-XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
+static XrVmOutcome vm_execution_cancel(XrVmExecution *execution) {
     if (!execution || execution->finished || !execution->suspended ||
         execution->cancel_block_id == XR_PROGRAM_LOCATION_NONE ||
         !xr_execution_lease_is_valid(&execution->lease))
@@ -3232,7 +3226,7 @@ XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
     uint32_t successor_index = 1u;
     if (execution->child) {
         uint64_t child_steps = execution->child->context.steps;
-        XrVmOutcome child = xr_vm_execution_cancel(execution->child);
+        XrVmOutcome child = vm_execution_cancel(execution->child);
         uint64_t child_delta = child.steps - child_steps;
         if (child_delta > execution->context.code->options.max_steps - execution->context.steps) {
             execution->finished = true;
@@ -3278,7 +3272,23 @@ XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
     execution->cancel_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->suspension_block_id = XR_PROGRAM_LOCATION_NONE;
     execution->suspension_instruction_id = XR_PROGRAM_LOCATION_NONE;
-    return xr_vm_execution_step(execution);
+    return vm_execution_step(execution);
+}
+
+/* Child results remain in the execution tree, whose parent adopts their storage.
+ * Only a host-facing outcome crosses the unsupported class-export boundary. */
+XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
+    XrVmOutcome outcome = vm_execution_step(execution);
+    return vm_outcome_contains_class(outcome)
+               ? vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION)
+               : outcome;
+}
+
+XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution) {
+    XrVmOutcome outcome = vm_execution_cancel(execution);
+    return vm_outcome_contains_class(outcome)
+               ? vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION)
+               : outcome;
 }
 
 void xr_vm_execution_free(XrVmExecution *execution) {

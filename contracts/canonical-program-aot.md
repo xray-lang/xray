@@ -228,6 +228,15 @@ the actual generated allocator, and cover nested value isolation, each allocatio
 invalid private dispatch, unchanged failed-copy outputs, destruction, and forbidden symbol absence.
 Those private-state mutations are materialization checks, not source-language mutation examples.
 
+The cleanup source fixtures emit dedicated native drivers for provider refusal,
+child cleanup composition, branching and nested cleanup, typed uncaught errors,
+place-backed cancellation, REF/READ child suspension, and affine child results.
+Each driver executes its declared scenarios and checks exact outcomes and provider
+traces; an ordinary standalone main does not qualify those scenarios. The REF
+fixture's exit byte is the dedicated driver's success oracle, not the ordinary
+program result modulo 256. Both generated C emissions must agree byte-for-byte.
+The reusable checks remain test-private and are part of the governed fixture source.
+
 anchor-sha256: tests/unit/program/xr_program_cleanup_graph_fixture.h 44cab32da792042b788f5282f91a042f2c6deb76c65bf7be69c242cc36003c54
 anchor-sha256: tests/unit/program/xr_program_coroutine_branch_fixture.h a69072ef2f14b4b1350dcdeb9a5facaf9ee36b4a04c5bf1b18f09727f5b3aa50
 anchor-sha256: CMakeLists.txt 5cbe10e2f0599c8f4db286797f119e4fdea855f12adea2f89e4ccd420543511b
@@ -249,4 +258,6 @@ anchor-sha256: scripts/check_xr_program_aot_contracts.py eda49f1e68b1f9060e4224e
 anchor-sha256: scripts/check_xr_program_aot_native.py 56822ee193168c2f76f549afbbaacaf3ed99f0236bf531b2500e52337881c2e2
 anchor-sha256: scripts/check_xr_program_aot_providers.py 51b1bdc7b16aa8709ba082ad185dcd0ca59af2f3bc10428d8d4ef480c80acbc0
 anchor-sha256: tests/unit/aot/test_xr_program_aot.c 23d4c343a56a42f718cc8a0c6f6860b20add56f672c013c31c73987c928802db
-anchor-sha256: tests/unit/program/test_xr_program_source_build.c 3c8916f1e8ccbeffdbe712f46e2ddd5941cbd9161fff4a4c460fd4a1a3e5b690
+anchor-sha256: tests/unit/program/test_xr_program_source_build.c 5cc66cc7b2541f775fb72a59126333ba6737f87633124a25ede97d86dbd89a46
+anchor-sha256: tests/unit/program/xr_program_source_cleanup_checks.inc.c 76ff7c2a6af7f1a6ddec6edd991ac22aa53d08ef7b9e326baec1d474d0969873
+anchor-sha256: tests/unit/program/xr_program_source_cases.json 69d65e71071b0e3be5758757dbdacbb5c0b17f1a2bb4ae9de5f27fd38b4d6796
