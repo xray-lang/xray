@@ -264,8 +264,7 @@ static void register_inheritable_builtin_class(XaAnalyzer *analyzer, const char 
         if (!member_links)
             continue;
         if (member->is_method) {
-            member_links->type =
-                xa_builtin_parse_full_signature(analyzer->isolate, member->signature);
+            member_links->type = xa_builtin_parse_full_signature(analyzer, member->signature);
             xa_class_info_add_method(info, member_sym);
             if (strcmp(member->name, "constructor") == 0 && member_links->type &&
                 XR_TYPE_IS_FUNCTION(member_links->type)) {
@@ -285,7 +284,7 @@ static void register_inheritable_builtin_class(XaAnalyzer *analyzer, const char 
                 type_text++;
             while (type_text && *type_text == ' ')
                 type_text++;
-            member_links->type = xa_builtin_parse_type_string(analyzer->isolate, type_text);
+            member_links->type = xa_builtin_parse_type_string(analyzer, type_text);
             xa_class_info_add_field(info, member_sym);
         }
         if (!member_links->type)
@@ -2149,8 +2148,8 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (!links)
             continue;
-        links->type = xa_builtin_parse_full_signature_for_module(
-            analyzer->isolate, mod->name, member->signature);
+        links->type =
+            xa_builtin_parse_full_signature_for_module(analyzer, mod->name, member->signature);
         if (!links->type)
             links->type = xr_type_new_unknown(analyzer->isolate);
         links->declared_type = links->type;

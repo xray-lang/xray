@@ -3647,11 +3647,9 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
                         const char *type_str = builtin_sig + 1;
                         while (*type_str == ' ')
                             type_str++;
-                        member_type =
-                            xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                        member_type = xa_builtin_parse_type_string(ctx->analyzer, type_str);
                     } else {
-                        member_type =
-                            xa_builtin_parse_full_signature(ctx->analyzer->isolate, builtin_sig);
+                        member_type = xa_builtin_parse_full_signature(ctx->analyzer, builtin_sig);
                     }
                 }
             }

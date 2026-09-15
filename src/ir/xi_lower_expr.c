@@ -7957,7 +7957,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         struct XrType *result_type = xi_lower_node_type(l, node);
         if (xi_lower_type_is_unknown(result_type)) {
             XrType *builtin_result =
-                xa_builtin_get_method_return_type(l->isolate, method_receiver_type, ma->name);
+                xa_builtin_get_method_return_type(l->analyzer, method_receiver_type, ma->name);
             if (builtin_result && !xi_lower_type_is_unknown(builtin_result))
                 result_type = builtin_result;
         }

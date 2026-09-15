@@ -15,6 +15,8 @@
 #include "runtime/xisolate_api.h"
 #include "module/xmodule_identity.h"
 #include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
 #include "../../../src/analysis/xglobal_summary.h"
 #include "../../../src/runtime/class/xclass.h"
@@ -119,6 +121,8 @@ TEST(native_type_lookup_and_typed_json_contract_are_total) {
 TEST(native_module_object_and_enum_metadata) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(xr_compiler_session_current_for_isolate(iso));
+    ASSERT_NOT_NULL(analyzer);
 
     const XaBuiltinObjectShape *object_shape = xa_builtin_get_object_shape("Coro", "CoroDeadlock");
     ASSERT_NOT_NULL(object_shape);
@@ -135,7 +139,7 @@ TEST(native_module_object_and_enum_metadata) {
     const XaBuiltinMember *connect_fd = find_module_member("net", "__connectFd");
     ASSERT_NOT_NULL(connect_fd);
     ASSERT_TRUE(connect_fd->is_internal);
-    XrType *fn = xa_builtin_parse_full_signature_for_module(iso, "net", connect_fd->signature);
+    XrType *fn = xa_builtin_parse_full_signature_for_module(analyzer, "net", connect_fd->signature);
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
@@ -152,14 +156,16 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_STR_EQ(conn_bridge->source_storage_field, "_storage");
     ASSERT_NULL(xa_builtin_find_source_provider_bridge("http", "NetConn"));
 
-    XrType *net_conn_leaf_type = xa_builtin_parse_type_string_for_module(iso, "net", "NetConn");
+    XrType *net_conn_leaf_type =
+        xa_builtin_parse_type_string_for_module(analyzer, "net", "NetConn");
     ASSERT_NOT_NULL(net_conn_leaf_type);
     ASSERT_EQ_INT(net_conn_leaf_type->kind, XR_KIND_INSTANCE);
     ASSERT_STR_EQ(net_conn_leaf_type->instance.class_name, "NetConn");
-    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(iso, "http", "NetConn")->kind,
+    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(analyzer, "http", "NetConn")->kind,
                   XR_KIND_ERROR);
-    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(iso, "http", "__NetConnStorage")->kind,
-                  XR_KIND_ERROR);
+    ASSERT_EQ_INT(
+        xa_builtin_parse_type_string_for_module(analyzer, "http", "__NetConnStorage")->kind,
+        XR_KIND_ERROR);
 
     /* ws is a pure-script module: its entire connection layer (WsConn,
      * connect, send/recv, serve) lives in stdlib/ws/ws.xr, so ws exposes no
@@ -210,6 +216,7 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NOT_NULL(find_module_member("io", "__fileRead"));
     ASSERT_NOT_NULL(find_module_member("io", "__stat"));
 
+    xa_analyzer_free(analyzer);
     xray_vm_delete(iso);
 }
 

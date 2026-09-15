@@ -20,6 +20,8 @@
 #include "../../runtime/value/xtype_names.h"
 #include "../../base/xdefs.h"
 
+struct XaAnalyzer;
+
 typedef enum XaBuiltinReturnOwnership {
     XA_BUILTIN_RETURN_UNKNOWN = 0,
     XA_BUILTIN_RETURN_FRESH,
@@ -174,7 +176,7 @@ XR_FUNC const XaBuiltinType *xa_builtin_get_by_name(const char *name);
 
 /* Full function type of a builtin static member (string.fromUtf8, ...), or
  * NULL when the type or member is unknown. */
-XR_FUNC XrType *xa_builtin_static_member_type(struct XrVMRuntime *X, const char *type_name,
+XR_FUNC XrType *xa_builtin_static_member_type(struct XaAnalyzer *analyzer, const char *type_name,
                                               const char *member_name);
 
 // Create fake symbols for built-in members (for LSP)
@@ -208,8 +210,8 @@ XR_FUNC const char *xa_builtin_get_member_doc(XrType *type, const char *member_n
 // Get method return type (for type inference)
 // Returns the return type of a built-in method, with generic substitution
 // e.g., Array<int>.pop() returns int?, Array<int>.map(fn) returns Array<U>
-XR_FUNC XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type,
-                                                  const char *method_name);
+XR_FUNC XrType *xa_builtin_get_method_return_type(struct XaAnalyzer *analyzer,
+                                                  XrType *container_type, const char *method_name);
 
 // R2-2 stopgap: overflow-control methods on fixed-width int receivers.
 // checked*/saturating*/*Overflows still compute at int64 width in both
@@ -326,18 +328,17 @@ XR_FUNC const char *xa_builtin_find_handle_module(const char *handle_name);
 // Set script directory for .xrd file search
 XR_FUNC void xa_builtin_set_script_dir(const char *dir);
 
-// Parse a type string (e.g., "f64", "i64?", "Array<string>") into XrType
-XR_FUNC XrType *xa_builtin_parse_type_string(XrVMRuntime *X, const char *s);
-XR_FUNC XrType *xa_builtin_parse_type_string_for_module(XrVMRuntime *X, const char *module_name,
-                                                        const char *s);
-
-// Parse return type from signature string (e.g., "(x: i64): string" -> string type)
-XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char *sig);
+/* Parse builtin metadata with exact prelude enum declaration identities.
+ * Semantic consumers must supply their analyzer. NULL is only for metadata
+ * display callers that do not publish analyzed program facts. */
+XR_FUNC XrType *xa_builtin_parse_type_string(struct XaAnalyzer *analyzer, const char *s);
+XR_FUNC XrType *xa_builtin_parse_type_string_for_module(struct XaAnalyzer *analyzer,
+                                                        const char *module_name, const char *s);
 
 // Parse full function signature including parameter types
 // e.g., "(data: string, level?: i64): string?" -> fn(string, int): string?
-XR_FUNC XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig);
-XR_FUNC XrType *xa_builtin_parse_full_signature_for_module(XrVMRuntime *X,
+XR_FUNC XrType *xa_builtin_parse_full_signature(struct XaAnalyzer *analyzer, const char *sig);
+XR_FUNC XrType *xa_builtin_parse_full_signature_for_module(struct XaAnalyzer *analyzer,
                                                            const char *module_name,
                                                            const char *sig);
 

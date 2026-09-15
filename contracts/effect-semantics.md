@@ -329,6 +329,15 @@ unit-enum flag. Analyzer-local enum IDs, pointers, display names alone, empty
 field-name sentinels, and backend type guesses are never authority. XSM has a
 hard schema cutover and the independent verifier reconstructs the stable
 identity, layout hash, field-name/type sequence, and canonical type-key link.
+Builtin signature types resolve prelude enums through the consuming analyzer's
+registry declaration. The result retains the declaration's nominal reference,
+variant layout, and exact generic arguments through nullable, container, and
+nested callable types. Channel result inference uses that same declaration
+owner. Wrong arity or a missing declaration fails closed; same spelling never
+replaces nominal identity, and generic enum results are not class instances.
+Context-free parsing is restricted to declaration templates and display data;
+it cannot publish analyzed source facts. Runtime and backend representations
+continue to consume the existing exact enum contract.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them
@@ -603,12 +612,12 @@ anchor-sha256: src/ir/xi.h 66968360c6fc99386ed9df4c89336e66df54a6680e05061de4fab
 anchor-sha256: src/ir/xi_lower.c f217757c936c4a223cf780a6392d4e26d5d430901c9ae16534b6d248419025ff
 anchor-sha256: src/app/cli/xcmd_verify.c 488650c108fe0276f2f98ce69f961be1a3bfeca1962b72af93d74b15bafbef99
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
-anchor-sha256: tests/unit/analyzer/test_analyzer.c d7f7f075cbc06fc5bbc0abcdf73e79337a6638f5fd10d03d258957bea17ef16a
+anchor-sha256: tests/unit/analyzer/test_analyzer.c 37eb8f7086f7c41e3fff9148ce579b249321c2c1847df16304917746aaee855a
 anchor-sha256: tests/unit/analyzer/test_effect_db.c f6fd62d692987325db74de9a31808b9a0e5d0573bd458c25a154a676257dfa1e
 anchor-sha256: tests/unit/ir/test_xi_lower.c 331d0ce9897ff73631873ace4df76468cfa3a8750be5a24802664890310c8afb
-anchor-sha256: src/frontend/analyzer/xanalyzer.c 9d6ea0f02b685e890ac7cbe4ee904a80cd0512f43c62ea316e94498c2bfc7032
+anchor-sha256: src/frontend/analyzer/xanalyzer.c 478569a51124a79fa5f36fe24085de9cb22188e26b35f33b178b55a15265be75
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 4da1394baa34244c76f07d0f9a6bccf406d862ba38f5b20b9b78b02ce894564a
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 85d3cde2cfc38457d2254f003760a2d42b7de55823842b644f3570c356eeb246
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 715f49dc3a980e5c5f2f3813e973cfb8177759b89b325a0cb0af70cc5c6b6d43
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
@@ -635,3 +644,6 @@ anchor-sha256: tests/unit/plan/test_semantic_plan.c aebdf70cc4c04f630863382d1742
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def 630421965a4045646bc4350ecbced9a04342938cf37e59939cee2bf4ababd195
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
 anchor-sha256: src/shared/xr_string_parse_core.h e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1
+anchor-sha256: src/frontend/analyzer/xanalyzer_builtins.c 1d2115cdcabcd2a38f4e6f7b7cdb967d021cb0887d96c4ac1a87599c3b9420ef
+anchor-sha256: src/frontend/analyzer/xanalyzer_builtins.h d05f66643e010009b64d3886eab4d2cc2d968c1c6adfd1d4f917b9263f7ec3f1
+anchor-sha256: tests/unit/analyzer/xa_builtin_enum_checks.inc.c 625c22133b1f1588a1741a9a5eb20d260e908a78904d5e73929f0b469e8baf22

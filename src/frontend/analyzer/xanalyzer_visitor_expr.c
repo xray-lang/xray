@@ -2086,8 +2086,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         (strcmp(ma->object->as.variable.name, "string") == 0 ||
          xr_exact_scalar_by_source_name(ma->object->as.variable.name,
                                         strlen(ma->object->as.variable.name)) != NULL)) {
-        XrType *static_member = xa_builtin_static_member_type(
-            ctx->analyzer->isolate, ma->object->as.variable.name, ma->name);
+        XrType *static_member =
+            xa_builtin_static_member_type(ctx->analyzer, ma->object->as.variable.name, ma->name);
         if (static_member)
             return static_member;
     }
@@ -2189,8 +2189,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         const XaBuiltinMember *member = &namespace_type->members[i];
                         if (!member->is_static || strcmp(member->name, ma->name) != 0)
                             continue;
-                        XrType *member_type = xa_builtin_parse_full_signature(
-                            ctx->analyzer->isolate, member->signature);
+                        XrType *member_type =
+                            xa_builtin_parse_full_signature(ctx->analyzer, member->signature);
                         if (member_type)
                             note_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
                                            member_type, false);
@@ -2221,10 +2221,10 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         const char *type_str = sig + 1;
                         while (*type_str == ' ')
                             type_str++;
-                        mod_result = xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                        mod_result = xa_builtin_parse_type_string(ctx->analyzer, type_str);
                     } else {
                         // Function: parse complete signature (params + return type)
-                        mod_result = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+                        mod_result = xa_builtin_parse_full_signature(ctx->analyzer, sig);
                     }
                     if (mod_result) {
                         note_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
@@ -2861,7 +2861,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (xa_builtin_is_method(obj_type, ma->name)) {
         const char *sig = xa_builtin_get_member_signature(obj_type, ma->name);
         if (sig) {
-            XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+            XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer, sig);
             // Substitute generic type parameters with actual container types:
             //   Array<T>/Set<T>/Channel<T>: T -> element_type
             //   Task<T>/Atomic<T>: T -> instance type argument
@@ -2894,7 +2894,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     }
                 }
                 XrType *return_type =
-                    xa_builtin_get_method_return_type(ctx->analyzer->isolate, obj_type, ma->name);
+                    xa_builtin_get_method_return_type(ctx->analyzer, obj_type, ma->name);
                 if (return_type && (!fn_type->function.return_type ||
                                     XR_TYPE_IS_UNKNOWN(fn_type->function.return_type) ||
                                     XR_TYPE_IS_JSON(fn_type->function.return_type))) {
@@ -2913,8 +2913,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             }
         }
         // Fallback: return function with unknown return type
-        XrType *return_type =
-            xa_builtin_get_method_return_type(ctx->analyzer->isolate, obj_type, ma->name);
+        XrType *return_type = xa_builtin_get_method_return_type(ctx->analyzer, obj_type, ma->name);
         if (return_type) {
             XrType *fn = xr_type_new_function(ctx->analyzer->isolate, NULL, 0, return_type, false);
             if (fn && XR_TYPE_IS_SLICE(return_type)) {
@@ -2936,7 +2935,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             const char *type_str = sig + 1;
             while (*type_str == ' ')
                 type_str++;
-            return xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+            return xa_builtin_parse_type_string(ctx->analyzer, type_str);
         }
     }
 
@@ -3035,15 +3034,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             // Check handle fields first
             for (int i = 0; i < handle->field_count; i++) {
                 if (strcmp(handle->fields[i].name, ma->name) == 0) {
-                    XrType *field_type = xa_builtin_parse_type_string(ctx->analyzer->isolate,
-                                                                      handle->fields[i].type_str);
+                    XrType *field_type =
+                        xa_builtin_parse_type_string(ctx->analyzer, handle->fields[i].type_str);
                     return xa_const_projection_type(ctx, obj_type, field_type);
                 }
             }
             // Check handle methods
             for (int i = 0; i < handle->method_count; i++) {
                 if (strcmp(handle->methods[i].name, ma->name) == 0) {
-                    return xa_builtin_parse_full_signature(ctx->analyzer->isolate,
+                    return xa_builtin_parse_full_signature(ctx->analyzer,
                                                            handle->methods[i].signature);
                 }
             }
@@ -5201,7 +5200,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
         if (xa_builtin_is_method(base_type, prop_name)) {
             const char *sig = xa_builtin_get_member_signature(base_type, prop_name);
             if (sig) {
-                XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+                XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer, sig);
                 if (fn_type) {
                     return xa_optional_nullable_result(ctx, node, fn_type);
                 }
@@ -5215,7 +5214,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                 const char *type_str = sig + 1;
                 while (*type_str == ' ')
                     type_str++;
-                XrType *prop_type = xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                XrType *prop_type = xa_builtin_parse_type_string(ctx->analyzer, type_str);
                 if (prop_type)
                     return xa_optional_nullable_result(ctx, node, prop_type);
             }

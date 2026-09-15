@@ -404,74 +404,75 @@ TEST(type_to_string) {
 }
 
 TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
-    XrType *const_slice = xa_builtin_parse_type_string(g_isolate, " const Slice<u8> ");
+    XrType *const_slice = xa_builtin_parse_type_string(g_analyzer, " const Slice<u8> ");
     ASSERT(const_slice != NULL);
     ASSERT(XR_TYPE_IS_SLICE(const_slice));
     ASSERT(const_slice->is_const);
     ASSERT(xr_type_is_exact_u8(const_slice->container.element_type));
 
     XrType *unscoped_private_native_class =
-        xa_builtin_parse_type_string(g_isolate, "__BufferStorage");
+        xa_builtin_parse_type_string(g_analyzer, "__BufferStorage");
     ASSERT(unscoped_private_native_class != NULL);
     ASSERT(XR_TYPE_IS_ERROR(unscoped_private_native_class));
 
     XrType *private_native_class =
-        xa_builtin_parse_type_string_for_module(g_isolate, "mem", "__BufferStorage");
+        xa_builtin_parse_type_string_for_module(g_analyzer, "mem", "__BufferStorage");
     ASSERT(private_native_class != NULL);
     ASSERT(private_native_class->kind == XR_KIND_INSTANCE);
     ASSERT(private_native_class->instance.class_name != NULL);
     ASSERT(strcmp(private_native_class->instance.class_name, "__BufferStorage") == 0);
 
-    XrType *unknown_name = xa_builtin_parse_type_string(g_isolate, "unknown");
+    XrType *unknown_name = xa_builtin_parse_type_string(g_analyzer, "unknown");
     ASSERT(unknown_name != NULL);
     ASSERT(XR_TYPE_IS_ERROR(unknown_name));
 
-    XrType *unregistered_name = xa_builtin_parse_type_string(g_isolate, "NoSuchType");
+    XrType *unregistered_name = xa_builtin_parse_type_string(g_analyzer, "NoSuchType");
     ASSERT(unregistered_name != NULL);
     ASSERT(XR_TYPE_IS_ERROR(unregistered_name));
 
-    XrType *nested_unregistered_name = xa_builtin_parse_type_string(g_isolate, "Array<NoSuchType>");
+    XrType *nested_unregistered_name =
+        xa_builtin_parse_type_string(g_analyzer, "Array<NoSuchType>");
     ASSERT(nested_unregistered_name != NULL);
     ASSERT(XR_TYPE_IS_ARRAY(nested_unregistered_name));
     ASSERT(XR_TYPE_IS_ERROR(nested_unregistered_name->container.element_type));
 
-    XrType *missing = xa_builtin_parse_type_string(g_isolate, NULL);
+    XrType *missing = xa_builtin_parse_type_string(g_analyzer, NULL);
     ASSERT(missing != NULL);
     ASSERT(XR_TYPE_IS_ERROR(missing));
 
-    XrType *empty = xa_builtin_parse_type_string(g_isolate, "");
+    XrType *empty = xa_builtin_parse_type_string(g_analyzer, "");
     ASSERT(empty != NULL);
     ASSERT(XR_TYPE_IS_ERROR(empty));
 
-    XrType *empty_union = xa_builtin_parse_type_string(g_isolate, "|");
+    XrType *empty_union = xa_builtin_parse_type_string(g_analyzer, "|");
     ASSERT(empty_union != NULL);
     ASSERT(XR_TYPE_IS_ERROR(empty_union));
 
-    XrType *bad_map = xa_builtin_parse_type_string(g_isolate, "Map<i64>");
+    XrType *bad_map = xa_builtin_parse_type_string(g_analyzer, "Map<i64>");
     ASSERT(bad_map != NULL);
     ASSERT(XR_TYPE_IS_ERROR(bad_map));
 
-    XrType *bad_fn = xa_builtin_parse_type_string(g_isolate, "fn(");
+    XrType *bad_fn = xa_builtin_parse_type_string(g_analyzer, "fn(");
     ASSERT(bad_fn != NULL);
     ASSERT(XR_TYPE_IS_ERROR(bad_fn));
 
-    XrType *bad_param = xa_builtin_parse_type_string(g_isolate, "fn(value): i64");
+    XrType *bad_param = xa_builtin_parse_type_string(g_analyzer, "fn(value): i64");
     ASSERT(bad_param != NULL);
     ASSERT(XR_TYPE_IS_FUNCTION(bad_param));
     ASSERT(bad_param->function.param_count == 1);
     ASSERT(XR_TYPE_IS_ERROR(bad_param->function.params[0].type));
 
-    XrType *missing_signature = xa_builtin_parse_full_signature(g_isolate, NULL);
+    XrType *missing_signature = xa_builtin_parse_full_signature(g_analyzer, NULL);
     ASSERT(missing_signature != NULL);
     ASSERT(XR_TYPE_IS_FUNCTION(missing_signature));
     ASSERT(XR_TYPE_IS_ERROR(missing_signature->function.return_type));
 
-    XrType *missing_parens = xa_builtin_parse_full_signature(g_isolate, "value: i64");
+    XrType *missing_parens = xa_builtin_parse_full_signature(g_analyzer, "value: i64");
     ASSERT(missing_parens != NULL);
     ASSERT(XR_TYPE_IS_FUNCTION(missing_parens));
     ASSERT(XR_TYPE_IS_ERROR(missing_parens->function.return_type));
 
-    XrType *bad_signature_param = xa_builtin_parse_full_signature(g_isolate, "(value): i64");
+    XrType *bad_signature_param = xa_builtin_parse_full_signature(g_analyzer, "(value): i64");
     ASSERT(bad_signature_param != NULL);
     ASSERT(XR_TYPE_IS_FUNCTION(bad_signature_param));
     ASSERT(bad_signature_param->function.param_count == 1);
@@ -8118,6 +8119,8 @@ TEST(builtin_datetime_type_methods_not_from_native_defs) {
 // Main
 // ============================================================================
 
+#include "xa_builtin_enum_checks.inc.c"
+
 int main(void) {
     xr_test_suppress_dialogs();
     printf("Running analyzer unit tests...\n\n");
@@ -8268,6 +8271,10 @@ int main(void) {
     RUN_TEST(analyzer_type_ref_failures_use_error_recovery);
     RUN_TEST(analyzer_cast_error_recovery_and_union_overlap);
     RUN_TEST(analyzer_enum_identity_is_nominal);
+    RUN_TEST(analyzer_builtin_enum_channel_results_keep_declaration_identity);
+    RUN_TEST(analyzer_builtin_enum_task_results_keep_declaration_identity);
+    RUN_TEST(analyzer_builtin_enum_generic_arguments_remain_distinct);
+    RUN_TEST(analyzer_builtin_enum_nested_signatures_bind_exact_heads);
     RUN_TEST(analyzer_assignment_error_recovery_suppresses_cascade);
     RUN_TEST(analyzer_member_error_recovery_suppresses_call_cascade);
     RUN_TEST(analyzer_operator_and_index_failures_use_error_recovery);

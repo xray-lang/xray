@@ -4383,8 +4383,7 @@ static bool xa_method_call_creates_span_borrow(XaInferContext *ctx, XrType *rece
      * synthesized rather than represented by a method symbol. */
     if (method_links && method_links->return_type && XR_TYPE_IS_SLICE(method_links->return_type))
         return true;
-    XrType *result =
-        xa_builtin_get_method_return_type(ctx->analyzer->isolate, receiver_type, method_name);
+    XrType *result = xa_builtin_get_method_return_type(ctx->analyzer, receiver_type, method_name);
     return result && XR_TYPE_IS_SLICE(result);
 }
 
@@ -8161,7 +8160,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     if (method_name && callee_obj_type) {
         XrType *builtin_return_type =
-            xa_builtin_get_method_return_type(ctx->analyzer->isolate, callee_obj_type, method_name);
+            xa_builtin_get_method_return_type(ctx->analyzer, callee_obj_type, method_name);
         if (builtin_return_type &&
             (!return_type || XR_TYPE_IS_UNKNOWN(return_type) || XR_TYPE_IS_JSON(return_type))) {
             return_type = builtin_return_type;
