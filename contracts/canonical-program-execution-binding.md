@@ -13,6 +13,13 @@ and profile in `XrInstance`; AOT compilation consumes them directly. Generation 
 excluded from that semantic identity and forms the second field of `XrExecutionCacheKey`, so
 provider rebinding invalidates live caches without pretending that program/profile meaning changed.
 
+Provider sets are ordered by complete contract IDs. The allocator and panic
+roles are unique runtime foundations; arbitrarily many ordinary operation
+contracts may coexist within the configured provider budget. Semantic
+capabilities are derived independently of those roles. Output and assertion
+capabilities require their exact contract and operation identities, so an
+ordinary service category or a copied operation ID grants no authority.
+
 Provider admission compares stable contract identity, exact provider-contract fingerprint,
 ordered operation identities, non-null operation entries, and required thread/reentrancy/callback
 behavior before the instance becomes ACTIVE. In particular, a provider compiled for a different
@@ -86,9 +93,9 @@ for the active object/string identity, RC/weak/panic/OOM policies, and generatio
 executor slot, native register, or common local physical plan is stored here.
 
 anchor-sha256: src/plan/target/xr_target_profile.h bdf184b79d382fe14ba2d3e4d1522ad74b7ee2fa3d70723f79468899e6374322
-anchor-sha256: src/plan/target/xr_target_profile.c 0ea3522a38fcd87b6f3dcf9768ebf5cd170f6a8b8b892b36a5c3889217dbba17
-anchor-sha256: src/plan/target/xr_target_profile_verify.c 4092adc2ff88ab03eccf6e9795b4c32efd7173a8acf96c94dba7932cc5e34ab7
-anchor-sha256: src/plan/target/xr_target_verify.c a7aade83086711c19cdfc03b0130fd186c5a5a71bd549273476260ae21304433
+anchor-sha256: src/plan/target/xr_target_profile.c 7b5cfb5d561174bd1b2e4c834efe4290d3297a00a97a847ea4c83ead36e0f3ac
+anchor-sha256: src/plan/target/xr_target_profile_verify.c 92fe5c6d533c93e1c3b5a2b7913e463cdcc9c143d62975bdf9ceeeda6946d2b4
+anchor-sha256: src/plan/target/xr_target_verify.c be30f2f18a5aef9290bd5a8355d7e199f33e381852d50136f51eaf24a3236a8e
 anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
 anchor-sha256: src/execution/xr_execution.c 9edba6e59f290cda924a6a337aba73554f8bd7aa1ac5a0e6dfba958d4b998046
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
@@ -98,12 +105,12 @@ anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434
 anchor-sha256: src/program/xr_program_verify.h 05a87dca25a389c21133915c9684fc2560f21d02c888e6117a6da3337e4f6d9e
 anchor-sha256: src/program/xr_program_verify.c fbc0f4d9b167efd73d068f3a013833ff0d424de38d7edfd43a7a0411debaa9ad
 anchor-sha256: src/program/xr_validated_program_internal.h 1f0777fec7dc82f53bb9c97afd25d575bcba8975e9d5b8ba8798450d44cf5533
-anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a7ff7a2c325d8a704e9adfea342ed2770baf0c
-anchor-sha256: src/runtime/abi/xr_runtime_contract.c 7a05cee07b815c943fa3745c701b5871649929f13d8daf82479b5cff6f064dfa
+anchor-sha256: src/runtime/abi/xr_runtime_contract.h 0ad68b4cda771923a5e1e138428c597385282fe8cf2fbe7a20f1c1863fc8d5f8
+anchor-sha256: src/runtime/abi/xr_runtime_contract.c 672ab46db68ed73172f9a8da63fe1a560c86a5240e305b907ba6f595c02336a4
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
-anchor-sha256: tests/unit/plan/test_target_profile.c ebcd1c0fef635f5e4997fd41523f47349b5c6ccaf868eaa491789993abaab8ac
-anchor-sha256: tests/unit/execution/test_xr_execution.c 04ba917bf55ef830923fd8a9c70baca6ed17b14a526bd3935cecc1745455edbc
+anchor-sha256: tests/unit/plan/test_target_profile.c e54b53070db66b309a07673c57fb1112781b19cd8eecacacb496fefb04079da6
+anchor-sha256: tests/unit/execution/test_xr_execution.c 7e3767f25c88c27696426df6d1b02e936afe57169fc3c14486f00a0a58f6db26
 anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 177583c0f785168d4693a33d035ce52c04c6bfd37eeb4de7dacf0843aeffb601
-anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 1bf549df5f42fabbbe537b578709e032b72b8d0b4848627186945a12b2ee215f
+anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 8d3ab1703c804aacd9bdd2ff64d527fa75744a8aa4ecc7198a285f957d55789f
 anchor-sha256: scripts/check_xr_execution_contracts.py 9001e12d09cd39abd658772dbe5a2079482f0a6b0109e31f364e5ff1d41bae89
 anchor-sha256: contracts/canonical-program/execution-binding-coverage.json efee9456407f35a994f73bed05dd3116790be6f3667d400691cb08648a729227

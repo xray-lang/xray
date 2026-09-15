@@ -224,14 +224,14 @@ static bool populate_identity(const XrTargetPlan *plan, uint64_t generation_numb
     XrFingerprint provider_fingerprint;
     XrFingerprint object_fingerprint;
     XrRuntimeObjectHeaderAbi object_header;
-    uint64_t provider_mask = 0;
+    uint64_t provider_capabilities = 0;
     uint64_t capability_mask = 0;
     if (!facts || xr_runtime_target_authority_native_hosted(&runtime) != XR_RUNTIME_ABI_OK ||
         !xr_runtime_target_authority_machine_matches(&runtime, &facts->machine) ||
         xr_runtime_abi_contract_fingerprint(&runtime.runtime_abi, &runtime_fingerprint) !=
             XR_RUNTIME_ABI_OK ||
         xr_target_provider_set_fingerprint(runtime.providers, runtime.provider_count,
-                                           &provider_mask,
+                                           &provider_capabilities,
                                            &provider_fingerprint) != XR_RUNTIME_ABI_OK ||
         xr_runtime_object_header_abi_materialize(&runtime.object_header_materialization,
                                                  &object_header) != XR_RUNTIME_ABI_OK ||
@@ -250,7 +250,7 @@ static bool populate_identity(const XrTargetPlan *plan, uint64_t generation_numb
                                                     profile, &expected_capability_mask, nested,
                                                     sizeof(nested)) ||
         capability_mask != expected_capability_mask ||
-        !xr_target_capability_mask_is_backed(capability_mask, provider_mask) ||
+        !xr_target_capability_mask_is_backed(capability_mask, provider_capabilities) ||
         !xr_fingerprint_equal(facts->runtime_abi_fingerprint, runtime_fingerprint) ||
         !xr_fingerprint_equal(facts->provider_set_fingerprint, provider_fingerprint) ||
         !xr_fingerprint_equal(facts->object_header_fingerprint, object_fingerprint))

@@ -61,9 +61,9 @@ static void test_structured_build_kat_and_exact_gate(void) {
         &same_fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
     XrTargetProfile *first = build_fixture(&first_fixture);
     XrTargetProfile *same = build_fixture(&same_fixture);
-    REQUIRE(first->facts.provider_mask ==
-            (XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-             XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC)));
+    REQUIRE(first->facts.provider_capabilities ==
+            (XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+             XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC)));
     REQUIRE(memcmp(first->facts.object_header_fingerprint.bytes,
                    expected_object_header, sizeof(expected_object_header)) == 0);
     REQUIRE(memcmp(first->facts.provider_set_fingerprint.bytes,

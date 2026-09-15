@@ -340,7 +340,7 @@ static void test_assertion_activation_requirements_are_exact(void) {
         uint32_t panic_rows = 0;
         for (uint32_t i = 0; i < requirement_count; i++) {
             REQUIRE(requirements[i].reserved == 0);
-            if (requirements[i].provider_kind == XR_TARGET_PROVIDER_PANIC)
+            if (requirements[i].provider_role == XR_TARGET_PROVIDER_ROLE_PANIC)
                 panic_rows++;
         }
         /* The typed-error boundary has no provider row.  The panic boundary

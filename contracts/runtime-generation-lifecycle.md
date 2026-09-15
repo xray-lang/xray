@@ -166,7 +166,9 @@ capabilities; they do not authorize general product graphs or dynamic reload.
     the module invalidates at unload; the caller never frees it.
 11. After re-verifying the immutable TargetPlan and instruction program, module
     activation reconstructs its exact native provider requirements from the
-    verified capability rows. The hosted foundation allocator's
+    verified capability rows. Registration identity is the full contract and
+    operation ID pair; role-based acquisition is restricted to the unique
+    allocator and panic foundations. The hosted foundation allocator's
     `ALLOCATES/RETURNS_OWNED` operation and the hosted panic
     `PANICS/BORROWS/NO_RETURN` operation are provider registrations; the same
     allocator contract's `DEALLOCATES/CONSUMES_OWNED` operation is the module
@@ -273,8 +275,8 @@ capabilities; they do not authorize general product graphs or dynamic reload.
 
 anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
 anchor-sha256: src/runtime/xr_module_generation_internal.h 0f80619cde6e8994ad2ae4b4dc93f50e0ce0735decb487e22c8b3b33202138b2
-anchor-sha256: src/runtime/xr_module_generation.c 886223fc052e2acd3114a2a78567603b853881de7887f495109a568934da149a
-anchor-sha256: src/runtime/xr_module_generation_verify.c dc57a5c52ee23fe364a8eb842689fed8b82a46259e1dcbfd11fed3efa26d9959
+anchor-sha256: src/runtime/xr_module_generation.c 84ac5ca94c73d63608716c8e6c3e6f28d41bf29f2caf49b54a1958e89bfd8a23
+anchor-sha256: src/runtime/xr_module_generation_verify.c 4db82699293a50b010225a2ea46de972cfb5381f419cadf02dbc883382730367
 anchor-sha256: src/vm/xr_typed_dispatch.h 5764853b278b367a0713c461e7e997ed67d50093d990b1a67e6fe93041b1a90f
 anchor-sha256: src/vm/xr_typed_dispatch.c c266fda805b5a7ab09537715601c853cce641c1ed7eed9cccbefe1e3d127dace
 anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0
@@ -289,16 +291,16 @@ anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py ce359885c88ab943fb5e8b61782770361083568db413aa3e6b940809457cb75c
 anchor-sha256: tests/install/run_install_public_surface_tests.py 7573dcf14236aebbad3f3840844d14f7060618d661e64886e31fb5f5ce3820be
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
-anchor-sha256: src/runtime/xr_runtime_api.c 3cbd014aa9037a69efc4eacc2bbe70e723d603fa16dea6d7f73541edb59a2744
+anchor-sha256: src/runtime/xr_runtime_api.c 2309834ec6034b4347200cf2776102d474b60ab5617e760a92e4178af3f343e4
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c b7ef1d75a66f12b0b408dcd73a672e3e7df8af4a140ce612612996b60a778b9a
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c c2bc18e2eb0c40767bff70b0137387a81d55bbe0b767673befcdc5acce4386a0
 anchor-sha256: tests/unit/runtime/test_entry_cell_runtime_archive.c 34bc22820144f368a5e5914ac387f2a19db85ef4555d458b07215548eef1dca0
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 576c9e443c711070aff3ab58efbaac42266f89be6be64d49f84889dc9668723c
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 53ecde3c9a89fd483ef81e34dc02f3c94fe8fd56327b34e31b73988472e942ed
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d3a980de75c5c131f17bc95bcee896841b5174e2fc281b3af83e64e3f4eed0b9
 anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e95fa04444b73cb1e3f8584b61544
 anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
 anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c d9a9dcdfc2a9231c75e1ed3e35a0cb5dcc54a423aa60741b14d2e7c25e7930cb

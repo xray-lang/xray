@@ -226,22 +226,22 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
             operation->operation_id = required_operation;
             if (stable_id_equal(requirement.contract_id, output_contract) &&
                 stable_id_equal(required_operation, output_operation) &&
-                contract->provider_kind == XR_TARGET_PROVIDER_IO) {
+                contract->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
                 operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE;
                 operation->entry.output_write = stdout_output_write;
                 operation->context = stdout;
             } else if (stable_id_equal(requirement.contract_id, output_contract) &&
                        stable_id_equal(required_operation, pipe_open_operation) &&
-                       contract->provider_kind == XR_TARGET_PROVIDER_IO) {
+                       contract->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
                 operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
                 operation->entry.optional_i64_pair_nullary = pipe_open;
             } else if (stable_id_equal(requirement.contract_id, output_contract) &&
                        stable_id_equal(required_operation, pipe_close_operation) &&
-                       contract->provider_kind == XR_TARGET_PROVIDER_IO) {
+                       contract->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
                 operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
                 operation->entry.bool_i64_unary = pipe_close;
             } else if (stable_id_equal(requirement.contract_id, clock_contract) &&
-                       contract->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+                       contract->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
                 if (stable_id_equal(required_operation, clock_utc_offset)) {
                     operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_UNARY;
                     operation->entry.i64_unary = clock_utc_offset_at;

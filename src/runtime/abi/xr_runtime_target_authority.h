@@ -41,7 +41,7 @@ XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
  * selector is only an allow-list for canonical provider rows; callers cannot
  * author operation IDs, call ABIs, effects, or failure behavior. */
 XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(
-    uint64_t provider_mask, XrRuntimeTargetAuthority *out);
+    uint64_t provider_capabilities, XrRuntimeTargetAuthority *out);
 
 /* Exact comparison is field-wise so C padding can never become authority.
  * The current native authority deliberately supports only scalar execution;

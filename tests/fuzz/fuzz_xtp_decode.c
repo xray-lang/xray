@@ -491,7 +491,7 @@ static bool apply_mutation(XtpMutationArtifact *artifact, XtpMutation mutation) 
             return insert_zero_row(artifact, XR_XTP_SECTION_COROUTINES);
         case XTP_MUTATION_WRONG_CAPABILITY:
             rows = section_bytes(bytes, XR_XTP_SECTION_CAPABILITIES);
-            xr_xtp_put_u16(rows + XTP_CAPABILITY_PROVIDER_OFFSET, XR_TARGET_PROVIDER_INVALID);
+            xr_xtp_put_u16(rows + XTP_CAPABILITY_PROVIDER_OFFSET, XR_TARGET_PROVIDER_ROLE_INVALID);
             resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_CAPABILITIES);
             return true;
         case XTP_MUTATION_WRONG_DEBUG:

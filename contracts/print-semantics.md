@@ -34,7 +34,9 @@ capability boundary for grouped output.
    profile. Hosted output uses the process stream the executor already owns.
    Freestanding output requires an exact output-write capability, which is a
    distinct identity: an assertion-report provider must not stand in for
-   ordinary program output. A missing capability fails before C emission.
+   ordinary program output. The full IO contract ID and output operation ID
+   must agree with the verified byte-sink ABI. A missing capability fails before
+   C emission.
 8. REPL auto-display is not a second output semantics. It elaborates a guarded
    ordinary call, so no suppress-null flag travels through the plan, the
    bytecode, or any backend.
@@ -73,8 +75,8 @@ anchor-sha256: src/ir/xi_emit_call.c f99706984af44243a0aa97651795f78f4247cbc45af
 anchor-sha256: src/vm/xvm_dispatch_convert.inc.c b7b703389d77714d167f64f4f8f4fbe8e934da4428324e4a590e485e86aabb2a
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 465aad140562f09d026c02a0efedc196a67364f3876a44032a2ea9a6164609bb
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/target/xr_target_capability.h 5069e52a258729e7c1384d1cea8706aba2cfa639d45ad94280bda0d89bd7a3e0
-anchor-sha256: src/plan/target/xr_target_builder.c f8dbf513a09d863d1dfad77f641cac81410658b3f11c6f10db5a86663aea290f
+anchor-sha256: src/plan/target/xr_target_capability.h e8076bd04818d155c36b1b11de6bf4359abcd1d2c2ddffe84c9ef74f39268f29
+anchor-sha256: src/plan/target/xr_target_builder.c cc9727fc1d2bb4bc61a20dfae5d357921c1e2825aafc4c9ae5b3901f0bc7b1fe
 anchor-sha256: src/api/xrepl.c 9c66051d7144b1ab126c76cefd6cb82b000e66887469f99bf3aad47b3ee74912
 anchor-sha256: tests/diff/cases/semantics/output/print_zero_args.xr a4c91a7c404a377515c73ed3d75b0548d7d7bb54ae0324c75622376df1ea03b8
 anchor-sha256: tests/diff/cases/semantics/output/print_separator_exact.xr 71b81c064808dfd69cc39867555f55c49d3cee23b2c3bfd387f1b5737a825c2f

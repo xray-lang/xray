@@ -9504,18 +9504,16 @@ static bool verify_adapters_and_capabilities(const XrTargetPlan *plan, char *err
         return false;
     for (uint32_t i = 0; i < plan->capabilities_count; i++) {
         const XrTargetCapabilityRecord *record = &plan->capabilities[i];
-        uint16_t expected_provider = xr_target_capability_provider(record->capability);
+        uint16_t expected_provider = xr_target_capability_provider_role(record->capability);
         uint64_t bit = xr_target_capability_mask(record->capability);
-        if (record->id != i || bit == 0 || record->provider != expected_provider ||
+        if (record->id != i || bit == 0 || record->provider_role != expected_provider ||
             record->flags != XR_TARGET_CAPABILITY_REQUIRED)
             return report(error, error_size, "XR_TARGET_1004",
                           "capability record is not canonically provider-bound");
         if ((capability_mask & bit) != 0 ||
             (i != 0 && plan->capabilities[i - 1].capability >= record->capability) || !facts ||
             (record->capability != XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY &&
-             (facts->provider_mask & bit) == 0) ||
-            (expected_provider != XR_TARGET_PROVIDER_INVALID &&
-             (facts->provider_mask & XR_TARGET_PROVIDER_MASK(expected_provider)) == 0))
+             (facts->provider_capabilities & bit) == 0))
             return report(error, error_size, "XR_TARGET_1004",
                           "capability provider is absent or duplicated");
         capability_mask |= bit;

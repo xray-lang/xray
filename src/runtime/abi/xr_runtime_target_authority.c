@@ -597,6 +597,12 @@ static bool make_operation(XrTargetProviderOperationContract *out, const char *k
     return canonical_id(key, &out->stable_id);
 }
 
+static int compare_provider_contracts(const void *left, const void *right) {
+    const XrTargetProviderContract *a = left;
+    const XrTargetProviderContract *b = right;
+    return memcmp(a->contract_id.bytes, b->contract_id.bytes, sizeof(a->contract_id.bytes));
+}
+
 static bool make_hosted_providers(
     XrTargetProviderContract providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT],
     uint8_t target_endian) {
@@ -657,7 +663,7 @@ static bool make_hosted_providers(
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
         .operation_count = 2,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        .provider_kind = XR_TARGET_PROVIDER_ALLOCATOR,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_ALLOCATOR,
         .allocator_max_alignment = (uint32_t) _Alignof(void *),
         .allocator_sized_free = 0,
         .allocator_zeroed_allocation = 0,
@@ -684,7 +690,7 @@ static bool make_hosted_providers(
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
         .operation_count = 1,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        .provider_kind = XR_TARGET_PROVIDER_PANIC,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_PANIC,
         .panic_behavior = XR_TARGET_PROVIDER_PANIC_UNWINDS,
     };
     if (!canonical_id("xray.runtime.provider.v1/hosted/panic", &providers[1].contract_id) ||
@@ -701,7 +707,7 @@ static bool make_hosted_providers(
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
         .operation_count = 3,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        .provider_kind = XR_TARGET_PROVIDER_IO,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
     if (!canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[3].contract_id) ||
         !make_operation(&providers[3].operations[0], XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
@@ -727,7 +733,7 @@ static bool make_hosted_providers(
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
         .operation_count = 4,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        .provider_kind = XR_TARGET_PROVIDER_CLOCK,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
     if (!canonical_id(XR_PROVIDER_CLOCK_CONTRACT_KEY, &providers[2].contract_id) ||
         !make_operation(&providers[2].operations[0],
@@ -749,7 +755,7 @@ static bool make_hosted_providers(
 }
 
 static bool make_freestanding_providers(
-    uint64_t provider_mask,
+    uint64_t provider_capabilities,
     XrTargetProviderContract providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT],
     size_t *out_count, uint8_t target_endian) {
     if (!providers || !out_count)
@@ -794,7 +800,7 @@ static bool make_freestanding_providers(
         .flags = XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING,
         .operation_count = 2,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING,
-        .provider_kind = XR_TARGET_PROVIDER_ALLOCATOR,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_ALLOCATOR,
         .allocator_max_alignment = (uint32_t) _Alignof(void *),
         .allocator_sized_free = 0,
         .allocator_zeroed_allocation = 0,
@@ -822,7 +828,7 @@ static bool make_freestanding_providers(
         .flags = XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING,
         .operation_count = 1,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING,
-        .provider_kind = XR_TARGET_PROVIDER_PANIC,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_PANIC,
         .panic_behavior = XR_TARGET_PROVIDER_PANIC_NO_RETURN,
     };
     if (!canonical_id("xray.runtime.provider.v1/freestanding/panic-hook",
@@ -835,14 +841,16 @@ static bool make_freestanding_providers(
         return false;
 
     size_t count = 2;
-    if ((provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO)) != 0) {
+    if ((provider_capabilities & (XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT) |
+                                  XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE))) !=
+        0) {
         /* Declare exactly the IO operations the caller stated. Reporting an
          * assertion failure and writing program output share this byte-sink
          * shape but are separate identities. */
-        bool has_report =
-            (provider_mask & XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT)) != 0;
-        bool has_output =
-            (provider_mask & XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE)) != 0;
+        bool has_report = (provider_capabilities &
+                           XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT)) != 0;
+        bool has_output = (provider_capabilities &
+                           XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE)) != 0;
         uint16_t operation_count = (uint16_t) ((has_report ? 1u : 0u) + (has_output ? 1u : 0u));
         if (operation_count == 0)
             return false;
@@ -852,7 +860,7 @@ static bool make_freestanding_providers(
             .flags = XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING,
             .operation_count = operation_count,
             .runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING,
-            .provider_kind = XR_TARGET_PROVIDER_IO,
+            .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
         };
         if (!canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[2].contract_id))
             return false;
@@ -951,10 +959,12 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuth
     if (!make_hosted_providers(authority.providers, target_endian))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     XrFingerprint fingerprint;
-    uint64_t provider_mask = 0;
+    uint64_t provider_capabilities = 0;
     const size_t hosted_provider_count = 4;
+    qsort(authority.providers, hosted_provider_count, sizeof(authority.providers[0]),
+          compare_provider_contracts);
     status = xr_target_provider_set_fingerprint(authority.providers, hosted_provider_count,
-                                                &provider_mask, &fingerprint);
+                                                &provider_capabilities, &fingerprint);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     authority.provider_count = hosted_provider_count;
@@ -962,15 +972,14 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuth
     return XR_RUNTIME_ABI_OK;
 }
 
-XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(uint64_t provider_mask,
+XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(uint64_t provider_capabilities,
                                                                    XrRuntimeTargetAuthority *out) {
-    const uint64_t supported = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                               XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
-                               XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
+    const uint64_t supported = XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+                               XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC) |
                                XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT) |
                                XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE);
-    if (!out || (provider_mask & ~supported) != 0 ||
-        (provider_mask & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
+    if (!out || (provider_capabilities & ~supported) != 0 ||
+        (provider_capabilities & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
             XR_TARGET_FOUNDATION_CAPABILITY_MASK)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
 
@@ -980,20 +989,21 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(uint64_t prov
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     size_t selected_count = 0;
-    if (!make_freestanding_providers(provider_mask, authority.providers, &selected_count,
+    if (!make_freestanding_providers(provider_capabilities, authority.providers, &selected_count,
                                      authority.object_header_materialization.target_endian))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     authority.provider_count = selected_count;
+    qsort(authority.providers, selected_count, sizeof(authority.providers[0]),
+          compare_provider_contracts);
 
     uint64_t verified_mask = 0;
     XrFingerprint fingerprint;
     status = xr_target_provider_set_fingerprint(authority.providers, authority.provider_count,
                                                 &verified_mask, &fingerprint);
-    /* The caller states provider kinds and, for IO, which operations it expects.
-     * The verified set is derived from the contracts actually built, so the two
-     * must agree exactly: comparing only the kind bits would let a provider
-     * offering an assertion reporter satisfy a request for an output sink. */
-    if (status != XR_RUNTIME_ABI_OK || verified_mask != provider_mask)
+    /* The requested semantic capabilities must equal the facts independently
+     * derived from the complete contracts. A byte-sink shape alone cannot
+     * substitute an assertion reporter for an output sink. */
+    if (status != XR_RUNTIME_ABI_OK || verified_mask != provider_capabilities)
         return status == XR_RUNTIME_ABI_OK ? XR_RUNTIME_ABI_INVALID_IDENTITY : status;
     *out = authority;
     return XR_RUNTIME_ABI_OK;

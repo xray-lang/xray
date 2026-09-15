@@ -44,7 +44,7 @@ typedef struct XrRuntimeArtifactAuthorityIdentity {
     uint32_t reserved;
     uint64_t required_family_mask;
     uint64_t required_capability_mask;
-    uint64_t provider_mask;
+    uint64_t provider_capabilities;
     uint8_t semantic_fingerprint[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE];
     uint8_t program_fingerprint[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE];
     uint8_t program_module_set_fingerprint[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE];

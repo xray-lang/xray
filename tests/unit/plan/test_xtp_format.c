@@ -1582,7 +1582,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
     REQUIRE(identity.schema_version == XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION);
     REQUIRE(identity.required_family_mask == XR_TARGET_REQUIRED_FAMILIES);
     REQUIRE(identity.required_capability_mask == XR_TARGET_FOUNDATION_CAPABILITY_MASK);
-    REQUIRE((identity.provider_mask & identity.required_capability_mask) ==
+    REQUIRE((identity.provider_capabilities & identity.required_capability_mask) ==
             identity.required_capability_mask);
 
     XrTargetPlan *loaded = NULL;
@@ -1626,7 +1626,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
     REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     authority->identity = saved;
     authority->identity.required_capability_mask &=
-        ~XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+        ~XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC);
     REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     authority->identity = saved;
     authority->identity.provider_set_fingerprint[0] ^= 1;

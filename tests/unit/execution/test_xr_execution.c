@@ -117,7 +117,7 @@ static XrValidatedProgram *build_validated_provider_program(
          provider < xr_target_profile_provider_count(requirements_profile); ++provider) {
         const XrTargetProviderContract *candidate =
             xr_target_profile_provider(requirements_profile, provider);
-        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+        if (xr_test_target_profile_is_scalar_provider(candidate)) {
             REQUIRE(required_contract == NULL);
             required_contract = candidate;
         }
@@ -816,7 +816,18 @@ static void test_nullary_provider_call_shape(void) {
     xr_validated_program_free(program);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "provider-contract") == 0) {
+        test_reentrant_provider_call_pins_lease_without_holding_lock();
+        test_concurrent_release_drain_and_retire_during_provider_call();
+        test_concurrent_pin_and_drain();
+        test_provider_admission_matrix();
+        test_nullary_provider_call_shape();
+        puts("provider admission and lease tests passed");
+        return 0;
+    }
+    if (argc != 1)
+        return 2;
     test_profile_partitions_and_foreign_authority();
     test_execution_identity_and_lifecycle();
     test_reentrant_provider_call_pins_lease_without_holding_lock();

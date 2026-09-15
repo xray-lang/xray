@@ -87,7 +87,7 @@ static inline bool xr_target_plan_capability_mask(const XrTargetPlan *plan, uint
         const XrTargetCapabilityRecord *record = &records[i];
         uint64_t bit = xr_target_capability_mask(record->capability);
         if (record->id != i || bit == 0 ||
-            record->provider != xr_target_capability_provider(record->capability) ||
+            record->provider_role != xr_target_capability_provider_role(record->capability) ||
             record->flags != XR_TARGET_CAPABILITY_REQUIRED ||
             (i != 0 && records[i - 1].capability >= record->capability) || (mask & bit) != 0)
             return false;
@@ -98,10 +98,10 @@ static inline bool xr_target_plan_capability_mask(const XrTargetPlan *plan, uint
 }
 
 static inline bool xr_target_capability_mask_is_backed(uint64_t capability_mask,
-                                                       uint64_t provider_mask) {
+                                                       uint64_t provider_capabilities) {
     const uint64_t language_capabilities =
         XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY);
-    return (capability_mask & ~(provider_mask | language_capabilities)) == 0;
+    return (capability_mask & ~(provider_capabilities | language_capabilities)) == 0;
 }
 
 #endif /* XR_TARGET_CAPABILITY_H */

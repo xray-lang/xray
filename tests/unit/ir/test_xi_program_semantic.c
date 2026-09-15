@@ -2807,9 +2807,8 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     assert_leaf_projection_architecture_boundary(semantic, profile);
     XrRuntimeTargetAuthority freestanding_authority;
     const uint64_t freestanding_providers =
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC) |
         XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
     ASSERT_EQ_UINT(xr_runtime_target_authority_native_freestanding(freestanding_providers,
                                                                    &freestanding_authority),

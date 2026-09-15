@@ -79,7 +79,7 @@ static bool profile_facts_equal(const XrTargetProfileDraft *left,
                                 const XrTargetProfileDraft *right) {
     return left->schema_version == right->schema_version &&
            machine_facts_equal(&left->machine, &right->machine) &&
-           left->provider_mask == right->provider_mask &&
+           left->provider_capabilities == right->provider_capabilities &&
            xr_fingerprint_equal(left->provider_set_fingerprint, right->provider_set_fingerprint) &&
            xr_fingerprint_equal(left->object_header_fingerprint,
                                 right->object_header_fingerprint) &&
@@ -255,7 +255,7 @@ void xr_target_profile_compute_fingerprint(const XrTargetProfileDraft *facts, Xr
     hash_fingerprint(&context, target_semantics_id);
     hash_fingerprint(&context, boundary.id);
     hash_fingerprint(&context, kernel.id);
-    hash_u64(&context, facts->provider_mask);
+    hash_u64(&context, facts->provider_capabilities);
     hash_fingerprint(&context, facts->provider_set_fingerprint);
     xr_sha256_final(&context, out->bytes);
 }
@@ -328,10 +328,10 @@ bool xr_target_profile_build(const XrTargetProfileBuildInput *input, XrTargetPro
                           status);
         return false;
     }
-    uint64_t provider_mask = 0;
+    uint64_t provider_capabilities = 0;
     XrFingerprint provider_set_fingerprint;
     status = xr_target_provider_set_fingerprint(input->providers, input->provider_count,
-                                                &provider_mask, &provider_set_fingerprint);
+                                                &provider_capabilities, &provider_set_fingerprint);
     if (status != XR_RUNTIME_ABI_OK) {
         set_runtime_error(error, error_size, "target provider contracts are invalid", status);
         return false;
@@ -339,7 +339,7 @@ bool xr_target_profile_build(const XrTargetProfileBuildInput *input, XrTargetPro
     XrTargetProfileDraft draft = {
         .schema_version = XR_TARGET_PROFILE_SCHEMA_VERSION,
         .machine = input->machine,
-        .provider_mask = provider_mask,
+        .provider_capabilities = provider_capabilities,
         .provider_set_fingerprint = provider_set_fingerprint,
         .object_header_fingerprint = object_header_fingerprint,
         .runtime_abi_fingerprint = runtime_abi_fingerprint,

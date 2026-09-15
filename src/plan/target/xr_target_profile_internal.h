@@ -19,7 +19,7 @@
 typedef struct XrTargetProfileDraft {
     uint32_t schema_version;
     XrTargetMachineFacts machine;
-    uint64_t provider_mask;
+    uint64_t provider_capabilities;
     XrFingerprint provider_set_fingerprint;
     XrFingerprint object_header_fingerprint;
     XrFingerprint runtime_abi_fingerprint;

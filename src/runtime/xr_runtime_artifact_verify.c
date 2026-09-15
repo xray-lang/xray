@@ -71,24 +71,22 @@ static const XrSemanticPlan *verifier_program_entry(
     return entry;
 }
 
-static bool current_runtime_identity(
-    XrRuntimeTargetAuthority *runtime, uint64_t *provider_mask,
-    XrFingerprint *runtime_fingerprint,
-    XrFingerprint *provider_fingerprint, XrFingerprint *object_fingerprint) {
+static bool current_runtime_identity(XrRuntimeTargetAuthority *runtime,
+                                     uint64_t *provider_capabilities,
+                                     XrFingerprint *runtime_fingerprint,
+                                     XrFingerprint *provider_fingerprint,
+                                     XrFingerprint *object_fingerprint) {
     XrRuntimeObjectHeaderAbi object_header;
-    return xr_runtime_target_authority_native_hosted(runtime) ==
+    return xr_runtime_target_authority_native_hosted(runtime) == XR_RUNTIME_ABI_OK &&
+           xr_runtime_abi_contract_fingerprint(&runtime->runtime_abi, runtime_fingerprint) ==
                XR_RUNTIME_ABI_OK &&
-           xr_runtime_abi_contract_fingerprint(&runtime->runtime_abi,
-                                               runtime_fingerprint) ==
-               XR_RUNTIME_ABI_OK &&
-           xr_target_provider_set_fingerprint(
-               runtime->providers, runtime->provider_count, provider_mask,
-               provider_fingerprint) == XR_RUNTIME_ABI_OK &&
-           xr_runtime_object_header_abi_materialize(
-               &runtime->object_header_materialization, &object_header) ==
-               XR_RUNTIME_ABI_OK &&
-           xr_runtime_object_header_abi_fingerprint(
-               &object_header, object_fingerprint) == XR_RUNTIME_ABI_OK;
+           xr_target_provider_set_fingerprint(runtime->providers, runtime->provider_count,
+                                              provider_capabilities,
+                                              provider_fingerprint) == XR_RUNTIME_ABI_OK &&
+           xr_runtime_object_header_abi_materialize(&runtime->object_header_materialization,
+                                                    &object_header) == XR_RUNTIME_ABI_OK &&
+           xr_runtime_object_header_abi_fingerprint(&object_header, object_fingerprint) ==
+               XR_RUNTIME_ABI_OK;
 }
 
 XRAY_API bool xr_runtime_artifact_authority_verify(
@@ -201,14 +199,12 @@ XRAY_API bool xr_runtime_artifact_authority_verify(
                     "artifact authority semantic or target fingerprint changed");
 
     XrRuntimeTargetAuthority runtime;
-    uint64_t provider_mask = 0;
+    uint64_t provider_capabilities = 0;
     XrFingerprint runtime_fingerprint;
     XrFingerprint provider_fingerprint;
     XrFingerprint object_fingerprint;
-    if (!current_runtime_identity(&runtime, &provider_mask,
-                                  &runtime_fingerprint,
-                                  &provider_fingerprint,
-                                  &object_fingerprint))
+    if (!current_runtime_identity(&runtime, &provider_capabilities, &runtime_fingerprint,
+                                  &provider_fingerprint, &object_fingerprint))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "canonical native runtime authority is invalid");
     const XrTargetProfileDraft *facts =
@@ -217,22 +213,16 @@ XRAY_API bool xr_runtime_artifact_authority_verify(
                       &runtime, &facts->machine))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "artifact authority does not bind the canonical native machine facts");
-    if (identity->provider_mask != provider_mask ||
-        facts->provider_mask != provider_mask ||
-        !xr_target_capability_mask_is_backed(
-            identity->required_capability_mask, provider_mask) ||
-        !fingerprint_equal_bytes(runtime_fingerprint,
-                                 identity->runtime_abi_fingerprint) ||
-        !fingerprint_equal_bytes(provider_fingerprint,
-                                 identity->provider_set_fingerprint) ||
-        !fingerprint_equal_bytes(object_fingerprint,
-                                 identity->object_header_fingerprint) ||
-        !xr_fingerprint_equal(facts->runtime_abi_fingerprint,
-                              runtime_fingerprint) ||
-        !xr_fingerprint_equal(facts->provider_set_fingerprint,
-                              provider_fingerprint) ||
-        !xr_fingerprint_equal(facts->object_header_fingerprint,
-                              object_fingerprint))
+    if (identity->provider_capabilities != provider_capabilities ||
+        facts->provider_capabilities != provider_capabilities ||
+        !xr_target_capability_mask_is_backed(identity->required_capability_mask,
+                                             provider_capabilities) ||
+        !fingerprint_equal_bytes(runtime_fingerprint, identity->runtime_abi_fingerprint) ||
+        !fingerprint_equal_bytes(provider_fingerprint, identity->provider_set_fingerprint) ||
+        !fingerprint_equal_bytes(object_fingerprint, identity->object_header_fingerprint) ||
+        !xr_fingerprint_equal(facts->runtime_abi_fingerprint, runtime_fingerprint) ||
+        !xr_fingerprint_equal(facts->provider_set_fingerprint, provider_fingerprint) ||
+        !xr_fingerprint_equal(facts->object_header_fingerprint, object_fingerprint))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "artifact authority does not bind the exact runtime provider set");
 
@@ -335,8 +325,7 @@ XR_FUNCDEF bool xr_runtime_artifact_authority_bind_plan(
     uint64_t capability_mask = 0;
     if (!xr_target_plan_capability_mask(plan, &capability_mask) ||
         capability_mask != identity->required_capability_mask ||
-        !xr_target_capability_mask_is_backed(
-            capability_mask, identity->provider_mask))
+        !xr_target_capability_mask_is_backed(capability_mask, identity->provider_capabilities))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
                     "TargetPlan capability closure is missing or unbound");
     uint32_t graph_count = 0;

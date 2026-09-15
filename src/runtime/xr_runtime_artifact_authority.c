@@ -48,7 +48,7 @@ XR_FUNCDEF void xr_runtime_artifact_authority_compute_fingerprint(
     hash_u64(&context, identity->reserved);
     hash_u64(&context, identity->required_family_mask);
     hash_u64(&context, identity->required_capability_mask);
-    hash_u64(&context, identity->provider_mask);
+    hash_u64(&context, identity->provider_capabilities);
     xr_sha256_update(&context, identity->semantic_fingerprint,
                      XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
     xr_sha256_update(&context, identity->program_fingerprint,
@@ -105,18 +105,15 @@ static bool populate_identity(
     XrFingerprint provider_fingerprint;
     XrFingerprint object_fingerprint;
     XrRuntimeObjectHeaderAbi object_header;
-    uint64_t provider_mask = 0;
-    if (xr_runtime_abi_contract_fingerprint(&runtime.runtime_abi,
-                                            &runtime_fingerprint) !=
+    uint64_t provider_capabilities = 0;
+    if (xr_runtime_abi_contract_fingerprint(&runtime.runtime_abi, &runtime_fingerprint) !=
             XR_RUNTIME_ABI_OK ||
-        xr_target_provider_set_fingerprint(
-            runtime.providers, runtime.provider_count, &provider_mask,
-            &provider_fingerprint) != XR_RUNTIME_ABI_OK ||
-        xr_runtime_object_header_abi_materialize(
-            &runtime.object_header_materialization, &object_header) !=
-            XR_RUNTIME_ABI_OK ||
-        xr_runtime_object_header_abi_fingerprint(&object_header,
-                                                 &object_fingerprint) !=
+        xr_target_provider_set_fingerprint(runtime.providers, runtime.provider_count,
+                                           &provider_capabilities,
+                                           &provider_fingerprint) != XR_RUNTIME_ABI_OK ||
+        xr_runtime_object_header_abi_materialize(&runtime.object_header_materialization,
+                                                 &object_header) != XR_RUNTIME_ABI_OK ||
+        xr_runtime_object_header_abi_fingerprint(&object_header, &object_fingerprint) !=
             XR_RUNTIME_ABI_OK)
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "native runtime target authority is invalid");
@@ -127,16 +124,13 @@ static bool populate_identity(
                               &runtime, &profile_facts->machine))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "TargetProfile does not match the canonical native machine authority");
-    if (profile_facts->provider_mask != provider_mask ||
-        !xr_fingerprint_equal(profile_facts->runtime_abi_fingerprint,
-                              runtime_fingerprint) ||
-        !xr_fingerprint_equal(profile_facts->provider_set_fingerprint,
-                              provider_fingerprint) ||
-        !xr_fingerprint_equal(profile_facts->object_header_fingerprint,
-                              object_fingerprint))
+    if (profile_facts->provider_capabilities != provider_capabilities ||
+        !xr_fingerprint_equal(profile_facts->runtime_abi_fingerprint, runtime_fingerprint) ||
+        !xr_fingerprint_equal(profile_facts->provider_set_fingerprint, provider_fingerprint) ||
+        !xr_fingerprint_equal(profile_facts->object_header_fingerprint, object_fingerprint))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "TargetProfile does not match the native runtime authority");
-    if ((provider_mask & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
+    if ((provider_capabilities & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
         XR_TARGET_FOUNDATION_CAPABILITY_MASK)
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
                     "native runtime authority lacks a foundation capability");
@@ -152,8 +146,7 @@ static bool populate_identity(
             &required_capability_mask, nested, sizeof(nested));
     }
     if (!capability_exact ||
-        !xr_target_capability_mask_is_backed(required_capability_mask,
-                                             provider_mask))
+        !xr_target_capability_mask_is_backed(required_capability_mask, provider_capabilities))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
                     "semantic capability closure lacks an exact runtime provider");
 
@@ -167,7 +160,7 @@ static bool populate_identity(
                                           : 1u;
     identity->required_family_mask = XR_TARGET_REQUIRED_FAMILIES;
     identity->required_capability_mask = required_capability_mask;
-    identity->provider_mask = provider_mask;
+    identity->provider_capabilities = provider_capabilities;
     copy_fingerprint(identity->semantic_fingerprint,
                      xr_semantic_plan_fingerprint(semantic_plan));
     if (semantic_module_count != 0) {

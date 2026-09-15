@@ -17,6 +17,7 @@
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int failures;
@@ -30,11 +31,13 @@ static int failures;
     } while (0)
 
 static const XrTargetProviderContract *find_provider(const XrRuntimeTargetAuthority *authority,
-                                                     uint8_t provider_kind) {
-    if (!authority)
+                                                     const char *contract_key) {
+    XrStableId expected;
+    XrFingerprint digest;
+    if (!authority || !xr_stable_id_from_key(contract_key, &expected, &digest))
         return NULL;
     for (size_t i = 0; i < authority->provider_count; i++) {
-        if (authority->providers[i].provider_kind == provider_kind)
+        if (xr_stable_id_equal(authority->providers[i].contract_id, expected))
             return &authority->providers[i];
     }
     return NULL;
@@ -132,7 +135,7 @@ static void test_runtime_owner_publishes_validated_structures(void) {
     XrRuntimeTargetAuthority authority;
     XrFingerprint first;
     XrFingerprint second;
-    uint64_t provider_mask = 0;
+    uint64_t provider_capabilities = 0;
     CHECK(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
     CHECK(authority.provider_count == 4);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &first) == XR_RUNTIME_ABI_OK);
@@ -140,15 +143,14 @@ static void test_runtime_owner_publishes_validated_structures(void) {
           XR_RUNTIME_ABI_OK);
     CHECK(xr_fingerprint_equal(first, second));
     CHECK(xr_target_provider_set_fingerprint(authority.providers, authority.provider_count,
-                                             &provider_mask, &second) == XR_RUNTIME_ABI_OK);
-    CHECK(provider_mask == (XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
-                            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_CLOCK) |
-                            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
-                            XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE) |
-                            XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY)));
+                                             &provider_capabilities, &second) == XR_RUNTIME_ABI_OK);
+    CHECK(provider_capabilities ==
+          (XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+           XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC) |
+           XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE) |
+           XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY)));
     const XrTargetProviderContract *clock =
-        find_provider(&authority, XR_TARGET_PROVIDER_CLOCK);
+        find_provider(&authority, XR_PROVIDER_CLOCK_CONTRACT_KEY);
     CHECK(clock != NULL);
     CHECK(clock && clock->operation_count == 4);
     check_signed_i64_operation(
@@ -170,11 +172,52 @@ static void test_runtime_owner_publishes_validated_structures(void) {
           XR_RUNTIME_ABI_OK);
 }
 
+static int compare_provider_ids(const void *left, const void *right) {
+    const XrTargetProviderContract *a = left;
+    const XrTargetProviderContract *b = right;
+    return memcmp(a->contract_id.bytes, b->contract_id.bytes, sizeof(a->contract_id.bytes));
+}
+
+static void test_capabilities_require_exact_contract_identity(void) {
+    XrRuntimeTargetAuthority authority;
+    CHECK(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
+    const XrTargetProviderContract *io = find_provider(&authority, XR_PROVIDER_IO_CONTRACT_KEY);
+    CHECK(io != NULL);
+    if (!io)
+        return;
+    size_t index = (size_t) (io - authority.providers);
+    authority.providers[index].contract_id.bytes[0] ^= UINT8_C(0x80);
+    qsort(authority.providers, authority.provider_count, sizeof(authority.providers[0]),
+          compare_provider_ids);
+    XrFingerprint fingerprint;
+    uint64_t capabilities = 0;
+    CHECK(xr_target_provider_set_fingerprint(authority.providers, authority.provider_count,
+                                             &capabilities, &fingerprint) == XR_RUNTIME_ABI_OK);
+    CHECK(capabilities == (XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+                           XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY)));
+
+    CHECK(xr_runtime_target_authority_native_freestanding(
+              XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+                  XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT),
+              &authority) == XR_RUNTIME_ABI_OK);
+    io = find_provider(&authority, XR_PROVIDER_IO_CONTRACT_KEY);
+    CHECK(io != NULL);
+    if (!io)
+        return;
+    index = (size_t) (io - authority.providers);
+    authority.providers[index].contract_id.bytes[0] ^= UINT8_C(0x80);
+    qsort(authority.providers, authority.provider_count, sizeof(authority.providers[0]),
+          compare_provider_ids);
+    CHECK(xr_target_provider_set_fingerprint(authority.providers, authority.provider_count,
+                                             &capabilities, &fingerprint) == XR_RUNTIME_ABI_OK);
+    CHECK(capabilities == XR_TARGET_FOUNDATION_CAPABILITY_MASK);
+}
+
 static void test_freestanding_authority_is_not_hosted_projection(void) {
-    const uint64_t foundation = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                                XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
-    const uint64_t requested = foundation | XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
-                               XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+    const uint64_t foundation = XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+                                XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC);
+    const uint64_t requested =
+        foundation | XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
     XrRuntimeTargetAuthority hosted;
     XrRuntimeTargetAuthority freestanding;
     XrRuntimeTargetAuthority minimal;
@@ -202,29 +245,35 @@ static void test_freestanding_authority_is_not_hosted_projection(void) {
           0);
     CHECK((freestanding_mask & XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY)) ==
           0);
-    static const uint8_t expected_kinds[] = {
-        XR_TARGET_PROVIDER_ALLOCATOR,
-        XR_TARGET_PROVIDER_PANIC,
-        XR_TARGET_PROVIDER_IO,
+    static const char *const hosted_keys[] = {
+        NULL,
+        "xray.runtime.provider.v1/hosted/allocator",
+        "xray.runtime.provider.v1/hosted/panic",
+        XR_PROVIDER_IO_CONTRACT_KEY,
     };
     for (size_t i = 0; i < freestanding.provider_count; i++) {
-        CHECK(freestanding.providers[i].runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
-        CHECK(freestanding.providers[i].flags == XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING);
-        CHECK(freestanding.providers[i].provider_kind == expected_kinds[i]);
+        const XrTargetProviderContract *provider = &freestanding.providers[i];
+        CHECK(provider->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+        CHECK(provider->flags == XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING);
+        CHECK(provider->provider_role > XR_TARGET_PROVIDER_ROLE_INVALID &&
+              provider->provider_role < XR_TARGET_PROVIDER_ROLE_COUNT);
+        if (i != 0)
+            CHECK(memcmp(freestanding.providers[i - 1].contract_id.bytes,
+                         provider->contract_id.bytes, sizeof(provider->contract_id.bytes)) < 0);
+        if (provider->provider_role >= XR_TARGET_PROVIDER_ROLE_COUNT)
+            continue;
         const XrTargetProviderContract *hosted_provider =
-            find_provider(&hosted, freestanding.providers[i].provider_kind);
+            find_provider(&hosted, hosted_keys[provider->provider_role]);
         CHECK(hosted_provider != NULL);
-        CHECK((freestanding.providers[i].provider_kind == XR_TARGET_PROVIDER_IO) ==
+        CHECK((provider->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) ==
               (hosted_provider &&
-               memcmp(freestanding.providers[i].contract_id.bytes,
-                      hosted_provider->contract_id.bytes,
-                      sizeof(freestanding.providers[i].contract_id.bytes)) == 0));
+               xr_stable_id_equal(provider->contract_id, hosted_provider->contract_id)));
     }
     CHECK(xr_runtime_target_authority_native_freestanding(
-              XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR), &minimal) ==
+              XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR), &minimal) ==
           XR_RUNTIME_ABI_INVALID_ARGUMENT);
     CHECK(xr_runtime_target_authority_native_freestanding(
-              XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC), &minimal) ==
+              XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC), &minimal) ==
           XR_RUNTIME_ABI_INVALID_ARGUMENT);
 
     XaotTarget aot_target = {0};
@@ -323,8 +372,8 @@ static void test_compiler_session_rejects_conflicting_layout_authority(void) {
 }
 
 static void test_compiler_session_rejects_conflicting_explicit_profile(void) {
-    const uint64_t providers = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                               XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+    const uint64_t providers = XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+                               XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC);
     XrToolchainTarget native_target;
     XrTargetCodegenFacts codegen = {0};
     XrTargetProfile *hosted = NULL;
@@ -371,6 +420,7 @@ int main(void) {
     test_canonical_native_projection_is_deterministic();
     test_native_authority_is_deterministic();
     test_runtime_owner_publishes_validated_structures();
+    test_capabilities_require_exact_contract_identity();
     test_freestanding_authority_is_not_hosted_projection();
     test_cross_target_and_reserved_facts_fail_closed();
     test_compiler_session_retains_exact_profile();

@@ -656,11 +656,13 @@ XRAY_API bool xr_export_call(const XrExport *export_handle, const XrExportValue 
         scalars[i] = arguments[i].i64;
     }
 
-    if (!xr_runtime_activation_provider_acquire(
-            export_handle->activation, XR_TARGET_PROVIDER_ALLOCATOR, diagnostic, diagnostic_size))
+    if (!xr_runtime_activation_foundation_acquire(export_handle->activation,
+                                                  XR_TARGET_PROVIDER_ROLE_ALLOCATOR, diagnostic,
+                                                  diagnostic_size))
         return false;
-    if (!xr_runtime_activation_provider_acquire(export_handle->activation, XR_TARGET_PROVIDER_PANIC,
-                                                diagnostic, diagnostic_size)) {
+    if (!xr_runtime_activation_foundation_acquire(export_handle->activation,
+                                                  XR_TARGET_PROVIDER_ROLE_PANIC, diagnostic,
+                                                  diagnostic_size)) {
         char nested[256] = {0};
         xr_runtime_activation_provider_release(export_handle->activation, nested, sizeof(nested));
         return false;

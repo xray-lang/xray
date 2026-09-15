@@ -68,7 +68,7 @@ static XrProgramBuildStatus write_cleanup_program(const XrTargetProfile *profile
     const XrTargetProviderContract *clock = NULL;
     for (size_t p = 0u; p < xr_target_profile_provider_count(profile); ++p) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, p);
-        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+        if (xr_test_target_profile_is_scalar_provider(candidate)) {
             if (clock)
                 return XR_PROGRAM_BUILD_INVALID_INPUT;
             clock = candidate;

@@ -1845,7 +1845,7 @@ static XrValidatedProgram *build_error_program(void) {
 static const XrTargetProviderContract *scalar_clock_contract(const XrTargetProfile *profile) {
     for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *contract = xr_target_profile_provider(profile, index);
-        if (contract && contract->provider_kind == XR_TARGET_PROVIDER_CLOCK)
+        if (xr_test_target_profile_is_scalar_provider(contract))
             return contract;
     }
     return NULL;
@@ -1854,7 +1854,7 @@ static const XrTargetProviderContract *scalar_clock_contract(const XrTargetProfi
 static const XrTargetProviderContract *pipe_contract(const XrTargetProfile *profile) {
     for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *contract = xr_target_profile_provider(profile, index);
-        if (contract && contract->provider_kind == XR_TARGET_PROVIDER_IO)
+        if (xr_test_target_profile_is_provider(contract, XR_PROVIDER_IO_CONTRACT_KEY))
             return contract;
     }
     return NULL;
@@ -2504,7 +2504,7 @@ static const XrTargetProviderContract *output_contract(const XrTargetProfile *pr
     const XrTargetProviderContract *result = NULL;
     for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
-        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_IO) {
+        if (xr_test_target_profile_is_provider(candidate, XR_PROVIDER_IO_CONTRACT_KEY)) {
             REQUIRE(result == NULL);
             result = candidate;
         }

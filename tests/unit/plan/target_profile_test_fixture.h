@@ -34,4 +34,8 @@ XrTargetProfile *xr_test_target_profile_build_with_output(bool ilp32,
 XrTargetProfile *xr_test_target_profile_build_with_pipe(bool ilp32,
                                                         uint8_t runtime_profile);
 
+bool xr_test_target_profile_is_scalar_provider(const XrTargetProviderContract *provider);
+bool xr_test_target_profile_is_provider(const XrTargetProviderContract *provider,
+                                        const char *contract_key);
+
 #endif  // TARGET_PROFILE_TEST_FIXTURE_H

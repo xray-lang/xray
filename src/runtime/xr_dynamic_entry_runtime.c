@@ -660,12 +660,13 @@ static void publication_items_release(
     xr_free(items);
 }
 
-static const XrTargetProviderContract *activation_provider_contract(
-    const XrRuntimeTargetAuthority *runtime, uint16_t provider_kind) {
-    if (!runtime)
+static const XrTargetProviderContract *
+activation_provider_contract(const XrRuntimeTargetAuthority *runtime, uint16_t provider_role) {
+    if (!runtime || (provider_role != XR_TARGET_PROVIDER_ROLE_ALLOCATOR &&
+                     provider_role != XR_TARGET_PROVIDER_ROLE_PANIC))
         return NULL;
     for (size_t i = 0; i < runtime->provider_count; i++)
-        if (runtime->providers[i].provider_kind == provider_kind)
+        if (runtime->providers[i].provider_role == provider_role)
             return &runtime->providers[i];
     return NULL;
 }
@@ -712,11 +713,11 @@ static bool activation_operation_required(
     return false;
 }
 
-static bool activation_requirement_present(
-    const XrRuntimeActivationRegistration *requirements, uint32_t count,
-    uint16_t provider_kind, XrStableId operation) {
+static bool activation_requirement_present(const XrRuntimeActivationRegistration *requirements,
+                                           uint32_t count, XrStableId provider_contract,
+                                           XrStableId operation) {
     for (uint32_t i = 0; i < count; i++)
-        if (requirements[i].provider_kind == provider_kind &&
+        if (xr_stable_id_equal(requirements[i].provider_contract, provider_contract) &&
             xr_stable_id_equal(requirements[i].operation, operation))
             return true;
     return false;
@@ -746,16 +747,15 @@ XR_FUNCDEF bool xr_runtime_activation_requirements_build(
     for (uint32_t i = 0; i < capability_count; i++) {
         const XrTargetCapabilityRecord *capability = &capabilities[i];
         if (!xr_target_capability_kind_valid(capability->capability) ||
-            capability->provider !=
-                xr_target_capability_provider(capability->capability))
+            capability->provider_role != xr_target_capability_provider_role(capability->capability))
             return false;
-        if (capability->provider == XR_TARGET_PROVIDER_INVALID)
+        if (capability->provider_role == XR_TARGET_PROVIDER_ROLE_INVALID)
             continue;
-        if (capability->provider >= XR_TARGET_PROVIDER_KIND_COUNT)
+        if (capability->provider_role >= XR_TARGET_PROVIDER_ROLE_COUNT)
             return false;
         const XrTargetProviderContract *contract =
-            activation_provider_contract(&runtime, capability->provider);
-        if (!contract || contract->provider_kind != capability->provider)
+            activation_provider_contract(&runtime, capability->provider_role);
+        if (!contract || contract->provider_role != capability->provider_role)
             return false;
         bool matched = false;
         for (uint16_t operation_index = 0;
@@ -766,9 +766,8 @@ XR_FUNCDEF bool xr_runtime_activation_requirements_build(
                                                operation))
                 continue;
             matched = true;
-            if (activation_requirement_present(
-                    requirements, *requirement_count,
-                    contract->provider_kind, operation->stable_id))
+            if (activation_requirement_present(requirements, *requirement_count,
+                                               contract->contract_id, operation->stable_id))
                 continue;
             if (*requirement_count >= capacity)
                 return false;
@@ -780,7 +779,7 @@ XR_FUNCDEF bool xr_runtime_activation_requirements_build(
             *registration = (XrRuntimeActivationRegistration) {
                 .provider_contract = contract->contract_id,
                 .operation = operation->stable_id,
-                .provider_kind = contract->provider_kind,
+                .provider_role = contract->provider_role,
                 .role = role,
             };
             (*requirement_count)++;
@@ -1046,12 +1045,12 @@ bool xr_runtime_activation_publish_module(
     return true;
 }
 
-bool xr_runtime_activation_provider_acquire(
-    XrRuntimeModuleActivation *activation, uint16_t provider_kind,
-    char *diagnostic, size_t diagnostic_size) {
+bool xr_runtime_activation_foundation_acquire(XrRuntimeModuleActivation *activation,
+                                              uint16_t provider_role, char *diagnostic,
+                                              size_t diagnostic_size) {
     if (!activation || !activation->generation ||
-        provider_kind <= XR_TARGET_PROVIDER_INVALID ||
-        provider_kind >= XR_TARGET_PROVIDER_KIND_COUNT)
+        (provider_role != XR_TARGET_PROVIDER_ROLE_ALLOCATOR &&
+         provider_role != XR_TARGET_PROVIDER_ROLE_PANIC))
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
                     "activation provider acquisition is incomplete");
     if (!xr_module_generation_pin_acquire(
@@ -1063,9 +1062,8 @@ bool xr_runtime_activation_provider_acquire(
     bool published = activation->published;
     bool present = false;
     for (uint32_t i = 0; published && i < activation->registration_count; i++)
-        if (activation->registrations[i].role ==
-                XR_RUNTIME_ACTIVATION_PROVIDER &&
-            activation->registrations[i].provider_kind == provider_kind) {
+        if (activation->registrations[i].role == XR_RUNTIME_ACTIVATION_PROVIDER &&
+            activation->registrations[i].provider_role == provider_role) {
             present = true;
             break;
         }

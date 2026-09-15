@@ -1243,22 +1243,22 @@ static bool provider_available_for_profile(const XrTargetProviderContract *provi
     return (provider->flags & required_flag) != 0;
 }
 
-static XrRuntimeAbiStatus verify_provider_kind_facts(const XrTargetProviderContract *provider,
+static XrRuntimeAbiStatus verify_provider_role_facts(const XrTargetProviderContract *provider,
                                                      uint32_t effects, uint32_t failures) {
     bool allocator_booleans_valid = provider->allocator_sized_free <= 1 &&
                                     provider->allocator_zeroed_allocation <= 1 &&
                                     provider->allocator_thread_safe <= 1;
     if (!allocator_booleans_valid)
         return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
-    switch ((XrTargetProviderKind) provider->provider_kind) {
-        case XR_TARGET_PROVIDER_ALLOCATOR:
+    switch ((XrTargetProviderRole) provider->provider_role) {
+        case XR_TARGET_PROVIDER_ROLE_ALLOCATOR:
             if (!is_power_of_two_u64(provider->allocator_max_alignment) ||
                 provider->panic_behavior != XR_TARGET_PROVIDER_PANIC_INVALID ||
                 (effects & XR_TARGET_PROVIDER_EFFECT_ALLOCATES) == 0 ||
                 (effects & XR_TARGET_PROVIDER_EFFECT_DEALLOCATES) == 0)
                 return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
             break;
-        case XR_TARGET_PROVIDER_PANIC:
+        case XR_TARGET_PROVIDER_ROLE_PANIC:
             if (provider->allocator_max_alignment != 0 || provider->allocator_sized_free != 0 ||
                 provider->allocator_zeroed_allocation != 0 ||
                 provider->allocator_thread_safe != 0 ||
@@ -1290,8 +1290,8 @@ static XrRuntimeAbiStatus verify_provider(const XrTargetProviderContract *provid
         provider->abi_schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION)
         return XR_RUNTIME_ABI_INVALID_SCHEMA;
     if (id_is_zero(provider->contract_id) || provider->runtime_profile != expected_profile ||
-        provider->provider_kind <= XR_TARGET_PROVIDER_INVALID ||
-        provider->provider_kind >= XR_TARGET_PROVIDER_KIND_COUNT || provider->flags == 0 ||
+        provider->provider_role <= XR_TARGET_PROVIDER_ROLE_INVALID ||
+        provider->provider_role >= XR_TARGET_PROVIDER_ROLE_COUNT || provider->flags == 0 ||
         (provider->flags & ~XR_TARGET_PROVIDER_FLAGS_ALL) != 0 ||
         !provider_available_for_profile(provider))
         return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
@@ -1302,7 +1302,7 @@ static XrRuntimeAbiStatus verify_provider(const XrTargetProviderContract *provid
     XrRuntimeAbiStatus status = verify_provider_operations(provider, &effects, &failures);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    return verify_provider_kind_facts(provider, effects, failures);
+    return verify_provider_role_facts(provider, effects, failures);
 }
 
 static bool provider_operation_id_from_key(const char *key, XrStableId *out) {
@@ -1333,16 +1333,19 @@ static bool provider_call_slot_exact(const XrTargetProviderCallSlotAbi *slot, ui
            bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) && slot->reserved64 == 0;
 }
 
-/* The assertion report capability is present only when the canonical IO
- * operation identity and its complete call ABI agree.  An unrelated IO
- * operation, a renamed operation, or a call-shape mutation cannot satisfy the
- * plan requirement. */
+/* Byte-sink capabilities require the full contract and operation identity,
+ * together with their complete call ABI. A matching operation in an unrelated
+ * contract cannot satisfy the requirement. */
 static bool provider_has_io_byte_sink(const XrTargetProviderContract *provider,
                                       const char *operation_key) {
-    if (!provider || provider->provider_kind != XR_TARGET_PROVIDER_IO || !operation_key)
+    if (!provider || provider->provider_role != XR_TARGET_PROVIDER_ROLE_OPERATIONS ||
+        !operation_key)
         return false;
+    XrStableId contract = {{0}};
     XrStableId expected = {{0}};
-    if (!provider_operation_id_from_key(operation_key, &expected))
+    if (!provider_operation_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &contract) ||
+        id_compare(provider->contract_id, contract) != 0 ||
+        !provider_operation_id_from_key(operation_key, &expected))
         return false;
     for (uint16_t i = 0; i < provider->operation_count; i++) {
         const XrTargetProviderOperationContract *operation = &provider->operations[i];
@@ -1404,14 +1407,19 @@ static XrRuntimeAbiStatus verify_provider_set(const XrTargetProviderContract *pr
         XrRuntimeAbiStatus status = verify_provider(&providers[i], profile);
         if (status != XR_RUNTIME_ABI_OK)
             return status;
-        if (i != 0 && providers[i - 1].provider_kind >= providers[i].provider_kind)
+        if (i != 0 && id_compare(providers[i - 1].contract_id, providers[i].contract_id) >= 0)
             return XR_RUNTIME_ABI_INVALID_ORDER;
-        for (size_t j = 0; j < i; j++) {
-            if (id_compare(providers[j].contract_id, providers[i].contract_id) == 0)
-                return XR_RUNTIME_ABI_INVALID_ORDER;
+        uint64_t foundation = 0;
+        if (providers[i].provider_role == XR_TARGET_PROVIDER_ROLE_ALLOCATOR)
+            foundation = XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR);
+        else if (providers[i].provider_role == XR_TARGET_PROVIDER_ROLE_PANIC)
+            foundation = XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC);
+        if (foundation != 0) {
+            if ((mask & foundation) != 0)
+                return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
+            mask |= foundation;
         }
-        mask |= XR_TARGET_PROVIDER_MASK(providers[i].provider_kind);
-        if (providers[i].provider_kind == XR_TARGET_PROVIDER_PANIC &&
+        if (providers[i].provider_role == XR_TARGET_PROVIDER_ROLE_PANIC &&
             providers[i].panic_behavior == XR_TARGET_PROVIDER_PANIC_UNWINDS)
             mask |= XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
         if (provider_has_assertion_report(&providers[i]))
@@ -1420,8 +1428,7 @@ static XrRuntimeAbiStatus verify_provider_set(const XrTargetProviderContract *pr
             mask |= XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE);
     }
     uint64_t required = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
-    if ((mask & required) != required ||
-        (mask & ~(XR_TARGET_PROVIDER_MASK_ALL | XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK)) != 0)
+    if ((mask & required) != required || (mask & ~XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK) != 0)
         return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
     *derived_mask = mask;
     return XR_RUNTIME_ABI_OK;
@@ -1439,7 +1446,7 @@ static void hash_provider_operation(XrSHA256Context *ctx,
 static void hash_provider(XrSHA256Context *ctx, const XrTargetProviderContract *provider) {
     hash_u32(ctx, provider->schema_version);
     hash_u8(ctx, provider->runtime_profile);
-    hash_u8(ctx, provider->provider_kind);
+    hash_u8(ctx, provider->provider_role);
     hash_id(ctx, provider->contract_id);
     hash_u32(ctx, provider->abi_schema_version);
     hash_u32(ctx, provider->flags);
@@ -1469,24 +1476,25 @@ XrRuntimeAbiStatus xr_target_provider_contract_fingerprint(const XrTargetProvide
 
 XrRuntimeAbiStatus xr_target_provider_set_fingerprint(const XrTargetProviderContract *providers,
                                                       size_t provider_count,
-                                                      uint64_t *out_provider_mask,
+                                                      uint64_t *out_provider_capabilities,
                                                       XrFingerprint *out) {
-    if (!out_provider_mask || !out)
+    if (!out_provider_capabilities || !out)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
-    uint64_t provider_mask = 0;
-    XrRuntimeAbiStatus status = verify_provider_set(providers, provider_count, &provider_mask);
+    uint64_t provider_capabilities = 0;
+    XrRuntimeAbiStatus status =
+        verify_provider_set(providers, provider_count, &provider_capabilities);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     XrSHA256Context ctx;
     hash_begin(&ctx, XR_RUNTIME_CONTRACT_PROVIDER_SET);
     hash_u8(&ctx, providers[0].runtime_profile);
     hash_u16(&ctx, (uint16_t) provider_count);
-    hash_u64(&ctx, provider_mask);
+    hash_u64(&ctx, provider_capabilities);
     for (size_t i = 0; i < provider_count; i++)
         hash_provider(&ctx, &providers[i]);
     XrFingerprint fingerprint;
     xr_sha256_final(&ctx, fingerprint.bytes);
-    *out_provider_mask = provider_mask;
+    *out_provider_capabilities = provider_capabilities;
     *out = fingerprint;
     return XR_RUNTIME_ABI_OK;
 }

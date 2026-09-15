@@ -2,6 +2,7 @@
  * test_target_plan.c - Immutable backend-neutral TargetPlan contract
  */
 
+#include "../../../src/runtime/abi/xr_builtin_provider_contract.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_ops_gen.h"
@@ -2081,14 +2082,14 @@ static const XiFunc *source_export_resolve_method(void *ud, const XiFunc *curren
 static void fill_foundation_capabilities(XrTargetCapabilityRecord capabilities[2]) {
     capabilities[0] = (XrTargetCapabilityRecord) {
         .id = 0,
-        .capability = XR_TARGET_PROVIDER_ALLOCATOR,
-        .provider = XR_TARGET_PROVIDER_ALLOCATOR,
+        .capability = XR_TARGET_CAPABILITY_ALLOCATOR,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_ALLOCATOR,
         .flags = XR_TARGET_CAPABILITY_REQUIRED,
     };
     capabilities[1] = (XrTargetCapabilityRecord) {
         .id = 1,
-        .capability = XR_TARGET_PROVIDER_PANIC,
-        .provider = XR_TARGET_PROVIDER_PANIC,
+        .capability = XR_TARGET_CAPABILITY_PANIC,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_PANIC,
         .flags = XR_TARGET_CAPABILITY_REQUIRED,
     };
 }
@@ -2991,10 +2992,10 @@ static void test_profile_freeze_and_determinism(void) {
     first->facts.machine.environment = XR_TARGET_ENV_MSVC;
     first->facts.machine.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
     first->fingerprint = saved_profile_fingerprint;
-    first->facts.provider_mask |= UINT64_C(1) << 63;
+    first->facts.provider_capabilities |= UINT64_C(1) << 63;
     xr_target_profile_compute_fingerprint(&first->facts, &first->fingerprint);
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
-    first->facts.provider_mask &= ~(UINT64_C(1) << 63);
+    first->facts.provider_capabilities &= ~(UINT64_C(1) << 63);
     first->fingerprint = saved_profile_fingerprint;
     first->fingerprint.bytes[0] ^= 1;
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
@@ -11272,12 +11273,12 @@ static void test_assertion_target_capability_authority(void) {
                                          : 3u));
         XrTargetCapabilityRecord *mutable_records = (XrTargetCapabilityRecord *) records;
         if (capability_count == 3) {
-            uint16_t saved_provider = mutable_records[2].provider;
-            mutable_records[2].provider = saved_provider == XR_TARGET_PROVIDER_PANIC
-                                              ? XR_TARGET_PROVIDER_IO
-                                              : XR_TARGET_PROVIDER_PANIC;
+            uint16_t saved_provider = mutable_records[2].provider_role;
+            mutable_records[2].provider_role = saved_provider == XR_TARGET_PROVIDER_ROLE_PANIC
+                                                   ? XR_TARGET_PROVIDER_ROLE_OPERATIONS
+                                                   : XR_TARGET_PROVIDER_ROLE_PANIC;
             expect_verify_failure(plan, "XR_TARGET_1004");
-            mutable_records[2].provider = saved_provider;
+            mutable_records[2].provider_role = saved_provider;
             uint32_t saved_capability = mutable_records[2].capability;
             mutable_records[2].capability = XR_TARGET_CAPABILITY_ASSERTION_REPORT;
             expect_verify_failure(plan, "XR_TARGET_1004");
@@ -11297,13 +11298,13 @@ static void test_assertion_target_capability_authority(void) {
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
     REQUIRE(hosted_without_report.provider_count == 4);
+    XrStableId io_contract;
+    XrFingerprint io_digest;
+    REQUIRE(xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY, &io_contract, &io_digest));
     bool has_io_provider = false;
-    for (size_t provider_index = 0;
-         provider_index < hosted_without_report.provider_count;
-         ++provider_index) {
-        has_io_provider |= hosted_without_report.providers[provider_index].provider_kind ==
-                           XR_TARGET_PROVIDER_IO;
-    }
+    for (size_t p = 0; p < hosted_without_report.provider_count; ++p)
+        has_io_provider |=
+            xr_stable_id_equal(hosted_without_report.providers[p].contract_id, io_contract);
     REQUIRE(has_io_provider);
     REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan != NULL);
     uint64_t hosted_mask = 0;
@@ -11314,12 +11315,11 @@ static void test_assertion_target_capability_authority(void) {
     xr_target_profile_free(profile);
 
     XrRuntimeTargetAuthority freestanding;
-    const uint64_t freestanding_provider_mask =
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
+    const uint64_t freestanding_provider_capabilities =
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC) |
         XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
-    REQUIRE(xr_runtime_target_authority_native_freestanding(freestanding_provider_mask,
+    REQUIRE(xr_runtime_target_authority_native_freestanding(freestanding_provider_capabilities,
                                                             &freestanding) == XR_RUNTIME_ABI_OK);
     profile = build_native_profile_with_provider_count(&freestanding, freestanding.provider_count);
     semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
@@ -11346,8 +11346,13 @@ static void test_assertion_target_capability_authority(void) {
         xr_target_profile_free(profile);
     }
 
+    size_t report_index = freestanding.provider_count;
+    for (size_t p = 0; p < freestanding.provider_count; ++p)
+        if (xr_stable_id_equal(freestanding.providers[p].contract_id, io_contract))
+            report_index = p;
+    REQUIRE(report_index < freestanding.provider_count);
     XrRuntimeTargetAuthority freestanding_wrong_report_id = freestanding;
-    freestanding_wrong_report_id.providers[2].operations[0].stable_id.bytes[0] ^= 1u;
+    freestanding_wrong_report_id.providers[report_index].operations[0].stable_id.bytes[0] ^= 1u;
     profile = build_native_profile_with_provider_count(&freestanding_wrong_report_id,
                                                        freestanding_wrong_report_id.provider_count);
     semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
@@ -11358,8 +11363,9 @@ static void test_assertion_target_capability_authority(void) {
     xr_target_profile_free(profile);
 
     XrRuntimeTargetAuthority freestanding_wrong_report_abi = freestanding;
-    freestanding_wrong_report_abi.providers[2].operations[0].call_abi.result.width = 2;
-    freestanding_wrong_report_abi.providers[2].operations[0].call_abi.result.alignment = 2;
+    freestanding_wrong_report_abi.providers[report_index].operations[0].call_abi.result.width = 2;
+    freestanding_wrong_report_abi.providers[report_index].operations[0].call_abi.result.alignment =
+        2;
     profile = build_native_profile_with_provider_count(
         &freestanding_wrong_report_abi, freestanding_wrong_report_abi.provider_count);
     semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT_EQUAL);
@@ -11369,7 +11375,11 @@ static void test_assertion_target_capability_authority(void) {
     xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
 
-    profile = build_native_profile_with_provider_count(&freestanding, 2);
+    XrRuntimeTargetAuthority foundation_only;
+    REQUIRE(xr_runtime_target_authority_native_freestanding(XR_TARGET_FOUNDATION_CAPABILITY_MASK,
+                                                            &foundation_only) == XR_RUNTIME_ABI_OK);
+    profile =
+        build_native_profile_with_provider_count(&foundation_only, foundation_only.provider_count);
     semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
     plan = NULL;
     REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL &&
@@ -11379,8 +11389,14 @@ static void test_assertion_target_capability_authority(void) {
 
     XrRuntimeTargetAuthority no_unwind;
     REQUIRE(xr_runtime_target_authority_native_hosted(&no_unwind) == XR_RUNTIME_ABI_OK);
-    no_unwind.providers[1].panic_behavior = XR_TARGET_PROVIDER_PANIC_NO_RETURN;
-    no_unwind.providers[1].operations[0].failure_flags = XR_TARGET_PROVIDER_FAILURE_NO_RETURN;
+    size_t panic_index = no_unwind.provider_count;
+    for (size_t p = 0; p < no_unwind.provider_count; ++p)
+        if (no_unwind.providers[p].provider_role == XR_TARGET_PROVIDER_ROLE_PANIC)
+            panic_index = p;
+    REQUIRE(panic_index < no_unwind.provider_count);
+    no_unwind.providers[panic_index].panic_behavior = XR_TARGET_PROVIDER_PANIC_NO_RETURN;
+    no_unwind.providers[panic_index].operations[0].failure_flags =
+        XR_TARGET_PROVIDER_FAILURE_NO_RETURN;
     profile = build_native_profile_with_provider_count(&no_unwind, no_unwind.provider_count);
     semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT_PANICS);
     REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL &&
@@ -11540,9 +11556,9 @@ static void test_structural_mutations_fail_closed(void) {
     plan->capabilities_count = 1;
     expect_verify_failure(plan, "XR_TARGET_1004");
     plan->capabilities_count = saved_capability_count;
-    plan->capabilities[0].provider = XR_TARGET_PROVIDER_PANIC;
+    plan->capabilities[0].provider_role = XR_TARGET_PROVIDER_ROLE_PANIC;
     expect_verify_failure(plan, "XR_TARGET_1004");
-    plan->capabilities[0].provider = XR_TARGET_PROVIDER_ALLOCATOR;
+    plan->capabilities[0].provider_role = XR_TARGET_PROVIDER_ROLE_ALLOCATOR;
     plan->capabilities[1].flags = 0;
     expect_verify_failure(plan, "XR_TARGET_1004");
     plan->capabilities[1].flags = XR_TARGET_CAPABILITY_REQUIRED;

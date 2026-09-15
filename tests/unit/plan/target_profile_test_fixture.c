@@ -12,6 +12,7 @@
 #include "../../../src/plan/semantic/xr_semantic_ids.h"
 #include "../../../src/runtime/abi/xr_builtin_provider_contract.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Reuse the frozen runtime/provider schema fixture instead of maintaining a
@@ -19,6 +20,25 @@
 #define main xr_test_runtime_abi_contract_fixture_main
 #include "../runtime/test_runtime_abi_contract.c"
 #undef main
+
+bool xr_test_target_profile_is_scalar_provider(const XrTargetProviderContract *provider) {
+    return provider && (xr_stable_id_equal(provider->contract_id, make_id(202u)) ||
+                        xr_stable_id_equal(provider->contract_id, make_id(203u)));
+}
+
+bool xr_test_target_profile_is_provider(const XrTargetProviderContract *provider,
+                                        const char *contract_key) {
+    XrStableId expected;
+    XrFingerprint digest;
+    return provider && xr_stable_id_from_key(contract_key, &expected, &digest) &&
+           xr_stable_id_equal(provider->contract_id, expected);
+}
+
+static int compare_provider_ids(const void *left, const void *right) {
+    const XrTargetProviderContract *a = left;
+    const XrTargetProviderContract *b = right;
+    return memcmp(a->contract_id.bytes, b->contract_id.bytes, sizeof(a->contract_id.bytes));
+}
 
 static XrRuntimeObjectHeaderMaterializationFacts make_header_facts(
     uint8_t endian) {
@@ -183,10 +203,11 @@ XrTargetProfile *xr_test_target_profile_build_with_scalar_clock(
         .flags = availability,
         .operation_count = 1u,
         .runtime_profile = runtime_profile,
-        .provider_kind = XR_TARGET_PROVIDER_CLOCK,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
     providers[2].operations[0] =
         make_operation(21u, scalar_abi, 0u, 0u, 0u);
+    qsort(providers, 3u, sizeof(providers[0]), compare_provider_ids);
     fixture.input.providers = providers;
     fixture.input.provider_count = 3u;
 
@@ -228,9 +249,10 @@ XrTargetProfile *xr_test_target_profile_build_with_nullary_clock(
         .flags = availability,
         .operation_count = 1u,
         .runtime_profile = runtime_profile,
-        .provider_kind = XR_TARGET_PROVIDER_CLOCK,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
     providers[2].operations[0] = make_operation(22u, scalar_abi, 0u, 0u, 0u);
+    qsort(providers, 3u, sizeof(providers[0]), compare_provider_ids);
     fixture.input.providers = providers;
     fixture.input.provider_count = 3u;
 
@@ -280,7 +302,7 @@ XrTargetProfile *xr_test_target_profile_build_with_output(bool ilp32,
         .flags = availability,
         .operation_count = 1u,
         .runtime_profile = runtime_profile,
-        .provider_kind = XR_TARGET_PROVIDER_IO,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
     providers[2].operations[0] = make_operation(
         0u, call_abi, XR_TARGET_PROVIDER_EFFECT_IO,
@@ -292,6 +314,7 @@ XrTargetProfile *xr_test_target_profile_build_with_output(bool ilp32,
         !xr_stable_id_from_key(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
                                &providers[2].operations[0].stable_id, &key_digest))
         return NULL;
+    qsort(providers, 3u, sizeof(providers[0]), compare_provider_ids);
     fixture.input.providers = providers;
     fixture.input.provider_count = 3u;
     XrTargetProfile *profile = NULL;
@@ -338,7 +361,7 @@ XrTargetProfile *xr_test_target_profile_build_with_pipe(bool ilp32,
         .flags = availability,
         .operation_count = 1u,
         .runtime_profile = runtime_profile,
-        .provider_kind = XR_TARGET_PROVIDER_IO,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
     providers[2].operations[0] = make_operation(
         0u, call_abi, XR_TARGET_PROVIDER_EFFECT_IO,
@@ -350,6 +373,7 @@ XrTargetProfile *xr_test_target_profile_build_with_pipe(bool ilp32,
         !xr_stable_id_from_key(XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
                                &providers[2].operations[0].stable_id, &key_digest))
         return NULL;
+    qsort(providers, 3u, sizeof(providers[0]), compare_provider_ids);
     fixture.input.providers = providers;
     fixture.input.provider_count = 3u;
     XrTargetProfile *profile = NULL;

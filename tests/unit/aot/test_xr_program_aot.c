@@ -994,7 +994,7 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
     const XrTargetProviderContract *contract = NULL;
     for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
-        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+        if (xr_test_target_profile_is_scalar_provider(candidate)) {
             REQUIRE(contract == NULL);
             contract = candidate;
         }
@@ -1889,7 +1889,7 @@ static void test_provider_trap_continuation_lowering_and_mutation(void) {
     const XrTargetProviderContract *contract = NULL;
     for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
-        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+        if (xr_test_target_profile_is_scalar_provider(candidate)) {
             REQUIRE(contract == NULL);
             contract = candidate;
         }
@@ -1976,7 +1976,7 @@ static XrValidatedProgram *build_cleanup_graph_program(const XrTargetProfile *pr
     const XrTargetProviderContract *contract = NULL;
     for (size_t p = 0u; p < xr_target_profile_provider_count(profile); ++p) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, p);
-        if (candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+        if (xr_test_target_profile_is_scalar_provider(candidate)) {
             REQUIRE(contract == NULL);
             contract = candidate;
         }
@@ -2490,7 +2490,7 @@ static void test_coroutine_trap_continuation_lowering_and_mutation(void) {
     const XrTargetProviderContract *contract = NULL;
     for (size_t index = 0u; index < xr_target_profile_provider_count(profile); ++index) {
         const XrTargetProviderContract *candidate = xr_target_profile_provider(profile, index);
-        if (candidate && candidate->provider_kind == XR_TARGET_PROVIDER_CLOCK) {
+        if (xr_test_target_profile_is_scalar_provider(candidate)) {
             REQUIRE(contract == NULL);
             contract = candidate;
         }

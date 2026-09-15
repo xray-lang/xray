@@ -215,9 +215,11 @@ bool xtc_target_profile_build_native_hosted(
     return xr_target_profile_build(&input, out, error, error_size);
 }
 
-bool xtc_target_profile_build_native_freestanding(
-    const XrToolchainTarget *target, const XrTargetCodegenFacts *codegen,
-    uint64_t provider_mask, XrTargetProfile **out, char *error, size_t error_size) {
+bool xtc_target_profile_build_native_freestanding(const XrToolchainTarget *target,
+                                                  const XrTargetCodegenFacts *codegen,
+                                                  uint64_t provider_capabilities,
+                                                  XrTargetProfile **out, char *error,
+                                                  size_t error_size) {
     if (out)
         *out = NULL;
     if (!target || !codegen || !out)
@@ -251,7 +253,7 @@ bool xtc_target_profile_build_native_freestanding(
 
     XrRuntimeTargetAuthority runtime;
     XrRuntimeAbiStatus status =
-        xr_runtime_target_authority_native_freestanding(provider_mask, &runtime);
+        xr_runtime_target_authority_native_freestanding(provider_capabilities, &runtime);
     if (status != XR_RUNTIME_ABI_OK)
         return authority_error(
             error, error_size,

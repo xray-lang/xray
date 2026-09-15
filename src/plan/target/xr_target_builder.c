@@ -16616,7 +16616,7 @@ static bool materialize_capabilities(const XrTargetBuildContext *builder,
                                      XrTargetMaterializedPlan *materialized, char *error,
                                      size_t error_size) {
     const XrTargetProfileDraft *facts = xr_target_profile_facts(builder->profile);
-    if (!facts || (facts->provider_mask & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
+    if (!facts || (facts->provider_capabilities & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
                       XR_TARGET_FOUNDATION_CAPABILITY_MASK)
         return fail(error, error_size, "XR_TARGET_1004",
                     "target profile lacks a foundation capability provider");
@@ -16689,14 +16689,14 @@ static bool materialize_capabilities(const XrTargetBuildContext *builder,
         return fail(error, error_size, "XR_EXEC_5003", "capability closure materialization failed");
     materialized->capabilities[0] = (XrTargetCapabilityRecord) {
         .id = 0,
-        .capability = XR_TARGET_PROVIDER_ALLOCATOR,
-        .provider = XR_TARGET_PROVIDER_ALLOCATOR,
+        .capability = XR_TARGET_CAPABILITY_ALLOCATOR,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_ALLOCATOR,
         .flags = XR_TARGET_CAPABILITY_REQUIRED,
     };
     materialized->capabilities[1] = (XrTargetCapabilityRecord) {
         .id = 1,
-        .capability = XR_TARGET_PROVIDER_PANIC,
-        .provider = XR_TARGET_PROVIDER_PANIC,
+        .capability = XR_TARGET_CAPABILITY_PANIC,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_PANIC,
         .flags = XR_TARGET_CAPABILITY_REQUIRED,
     };
     uint32_t next = 2;
@@ -16704,16 +16704,16 @@ static bool materialize_capabilities(const XrTargetBuildContext *builder,
     do {                                                                                           \
         if (is_required) {                                                                         \
             uint64_t capability_bit = xr_target_capability_mask(target_capability);                \
-            uint16_t provider = xr_target_capability_provider(target_capability);                  \
+            uint16_t provider = xr_target_capability_provider_role(target_capability);             \
             if (capability_bit == 0 ||                                                             \
                 (target_capability != XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY &&                 \
-                 (facts->provider_mask & capability_bit) == 0))                                    \
+                 (facts->provider_capabilities & capability_bit) == 0))                            \
                 return fail(error, error_size, "XR_TARGET_1004",                                   \
                             "target profile lacks a required capability");                         \
             materialized->capabilities[next] = (XrTargetCapabilityRecord) {                        \
                 .id = next,                                                                        \
                 .capability = target_capability,                                                   \
-                .provider = provider,                                                              \
+                .provider_role = provider,                                                         \
                 .flags = XR_TARGET_CAPABILITY_REQUIRED,                                            \
             };                                                                                     \
             next++;                                                                                \
@@ -17203,8 +17203,8 @@ static bool graph_merge_capabilities(const XrTargetMaterializedPlan *left,
                     : left_row->capability < right_row->capability ? -1
                     : left_row->capability > right_row->capability ? 1
                                                                    : 0;
-        if (order == 0 &&
-            (left_row->provider != right_row->provider || left_row->flags != right_row->flags))
+        if (order == 0 && (left_row->provider_role != right_row->provider_role ||
+                           left_row->flags != right_row->flags))
             return false;
         const XrTargetCapabilityRecord *chosen = order <= 0 ? left_row : right_row;
         if (!chosen || count >= target->capability_count)
@@ -17998,7 +17998,7 @@ static bool module_set_merge_capabilities(const XrTargetMaterializedPlan *source
             const XrTargetCapabilityRecord *row = &sources[i].capabilities[indexes[i]];
             if (row->capability != best->capability)
                 continue;
-            if (row->provider != best->provider || row->flags != best->flags)
+            if (row->provider_role != best->provider_role || row->flags != best->flags)
                 ok = false;
             else
                 indexes[i]++;

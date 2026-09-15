@@ -521,7 +521,7 @@ typedef struct XrTargetProviderContract {
     uint32_t flags;
     uint16_t operation_count;
     uint8_t runtime_profile;
-    uint8_t provider_kind;
+    uint8_t provider_role;
     uint32_t allocator_max_alignment;
     uint8_t allocator_sized_free;
     uint8_t allocator_zeroed_allocation;
@@ -540,8 +540,8 @@ XR_FUNC XrRuntimeAbiStatus xr_target_provider_call_abi_fingerprint(
     const XrTargetProviderCallAbiContract *abi, XrFingerprint *out);
 XR_FUNC XrRuntimeAbiStatus xr_target_provider_contract_fingerprint(
     const XrTargetProviderContract *provider, XrFingerprint *out);
-XR_FUNC XrRuntimeAbiStatus xr_target_provider_set_fingerprint(
-    const XrTargetProviderContract *providers, size_t provider_count,
-    uint64_t *out_provider_mask, XrFingerprint *out);
+XR_FUNC XrRuntimeAbiStatus
+xr_target_provider_set_fingerprint(const XrTargetProviderContract *providers, size_t provider_count,
+                                   uint64_t *out_provider_capabilities, XrFingerprint *out);
 
 #endif  // XR_RUNTIME_CONTRACT_H

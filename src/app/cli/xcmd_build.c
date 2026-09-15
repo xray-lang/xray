@@ -3296,14 +3296,14 @@ static uint32_t xaot_cli_provider_capability_by_name(const char *name) {
 
 static bool xaot_cli_provider_from_target_config(
     const XrTargetConfig *config, XrCliBuildProfile profile, const XrToolchainTarget *target,
-    XaotTargetCapabilityProvider *out, bool *out_present, uint64_t *out_runtime_provider_mask,
-    char *err, size_t err_size) {
+    XaotTargetCapabilityProvider *out, bool *out_present,
+    uint64_t *out_runtime_provider_capabilities, char *err, size_t err_size) {
     bool present = config && ((config->runtime_provider && config->runtime_provider[0]) ||
                               config->n_runtime_capabilities > 0 || config->n_runtime_hooks > 0);
     if (out_present)
         *out_present = present;
-    if (out_runtime_provider_mask)
-        *out_runtime_provider_mask = 0;
+    if (out_runtime_provider_capabilities)
+        *out_runtime_provider_capabilities = 0;
     if (!present)
         return true;
     if (!out || !config->runtime_provider || !config->runtime_provider[0]) {
@@ -3402,20 +3402,20 @@ static bool xaot_cli_provider_from_target_config(
                  "freestanding provider is missing allocator or panic foundation hooks");
         return false;
     }
-    if (out_runtime_provider_mask) {
-        *out_runtime_provider_mask |= XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                                      XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+    if (out_runtime_provider_capabilities) {
+        *out_runtime_provider_capabilities |=
+            XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+            XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC);
     }
-    if ((assertion_report_capability || output_write_capability) && out_runtime_provider_mask) {
-        /* The provider kind alone does not say which IO operations exist. Carry
-         * the exact ones so an assertion reporter is never mistaken for an
-         * output sink, or the reverse. */
-        *out_runtime_provider_mask |= XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
+    if ((assertion_report_capability || output_write_capability) &&
+        out_runtime_provider_capabilities) {
+        /* Assertion reporting and ordinary output require distinct verified
+         * operation contracts even when their byte-sink ABI is identical. */
         if (assertion_report_capability)
-            *out_runtime_provider_mask |=
+            *out_runtime_provider_capabilities |=
                 XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
         if (output_write_capability)
-            *out_runtime_provider_mask |=
+            *out_runtime_provider_capabilities |=
                 XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE);
     }
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
@@ -3452,7 +3452,7 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
     XrTargetProfile *target_profile = NULL;
     XaotTargetCapabilityProvider capability_provider;
     bool has_capability_provider = false;
-    uint64_t runtime_provider_mask = 0;
+    uint64_t runtime_provider_capabilities = 0;
     XaotTarget build_target;
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
@@ -3484,7 +3484,7 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
         char provider_err[256];
         if (!xaot_cli_provider_from_target_config(
                 target_config, profile, target, &capability_provider, &has_capability_provider,
-                &runtime_provider_mask, provider_err, sizeof(provider_err))) {
+                &runtime_provider_capabilities, provider_err, sizeof(provider_err))) {
             fprintf(stderr, "Error: %s\n", provider_err);
             xr_target_profile_free(target_profile);
             xaot_target_free(&build_target);
@@ -3500,8 +3500,8 @@ cmd_build_native(const char *input, const char *output, const char *cc, const ch
                  ? xtc_target_profile_build_native_hosted(target, &codegen, &target_profile,
                                                           profile_err, sizeof(profile_err))
                  : xtc_target_profile_build_native_freestanding(
-                       target, &codegen, runtime_provider_mask, &target_profile, profile_err,
-                       sizeof(profile_err)));
+                       target, &codegen, runtime_provider_capabilities, &target_profile,
+                       profile_err, sizeof(profile_err)));
         if (!profile_ok) {
             fprintf(stderr, "Error: %s\n", profile_err);
             xaot_target_free(&build_target);

@@ -18,10 +18,7 @@ _Static_assert(XR_TARGET_RUNTIME_PROFILE_HOSTED == 1,
                "hosted runtime profile encoding is canonical");
 _Static_assert(XR_TARGET_RUNTIME_PROFILE_FREESTANDING == 2,
                "freestanding runtime profile encoding is canonical");
-_Static_assert(XR_TARGET_PROVIDER_RANDOM == 4, "random provider owns its canonical numeric slot");
-_Static_assert(XR_TARGET_PROVIDER_SCHEDULER == 5,
-               "scheduler provider follows random without remapping");
-_Static_assert(XR_TARGET_PROVIDER_FFI == 8, "FFI provider encoding is canonical");
+_Static_assert(XR_TARGET_PROVIDER_ROLE_COUNT == 4, "only runtime roles occupy enum slots");
 
 static int failures;
 
@@ -497,7 +494,7 @@ static void make_providers(XrTargetProviderContract providers[2]) {
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
         .operation_count = 2,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        .provider_kind = XR_TARGET_PROVIDER_ALLOCATOR,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_ALLOCATOR,
         .allocator_max_alignment = 64,
         .allocator_sized_free = 1,
         .allocator_zeroed_allocation = 1,
@@ -519,7 +516,7 @@ static void make_providers(XrTargetProviderContract providers[2]) {
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
         .operation_count = 1,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        .provider_kind = XR_TARGET_PROVIDER_PANIC,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_PANIC,
         .panic_behavior = XR_TARGET_PROVIDER_PANIC_NO_RETURN,
     };
     providers[1].contract_id = make_id(201);
@@ -843,15 +840,15 @@ static void test_provider_set_known_answer_and_mutation(void) {
               !fingerprint_equal(provider_fingerprint, provider_changed),
           "exact provider ABI mutation changes the contract fingerprint");
 
-    uint64_t provider_mask = 0;
+    uint64_t provider_capabilities = 0;
     XrFingerprint fingerprint;
-    CHECK(xr_target_provider_set_fingerprint(providers, 2, &provider_mask, &fingerprint) ==
+    CHECK(xr_target_provider_set_fingerprint(providers, 2, &provider_capabilities, &fingerprint) ==
               XR_RUNTIME_ABI_OK,
           "structured provider set fingerprints");
-    uint64_t expected_mask = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                             XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
-    CHECK(provider_mask == expected_mask,
-          "provider mask is derived exactly from verified provider kinds");
+    uint64_t expected_mask = XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+                             XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC);
+    CHECK(provider_capabilities == expected_mask,
+          "provider mask is derived exactly from verified provider contracts");
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
         0x31, 0x42, 0xfb, 0xdb, 0x71, 0x05, 0xd9, 0xda, 0x10, 0x29, 0xf2,
         0x5f, 0x02, 0xcb, 0xd4, 0xc7, 0x1c, 0x79, 0xa3, 0xce, 0x2f, 0x0c,
@@ -895,7 +892,7 @@ static void test_provider_set_known_answer_and_mutation(void) {
     CHECK(xr_target_provider_set_fingerprint(reversed, 2, &changed_mask, &changed) ==
                   XR_RUNTIME_ABI_INVALID_ORDER &&
               changed_mask == untouched_mask && fingerprint_equal(changed, untouched),
-          "provider kind order fails without publishing mask or digest");
+          "provider contract ID order fails without publishing mask or digest");
     CHECK(xr_target_provider_set_fingerprint(providers, 1, &changed_mask, &changed) ==
               XR_RUNTIME_ABI_INVALID_PROVIDER_SET,
           "missing mandatory panic provider is rejected");
@@ -953,10 +950,10 @@ static void test_provider_set_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_INVALID_PROVIDER_SET,
           "provider availability must include the selected runtime profile");
     memcpy(mutated, providers, sizeof(mutated));
-    mutated[1].provider_kind = XR_TARGET_PROVIDER_KIND_COUNT;
+    mutated[1].provider_role = XR_TARGET_PROVIDER_ROLE_COUNT;
     CHECK(xr_target_provider_set_fingerprint(mutated, 2, &changed_mask, &changed) ==
               XR_RUNTIME_ABI_INVALID_PROVIDER_SET,
-          "unknown provider kind is rejected");
+          "unknown provider role is rejected");
     memcpy(mutated, providers, sizeof(mutated));
     mutated[1].reserved32 = 1;
     CHECK(xr_target_provider_set_fingerprint(mutated, 2, &changed_mask, &changed) ==
@@ -964,11 +961,90 @@ static void test_provider_set_known_answer_and_mutation(void) {
           "provider reserved fields must be zero");
 }
 
+static XrTargetProviderContract make_operation_provider(uint8_t id_seed) {
+    XrTargetProviderContract provider = {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
+        .operation_count = 1,
+        .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
+    };
+    provider.contract_id = make_id(id_seed);
+    XrTargetProviderCallSlotAbi result =
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    provider.operations[0] = make_operation(1, make_call_abi(result, NULL, 0), 0, 0, 0);
+    return provider;
+}
+
+static void test_provider_identity_order_and_capability_separation(void) {
+    XrTargetProviderContract providers[4];
+    make_providers(providers);
+    providers[2] = make_operation_provider(202);
+    providers[3] = make_operation_provider(203);
+    XrFingerprint fingerprint = sentinel_fingerprint(231);
+    uint64_t capabilities = 0;
+    const uint64_t foundation = XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR) |
+                                XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC);
+    CHECK(xr_target_provider_set_fingerprint(providers, 3, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_OK &&
+              capabilities == foundation,
+          "ordinary provider identities do not create semantic capability bits");
+    CHECK(xr_target_provider_set_fingerprint(providers, 4, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_OK &&
+              capabilities == foundation,
+          "distinct ordinary contracts coexist without new provider categories");
+
+    providers[3].contract_id = providers[2].contract_id;
+    providers[3].contract_id.bytes[XR_STABLE_ID_BYTES - 1u]++;
+    CHECK(xr_target_provider_set_fingerprint(providers, 4, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_OK &&
+              capabilities == foundation,
+          "contracts that differ only in their final identity byte remain distinct");
+
+    XrTargetProviderContract ordered[3] = {make_operation_provider(100), providers[0],
+                                           providers[1]};
+    CHECK(xr_target_provider_set_fingerprint(ordered, 3, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_OK &&
+              capabilities == foundation,
+          "provider order follows complete contract identities rather than roles");
+
+    XrTargetProviderContract reversed[3] = {providers[0], ordered[0], providers[1]};
+    XrFingerprint untouched = sentinel_fingerprint(232);
+    fingerprint = untouched;
+    capabilities = UINT64_C(0xfeed);
+    CHECK(xr_target_provider_set_fingerprint(reversed, 3, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_INVALID_ORDER &&
+              capabilities == UINT64_C(0xfeed) && fingerprint_equal(fingerprint, untouched),
+          "unsorted contract identities publish neither capabilities nor fingerprint");
+
+    providers[3].contract_id = providers[2].contract_id;
+    CHECK(xr_target_provider_set_fingerprint(providers, 4, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_INVALID_ORDER &&
+              capabilities == UINT64_C(0xfeed) && fingerprint_equal(fingerprint, untouched),
+          "duplicate contract identities remain invalid across ordinary providers");
+
+    providers[3] = providers[0];
+    providers[3].contract_id = make_id(204);
+    CHECK(xr_target_provider_set_fingerprint(providers, 4, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_INVALID_PROVIDER_SET &&
+              capabilities == UINT64_C(0xfeed) && fingerprint_equal(fingerprint, untouched),
+          "two allocator contracts cannot ambiguously own the same runtime foundation role");
+    providers[3] = providers[1];
+    providers[3].contract_id = make_id(204);
+    CHECK(xr_target_provider_set_fingerprint(providers, 4, &capabilities, &fingerprint) ==
+                  XR_RUNTIME_ABI_INVALID_PROVIDER_SET &&
+              capabilities == UINT64_C(0xfeed) && fingerprint_equal(fingerprint, untouched),
+          "two panic contracts cannot ambiguously own the same runtime foundation role");
+}
+
 int main(void) {
     test_object_header_known_answer_and_mutation();
     test_runtime_known_answer_and_mutation();
     test_provider_call_abi_known_answer_and_mutation();
     test_provider_set_known_answer_and_mutation();
+    test_provider_identity_order_and_capability_separation();
     if (failures != 0) {
         fprintf(stderr, "%d runtime ABI contract test(s) failed\n", failures);
         return 1;

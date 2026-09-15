@@ -31,7 +31,7 @@ typedef enum XrRuntimeActivationRegistrationRole {
 typedef struct XrRuntimeActivationRegistration {
     XrStableId provider_contract;
     XrStableId operation;
-    uint16_t provider_kind;
+    uint16_t provider_role;
     uint8_t role;
     uint8_t reserved;
 } XrRuntimeActivationRegistration;
@@ -112,9 +112,9 @@ XR_FUNC bool xr_runtime_activation_publish_module(
 XR_FUNC bool xr_runtime_activation_unpublish(
     XrRuntimeModuleActivation **activation, char *diagnostic,
     size_t diagnostic_size);
-XR_FUNC bool xr_runtime_activation_provider_acquire(
-    XrRuntimeModuleActivation *activation, uint16_t provider_kind,
-    char *diagnostic, size_t diagnostic_size);
+XR_FUNC bool xr_runtime_activation_foundation_acquire(XrRuntimeModuleActivation *activation,
+                                                      uint16_t provider_role, char *diagnostic,
+                                                      size_t diagnostic_size);
 XR_FUNC bool xr_runtime_activation_provider_release(
     XrRuntimeModuleActivation *activation, char *diagnostic,
     size_t diagnostic_size);

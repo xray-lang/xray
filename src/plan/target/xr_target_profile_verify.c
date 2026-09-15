@@ -193,15 +193,16 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
                                  XR_TARGET_VECTOR_AVX512 | XR_TARGET_VECTOR_NEON |
                                  XR_TARGET_VECTOR_SVE | XR_TARGET_VECTOR_VSX |
                                  XR_TARGET_VECTOR_LSX | XR_TARGET_VECTOR_WASM128;
-    const uint64_t provider_mask =
-        XR_TARGET_PROVIDER_MASK_ALL | XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK;
+    const uint64_t provider_capabilities = XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK;
     if ((machine->atomic_width_mask & ~atomic_width_mask) != 0 ||
         (machine->atomic_order_mask & ~atomic_order_mask) != 0 ||
         (machine->float_feature_mask & ~float_mask) != 0 ||
         (machine->vector_feature_mask & ~vector_mask) != 0 ||
-        (facts->provider_mask & ~provider_mask) != 0 ||
-        (facts->provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR)) == 0 ||
-        (facts->provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC)) == 0 ||
+        (facts->provider_capabilities & ~provider_capabilities) != 0 ||
+        (facts->provider_capabilities &
+         XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ALLOCATOR)) == 0 ||
+        (facts->provider_capabilities & XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC)) ==
+            0 ||
         (machine->float_feature_mask & XR_TARGET_FLOAT_IEEE754) == 0 ||
         ((machine->float_feature_mask & XR_TARGET_FLOAT_STRICT) != 0 &&
          (machine->float_feature_mask & XR_TARGET_FLOAT_FAST) != 0) ||
@@ -231,14 +232,14 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile partition identity changed after freeze");
     if (profile->provider_contracts_materialized) {
-        uint64_t actual_provider_mask = 0;
+        uint64_t actual_provider_capabilities = 0;
         XrFingerprint provider_set_id;
         if (!profile->providers || profile->provider_count == 0 ||
             profile->provider_count > XR_RUNTIME_ABI_MAX_PROVIDERS ||
             xr_target_provider_set_fingerprint(profile->providers, profile->provider_count,
-                                               &actual_provider_mask,
+                                               &actual_provider_capabilities,
                                                &provider_set_id) != XR_RUNTIME_ABI_OK ||
-            actual_provider_mask != facts->provider_mask ||
+            actual_provider_capabilities != facts->provider_capabilities ||
             !xr_fingerprint_equal(provider_set_id, facts->provider_set_fingerprint))
             return report(error, error_size, "XR_TARGET_1000",
                           "materialized provider contracts do not match profile identity");

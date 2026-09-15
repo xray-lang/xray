@@ -30,7 +30,9 @@ capability boundary for core assertions.
    retired assertion opcodes are not accepted.
 8. Target planning derives assertion capabilities from the frozen target
    profile. Freestanding assertion reporting requires the exact IO provider
-   identity and operation ABI. Missing or incompatible providers fail before C
+   contract ID, assertion operation ID, and complete operation ABI. An ordinary
+   role or a copied operation in another contract grants no reporting capability.
+   Missing or incompatible providers fail before C
    emission; typed-error and unwind boundaries are never inferred from hosted
    behavior.
 9. C generation selects the assertion adapter through a stable typed identity.
@@ -49,15 +51,15 @@ anchor-sha256: src/vm/xvm_dispatch_assert.inc.c bd5ba9f3e4f36716cbfa8a28344566a2
 anchor-sha256: src/aot/xrt_assertion.h 5bfb7083ad7d78343557366424919a99403fc8e3a64ed51903c7d2860c46095d
 anchor-sha256: src/aot/xrt_core_freestanding.h 5ea90e48514a3bbaa483634bfa58dd0f4c9566d790c284ecc337b9bef274c55f
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 922e370c40e60e113fba8e0a40889c4f379c74cc43bb7543ea7b5d56241d9044
-anchor-sha256: src/plan/target/xr_target_capability.h 5069e52a258729e7c1384d1cea8706aba2cfa639d45ad94280bda0d89bd7a3e0
+anchor-sha256: src/plan/target/xr_target_capability.h e8076bd04818d155c36b1b11de6bf4359abcd1d2c2ddffe84c9ef74f39268f29
 anchor-sha256: src/plan/target/xr_target_profile.h bdf184b79d382fe14ba2d3e4d1522ad74b7ee2fa3d70723f79468899e6374322
-anchor-sha256: src/plan/target/xr_target_builder.c f8dbf513a09d863d1dfad77f641cac81410658b3f11c6f10db5a86663aea290f
-anchor-sha256: src/plan/target/xr_target_verify.c a7aade83086711c19cdfc03b0130fd186c5a5a71bd549273476260ae21304433
-anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c e138096323af8b59ad6e7dbf4aa9813400c2f9ce231c09bc1e26eefb45b09911
+anchor-sha256: src/plan/target/xr_target_builder.c cc9727fc1d2bb4bc61a20dfae5d357921c1e2825aafc4c9ae5b3901f0bc7b1fe
+anchor-sha256: src/plan/target/xr_target_verify.c be30f2f18a5aef9290bd5a8355d7e199f33e381852d50136f51eaf24a3236a8e
+anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c 8e88762a6a8db72658c502ae2ed7a91001454d3a6acee01df298e74d4202775e
 anchor-sha256: tests/unit/aot/test_xrt_assertion.c 5e03408d6b96adfdc657951ba18d3edcf3a788b3609ef2a0151362d0847416bf
 anchor-sha256: tests/unit/aot/test_xrt_assertion_freestanding.c 44d79358e0b620abaa43e3ed37830ebdc3787c5bb979bd526cdaa647a788501d
 anchor-sha256: tests/aot/run_freestanding_assertion_provider_test.py ed01a22dcc10d26dfbe65bf9b99c55ab9db733e5742f2337b9a160dcfabd9a4a
 anchor-sha256: tests/unit/ir/test_xi_emit.c 3275365cff417d913bd85f11f34137bdd1bce28bd8ae48eb6598b03eaa5fee48
-anchor-sha256: tests/unit/plan/test_target_profile.c ebcd1c0fef635f5e4997fd41523f47349b5c6ccaf868eaa491789993abaab8ac
-anchor-sha256: tests/unit/plan/test_target_plan.c c1237baa6a16a896f9ead9e06729879ad1f5de51d769b85bb801951a0fadfb97
+anchor-sha256: tests/unit/plan/test_target_profile.c e54b53070db66b309a07673c57fb1112781b19cd8eecacacb496fefb04079da6
+anchor-sha256: tests/unit/plan/test_target_plan.c 692d059fac42ebbbbfc99974a025d8c91ee4cdb9753441b9ee6639d3f06d3969
 anchor-sha256: tests/unit/fixtures/assertion/same_t_contextual.xr 865f66dda824e04543a140d5423855c6199b60b13673c292b7ee990c58a550fa
