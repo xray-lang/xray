@@ -156,6 +156,24 @@ class FocusedSelectionTest(unittest.TestCase):
         run.assert_called_once_with(["ninja", "-C", "build",
                                      "-t", "targets", "all"])
 
+    def test_required_executable_target_uses_real_ninja_inventory(self):
+        with tempfile.TemporaryDirectory(prefix="xray ninja targets ") as directory:
+            source = Path(directory)
+            build = source / "build"
+            (source / "CMakeLists.txt").write_text(
+                "cmake_minimum_required(VERSION 3.20)\n"
+                "project(target_inventory C)\n"
+                "add_executable(xray main.c)\n", encoding="utf-8")
+            (source / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            configured = runner.proc.run(["cmake", "-G", "Ninja", "-S", source, "-B", build])
+            self.assertTrue(configured.ok, configured.combined_text())
+            self.assertTrue(runner.build_selected(
+                build, [], 1, include_xray=False, required_targets=("xray",)))
+            executed = runner.proc.run([build / runner.platform.exe_name("xray")])
+            self.assertTrue(executed.ok, executed.combined_text())
+            self.assertFalse(runner.build_selected(
+                build, [], 1, include_xray=False, required_targets=("missing_target",)))
+
 
 class ProductionBuildPreflightTest(unittest.TestCase):
     def setUp(self):

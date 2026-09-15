@@ -186,7 +186,9 @@ TIERS: Dict[str, Tuple[str, str, str]] = {
 }
 
 TEST_NAME_RE = re.compile(r"^\s*Test\s*#[0-9]+:\s*(\S+)")
-NINJA_TARGET_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_.-]*): phony")
+# Top-level executables are real linker outputs; subdirectory targets often
+# have phony aliases. Both are buildable names in Ninja's target inventory.
+NINJA_TARGET_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_.-]*): \S+$")
 BACKEND_TOUCHED = re.compile(r"^src/(aot|ir|coro|vm|runtime)/|^CMakeLists\.txt$|^xisa/")
 FOCUSED_CTEST_OPTIONS = {
     "-R", "--tests-regex", "-L", "--label-regex", "-I", "--tests-information",
