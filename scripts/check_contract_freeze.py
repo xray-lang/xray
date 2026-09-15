@@ -280,6 +280,9 @@ CONTRACT_SPECS = (
         "memory-model.md",
         (
             "xisa/xi/ops.def",
+            "src/ir/xi_lower_internal.h",
+            "tests/regression/11_coroutine/1130_linked_scope.xr",
+            "tests/regression/11_coroutine/1132_task_monitor.xr",
             "src/ir/xi_tbaa.c",
             "src/ir/xi_tbaa.h",
             "src/ir/xi_opt_licm.c",
@@ -811,6 +814,7 @@ CONTRACT_SPECS = (
             "scripts/check_ownership_audit_record_no_alloc.py",
             "scripts/check_ownership_audit_release_boundary.py",
             "scripts/run_tsan_focused.py",
+            "tests/lib/tests/test_tsan_focused.py",
             "tests/unit/CMakeLists.txt",
             "tests/unit/runtime/test_ownership_audit.c",
             "tests/unit/runtime/test_typed_lifecycle_audit.c",

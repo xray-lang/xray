@@ -81,6 +81,12 @@ either side has to be argued rather than drift.
   to the reachable graph. Concurrent retain/release on a non-atomic count is
   memory corruption, not a lost update, so this is a correctness obligation
   rather than an accuracy one.
+- M12a: fresh record-enum construction carries the allocation domain selected
+  by lowering, including shared construction inside a thrown expression.
+  This changes allocation metadata, never the exact variant ordinal or payload
+  order. Task-result and linked-scope publication retain their existing
+  transferable/shared-owner checks; publication does not insert an implicit
+  clone to repair an invalid owner.
 
 ## Guarantee boundary
 
@@ -101,6 +107,10 @@ A change to these rules re-runs and, where the expected output moves, updates:
   Dekker, run under AOT `-O2` where the Xi optimiser is active
 - `tests/unit/ir/test_xi_tbaa.c` - op-table invariants (M7, M9, M10, M11)
 - `tests/unit/ir/test_xi_licm.c` - barrier obligations (M8)
+- `tests/regression/11_coroutine/1130_linked_scope.xr` and
+  `1132_task_monitor.xr` - thrown record-enum publication, error payload and
+  completed task observations (M12a); linked propagation, child errors,
+  task links, await-any and scope stress cover the same allocation rule.
 
 ## Digest anchors
 
@@ -114,3 +124,6 @@ anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0
 anchor-sha256: src/coro/xtask.c a58cd9d324c5919b8e60b2130523ee3c544ba600fe36be0fe3a93232faadb0ba
 anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
 anchor-sha256: src/frontend/canonical/xcanon.c 6a2d24cce6c597bb99b318cba3dafcaa021b1023b3bf3a5201bb6d69ec0ec589
+anchor-sha256: src/ir/xi_lower_internal.h 61eea02e231fa58fefe7b2c3fef0a0268469e23a1ca3730765cec892ad3c37f2
+anchor-sha256: tests/regression/11_coroutine/1130_linked_scope.xr 6b58eb44971587073e71ec549b024c8ab5761856089dfe2a31ad478d24ab78b0
+anchor-sha256: tests/regression/11_coroutine/1132_task_monitor.xr ae8260b568f5e4d6240a6f95cbd8d2325cc0c119b1755d52ccd0f5cc9c4fd458

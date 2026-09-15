@@ -8,7 +8,7 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -232,6 +232,53 @@ class CTestSelectionTest(unittest.TestCase):
                 self.build, {}, 777, self.log,
                 run=lambda argv, **kwargs: next(results),
             ))
+
+
+class LaneVerdictTest(unittest.TestCase):
+    def run_lane(self, failed_case=None):
+        calls = []
+
+        def fake_run(argv, **kwargs):
+            calls.append(tuple(str(arg) for arg in argv))
+            # The first process is the ownership audit; every remaining
+            # process is an actual source case selected by the lane.
+            return failed_case if len(calls) == 2 and failed_case else outcome()
+
+        output = io.StringIO()
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(tsan, "tsan_runtime_available", return_value=True))
+            stack.enter_context(mock.patch.object(tsan.sanitizer, "rebuild_reason", return_value=None))
+            stack.enter_context(mock.patch.object(tsan.sanitizer, "verify_configured", return_value=None))
+            stack.enter_context(mock.patch.object(tsan, "run_task276_ctests", return_value=True))
+            stack.enter_context(mock.patch.object(tsan.Path, "is_file", return_value=True))
+            stack.enter_context(mock.patch.object(tsan.os, "access", return_value=True))
+            stack.enter_context(mock.patch.object(tsan.proc, "run", side_effect=fake_run))
+            stack.enter_context(redirect_stdout(output))
+            result = tsan.main(["run_tsan_focused.py"])
+        self.assertEqual(len(calls), len(tsan.CASES) + 1)
+        self.assertEqual(
+            [(call[1], call[2]) for call in calls[1:]],
+            [(mode, str(tsan.PROJECT_DIR / path)) for mode, path in tsan.CASES],
+        )
+        return result, output.getvalue()
+
+    def test_success_requires_all_source_cases_to_execute(self):
+        code, output = self.run_lane()
+        self.assertEqual(code, 0)
+        self.assertIn("VERDICT: PASS", output)
+
+    def test_source_failures_without_race_warnings_fail_the_lane(self):
+        for failed in (
+            outcome(returncode=1, stderr=b"unsupported canonical operation\n"),
+            outcome(returncode=-6, stderr=b"publication invariant failed\n"),
+            outcome(returncode=124, timed_out=True, stdout=b"partial trace\n"),
+        ):
+            with self.subTest(exit=failed.returncode):
+                code, output = self.run_lane(failed)
+                self.assertEqual(code, 1)
+                self.assertIn("VERDICT: FAIL", output)
+                self.assertNotIn("VERDICT: PASS", output)
+                self.assertIn(failed.combined_text().strip(), output)
 
 
 if __name__ == "__main__":

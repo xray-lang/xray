@@ -34,6 +34,11 @@ managed String-concat cleanup partition described below.
    lane builds and runs that audit test on supported hosts. Allocation counters
    and repeated focused tests provide additional dynamic evidence. An event is
    validated in temporary state before its object/loan transition is committed.
+   The sanitizer lane also requires every selected source probe to finish with
+   a successful exit. Timeout, signal termination, unsupported-source rejection
+   and other nonzero exits fail the lane even without a race warning. Failed
+   probe output and stable source paths are retained in the lane log; remaining
+   probes still execute to collect independent failures.
 6. Tracked allocations follow LIVE -> FINALIZING -> FINALIZED -> RECLAIMED.
    The destructor terminal is legal only in FINALIZING. Exact domain instances
    follow DRAINING -> ENDED; drain rejects resurrection, new borrow, positive
@@ -80,7 +85,8 @@ anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.h 85dab081a8f11822651cc6866
 anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.c 291e460b9004adfe43491e1f1c0054bac1cf2af8e137917ebb4e2760868573c3
 anchor-sha256: scripts/check_ownership_audit_record_no_alloc.py 00f71577e9278988a69467ffb3ef1078618cb3658ba544568742ffc9c1581f63
 anchor-sha256: scripts/check_ownership_audit_release_boundary.py b89a7249c71941a6a7ca55331f75507cba96ea7d3c55d1f7dafe062b968804fb
-anchor-sha256: scripts/run_tsan_focused.py f431ef1a596ca0c2708c2ed8317333b817003b18b94e4e48233ea971b3f7b098
-anchor-sha256: tests/unit/CMakeLists.txt 9a246355c25047c119ac17f11074b82aa1b98f315e2e002e7260c33d9c52b50d
+anchor-sha256: scripts/run_tsan_focused.py 8686d8468f3c8617a4c235b378ec83384d29b765c3516641f512db68f648b28c
+anchor-sha256: tests/unit/CMakeLists.txt e1bb10a1df3f22c5aa6e76eb8736fc255858f3bae815c97b0319be868edb426a
 anchor-sha256: tests/unit/runtime/test_ownership_audit.c 98c718b64f6b840bee6172c07e0a931178ca4dd237e5bb1a88ff9f03a130f59e
 anchor-sha256: tests/unit/runtime/test_typed_lifecycle_audit.c 25ea03d2d62ab5086f2f9634bf1a819d3eec577a60f327d26df60c671fbe8ce5
+anchor-sha256: tests/lib/tests/test_tsan_focused.py 827f64f6324aae1c4bbf9036682f74bbef0a311d5245f516acc38f89192fff52

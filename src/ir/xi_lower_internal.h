@@ -63,6 +63,7 @@ static inline bool xi_lower_mark_storage_allocation(XiValue *v, uint8_t storage_
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
         case XI_SET_NEW:
+        case XI_VARIANT_CONSTRUCT:
             xi_value_set_allocation_storage_mode(v, storage_mode);
             return true;
         case XI_OBJECT_NEW:

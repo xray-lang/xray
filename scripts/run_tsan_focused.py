@@ -17,7 +17,8 @@ AOT child binaries are produced by the system cc, so they would not be
 instrumented and would prove nothing.
 
 Races are collected rather than halted on (halt_on_error=0), so one warning does
-not hide the rest; the lane fails when any warning appeared.
+not hide the rest. Every selected test must complete successfully, and any race
+warning fails the lane independently of process exit status.
 
 Environment overrides:
     XR_TSAN_JOBS        parallel build jobs (default: all cores)
@@ -294,6 +295,7 @@ def main(argv: list[str]) -> int:
         else:
             print(f"failed (nonzero exit {audit_result.returncode})")
 
+        failed_cases = []
         for mode, case in CASES:
             name = Path(case).stem
             sys.stdout.write(f"  {name:<40}")
@@ -301,11 +303,14 @@ def main(argv: list[str]) -> int:
             result = proc.run([xray, mode, PROJECT_DIR / case], env=env,
                               timeout=CASE_TIMEOUT)
             if result.timed_out:
-                print(f"ran (timed out after {CASE_TIMEOUT}s)")
+                print(f"failed (timed out after {CASE_TIMEOUT}s)")
             elif result.ok:
-                print("ran")
+                print("passed")
             else:
-                print(f"ran (nonzero exit {result.returncode})")
+                print(f"failed (nonzero exit {result.returncode})")
+            if not result.ok:
+                failed_cases.append(case)
+                sanitizer.write_console(sys.stdout, result.combined_text())
 
         reports = []
         for path in sorted(ws.root.glob("tsan.*")):
@@ -330,13 +335,15 @@ def main(argv: list[str]) -> int:
             print(f"VERDICT: FAIL ({count} TSan warnings)")
             return 1
 
-    if focused_failed or audit_failed:
+    if focused_failed or audit_failed or failed_cases:
         print("")
         failed_steps = []
         if focused_failed:
             failed_steps.append("Task 276 focused CTest set")
         if audit_failed:
             failed_steps.append("ownership audit concurrency test")
+        if failed_cases:
+            failed_steps.append("VM cases: " + ", ".join(failed_cases))
         print("VERDICT: FAIL (" + " and ".join(failed_steps) + " failed)")
         return 1
 

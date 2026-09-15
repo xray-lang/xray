@@ -3857,25 +3857,6 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     stmt_write_decl_value(l, var_id, init_val);
 }
 
-/* An enum variant constructed at the throw is the error value itself, so it is
- * allocated straight into the shared band. A unit variant needs no such
- * marking: it is an immutable per-enum singleton that is already shared. */
-static bool stmt_throw_is_direct_enum_constructor(XiLower *l, AstNode *expr) {
-    while (expr && (expr->type == AST_GROUPING || expr->type == AST_AS_EXPR))
-        expr = expr->type == AST_GROUPING ? expr->as.grouping : expr->as.as_expr.expr;
-    if (!l || !l->analyzer || !expr || expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
-        expr->as.call_expr.callee->type != AST_MEMBER_ACCESS)
-        return false;
-    AstNode *object = expr->as.call_expr.callee->as.member_access.object;
-    if (!object || object->type != AST_VARIABLE)
-        return false;
-    XaSymbol *symbol =
-        object->as.variable.symbol_id
-            ? xa_scope_lookup_by_id(l->analyzer->global_scope, object->as.variable.symbol_id)
-            : NULL;
-    return symbol && symbol->kind == XA_SYM_ENUM;
-}
-
 static void lower_throw(XiLower *l, AstNode *node) {
     ThrowStmtNode *t = &node->as.throw_stmt;
     XiBlock *allocation_block = l->cur_block;
@@ -3886,8 +3867,6 @@ static void lower_throw(XiLower *l, AstNode *node) {
     if (allocation_block == l->cur_block) {
         stmt_mark_storage_allocs_in_range(allocation_block, allocation_begin,
                                           XR_OBJ_STORAGE_SHARED);
-        if (stmt_throw_is_direct_enum_constructor(l, t->expression))
-            xi_value_set_allocation_storage_mode(val, XR_OBJ_STORAGE_SHARED);
     }
 
     /* `throw <enum>` is the value-return error channel: write the error
