@@ -11,6 +11,7 @@
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/runtime/class/xclass_descriptor.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
@@ -1302,6 +1303,108 @@ TEST(emit_select_preserves_param_slot_alias) {
     xi_func_free(f);
 }
 
+TEST(emit_aggregate_update_preserves_replaced_owner_before_address_use) {
+    XrVMRuntime *isolate = new_test_isolate();
+    TEST_REQUIRE(isolate != NULL);
+    XrType aggregate_type = {.kind = XR_KIND_INSTANCE, .id = 11, .frozen = true};
+    const char *field_names[] = {"value"};
+    XrAggregateLayout layout = {
+        .total_size = 8,
+        .alignment = 8,
+        .field_count = 1,
+        .field_names = field_names,
+        .fields = {{.native_type = XR_NATIVE_I64, .size = 8}},
+    };
+    XiFunc *f = make_func("update_then_borrow", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *previous = xi_param(f, entry, 0, &aggregate_type);
+    previous->var_id = 1;
+    XiValue *replacement = xi_const_int(f, entry, 42, &stub_int);
+    XiValue *updated = xi_value_new(f, entry, XI_AGG_UPDATE, &aggregate_type, 2);
+    TEST_REQUIRE(updated != NULL);
+    updated->args[0] = previous;
+    updated->args[1] = replacement;
+    updated->aux = &layout;
+    updated->var_id = 1;
+    XiValue *release_previous = xi_value_new(f, entry, XI_RELEASE, &stub_void, 1);
+    release_previous->args[0] = previous;
+    XiValue *place = xi_value_new(f, entry, XI_LOCAL_ADDR, &aggregate_type, 1);
+    place->args[0] = updated;
+    XiValue *release_updated = xi_value_new(f, entry, XI_RELEASE, &stub_void, 1);
+    release_updated->args[0] = updated;
+    xi_block_set_return(entry, NULL);
+
+    XrProto *proto = NULL;
+    TEST_REQUIRE(xi_emit(f, isolate, &proto) == XI_EMIT_OK && proto != NULL);
+    int copy_pc = -1;
+    int old_drop_pc = -1;
+    int new_drop_pc = -1;
+    for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
+        XrInstruction instruction = PROTO_CODE(proto, pc);
+        if (GET_OPCODE(instruction) == OP_COPY)
+            copy_pc = pc;
+        if (GET_OPCODE(instruction) == OP_DROP) {
+            if (old_drop_pc < 0)
+                old_drop_pc = pc;
+            else
+                new_drop_pc = pc;
+        }
+    }
+    TEST_REQUIRE(copy_pc >= 0 && old_drop_pc > copy_pc && new_drop_pc > old_drop_pc);
+    uint32_t destination = GETARG_A(PROTO_CODE(proto, copy_pc));
+    uint32_t old_owner = GETARG_A(PROTO_CODE(proto, old_drop_pc));
+    TEST_REQUIRE(old_owner != destination);
+    TEST_REQUIRE(GETARG_A(PROTO_CODE(proto, new_drop_pc)) == destination);
+    bool saved_before_copy = false;
+    for (int pc = 0; pc < copy_pc; pc++) {
+        XrInstruction instruction = PROTO_CODE(proto, pc);
+        if (GET_OPCODE(instruction) == OP_MOVE && GETARG_A(instruction) == old_owner &&
+            GETARG_B(instruction) == destination)
+            saved_before_copy = true;
+    }
+    TEST_REQUIRE(saved_before_copy);
+    xr_instruction_unit_free(proto);
+    xi_func_free(f);
+    xray_vm_delete(isolate);
+}
+
+TEST(emit_addressed_owner_release_follows_place_replacement) {
+    XrType aggregate_type = {.kind = XR_KIND_INSTANCE, .id = 11, .frozen = true};
+    XiFunc *f = make_func("replace_through_place", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *previous = xi_param(f, entry, 0, &aggregate_type);
+    previous->var_id = 1;
+    XiValue *replacement = xi_param(f, entry, 1, &aggregate_type);
+    XiValue *place = xi_value_new(f, entry, XI_LOCAL_ADDR, &aggregate_type, 1);
+    place->args[0] = previous;
+    XiValue *store = xi_value_new(f, entry, XI_PLACE_STORE, &stub_void, 2);
+    store->args[0] = place;
+    store->args[1] = replacement;
+    XiValue *reload = xi_value_new(f, entry, XI_PLACE_LOAD, &aggregate_type, 1);
+    reload->args[0] = place;
+    reload->var_id = 1;
+    XiValue *release = xi_value_new(f, entry, XI_RELEASE, &stub_void, 1);
+    release->args[0] = previous;
+    xi_block_set_return(entry, NULL);
+
+    XrProto *proto = NULL;
+    TEST_REQUIRE(xi_emit(f, NULL, &proto) == XI_EMIT_OK && proto != NULL);
+    int reload_pc = -1;
+    int drop_pc = -1;
+    for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
+        OpCode operation = GET_OPCODE(PROTO_CODE(proto, pc));
+        if (operation == OP_PLACE_LOAD)
+            reload_pc = pc;
+        if (operation == OP_DROP)
+            drop_pc = pc;
+    }
+    TEST_REQUIRE(reload_pc >= 0 && drop_pc > reload_pc);
+    TEST_REQUIRE(GETARG_A(PROTO_CODE(proto, drop_pc)) ==
+                 GETARG_A(PROTO_CODE(proto, reload_pc)));
+    xr_instruction_unit_free(proto);
+    xi_func_free(f);
+}
+
 TEST(emit_symbol_index_above_255) {
     XrVMRuntime *iso = new_test_isolate();
     assert(iso != NULL);
@@ -2058,6 +2161,8 @@ int main(void) {
     run_emit_param_register_above_255();
     run_emit_coalesces_var_id_above_255();
     run_emit_select_preserves_param_slot_alias();
+    run_emit_aggregate_update_preserves_replaced_owner_before_address_use();
+    run_emit_addressed_owner_release_follows_place_replacement();
     run_emit_symbol_index_above_255();
 
     /* Instruction fusion */

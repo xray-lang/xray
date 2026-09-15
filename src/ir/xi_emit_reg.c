@@ -405,7 +405,10 @@ XR_FUNC void check_var_interference(EmitCtx *ctx) {
  * value because no other name exists; a scope-exit release of such a variable
  * is an obligation on the cell, and the shared register is what makes that
  * name resolve to the cell.  collect_addressed_vars() marks those variables
- * and they are left alone.
+ * and their cell obligations are left alone.  A pure aggregate update is
+ * different: it copies its input into a new owned value before rebinding the
+ * cell.  A release of that input still owns the replaced value, even when a
+ * later method call takes the variable's address.
  *
  * For the rest, the fix is a live-range split: copy the variable's content to
  * a private register just before the definition that overwrites it, and let
@@ -504,8 +507,6 @@ XR_FUNC void split_owner_live_range(EmitCtx *ctx, XiBlock *blk, uint32_t index) 
     if (xi_generated_op_result_kind(def->op) == XI_GEN_RESULT_VOID)
         return;
     XiVarId var_id = def->var_id;
-    if (ctx->var_addressed && ctx->var_addressed[var_id])
-        return;
     XiEmitReg var_reg = ctx->var_reg[var_id];
     if (var_reg == NO_REG)
         return;
@@ -518,6 +519,13 @@ XR_FUNC void split_owner_live_range(EmitCtx *ctx, XiBlock *blk, uint32_t index) 
         /* A release of the value being defined here is not a stale read: its
          * live range starts where this definition does. */
         if (!owned || owned == def || owned->var_id != var_id)
+            continue;
+        /* An addressed variable's final drop follows the cell after place
+         * writes.  Only a direct value replacement establishes a distinct
+         * pre-rebind owner here; saving other reads would drop stale content
+         * after a callee writes through a ref parameter. */
+        if (ctx->var_addressed && ctx->var_addressed[var_id] &&
+            !(def->op == XI_AGG_UPDATE && def->nargs == 2 && def->args[0] == owned))
             continue;
         /* Only a value that reads the shared register is superseded.  A
          * definition that landed in its own register still holds the object
