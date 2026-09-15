@@ -7,9 +7,9 @@ through a real file rather than a pipe buffer: a crashing case writes its
 report between the last flush and the abort, which is exactly when the output
 matters most.
 
-The VM/AOT differential net is folded into the same summary, so a backend
-divergence fails the run rather than being reported somewhere else. Opt out
-with XRAY_SKIP_BACKEND_DIFF=1 when no AOT host toolchain is available.
+The VM/AOT differential net is an additional gate with its own result, so a
+backend divergence fails the run without changing source-case tallies. Opt
+out with XRAY_SKIP_BACKEND_DIFF=1 when no AOT host toolchain is available.
 
 `--json PATH` writes the same result as structured data. Callers that need the
 failure list should read that instead of scraping the console summary.
@@ -29,13 +29,16 @@ Usage: run_regression_tests.py [--json PATH]
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import re
+import platform as host_platform
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -46,7 +49,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import platform, proc  # noqa: E402
+from xraytest import platform, proc, regression_report  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TEST_DIR = PROJECT_ROOT / "tests" / "regression"
@@ -56,9 +59,6 @@ BACKEND_DIFF = PROJECT_ROOT / "tests" / "diff" / "run_backend_diff.py"
 # cases; `_`-prefixed files are reserved the same way.
 EXCLUDED_PARTS = ("fixtures", "modules", "reexport_test")
 
-_ANSI = re.compile(r"\x1b\[[0-9;]*m")
-COUNT_PASSED = re.compile(r"(\d+) passed")
-COUNT_FAILED = re.compile(r"(\d+) failed")
 TEST_ANNOTATION = re.compile(rb"(?m)^[ \t]*@test(?:[ \t\r\n(]|$)")
 
 USE_COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
@@ -69,15 +69,60 @@ BLUE = "\033[0;34m" if USE_COLOR else ""
 CYAN = "\033[0;36m" if USE_COLOR else ""
 NC = "\033[0m" if USE_COLOR else ""
 
-PASS, FAIL, TIMEOUT, SKIP = "PASS", "FAIL", "TIMEOUT", "SKIP"
+PASS, FAIL, CRASH, TIMEOUT, SKIP = "PASS", "FAIL", "CRASH", "TIMEOUT", "SKIP"
 
 
 @dataclass
 class CaseResult:
-    name: str
+    case_id: str
     verdict: str
-    executed: int
-    output: bytes = b""
+    returncode: int
+    seconds: float
+    stdout: bytes
+    stderr: bytes
+
+    @property
+    def output(self) -> bytes:
+        return self.stdout + self.stderr
+
+    def as_json(self) -> dict:
+        return {
+            "case_id": self.case_id, "outcome": self.verdict,
+            "returncode": self.returncode,
+            "seconds": self.seconds,
+            "stdout_base64": base64.b64encode(self.stdout).decode("ascii"),
+            "stderr_base64": base64.b64encode(self.stderr).decode("ascii"),
+        }
+
+
+def case_id(case: Path) -> str:
+    return case.relative_to(PROJECT_ROOT).as_posix()
+
+
+def file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def provenance(xray: Path, build_dir: Path) -> dict:
+    """Bind results to the actual binary, configuration and complete source set."""
+    inventory = proc.run(["git", "ls-files", "-z", "--cached", "--others",
+                          "--exclude-standard"], cwd=PROJECT_ROOT, check=True)
+    files = sorted(set(os.fsdecode(name) for name in inventory.stdout.split(b"\0") if name))
+    rows = {name: file_digest(PROJECT_ROOT / name) for name in files
+            if (PROJECT_ROOT / name).is_file()}
+    digest = lambda values: hashlib.sha256(json.dumps(
+        values, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    head = proc.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, check=True)
+    cache = build_dir / "CMakeCache.txt"
+    return {
+        "head": head.stdout_text().strip(),
+        "source_files_sha256": digest(rows),
+        "source_file_count": len(rows),
+        "stdlib_sha256": digest({k: v for k, v in rows.items() if k.startswith("stdlib/")}),
+        "binary": str(xray.resolve()), "binary_sha256": file_digest(xray),
+        "cmake_cache_sha256": file_digest(cache) if cache.is_file() else None,
+        "platform": host_platform.platform(),
+    }
 
 
 def find_build_dir() -> Path:
@@ -97,15 +142,6 @@ def find_xray(build_dir: Path) -> Path:
     return build_dir / platform.exe_name("xray")
 
 
-def executed_count(text: str) -> int:
-    """`N passed` + `N failed` from the case's own summary line."""
-    plain = _ANSI.sub("", text)
-    passed = COUNT_PASSED.search(plain)
-    failed = COUNT_FAILED.search(plain)
-    return (int(passed.group(1)) if passed else 0) + \
-           (int(failed.group(1)) if failed else 0)
-
-
 def is_test_module(case: Path) -> bool:
     """Return whether the source declares a top-level test annotation."""
     return TEST_ANNOTATION.search(case.read_bytes()) is not None
@@ -114,15 +150,16 @@ def is_test_module(case: Path) -> bool:
 def run_one(xray: Path, case: Path, timeout: float) -> CaseResult:
     test_module = is_test_module(case)
     verb = "test" if test_module else "run"
+    started = time.perf_counter()
     result = proc.run([xray, verb, case], timeout=timeout)
-    output = result.stdout + result.stderr
-    count = (executed_count(output.decode("utf-8", "replace"))
-             if test_module else int(result.ok))
     if result.timed_out:
-        return CaseResult(case.name, TIMEOUT, 0, output)
-    if result.ok:
-        return CaseResult(case.name, PASS, count)
-    return CaseResult(case.name, FAIL, count, output)
+        verdict = TIMEOUT
+    elif result.returncode < 0 or result.returncode >= 0xC0000000:
+        verdict = CRASH
+    else:
+        verdict = PASS if result.ok else FAIL
+    return CaseResult(case_id(case), verdict, result.returncode,
+                      time.perf_counter() - started, result.stdout, result.stderr)
 
 
 def collect_cases() -> list[Path]:
@@ -134,6 +171,11 @@ def collect_cases() -> list[Path]:
             continue
         cases.append(path)
     return sorted(cases)
+
+
+def case_manifest(cases: list[Path]) -> list[dict]:
+    return [{"case_id": case_id(case), "source_sha256": file_digest(case),
+             "entry": "test" if is_test_module(case) else "run"} for case in cases]
 
 
 def main(argv: list[str]) -> int:
@@ -172,72 +214,79 @@ def main(argv: list[str]) -> int:
     print("")
 
     cases = collect_cases()
+    if not cases:
+        print(f"{RED}错误: 没有发现回归用例{NC}")
+        return 1
     print(f"{CYAN}运行 {len(cases)} 个测试 ({jobs} 并行)...{NC}")
     print("")
 
+    manifest = case_manifest(cases)
+    identity = provenance(xray, build_dir)
     started = time.time()
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         results = list(pool.map(lambda c: run_one(xray, c, timeout), cases))
-    # Sorted by name so the report and the tallies are byte-for-byte
-    # deterministic regardless of completion order.
-    results.sort(key=lambda r: r.name)
+    results.sort(key=lambda r: r.case_id)
+    counts = {outcome: sum(item.verdict == outcome for item in results)
+              for outcome in regression_report.OUTCOMES}
+    passed, skipped = counts[PASS], counts[SKIP]
+    failed_results = [item for item in results
+                      if item.verdict in regression_report.FAILED_OUTCOMES]
+    failed = len(failed_results)
+    backend_diff = None
 
-    passed = failed = skipped = executed = 0
-    failed_list: list[str] = []
-    outputs: dict[str, bytes] = {}
-    for item in results:
-        executed += item.executed
-        if item.verdict == PASS:
-            passed += 1
-        elif item.verdict == SKIP:
-            skipped += 1
-        else:
-            failed += 1
-            label = (f"{item.name} (timeout)" if item.verdict == TIMEOUT
-                     else item.name)
-            failed_list.append(label)
-            outputs[item.name] = item.output
-
-    # Cross-backend differential net: the same .xr through VM and AOT must
-    # produce byte-identical observable output. Folded in here so a divergence
-    # fails this run rather than being reported somewhere nobody reads.
-    if not skip_diff and BACKEND_DIFF.is_file():
+    # The differential suite is an auxiliary gate, not a regression source
+    # case. Keep its outcome out of the source manifest and source tallies.
+    if not skip_diff:
         print(f"{CYAN}运行跨后端差分网 (VM/AOT){NC}")
         diff = proc.run([sys.executable, BACKEND_DIFF, xray])
-        if diff.ok:
-            passed += 1
-        else:
-            failed += 1
-            failed_list.append("backend_diff")
-            outputs["backend_diff"] = diff.stdout + diff.stderr
+        backend_diff = {
+            "outcome": PASS if diff.ok else FAIL,
+            "returncode": diff.returncode,
+            "stdout_base64": base64.b64encode(diff.stdout).decode("ascii"),
+            "stderr_base64": base64.b64encode(diff.stderr).decode("ascii"),
+        }
         print("")
 
+    identity_after = provenance(xray, build_dir)
+    stable_manifest = case_manifest(collect_cases()) == manifest
+    stable_inputs = identity_after == identity and stable_manifest
     elapsed = int(time.time() - started)
 
     print(f"{BLUE}======================================{NC}")
     print(f"{BLUE}测试摘要{NC}")
     print(f"{BLUE}======================================{NC}")
     print(f"总文件数: {len(cases)}")
-    print(f"执行测试: {executed}")
     print(f"{GREEN}通过: {passed}{NC}")
     if skipped:
         print(f"{CYAN}跳过: {skipped}{NC}")
-    print(f"{RED}失败: {failed}{NC}")
+    print(f"{RED}失败: {failed} (错误 {counts[FAIL]}, 崩溃 {counts[CRASH]}, "
+          f"超时 {counts[TIMEOUT]}){NC}")
     print(f"耗时: {elapsed} 秒")
     print("")
 
     if args.json:
         args.json.write_text(json.dumps({
+            "schema_version": regression_report.SCHEMA_VERSION,
+            "manifest": manifest,
+            "results": [item.as_json() for item in results],
+            "counts": counts,
+            "provenance": identity,
+            "provenance_after": identity_after,
+            "stable_inputs": stable_inputs,
+            "stable_manifest": stable_manifest,
+            "jobs": jobs, "timeout_seconds": timeout,
+            "backend_diff": backend_diff,
             "total_files": len(cases),
-            "executed": executed,
             "passed": passed,
             "skipped": skipped,
             "failed": failed,
             "elapsed_seconds": elapsed,
-            "failed_tests": failed_list,
         }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    if not failed:
+    auxiliary_failed = backend_diff is not None and backend_diff["outcome"] != PASS
+    if not stable_inputs:
+        print(f"{RED}运行期间源码、二进制或构建配置发生变化；本次结果不能用于资格判断{NC}")
+    if not failed and not skipped and not counts["NOT_RUN"] and not auxiliary_failed and stable_inputs:
         print(f"{GREEN}所有测试通过！{NC}")
         print("")
         return 0
@@ -245,20 +294,22 @@ def main(argv: list[str]) -> int:
     if dump_failed:
         print(f"{YELLOW}--- begin per-test failure output "
               f"(XRAY_TEST_DUMP_FAILED=1) ---{NC}")
-        for label in failed_list:
-            name = label[:-len(" (timeout)")] if label.endswith(" (timeout)") else label
-            blob = outputs.get(name)
-            if blob:
-                print(f"{RED}>>> {name} >>>{NC}")
-                sys.stdout.write(blob.decode("utf-8", "replace"))
-                print(f"{RED}<<< {name} <<<{NC}")
-                print("")
+        for item in failed_results:
+            print(f"{RED}>>> {item.case_id} ({item.verdict}) >>>{NC}")
+            sys.stdout.write(item.output.decode("utf-8", "replace"))
+            print(f"{RED}<<< {item.case_id} <<<{NC}")
+            print("")
+        if auxiliary_failed:
+            sys.stdout.write(base64.b64decode(backend_diff["stdout_base64"]).decode("utf-8", "replace"))
+            sys.stdout.write(base64.b64decode(backend_diff["stderr_base64"]).decode("utf-8", "replace"))
         print(f"{YELLOW}--- end per-test failure output ---{NC}")
         print("")
 
     print(f"{RED}失败的测试:{NC}")
-    for label in failed_list:
-        print(f"  - {label}")
+    for item in failed_results:
+        print(f"  - {item.case_id} ({item.verdict})")
+    if auxiliary_failed:
+        print("  - backend differential suite (FAIL)")
     print("")
     print(f"{YELLOW}提示: 使用 VERBOSE=1 运行单个失败测试查看详细输出{NC}")
     print(f"  {xray} test <test_file>")

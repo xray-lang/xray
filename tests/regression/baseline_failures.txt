@@ -111,37 +111,37 @@
 # ----------------------------------------------------------------------------
 # --- carried over from the 2026-08-19 capture (32, incl. 1305_csv_basic
 #     which only surfaced once the gate ran repeatedly) --------------------------
-0381_optional_call.xr
-0740_context_auto_select.xr
-0741_context_buffer_isolation.xr
-0841_operator_overload_compat.xr
-0911_dump_builtin.xr
-0940_edge_cases.xr
-0950_exception.xr
-1106_select.xr
-1111_comprehensive.xr
-1113_select_send.xr
-1157_work_queue_generic_class.xr
-1161_multiple_task_awaiters.xr
-1162_overlapping_await_any_waiters.xr
-1172_enum_descriptor_erased_transfer.xr
-1172_module_readonly_capture.xr
-1205_typeof_operator.xr
-1208_tostring.xr
-1224_generic_methods.xr
-1302_is_builtin_native_class.xr
-1305_csv_basic.xr
-1370_tuple_generic_args.xr
-1410_shared_provenance_rebind_reset.xr
-1418_shared_provenance_readonly_closure_capture.xr
-1433_net_loopback.xr
-1434_net_byte_array_loopback.xr
-1436_net_halfclose_bidi.xr
-1437_net_tls_timeout.xr
-1438_ws_self_connect.xr
-1502_http_request_options.xr
-1509_ws_pure_protocol.xr
-1510_http2_client.xr
+tests/regression/03_operators/0381_optional_call.xr
+tests/regression/07_strings/0740_context_auto_select.xr
+tests/regression/07_strings/0741_context_buffer_isolation.xr
+tests/regression/08_oop/0841_operator_overload_compat.xr
+tests/regression/09_advanced/0911_dump_builtin.xr
+tests/regression/09_advanced/0940_edge_cases.xr
+tests/regression/09_advanced/0950_exception.xr
+tests/regression/11_coroutine/1106_select.xr
+tests/regression/11_coroutine/1111_comprehensive.xr
+tests/regression/11_coroutine/1113_select_send.xr
+tests/regression/11_coroutine/1157_work_queue_generic_class.xr
+tests/regression/11_coroutine/1161_multiple_task_awaiters.xr
+tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr
+tests/regression/11_coroutine/1172_enum_descriptor_erased_transfer.xr
+tests/regression/11_coroutine/1172_module_readonly_capture.xr
+tests/regression/12_type_checking/1205_typeof_operator.xr
+tests/regression/12_type_checking/1208_tostring.xr
+tests/regression/12_type_checking/1224_generic_methods.xr
+tests/regression/12_type_checking/1302_is_builtin_native_class.xr
+tests/regression/10_stdlib/1305_csv_basic.xr
+tests/regression/13_types/1370_tuple_generic_args.xr
+tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr
+tests/regression/14_typed_array/1418_shared_provenance_readonly_closure_capture.xr
+tests/regression/10_stdlib/1433_net_loopback.xr
+tests/regression/10_stdlib/1434_net_byte_array_loopback.xr
+tests/regression/10_stdlib/1436_net_halfclose_bidi.xr
+tests/regression/10_stdlib/1437_net_tls_timeout.xr
+tests/regression/10_stdlib/1438_ws_self_connect.xr
+tests/regression/10_stdlib/1502_http_request_options.xr
+tests/regression/10_stdlib/1509_ws_pure_protocol.xr
+tests/regression/10_stdlib/1510_http2_client.xr
 #
 # --- exposed-on-gate-install 2026-08-28 (14) --------------------------------
 # Failing before this change and listed nowhere. Nine days without a gate.
@@ -151,17 +151,17 @@
 # been red inside the 82-failure floor with nobody reading it. `no gate` and
 # `a gate nobody reads` are different failures, and the second is worse: it
 # leaves people believing the coverage exists.
-0380_optional_chain.xr
-0430_for_in.xr
-0720_stringbuilder.xr
-0731_string_byte_rune_surface.xr
-0840_operator_overload.xr
-1037_cross_module_owned_transfer_summary.xr
-1038_cross_module_return_ownership_summary.xr
-1150_string_byte_ops.xr
-1207_runtime_stress.xr
-1308_xml_basic.xr
-1309_xml_advanced.xr
-1413_shared_provenance_imported_readonly_function_value_param.xr
-1414_shared_provenance_reexported_readonly_function_value_param.xr
-1436_param_mode_imported_contracts.xr
+tests/regression/03_operators/0380_optional_chain.xr
+tests/regression/04_control_flow/0430_for_in.xr
+tests/regression/07_strings/0720_stringbuilder.xr
+tests/regression/07_strings/0731_string_byte_rune_surface.xr
+tests/regression/08_oop/0840_operator_overload.xr
+tests/regression/10_stdlib/1037_cross_module_owned_transfer_summary.xr
+tests/regression/10_stdlib/1038_cross_module_return_ownership_summary.xr
+tests/regression/10_stdlib/1150_string_byte_ops.xr
+tests/regression/10_stdlib/1207_runtime_stress.xr
+tests/regression/10_stdlib/1308_xml_basic.xr
+tests/regression/10_stdlib/1309_xml_advanced.xr
+tests/regression/14_typed_array/1413_shared_provenance_imported_readonly_function_value_param.xr
+tests/regression/14_typed_array/1414_shared_provenance_reexported_readonly_function_value_param.xr
+tests/regression/13_types/1436_param_mode_imported_contracts.xr

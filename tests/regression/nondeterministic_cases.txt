@@ -48,6 +48,6 @@
 #
 # See blockers/r3-8-stdlib-data-fuzzer-crashes-on-its-own-seed.md. Fixing
 # xcoro_heap.h:346 should delete all three lines below.
-1305_csv_basic.xr
-1308_xml_basic.xr
-1309_xml_advanced.xr
+tests/regression/10_stdlib/1305_csv_basic.xr
+tests/regression/10_stdlib/1308_xml_basic.xr
+tests/regression/10_stdlib/1309_xml_advanced.xr

@@ -193,7 +193,6 @@ FOCUSED_CTEST_OPTIONS = {
     "--rerun-failed", "--tests-from-file",
 }
 
-REGRESSION_BASELINE = REPO_ROOT / "tests" / "regression" / "baseline_failures.txt"
 PRODUCTION_CACHE_VALUES = {
     "CMAKE_GENERATOR": "Ninja",
     "CMAKE_BUILD_TYPE": "Release",
@@ -640,59 +639,17 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
 
 @timed_phase("regression corpus")
 def run_regression_corpus(build_dir: Path, skip_diff: bool) -> bool:
-    """Gate the tests/regression corpus against an only-shrink ratchet.
-
-    The corpus has no ctest entry: it only ever ran in one non-blocking nightly
-    lane, and cases had rotted unnoticed. Any failure not in the baseline fails
-    the tier, and a baseline entry that starts passing fails too, so the list
-    can only shrink.
-    """
-    suffix = ", VM only" if skip_diff else ""
-    print(f"{BLUE}==>{NC} regression corpus{suffix}")
-
-    env = dict(os.environ)
-    env["XRAY_SKIP_BACKEND_DIFF"] = "1" if skip_diff else "0"
-    env["XRAY_BIN"] = str(build_dir / platform.exe_name("xray"))
-    env["XRAY_BUILD_DIR"] = str(build_dir)
-
-    with workspace.Workspace("xray_t_regression") as ws:
-        report = ws.path("regression.json")
-        result = proc.run([sys.executable,
-                           REPO_ROOT / "scripts" / "run_regression_tests.py",
-                           "--json", report], env=env, cwd=REPO_ROOT)
-        text = result.combined_text()
-        for line in text.splitlines():
-            if line.startswith(("总文件数", "通过", "失败")):
-                print(f"    {line}")
-        # Structured result, not a grep over a localized summary: the runner
-        # owns the format and this reads it.
-        if not report.is_file():
-            print(f"{RED}    regression: runner produced no report{NC}")
-            sys.stdout.write(text)
-            return False
-        actual = set(json.loads(report.read_text(encoding="utf-8"))["failed_tests"])
-
-    expected = {line.strip()
-                for line in REGRESSION_BASELINE.read_text(encoding="utf-8").splitlines()
-                if line.strip() and not line.startswith("#")}
-
-    newly_broken = sorted(actual - expected)
-    newly_fixed = sorted(expected - actual)
-    ok = True
-    if newly_broken:
-        print(f"{RED}    regression: newly broken{NC}")
-        for name in newly_broken:
-            print(f"      {name}")
-        ok = False
-    if newly_fixed:
-        print(f"{YELLOW}    regression: now passing — delete these from "
-              f"{REGRESSION_BASELINE.relative_to(REPO_ROOT)}{NC}")
-        for name in newly_fixed:
-            print(f"      {name}")
-        ok = False
-    if ok:
-        print(f"{GREEN}    regression: no change against baseline{NC}")
-    return ok
+    """Use the same exact report and ratchet as the standalone corpus gate."""
+    print(f"{BLUE}==>{NC} regression corpus")
+    command = [sys.executable, REPO_ROOT / "scripts" / "check_regression_corpus.py",
+               "--xray", build_dir / platform.exe_name("xray"),
+               "--build-dir", build_dir,
+               "--json", build_dir / "regression-report.json"]
+    if not skip_diff:
+        command.append("--with-backend-diff")
+    result = proc.run(command, cwd=REPO_ROOT)
+    sys.stdout.write(result.combined_text())
+    return result.ok
 
 
 def _run_main(argv: List[str]) -> int:

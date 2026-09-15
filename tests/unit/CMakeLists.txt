@@ -64,6 +64,7 @@ endfunction()
 
 add_xray_python_unit_test(test_build_tree_lock test_buildlock.py)
 add_xray_python_unit_test(test_tiered_test_runner test_t_runner.py)
+add_xray_python_unit_test(test_regression_report test_regression_report.py)
 add_xray_python_unit_test(test_canonical_program_test_profile
     test_canonical_program_test_profile.py)
 add_xray_python_unit_test(xr_program_h2_backend_differential_self_test

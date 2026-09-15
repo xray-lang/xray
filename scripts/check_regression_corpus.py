@@ -50,7 +50,8 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import ratchet  # noqa: E402
+from xraytest import ratchet, regression_report
+from run_regression_tests import case_id, collect_cases  # noqa: E402
 
 RUNNER = Path("scripts/run_regression_tests.py")
 BASELINE_FILE = Path("tests/regression/baseline_failures.txt")
@@ -106,7 +107,7 @@ def echo_summary(output: str) -> None:
     """Reprint the runner's own tally lines; it owns those numbers."""
     for line in output.splitlines():
         stripped = line.strip()
-        if stripped.startswith(("总文件数", "执行测试", "通过", "失败", "耗时")):
+        if stripped.startswith(("总文件数", "通过", "失败", "耗时")):
             print(f"  {stripped}")
 
 
@@ -134,6 +135,8 @@ def main(argv: list[str]) -> int:
                              "its own ctest entry and its own baseline")
     parser.add_argument("--dump-failed", action="store_true",
                         help="dump each failing case's output")
+    parser.add_argument("--json", type=Path, default=None,
+                        help="retain the full structured report at this path")
     parser.add_argument("--rebaseline", action="store_true",
                         help="rewrite the baseline's entries from this run. "
                              "The header is preserved; review the diff.")
@@ -146,23 +149,49 @@ def main(argv: list[str]) -> int:
 
     section("corpus run")
     with tempfile.TemporaryDirectory(prefix="xray_regression_gate_") as tmp:
-        report = Path(tmp) / "regression.json"
+        report = args.json.resolve() if args.json else Path(tmp) / "regression.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.unlink(missing_ok=True)
         code, output = run_corpus(args, report)
         if not report.is_file():
             red("FAIL: the runner produced no JSON report.")
             print(f"  exit code {code}; its output follows.")
             sys.stdout.write(output)
             return 1
-        payload = json.loads(report.read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(report.read_text(encoding="utf-8"))
+            outcomes = regression_report.validate(payload, {case_id(case) for case in collect_cases()})
+        except (ValueError, TypeError) as error:
+            red(f"FAIL: invalid regression report: {error}")
+            return 1
 
-    echo_summary(output)
-    failed = set(payload["failed_tests"])
+    if args.dump_failed:
+        sys.stdout.write(output)
+    else:
+        echo_summary(output)
+    failed = {name for name, outcome in outcomes.items()
+              if outcome in regression_report.FAILED_OUTCOMES}
+    not_executed = {name for name, outcome in outcomes.items() if outcome in {"SKIP", "NOT_RUN"}}
+    if not payload.get("stable_inputs"):
+        red("FAIL: source, binary or configuration changed during the run.")
+        return 1
+    backend_diff = payload.get("backend_diff")
+    auxiliary_failed = backend_diff is not None and backend_diff.get("outcome") != "PASS"
+    if code not in {0, 1} or (code != 0 and not (failed or not_executed or auxiliary_failed)):
+        red(f"FAIL: runner exited {code} without matching case failures.")
+        return 1
 
     if args.rebaseline:
         return rewrite_baseline(args.baseline, sorted(failed), payload)
 
     section("ratchet")
     baseline = ratchet.read_baseline(args.baseline)
+    missing = baseline - set(outcomes)
+    if missing:
+        red("FAIL: baseline cases were not discovered; absence is not a passing result:")
+        for name in sorted(missing):
+            print(f"  {name}")
+        return 1
     # A case that decides at random produced no verdict worth reading, which is
     # precisely ratchet.py's definition of skipped: neither a new failure nor
     # evidence that a baselined entry is fixed. Judging one would make this gate
@@ -182,10 +211,10 @@ def main(argv: list[str]) -> int:
         yellow(f"{len(unjudgeable)} case(s) are recorded as nondeterministic "
                "and are not judged:")
         for name in sorted(unjudgeable):
-            landed = "failed" if name in failed else "passed"
+            landed = outcomes[name]
             print(f"  {name} ({landed} this run)")
     verdict = ratchet.evaluate(failed=failed, baseline=baseline,
-                               skipped=unjudgeable)
+                               skipped=unjudgeable | not_executed)
 
     if verdict.new_failures:
         red(f"FAIL: {len(verdict.new_failures)} case(s) fail and are not in "
@@ -210,11 +239,14 @@ def main(argv: list[str]) -> int:
               f"{verdict.baseline_count} baselined, none newly passing.")
 
     section("summary")
-    if not verdict.ok:
-        red("regression corpus: the baseline no longer describes this tree.")
+    if not verdict.ok or not_executed or auxiliary_failed:
+        if not_executed:
+            red(f"FAIL: {len(not_executed)} case(s) have no execution result.")
+        if auxiliary_failed:
+            red("FAIL: backend differential suite failed.")
+        red("regression corpus: the baseline or execution evidence is incomplete.")
         return 1
     green(f"regression corpus: {payload['passed']} passed, "
-          f"{payload['executed']} assertions executed, "
           f"{payload['elapsed_seconds']}s.")
     return 0
 
