@@ -2813,6 +2813,102 @@ TEST(source_owner_generic_scalar_class_specializations_are_exact_class_reference
     source_build_fixture_free(&fixture);
 }
 
+/* A constructor body that stores each field from any parameter or a scalar
+ * literal folds into one class.construct: the operands follow the declared
+ * field order, not the parameter order, and a literal is materialized as its
+ * own constant instruction ahead of the construction. Before this, the fold
+ * admitted only a body that stored field i from parameter i, so the ordinary
+ * `this.value = 0` constructor was refused. */
+TEST(source_owner_folds_constructor_literal_and_reordered_stores) {
+    static const char source[] = "class Counter {\n"
+                                 "  value: i64\n"
+                                 "  constructor() { this.value = 0 }\n"
+                                 "}\n"
+                                 "class Pair {\n"
+                                 "  a: i64\n"
+                                 "  b: bool\n"
+                                 "  constructor(x: i64) { this.b = true\n"
+                                 "    this.a = x }\n"
+                                 "}\n"
+                                 "class Swap {\n"
+                                 "  first: i64\n"
+                                 "  second: i64\n"
+                                 "  constructor(x: i64, y: i64) { this.second = x\n"
+                                 "    this.first = y }\n"
+                                 "}\n"
+                                 "fn answer() -> i64 {\n"
+                                 "  var c = Counter()\n"
+                                 "  var p = Pair(5)\n"
+                                 "  var s = Swap(1, 10)\n"
+                                 "  return c.value + p.a + s.first * 100 + s.second\n"
+                                 "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    const XrValidatedProgram *program = product.program;
+    ASSERT_EQ_UINT(program_operation_count(program, XR_CORE_OP_CORE_CLASS_CONSTRUCT), 3u);
+
+    uint32_t counter_constructs = 0u;
+    uint32_t pair_constructs = 0u;
+    uint32_t swap_constructs = 0u;
+    for (uint32_t function_index = 0u; function_index < program->function_count; ++function_index) {
+        const XrValidatedFunction *function = &program->functions[function_index];
+        /* The operation that produced each value, so a construction operand
+         * can be traced back to the constant instruction that materialized a
+         * folded literal. */
+        uint16_t *producers = xr_calloc(function->value_count, sizeof(*producers));
+        ASSERT_NOT_NULL(producers);
+        for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
+            const XrValidatedBlock *block = &function->blocks[block_index];
+            for (uint32_t index = 0u; index < block->instruction_count; ++index) {
+                const XrValidatedInstruction *instruction = &block->instructions[index];
+                if (instruction->result_id < function->value_count)
+                    producers[instruction->result_id] = instruction->operation_id;
+            }
+        }
+        for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
+            const XrValidatedBlock *block = &function->blocks[block_index];
+            for (uint32_t index = 0u; index < block->instruction_count; ++index) {
+                const XrValidatedInstruction *instruction = &block->instructions[index];
+                if (instruction->operation_id != XR_CORE_OP_CORE_CLASS_CONSTRUCT)
+                    continue;
+                const XrValidatedType *type =
+                    xr_validated_program_type(program, instruction->result_type_id);
+                ASSERT_NOT_NULL(type);
+                ASSERT_EQ_UINT(instruction->operand_count, type->field_count);
+                for (uint32_t field = 0u; field < type->field_count; ++field)
+                    ASSERT_EQ_UINT(function->value_types[instruction->operands[field]],
+                                   type->field_types[field]);
+                if (type->field_count == 1u) {
+                    /* Counter: the single field is the literal 0. */
+                    ASSERT_EQ_UINT(producers[instruction->operands[0]],
+                                   XR_CORE_OP_CORE_CONSTANT_I64);
+                    ++counter_constructs;
+                } else if (type->field_types[1] == XR_CORE_TYPE_BOOL) {
+                    /* Pair: field a from the argument (itself the literal 5 in the
+                     * caller), field b from the constructor's own literal true, in
+                     * declared field order although the body stores b first. */
+                    ASSERT_EQ_UINT(producers[instruction->operands[1]],
+                                   XR_CORE_OP_CORE_CONSTANT_BOOL);
+                    ++pair_constructs;
+                } else {
+                    /* Swap: both fields from arguments, crossed. */
+                    ASSERT_TRUE(instruction->operands[0] != instruction->operands[1]);
+                    ++swap_constructs;
+                }
+            }
+        }
+        xr_free(producers);
+    }
+    ASSERT_EQ_UINT(counter_constructs, 1u);
+    ASSERT_EQ_UINT(pair_constructs, 1u);
+    ASSERT_EQ_UINT(swap_constructs, 1u);
+    xr_program_source_product_free(&product);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_generic_nested_class_types_are_exact) {
     static const char direct_managed_struct_source[] =
         "class Leaf {\n"

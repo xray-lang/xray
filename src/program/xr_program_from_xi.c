@@ -510,6 +510,14 @@ static XrCoreIrKey function_key(XrStableId module_id, uint32_t function_index) {
     return key_from_stable_id_and_u32(UINT8_C(0x46), module_id, function_index);
 }
 
+/* Result key of the constant instruction that materializes, in the caller,
+ * the literal a folded constructor body stores into instance field `slot`.
+ * The construction and its literals are one emission span, so the key is
+ * derived from the construction's own key. */
+static XrCoreIrKey construction_literal_key(XrCoreIrKey construction, uint32_t slot) {
+    return key_from_key_and_u32(UINT8_C(0x50), construction, slot);
+}
+
 static XrCoreIrKey block_key(const XrXiFunctionStorage *function, const XiBlock *block) {
     return key_from_key_and_u32(UINT8_C(0x42), function->key, block->id);
 }
@@ -2174,13 +2182,24 @@ static const XiValue *logical_value_identity(const XiValue *value);
 static const XiClassData *resolved_empty_class_allocation(const XrXiBuildContext *context,
                                                           const XiFunc *caller,
                                                           const XiValue *call);
+/* One instance field's initial value in a canonical class construction. The
+ * value is either an argument of the construction call, already a value of the
+ * caller, or a constant the constructor body stores into the field itself; a
+ * literal has no key in the caller and is materialized as its own constant
+ * instruction ahead of the construction (see construction_literal_key). */
+typedef struct XrXiConstructionField {
+    const XiValue *value;
+    bool literal;
+} XrXiConstructionField;
+
 static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildContext *context,
                                                                 const XiFunc *caller,
-                                                                const XiValue *call);
+                                                                const XiValue *call,
+                                                                XrXiConstructionField *fields_out);
 static const XiClassData *resolved_canonical_class_construction(const XrXiBuildContext *context,
                                                                 const XiFunc *caller,
                                                                 const XiValue *call,
-                                                                XiValue *const **field_values_out,
+                                                                XrXiConstructionField *fields_out,
                                                                 uint32_t *field_count_out);
 static const XiClassData *resolved_value_aggregate_construction(const XrXiBuildContext *context,
                                                                 const XiFunc *caller,
@@ -2915,9 +2934,10 @@ static const XiClassData *resolved_empty_class_allocation(const XrXiBuildContext
  * computation, effect, or control flow is admitted. */
 static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildContext *context,
                                                                 const XiFunc *caller,
-                                                                const XiValue *call) {
+                                                                const XiValue *call,
+                                                                XrXiConstructionField *fields_out) {
     if (!context || !context->source || !context->source->global_evidence || !caller || !call ||
-        (call->op != XI_CALL && call->op != XI_CALL_METHOD) || call->nargs <= 1u || !call->args ||
+        (call->op != XI_CALL && call->op != XI_CALL_METHOD) || call->nargs == 0u || !call->args ||
         !xi_value_is_constructor_call(call))
         return NULL;
 
@@ -2939,7 +2959,6 @@ static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildC
     if (!resolved_closed_nominal_identity(context, class_data, class_row, call->type, module_index,
                                           XG_DECL_CLASS, XR_CORE_IR_NOMINAL_CLASS) ||
         class_data->instance_field_count == 0u ||
-        class_data->instance_field_count != call->nargs - 1u ||
         class_row->field_count != class_data->instance_field_count ||
         class_row->field_start == 0u || !class_data->instance_field_names ||
         !class_data->instance_field_types || !class_data->instance_field_source_node_ids)
@@ -3017,8 +3036,7 @@ static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildC
             if (!xr_type_equals(value->type, call->type))
                 return NULL;
         } else if (!call->args[parameter] ||
-                   !xr_type_equals(value->type, call->args[parameter]->type) ||
-                   !xr_type_equals(value->type, class_data->instance_field_types[parameter - 1u])) {
+                   !xr_type_equals(value->type, call->args[parameter]->type)) {
             return NULL;
         }
     }
@@ -3032,6 +3050,10 @@ static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildC
         if (!value)
             return NULL;
         if (value == block->control || value->op == XI_PARAM)
+            continue;
+        /* A literal the body stores is defined in this block too; it has no
+         * effect of its own and is accounted for at the store that reads it. */
+        if (value->op == XI_CONST && value->nargs == 0u)
             continue;
         if (value->op != XI_STORE_FIELD || value->nargs != 2u || !value->args ||
             logical_value_identity(value->args[0]) != constructor->params[0] ||
@@ -3058,13 +3080,35 @@ static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildC
             !value->aux ||
             strcmp((const char *) value->aux,
                    class_data->instance_field_names[field->instance_slot]) != 0 ||
-            logical_value_identity(value->args[1]) !=
-                constructor->params[field->instance_slot + 1u] ||
             !xr_type_equals(value->args[1]->type,
                             class_data->instance_field_types[field->instance_slot]) ||
             !xr_type_equals(value->type, class_data->instance_field_types[field->instance_slot]) ||
             (seen_fields & (UINT64_C(1) << field->instance_slot)) != 0u)
             return NULL;
+        /* The stored value is what the fold hands to class.construct for this
+         * field: any constructor parameter, mapped back to the call argument in
+         * that position, or a scalar constant the body writes itself. Anything
+         * else -- an expression, a nested construction, a call -- is not a
+         * fold and stays outside this claim. */
+        const XiValue *stored = logical_value_identity(value->args[1]);
+        XrXiConstructionField initial = {NULL, false};
+        for (uint16_t parameter = 1u; stored && parameter < constructor->nparams; ++parameter) {
+            if (stored != constructor->params[parameter])
+                continue;
+            initial.value = call->args[parameter];
+            break;
+        }
+        if (!initial.value && stored && stored->op == XI_CONST && stored->nargs == 0u &&
+            stored->aux == NULL && stored->type &&
+            (stored->type->kind == XR_KIND_INT || stored->type->kind == XR_KIND_BOOL) &&
+            !stored->type->is_nullable) {
+            initial.value = stored;
+            initial.literal = true;
+        }
+        if (!initial.value)
+            return NULL;
+        if (fields_out)
+            fields_out[field->instance_slot] = initial;
         seen_fields |= UINT64_C(1) << field->instance_slot;
         ++stores;
     }
@@ -3078,20 +3122,20 @@ static const XiClassData *resolved_fieldwise_class_construction(const XrXiBuildC
 static const XiClassData *resolved_canonical_class_construction(const XrXiBuildContext *context,
                                                                 const XiFunc *caller,
                                                                 const XiValue *call,
-                                                                XiValue *const **field_values_out,
+                                                                XrXiConstructionField *fields_out,
                                                                 uint32_t *field_count_out) {
-    if (field_values_out)
-        *field_values_out = NULL;
     if (field_count_out)
         *field_count_out = 0u;
     const XiClassData *class_data = resolved_empty_class_allocation(context, caller, call);
     if (class_data)
         return class_data;
-    class_data = resolved_fieldwise_class_construction(context, caller, call);
+    XrXiConstructionField fields[XR_MAX_AGG_FIELDS];
+    memset(fields, 0, sizeof(fields));
+    class_data = resolved_fieldwise_class_construction(context, caller, call, fields);
     if (!class_data)
         return NULL;
-    if (field_values_out)
-        *field_values_out = call->args + 1u;
+    if (fields_out)
+        memcpy(fields_out, fields, class_data->instance_field_count * sizeof(*fields_out));
     if (field_count_out)
         *field_count_out = class_data->instance_field_count;
     return class_data;
@@ -6900,10 +6944,9 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
     if (!callsite)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi call v%u lacks matching global callsite evidence", value->id);
-    XiValue *const *field_values = NULL;
+    XrXiConstructionField fields[XR_MAX_AGG_FIELDS];
     uint32_t field_count = 0u;
-    if (resolved_canonical_class_construction(context, function->xi, value, &field_values,
-                                              &field_count)) {
+    if (resolved_canonical_class_construction(context, function->xi, value, fields, &field_count)) {
         uint16_t result_type = XR_CORE_TYPE_VOID;
         if (!map_type(context, value->type, &result_type))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -6919,8 +6962,30 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         instruction->result_type_id = result_type;
         instruction->result_ownership = logical_ownership_for_type(context, result_type);
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-        return set_operands(context, instruction, function, block, field_values, field_count,
-                            diagnostic, diagnostic_size);
+        if (field_count == 0u)
+            return XR_PROGRAM_BUILD_OK;
+        /* Arguments are caller values; a literal the constructor body stored
+         * was materialized ahead of this instruction under its derived key. */
+        XrCoreIrKey *operands = xr_calloc(field_count, sizeof(*operands));
+        if (!operands)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        for (uint32_t field = 0u; field < field_count; ++field) {
+            if (fields[field].literal) {
+                operands[field] = construction_literal_key(instruction->result, field);
+                continue;
+            }
+            if (!value_operand_key(context, function, block, fields[field].value,
+                                   &operands[field])) {
+                xr_free(operands);
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi class construction v%u field %u argument (Xi v%u) cannot be "
+                            "represented by active CoreSpec",
+                            value->id, field, fields[field].value ? fields[field].value->id : 0u);
+            }
+        }
+        instruction->operands = operands;
+        instruction->operand_count = field_count;
+        return XR_PROGRAM_BUILD_OK;
     }
     const XrStdlibDefEntry *provider_entry =
         resolved_provider_native_call(context, function->xi, value);
@@ -15144,6 +15209,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         uint32_t emitted = block_storage->argument_count != 0u ? 1u : 0u;
         uint32_t affine_exchange_drop_count = 0u;
         uint32_t affine_exchange_share_count = 0u;
+        uint32_t construction_literal_count = 0u;
         if (block_storage->reconstructed_place_count > UINT32_MAX - emitted)
             return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
         emitted += block_storage->reconstructed_place_count;
@@ -15155,6 +15221,22 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 continue;
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u)
                 ++emitted;
+            if (value->op == XI_CALL) {
+                /* A folded constructor body may store literals; each one is
+                 * its own constant instruction ahead of the construction. */
+                XrXiConstructionField fields[XR_MAX_AGG_FIELDS];
+                uint32_t field_count = 0u;
+                if (resolved_canonical_class_construction(context, xi, value, fields,
+                                                          &field_count)) {
+                    for (uint32_t field = 0u; field < field_count; ++field) {
+                        if (!fields[field].literal)
+                            continue;
+                        if (construction_literal_count == UINT32_MAX)
+                            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                        ++construction_literal_count;
+                    }
+                }
+            }
             if (value->xg_existential_kind == XI_EXISTENTIAL_PACK &&
                 value->xg_interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE)
                 ++emitted;
@@ -15187,10 +15269,9 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
          * An affine class replacement needs place, exchange, and adjacent drop.
          * A borrowed class replacement also needs its explicit share before the
          * place is exposed, so reserve both additions exactly. */
-        uint64_t instruction_capacity_wide = (uint64_t) emitted * 2u +
-                                              block_storage->argument_count +
-                                              affine_exchange_drop_count +
-                                              affine_exchange_share_count;
+        uint64_t instruction_capacity_wide =
+            (uint64_t) emitted * 2u + block_storage->argument_count + affine_exchange_drop_count +
+            affine_exchange_share_count + construction_literal_count;
         if (instruction_capacity_wide > UINT32_MAX)
             return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
         uint32_t instruction_capacity = (uint32_t) instruction_capacity_wide;
@@ -15361,6 +15442,46 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     xr_core_spec_operation_by_id(owner_copy->operation_id)->effect_mask;
                 storage->local_capability_mask |=
                     xr_core_spec_operation_by_id(owner_copy->operation_id)->capability_mask;
+            }
+            if (value->op == XI_CALL) {
+                /* Literals a folded constructor body stores into fields have no
+                 * value in the caller; materialize each as a constant
+                 * instruction the construction then names by a derived key. */
+                XrXiConstructionField fields[XR_MAX_AGG_FIELDS];
+                uint32_t field_count = 0u;
+                if (resolved_canonical_class_construction(context, xi, value, fields,
+                                                          &field_count)) {
+                    XrCoreIrKey construction = value_key(storage, value);
+                    for (uint32_t field = 0u; field < field_count; ++field) {
+                        if (!fields[field].literal)
+                            continue;
+                        uint16_t literal_type = XR_CORE_TYPE_VOID;
+                        XrCoreIrKey pool_key;
+                        if (!map_type(context, fields[field].value->type, &literal_type))
+                            return fail(diagnostic, diagnostic_size,
+                                        XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                        "Xi class construction v%u field %u literal has no "
+                                        "active CoreSpec type",
+                                        value->id, field);
+                        status = add_constant(context, module, fields[field].value, &pool_key,
+                                              diagnostic, diagnostic_size);
+                        if (status != XR_PROGRAM_BUILD_OK)
+                            return status;
+                        XrCoreIrInstructionInput *literal =
+                            &block_storage->instructions[instruction_index++];
+                        literal->operation_id = literal_type == XR_CORE_TYPE_BOOL
+                                                    ? XR_CORE_OP_CORE_CONSTANT_BOOL
+                                                    : XR_CORE_OP_CORE_CONSTANT_I64;
+                        literal->result = construction_literal_key(construction, field);
+                        literal->result_type_id = literal_type;
+                        literal->immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT;
+                        literal->immediate.key = pool_key;
+                        storage->local_effect_mask |=
+                            xr_core_spec_operation_by_id(literal->operation_id)->effect_mask;
+                        storage->local_capability_mask |=
+                            xr_core_spec_operation_by_id(literal->operation_id)->capability_mask;
+                    }
+                }
             }
             XrCoreIrInstructionInput *instruction =
                 &block_storage->instructions[instruction_index++];

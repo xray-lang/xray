@@ -10,6 +10,7 @@
     {"name": "source_owner_generic_constraint_methods_have_exact_concrete_targets", "fixture": {"id": "generic_constraint_method", "expected_exit": 42, "labels": ["generic", "constraint", "method", "call", "value-representation"], "backends": {"vm": "execute", "aot": "execute"}}},
     {"name": "source_owner_generic_value_struct_specializations_are_exact_nominal_aggregates", "fixture": {"id": "generic_value_struct", "expected_exit": 42, "labels": ["module-graph", "namespace", "generic", "value-representation", "aggregate"], "backends": {"vm": "execute", "aot": "execute"}}},
     {"name": "source_owner_generic_scalar_class_specializations_are_exact_class_references", "fixture": {"id": "generic_scalar_class", "expected_exit": 42, "labels": ["module-graph", "namespace", "reexport", "generic", "class", "ownership", "value-representation"], "backends": {"vm": "execute", "aot": "execute"}}},
+    {"name": "source_owner_folds_constructor_literal_and_reordered_stores", "fixture": null},
     {"name": "source_owner_generic_nested_class_types_are_exact", "fixture": null},
     {"name": "source_owner_recursive_class_type_reservation_is_cycle_safe", "fixture": null},
     {"name": "source_owner_mutual_class_type_reservation_is_cycle_safe", "fixture": null},
