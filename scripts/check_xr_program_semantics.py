@@ -68,7 +68,7 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
             "positive_kat": (
                 "tests/unit/program/test_xr_program_verify.c"
                 if all(row["coverage"][consumer]["status"] == "COMPLETE"
-                       for consumer in ("decoder", "verifier", "evaluator"))
+                       for consumer in ("spec_oracle", "decoder", "verifier"))
                 else None
             ),
         }
@@ -77,7 +77,7 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
     incomplete = [
         row["spelling"] for row in registry["operations"]
         if any(row["coverage"][consumer]["status"] != "COMPLETE"
-               for consumer in ("decoder", "verifier", "evaluator"))
+               for consumer in ("decoder", "verifier"))
     ]
     return {
         "schema": "xray-program-semantic-coverage/1",
@@ -92,6 +92,10 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
         "operation_count": len(operations),
         "operations": operations,
         "incomplete_operations": incomplete,
+        "reference_unmodeled_operations": [
+            row["spelling"] for row in registry["operations"]
+            if row["coverage"]["evaluator"]["status"] != "COMPLETE"
+        ],
         "negative_mutations": [
             "core-spec-identity",
             "effect-mask",
@@ -178,6 +182,16 @@ def check(root: Path, source_override: dict[Path, str] | None = None) -> None:
 def self_test(root: Path) -> None:
     check(root)
     registry = read_json(root / REGISTRY)
+    unmodeled = copy.deepcopy(registry)
+    unmodeled["operations"][0]["coverage"]["evaluator"]["status"] = "NOT_APPLICABLE"
+    coverage = expected_coverage(unmodeled, read_json(root / PROGRAM_SCHEMA), "test")
+    spelling = unmodeled["operations"][0]["spelling"]
+    require(spelling not in coverage["incomplete_operations"],
+            "missing local model incorrectly disables Program admission")
+    require(spelling in coverage["reference_unmodeled_operations"],
+            "unmodeled reference operation was reported as covered")
+    require(coverage["operations"][0]["positive_kat"] is not None,
+            "independent Program admission KAT disappeared with the local model")
     verifier = (root / VERIFIER).read_text(encoding="utf-8")
     first = enum_token(registry["operations"][0]["spelling"])
     mutated = verifier.replace(f"case {first}:", "case XR_CORE_OP_MISSING:", 1)

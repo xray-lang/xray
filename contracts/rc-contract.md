@@ -137,14 +137,8 @@ borrow) would satisfy the contract and still be wrong. That layer is guarded by
 different assets — the VM/AOT differential suite and the ASan corpus — not by
 this one. A contract names what it proves; this line names what it does not.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: src/ir/xi_arc_verify.c b0344b309501c8daa318f5669974aba949d93187fb5087fd20ecc6a5be4e83a6
-anchor-sha256: src/ir/xi_arc.c af33771742778197ad545d98ee80ae26dea6b14089b120cdbdfc5b9e9f159961
-anchor-sha256: src/ir/xi_lower_expr.c c9358b70b12e357bfed72a4ffafb9dad807174bc1ee2456c0674ff3416ab4e5f
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 922e370c40e60e113fba8e0a40889c4f379c74cc43bb7543ea7b5d56241d9044
-anchor-sha256: src/aot/xrt_coll.h f699e3aecd8f3c408deca50e306274be74d0d700a61b29ca1dd170be48086511
-anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3
-anchor-sha256: src/runtime/core/xr_runtime_core.c cce6b3b7d317c83c167fadd906b742c90b48d5e84f7816993335c825f9465169
-anchor-sha256: src/api/xisolate.c 44ecf8bfa89f44aae0e745da27ded546ba40dbf404cc9d438047e28fd6cac489
-anchor-sha256: tests/unit/mem/test_fixed_heap_teardown.c 5522ad5fbc6a273595a33a05dac4cc87da9d96395a4278d39b66530c8362389e
+verification-test: test_xi_arc_verify
+verification-test: test_fixed_heap_teardown
+verification-test: test_rc_container_release

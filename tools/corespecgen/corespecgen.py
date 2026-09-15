@@ -351,7 +351,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                     f"operation {spelling} {consumer} has invalid status")
             require(entry["task"] == task,
                     f"operation {spelling} {consumer} must be owned by task {task}")
-            require(entry["status"] != "NOT_APPLICABLE",
+            require(consumer == "evaluator" or entry["status"] != "NOT_APPLICABLE",
                     f"active operation {spelling} must apply to {consumer}")
         require(coverage["spec_oracle"]["status"] == "COMPLETE",
                 f"operation {spelling} has no normative oracle")
@@ -359,9 +359,10 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             if coverage[consumer]["status"] == "COMPLETE":
                 require(coverage["decoder"]["status"] == "COMPLETE",
                         f"operation {spelling} {consumer} precedes decoder coverage")
-        if coverage["evaluator"]["status"] == "COMPLETE":
-            require(coverage["verifier"]["status"] == "COMPLETE",
-                    f"operation {spelling} evaluator precedes verifier coverage")
+        for consumer in ("evaluator", "vm", "aot"):
+            if coverage[consumer]["status"] == "COMPLETE":
+                require(coverage["verifier"]["status"] == "COMPLETE",
+                        f"operation {spelling} {consumer} precedes verifier coverage")
         leaked = walk_keys(operation) & IMPLEMENTATION_KEYS
         require(not leaked, f"operation {spelling} leaks implementation keys {sorted(leaked)}")
 
@@ -1467,6 +1468,17 @@ def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
     first = generate_outputs(registry, kats)
     second = generate_outputs(copy.deepcopy(registry), copy.deepcopy(kats))
     require(first == second, "generation is nondeterministic")
+
+    unmodeled = copy.deepcopy(registry)
+    unmodeled["operations"][0]["coverage"]["evaluator"]["status"] = "NOT_APPLICABLE"
+    generate_outputs(unmodeled, kats)
+    require(semantic_registry_digest(unmodeled) == semantic_registry_digest(registry),
+            "reference modeling changed executable semantic identity")
+    for consumer in ("vm", "aot"):
+        unverified = copy.deepcopy(unmodeled)
+        unverified["operations"][0]["coverage"][consumer]["status"] = "COMPLETE"
+        unverified["operations"][0]["coverage"]["verifier"]["status"] = "NOT_YET_ACTIVE"
+        expect_invalid(f"{consumer} without Program admission", unverified, kats)
 
     governance = copy.deepcopy(registry)
     governance["operations"][0]["coverage"]["vm"]["status"] = "COMPLETE"

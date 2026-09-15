@@ -48,7 +48,10 @@ together they are roughly two thirds of the wall time of `ctest -j4`; the other
 Both lanes decide for themselves whether to build, by comparing the binary
 against `src`, `include`, `stdlib`, `tests`, and `CMakeLists.txt`, so an
 unchanged tree reuses the build and a changed one rebuilds without being asked.
-Neither lane is optional before handing off work in the directories above.
+Neither lane is optional before handing off a completed capability or deletion
+batch in the directories above. During a batch use the existing impact tests;
+do not rerun the same full qualification after each local edit. A failing lane
+remains a failure until its cause is fixed and rerun.
 
 Changes under `src/ir/`, `src/aot/`, or `src/analysis/` must preserve the Task 218 compiler-memory-safety defenses:
 
@@ -129,9 +132,18 @@ The machine-checked semantic contracts live in `contracts/`. Before changing a
 listed anchor, read the owning contract and decide whether existing diff cases,
 KATs, shape gates, or ports evidence must be migrated.
 
-- Refresh every affected `anchor-sha256` record in the same commit.
+- A contract's `verification-test` records bind its existing assertion tests to
+  the CTest `contract_freeze` fixture. Those tests execute once, and a failure
+  blocks the contract gate. They replace manual whole-source hashes only after
+  the replacement tests pass. Contracts still listing `anchor-sha256` retain
+  that protection and require refresh in the same commit until their failing
+  replacement tests are repaired and migrated. Never refresh a runtime,
+  schema, provider, ABI, or artifact fingerprint merely to silence a failure.
 - Do not add a dedicated contract-change trailer to the commit message.
 - Record how affected evidence was rerun, regenerated, or retired. Retirement
   must use the governed tombstone inventory; never silently delete evidence.
-- Run `ctest --test-dir build --output-on-failure -R contract_freeze` after the
-  commit so anchors and governed evidence are checked against the final commit.
+- Run `ctest --test-dir build --output-on-failure -R contract_freeze` at the
+  completed batch boundary and after the commit. CTest includes required
+  assertion fixtures automatically; a skipped dependent gate is not PASS.
+  Preserve source/binary/content identity binding in the existing evidence
+  runners and governed evidence retirement inventories.

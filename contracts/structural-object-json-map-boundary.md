@@ -88,29 +88,8 @@ Status: frozen after exact-object convergence and the removal of the public
     are rejected by the bytecode version and verifier rather than reconstructed
     as a weaker dynamic model.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: src/shared/xobject_shape.h ab7d5fdd49717836bcebd9d5af50d98054b71c698d0ecfa0f8e66a3cc1d97856
-anchor-sha256: src/runtime/value/xtype.h 9de63a916d92dd91359e1be782ddb1fccb8e7ae31df0198f78eb333591935192
-anchor-sha256: src/runtime/value/xtype.c 89fdffe12733a96bdb195932c37936e24f42bb435f7d3f1a16337e92e688aa38
-anchor-sha256: src/frontend/parser/xtype_ref.h 7e1383ce9bf8e2c1cdf8008163a7c95c614651c7134d18c744f1871980e2b7b1
-anchor-sha256: src/frontend/parser/xtype_ref.c 534687dba660afca5766f5833652a07615f17c47ed113d244df4edaa9025bf0d
-anchor-sha256: src/frontend/analyzer/xanalyzer_capability.h 24822aedfbe4c40e2f3916c8bc804bae3b6d924f0f54986d3e359db6b97a3342
-anchor-sha256: src/frontend/analyzer/xanalyzer_capability.c 631929798226365ce84a13b8205600c04b4b57816adc99300d2c455cc1b2685f
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c 5bf0319b258a27b7314dea744fde78f023a74b9bc9f9b3814d327a8f58c34ffb
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 715f49dc3a980e5c5f2f3813e973cfb8177759b89b325a0cb0af70cc5c6b6d43
-anchor-sha256: src/frontend/analyzer/xtype_ref_resolve.c ddfb8af183d0da252830a081a2086415c836037729ac75d009f1cd63a3db762d
-anchor-sha256: src/analysis/xglobal_summary.h 966c01c296399a28372552a8002b5869283bd59fea5e10a7f42edf904679fcec
-anchor-sha256: src/ir/xi.h 66968360c6fc99386ed9df4c89336e66df54a6680e05061de4fab294d9f4a3b2
-anchor-sha256: xisa/xi/ops.def c0656cbe20539c8f2748d74b211c5b8bd8cf579c6b23f53157fd617f9dd1699f
-anchor-sha256: src/aot/xrt_coll.h f699e3aecd8f3c408deca50e306274be74d0d700a61b29ca1dd170be48086511
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 922e370c40e60e113fba8e0a40889c4f379c74cc43bb7543ea7b5d56241d9044
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ea9c4ac67c31537fc6f41326f09481e702c1592f159946d54da89eae8a5a1baf
-anchor-sha256: src/runtime/class/xclass.h b284519f255629f4a99be7677768841a0a494f8cecc0be73ead793f9507240b3
-anchor-sha256: src/runtime/class/xinstance.c af51b5c0d8398b3d509c1f951f9aec062e4b91fd87d5f0eab112fe57ff6b8998
-anchor-sha256: src/runtime/object/xjson.c 38ba42610108b17fafa212ffef21ae20eb8e9cc77de7347f495432a8f6dc6d77
-anchor-sha256: src/module/xproto_codec.h 109ec696fedec4c86fafe43632f8551441f8f1e4c2576a00701c1f2f2750aa3d
-anchor-sha256: src/runtime/object/xjson_serde.c 5ed2dcf59b03a663ef6447b57660bc970b93bbd1b193c8b2cec8112a173fc3e2
-anchor-sha256: stdlib/types/json.xr 9b4904f85a13bea98b04c616185183f921ed09761bde1cb48d751784fef48161
-anchor-sha256: src/module/xproto_codec.c a38e80f950df3be9b5b367af3de31f5dc83e26b75f3d218fe923918629875de5
-anchor-sha256: src/aot/xaot_verify.c bae55927291480a94df6a52cef43a5e8c918be9bc5c6a7e04d70488525afa26b
+verification-test: structural_object_json_map_boundary
+verification-test: test_map_set_abi
+verification-test: test_xrt_json_decode

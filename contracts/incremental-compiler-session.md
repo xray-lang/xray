@@ -159,16 +159,7 @@ invalid profile instead of constructing a graph-less fallback session.
 - Runtime-only installed symbol gates must continue excluding compiler-session
   and cache-builder APIs.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: src/incremental/xr_dependency_graph.h 549030885cabac77a90280d75cb8b619b52b19c6c4277208330f399ccb471f6c
-anchor-sha256: src/incremental/xr_dependency_graph.c 1148f7a8c0f0621298c6b05afff8ab35e5b99b1af1ee62fd175d302eec2ebedd
-anchor-sha256: src/incremental/xr_module_task_graph.h 3347ef1fadffbddfb53b5cff0b2ee0d5ca1ad82a7630f176a4e50c497c67b667
-anchor-sha256: src/incremental/xr_module_task_graph.c 265336dd0d6e422447e882c2d1bcb8f48be8d98ddcb2639b2b571bc00556cff0
-anchor-sha256: src/incremental/xr_cache_invalidate.h d546845678f14a1c84a112370380b58f063f2b3a7d859b7c326ebb17c0a81c3c
-anchor-sha256: src/incremental/xr_cache_invalidate.c f134e5e0ea324161a54cf4d9e352faf630ce7c27bb8c3c7aaaa2856d195ef828
-anchor-sha256: src/toolchain/xcompiler_session.h 7dc98186760abfd336da2405b7c9227400835e143ebdb8c99e7c13a3c9077c29
-anchor-sha256: src/toolchain/xcompiler_session.c f8398a7562b7150596c2b74c9ed5e7fb2b7429192605f9bc0817f3444ddd5a6d
-anchor-sha256: src/api/xrepl.c 44a459c9440b391aa3ab954602dfcec77bc380f90cb556ee6885a0be56d48013
-anchor-sha256: tests/unit/incremental/test_dependency_graph.c 968768a0272e1fd5d06767e55698d00449f52bee1b67b4316e1e39042eddb888
-anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 3e430e9621be72df29aadce53fe34e4269dd7e2f7d6070cb5e99eb943c38c8f6
+verification-test: test_dependency_graph
+verification-test: test_compiler_session_generation

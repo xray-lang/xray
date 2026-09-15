@@ -1,13 +1,13 @@
 {
-  "schema": "xray-canonical-capability-denominator/1",
+  "schema": "xray-canonical-capability-denominator/2",
   "architecture_task": 293,
   "coordination_task": 304,
-  "rule": "A declared core capability closes only after one real source build reaches the canonical producer, bounded verifier, independent reference, VM-private executor, AOT-private executor, and retained product route with the required observations. Shared rejection of a valid declared capability is not parity.",
+  "rule": "A declared core capability closes only after one real source build reaches the canonical producer, bounded verifier, VM and native AOT executors, and retained product route, each checked against independent known answers, properties or local models for the required observations. A full Reference evaluator is not required. Missing modeling is not PASS; shared rejection of a valid declared capability is not parity.",
   "required_layers": [
     "source_owner",
     "producer",
     "verifier",
-    "reference",
+    "independent_oracle",
     "vm",
     "aot",
     "product"
@@ -121,7 +121,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -157,7 +157,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -196,7 +196,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -232,7 +232,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -273,7 +273,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -313,7 +313,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -349,7 +349,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -385,7 +385,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -422,7 +422,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -459,7 +459,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -497,7 +497,7 @@
         "source_owner": "OPEN",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -536,7 +536,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -573,7 +573,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -613,7 +613,7 @@
         "source_owner": "PARTIAL_CANONICAL",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -653,7 +653,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -690,7 +690,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -728,7 +728,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -770,7 +770,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -810,7 +810,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -853,7 +853,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -896,7 +896,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -938,7 +938,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -984,7 +984,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -1028,7 +1028,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -1062,7 +1062,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "PARTIAL_CANONICAL",
         "verifier": "PARTIAL_CANONICAL",
-        "reference": "PARTIAL_CANONICAL",
+        "independent_oracle": "PARTIAL_CANONICAL",
         "vm": "PARTIAL_CANONICAL",
         "aot": "PARTIAL_CANONICAL",
         "product": "CURRENT_ROUTE_ONLY"
@@ -1101,7 +1101,7 @@
         "source_owner": "CURRENT_ROUTE_ONLY",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"
@@ -1143,7 +1143,7 @@
         "source_owner": "OPEN",
         "producer": "OPEN",
         "verifier": "OPEN",
-        "reference": "OPEN",
+        "independent_oracle": "OPEN",
         "vm": "OPEN",
         "aot": "OPEN",
         "product": "CURRENT_ROUTE_ONLY"

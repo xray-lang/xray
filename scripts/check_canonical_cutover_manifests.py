@@ -27,7 +27,7 @@ REQUIRED_LAYERS = {
     "source_owner",
     "producer",
     "verifier",
-    "reference",
+    "independent_oracle",
     "vm",
     "aot",
     "product",
@@ -131,8 +131,8 @@ def validate_qualification_rows(root: Path, rows: Any, owner: str) -> set[str]:
 
 
 def validate_capabilities(root: Path, data: dict[str, Any], legacy_ids: set[str]) -> int:
-    require(data.get("schema") == "xray-canonical-capability-denominator/1",
-            "capability denominator schema must be v1")
+    require(data.get("schema") == "xray-canonical-capability-denominator/2",
+            "capability denominator schema must be v2")
     require(data.get("architecture_task") == 293, "capability architecture task drifted")
     require(set(data.get("required_layers", [])) == REQUIRED_LAYERS,
             "capability required layer set drifted")
@@ -336,6 +336,17 @@ def self_test(root: Path) -> None:
     premature["capabilities"][0]["open_reason"] = ""
     expect_rejected("premature capability closure",
                     lambda: validate_all(root, premature, product))
+
+    missing_oracle = deepcopy(capability)
+    del missing_oracle["capabilities"][0]["layers"]["independent_oracle"]
+    expect_rejected("missing independent correctness basis",
+                    lambda: validate_all(root, missing_oracle, product))
+
+    reference_only = deepcopy(capability)
+    row = reference_only["capabilities"][0]
+    row["layers"]["reference"] = row["layers"].pop("independent_oracle")
+    expect_rejected("full reference requirement replacing correctness basis",
+                    lambda: validate_all(root, reference_only, product))
 
     missing_route = deepcopy(product)
     missing_route["routes"] = missing_route["routes"][1:]

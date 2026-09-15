@@ -113,11 +113,7 @@ VM only materializes the result and CGen emits the already-decided integer.
 Generated C may not ask the host compiler to rediscover target layout through
 `sizeof` or `_Alignof`, and invalid layout, query, or type inputs fail closed.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: contracts/semantic-owners.toml e8757676082856e5f3fcc538189f1dd5a9298832efc9d87a878640bc15dfcee2
-anchor-sha256: contracts/semantic-owner-registry.json 50e488398a29244c0f46c6785056213c5de4c22309045df0ea57ed460b9937d5
-anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json f3f3567b73b0fc34c213e2b8d6d2a8ac1f99748af99cdfe36066fd94b84d23af
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h ed73a626b67d19606ee640290836529258d3a9a2c697eb87219d06cb88746b8c
-anchor-sha256: scripts/check_semantic_owners.py efd83b2029bd479b43e325df152f267b41d87f5eb72aa10f87720e310640e072
+verification-test: semantic_owner_inventory
+verification-test: semantic_owner_inventory_self_test

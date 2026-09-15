@@ -95,14 +95,8 @@ the program-output comparison remain byte-native and are not normalized.
     row evidence remains failed and reports the exact debt; census generation
     does not change its denominator or rewrite the governed refusal baseline.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: tests/diff/run_backend_diff.py 25e7a5cb894f419008eeffc1369f2c9567deb090492763b0a25eaaff959013e9
-anchor-sha256: tests/diff/survey_refusals.py 50a54dcdd631d73c03d309b7fcbfb77f9ae22b64cad86847d96ea36916c373e3
-anchor-sha256: scripts/check_live_refusal_manifest.py 81f489f08175034643871675d246a09bf4e70cbae5a6a9e9116ec8e1edebebea
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 8f4a3996e856f99143c49ab0fb4e0b85a9f5ea23b14515509ecd6d471af51687
-anchor-sha256: src/plan/target/xr_target_builder.c cc9727fc1d2bb4bc61a20dfae5d357921c1e2825aafc4c9ae5b3901f0bc7b1fe
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 214f027aeb8ff733fb89860b232626da54035b29ad4869679d85f0b488395fec
-anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
-anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
-anchor-sha256: tests/aot/TOMBSTONES.tsv 1ad7d280093c5a3aedecdf490fe88dc9c48f79215de9ea1d1c8216373cd56eb7
+verification-test: expected_format_self_test
+verification-test: test_regression_report
+verification-test: xr_program_h2_backend_differential

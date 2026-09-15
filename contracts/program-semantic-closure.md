@@ -378,7 +378,7 @@ registrations inside cold handlers. Normal exits close active boundaries; an exp
 may abandon an outer closed boundary and must preserve its reason. Cancellation owner payload
 exactness is checked only after live-in propagation reaches its fixed point.
 
-anchor-sha256: CMakeLists.txt 5cbe10e2f0599c8f4db286797f119e4fdea855f12adea2f89e4ccd420543511b
+anchor-sha256: CMakeLists.txt 9613dfaef68552718c74b2e19326cca610915bee2320da9c691bb9044140c92f
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
@@ -441,7 +441,7 @@ anchor-sha256: tests/unit/frontend/test_parser.c 83d2fcc57c562b0def2f589440f0f79
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c f649890040e9a26bcbadca53a6ebd8460b07564c0692afe5bdfe03ea6cf3e3f1
-anchor-sha256: tests/unit/CMakeLists.txt e1bb10a1df3f22c5aa6e76eb8736fc255858f3bae815c97b0319be868edb426a
+anchor-sha256: tests/unit/CMakeLists.txt 0b3aca5cbb019086c9bde9dc71007bd0977a276ffe567a1e41fb79682d8ab1a8
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
 anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc

@@ -510,6 +510,7 @@
     }
   ],
   "incomplete_operations": [],
+  "reference_unmodeled_operations": [],
   "negative_mutations": [
     "core-spec-identity",
     "effect-mask",

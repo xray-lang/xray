@@ -30,8 +30,7 @@ declarations, and reachable shared/builtin/dynamic runtime state. Its positive
 fixture, forbidden-residue injections, and literal/comment boundary cases are
 part of the frozen verifier suite.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: src/aot/xi_cgen_verify_output.h a3662a2575d97d5da3f5ae63fe8319eabc0aad0bc1303264bc8a468397bd9705
-anchor-sha256: src/aot/xi_cgen_verify_output.c 274d8b20d667ad0f0ae00d956be803480f0876e6f111f0d137bc40dad49a6da8
-anchor-sha256: tests/unit/aot/test_cgen_verify_output.c ca23cace6f60e24445d82f7dcb984673fd36ecf4c4504064d5dca56501a40c25
+verification-test: test_cgen_verify_output
+verification-test: test_c_emission_typed_rules

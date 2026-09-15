@@ -169,13 +169,9 @@ compatibility opcode, reserved hole, or second bounds owner.
     `regex.Regex(pattern, flags)`. A regex-specific opcode, backend rewrite, or
     native constructor is not a compatible form.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: xisa/xi/ops.def c0656cbe20539c8f2748d74b211c5b8bd8cf579c6b23f53157fd617f9dd1699f
-anchor-sha256: xisa/xi/lowering.def ab2ef2e839ef587b3c826bce89b74dbb851477cbad6ae0e9e12a24d4aae06e50
-anchor-sha256: src/ir/xi_cleanup.c c6fb49d7e811f54637160b605a79c5301a528085d24ecca9c690820290e6fd83
-anchor-sha256: src/ir/xi_cleanup.h 7149fdf5ffcfed5c6904882f5e06889368bd1a6912db5580c65486c280279a0e
-anchor-sha256: tests/unit/ir/test_xi_cleanup.c 01b4edf0bf215e3099c1157f7282c7bb4d4cd72e54133c50eaabda5218210d51
-anchor-sha256: tests/unit/ir/test_xi_cleanup_lower.c 118ffa02d0c9f9cc12a2d9021b106e4863fa6e21aad18b30e59398ef60560bf4
-anchor-sha256: tests/unit/ir/test_xi_cleanup_clone.c 4d35d1c83c13a8ad46192caaf2ca6b3a5b4337b7ea469590bd06ecf30d7dc813
-anchor-sha256: tests/unit/ir/test_xi_cleanup_integration.c 4d556382f904301ca58218e46b266b25f42565fff4950d7c41d7ee4b902ab7b3
+verification-test: test_xi_cleanup
+verification-test: test_xi_cleanup_lower
+verification-test: test_xi_cleanup_clone
+verification-test: test_xi_cleanup_integration

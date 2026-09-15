@@ -2421,3 +2421,4 @@ add_test(
 )
 
 xray_prepend_windows_asan_runtime_to_directory_tests()
+xray_attach_contract_assertions()

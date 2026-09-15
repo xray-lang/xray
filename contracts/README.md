@@ -5,18 +5,32 @@ task 220. Language syntax and public API shape may still change directly; the
 contracts below freeze the meaning of compiler/runtime invariants and their
 verification protocols.
 
-Every contract records SHA-256 anchors in this form:
+Contracts transfer verification responsibility to existing behavior, ABI and
+rejection tests using one record per test:
 
 ```text
-anchor-sha256: path/from/repository/root digest
+verification-test: registered_ctest_name
 ```
 
-`scripts/check_contract_freeze.py` verifies the anchors in CTest. A change to
-an anchor or contract file does not require a dedicated commit trailer. The
-ordinary self-contained commit subject/body and governed evidence must explain
-how affected differential cases, KATs, shape gates, ports, or other evidence
-were rerun, regenerated, or retired. Retired evidence belongs in its governed
-tombstone inventory; it must not silently disappear.
+`scripts/check_contract_freeze.py --list-tests` projects this owner list into
+CTest fixtures. `ctest -R contract_freeze` automatically runs each named test
+once; a failed assertion blocks the dependent contract gate. A full CTest run
+uses those same tests, without a second matrix. Missing, disabled, skip-enabled
+or disconnected tests fail registration validation. Registration alone is not
+proof that the test ran successfully.
+
+Contracts whose replacement assertions still fail retain `anchor-sha256`
+records and their registered source sets. Repair and rerun those assertions
+before removing that contract's digest protection. The checker still rejects
+remaining digest drift. This is a per-contract transition, not an option to
+choose a weaker gate. Source changes do not require hashes after transfer;
+runtime Program/schema/provider/ABI/artifact identities remain mandatory.
+
+Existing runners bind evidence to source, binary and content identities.
+Contract changes and evidence retirement remain reviewable in ordinary commit
+messages and the governed tombstone inventory. No test is retired merely
+because its source digest is retired. Overall qualification still requires
+all applicable regression, native, safety and platform gates.
 
 Initial frozen contracts:
 

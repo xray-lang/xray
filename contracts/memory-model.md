@@ -112,18 +112,9 @@ A change to these rules re-runs and, where the expected output moves, updates:
   completed task observations (M12a); linked propagation, child errors,
   task links, await-any and scope stress cover the same allocation rule.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: xisa/xi/ops.def c0656cbe20539c8f2748d74b211c5b8bd8cf579c6b23f53157fd617f9dd1699f
-anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
-anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
-anchor-sha256: src/ir/xi_opt_licm.c 06f7494501b87db38c4426987c7f8242451624d10686309e100f3ca66dac819f
-anchor-sha256: src/ir/xi_opt_gvn_pre.c fb3675f74b1ed01a3ecc64cd2c9e4a479fb894e4af1fc0126d3657926b6c212b
-anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
-anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0dde2595f532e474a943
-anchor-sha256: src/coro/xtask.c a58cd9d324c5919b8e60b2130523ee3c544ba600fe36be0fe3a93232faadb0ba
-anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
-anchor-sha256: src/frontend/canonical/xcanon.c 6a2d24cce6c597bb99b318cba3dafcaa021b1023b3bf3a5201bb6d69ec0ec589
-anchor-sha256: src/ir/xi_lower_internal.h 61eea02e231fa58fefe7b2c3fef0a0268469e23a1ca3730765cec892ad3c37f2
-anchor-sha256: tests/regression/11_coroutine/1130_linked_scope.xr 6b58eb44971587073e71ec549b024c8ab5761856089dfe2a31ad478d24ab78b0
-anchor-sha256: tests/regression/11_coroutine/1132_task_monitor.xr ae8260b568f5e4d6240a6f95cbd8d2325cc0c119b1755d52ccd0f5cc9c4fd458
+verification-test: test_channel_close
+verification-test: test_scope_wait
+verification-test: test_weak_handle
+verification-test: test_cycle_detector_traversal

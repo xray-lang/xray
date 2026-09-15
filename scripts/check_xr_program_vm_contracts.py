@@ -102,7 +102,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
             "baseline_view": row["coverage"]["vm"]["status"],
             "fixed_row_view": row["coverage"]["vm"]["status"],
             "differential_oracle": (
-                "XrReferenceEvaluator"
+                "CoreSpec-known-answers-and-source-expectations"
                 if row["coverage"]["vm"]["status"] == "COMPLETE" else None
             ),
         }

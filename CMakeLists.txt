@@ -2640,6 +2640,33 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 if(BUILD_TESTS)
     enable_testing()
 
+    # Contract owners name existing tests; fixtures schedule each assertion once,
+    # including when only contract_freeze is selected. Failed assertions prevent
+    # the contract gate from running. No second test command or result cache exists.
+    file(GLOB _xr_contract_documents CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/contracts/*.md")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        ${_xr_contract_documents} "${CMAKE_SOURCE_DIR}/scripts/check_contract_freeze.py")
+    execute_process(
+        COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_contract_freeze.py
+                --root ${CMAKE_SOURCE_DIR} --list-tests
+        RESULT_VARIABLE _xr_contract_status
+        OUTPUT_VARIABLE _xr_contract_tests
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(NOT _xr_contract_status EQUAL 0)
+        message(FATAL_ERROR "Cannot resolve semantic contract assertion tests")
+    endif()
+    string(REPLACE "\n" ";" XR_CONTRACT_ASSERTION_TESTS "${_xr_contract_tests}")
+    function(xray_attach_contract_assertions)
+        get_property(_xr_local_tests DIRECTORY PROPERTY TESTS)
+        foreach(_xr_test IN LISTS XR_CONTRACT_ASSERTION_TESTS)
+            if(_xr_test IN_LIST _xr_local_tests)
+                set_property(TEST ${_xr_test} APPEND PROPERTY
+                    FIXTURES_SETUP semantic_contract_assertions)
+            endif()
+        endforeach()
+    endfunction()
+
     if(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
         add_test(
             NAME windows_asan_runtime_path
@@ -5111,17 +5138,18 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    # P0: semantic contract anchor digests. Commit messages need no dedicated
-    # trailer. The self-test injects digest drift and checkout-only CRLF to
-    # prove fail-closed content checks remain portable across repository state.
+    # Assertion fixtures own semantic verification. Digest protection remains
+    # only for contracts whose replacement tests have not yet passed.
     add_test(
         NAME contract_freeze
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --build-dir ${CMAKE_BINARY_DIR}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(contract_freeze PROPERTIES
         LABELS "meta;contracts;freeze;task-220"
+        FIXTURES_REQUIRED semantic_contract_assertions
         PROCESSORS 1
         TIMEOUT 30
     )
@@ -6218,6 +6246,7 @@ if(BUILD_TESTS)
     # Root tests and tests/unit are distinct CMake directory scopes; each scope
     # applies the same compiler-owned runtime without changing test commands.
     xray_prepend_windows_asan_runtime_to_directory_tests()
+    xray_attach_contract_assertions()
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)

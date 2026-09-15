@@ -15,6 +15,6 @@ meaning of an `owned:` exemption are frozen. Suppression budgets may shrink;
 expanding one requires a contract change and evidence explaining why ownership
 cannot be made explicit.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: scripts/check_meta_ownership.py bb366fbfdf03b975b45d408f106dc105fd50a65a7111591e77bc4c7dca5fda6e
+verification-test: meta_ownership_inventory

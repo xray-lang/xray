@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-"""Semantic-contract digest gate.
+"""Check semantic-contract verification responsibilities.
 
-Each contract records an anchor-sha256 line per source file it governs. A
-file whose content no longer matches its recorded digest means the contract
-was not re-read when the code under it moved, and that is what this catches.
-
-Digest drift is the whole gate. There is deliberately no commit-message
-requirement: during high-speed development the change itself is the record,
-and a rule that every anchor edit must be re-justified in a trailer would be
-either noise or a permanently red gate.
+Migrated contracts name existing assertion tests. CTest fixtures execute those
+tests once and block this gate on failure. Registration is not execution evidence.
+Contracts whose replacements are still failing retain their digest checks until
+the corresponding verification responsibility can be transferred safely.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
+import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -44,19 +42,7 @@ CONTRACT_SPECS = (
             "tests/regression/05_functions/0582_removed_builtin_names_reusable.xr",
         ),
     ),
-    ContractSpec(
-        "xi-canonical-ops.md",
-        (
-            "xisa/xi/ops.def",
-            "xisa/xi/lowering.def",
-            "src/ir/xi_cleanup.c",
-            "src/ir/xi_cleanup.h",
-            "tests/unit/ir/test_xi_cleanup.c",
-            "tests/unit/ir/test_xi_cleanup_lower.c",
-            "tests/unit/ir/test_xi_cleanup_clone.c",
-            "tests/unit/ir/test_xi_cleanup_integration.c",
-        ),
-    ),
+    ContractSpec("xi-canonical-ops.md", ()),
     ContractSpec(
         "assertion-semantics.md",
         (
@@ -85,63 +71,7 @@ CONTRACT_SPECS = (
             "tests/unit/fixtures/assertion/same_t_contextual.xr",
         ),
     ),
-    ContractSpec(
-        "effect-semantics.md",
-        (
-            "src/app/cli/xcmd_verify.c",
-            "src/frontend/analyzer/xa_effect_db.c",
-            "src/frontend/analyzer/xa_effect_db.h",
-            "src/frontend/analyzer/xa_native_member_contract.def",
-            "src/frontend/analyzer/xa_memory_effect_db.c",
-            "src/frontend/analyzer/xa_memory_effect_db.h",
-            "src/frontend/analyzer/xa_typed_program.c",
-            "src/frontend/analyzer/xanalyzer_builtins.c",
-            "src/frontend/analyzer/xanalyzer_builtins.h",
-            "tests/unit/analyzer/xa_builtin_enum_checks.inc.c",
-            "src/frontend/analyzer/xanalyzer.c",
-            "src/frontend/analyzer/xanalyzer.h",
-            "src/frontend/analyzer/xanalyzer_errorset.c",
-            "src/frontend/analyzer/xanalyzer_allocation.c",
-            "src/frontend/analyzer/xanalyzer_memory_effect.c",
-            "src/frontend/analyzer/xanalyzer_suspend.c",
-            "src/frontend/analyzer/xanalyzer_visitor_internal.h",
-            "src/frontend/analyzer/xanalyzer_visitor_decl.c",
-            "src/frontend/analyzer/xanalyzer_visitor_call.c",
-            "src/frontend/analyzer/xanalyzer_visitor_stmt.c",
-            "src/ir/xi.h",
-            "src/ir/xi_lower.c",
-            "src/plan/format/xr_xsm_decode.c",
-            "src/plan/format/xr_xsm_encode.c",
-            "src/plan/format/xr_xsm_schema.h",
-            "src/plan/semantic/xr_semantic_builder.c",
-            "src/plan/semantic/xr_semantic_cleanup_shape.h",
-            "src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h",
-            "src/plan/semantic/xr_semantic_enum_shape.h",
-            "src/plan/semantic/xr_semantic_ids.h",
-            "src/plan/semantic/xr_semantic_plan.c",
-            "src/plan/semantic/xr_semantic_plan.h",
-            "src/plan/semantic/xr_semantic_type_admission_shape.h",
-            "src/plan/semantic/xr_semantic_string_runes_shape.h",
-            "src/plan/semantic/xr_semantic_string_slice_shape.h",
-            "src/plan/semantic/xr_semantic_string_utf8_shape.h",
-            "src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h",
-            "src/plan/semantic/xr_semantic_iterator_rune_next_shape.h",
-            "src/plan/semantic/xr_semantic_number_parse_error_shape.h",
-            "src/plan/semantic/xr_semantic_rune_to_uint32_shape.h",
-            "src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h",
-            "src/plan/semantic/xr_semantic_plan_internal.h",
-            "src/plan/semantic/xr_semantic_verify.c",
-            "scripts/check_coroutine_lifecycle_projection.py",
-            "src/runtime/value/xtype.h",
-            "src/stdlib/xstdlib_metadata.h",
-            "src/shared/xr_string_parse_core.h",
-            "tests/cli/run_verify_contract_tests.py",
-            "tests/unit/analyzer/test_analyzer.c",
-            "tests/unit/analyzer/test_effect_db.c",
-            "tests/unit/ir/test_xi_lower.c",
-            "tests/unit/plan/test_semantic_plan.c",
-        ),
-    ),
+    ContractSpec("effect-semantics.md", ()),
     ContractSpec(
         "zero-cost-residue.md",
         (
@@ -151,43 +81,10 @@ CONTRACT_SPECS = (
             "src/app/cli/xcmd_verify.c",
         ),
     ),
-    ContractSpec(
-        "rc-contract.md",
-        (
-            "src/ir/xi_arc_verify.c",
-            "src/ir/xi_arc.c",
-            "src/ir/xi_lower_expr.c",
-            "src/aot/xi_cgen_dispatch_helpers.inc.c",
-            "src/aot/xrt_coll.h",
-            "src/runtime/mem/xfixed_heap.c",
-            "src/runtime/core/xr_runtime_core.c",
-            "src/api/xisolate.c",
-            "tests/unit/mem/test_fixed_heap_teardown.c",
-        ),
-    ),
-    ContractSpec(
-        "cgen-wellformedness.md",
-        (
-            "src/aot/xi_cgen_verify_output.h",
-            "src/aot/xi_cgen_verify_output.c",
-            "tests/unit/aot/test_cgen_verify_output.c",
-        ),
-    ),
-    ContractSpec("meta-ownership.md", ("scripts/check_meta_ownership.py",)),
-    ContractSpec(
-        "differential-protocol.md",
-        (
-            "tests/diff/run_backend_diff.py",
-            "tests/diff/survey_refusals.py",
-            "scripts/check_live_refusal_manifest.py",
-            "src/plan/semantic/xr_semantic_verify.c",
-            "src/plan/target/xr_target_builder.c",
-            "src/aot/refine/xr_aot_representation_refinement.c",
-            "src/aot/refine/xr_aot_scalar_ref_v1.h",
-            "src/aot/refine/xr_aot_scalar_ref_v1.c",
-            "tests/aot/TOMBSTONES.tsv",
-        ),
-    ),
+    ContractSpec("rc-contract.md", ()),
+    ContractSpec("cgen-wellformedness.md", ()),
+    ContractSpec("meta-ownership.md", ()),
+    ContractSpec("differential-protocol.md", ()),
     ContractSpec(
         "process-byte-stream.md",
         (
@@ -279,74 +176,10 @@ CONTRACT_SPECS = (
             "tests/unit/aot/test_xaot_driver.c",
         ),
     ),
-    ContractSpec(
-        "memory-model.md",
-        (
-            "xisa/xi/ops.def",
-            "src/ir/xi_lower_internal.h",
-            "tests/regression/11_coroutine/1130_linked_scope.xr",
-            "tests/regression/11_coroutine/1132_task_monitor.xr",
-            "src/ir/xi_tbaa.c",
-            "src/ir/xi_tbaa.h",
-            "src/ir/xi_opt_licm.c",
-            "src/ir/xi_opt_gvn_pre.c",
-            "src/ir/xi_memssa.c",
-            "src/coro/xchannel.c",
-            "src/coro/xtask.c",
-            "src/coro/xtask_await.c",
-            "src/frontend/canonical/xcanon.c",
-        ),
-    ),
-    ContractSpec(
-        "structural-object-json-map-boundary.md",
-        (
-            "src/shared/xobject_shape.h",
-            "src/runtime/value/xtype.h",
-            "src/runtime/value/xtype.c",
-            "src/frontend/parser/xtype_ref.h",
-            "src/frontend/parser/xtype_ref.c",
-            "src/frontend/analyzer/xanalyzer_capability.h",
-            "src/frontend/analyzer/xanalyzer_capability.c",
-            "src/frontend/analyzer/xanalyzer_visitor_expr.c",
-            "src/frontend/analyzer/xanalyzer_visitor_call.c",
-            "src/frontend/analyzer/xtype_ref_resolve.c",
-            "src/analysis/xglobal_summary.h",
-            "src/ir/xi.h",
-            "xisa/xi/ops.def",
-            "src/aot/xrt_coll.h",
-            "src/aot/xi_cgen_dispatch_helpers.inc.c",
-            "src/aot/xi_cgen_program_entry.inc.c",
-            "src/runtime/class/xclass.h",
-            "src/runtime/class/xinstance.c",
-            "src/runtime/object/xjson.c",
-            "src/runtime/object/xjson_serde.c",
-            "stdlib/types/json.xr",
-            "src/module/xproto_codec.h",
-            "src/module/xproto_codec.c",
-            "src/aot/xaot_verify.c",
-        ),
-    ),
-    ContractSpec(
-        "sort-semantics.md",
-        (
-            "src/shared/xr_sort_core.h",
-            "src/runtime/object/xarray_vm.c",
-            "src/aot/xrt_sort.inc.c",
-            "tests/diff/cases/semantics/collections/array_sort_shared_core.xr",
-            "tests/unit/stdlib/test_array_core.c",
-        ),
-    ),
-    ContractSpec(
-        "semantic-ownership.md",
-        (
-            "contracts/semantic-owners.toml",
-            "contracts/semantic-owner-registry.json",
-            "contracts/hof-shape-matrix.toml",
-            "contracts/shared-core-inventory.json",
-            "src/shared/xr_semantic_owner_ids_gen.h",
-            "scripts/check_semantic_owners.py",
-        ),
-    ),
+    ContractSpec("memory-model.md", ()),
+    ContractSpec("structural-object-json-map-boundary.md", ()),
+    ContractSpec("sort-semantics.md", ()),
+    ContractSpec("semantic-ownership.md", ()),
     ContractSpec(
         "unified-target-machine-discovery.md",
         (
@@ -382,59 +215,8 @@ CONTRACT_SPECS = (
             "tests/target-machine/phase0/negative/manifest.toml",
         ),
     ),
-    ContractSpec(
-        "execution-error-publication.md",
-        (
-            "src/runtime/core/xr_exec_context.h",
-            "src/runtime/core/xr_exec_context.c",
-            "src/coro/xcoro.c",
-            "src/api/xvm_exec.c",
-            "src/vm/xvm_coro_backend.c",
-            "src/vm/xvm.h",
-            "src/vm/xvm_api.c",
-            "src/coro/xthread_obj.c",
-            "src/runtime/object/xiterator.c",
-            "src/runtime/object/xstring_methods.c",
-            "src/stdlib/xstdlib_vm_fastpath.c",
-            "include/xray_hosted_fragment_runtime.h",
-            "tools/stdlibgen/generate_vm_fastpaths.py",
-            # Compress and crypto used to publish typed errors from C. Their
-            # Xray modules now state those errors directly, so neither private
-            # provider translation unit belongs to this contract.
-            # Net still publishes transport failures through this provider.
-            "src/io/xnet_provider.c",
-            "tests/unit/runtime/test_execution_error_channel.c",
-            "tests/unit/vm/test_vm_exception.c",
-        ),
-    ),
-    ContractSpec(
-        "runtime-abi-foundation.md",
-        (
-            "src/base/xstable_id.h",
-            "contracts/target-machine/id-and-fingerprint-policy.toml",
-            "src/plan/semantic/xr_semantic_ids.h",
-            "src/runtime/abi/xr_runtime_descriptor.h",
-            "src/runtime/abi/xr_runtime_descriptor.c",
-            "src/runtime/abi/xr_target_runtime_profile.h",
-            "src/runtime/abi/xr_runtime_contract.h",
-            "src/runtime/abi/xr_runtime_contract.c",
-            "src/runtime/abi/xr_runtime_object_header.h",
-            "src/runtime/abi/xr_runtime_object_header.c",
-            "contracts/target-machine/runtime-string-object-contract.toml",
-            "src/runtime/abi/xr_runtime_string_object.h",
-            "src/runtime/abi/xr_runtime_string_object.c",
-            "tests/unit/runtime/test_runtime_descriptor.c",
-            "tests/unit/runtime/test_runtime_abi_contract.c",
-            "tests/unit/cli/test_target_profile_authority.c",
-            "tests/unit/plan/target_profile_test_fixture.c",
-            "tests/unit/plan/target_profile_test_fixture.h",
-            "tests/unit/runtime/test_runtime_object_header.c",
-            "tests/unit/runtime/test_runtime_string_object.c",
-            "tests/unit/CMakeLists.txt",
-            "scripts/check_runtime_object_header_boundary.py",
-            "scripts/check_runtime_string_object_boundary.py",
-        ),
-    ),
+    ContractSpec("execution-error-publication.md", ()),
+    ContractSpec("runtime-abi-foundation.md", ()),
     ContractSpec(
         "runtime-target-plan-load.md",
         (
@@ -553,152 +335,9 @@ CONTRACT_SPECS = (
             "CMakeLists.txt",
         ),
     ),
-    ContractSpec(
-        "typed-target-plan-execution.md",
-        (
-            "CMakeLists.txt",
-            "xisa/target/vm_ops.def",
-            "tools/xisagen/xisagen.py",
-            "src/plan/target/xr_target_plan.h",
-            "src/plan/target/xr_target_plan.c",
-            "src/plan/target/xr_target_plan_internal.h",
-            "src/plan/target/xr_target_builder.h",
-            "src/plan/target/xr_target_builder.c",
-            "src/plan/target/xr_target_call_abi_shape.h",
-            "src/plan/target/xr_target_entry_abi.h",
-            "src/plan/target/xr_target_entry_abi.c",
-            "src/plan/target/xr_target_instruction_gen.h",
-            "src/plan/target/xr_target_instruction_verify.h",
-            "src/plan/target/xr_target_instruction_verify.c",
-            "src/plan/target/xr_i64_overflow_target_instruction.h",
-            "src/plan/target/xr_i64_overflow_target_instruction.c",
-            "src/plan/target/xr_i64_overflow_target_instruction_verify.c",
-            "src/plan/target/xr_target_verify.c",
-            "src/plan/format/xr_xtp_schema.h",
-            "src/plan/format/xr_xtp_internal.h",
-            "src/plan/format/xr_xtp_decode.c",
-            "src/plan/format/xr_xtp_row_fields.h",
-            "src/plan/format/xr_xtp_rows.c",
-            "src/plan/format/xr_xtp_encode.c",
-            "src/plan/format/xr_xtp_instruction_stream.h",
-            "src/plan/format/xr_xtp_instruction_stream.c",
-            "src/plan/format/xr_xtp_text.h",
-            "src/plan/format/xr_xtp_text.c",
-            "xisa/target/xtp_super_ops.def",
-            "src/plan/target/xr_xtp_materialize.c",
-            "src/aot/xaot_boundary.h",
-            "src/aot/xaot_boundary.c",
-            "src/aot/xaot_bundle.c",
-            "src/aot/xaot_callable.c",
-            "src/aot/xaot_driver.c",
-            "src/aot/xaot_prepare.c",
-            "src/aot/xaot_verify.c",
-            "src/aot/xr_leaf_value_product_program_emission.h",
-            "src/aot/xr_leaf_value_product_program_emission.c",
-            "src/aot/xr_target_aggregate_c_projection.h",
-            "src/aot/xr_target_aggregate_c_projection.c",
-            "tests/target-machine/compiler_archive_link_probe.c",
-            "src/aot/emit_c/xr_c_emission_plan.c",
-            "src/aot/emit_c/xr_c_scalar_ref_projection.h",
-            "src/aot/emit_c/xr_c_scalar_ref_projection.c",
-            "src/aot/emit_c/xr_c_program_emission.h",
-            "src/aot/emit_c/xr_c_program_emission.c",
-            "src/aot/xi_cgen.c",
-            "src/aot/xi_cgen_call_resolve.inc.c",
-            "src/aot/xi_cgen_import_helpers.inc.c",
-            "src/aot/xi_cgen_abi_helpers.inc.c",
-            "src/aot/xi_cgen_dispatch_helpers.inc.c",
-            "src/aot/xi_cgen_program_entry.inc.c",
-            "src/aot/xi_cgen_struct_helpers.inc.c",
-            "src/vm/xr_typed_dispatch.h",
-            "src/vm/xr_typed_dispatch.c",
-            "src/vm/xr_vm_dynamic_entry.h",
-            "src/vm/xr_vm_entry_adapter.h",
-            "src/vm/xr_vm_entry_adapter.c",
-            "xisa/target/vm_entry_adapters.def",
-            "src/vm/xr_vm_ops.def",
-            "src/shared/xr_array_push_status.h",
-            "src/runtime/object/xarray.h",
-            "src/runtime/object/xarray.c",
-            "src/vm/xvm_dispatch_collection.inc.c",
-            "src/vm/xvm_dispatch_struct.inc.c",
-            "src/vm/xr_vm_decoded_cache.h",
-            "src/vm/xr_vm_decoded_cache.c",
-            "src/vm/xr_typed_frame.c",
-            "scripts/check_coroutine_lifecycle_projection.py",
-            "tests/unit/ir/test_xi_cgen.c",
-            "tests/unit/ir/test_xi_opt.c",
-            "tests/unit/ir/test_xi_program_semantic.c",
-            "tests/unit/aot/test_xaot_driver.c",
-            "tests/unit/vm/test_typed_dispatch.c",
-            "tests/unit/object/test_xarray.c",
-            "tests/unit/plan/test_target_plan.c",
-            "tests/unit/vm/test_vm_decoded_cache.c",
-            "tests/unit/plan/test_xtp_format.c",
-            "tests/unit/plan/test_xtp_resource_stress.c",
-            "tests/unit/frontend/test_xa_program_semantic_closure.c",
-            "tests/aot/run_module_summary_determinism.py",
-            "tests/fuzz/fuzz_xtp_decode.c",
-            "tests/unit/runtime/test_typed_frame_runtime_archive.c",
-            "tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c",
-            "include/xray_runtime_generation.h",
-            "src/runtime/xr_dynamic_entry_runtime.h",
-            "src/runtime/xr_dynamic_entry_runtime.c",
-            "src/runtime/xr_module_generation.c",
-            "tests/unit/runtime/test_runtime_generation.c",
-            "tests/unit/runtime/test_dynamic_entry_runtime.c",
-            "tests/unit/CMakeLists.txt",
-        ),
-    ),
-    ContractSpec(
-        "incremental-cache-store.md",
-        (
-            "src/incremental/xr_cache_artifact_verify.h",
-            "src/incremental/xr_cache_artifact_verify.c",
-            "src/incremental/xr_cache_store.h",
-            "src/incremental/xr_cache_store.c",
-            "src/incremental/xr_program_target_plan_build.h",
-            "src/incremental/xr_program_target_plan_build.c",
-            "src/incremental/xr_module_summary_build.h",
-            "src/incremental/xr_module_summary_build.c",
-            "src/aot/xaot_driver.h",
-            "src/aot/xaot_driver.c",
-            "src/aot/xaot_module_summary.h",
-            "src/aot/xaot_module_summary.c",
-            "src/os/os_fs.h",
-            "src/os/unix/fs_unix.c",
-            "src/os/win/fs_win.c",
-            "tests/unit/CMakeLists.txt",
-            "tests/unit/incremental/test_cache_artifact_verify.c",
-            "tests/unit/incremental/test_cache_store.c",
-            "tests/unit/incremental/test_program_target_plan_build.c",
-            "tests/unit/incremental/program_plan_cache_fixture.h",
-            "tests/unit/incremental/program_plan_cache_fixture.c",
-            "tests/unit/incremental/test_program_plan_cache_qualification.c",
-            "tests/unit/incremental/test_module_summary_build.c",
-            "scripts/check_runtime_archive_cache_symbols.py",
-            "tests/target-machine/run_program_plan_cache_qualification.py",
-            "tests/unit/aot/test_xaot_driver.c",
-            "tests/unit/os/test_fs_atomic.c",
-            "tests/aot/run_module_summary_determinism.py",
-        ),
-    ),
-    ContractSpec(
-        "incremental-compiler-session.md",
-        (
-            "src/incremental/xr_dependency_graph.h",
-            "src/incremental/xr_dependency_graph.c",
-            "src/incremental/xr_module_task_graph.h",
-            "src/incremental/xr_module_task_graph.c",
-            "src/incremental/xr_cache_invalidate.h",
-            "src/incremental/xr_cache_invalidate.c",
-            "src/toolchain/xcompiler_session.h",
-            "src/toolchain/xcompiler_session.c",
-            "src/api/xrepl.c",
-            "tests/unit/incremental/test_dependency_graph.c",
-            "tests/unit/toolchain/test_compiler_session_generation.c",
-        ),
-    ),
+    ContractSpec("typed-target-plan-execution.md", ()),
+    ContractSpec("incremental-cache-store.md", ()),
+    ContractSpec("incremental-compiler-session.md", ()),
     ContractSpec(
         "program-semantic-closure.md",
         (
@@ -807,25 +446,7 @@ CONTRACT_SPECS = (
             "tests/install/run_install_public_surface_tests.py",
         ),
     ),
-    ContractSpec(
-        "ownership-audit-foundation.md",
-        (
-            "CMakeLists.txt",
-            "src/shared/xr_ownership_event.h",
-            "src/plan/ownership/xr_ownership_certificate.h",
-            "src/runtime/ownership/xr_ownership_audit.h",
-            "src/runtime/ownership/xr_ownership_audit.c",
-            "src/vm/audit/xr_typed_lifecycle_audit.h",
-            "src/vm/audit/xr_typed_lifecycle_audit.c",
-            "scripts/check_ownership_audit_record_no_alloc.py",
-            "scripts/check_ownership_audit_release_boundary.py",
-            "scripts/run_tsan_focused.py",
-            "tests/lib/tests/test_tsan_focused.py",
-            "tests/unit/CMakeLists.txt",
-            "tests/unit/runtime/test_ownership_audit.c",
-            "tests/unit/runtime/test_typed_lifecycle_audit.c",
-        ),
-    ),
+    ContractSpec("ownership-audit-foundation.md", ()),
     ContractSpec(
         "canonical-program-execution-binding.md",
         (
@@ -853,64 +474,59 @@ CONTRACT_SPECS = (
             "contracts/canonical-program/execution-binding-coverage.json",
         ),
     ),
-    ContractSpec(
-        "canonical-program-vm.md",
-        (
-            "CMakeLists.txt",
-            "xisa/core/registry.json",
-            "src/vm/xr_program_vm.h",
-            "src/vm/xr_program_vm.c",
-            "src/program/xr_program_verify.h",
-            "src/program/xr_program_verify.c",
-            "src/execution/xr_execution.h",
-            "src/execution/xr_execution.c",
-            "src/execution/xr_execution_identity.h",
-            "src/execution/xr_execution_identity.c",
-            "scripts/check_xr_program_vm_contracts.py",
-            "contracts/canonical-program/xrprogram-vm-coverage.json",
-            "tests/unit/vm/test_xr_program_vm.c",
-            "tests/unit/vm/test_xr_program_vm_runtime.c",
-            "tests/unit/vm/xr_program_vm_embedded_fixture.h",
-            "tests/unit/program/xr_program_cleanup_graph_fixture.h",
-            "tests/unit/program/xr_program_coroutine_branch_fixture.h",
-            "tests/unit/program/xr_program_vm_fixture_writer.c",
-            "tests/unit/program/test_xr_program_source_build.c",
-            "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
-            "tests/unit/program/xr_program_source_cases.json",
-        ),
-    ),
-    ContractSpec(
-        "canonical-program-aot.md",
-        (
-            "CMakeLists.txt",
-            "tests/unit/CMakeLists.txt",
-            "xisa/core/registry.json",
-            "contracts/canonical-program/architecture-identity.toml",
-            "contracts/canonical-program/operation-capability-matrix.json",
-            "contracts/canonical-program/xrprogram-aot-coverage.json",
-            "src/aot/program/xr_backend_ir.h",
-            "src/aot/program/xr_backend_ir_internal.h",
-            "src/aot/program/xr_backend_ir.c",
-            "src/aot/program/xr_backend_ir_verify.c",
-            "src/aot/program/xr_backend_ir_emit_c.c",
-            "src/aot/program/xr_backend_ir_emit_copy.inc.c",
-            "src/aot/program/xr_native_artifact.c",
-            "src/execution/xr_execution_identity.h",
-            "src/execution/xr_execution_identity.c",
-            "scripts/check_xr_program_aot_contracts.py",
-            "scripts/check_xr_program_aot_native.py",
-            "scripts/check_xr_program_aot_providers.py",
-            "tests/unit/aot/test_xr_program_aot.c",
-            "tests/unit/program/xr_program_cleanup_graph_fixture.h",
-            "tests/unit/program/xr_program_coroutine_branch_fixture.h",
-            "tests/unit/program/test_xr_program_source_build.c",
-            "tests/unit/program/xr_program_source_cleanup_checks.inc.c",
-            "tests/unit/program/xr_program_source_cases.json",
-        ),
-    ),
+    ContractSpec("canonical-program-vm.md", ()),
+    ContractSpec("canonical-program-aot.md", ()),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")
+TEST_RE = re.compile(r"^verification-test: ([A-Za-z0-9_-]+)$")
+ASSERTION_FIXTURE = "semantic_contract_assertions"
+
+
+def assertion_tests(contracts_dir: Path, specs=CONTRACT_SPECS) -> set[str]:
+    tests: set[str] = set()
+    for spec in specs:
+        if spec.anchors:
+            continue
+        path = contracts_dir / spec.name
+        declared: set[str] = set()
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("anchor-sha256:"):
+                raise ValueError(f"{path}: retired source digest record")
+            if not line.startswith("verification-test:"):
+                continue
+            match = TEST_RE.fullmatch(line)
+            if not match:
+                raise ValueError(f"{path}: malformed verification-test record")
+            name = match.group(1)
+            if name in declared or name.startswith("contract_freeze"):
+                raise ValueError(f"{path}: duplicate or recursive verification test {name}")
+            declared.add(name)
+        if not declared:
+            raise ValueError(f"{path}: missing verification tests")
+        tests.update(declared)
+    return tests
+
+
+def verify_assertion_registration(tests: set[str], inventory: dict) -> None:
+    rows = {row["name"]: row for row in inventory["tests"]}
+    for name in sorted(tests):
+        if name not in rows:
+            raise ValueError(f"contract assertion test is not registered: {name}")
+        row = rows[name]
+        properties = {p["name"]: p["value"] for p in row.get("properties", [])}
+        if not row.get("command") or properties.get("DISABLED"):
+            raise ValueError(f"contract assertion test cannot execute: {name}")
+        if any(key in properties for key in ("SKIP_RETURN_CODE", "SKIP_REGULAR_EXPRESSION")):
+            raise ValueError(f"contract assertion test permits a skipped result: {name}")
+        if ASSERTION_FIXTURE not in properties.get("FIXTURES_SETUP", []):
+            raise ValueError(f"contract assertion test does not guard freeze: {name}")
+    freeze = rows.get("contract_freeze", {})
+    properties = {p["name"]: p["value"] for p in freeze.get("properties", [])}
+    if ASSERTION_FIXTURE not in properties.get("FIXTURES_REQUIRED", []):
+        raise ValueError("contract freeze does not require its assertion tests")
+
+
 def digest(path: Path) -> str:
     # Contract anchors describe repository content, whose canonical Git form
     # uses LF. Normalize checkout-only CRLF so the gate has the same result on
@@ -941,7 +557,12 @@ def parse_contract(path: Path) -> tuple[dict[str, str], list[str]]:
 def verify_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> list[str]:
     errors: list[str] = []
     for spec in specs:
+        if not spec.anchors:
+            continue
         path = contracts_dir / spec.name
+        if len(set(spec.anchors)) != len(spec.anchors):
+            errors.append(f"{path}: duplicate registered anchors")
+            continue
         recorded, parse_errors = parse_contract(path)
         errors.extend(parse_errors)
         expected_anchors = set(spec.anchors)
@@ -969,7 +590,12 @@ def verify_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> lis
 def refresh_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> list[str]:
     errors: list[str] = []
     for spec in specs:
+        if not spec.anchors:
+            continue
         path = contracts_dir / spec.name
+        if len(set(spec.anchors)) != len(spec.anchors):
+            errors.append(f"{path}: duplicate registered anchors")
+            continue
         recorded, parse_errors = parse_contract(path)
         errors.extend(parse_errors)
         if parse_errors:
@@ -1019,13 +645,58 @@ def self_test() -> int:
             f"# Sample\n\nanchor-sha256: src/truth.def {digest(anchor)}\n", encoding="utf-8"
         )
         assert verify_digests(root, root / "contracts", (spec,)) == []
+        duplicate = ContractSpec("sample.md", spec.anchors * 2)
+        before = contract.read_bytes()
+        assert verify_digests(root, root / "contracts", (duplicate,))
+        assert refresh_digests(root, root / "contracts", (duplicate,))
+        assert contract.read_bytes() == before
         anchor.write_bytes(b"v1\r\n")
         assert verify_digests(root, root / "contracts", (spec,)) == []
         anchor.write_text("v2\n", encoding="utf-8")
         assert any("digest drift" in error for error in verify_digests(root, root / "contracts", (spec,)))
         assert refresh_digests(root, root / "contracts", (spec,)) == []
         assert verify_digests(root, root / "contracts", (spec,)) == []
-    print("contract freeze injection self-test: PASS")
+        migrated = ContractSpec("sample.md", ())
+        contract.write_text("verification-test: sample_behavior\n", encoding="utf-8")
+        assert assertion_tests(root / "contracts", (migrated,)) == {"sample_behavior"}
+        anchor.write_text("private implementation changed\n", encoding="utf-8")
+        assert verify_digests(root, root / "contracts", (migrated,)) == []
+        inventory = {"tests": [
+            {"name": "sample_behavior", "command": ["sample"], "properties": [
+                {"name": "FIXTURES_SETUP", "value": [ASSERTION_FIXTURE]}]},
+            {"name": "contract_freeze", "properties": [
+                {"name": "FIXTURES_REQUIRED", "value": [ASSERTION_FIXTURE]}]},
+        ]}
+        verify_assertion_registration({"sample_behavior"}, inventory)
+        for mutation in ("missing", "disabled", "skip", "unbound", "missing-requirement"):
+            bad = json.loads(json.dumps(inventory))
+            if mutation == "missing":
+                bad["tests"].pop(0)
+            elif mutation == "disabled":
+                bad["tests"][0]["properties"].append({"name": "DISABLED", "value": True})
+            elif mutation == "skip":
+                bad["tests"][0]["properties"].append({"name": "SKIP_RETURN_CODE", "value": 77})
+            elif mutation == "unbound":
+                bad["tests"][0]["properties"] = []
+            else:
+                bad["tests"][1]["properties"] = []
+            try:
+                verify_assertion_registration({"sample_behavior"}, bad)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"accepted {mutation} assertion registration")
+        for text in ("", "verification-test: sample_behavior\n" * 2,
+                     "verification-test: contract_freeze\n", "verification-test: bad name\n",
+                     "anchor-sha256: retired\nverification-test: sample_behavior\n"):
+            contract.write_text(text, encoding="utf-8")
+            try:
+                assertion_tests(root / "contracts", (migrated,))
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("accepted invalid assertion contract")
+    print("contract verification injection self-test: PASS")
     return 0
 
 
@@ -1033,6 +704,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--contracts-dir", default="contracts", help="contract directory")
+    parser.add_argument("--build-dir", default="build", help="configured CTest build")
+    parser.add_argument("--list-tests", action="store_true", help="emit required assertion tests")
     parser.add_argument(
         "--refresh",
         action="store_true",
@@ -1046,6 +719,19 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     contracts_dir = (root / args.contracts_dir).resolve()
+    try:
+        tests = assertion_tests(contracts_dir)
+        if args.list_tests:
+            print("\n".join(sorted(tests)))
+            return 0
+        if not args.refresh:
+            inventory = json.loads(subprocess.check_output(
+                ["ctest", "--test-dir", str(root / args.build_dir), "--show-only=json-v1"],
+                encoding="utf-8", errors="strict"))
+            verify_assertion_registration(tests, inventory)
+    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+        print(f"contract verification failed: {exc}", file=sys.stderr)
+        return 1
     if args.refresh:
         errors = refresh_digests(root, contracts_dir)
         if errors:
@@ -1053,7 +739,8 @@ def main() -> int:
             for error in errors:
                 print(f"  - {error}", file=sys.stderr)
             return 1
-        print(f"contract freeze: REFRESHED ({len(CONTRACT_SPECS)} contracts)")
+        remaining = sum(bool(spec.anchors) for spec in CONTRACT_SPECS)
+        print(f"contract freeze: REFRESHED ({remaining} remaining digest contracts)")
         return 0
     errors = verify_digests(root, contracts_dir)
     if errors:
@@ -1062,7 +749,10 @@ def main() -> int:
             print(f"  - {error}", file=sys.stderr)
         return 1
 
-    print(f"contract freeze: PASS ({len(CONTRACT_SPECS)} contracts)")
+    migrated = sum(not spec.anchors for spec in CONTRACT_SPECS)
+    print(f"contract registration and remaining digests: PASS "
+          f"({migrated} assertion contracts, {len(CONTRACT_SPECS) - migrated} digest contracts; "
+          "assertion execution is enforced by CTest)")
     return 0
 
 

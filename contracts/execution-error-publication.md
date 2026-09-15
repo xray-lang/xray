@@ -47,21 +47,7 @@ non-overwrite, move-on-success, rejection stability, and exact borrow lifetime.
 VM publication tests additionally prove that executor bindings reach the
 existing pending-error consumer without restoring a VM-private setter.
 
-## Digest anchors
+## Verification
 
-anchor-sha256: src/runtime/core/xr_exec_context.h af6e7cdc5e3a00c5e91de9d57fa828fb4b662f670fe8b235e4009fff8b9a0377
-anchor-sha256: src/runtime/core/xr_exec_context.c fc953b234bf24e26ef953f9da946603e5f274485ec28a2136417e6d0e0438eec
-anchor-sha256: src/coro/xcoro.c 55602c9d05121142e1e69b84caa5946f86b28d15e24df3ca9675fd668209256c
-anchor-sha256: src/api/xvm_exec.c a4e92536fec225013dcc807654bd93d346129c1f97fafd59f86e3aa430ec4db3
-anchor-sha256: src/vm/xvm_coro_backend.c 158edf5eb0612686f25987b44bd6bd5951bceac1b5d3e6e0c8148e03dcc6bc75
-anchor-sha256: src/vm/xvm.h c2c4e3c70a464c86be9697c80751c7bf6282cc12e1a1473c15e2cfb7ea0ec7f2
-anchor-sha256: src/vm/xvm_api.c e302889a5ee8b5131de99a50b7278edbd20153446e8f12f96b8bc7cdbf2ef883
-anchor-sha256: src/coro/xthread_obj.c c289b005477750eaf9ce12d080b40e31b6ae7693c6252feb26bfa1ee33938d4f
-anchor-sha256: src/runtime/object/xiterator.c 3e592afd2b7c739222a6c07845a8c559695d6593646010dc6130967e9c35c49e
-anchor-sha256: src/runtime/object/xstring_methods.c f6fdadd8b5a8cbd9180159b3a302dcf32b24b0e700848bf7e2c0d129eaab89d5
-anchor-sha256: src/stdlib/xstdlib_vm_fastpath.c db6c8ad16cf3939bed1a62923abb735d504270c2f9c9a29ef0b4d8ecccb294db
-anchor-sha256: include/xray_hosted_fragment_runtime.h d9d219298d8b4c7ebd0aef72c3becfa7f6224f6686582556a31e4ca65f0834bc
-anchor-sha256: tools/stdlibgen/generate_vm_fastpaths.py 0c2ac096740f996715106e7e46c1ac486b6bd0d3f74c8c0355aa495e067def91
-anchor-sha256: src/io/xnet_provider.c 242f3aa870e9b167535ecc874101261324c6e9d04af96498c7fdde1c495f15b6
-anchor-sha256: tests/unit/runtime/test_execution_error_channel.c 6402bf9a867f5b4a107fb180344b63becd6b142e677d14fb6f421d83185f03b0
-anchor-sha256: tests/unit/vm/test_vm_exception.c c7f010047fd2a8b733e8bafc29b527543ba0a750de474cc0b2c63e3c4541bf86
+verification-test: test_execution_error_channel
+verification-test: test_vm_exception
