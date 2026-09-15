@@ -600,7 +600,7 @@ static XrCoreIrKey closure_capture_key(const XrXiFunctionStorage *function,
     return key_from_key_and_u32(UINT8_C(0x45), function->key, closure->id);
 }
 
-static XrCoreIrKey existential_owner_copy_key(const XrXiFunctionStorage *function,
+static XrCoreIrKey existential_owner_acquire_key(const XrXiFunctionStorage *function,
                                               const XiValue *pack) {
     return key_from_key_and_u32(UINT8_C(0x59), value_key(function, pack), 0u);
 }
@@ -7459,7 +7459,7 @@ static XrProgramBuildStatus translate_existential_value(XrXiBuildContext *contex
 }
 
 static XrProgramBuildStatus
-translate_existential_owner_copy(XrXiBuildContext *context, XrXiFunctionStorage *function,
+translate_existential_owner_acquire(XrXiBuildContext *context, XrXiFunctionStorage *function,
                                  const XiValue *pack, const XrXiBlockStorage *block,
                                  XrCoreIrInstructionInput *instruction, bool *emitted,
                                  char *diagnostic, size_t diagnostic_size) {
@@ -7481,13 +7481,20 @@ translate_existential_owner_copy(XrXiBuildContext *context, XrXiFunctionStorage 
     if (logical_ownership_for_type(context, source_type) != XR_CORE_IR_OWNER ||
         logical_value_produces_owner(context, function->xi, pack->args[0], 0u))
         return XR_PROGRAM_BUILD_OK;
-    if (logical_copy_contract_for_type(context, source_type) != XR_CORE_IR_COPY_EXPLICIT)
+    const XrXiTypeStorage *concrete = find_dynamic_type_by_id(context, source_type);
+    bool class_reference = concrete && concrete->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+    if (!class_reference &&
+        logical_copy_contract_for_type(context, source_type) != XR_CORE_IR_COPY_EXPLICIT)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi existential pack v%u cannot acquire owned storage from a borrow", pack->id);
 
     memset(instruction, 0, sizeof(*instruction));
-    instruction->operation_id = XR_CORE_OP_CORE_OWNER_COPY;
-    instruction->result = existential_owner_copy_key(function, pack);
+    /* Owned interface storage retains class identity. Value aggregates need
+     * an independent copy, but acquiring a class borrow is an alias operation
+     * even when that class forbids explicit deep copies. */
+    instruction->operation_id = class_reference ? XR_CORE_OP_CORE_CLASS_SHARE
+                                               : XR_CORE_OP_CORE_OWNER_COPY;
+    instruction->result = existential_owner_acquire_key(function, pack);
     instruction->result_type_id = source_type;
     instruction->result_category = XR_CORE_IR_VALUE;
     instruction->result_ownership = XR_CORE_IR_OWNER;
@@ -15429,19 +15436,19 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 storage->local_capability_mask |=
                     xr_core_spec_operation_by_id(capture->operation_id)->capability_mask;
             }
-            bool copied_existential_source = false;
-            XrCoreIrInstructionInput *owner_copy = &block_storage->instructions[instruction_index];
-            status = translate_existential_owner_copy(context, storage, value, block_storage,
-                                                      owner_copy, &copied_existential_source,
+            bool acquired_existential_source = false;
+            XrCoreIrInstructionInput *owner_acquire = &block_storage->instructions[instruction_index];
+            status = translate_existential_owner_acquire(context, storage, value, block_storage,
+                                                      owner_acquire, &acquired_existential_source,
                                                       diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
-            if (copied_existential_source) {
+            if (acquired_existential_source) {
                 ++instruction_index;
                 storage->local_effect_mask |=
-                    xr_core_spec_operation_by_id(owner_copy->operation_id)->effect_mask;
+                    xr_core_spec_operation_by_id(owner_acquire->operation_id)->effect_mask;
                 storage->local_capability_mask |=
-                    xr_core_spec_operation_by_id(owner_copy->operation_id)->capability_mask;
+                    xr_core_spec_operation_by_id(owner_acquire->operation_id)->capability_mask;
             }
             if (value->op == XI_CALL) {
                 /* Literals a folded constructor body stores into fields have no
@@ -15494,13 +15501,13 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             if (!operation)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "translated Xi v%u has no CoreSpec operation", value->id);
-            if (copied_existential_source) {
+            if (acquired_existential_source) {
                 if (instruction->operation_id != XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
                     instruction->operand_count != 1u || !instruction->operands)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                "Xi existential pack v%u lost its canonical copy boundary",
+                                "Xi existential pack v%u lost its canonical ownership boundary",
                                 value->id);
-                ((XrCoreIrKey *) instruction->operands)[0] = owner_copy->result;
+                ((XrCoreIrKey *) instruction->operands)[0] = owner_acquire->result;
             }
             storage->local_effect_mask |= operation->effect_mask;
             storage->local_capability_mask |= operation->capability_mask;

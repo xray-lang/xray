@@ -1425,7 +1425,7 @@ static uint32_t validated_program_operation_count(const XrValidatedProgram *prog
     return count;
 }
 
-static bool validated_program_has_owned_storage_copy_pack(const XrValidatedProgram *program) {
+static bool validated_program_has_owned_storage_class_share(const XrValidatedProgram *program) {
     for (uint32_t function_index = 0u; program && function_index < program->function_count;
          ++function_index) {
         const XrValidatedFunction *function = &program->functions[function_index];
@@ -1442,16 +1442,44 @@ static bool validated_program_has_owned_storage_copy_pack(const XrValidatedProgr
                         XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE ||
                     pack->operand_count != 1u || !pack->operands)
                     continue;
-                const XrValidatedInstruction *copy = &block->instructions[instruction_index - 1u];
-                if (copy->operation_id == XR_CORE_OP_CORE_OWNER_COPY &&
-                    copy->result_id != XR_PROGRAM_LOCATION_NONE &&
-                    copy->result_ownership == XR_CORE_IR_OWNER &&
-                    pack->operands[0] == copy->result_id)
+                const XrValidatedInstruction *share = &block->instructions[instruction_index - 1u];
+                const XrValidatedType *concrete =
+                    xr_validated_program_type(program, share->result_type_id);
+                if (share->operation_id == XR_CORE_OP_CORE_CLASS_SHARE && concrete &&
+                    concrete->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE &&
+                    share->result_id != XR_PROGRAM_LOCATION_NONE &&
+                    share->result_ownership == XR_CORE_IR_OWNER &&
+                    pack->operands[0] == share->result_id)
                     return true;
             }
         }
     }
     return false;
+}
+
+typedef struct XiPipelineClassIdentityLog {
+    uint32_t constructs;
+    uint32_t shares;
+    uint32_t copies;
+    uint32_t finalizes;
+    uint32_t reclaims;
+    bool identity_changed;
+    bool teardown_cleanup;
+} XiPipelineClassIdentityLog;
+
+static void record_pipeline_class_identity(void *context,
+                                           const XrReferenceLifecycleEvent *event) {
+    XiPipelineClassIdentityLog *log = context;
+    log->constructs += event->kind == XR_REFERENCE_EVENT_CLASS_CONSTRUCT;
+    log->shares += event->kind == XR_REFERENCE_EVENT_CLASS_SHARE;
+    log->copies += event->kind == XR_REFERENCE_EVENT_CLASS_COPY;
+    log->finalizes += event->kind == XR_REFERENCE_EVENT_CLASS_FINALIZE;
+    log->reclaims += event->kind == XR_REFERENCE_EVENT_CLASS_RECLAIM;
+    if (event->kind == XR_REFERENCE_EVENT_CLASS_SHARE &&
+        event->identity != event->related_identity)
+        log->identity_changed = true;
+    if (event->origin == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN)
+        log->teardown_cleanup = true;
 }
 
 static bool xi_function_has_operation(const XiFunc *function, uint16_t operation_id) {
@@ -4600,6 +4628,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE,
         XR_CORE_OP_CORE_OWNER_DROP,
         XR_CORE_OP_CORE_EXISTENTIAL_PACK,
+        XR_CORE_OP_CORE_CLASS_SHARE,
         XR_CORE_OP_CORE_CALL_WITNESS_DIRECT,
         XR_CORE_OP_CORE_CALL_WITNESS_INVOKE,
     };
@@ -4618,14 +4647,26 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated_program_operation_count(validated, XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT) >= 11u);
     PIPELINE_TEST_REQUIRE(
         validated_program_operation_count(validated, XR_CORE_OP_CORE_OWNER_COPY) >= 2u);
-    PIPELINE_TEST_REQUIRE(validated_program_has_owned_storage_copy_pack(validated));
+    PIPELINE_TEST_REQUIRE(validated_program_has_owned_storage_class_share(validated));
     PIPELINE_TEST_REQUIRE(
         validated_program_operation_count(validated, XR_CORE_OP_CORE_OWNER_DROP) >= 6u);
-    XrReferenceOutcome reference = xr_reference_evaluate(
-        validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
+    XiPipelineClassIdentityLog identity_log = {0};
+    XrReferenceProviderBinding reference_binding = {
+        .lifecycle_context = &identity_log,
+        .lifecycle_event = record_pipeline_class_identity,
+    };
+    XrReferenceOutcome reference = xr_reference_evaluate_bound(
+        validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL,
+        &reference_binding);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
     PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 478);
+    PIPELINE_TEST_REQUIRE(identity_log.constructs == 2u);
+    PIPELINE_TEST_REQUIRE(identity_log.shares >= 1u);
+    PIPELINE_TEST_REQUIRE(identity_log.copies == 0u);
+    PIPELINE_TEST_REQUIRE(identity_log.finalizes == identity_log.constructs);
+    PIPELINE_TEST_REQUIRE(identity_log.reclaims == identity_log.constructs);
+    PIPELINE_TEST_REQUIRE(!identity_log.identity_changed && !identity_log.teardown_cleanup);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);
