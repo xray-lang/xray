@@ -9883,9 +9883,9 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                     return false;
                 }
             }
-            /* A byte-view receiver stays in its frozen VIEW storage. Arrays
-             * remain owned tagged allocations, and all indices/elements keep
-             * the native scalar storage bound for their own subject. */
+            /* Byte views and fixed arrays keep their proved receiver and
+             * scalar element storage. A dynamic Array store consumes an exact
+             * element type in its existing scalar or tagged reference carrier. */
             if (oracle_fixed_array_element_access_is_exact(ctx, operation_index)) {
                 if (operand_index == 0)
                     return oracle_fixed_array_value_storage(ctx, source_value, out_storage,
@@ -9905,6 +9905,9 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                                                            &ignored_kind) ||
                        oracle_direct_local_tagged_ref_parameter_place_storage(
                            ctx, source_value, out_storage, &ignored_kind);
+            if (operand_index == 2 && oracle_tagged_reference_carrier_storage(
+                                          ctx, source_value, out_storage, &ignored_kind))
+                return true;
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_LOAD_FIELD:
             /* Field identity and result type are admitted separately. Reading
@@ -10733,28 +10736,40 @@ static bool verify_exact_dynamic_storage_materialization(
             valid = false;
             break;
         }
-        if (operation->opcode == XI_RETAIN || operation->opcode == XI_RELEASE) {
-            uint32_t source = operation->operand_count == 1
-                                  ? operands[operation->operand_begin].value
+        bool managed_array_store =
+            operation->opcode == XI_INDEX_SET && operation->operand_count == 3 &&
+            oracle_array_element_access_is_exact(&ctx, i) &&
+            xr_semantic_array_member_owned_reference_type_is_exact(
+                ctx.semantic,
+                xr_semantic_plan_type(ctx.semantic,
+                    operands[operation->operand_begin + 2u].type));
+        if (operation->opcode == XI_RETAIN || operation->opcode == XI_RELEASE ||
+            managed_array_store) {
+            uint16_t ordinal = managed_array_store ? 2u : 0u;
+            uint32_t source = operation->operand_count == ordinal + 1u
+                                  ? operands[operation->operand_begin + ordinal].value
                                   : XR_SEMANTIC_INDEX_NONE;
             uint32_t resolved = source;
             const XiValue *expected = source < ctx.value_count ? ctx.live_by_value[source] : NULL;
             if (!expected && oracle_resolve_identity_rename(&ctx, source, &resolved))
                 expected = resolved < ctx.value_count ? ctx.live_by_value[resolved] : NULL;
-            const XiValue *actual = user && user->nargs == 1 && user->args ? user->args[0] : NULL;
+            const XiValue *actual = user && user->nargs == ordinal + 1u && user->args
+                                       ? user->args[ordinal]
+                                       : NULL;
             /* A declared representation adapter is checked against its frozen
              * record below. It may wrap this exact source, never another owner. */
             if (actual && actual->backend_origin == XI_BACKEND_VALUE_REP_BOX &&
                 actual->op == XI_BOX && actual->nargs == 1 && actual->args)
                 actual = actual->args[0];
             bool exact = user && expected && actual == expected && user->block &&
+                         (!managed_array_store || expected->rep == XR_REP_TAGGED) &&
                          user->block->id < semantic_function->block_count &&
                          semantic_function->block_begin + user->block->id == operation->block &&
                          materialized_operation_shape_matches(
                              operation, user, operation->result_value - semantic_function->value_begin) &&
                          source_type_matches(expected->type,
                                              xr_semantic_plan_type(ctx.semantic,
-                                                 operands[operation->operand_begin].type));
+                                                 operands[operation->operand_begin + ordinal].type));
             if (!exact) {
                 set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i, source, i);
                 valid = false;

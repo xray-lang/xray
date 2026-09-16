@@ -5096,6 +5096,8 @@ static void check_array_allocation_storage_is_exact_and_fail_closed(XrType *arra
         release->args[0] = first;
     }
     XiValue *array = xi_value_new(function, entry, XI_ARRAY_NEW, &equivalent_array, 1);
+    XiValue *tagged_write = NULL;
+    XiValue *other_tagged_element = NULL;
     REQUIRE(count && array);
     array->args[0] = count;
     array->array_element_storage = semantic_storage;
@@ -5104,6 +5106,17 @@ static void check_array_allocation_storage_is_exact_and_fail_closed(XrType *arra
      * still be erased by that canonical semantic authority. */
     array->aux_int = XI_ARRAY_NEW;
     if (tagged_element) {
+        if (element_type->kind == XR_KIND_STRING) {
+            XiValue *index = xi_const_int(function, entry, 0, &scalar_int);
+            XiValue *element = xi_const_str(function, entry, "stored", element_type);
+            other_tagged_element = xi_const_str(function, entry, "different", element_type);
+            XiValue *write = xi_value_new(function, entry, XI_INDEX_SET, &scalar_unit, 3);
+            REQUIRE(index && element && other_tagged_element && write);
+            write->args[0] = array;
+            write->args[1] = index;
+            write->args[2] = element;
+            tagged_write = write;
+        }
         XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
         REQUIRE(release != NULL);
         release->args[0] = array;
@@ -5170,7 +5183,35 @@ static void check_array_allocation_storage_is_exact_and_fail_closed(XrType *arra
         abort();
     }
     REQUIRE(refinement != NULL && xr_aot_refinement_plan_view(refinement).record_count ==
-                                      (tagged_element ? 0u : 1u));
+                                      (tagged_element && !tagged_write ? 0u : 1u));
+    if (tagged_write) {
+        XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
+        const XrAotRepresentationAdapterRecord *adapter =
+            &refinement_view.records[0].representation_adapter;
+        REQUIRE(adapter->use_operand == 1u &&
+                adapter->adapter_kind == XR_AOT_REP_ADAPTER_IDENTITY &&
+                adapter->input_rep_kind == XR_MACHINE_REP_I64 &&
+                adapter->output_rep_kind == XR_MACHINE_REP_I64);
+        xi_opt_refresh_representations_with_policy(function, &policy);
+        REQUIRE(xr_aot_representation_materialization_verify(
+            &refinement_view, function, target, &policy, &diag));
+        XiValue *saved_element = tagged_write->args[2];
+        XiValue *replacements[] = {count, other_tagged_element, NULL};
+        for (uint32_t i = 0; i < sizeof(replacements) / sizeof(replacements[0]); i++) {
+            tagged_write->args[2] = replacements[i];
+            REQUIRE(!xr_aot_representation_materialization_verify(
+                &refinement_view, function, target, &policy, &diag));
+            REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+        }
+        tagged_write->args[2] = saved_element;
+        saved_element->rep = XR_REP_I64;
+        REQUIRE(!xr_aot_representation_materialization_verify(
+            &refinement_view, function, target, &policy, &diag));
+        REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+        saved_element->rep = XR_REP_TAGGED;
+        REQUIRE(xr_aot_representation_materialization_verify(
+            &refinement_view, function, target, &policy, &diag));
+    }
     xr_aot_refinement_plan_free(refinement);
 
     XrCEmissionPlan *emission = NULL;

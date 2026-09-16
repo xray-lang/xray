@@ -3862,14 +3862,17 @@ static void check_structural_array_requires_promotion(XiFunc *root) {
     TEST_REQUIRE(built,
                  "unmodified structural Array facts independently rebuild");
     xr_semantic_plan_free(rebuilt);
-    uint32_t checked = 0;
+    uint32_t checked_structural = 0;
+    uint32_t checked_string = 0;
     for (uint32_t b = 0; b < function->nblocks; b++) {
         XiBlock *block = function->blocks[b];
         for (uint32_t v = 0; v < block->nvalues; v++) {
             XiValue *retain = block->values[v];
             if (!retain || retain->op != XI_RETAIN || retain->nargs != 1 ||
                 !retain->args[0] || retain->args[0]->op != XI_INDEX_GET ||
-                !retain->args[0]->type || retain->args[0]->type->kind != XR_KIND_STRUCT_OBJECT)
+                !retain->args[0]->type ||
+                (retain->args[0]->type->kind != XR_KIND_STRUCT_OBJECT &&
+                 retain->args[0]->type->kind != XR_KIND_STRING))
                 continue;
             /* Rebuild from mutated source IR, so a stale certificate or digest
              * cannot account for rejection of an absent promotion. */
@@ -3886,11 +3889,15 @@ static void check_structural_array_requires_promotion(XiFunc *root) {
             if (accepted || strncmp(error, "XR_OWN_", 7) != 0)
                 fprintf(stderr, "structural Array missing promotion: %s\n", error);
             TEST_REQUIRE(!accepted && !rebuilt && strncmp(error, "XR_OWN_", 7) == 0,
-                         "removing a structural element retain fails ownership admission");
-            checked++;
+                         "removing a managed element retain fails ownership admission");
+            if (retain->args[0]->type->kind == XR_KIND_STRUCT_OBJECT)
+                checked_structural++;
+            else
+                checked_string++;
         }
     }
-    TEST_REQUIRE(checked > 0, "structural Array fixture exercises explicit element promotion");
+    TEST_REQUIRE(checked_structural > 0 && checked_string > 0,
+                 "structural and string elements both require explicit promotion");
     rebuilt = NULL;
     TEST_REQUIRE(xr_semantic_plan_build(root, &rebuilt, error, sizeof(error)),
                  "restored structural Array promotions independently rebuild");
@@ -3910,6 +3917,12 @@ TEST(cgen_structural_array_preserves_element_owners) {
         "    assertEqual(items[0].label, \"beta\")\n"
         "    items.push(first)\n"
         "    assertEqual(items[1].label, \"alpha\")\n"
+        "    var labels: Array<string> = [\"initial\", \"retained\"]\n"
+        "    var saved = labels[0]\n"
+        "    labels[0] = first.label + \"-replacement\"\n"
+        "    labels[1] = saved\n"
+        "    assertEqual(labels[0], \"alpha-replacement\")\n"
+        "    assertEqual(labels[1], \"initial\")\n"
         "    return len(items)\n"
         "}\n"
         "assertEqual(observe(), 2)\n";

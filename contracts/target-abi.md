@@ -205,6 +205,13 @@ consuming store. Physical argument checks still require the exact type, slot,
 ABI and consume contract. Fresh semantic construction after deleting each element
 retain rejects the program. The generated native regression reads an element,
 replaces the array slot, reads the preserved object and inserts it again.
+Dynamic Array stores consume the exact element's existing definition carrier;
+reference elements do not need machine-scalar storage or a second producer list.
+The materialization check binds managed stores to the frozen consumed owner,
+using the same source, type and block checks as retain/release. Wrong-type and
+same-type substituted values, absent values and non-tagged carriers are rejected.
+String literal and concatenation stores, preserved reads after overwrite, and
+missing string-element promotions extend the same native regression.
 Literal storage uses one consumer-emission judgement for scalar and immutable
 string constants. Structural field initialization and assignment already emit
 the stored literal directly; the duplicate string-use whitelist and unused C
@@ -1117,14 +1124,14 @@ anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb
 anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc
 anchor-sha256: src/aot/xaot_verify.c bae55927291480a94df6a52cef43a5e8c918be9bc5c6a7e04d70488525afa26b
 anchor-sha256: src/aot/refine/xr_aot_refinement.h 5d275c7ba1f9d1bcee80ab1f98cf0507b7ee5a148d9a39119ba2901026da1231
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c df5a76848181862a1b3072f0e464e22bcb71b0629ca4aabc2bba0e0b414f6d36
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 70e4123e133582d987dba0c2b1936eb4a65edc0a1898b2079ab11bcd22ba7851
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.h 4a5e0dcc2a7cb10707bfeb45d2b5437d4751664edd89854ffeb241311ef766ee
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 0e8279c12aff4420603bcd09f38a70bad449fd27b99c1caa978657fd4bd2d9c3
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 4b97fe55b1b38c7fd0106cdd2be47b9bcd811b9a669457491c54ba1ba00bb152
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c ee52680a993c58579341eb63cbca8986add99e4e9ba76364676750c967489388
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 41a5cf5642f64bbc42a9336d3c008fb8fbdf83f07732f40a4e988d44cf5cead7
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 30a871e40895837c1cf4818464ffb7766b9bea5bf1c4d5c73b3816497f16123c
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 650a3f6009010841b462567a86b104c00feb2112cc180905511da4f2f3040dff
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.h e95422b2cf84d1dc5e0a94e542344172e569660196da81ac2a9a79fc7d8123a4
