@@ -4393,11 +4393,14 @@ static void test_module_operations_require_runtime_activation(void) {
     xr_program_artifact_free(&artifact);
 }
 
+#include "xr_program_vm_child_storage_tests.inc.c"
+
 int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "--h2-class-differential") == 0)
         return run_h2_class_differential_probe(argv[2]);
     if (argc != 1)
         return 2;
+    test_coroutine_child_string_storage();
     test_coroutine_arithmetic_uses_ordinary_operation_semantics();
     test_coroutine_self_edge_parallel_arguments();
     test_reason_private_cleanup_graph_differential();

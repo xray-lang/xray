@@ -93,6 +93,16 @@ execution authority owns retained program/profile references and copied provider
 pre-existing language object allocation type is named `XrObjectInstance`; `XrInstance` has one
 meaning only.
 
+A valid lease can publish one backend-private physical state owner to its instance. A static
+layout key prevents a consumer from interpreting another representation. Only successful first
+publication transfers candidate ownership; concurrent losing candidates remain caller-owned.
+Queries return a borrow bounded by that lease. Publication synchronization does not authorize
+concurrent language access to mutable module values. Drain and the last lease release detach
+the state exactly once, then run non-failing destruction outside the instance lock. Retirement
+remains blocked until destruction returns, including reentrant retirement from a cleanup callback.
+An instance with no active leases still retains state until drain. This binding primitive alone
+does not implement module slots, initializer execution, or module-value borrow admission.
+
 Immutable VM code is built from Program/Profile without acquiring an instance. Its ExecutionId
 allows reuse by compatible instances, including a successor, but does not authorize cross-instance
 resource use. Each invocation still acquires its actual instance lease and enters only that
@@ -203,8 +213,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h d21c09134a6469510fddfe0e10e96
 anchor-sha256: src/plan/target/xr_target_profile.c 7b5cfb5d561174bd1b2e4c834efe4290d3297a00a97a847ea4c83ead36e0f3ac
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 45c0cd1a438551071bd767e0a966e5950a03b809cbfbad7cbfeab3ed0f020c26
 anchor-sha256: src/plan/target/xr_target_verify.c 6a58af2b4a6270625b6260177e5bf2cfbceb273b5d07c9d19dd16dd575e58966
-anchor-sha256: src/execution/xr_execution.h f0b2854d26d380c106441634465a5d60c2f3dc821fe33c830b5531f9c0f01e99
-anchor-sha256: src/execution/xr_execution.c 15ffbd4144fe343607b14d934c4e9ac12e8ecc63f0afee22773ed6bf43bc4a06
+anchor-sha256: src/execution/xr_execution.h 6fc7e15c2399cec032850567a0211e319448e8eb5f3b46d7d467ce341bed06a0
+anchor-sha256: src/execution/xr_execution.c f88863d22e7486d06a7cf4b89f62f74d0b9f08ae495e93de268edb4dceab197a
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 2b6c5b11049212bf0993b0bc95718004db2c4e51e7d08ee7ee75e960c368a5d1
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
@@ -216,7 +226,7 @@ anchor-sha256: src/runtime/abi/xr_runtime_contract.h 6f59e9d8d7d5f48035db68c7bc4
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 8c68657d160545bbfc3fafb6b54e347e9a0dbc959122e71d1763b1b5866443bf
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
 anchor-sha256: tests/unit/plan/test_target_profile.c e54b53070db66b309a07673c57fb1112781b19cd8eecacacb496fefb04079da6
-anchor-sha256: tests/unit/execution/test_xr_execution.c 4011e27598523ea821c8a2dbe45d5fdfc2e7017ad14ad3a05f125af7d6fccdc5
+anchor-sha256: tests/unit/execution/test_xr_execution.c 3398ffec7eb161515088b7c55829de82518243b099ec2535122214931af234b7
 anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 177583c0f785168d4693a33d035ce52c04c6bfd37eeb4de7dacf0843aeffb601
 anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858
 anchor-sha256: scripts/check_xr_execution_contracts.py 88b35a547b5f56febd0ccd625761dd47b18242c00f9fca858c616884c090234d

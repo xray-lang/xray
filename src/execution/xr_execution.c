@@ -43,6 +43,12 @@ typedef struct XrExecutionLeaseTicket {
     uint32_t in_flight_calls;
 } XrExecutionLeaseTicket;
 
+typedef struct XrExecutionRuntimeState {
+    const void *layout_key;
+    void *value;
+    void (*destroy)(void *);
+} XrExecutionRuntimeState;
+
 struct XrInstance {
     XrValidatedProgram *program;
     XrTargetProfile *profile;
@@ -60,6 +66,8 @@ struct XrInstance {
     uint32_t initialized_modules;
     bool initializer_active;
     bool initialization_failed;
+    XrExecutionRuntimeState runtime_state;
+    bool state_cleanup_active;
 };
 
 static void lease_lock(XrInstance *instance) {
@@ -73,6 +81,29 @@ static void lease_lock(XrInstance *instance) {
 
 static void lease_unlock(XrInstance *instance) {
     atomic_store_explicit(&instance->lease_lock, false, memory_order_release);
+}
+
+static XrExecutionRuntimeState take_drained_state_locked(XrInstance *instance) {
+    XrExecutionRuntimeState state = {0};
+    if (atomic_load_explicit(&instance->state, memory_order_relaxed) == XR_INSTANCE_DRAINING &&
+        atomic_load_explicit(&instance->leases, memory_order_relaxed) == 0u &&
+        instance->runtime_state.value) {
+        XR_CHECK(!instance->state_cleanup_active, "instance state cleanup already active");
+        state = instance->runtime_state;
+        instance->runtime_state = (XrExecutionRuntimeState) {0};
+        instance->state_cleanup_active = true;
+    }
+    return state;
+}
+
+static void destroy_drained_state(XrInstance *instance, XrExecutionRuntimeState state) {
+    if (!state.value)
+        return;
+    state.destroy(state.value);
+    lease_lock(instance);
+    XR_CHECK(instance->state_cleanup_active, "instance state cleanup lost its retirement pin");
+    instance->state_cleanup_active = false;
+    lease_unlock(instance);
 }
 
 static XrExecutionLeaseTicket *find_lease_ticket_locked(XrInstance *instance, uint64_t ticket) {
@@ -588,10 +619,44 @@ bool xr_execution_lease_release(XrExecutionLease *lease) {
     }
     ticket->id = 0u;
     atomic_fetch_sub_explicit(&instance->leases, 1u, memory_order_relaxed);
+    XrExecutionRuntimeState state = take_drained_state_locked(instance);
     lease_unlock(instance);
     lease->instance = NULL;
     lease->ticket = 0u;
+    destroy_drained_state(instance, state);
     return true;
+}
+
+XrExecutionStateBindingResult xr_execution_lease_bind_state(
+    const XrExecutionLease *lease, const void *layout_key, void *candidate,
+    void (*destroy)(void *), void **state_out) {
+    if (state_out)
+        *state_out = NULL;
+    if (!lease || !lease->instance || lease->ticket == 0u || !layout_key || !state_out ||
+        (candidate && !destroy) || (!candidate && destroy))
+        return XR_EXECUTION_STATE_INVALID;
+    XrInstance *instance = lease->instance;
+    lease_lock(instance);
+    XrExecutionStateBindingResult result = XR_EXECUTION_STATE_INVALID;
+    if (!lease_ticket_is_active_locked(instance, lease->ticket))
+        goto done;
+    if (instance->runtime_state.value) {
+        if (instance->runtime_state.layout_key != layout_key) {
+            result = XR_EXECUTION_STATE_INCOMPATIBLE;
+        } else {
+            *state_out = instance->runtime_state.value;
+            result = XR_EXECUTION_STATE_PRESENT;
+        }
+    } else if (!candidate) {
+        result = XR_EXECUTION_STATE_EMPTY;
+    } else {
+        instance->runtime_state = (XrExecutionRuntimeState) {layout_key, candidate, destroy};
+        *state_out = candidate;
+        result = XR_EXECUTION_STATE_ADOPTED;
+    }
+done:
+    lease_unlock(instance);
+    return result;
 }
 
 bool xr_execution_lease_is_valid(const XrExecutionLease *lease) {
@@ -992,7 +1057,9 @@ XrExecutionStatus xr_execution_instance_begin_drain(XrInstance *instance,
                       (XrStableId) {{0}}, (XrStableId) {{0}}, XR_EXECUTION_GENERATION_REJECTED);
     }
     atomic_store_explicit(&instance->state, XR_INSTANCE_DRAINING, memory_order_release);
+    XrExecutionRuntimeState state = take_drained_state_locked(instance);
     lease_unlock(instance);
+    destroy_drained_state(instance, state);
     return XR_EXECUTION_OK;
 }
 
@@ -1003,7 +1070,8 @@ XrExecutionStatus xr_execution_instance_retire(XrInstance *instance,
         return reject(diagnostic_out, XR_EXECUTION_DIAGNOSTIC_INVALID_INPUT, 0, 0,
                       (XrStableId) {{0}}, (XrStableId) {{0}}, XR_EXECUTION_INVALID_INPUT);
     lease_lock(instance);
-    if (atomic_load_explicit(&instance->leases, memory_order_relaxed) != 0u) {
+    if (atomic_load_explicit(&instance->leases, memory_order_relaxed) != 0u ||
+        instance->runtime_state.value || instance->state_cleanup_active) {
         lease_unlock(instance);
         return reject(diagnostic_out, XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY, 0, 0,
                       (XrStableId) {{0}}, (XrStableId) {{0}}, XR_EXECUTION_GENERATION_REJECTED);

@@ -135,13 +135,11 @@ typedef struct XrVmInstructionView {
     uint32_t successor_count;
 } XrVmInstructionView;
 
-typedef struct XrVmContext {
-    const XrVmCode *code;
-    const XrExecutionLease *lease;
-    uint64_t steps;
+/* All frames in one execution tree borrow this owner. Independent entries
+ * have separate storage, and returned host values use explicit detachment. */
+typedef struct XrVmValueStorage {
     uint64_t aggregate_cell_count;
     uint64_t next_class_identity;
-    XrSHA256Context trace;
     struct XrVmAggregateValue **aggregates;
     uint32_t aggregate_count;
     uint32_t aggregate_capacity;
@@ -157,6 +155,14 @@ typedef struct XrVmContext {
     XrVmStringValue **strings;
     uint32_t string_count;
     uint32_t string_capacity;
+} XrVmValueStorage;
+
+typedef struct XrVmContext {
+    const XrVmCode *code;
+    const XrExecutionLease *lease;
+    uint64_t steps;
+    XrSHA256Context trace;
+    XrVmValueStorage *storage;
 } XrVmContext;
 
 /* One immutable string owner in the VM arena.  Releasing it is not a
@@ -203,6 +209,7 @@ typedef struct XrVmRuntimeValue {
 
 struct XrVmExecution {
     XrVmContext context;
+    XrVmValueStorage storage;
     XrExecutionLease lease;
     XrVmCode *code;
     uint32_t function_id;
@@ -321,22 +328,23 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
 
 static XrVmClassValue *allocate_class(XrVmContext *context, uint16_t type_id,
                                       uint32_t field_count) {
+    XrVmValueStorage *storage = context->storage;
     const XrValidatedType *type = xr_validated_program_type(context->code->program, type_id);
     if (!type || type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE || type->field_count != field_count ||
         (uint64_t) field_count >
-            (uint64_t) context->code->options.max_value_cells - context->aggregate_cell_count)
+            (uint64_t) context->code->options.max_value_cells - storage->aggregate_cell_count)
         return NULL;
-    if (context->class_count == context->class_capacity) {
-        uint32_t capacity = context->class_capacity ? context->class_capacity * 2u : 8u;
-        if (capacity < context->class_count ||
-            (size_t) capacity > SIZE_MAX / sizeof(*context->classes))
+    if (storage->class_count == storage->class_capacity) {
+        uint32_t capacity = storage->class_capacity ? storage->class_capacity * 2u : 8u;
+        if (capacity < storage->class_count ||
+            (size_t) capacity > SIZE_MAX / sizeof(*storage->classes))
             return NULL;
         XrVmClassValue **grown =
-            xr_realloc(context->classes, (size_t) capacity * sizeof(*context->classes));
+            xr_realloc(storage->classes, (size_t) capacity * sizeof(*storage->classes));
         if (!grown)
             return NULL;
-        context->classes = grown;
-        context->class_capacity = capacity;
+        storage->classes = grown;
+        storage->class_capacity = capacity;
     }
     XrVmClassValue *value = xr_calloc(1u, sizeof(*value));
     if (!value)
@@ -351,32 +359,33 @@ static XrVmClassValue *allocate_class(XrVmContext *context, uint16_t type_id,
     value->type_id = type_id;
     value->field_count = field_count;
     value->owner_count = 1u;
-    value->identity = ++context->next_class_identity;
+    value->identity = ++storage->next_class_identity;
     value->alive = true;
-    context->classes[context->class_count++] = value;
-    context->aggregate_cell_count += field_count;
+    storage->classes[storage->class_count++] = value;
+    storage->aggregate_cell_count += field_count;
     return value;
 }
 
 static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t type_id,
                                               uint32_t variant_ordinal, uint32_t field_count) {
+    XrVmValueStorage *storage = context->storage;
     if ((uint64_t) field_count >
-        (uint64_t) context->code->options.max_value_cells - context->aggregate_cell_count)
+        (uint64_t) context->code->options.max_value_cells - storage->aggregate_cell_count)
         return NULL;
-    if (context->aggregate_count == context->aggregate_capacity) {
-        uint32_t capacity = context->aggregate_capacity ? context->aggregate_capacity * 2u : 8u;
-        if (capacity < context->aggregate_count)
+    if (storage->aggregate_count == storage->aggregate_capacity) {
+        uint32_t capacity = storage->aggregate_capacity ? storage->aggregate_capacity * 2u : 8u;
+        if (capacity < storage->aggregate_count)
             return NULL;
 #if SIZE_MAX < UINT64_MAX
-        if ((size_t) capacity > SIZE_MAX / sizeof(*context->aggregates))
+        if ((size_t) capacity > SIZE_MAX / sizeof(*storage->aggregates))
             return NULL;
 #endif
         XrVmAggregateValue **grown =
-            xr_realloc(context->aggregates, (size_t) capacity * sizeof(*context->aggregates));
+            xr_realloc(storage->aggregates, (size_t) capacity * sizeof(*storage->aggregates));
         if (!grown)
             return NULL;
-        context->aggregates = grown;
-        context->aggregate_capacity = capacity;
+        storage->aggregates = grown;
+        storage->aggregate_capacity = capacity;
     }
     XrVmAggregateValue *aggregate = xr_calloc(1u, sizeof(*aggregate));
     if (!aggregate)
@@ -391,31 +400,32 @@ static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t typ
     aggregate->type_id = type_id;
     aggregate->variant_ordinal = variant_ordinal;
     aggregate->field_count = field_count;
-    context->aggregates[context->aggregate_count++] = aggregate;
-    context->aggregate_cell_count += field_count;
+    storage->aggregates[storage->aggregate_count++] = aggregate;
+    storage->aggregate_cell_count += field_count;
     return aggregate;
 }
 
 /* Each string counts one cell plus its payload bytes against the VM budget. */
 static XrVmStringValue *allocate_string(XrVmContext *context, size_t size) {
+    XrVmValueStorage *storage = context->storage;
     if (size > XR_PROGRAM_CONSTANT_STRING_MAX_BYTES ||
         (uint64_t) size + 1u >
-            (uint64_t) context->code->options.max_value_cells - context->aggregate_cell_count)
+            (uint64_t) context->code->options.max_value_cells - storage->aggregate_cell_count)
         return NULL;
-    if (context->string_count == context->string_capacity) {
-        uint32_t capacity = context->string_capacity ? context->string_capacity * 2u : 8u;
-        if (capacity < context->string_count)
+    if (storage->string_count == storage->string_capacity) {
+        uint32_t capacity = storage->string_capacity ? storage->string_capacity * 2u : 8u;
+        if (capacity < storage->string_count)
             return NULL;
 #if SIZE_MAX < UINT64_MAX
-        if ((size_t) capacity > SIZE_MAX / sizeof(*context->strings))
+        if ((size_t) capacity > SIZE_MAX / sizeof(*storage->strings))
             return NULL;
 #endif
         XrVmStringValue **grown =
-            xr_realloc(context->strings, (size_t) capacity * sizeof(*context->strings));
+            xr_realloc(storage->strings, (size_t) capacity * sizeof(*storage->strings));
         if (!grown)
             return NULL;
-        context->strings = grown;
-        context->string_capacity = capacity;
+        storage->strings = grown;
+        storage->string_capacity = capacity;
     }
     XrVmStringValue *string = xr_calloc(1u, sizeof(*string));
     if (!string)
@@ -426,8 +436,8 @@ static XrVmStringValue *allocate_string(XrVmContext *context, size_t size) {
         return NULL;
     }
     string->size = (uint32_t) size;
-    context->strings[context->string_count++] = string;
-    context->aggregate_cell_count += (uint64_t) size + 1u;
+    storage->strings[storage->string_count++] = string;
+    storage->aggregate_cell_count += (uint64_t) size + 1u;
     return string;
 }
 
@@ -447,54 +457,56 @@ static bool vm_string_view(XrVmValue value, const uint8_t **bytes_out, size_t *s
 }
 
 static XrVmExistentialValue *allocate_existential(XrVmContext *context) {
-    if (context->aggregate_cell_count == context->code->options.max_value_cells)
+    XrVmValueStorage *storage = context->storage;
+    if (storage->aggregate_cell_count == context->code->options.max_value_cells)
         return NULL;
-    if (context->existential_count == context->existential_capacity) {
-        uint32_t capacity = context->existential_capacity ? context->existential_capacity * 2u : 8u;
-        if (capacity < context->existential_count)
+    if (storage->existential_count == storage->existential_capacity) {
+        uint32_t capacity = storage->existential_capacity ? storage->existential_capacity * 2u : 8u;
+        if (capacity < storage->existential_count)
             return NULL;
 #if SIZE_MAX < UINT64_MAX
-        if ((size_t) capacity > SIZE_MAX / sizeof(*context->existentials))
+        if ((size_t) capacity > SIZE_MAX / sizeof(*storage->existentials))
             return NULL;
 #endif
         XrVmExistentialValue **grown =
-            xr_realloc(context->existentials, (size_t) capacity * sizeof(*context->existentials));
+            xr_realloc(storage->existentials, (size_t) capacity * sizeof(*storage->existentials));
         if (!grown)
             return NULL;
-        context->existentials = grown;
-        context->existential_capacity = capacity;
+        storage->existentials = grown;
+        storage->existential_capacity = capacity;
     }
     XrVmExistentialValue *value = xr_calloc(1u, sizeof(*value));
     if (!value)
         return NULL;
-    context->existentials[context->existential_count++] = value;
-    ++context->aggregate_cell_count;
+    storage->existentials[storage->existential_count++] = value;
+    ++storage->aggregate_cell_count;
     return value;
 }
 
 static XrVmCallableValue *allocate_callable(XrVmContext *context) {
-    if (context->aggregate_cell_count == context->code->options.max_value_cells)
+    XrVmValueStorage *storage = context->storage;
+    if (storage->aggregate_cell_count == context->code->options.max_value_cells)
         return NULL;
-    if (context->callable_count == context->callable_capacity) {
-        uint32_t capacity = context->callable_capacity ? context->callable_capacity * 2u : 8u;
-        if (capacity < context->callable_count)
+    if (storage->callable_count == storage->callable_capacity) {
+        uint32_t capacity = storage->callable_capacity ? storage->callable_capacity * 2u : 8u;
+        if (capacity < storage->callable_count)
             return NULL;
 #if SIZE_MAX < UINT64_MAX
-        if ((size_t) capacity > SIZE_MAX / sizeof(*context->callables))
+        if ((size_t) capacity > SIZE_MAX / sizeof(*storage->callables))
             return NULL;
 #endif
         XrVmCallableValue **grown =
-            xr_realloc(context->callables, (size_t) capacity * sizeof(*context->callables));
+            xr_realloc(storage->callables, (size_t) capacity * sizeof(*storage->callables));
         if (!grown)
             return NULL;
-        context->callables = grown;
-        context->callable_capacity = capacity;
+        storage->callables = grown;
+        storage->callable_capacity = capacity;
     }
     XrVmCallableValue *value = xr_calloc(1u, sizeof(*value));
     if (!value)
         return NULL;
-    context->callables[context->callable_count++] = value;
-    ++context->aggregate_cell_count;
+    storage->callables[storage->callable_count++] = value;
+    ++storage->aggregate_cell_count;
     return value;
 }
 
@@ -854,31 +866,31 @@ void xr_vm_outcome_dispose(XrVmOutcome *outcome) {
     memset(outcome, 0, sizeof(*outcome));
 }
 
-static void free_aggregates(XrVmContext *context) {
-    for (uint32_t index = 0; index < context->aggregate_count; ++index) {
-        xr_free(context->aggregates[index]->fields);
-        xr_free(context->aggregates[index]);
+static void free_value_storage(XrVmValueStorage *storage) {
+    for (uint32_t index = 0; index < storage->aggregate_count; ++index) {
+        xr_free(storage->aggregates[index]->fields);
+        xr_free(storage->aggregates[index]);
     }
-    xr_free(context->aggregates);
-    for (uint32_t index = 0; index < context->class_count; ++index) {
-        xr_free(context->classes[index]->fields);
-        xr_free(context->classes[index]);
+    xr_free(storage->aggregates);
+    for (uint32_t index = 0; index < storage->class_count; ++index) {
+        xr_free(storage->classes[index]->fields);
+        xr_free(storage->classes[index]);
     }
-    xr_free(context->classes);
-    for (uint32_t index = 0; index < context->existential_count; ++index)
-        xr_free(context->existentials[index]);
-    xr_free(context->existentials);
-    for (uint32_t index = 0; index < context->callable_count; ++index)
-        xr_free(context->callables[index]);
-    xr_free(context->callables);
-    for (uint32_t index = 0; index < context->string_count; ++index) {
-        xr_free(context->strings[index]->bytes);
-        xr_free(context->strings[index]);
+    xr_free(storage->classes);
+    for (uint32_t index = 0; index < storage->existential_count; ++index)
+        xr_free(storage->existentials[index]);
+    xr_free(storage->existentials);
+    for (uint32_t index = 0; index < storage->callable_count; ++index)
+        xr_free(storage->callables[index]);
+    xr_free(storage->callables);
+    for (uint32_t index = 0; index < storage->string_count; ++index) {
+        xr_free(storage->strings[index]->bytes);
+        xr_free(storage->strings[index]);
     }
-    xr_free(context->strings);
+    xr_free(storage->strings);
 }
 
-/* Outcome of one text operation shared by both VM execution loops. */
+/* Outcome of a text operation in the common dispatcher. */
 typedef enum VmTextStatus {
     VM_TEXT_OK = 0,
     VM_TEXT_RESOURCE_LIMIT,
@@ -1602,7 +1614,7 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
     child->lease = parent->lease;
     child->context.code = parent->context.code;
     child->context.lease = &child->lease;
-    child->context.next_class_identity = parent->context.next_class_identity;
+    child->context.storage = parent->context.storage;
     child->code = xr_vm_code_retain(parent->code);
     child->depth = parent->depth + 1u;
     child->function_id = function_id;
@@ -1651,87 +1663,6 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
     return true;
 }
 
-static void *vm_reserve_child_carriers(void *storage, uint32_t count, uint32_t added,
-                                       uint32_t *capacity, size_t item_size) {
-    if (added > UINT32_MAX - count || (size_t) (count + added) > SIZE_MAX / item_size)
-        return NULL;
-    uint32_t required = count + added;
-    if (required <= *capacity)
-        return storage;
-    void *grown = xr_realloc(storage, (size_t) required * item_size);
-    if (grown)
-        *capacity = required;
-    return grown;
-}
-
-static bool vm_adopt_child_storage(XrVmExecution *execution) {
-    XrVmContext *parent = &execution->context;
-    XrVmContext *child = &execution->child->context;
-    if (parent->aggregate_cell_count > parent->code->options.max_value_cells ||
-        child->aggregate_cell_count >
-            parent->code->options.max_value_cells - parent->aggregate_cell_count)
-        return false;
-    if (child->aggregate_count != 0u) {
-        XrVmAggregateValue **grown = vm_reserve_child_carriers(
-            parent->aggregates, parent->aggregate_count, child->aggregate_count,
-            &parent->aggregate_capacity, sizeof(*parent->aggregates));
-        if (!grown)
-            return false;
-        parent->aggregates = grown;
-    }
-    if (child->class_count != 0u) {
-        XrVmClassValue **grown = vm_reserve_child_carriers(
-            parent->classes, parent->class_count, child->class_count,
-            &parent->class_capacity, sizeof(*parent->classes));
-        if (!grown)
-            return false;
-        parent->classes = grown;
-    }
-    if (child->existential_count != 0u) {
-        XrVmExistentialValue **grown = vm_reserve_child_carriers(
-            parent->existentials, parent->existential_count, child->existential_count,
-            &parent->existential_capacity, sizeof(*parent->existentials));
-        if (!grown)
-            return false;
-        parent->existentials = grown;
-    }
-    if (child->callable_count != 0u) {
-        XrVmCallableValue **grown = vm_reserve_child_carriers(
-            parent->callables, parent->callable_count, child->callable_count,
-            &parent->callable_capacity, sizeof(*parent->callables));
-        if (!grown)
-            return false;
-        parent->callables = grown;
-    }
-    // REF writes and uncaught outcomes can retain child-created carriers. Moving
-    // their allocation ownership preserves aliases when the child frame ends.
-    if (child->aggregate_count != 0u)
-        memcpy(parent->aggregates + parent->aggregate_count, child->aggregates,
-               (size_t) child->aggregate_count * sizeof(*child->aggregates));
-    if (child->class_count != 0u)
-        memcpy(parent->classes + parent->class_count, child->classes,
-               (size_t) child->class_count * sizeof(*child->classes));
-    if (child->existential_count != 0u)
-        memcpy(parent->existentials + parent->existential_count, child->existentials,
-               (size_t) child->existential_count * sizeof(*child->existentials));
-    if (child->callable_count != 0u)
-        memcpy(parent->callables + parent->callable_count, child->callables,
-               (size_t) child->callable_count * sizeof(*child->callables));
-    parent->aggregate_count += child->aggregate_count;
-    parent->class_count += child->class_count;
-    parent->existential_count += child->existential_count;
-    parent->callable_count += child->callable_count;
-    parent->aggregate_cell_count += child->aggregate_cell_count;
-    if (child->next_class_identity > parent->next_class_identity)
-        parent->next_class_identity = child->next_class_identity;
-    child->aggregate_count = 0u;
-    child->class_count = 0u;
-    child->existential_count = 0u;
-    child->callable_count = 0u;
-    child->aggregate_cell_count = 0u;
-    return true;
-}
-
 static XrVmOutcome vm_execution_outcome(XrVmExecution *execution, XrVmOutcomeKind kind) {
     XrVmOutcome result = vm_outcome(kind, execution ? &execution->context : NULL);
     if (!execution)
@@ -1768,6 +1699,7 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
     execution->owns_lease = true;
     execution->context.code = code;
     execution->context.lease = &execution->lease;
+    execution->context.storage = &execution->storage;
     execution->code = xr_vm_code_retain(code);
     execution->function_id = function_id;
     execution->depth = 1u;
@@ -2114,13 +2046,7 @@ static XrVmOutcome vm_execution_cancel(XrVmExecution *execution) {
             return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
         }
         execution->context.steps += child_delta;
-        if (!vm_adopt_child_storage(execution)) {
-            execution->finished = true;
-            xr_vm_execution_free(execution->child);
-            execution->child = NULL;
-            vm_execution_release_lease(execution);
-            return vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT);
-        }
+
         XrVmInstructionView instruction;
         if (child.kind == XR_VM_OUTCOME_TRAP && child.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&
             vm_suspension_instruction(execution, &instruction) &&
@@ -2153,7 +2079,7 @@ static XrVmOutcome vm_execution_cancel(XrVmExecution *execution) {
     return vm_execution_step(execution);
 }
 
-/* Child results remain in the execution tree, whose parent adopts their storage.
+/* Child results remain in the shared execution-tree storage.
  * Only a host-facing outcome crosses the unsupported class-export boundary. */
 XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
     XrVmOutcome outcome = vm_execution_step(execution);
@@ -2174,7 +2100,8 @@ void xr_vm_execution_free(XrVmExecution *execution) {
         return;
     xr_vm_execution_free(execution->child);
     vm_execution_release_lease(execution);
-    free_aggregates(&execution->context);
+    if (execution->context.storage == &execution->storage)
+        free_value_storage(&execution->storage);
     vm_execution_free_values(execution);
     xr_vm_code_free(execution->code);
     xr_free(execution);
@@ -2182,7 +2109,8 @@ void xr_vm_execution_free(XrVmExecution *execution) {
 
 XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint32_t function_id,
                                const XrVmValue *arguments, uint32_t argument_count) {
-    XrVmContext context = {.code = code};
+    XrVmValueStorage storage = {0};
+    XrVmContext context = {.code = code, .storage = &storage};
     if (!code || !instance || function_id >= code->program->function_count ||
         (argument_count != 0u && !arguments))
         return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
@@ -2205,7 +2133,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     XrVmRuntimeValue *runtime_arguments =
         xr_calloc(argument_count ? argument_count : 1u, sizeof(XrVmRuntimeValue));
     if (!runtime_arguments) {
-        free_aggregates(&context);
+        free_value_storage(&storage);
         (void) xr_execution_lease_release(&lease);
         return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, &context);
     }
@@ -2214,7 +2142,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
             (function->parameter_modes[index] == XR_PARAM_REF &&
              !function_parameter_is_class_receiver(code->program, function, index))) {
             xr_free(runtime_arguments);
-            free_aggregates(&context);
+            free_value_storage(&storage);
             (void) xr_execution_lease_release(&lease);
             return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
         }
@@ -2264,7 +2192,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
         hash_u32(&context.trace, outcome.panic_value.as.panic_info);
     xr_sha256_final(&context.trace, outcome.logical_trace.bytes);
     outcome.steps = context.steps;
-    free_aggregates(&context);
+    free_value_storage(&storage);
     (void) xr_execution_lease_release(&lease);
     return outcome;
 }

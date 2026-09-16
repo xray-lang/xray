@@ -149,6 +149,28 @@ typedef struct XrExecutionLease {
     uint64_t ticket;
 } XrExecutionLease;
 
+typedef enum XrExecutionStateBindingResult {
+    XR_EXECUTION_STATE_INVALID = 0,
+    XR_EXECUTION_STATE_EMPTY,
+    XR_EXECUTION_STATE_ADOPTED,
+    XR_EXECUTION_STATE_PRESENT,
+    XR_EXECUTION_STATE_INCOMPATIBLE,
+} XrExecutionStateBindingResult;
+
+/* A backend publishes one physical state owner per instance. The static layout
+ * key identifies its private representation; it does not change Program identity.
+ * Only ADOPTED transfers candidate ownership. A NULL candidate queries the state.
+ * Returned state is borrowed for the supplied lease, without synchronizing its
+ * contents or granting language-level sharing permission.
+ *
+ * destroy performs non-failing value destruction and physical reclamation. It
+ * runs once, outside the instance lock, after drain and the final lease release.
+ * Retirement remains blocked until it returns. The layout key and callback code
+ * must remain available through retirement, as with provider binding code. */
+XR_FUNC XrExecutionStateBindingResult xr_execution_lease_bind_state(
+    const XrExecutionLease *lease, const void *layout_key, void *candidate,
+    void (*destroy)(void *), void **state_out);
+
 typedef enum XrExecutionInitializationStatus {
     XR_EXECUTION_INITIALIZATION_INVALID = 0,
     XR_EXECUTION_INITIALIZATION_RUN,

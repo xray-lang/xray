@@ -235,8 +235,9 @@ Source fixture execution includes both VM decode policies, exact provider traces
 typed return/error payloads, and cancellation at every declared suspension point.
 Construction of a private code view alone does not satisfy an execute expectation.
 A suspended child may transfer a class result inside the private execution tree:
-the parent adopts the child's carrier storage before destroying its frame and
-publishes the result on the verified normal edge. This is distinct from exporting
+ordinary and suspended frames borrow one execution-owned value store and publish
+the result on the verified normal edge. Destroying a child frame cannot invalidate
+returned values or REF writes. This is distinct from exporting
 class carriers to the host, which still fails closed at the public step/cancel
 boundary. The affine Pipe source proves normal return and four cancellation points,
 including class finalization/reclamation before frame disposal and no implicit copy.
@@ -260,6 +261,21 @@ across unbalanced branches, aggregates or classes with string fields, and text m
 outside this slice.
 
 ## Verification
+
+The common value store owns every aggregate, class, existential, callable and
+string carrier for one execution tree. Carrier-specific child adoption and its
+reallocation/failure paths are removed. Nested calls charge the same cell budget
+when allocating, and class identities come from that same owner. Independent
+entries never share this store, even when they use the same Code and Instance.
+Frame completion retains existing semantic drops; storage teardown stays at the
+root execution boundary, separate from instance-owned module state.
+
+The suspended string fixture returns the independently expected bytes `21`,
+and covers resume, cancellation and disposal while suspended. Two overlapping
+entries prove that destroying one cannot invalidate the other. A parent and
+child allocating three cells each succeed at a six-cell budget and refuse at
+five; cancellation and resource refusal leave no lease. Existing class/REF and
+provider cleanup fixtures continue checking identity and physical reclamation.
 
 verification-test: test_xr_program_vm
 verification-test: test_xr_program_vm_runtime

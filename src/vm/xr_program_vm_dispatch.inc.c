@@ -1165,14 +1165,7 @@ static void vm_dispatch_coroutine_call(XrVmDispatch *dispatch) {
                 vm_dispatch_publish_outcome(dispatch, suspended);
                 return;
             }
-            if (!vm_adopt_child_storage(execution)) {
-                execution->finished = true;
-                xr_vm_execution_free(execution->child);
-                execution->child = NULL;
-                vm_execution_release_lease(execution);
-                vm_dispatch_publish_outcome(dispatch, vm_execution_outcome(execution, XR_VM_OUTCOME_RESOURCE_LIMIT));
-                return;
-            }
+
             if (child.kind != XR_VM_OUTCOME_RETURN) {
                 if (child.kind == XR_VM_OUTCOME_TRAP &&
                     child.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED &&

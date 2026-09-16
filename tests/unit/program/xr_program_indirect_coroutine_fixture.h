@@ -24,6 +24,8 @@ typedef enum XrProgramIndirectCoroutineMutation {
     XR_PROGRAM_INDIRECT_COROUTINE_NONCALLABLE_OPERAND,
     XR_PROGRAM_INDIRECT_COROUTINE_MISSING_LIVE,
     XR_PROGRAM_INDIRECT_COROUTINE_MISSING_CANCEL_ARGUMENT,
+    XR_PROGRAM_COROUTINE_SEALED_STRING_RESULT,
+    XR_PROGRAM_COROUTINE_SEALED_STRING_BUDGET,
 } XrProgramIndirectCoroutineMutation;
 
 enum {
@@ -88,7 +90,7 @@ xr_program_indirect_coroutine_fixture_write(XrProgramIndirectCoroutineMutation m
     XrCoreIrKey child_entry_arguments[] = {child_argument_key};
     XrCoreIrKey child_resume_arguments[] = {child_resumed_key};
     XrCoreIrKey child_successors[] = {child_resume_key, child_cancel_key};
-    XrCoreIrInstructionInput child_entry_instructions[] = {
+    XrCoreIrInstructionInput child_entry_instructions[3] = {
         {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = child_entry_arguments,
@@ -222,7 +224,7 @@ xr_program_indirect_coroutine_fixture_write(XrProgramIndirectCoroutineMutation m
         xr_program_indirect_coroutine_key("indirect-coro:parent:cancel-argument");
     XrCoreIrKey call_operands[] = {callable_key, value_key};
     XrCoreIrKey parent_successors[] = {parent_normal_key, parent_cancel_key};
-    XrCoreIrInstructionInput parent_entry_instructions[] = {
+    XrCoreIrInstructionInput parent_entry_instructions[4] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = value_key,
          .result_type_id = XR_CORE_TYPE_I64,
@@ -338,6 +340,76 @@ xr_program_indirect_coroutine_fixture_write(XrProgramIndirectCoroutineMutation m
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
 
+    bool string_budget = mutation == XR_PROGRAM_COROUTINE_SEALED_STRING_BUDGET;
+    bool string_result = mutation == XR_PROGRAM_COROUTINE_SEALED_STRING_RESULT || string_budget;
+    XrCoreIrKey string_result_key = xr_program_indirect_coroutine_key("indirect-coro:child:string");
+    XrCoreIrKey cancel_string_key = xr_program_indirect_coroutine_key("indirect-coro:child:cancel-string");
+    XrCoreIrKey child_string_operands[] = {string_result_key, string_result_key};
+    XrCoreIrValueInput cancel_string_argument = {
+        .key = cancel_string_key, .type_id = XR_CORE_TYPE_STRING,
+        .category = XR_CORE_IR_VALUE, .ownership = XR_CORE_IR_OWNER,
+    };
+    XrCoreIrInstructionInput cancel_string_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT, .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = &cancel_string_key, .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = &cancel_string_key, .operand_count = 1u},
+        child_cancel_instruction,
+    };
+    XrCoreIrKey parent_string_key = xr_program_indirect_coroutine_key("indirect-coro:parent:string");
+    if (string_result) {
+        parent_entry_instructions[2].operation_id = XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
+        parent_entry_instructions[2].operands = &call_operands[1];
+        parent_entry_instructions[2].operand_count = 1u;
+        parent_entry_instructions[2].immediate_kind = XR_CORE_IR_IMMEDIATE_COROUTINE_CALL;
+        parent_entry_instructions[2].immediate.coroutine_call.callee = child_key;
+        parent_entry_instructions[2].immediate.coroutine_call.safepoint_id = 0u;
+        parent_entry_instructions[1] = parent_entry_instructions[2];
+        parent_blocks[0].instruction_count = 2u;
+        callable_signature.result_type_id = XR_CORE_TYPE_STRING;
+        callable_signature.result_ownership = XR_CORE_IR_OWNER;
+        child.result_type_id = XR_CORE_TYPE_STRING;
+        child.result_ownership = XR_CORE_IR_OWNER;
+        parent.result_type_id = XR_CORE_TYPE_STRING;
+        parent.result_ownership = XR_CORE_IR_OWNER;
+        normal_arguments[0].type_id = XR_CORE_TYPE_STRING;
+        normal_arguments[0].ownership = XR_CORE_IR_OWNER;
+        child_entry_instructions[2] = child_entry_instructions[1];
+        child_entry_instructions[2].operands = child_string_operands;
+        child_entry_instructions[2].operand_count = 2u;
+        child_entry_instructions[1] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_STRING_FROM_I64,
+            .result = string_result_key,
+            .result_type_id = XR_CORE_TYPE_STRING,
+            .result_category = XR_CORE_IR_VALUE,
+            .result_ownership = XR_CORE_IR_OWNER,
+            .operands = child_entry_arguments,
+            .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+        };
+        child_blocks[0].instruction_count = 3u;
+        child_live_values[0] = string_result_key;
+        child_resumed.type_id = XR_CORE_TYPE_STRING;
+        child_resumed.ownership = XR_CORE_IR_OWNER;
+        child_blocks[2].arguments = &cancel_string_argument;
+        child_blocks[2].argument_count = 1u;
+        child_blocks[2].instructions = cancel_string_instructions;
+        child_blocks[2].instruction_count = 3u;
+    }
+    if (string_budget) {
+        parent_entry_instructions[3] = parent_entry_instructions[1];
+        parent_entry_instructions[1] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_STRING_FROM_I64,
+            .result = parent_string_key, .result_type_id = XR_CORE_TYPE_STRING,
+            .result_category = XR_CORE_IR_VALUE, .result_ownership = XR_CORE_IR_OWNER,
+            .operands = &value_key, .operand_count = 1u,
+        };
+        parent_entry_instructions[2] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_OWNER_DROP, .result_type_id = XR_CORE_TYPE_VOID,
+            .operands = &parent_string_key, .operand_count = 1u,
+        };
+        parent_blocks[0].instruction_count = 4u;
+    }
     XrCoreIrFunctionInput functions[] = {child, sync_child, parent};
     XrCoreIrModuleInput module = {
         .key = xr_program_indirect_coroutine_key("indirect-coro:module"),
@@ -352,8 +424,8 @@ xr_program_indirect_coroutine_fixture_write(XrProgramIndirectCoroutineMutation m
         .semantic_profile_fingerprint = profile,
         .required_features = &feature,
         .required_feature_count = 1u,
-        .types = &callable_type,
-        .type_count = 1u,
+        .types = string_result ? NULL : &callable_type,
+        .type_count = string_result ? 0u : 1u,
         .modules = &module,
         .module_count = 1u,
     };

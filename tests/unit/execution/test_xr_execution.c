@@ -9,6 +9,7 @@
  */
 
 #include "../../../src/core/xr_core_spec_gen.h"
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/execution/xr_boundary_materialization.h"
 #include "../../../src/execution/xr_execution.h"
 #include "../../../src/os/os_thread.h"
@@ -998,7 +999,158 @@ static void test_concurrent_module_initialization(void) {
     xr_validated_program_free(program);
 }
 
+typedef struct RuntimeStateProbe {
+    XrInstance *instance;
+    atomic_uint *destroyed;
+    atomic_uint *freed;
+    uint32_t value;
+} RuntimeStateProbe;
+
+static const uint8_t runtime_state_layout = 1u;
+static const uint8_t foreign_state_layout = 2u;
+
+static void destroy_runtime_state_probe(void *opaque) {
+    RuntimeStateProbe *probe = opaque;
+    REQUIRE(xr_execution_instance_state(probe->instance) == XR_INSTANCE_DRAINING);
+    REQUIRE(xr_execution_instance_lease_count(probe->instance) == 0u);
+    XrExecutionDiagnostic diagnostic = {0};
+    REQUIRE(xr_execution_instance_retire(probe->instance, &diagnostic) ==
+            XR_EXECUTION_GENERATION_REJECTED);
+    REQUIRE(diagnostic.kind == XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY);
+    XrExecutionLease refused = {0};
+    REQUIRE(!xr_execution_instance_acquire(probe->instance, &refused));
+    XrInstance *same = probe->instance;
+    REQUIRE(xr_execution_instance_free(&same, NULL) == XR_EXECUTION_GENERATION_REJECTED);
+    REQUIRE(same == probe->instance && probe->value == 7634u);
+    atomic_fetch_add_explicit(probe->destroyed, 1u, memory_order_relaxed);
+    atomic_fetch_add_explicit(probe->freed, 1u, memory_order_relaxed);
+    xr_free(probe);
+}
+
+static RuntimeStateProbe *new_runtime_state_probe(XrInstance *instance, atomic_uint *destroyed,
+                                                  atomic_uint *freed) {
+    RuntimeStateProbe *probe = xr_malloc(sizeof(*probe));
+    REQUIRE(probe != NULL);
+    *probe = (RuntimeStateProbe) {instance, destroyed, freed, 7634u};
+    return probe;
+}
+
+static void test_instance_state_drain_and_layout(void) {
+    XrValidatedProgram *program = build_module_program();
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings = {0};
+    for (uint32_t drain_first = 0u; drain_first != 2u; ++drain_first) {
+        XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+        atomic_uint destroyed, freed;
+        atomic_init(&destroyed, 0u);
+        atomic_init(&freed, 0u);
+        XrExecutionLease first = {0}, last = {0};
+        REQUIRE(xr_execution_instance_acquire(instance, &first));
+        REQUIRE(xr_execution_instance_acquire(instance, &last));
+        void *state = program;
+        REQUIRE(xr_execution_lease_bind_state(&first, &runtime_state_layout, NULL, NULL, &state) ==
+                XR_EXECUTION_STATE_EMPTY);
+        REQUIRE(state == NULL);
+        RuntimeStateProbe *candidate = new_runtime_state_probe(instance, &destroyed, &freed);
+        REQUIRE(xr_execution_lease_bind_state(&first, &runtime_state_layout, candidate, NULL,
+                                              &state) == XR_EXECUTION_STATE_INVALID);
+        REQUIRE(state == NULL);
+        REQUIRE(xr_execution_lease_bind_state(&first, &runtime_state_layout, candidate,
+                                              destroy_runtime_state_probe, &state) ==
+                XR_EXECUTION_STATE_ADOPTED);
+        REQUIRE(state == candidate);
+        REQUIRE(xr_execution_lease_bind_state(&last, &foreign_state_layout, NULL, NULL, &state) ==
+                XR_EXECUTION_STATE_INCOMPATIBLE);
+        REQUIRE(state == NULL);
+        REQUIRE(xr_execution_lease_bind_state(&last, &runtime_state_layout, NULL, NULL, &state) ==
+                XR_EXECUTION_STATE_PRESENT);
+        REQUIRE(state == candidate);
+        if (drain_first)
+            REQUIRE(xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK);
+        XrExecutionLease stale = first;
+        REQUIRE(xr_execution_lease_release(&first));
+        REQUIRE(atomic_load(&destroyed) == 0u);
+        REQUIRE(xr_execution_lease_bind_state(&stale, &runtime_state_layout, NULL, NULL, &state) ==
+                XR_EXECUTION_STATE_INVALID);
+        REQUIRE(state == NULL);
+        REQUIRE(xr_execution_lease_release(&last));
+        REQUIRE(atomic_load(&destroyed) == drain_first);
+        if (!drain_first)
+            REQUIRE(xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK);
+        REQUIRE(atomic_load(&destroyed) == 1u && atomic_load(&freed) == 1u);
+        REQUIRE(xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK);
+        REQUIRE(xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK);
+    }
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+typedef struct RuntimeStateRace {
+    XrInstance *instance;
+    atomic_bool *start;
+    atomic_uint *destroyed;
+    atomic_uint *freed;
+    void *observed;
+} RuntimeStateRace;
+
+static void *publish_runtime_state_worker(void *opaque) {
+    RuntimeStateRace *race = opaque;
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(race->instance, &lease));
+    RuntimeStateProbe *candidate =
+        new_runtime_state_probe(race->instance, race->destroyed, race->freed);
+    while (!atomic_load_explicit(race->start, memory_order_acquire))
+        xr_thread_yield();
+    XrExecutionStateBindingResult result = xr_execution_lease_bind_state(
+        &lease, &runtime_state_layout, candidate, destroy_runtime_state_probe, &race->observed);
+    REQUIRE(result == XR_EXECUTION_STATE_ADOPTED || result == XR_EXECUTION_STATE_PRESENT);
+    REQUIRE(race->observed && ((RuntimeStateProbe *) race->observed)->value == 7634u);
+    if (result == XR_EXECUTION_STATE_PRESENT) {
+        REQUIRE(race->observed != candidate);
+        atomic_fetch_add_explicit(race->freed, 1u, memory_order_relaxed);
+        xr_free(candidate);
+    }
+    REQUIRE(xr_execution_lease_release(&lease));
+    return NULL;
+}
+
+static void test_instance_state_concurrent_publication(void) {
+    XrValidatedProgram *program = build_module_program();
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings = {0};
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    atomic_bool start;
+    atomic_uint destroyed, freed;
+    atomic_init(&start, false);
+    atomic_init(&destroyed, 0u);
+    atomic_init(&freed, 0u);
+    RuntimeStateRace races[4];
+    xr_thread_t threads[4];
+    for (size_t index = 0u; index < 4u; ++index) {
+        races[index] = (RuntimeStateRace) {instance, &start, &destroyed, &freed, NULL};
+        REQUIRE(xr_thread_create(&threads[index], publish_runtime_state_worker, &races[index]));
+    }
+    atomic_store_explicit(&start, true, memory_order_release);
+    for (size_t index = 0u; index < 4u; ++index) {
+        REQUIRE(xr_thread_join(threads[index], NULL) == 0);
+        REQUIRE(races[index].observed == races[0].observed);
+    }
+    REQUIRE(atomic_load(&destroyed) == 0u && atomic_load(&freed) == 3u);
+    retire_and_free(&instance);
+    REQUIRE(atomic_load(&destroyed) == 1u && atomic_load(&freed) == 4u);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "module-storage") == 0) {
+        test_instance_state_drain_and_layout();
+        test_instance_state_concurrent_publication();
+        puts("instance state ownership tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "module-initialization") == 0) {
         test_module_initialization_authority_and_failure();
         test_concurrent_module_initialization();
@@ -1016,6 +1168,8 @@ int main(int argc, char **argv) {
     }
     if (argc != 1)
         return 2;
+    test_instance_state_drain_and_layout();
+    test_instance_state_concurrent_publication();
     test_module_initialization_authority_and_failure();
     test_concurrent_module_initialization();
     test_profile_partitions_and_foreign_authority();
