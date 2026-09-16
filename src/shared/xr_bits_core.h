@@ -58,7 +58,7 @@ static inline uint8_t xr_bits_aot_rotl8(uint8_t value, int64_t count) {
     return __builtin_rotateleft8(value, (uint8_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (uint8_t) ((value << (n & 7u)) | (value >> ((-n) & 7u)));
+    return (uint8_t) ((value << (n & 7u)) | (value >> ((UINT64_C(0) - n) & 7u)));
 #endif
 }
 
@@ -67,7 +67,7 @@ static inline uint8_t xr_bits_aot_rotr8(uint8_t value, int64_t count) {
     return __builtin_rotateright8(value, (uint8_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (uint8_t) ((value >> (n & 7u)) | (value << ((-n) & 7u)));
+    return (uint8_t) ((value >> (n & 7u)) | (value << ((UINT64_C(0) - n) & 7u)));
 #endif
 }
 
@@ -76,7 +76,7 @@ static inline uint16_t xr_bits_aot_rotl16(uint16_t value, int64_t count) {
     return __builtin_rotateleft16(value, (uint16_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (uint16_t) ((value << (n & 15u)) | (value >> ((-n) & 15u)));
+    return (uint16_t) ((value << (n & 15u)) | (value >> ((UINT64_C(0) - n) & 15u)));
 #endif
 }
 
@@ -85,7 +85,7 @@ static inline uint16_t xr_bits_aot_rotr16(uint16_t value, int64_t count) {
     return __builtin_rotateright16(value, (uint16_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (uint16_t) ((value >> (n & 15u)) | (value << ((-n) & 15u)));
+    return (uint16_t) ((value >> (n & 15u)) | (value << ((UINT64_C(0) - n) & 15u)));
 #endif
 }
 
@@ -95,7 +95,7 @@ static inline uint32_t xr_bits_aot_rotl32(uint32_t value, int64_t count) {
     return __builtin_rotateleft32(value, (uint32_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (value << (n & 31u)) | (value >> ((-n) & 31u));
+    return (value << (n & 31u)) | (value >> ((UINT64_C(0) - n) & 31u));
 #endif
 }
 
@@ -105,7 +105,7 @@ static inline uint32_t xr_bits_aot_rotr32(uint32_t value, int64_t count) {
     return __builtin_rotateright32(value, (uint32_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (value >> (n & 31u)) | (value << ((-n) & 31u));
+    return (value >> (n & 31u)) | (value << ((UINT64_C(0) - n) & 31u));
 #endif
 }
 
@@ -114,7 +114,7 @@ static inline uint64_t xr_bits_aot_rotl64(uint64_t value, int64_t count) {
     return __builtin_rotateleft64(value, (uint64_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (value << (n & 63u)) | (value >> ((-n) & 63u));
+    return (value << (n & 63u)) | (value >> ((UINT64_C(0) - n) & 63u));
 #endif
 }
 
@@ -123,7 +123,7 @@ static inline uint64_t xr_bits_aot_rotr64(uint64_t value, int64_t count) {
     return __builtin_rotateright64(value, (uint64_t) count);
 #else
     const uint64_t n = (uint64_t) count;
-    return (value >> (n & 63u)) | (value << ((-n) & 63u));
+    return (value >> (n & 63u)) | (value << ((UINT64_C(0) - n) & 63u));
 #endif
 }
 

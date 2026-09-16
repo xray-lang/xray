@@ -8,8 +8,27 @@
  * test_windows_time_query.c - Execute Windows clock logic with injected API results
  */
 
+#include "base/xdefs.h"
 #include <windows.h>
 #include <stdio.h>
+
+/* Load the host SDK before redirecting only the clock APIs. The portable
+ * declarations must never shadow Windows headers used by the platform layer. */
+#define QueryPerformanceFrequency xr_test_QueryPerformanceFrequency
+#define QueryPerformanceCounter xr_test_QueryPerformanceCounter
+#define GetSystemTimePreciseAsFileTime xr_test_GetSystemTimePreciseAsFileTime
+#define GetCurrentProcess xr_test_GetCurrentProcess
+#define GetProcessTimes xr_test_GetProcessTimes
+#define Sleep xr_test_Sleep
+
+static BOOL QueryPerformanceFrequency(LARGE_INTEGER *frequency);
+static BOOL QueryPerformanceCounter(LARGE_INTEGER *counter);
+static void GetSystemTimePreciseAsFileTime(FILETIME *value);
+static void *GetCurrentProcess(void);
+static BOOL GetProcessTimes(void *process, FILETIME *creation, FILETIME *exit, FILETIME *kernel,
+                            FILETIME *user);
+static void Sleep(DWORD milliseconds);
+
 #include "os/win/time_win.c"
 
 static BOOL frequency_ok = 1;

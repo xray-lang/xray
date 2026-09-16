@@ -123,7 +123,7 @@ static inline uint64_t xr_uint_mul_high_bits(uint64_t a, uint64_t b, unsigned bi
 }
 
 static inline int64_t xr_i64_neg_wrap(int64_t v) {
-    return (int64_t) (-(uint64_t) v);
+    return (int64_t) (UINT64_C(0) - (uint64_t) v);
 }
 
 static inline int64_t xr_i64_abs_wrap(int64_t v) {

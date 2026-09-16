@@ -8,7 +8,7 @@
  * xr_program_allocation_probe.h - Allocation failure injection for Program tests
  *
  * KEY CONCEPT:
- *   Only the test executable substitutes the compiler and verifier allocators.
+ *   Only the test executable substitutes construction, encoding and verifier allocators.
  *   Production code retains the ordinary allocator and has no test-mode branch.
  */
 
@@ -25,19 +25,26 @@ static inline void *xr_program_test_system_calloc(size_t count, size_t size) {
     return xr_calloc(count, size);
 }
 
+static inline void *xr_program_test_system_realloc(void *pointer, size_t size) {
+    return xr_realloc(pointer, size);
+}
+
 static inline void xr_program_test_system_free(void *pointer) {
     xr_free(pointer);
 }
 
 XR_FUNC void *xr_program_test_malloc(size_t size);
 XR_FUNC void *xr_program_test_calloc(size_t count, size_t size);
+XR_FUNC void *xr_program_test_realloc(void *pointer, size_t size);
 XR_FUNC void xr_program_test_free(void *pointer);
 
 #undef xr_malloc
 #undef xr_calloc
+#undef xr_realloc
 #undef xr_free
 #define xr_malloc(size) xr_program_test_malloc(size)
 #define xr_calloc(count, size) xr_program_test_calloc(count, size)
+#define xr_realloc(pointer, size) xr_program_test_realloc(pointer, size)
 #define xr_free(pointer) xr_program_test_free(pointer)
 
 #endif // XR_PROGRAM_ALLOCATION_PROBE_H

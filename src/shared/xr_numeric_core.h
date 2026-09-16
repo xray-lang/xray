@@ -120,7 +120,7 @@ static inline uint64_t xr_numeric_core_i64_abs_magnitude(int64_t value) {
 static inline int64_t xr_numeric_core_i64_abs_wrap(int64_t value) {
     if (value >= 0)
         return value;
-    return (int64_t) (-(uint64_t) value);
+    return (int64_t) (UINT64_C(0) - (uint64_t) value);
 }
 
 static inline int64_t xr_numeric_core_i64_add_wrap(int64_t a, int64_t b) {

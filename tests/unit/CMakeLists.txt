@@ -106,8 +106,9 @@ add_dependencies(xr_program_test_core gen-core-spec gen-xr-program-schema)
 add_executable(test_xr_program
     program/test_xr_program.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_core_ir.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_program_encode.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c)
-# Compile the real constructors with allocator substitution confined to this
+# Compile the real constructors and writer with allocator substitution confined to this
 # executable. Other consumers link the ordinary production objects.
 if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     target_compile_options(test_xr_program PRIVATE
@@ -326,7 +327,11 @@ add_test(NAME test_time_utc_offset COMMAND $<TARGET_FILE:test_time_utc_offset>)
 set_tests_properties(test_time_utc_offset PROPERTIES LABELS "runtime;provider;unit")
 add_executable(test_windows_time_query os/test_windows_time_query.c)
 target_include_directories(test_windows_time_query PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/os/clock_api_fixture ${CMAKE_SOURCE_DIR}/src)
+    ${CMAKE_SOURCE_DIR}/src)
+if(NOT WIN32)
+    target_include_directories(test_windows_time_query PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/os/clock_api_fixture)
+endif()
 if(MSVC)
     target_compile_options(test_windows_time_query PRIVATE /W4 /WX)
 else()
@@ -1998,6 +2003,10 @@ target_include_directories(test_byte_array_append_core PRIVATE
 add_test(NAME test_byte_array_append_core COMMAND $<TARGET_FILE:test_byte_array_append_core>)
 add_xray_unit_test(test_math_core stdlib/test_math_core.c)
 add_xray_unit_test(test_numeric_core stdlib/test_numeric_core.c)
+if(MSVC)
+    target_compile_options(test_math_core PRIVATE /W4 /WX)
+    target_compile_options(test_numeric_core PRIVATE /W4 /WX)
+endif()
 add_xray_unit_test(test_null_test_core stdlib/test_null_test_core.c)
 add_xray_unit_test(test_compare_core stdlib/test_compare_core.c)
 add_xray_unit_test(test_target_simd_core stdlib/test_target_simd_core.c)

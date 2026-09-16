@@ -58,22 +58,40 @@ void *xr_program_test_calloc(size_t count, size_t size) {
                : allocation_probe_record(xr_program_test_system_calloc(count, size));
 }
 
+static size_t allocation_probe_slot(void *pointer) {
+    for (size_t index = 0u; index < XR_COUNTOF(allocation_probe.live); ++index) {
+        if (allocation_probe.live[index] == pointer)
+            return index;
+    }
+    fprintf(stderr, "Program used unowned allocation at failure %zu\n", allocation_probe.fail_at);
+    abort();
+}
+
+void *xr_program_test_realloc(void *pointer, size_t size) {
+    if (!allocation_probe.enabled)
+        return xr_program_test_system_realloc(pointer, size);
+    /* The writer only grows buffers. Keep failed realloc ownership unchanged. */
+    if (size == 0u)
+        abort();
+    if (allocation_probe_reject())
+        return NULL;
+    bool replacing = pointer != NULL;
+    size_t slot = replacing ? allocation_probe_slot(pointer) : 0u;
+    void *grown = xr_program_test_system_realloc(pointer, size);
+    if (!grown)
+        return NULL;
+    if (!replacing)
+        return allocation_probe_record(grown);
+    allocation_probe.live[slot] = grown;
+    ++allocation_probe.released;
+    ++allocation_probe.allocated;
+    return grown;
+}
+
 void xr_program_test_free(void *pointer) {
     if (pointer && allocation_probe.enabled) {
-        bool found = false;
-        for (size_t index = 0u; index < XR_COUNTOF(allocation_probe.live); ++index) {
-            if (allocation_probe.live[index] != pointer)
-                continue;
-            allocation_probe.live[index] = NULL;
-            ++allocation_probe.released;
-            found = true;
-            break;
-        }
-        if (!found) {
-            fprintf(stderr, "Program freed unowned memory at allocation failure %zu\n",
-                    allocation_probe.fail_at);
-            abort();
-        }
+        allocation_probe.live[allocation_probe_slot(pointer)] = NULL;
+        ++allocation_probe.released;
     }
     xr_program_test_system_free(pointer);
 }
@@ -627,6 +645,10 @@ static void test_partial_core_ir_construction(void) {
     }
 }
 
+static XrProgramBuildStatus write_module_initialization_fixture(XrProgramArtifact *artifact,
+                                                                char *diagnostic,
+                                                                size_t diagnostic_size);
+
 static XrProgramBuildStatus write_allocation_fixture(uint32_t fixture, XrProgramArtifact *artifact,
                                                      char *diagnostic, size_t diagnostic_size) {
     switch (fixture) {
@@ -641,6 +663,8 @@ static XrProgramBuildStatus write_allocation_fixture(uint32_t fixture, XrProgram
         case 3u:
             return xr_program_coroutine_trap_fixture_write(XR_PROGRAM_COROUTINE_TRAP_VALID,
                                                            artifact, diagnostic, diagnostic_size);
+        case 4u:
+            return write_module_initialization_fixture(artifact, diagnostic, diagnostic_size);
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -654,6 +678,10 @@ static void test_constructor_allocation_failures(uint32_t fixture) {
         allocation_probe_begin(fail_at);
         XrProgramBuildStatus status =
             write_allocation_fixture(fixture, &artifact, diagnostic, sizeof(diagnostic));
+        if (status != XR_PROGRAM_BUILD_OK) {
+            CHECK(artifact.bytes == NULL);
+            CHECK(artifact.size == 0u);
+        }
         xr_program_artifact_free(&artifact);
         size_t attempts = allocation_probe.attempts;
         allocation_probe_end();
@@ -750,6 +778,114 @@ static void init_module_initialization_fixture(ModuleInitializationFixture *fixt
     };
 }
 
+static XrProgramBuildStatus write_module_initialization_fixture(XrProgramArtifact *artifact,
+                                                                char *diagnostic,
+                                                                size_t diagnostic_size) {
+    ModuleInitializationFixture fixture;
+    init_module_initialization_fixture(&fixture);
+    XrCoreIrProgram *program = NULL;
+    XrProgramBuildStatus status =
+        xr_core_ir_program_build(&fixture.input, &program, diagnostic, diagnostic_size);
+    if (status == XR_PROGRAM_BUILD_OK)
+        status = xr_program_write(program, artifact, diagnostic, diagnostic_size);
+    xr_core_ir_program_free(program);
+    return status;
+}
+
+static void test_module_initialization_hostile_wire(void) {
+    ModuleInitializationFixture fixture;
+    init_module_initialization_fixture(&fixture);
+    char diagnostic[256] = {0};
+    XrProgramArtifact artifact = {0};
+    XrProgramBuildStatus status =
+        write_module_initialization_fixture(&artifact, diagnostic, sizeof(diagnostic));
+    CHECK(status == XR_PROGRAM_BUILD_OK);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return;
+    XrProgramView view = {0};
+    XrProgramDecodeStatus decoded = xr_program_decode_structure(
+        artifact.bytes, artifact.size, NULL, &view, diagnostic, sizeof(diagnostic));
+    CHECK(decoded == XR_PROGRAM_DECODE_OK);
+    if (decoded != XR_PROGRAM_DECODE_OK) {
+        xr_program_artifact_free(&artifact);
+        return;
+    }
+    const XrProgramSectionView *section = &view.sections[XR_PROGRAM_SECTION_SEMANTIC_METADATA - 1u];
+    size_t rows[4] = {0};
+    for (size_t module = 0u; module < XR_COUNTOF(rows); ++module) {
+        unsigned matches = 0u;
+        for (size_t offset = section->offset;
+             offset + XR_CORE_IR_KEY_SIZE <= section->offset + section->size; ++offset) {
+            if (memcmp(artifact.bytes + offset, fixture.modules[module].key.bytes,
+                       XR_CORE_IR_KEY_SIZE) == 0) {
+                rows[module] = offset;
+                ++matches;
+            }
+        }
+        CHECK(matches == 1u);
+        if (matches != 1u) {
+            xr_program_artifact_free(&artifact);
+            return;
+        }
+    }
+    uint8_t *mutated = xr_malloc(artifact.size);
+    CHECK(mutated != NULL);
+    if (!mutated) {
+        xr_program_artifact_free(&artifact);
+        return;
+    }
+    /* These fixture rows have one-byte IDs/counts: key, initializer, owned count,
+     * owned function, dependency count, dependency IDs. */
+    const size_t key_size = XR_CORE_IR_KEY_SIZE;
+    for (unsigned mutation = 0u; mutation < 10u; ++mutation) {
+        memcpy(mutated, artifact.bytes, artifact.size);
+        switch (mutation) {
+            case 0u:  // A zero module identity is structurally bounded but has no owner.
+                memset(mutated + rows[1], 0, key_size);
+                break;
+            case 1u:  // Two initialization rows cannot claim the same module identity.
+                memcpy(mutated + rows[1], mutated + rows[0], key_size);
+                break;
+            case 2u:  // An initializer must belong to the module that invokes it.
+                mutated[rows[1] + key_size] = mutated[rows[0] + key_size];
+                break;
+            case 3u:  // A function cannot be owned by two modules.
+                mutated[rows[1] + key_size + 2u] = mutated[rows[0] + key_size + 2u];
+                break;
+            case 4u:
+                mutated[rows[1] + key_size] = 4u;
+                break;
+            case 5u:
+                mutated[rows[1] + key_size + 2u] = 4u;
+                break;
+            case 6u:  // Empty function ownership is not a runtime module.
+                mutated[rows[1] + key_size + 1u] = 0u;
+                break;
+            case 7u:  // Self-dependency.
+                mutated[rows[1] + key_size + 4u] = 1u;
+                break;
+            case 8u:  // Forward dependency.
+                mutated[rows[1] + key_size + 4u] = 3u;
+                break;
+            case 9u:  // Duplicate dependency in the diamond's root.
+                mutated[rows[3] + key_size + 5u] = mutated[rows[3] + key_size + 4u];
+                break;
+        }
+        expect_decode_status(mutated, artifact.size, NULL,
+                             mutation < 4u ? XR_PROGRAM_DECODE_OK : XR_PROGRAM_DECODE_NONCANONICAL);
+        XrValidatedProgram *validated = NULL;
+        XrProgramDiagnostic rejection = {0};
+        CHECK(xr_program_validate(mutated, artifact.size, NULL, &validated, &rejection) !=
+              XR_PROGRAM_VERIFY_OK);
+        CHECK(validated == NULL);
+        if (mutation < 4u)
+            CHECK(rejection.kind == XR_PROGRAM_DIAGNOSTIC_FUNCTION);
+        xr_validated_program_free(validated);
+    }
+    xr_free(mutated);
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_module_initialization_construction(void) {
     ModuleInitializationFixture fixture;
     init_module_initialization_fixture(&fixture);
@@ -838,7 +974,8 @@ static void test_module_initialization_construction(void) {
 
 int main(void) {
     test_module_initialization_construction();
-    for (uint32_t fixture = 0u; fixture < 4u; ++fixture)
+    test_module_initialization_hostile_wire();
+    for (uint32_t fixture = 0u; fixture < 5u; ++fixture)
         test_constructor_allocation_failures(fixture);
     test_partial_core_ir_construction();
     test_determinism_roundtrip_and_identity();

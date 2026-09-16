@@ -147,6 +147,13 @@ Program/profile logical admission has positive and hostile VM/AOT build tests.
 Generated AOT adapter consumption and complete source-program parity remain
 separate obligations; these local tests do not establish them.
 
+Module-table admission is exercised with direct wire mutations as well as
+constructor inputs. Allocation-failure checks compile the production CoreIR
+builder, writer (including buffer reallocation), and independent verifier with
+test-local allocators. Every injected failure must preserve empty output and
+release all owned allocations. This coverage does not establish module slot
+execution or instance initialization, which remain separate obligations.
+
 ## Digest anchors
 
 anchor-sha256: src/plan/target/xr_target_profile.h d21c09134a6469510fddfe0e10e961448fe47d79086f223e0b48fb5ff01e31eb
@@ -187,7 +194,7 @@ anchor-sha256: src/program/xr_program_decode.c ab7ec45d4b3e0e20316e6bc5f274af7a0
 anchor-sha256: src/program/xr_program_schema_gen.h a8854ccf5ce0a0c5cda994be76da18c85946a14e5c4d90a2b8d5c90c9eb1a926
 anchor-sha256: xisa/program/schema.json 66ebcb692bbdca5f7c4e9e1e037fd4529959f8e7bd8476d039ae7e507e628afe
 anchor-sha256: tools/programgen/programgen.py 039540bcc3bff25776373a061a9fbeb300da19d7a6c5e472b0f63295bf25206a
-anchor-sha256: tests/unit/program/test_xr_program.c d95115c13dfc6b998e74663b39e9ec7b4292f4d8ce80ceea05ef6866eefcf457
+anchor-sha256: tests/unit/program/test_xr_program.c 4297b5c1779aae0d2f30668d8b147c84d631bbc151b22527dc9ac472fe69d625
 anchor-sha256: tests/unit/program/test_xr_program_provider_requirements.c 0368d273bc7c783ff9c8e72f65e38cee49b2575af94c5a0bec03ec9a33390abf
 anchor-sha256: tests/unit/program/xr_program_provider_fixture.h 9a7116c1fdcad29ea945a8e7b651e24490f35fd52f5f3aaab5367e755e8affea
 anchor-sha256: contracts/canonical-program/xrprogram-format-v3.md 8bfe617f6cc769f2565e596d408c5bb0b8174ac852bc203e1876d862ebd12398

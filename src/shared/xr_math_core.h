@@ -48,7 +48,7 @@ static inline int64_t xr_math_core_random_i64(XrMathCoreRandomBytesFn fill, void
     if (range == 0) {
         r = xr_math_core_random_u64(fill, ctx);
     } else {
-        uint64_t threshold = (-range) % range;
+        uint64_t threshold = (UINT64_C(0) - range) % range;
         do {
             r = xr_math_core_random_u64(fill, ctx);
         } while (r < threshold);
