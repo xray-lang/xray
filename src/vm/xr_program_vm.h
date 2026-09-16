@@ -210,6 +210,9 @@ XR_FUNC XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instanc
 XR_FUNC bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out);
 XR_FUNC bool xr_vm_value_string_view(const XrVmValue *value, XrVmStringView *view_out);
 XR_FUNC void xr_vm_outcome_dispose(XrVmOutcome *outcome);
+/* Ordinary and resumable entries use the same frame dispatcher. Step returns
+ * at a suspension or terminal outcome; returned views borrow frame storage
+ * until free. Cancellation remains valid only at a verified suspension. */
 XR_FUNC bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance,
                                     uint32_t function_id, const XrVmValue *arguments,
                                     uint32_t argument_count, XrVmExecution **execution_out);

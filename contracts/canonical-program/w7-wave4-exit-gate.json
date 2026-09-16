@@ -234,6 +234,7 @@
     ],
     "scan_files": [
       "src/vm/xr_program_vm.c",
+      "src/vm/xr_program_vm_dispatch.inc.c",
       "src/vm/xr_program_vm.h"
     ],
     "categories": [

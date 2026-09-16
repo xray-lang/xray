@@ -504,7 +504,8 @@ def canonical_pipeline_files(root: Path, zero: dict[str, object]) -> list[Path]:
     scan_files = zero.get("scan_files")
     require(scan_roots == ["src/program", "src/aot/program", "src/execution"],
             "Wave 4 canonical scan roots drifted")
-    require(scan_files == ["src/vm/xr_program_vm.c", "src/vm/xr_program_vm.h"],
+    require(scan_files == ["src/vm/xr_program_vm.c", "src/vm/xr_program_vm_dispatch.inc.c",
+                           "src/vm/xr_program_vm.h"],
             "Wave 4 canonical scan files drifted")
     paths: list[Path] = []
     for relative in scan_roots:
@@ -852,6 +853,7 @@ def self_test(root: Path) -> None:
             "src/aot/program",
             "src/execution",
             "src/vm/xr_program_vm.c",
+            "src/vm/xr_program_vm_dispatch.inc.c",
             "src/vm/xr_program_vm.h",
             "tests/unit/ir/test_xi_pipeline.c",
             "tests/unit/ir/test_xi_lower.c",
@@ -895,12 +897,14 @@ def self_test(root: Path) -> None:
         expect_failure(target, "interface capability-group status mismatch")
         matrix_path.write_text(original_matrix, encoding="utf-8")
 
-        victim = target / "src/program/xr_program_identity.c"
-        original_victim = victim.read_text(encoding="utf-8")
-        victim.write_text(original_victim + "\n/* injected XrScalarCallDecision */\n",
-                          encoding="utf-8")
-        expect_failure(target, "old-owner")
-        victim.write_text(original_victim, encoding="utf-8")
+        for relative in ("src/program/xr_program_identity.c",
+                         "src/vm/xr_program_vm_dispatch.inc.c"):
+            victim = target / relative
+            original_victim = victim.read_text(encoding="utf-8")
+            victim.write_text(original_victim + "\n/* injected XrScalarCallDecision */\n",
+                              encoding="utf-8")
+            expect_failure(target, "old-owner")
+            victim.write_text(original_victim, encoding="utf-8")
 
         reference = target / EXPECTED_SURFACES["reference"]
         original_reference = reference.read_text(encoding="utf-8")

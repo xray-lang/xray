@@ -36,6 +36,7 @@ def canonical_pipeline_files(root: Path) -> list[Path]:
         files.extend(sorted((root / relative).glob("*.h")))
     files.extend((root / relative) for relative in (
         "src/vm/xr_program_vm.c",
+        "src/vm/xr_program_vm_dispatch.inc.c",
         "src/vm/xr_program_vm.h",
     ))
     return files
@@ -186,6 +187,7 @@ def self_test(root: Path) -> None:
             "src/aot/program",
             "src/execution",
             "src/vm/xr_program_vm.c",
+            "src/vm/xr_program_vm_dispatch.inc.c",
             "src/vm/xr_program_vm.h",
             "tests/unit/program/test_xr_program_verify.c",
             "tests/unit/vm/test_xr_program_vm.c",
@@ -199,14 +201,18 @@ def self_test(root: Path) -> None:
             else:
                 shutil.copy2(source, destination)
         validate(target)
-        victim = target / "src/vm/xr_program_vm.c"
-        victim.write_text(victim.read_text(encoding="utf-8") +
-                          "\n/* injected pending_error authority */\n", encoding="utf-8")
-        try:
-            validate(target)
-        except ContractError:
-            return
-        raise ContractError("injected pending-error authority was accepted")
+        for name in ("xr_program_vm.c", "xr_program_vm_dispatch.inc.c"):
+            victim = target / "src/vm" / name
+            original = victim.read_text(encoding="utf-8")
+            victim.write_text(original + "\n/* injected pending_error authority */\n",
+                              encoding="utf-8")
+            try:
+                validate(target)
+            except ContractError:
+                pass
+            else:
+                raise ContractError("injected pending-error authority was accepted")
+            victim.write_text(original, encoding="utf-8")
 
 
 def main() -> int:

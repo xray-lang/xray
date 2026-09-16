@@ -756,6 +756,7 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
             ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.h
             ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.c
+            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm_dispatch.inc.c
             ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm.c
             ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm_runtime.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-vm-coverage.json
@@ -840,6 +841,7 @@ add_custom_target(check-xr-program-wave3-closure
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.c
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c
             ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.c
+            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm_dispatch.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
             ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_verify.c
             ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm.c

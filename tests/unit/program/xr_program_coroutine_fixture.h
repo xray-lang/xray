@@ -11,6 +11,8 @@ typedef enum XrProgramCoroutineFixtureMutation {
     XR_PROGRAM_COROUTINE_FIXTURE_UNUSED_LIVE,
     XR_PROGRAM_COROUTINE_FIXTURE_MISSING_CANCEL_EDGE,
     XR_PROGRAM_COROUTINE_FIXTURE_NORMAL_EDGE_TO_CANCEL,
+    XR_PROGRAM_COROUTINE_FIXTURE_DIVIDE_AFTER_YIELD,
+    XR_PROGRAM_COROUTINE_FIXTURE_DIVIDE_BY_ZERO_AFTER_YIELD,
 } XrProgramCoroutineFixtureMutation;
 
 static XrCoreIrKey xr_program_coroutine_fixture_key(const char *text) {
@@ -94,6 +96,14 @@ xr_program_coroutine_fixture_write_mutated(XrProgramCoroutineFixtureMutation mut
         .result_type_id = XR_CORE_TYPE_VOID,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
+    if (mutation == XR_PROGRAM_COROUTINE_FIXTURE_DIVIDE_AFTER_YIELD ||
+        mutation == XR_PROGRAM_COROUTINE_FIXTURE_DIVIDE_BY_ZERO_AFTER_YIELD) {
+        resume_instructions[2].operation_id = XR_CORE_OP_CORE_DIV_I64;
+        resume_instructions[2].immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+        resume_instructions[2].immediate.u32 = 0u;
+        if (mutation == XR_PROGRAM_COROUTINE_FIXTURE_DIVIDE_BY_ZERO_AFTER_YIELD)
+            constants[1].value.i64 = 0;
+    }
     XrCoreIrKey cancel_successor[] = {cancel_key};
     if (mutation == XR_PROGRAM_COROUTINE_FIXTURE_NORMAL_EDGE_TO_CANCEL) {
         resume_instructions[3].operation_id = XR_CORE_OP_CORE_BRANCH;

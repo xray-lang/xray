@@ -15,6 +15,7 @@ from typing import Any
 REGISTRY = Path("xisa/core/registry.json")
 VM_HEADER = Path("src/vm/xr_program_vm.h")
 VM_SOURCE = Path("src/vm/xr_program_vm.c")
+VM_DISPATCH = Path("src/vm/xr_program_vm_dispatch.inc.c")
 VM_TEST = Path("tests/unit/vm/test_xr_program_vm.c")
 RUNTIME_TEST = Path("tests/unit/vm/test_xr_program_vm_runtime.c")
 TARGET_FIXTURE = Path("tests/unit/plan/target_profile_test_fixture.c")
@@ -176,14 +177,16 @@ def cmake_runtime_sources(cmake: str) -> tuple[str, ...]:
 
 
 def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> None:
-    paths = (VM_HEADER, VM_SOURCE, VM_TEST, RUNTIME_TEST, TARGET_FIXTURE, CMAKE)
+    paths = (VM_HEADER, VM_SOURCE, VM_DISPATCH, VM_TEST, RUNTIME_TEST, TARGET_FIXTURE, CMAKE)
     sources = {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
         for path in paths
     }
     registry = read_json(root / REGISTRY)
     header = sources[VM_HEADER]
-    vm = sources[VM_SOURCE]
+    require('#include "xr_program_vm_dispatch.inc.c"' in sources[VM_SOURCE],
+            "VM shared instruction handlers are not compiled")
+    vm = sources[VM_SOURCE] + "\n" + sources[VM_DISPATCH]
     test = sources[VM_TEST]
     runtime_test = sources[RUNTIME_TEST]
     cmake = sources[CMAKE]
@@ -225,8 +228,11 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
                 coverage.get("task") == 299,
                 f"registry VM coverage is stale for {row['spelling']}")
         token = enum_token(row["spelling"])
-        has_handler = re.search(rf"\bcase\s+{re.escape(token)}\s*:", vm) is not None
-        require(has_handler == (coverage["status"] == "COMPLETE"),
+        pattern = rf"\bcase\s+{re.escape(token)}\s*:"
+        has_dispatch = re.search(pattern, sources[VM_SOURCE]) is not None
+        has_handler = re.search(pattern, sources[VM_DISPATCH]) is not None
+        active = coverage["status"] == "COMPLETE"
+        require(has_dispatch == active and has_handler == active,
                 f"VM lifecycle disagrees with registry for {row['spelling']}")
         require(token in test, f"VM differential test omits {row['spelling']}")
 
@@ -283,6 +289,7 @@ def self_test(root: Path) -> None:
     validate_sources(root)
     registry = read_json(root / REGISTRY)
     vm = (root / VM_SOURCE).read_text(encoding="utf-8")
+    handlers = (root / VM_DISPATCH).read_text(encoding="utf-8")
     first = enum_token(registry["operations"][0]["spelling"])
     mutated, mutation_count = re.subn(
         rf"\bcase\s+{re.escape(first)}\s*:", "case XR_CORE_OP_MISSING:", vm
@@ -315,15 +322,28 @@ def self_test(root: Path) -> None:
     else:
         raise GateError("instance-bound VM code construction was accepted")
 
-    mutated = vm.replace("produced.as.value.kind = XR_VM_VALUE_U16",
+    mutated = handlers.replace("produced.as.value.kind = XR_VM_VALUE_U16",
                          "produced.as.value.kind = XR_VM_VALUE_U32", 1)
-    require(mutated != vm, "pointer-width result mutation did not apply")
+    require(mutated != handlers, "pointer-width result mutation did not apply")
     try:
-        validate_sources(root, {VM_SOURCE: mutated})
+        validate_sources(root, {VM_DISPATCH: mutated})
     except GateError:
         pass
     else:
         raise GateError("legacy u32 VM result was accepted")
+
+    for overrides in (
+        {VM_SOURCE: vm.replace('#include "xr_program_vm_dispatch.inc.c"', '')},
+        {VM_DISPATCH: handlers + "\n/* xr_reference_evaluate */\n"},
+        {VM_DISPATCH: re.sub(rf"\bcase\s+{re.escape(first)}\s*:",
+                            "case XR_CORE_OP_MISSING:", handlers)},
+    ):
+        try:
+            validate_sources(root, overrides)
+        except GateError:
+            pass
+        else:
+            raise GateError("missing or foreign shared VM handler was accepted")
 
 
 def main() -> int:

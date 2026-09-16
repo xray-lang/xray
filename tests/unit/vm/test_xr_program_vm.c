@@ -2299,6 +2299,23 @@ static XrVmOutcome execute_differential(XrValidatedProgram *program, XrInstance 
     compare_outcomes(reference, fixed_result);
     REQUIRE(fingerprint_equal(baseline_result.logical_trace, fixed_result.logical_trace));
 
+    XrVmCode *frame_codes[] = {baseline, fixed};
+    XrFingerprint frame_traces[2] = {0};
+    for (unsigned policy = 0u; policy < 2u; ++policy) {
+        XrVmExecution *execution = NULL;
+        REQUIRE(xr_vm_execution_create(frame_codes[policy], instance, entry, vm_arguments,
+                                        argument_count, &execution));
+        REQUIRE(xr_execution_instance_lease_count(instance) == 1u);
+        XrVmOutcome stepped = xr_vm_execution_step(execution);
+        compare_outcomes(reference, stepped);
+        frame_traces[policy] = stepped.logical_trace;
+        REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+        REQUIRE(xr_vm_execution_step(execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+        xr_vm_execution_free(execution);
+    }
+    REQUIRE(fingerprint_equal(frame_traces[0], frame_traces[1]));
+    REQUIRE(!fingerprint_equal(frame_traces[0], (XrFingerprint) {{0}}));
+
     xr_vm_code_free(fixed);
     xr_vm_code_free(baseline);
     return baseline_result;
@@ -3512,6 +3529,49 @@ static void test_class_error_outcomes_fail_closed(void) {
     }
 }
 
+static void test_coroutine_arithmetic_uses_ordinary_operation_semantics(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings = {0};
+    for (unsigned zero = 0u; zero < 2u; ++zero) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        char diagnostic[256] = {0};
+        REQUIRE(xr_program_coroutine_fixture_write_mutated(
+                    zero ? XR_PROGRAM_COROUTINE_FIXTURE_DIVIDE_BY_ZERO_AFTER_YIELD
+                         : XR_PROGRAM_COROUTINE_FIXTURE_DIVIDE_AFTER_YIELD,
+                    &artifact, diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) ==
+                XR_PROGRAM_VERIFY_OK);
+        xr_program_artifact_free(&artifact);
+        for (unsigned fixed = 0u; fixed < 2u; ++fixed) {
+            XrVmCodeOptions options = xr_vm_code_default_options();
+            options.decode_policy = fixed ? XR_VM_DECODE_FIXED_ROWS : XR_VM_DECODE_BASELINE_VIEW;
+            XrVmCode *code = NULL;
+            REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+            XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+            XrVmExecution *execution = NULL;
+            REQUIRE(xr_vm_execution_create(code, instance, 0u, NULL, 0u, &execution));
+            REQUIRE(xr_vm_execution_step(execution).kind == XR_VM_OUTCOME_SUSPENDED);
+            XrVmOutcome result = xr_vm_execution_step(execution);
+            if (zero) {
+                REQUIRE(result.kind == XR_VM_OUTCOME_TRAP);
+                REQUIRE(result.trap == XR_VM_TRAP_INTEGER_DIVISION_BY_ZERO);
+            } else {
+                REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+                REQUIRE(result.value.kind == XR_VM_VALUE_I64 && result.value.as.i64 == 20);
+            }
+            REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+            REQUIRE(xr_vm_execution_step(execution).kind == XR_VM_OUTCOME_INVALID_INVOCATION);
+            xr_vm_execution_free(execution);
+            xr_vm_code_free(code);
+            retire_and_free(&instance);
+        }
+        xr_validated_program_free(program);
+    }
+    xr_target_profile_free(profile);
+}
+
 static void test_coroutine_suspend_resume_generation_lease(void) {
     XrValidatedProgram *program = build_coroutine_program();
     XrTargetProfile *profile =
@@ -4311,6 +4371,7 @@ int main(int argc, char **argv) {
         return run_h2_class_differential_probe(argv[2]);
     if (argc != 1)
         return 2;
+    test_coroutine_arithmetic_uses_ordinary_operation_semantics();
     test_coroutine_self_edge_parallel_arguments();
     test_reason_private_cleanup_graph_differential();
     test_aggregate_construct_owner_transfers();

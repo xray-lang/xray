@@ -27,6 +27,23 @@ arguments, including on a self-loop. That storage is private to the parent or ch
 is released with it. Multi-block cancellation and provider-failure cleanup follow only validated
 reason-private edges; no executor-local search for a convenient terminal is permitted.
 
+Ordinary calls and resumable frames now dispatch through one operation loop.
+The separate coroutine operation whitelist and its duplicate arithmetic,
+ownership, place, provider and control-flow handlers are removed. An ordinary
+call uses a temporary frame with the caller's execution context; a suspended
+frame keeps its values and verified continuation. Both use the same bounded
+value/edge allocation and terminal lease/trace publication. The explicit frame
+API also accepts ordinary entries, whose returned views remain frame-owned.
+One-shot execution still rejects a resumable entry because it cannot retain a
+suspended session. Cancellation still follows only a verified suspension edge.
+
+Existing operation fixtures execute through both one-shot and explicit-frame
+entries under both decode policies. Their independent outcomes, step counts
+and nonzero matching traces remain required. Yield followed by signed division
+returns 20 for 40/2 and publishes the existing division-by-zero trap for 40/0;
+both terminal paths release their lease. These assertions replace the old
+coroutine-only subset, without adding an operation or changing Program identity.
+
 The `xray_program_vm_runtime` archive is the embeddable product boundary for this stage. Its exact
 source closure contains the CoreSpec projection, XrProgram decoder/verifier, immutable target
 profile, BoundaryABI/runtime contracts, execution instance, and typed VM. The target-neutral
