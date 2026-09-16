@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 68u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 70u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -30,9 +30,13 @@ static void test_registry_identity_and_lookup(void) {
         CHECK(operation->spec_oracle_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->evaluator_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->vm_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->aot_status == XR_CORE_COVERAGE_COMPLETE);
+        uint8_t execution_status =
+            operation->stable_id == 152u || operation->stable_id == 153u
+                ? XR_CORE_COVERAGE_NOT_YET_ACTIVE
+                : XR_CORE_COVERAGE_COMPLETE;
+        CHECK(operation->evaluator_status == execution_status);
+        CHECK(operation->vm_status == execution_status);
+        CHECK(operation->aot_status == execution_status);
         CHECK(xr_core_spec_operation_by_id(operation->stable_id) == operation);
         CHECK(xr_core_spec_operation_by_spelling(operation->spelling) == operation);
         if (index > 0u)
@@ -215,9 +219,43 @@ static void test_operation_metadata(void) {
     CHECK(cancel->effect_mask == XR_CORE_EFFECT_CANCEL);
 }
 
+static void test_module_place_metadata(void) {
+    CHECK(XR_CORE_OP_CORE_PLACE_MODULE == 152u);
+    CHECK(XR_CORE_OP_CORE_PLACE_INITIALIZE == 153u);
+    const XrCoreOperationSpec *place = xr_core_spec_operation_by_id(152u);
+    const XrCoreOperationSpec *initialize = xr_core_spec_operation_by_id(153u);
+    CHECK(place != NULL);
+    CHECK(initialize != NULL);
+    if (!place || !initialize)
+        return;
+    CHECK(strcmp(place->spelling, "core.place.module") == 0);
+    CHECK(place->operand_arity == 0u);
+    CHECK(place->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
+    CHECK(place->effect_mask == 0u);
+    CHECK(place->successor_mask == XR_CORE_SUCCESSOR_NORMAL);
+    CHECK(strcmp(initialize->spelling, "core.place.initialize") == 0);
+    CHECK(initialize->operand_arity == 2u);
+    CHECK(initialize->result_type == XR_CORE_TYPE_VOID);
+    CHECK(initialize->effect_mask == XR_CORE_EFFECT_TRAP);
+    CHECK(initialize->successor_mask == (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_TRAP));
+    const uint16_t conditional[] = {
+        XR_CORE_OP_CORE_PLACE_LOAD, XR_CORE_OP_CORE_PLACE_STORE,
+        XR_CORE_OP_CORE_PLACE_PROJECT, XR_CORE_OP_CORE_PLACE_EXCHANGE,
+    };
+    for (size_t index = 0u; index < sizeof(conditional) / sizeof(conditional[0]); ++index) {
+        const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(conditional[index]);
+        CHECK(operation != NULL);
+        if (operation) {
+            CHECK(operation->effect_mask == 0u);
+            CHECK(operation->successor_mask == (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_TRAP));
+        }
+    }
+}
+
 int main(void) {
     test_registry_identity_and_lookup();
     test_operation_metadata();
+    test_module_place_metadata();
 
     if (failures != 0) {
         fprintf(stderr, "CoreSpec metadata tests failed: %d\n", failures);

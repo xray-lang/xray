@@ -2443,7 +2443,20 @@ xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
                                        const char *summary_name, uint32_t summary_symbol_id,
                                        XaThreadHandleLintFnSummary *visible_summaries) {
     FunctionDeclNode *fn = xa_lifecycle_lint_function_node(fn_node);
-    if (!ctx || !fn_node || !fn || !summary_name || !fn->body ||
+    if (!ctx || !fn_node || !fn || !summary_name || !fn->body)
+        return NULL;
+    AstNode *return_expr =
+        xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
+    bool returns_new_handle =
+        xa_thread_lint_expr_returns_new_handle(ctx, visible_summaries, return_expr);
+    bool has_handle_param = false;
+    for (int i = 0; i < fn->param_count && !has_handle_param; i++) {
+        has_handle_param = fn->params && fn->params[i] &&
+                           xa_lifecycle_lint_function_param_is_named_class(ctx, fn, i, "Thread");
+    }
+    /* Without a handle input or a factory result, every summary field is empty.
+     * Check that before traversing the body or allocating per-parameter state. */
+    if ((!has_handle_param && !returns_new_handle) ||
         xa_lifecycle_lint_body_has_non_tail_exit(fn->body))
         return NULL;
 
@@ -2486,10 +2499,7 @@ xa_thread_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_node,
         tail = &state->next;
     }
 
-    AstNode *return_expr =
-        xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
-    summary->returns_new_handle =
-        xa_thread_lint_expr_returns_new_handle(ctx, visible_summaries, return_expr);
+    summary->returns_new_handle = returns_new_handle;
 
     XaThreadHandleLintState *returned_state = NULL;
     if (states) {
@@ -4960,7 +4970,20 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
                                             const char *summary_name, uint32_t summary_symbol_id,
                                             XaOsResourceLintFnSummary *visible_summaries) {
     FunctionDeclNode *fn = xa_lifecycle_lint_function_node(fn_node);
-    if (!ctx || !fn_node || !fn || !summary_name || !fn->body ||
+    if (!ctx || !fn_node || !fn || !summary_name || !fn->body)
+        return NULL;
+    AstNode *return_expr =
+        xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
+    XaOsResourceKind return_kind = XA_OS_RESOURCE_PROCESS;
+    bool returns_new_resource = xa_os_resource_lint_expr_returns_new_resource(
+        ctx, visible_summaries, return_expr, &return_kind);
+    bool has_resource_param = false;
+    for (int i = 0; i < fn->param_count && !has_resource_param; i++) {
+        has_resource_param = fn->params && fn->params[i] &&
+                             xa_lifecycle_lint_function_param_os_resource_kind(ctx, fn, i, NULL);
+    }
+    /* Empty summaries cannot acquire effects from unrelated function bodies. */
+    if ((!has_resource_param && !returns_new_resource) ||
         xa_lifecycle_lint_body_has_non_tail_exit(fn->body))
         return NULL;
 
@@ -5006,10 +5029,8 @@ xa_os_resource_lint_summarize_function_node(XaInferContext *ctx, AstNode *fn_nod
         tail = &state->next;
     }
 
-    AstNode *return_expr =
-        xa_lifecycle_lint_returned_handle_expr(xa_lifecycle_lint_tail_return_expr(fn->body));
-    summary->returns_new_resource = xa_os_resource_lint_expr_returns_new_resource(
-        ctx, visible_summaries, return_expr, &summary->return_kind);
+    summary->returns_new_resource = returns_new_resource;
+    summary->return_kind = return_kind;
 
     XaOsResourceLintState *returned_state = NULL;
     if (states) {

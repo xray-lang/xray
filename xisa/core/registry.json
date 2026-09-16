@@ -193,6 +193,16 @@
       "stable_id": 7,
       "name": "provider-call-failed",
       "description": "The admitted provider trampoline refused or failed the requested operation."
+    },
+    {
+      "stable_id": 8,
+      "name": "module-slot-uninitialized",
+      "description": "A module slot value is read or replaced before its initializer publishes it."
+    },
+    {
+      "stable_id": 9,
+      "name": "module-slot-already-initialized",
+      "description": "A module initializer attempts to publish the same slot twice."
     }
   ],
   "features": [
@@ -3816,7 +3826,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -3835,7 +3845,7 @@
       "materialization": "logical-place-read",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one non-owning value snapshot of the current place contents; affine contents remain borrowed from the aliased storage owner"
+        "allowed_trace": "one non-owning value snapshot of the current place contents; affine contents remain borrowed from the aliased storage owner; a module-origin place additionally requires the trap effect and traps before value access if its instance slot is uninitialized"
       },
       "kat_validator": "place-load",
       "coverage": {
@@ -3884,7 +3894,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -3904,7 +3914,7 @@
       "materialization": "logical-place-write",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one replacement of the place contents by the value operand"
+        "allowed_trace": "one replacement of the place contents by the value operand; a module-origin place additionally requires the trap effect and traps before value access if its instance slot is uninitialized"
       },
       "kat_validator": "place-store",
       "coverage": {
@@ -3954,7 +3964,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -3973,7 +3983,7 @@
       "materialization": "logical-place-field-projection",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one derived place aliasing the declaration-ordinal field of the aggregate place"
+        "allowed_trace": "one derived place aliasing the declaration-ordinal field of the aggregate place; a module-origin place additionally requires the trap effect and traps before value access if its instance slot is uninitialized"
       },
       "kat_validator": "place-project",
       "coverage": {
@@ -4828,7 +4838,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -4848,7 +4858,7 @@
       "materialization": "logical-atomic-place-exchange",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the replacement becomes the complete place value atomically and the previous complete value is returned without a control transfer"
+        "allowed_trace": "the replacement becomes the complete place value atomically and the previous complete value is returned without a control transfer; a module-origin place additionally requires the trap effect and traps before value access if its instance slot is uninitialized"
       },
       "kat_validator": "place-exchange",
       "coverage": {
@@ -5091,6 +5101,143 @@
         },
         "aot": {
           "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 152,
+      "spelling": "core.place.module",
+      "class": "place",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "T",
+        "immediates": {
+          "module": "ModuleId",
+          "slot": "ModuleSlotId"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "program-place-alias"
+      },
+      "profile_dependency": "none",
+      "materialization": "instance-module-slot-alias",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "One instance-owned place at the verified module and declaration slot; taking its address neither reads nor initializes the value."
+      },
+      "kat_validator": "place-module",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 153,
+      "spelling": "core.place.initialize",
+      "class": "place",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T",
+          "T"
+        ],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "trap"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-place",
+          "consume-value"
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "instance-module-slot-first-publication",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "The owning module initializer consumes one value and publishes its slot exactly once; duplicate publication traps and never replaces the existing owner."
+      },
+      "kat_validator": "place-initialize",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
           "task": 300
         }
       }

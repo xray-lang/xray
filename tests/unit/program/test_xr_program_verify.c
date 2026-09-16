@@ -28,6 +28,7 @@
 #include "xr_program_text_fixture.h"
 #include "xr_program_trap_fixture.h"
 #include "xr_program_construct_fixture.h"
+#include "xr_program_module_fixture.h"
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
@@ -199,6 +200,7 @@ static void test_skip_instruction(const uint8_t *bytes, size_t size, size_t *off
     if (immediate != XR_CORE_IR_IMMEDIATE_NONE) {
         (void) test_take_uvar(bytes, size, offset);
         if (immediate == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD ||
+            immediate == XR_CORE_IR_IMMEDIATE_MODULE_SLOT ||
             immediate == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION ||
             immediate == XR_CORE_IR_IMMEDIATE_COROUTINE_CALL)
             (void) test_take_uvar(bytes, size, offset);
@@ -6447,7 +6449,13 @@ static void test_aggregate_construct_owner_transfers(void) {
     CHECK(accepted + rejected == XR_PROGRAM_CONSTRUCT_CASE_COUNT);
 }
 
+#include "xr_program_module_operation_checks.inc.c"
+
 int main(void) {
+    test_module_operation_admission();
+    test_module_const_place_survives_branch();
+    test_module_place_ref_call_admission();
+    test_module_place_ref_interface_admission();
     test_aggregate_construct_owner_transfers();
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();

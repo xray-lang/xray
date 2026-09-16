@@ -530,6 +530,10 @@ static void hash_immediate(XrSHA256Context *context, const XrBackendInstruction 
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             hash_u32(context, instruction->immediate.function_id);
             return;
+        case XR_CORE_IR_IMMEDIATE_MODULE_SLOT:
+            hash_u32(context, instruction->immediate.module_slot.module_index);
+            hash_u32(context, instruction->immediate.module_slot.slot_index);
+            return;
         case XR_CORE_IR_IMMEDIATE_FIELD:
             hash_u32(context, instruction->immediate.field_ordinal);
             return;

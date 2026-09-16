@@ -341,7 +341,8 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "class-construct", "class-share", "class-field-load", "class-field-place",
             "block-arguments", "branch", "cancel-publish", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
-            "place-exchange", "place-local", "place-project", "place-store", "place-take", "return",
+            "place-exchange", "place-local", "place-module", "place-initialize",
+            "place-project", "place-store", "place-take", "return",
             "scalar-oracle", "sealed-call",
             "sealed-invoke", "indirect-call", "indirect-invoke", "witness-call",
             "witness-invoke", "callable-pack", "variant-construct",
@@ -1151,6 +1152,26 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                     ("owner" if ownership == "affine" else "non-owner")
                 and actual.get("result_ownership") == "non-owner"
                 and actual.get("storage_relation") == "aliases-operand-storage")
+    if validator == "place-module":
+        return (actual.get("slot_type") == actual.get("result_type")
+                and actual.get("slot_type") not in {None, "void"}
+                and actual.get("operand_count") == 0
+                and actual.get("module_exists") is True
+                and actual.get("slot_exists") is True
+                and actual.get("result_category") == "place"
+                and actual.get("result_ownership") == "non-owner"
+                and actual.get("storage_owner") == "execution-instance")
+    if validator == "place-initialize":
+        ownership = actual.get("type_ownership")
+        return (actual.get("place_type") == actual.get("value_type")
+                and actual.get("place_category") == "place"
+                and actual.get("place_origin") == "module-slot"
+                and actual.get("value_category") == "value"
+                and actual.get("result_type") == "void"
+                and actual.get("owning_initializer") is True
+                and ownership in {"trivial", "affine"}
+                and actual.get("value_ownership") ==
+                    ("owner" if ownership == "affine" else "non-owner"))
     if validator == "place-load":
         ownership = actual.get("type_ownership")
         return (actual.get("operand_type") == actual.get("result_type")

@@ -206,6 +206,7 @@ typedef enum XrCoreIrImmediateKind {
     XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
     XR_CORE_IR_IMMEDIATE_COROUTINE_CALL,
     XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND,
+    XR_CORE_IR_IMMEDIATE_MODULE_SLOT,
 } XrCoreIrImmediateKind;
 
 /* A place is a verifier-confined SSA capability naming typed storage. It is
@@ -266,6 +267,10 @@ typedef struct XrCoreIrInstructionInput {
         uint32_t u32;
         bool boolean;
         XrCoreIrKey key;
+        struct {
+            XrCoreIrKey module;
+            XrCoreIrKey declaration;
+        } module_slot;
         uint32_t field_ordinal;
         uint32_t variant_ordinal;
         struct {

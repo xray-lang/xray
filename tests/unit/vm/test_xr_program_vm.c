@@ -4366,6 +4366,33 @@ static int run_h2_class_differential_probe(const char *mode) {
     return 0;
 }
 
+#include "../program/xr_program_module_fixture.h"
+
+static void test_module_operations_require_runtime_activation(void) {
+    _Static_assert(XR_CORE_OP_CORE_PLACE_MODULE == 152, "module place stable id drifted");
+    _Static_assert(XR_CORE_OP_CORE_PLACE_INITIALIZE == 153, "initialization stable id drifted");
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_module_initializer_fixture_write(false, &artifact, NULL, 0u) ==
+            XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) ==
+            XR_PROGRAM_VERIFY_OK);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.decode_policy = policy ? XR_VM_DECODE_FIXED_ROWS : XR_VM_DECODE_BASELINE_VIEW;
+        XrVmCode *code = NULL;
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) ==
+                XR_VM_CODE_UNSUPPORTED_OPERATION);
+        REQUIRE(code == NULL);
+    }
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
 int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "--h2-class-differential") == 0)
         return run_h2_class_differential_probe(argv[2]);
@@ -4380,6 +4407,7 @@ int main(int argc, char **argv) {
     test_provider_trap_continuation_differential();
     test_pipe_provider_call_differential();
     test_provider_output_differential();
+    test_module_operations_require_runtime_activation();
     test_text_differential();
     test_sealed_invoke_and_cleanup_cfg();
     test_typed_panic_invoke_and_cleanup_cfg();

@@ -464,6 +464,10 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             output->immediate.key = input->immediate.key;
             break;
+        case XR_CORE_IR_IMMEDIATE_MODULE_SLOT:
+            output->immediate.module_slot.module = input->immediate.module_slot.module;
+            output->immediate.module_slot.declaration = input->immediate.module_slot.declaration;
+            break;
         case XR_CORE_IR_IMMEDIATE_FIELD:
             output->immediate.field_ordinal = input->immediate.field_ordinal;
             break;

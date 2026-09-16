@@ -56,6 +56,10 @@ typedef struct XrCoreIrInstruction {
         uint32_t u32;
         bool boolean;
         XrCoreIrKey key;
+        struct {
+            XrCoreIrKey module;
+            XrCoreIrKey declaration;
+        } module_slot;
         uint32_t field_ordinal;
         uint32_t variant_ordinal;
         struct {

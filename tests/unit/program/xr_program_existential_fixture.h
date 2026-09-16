@@ -20,6 +20,9 @@ typedef enum XrProgramExistentialFixtureMutation {
     XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_TRAP_LOST_OWNER,
     XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP,
     XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_TRAP_BAD_TARGET,
+    XR_EXISTENTIAL_FIXTURE_MODULE_REF,
+    XR_EXISTENTIAL_FIXTURE_CONST_MODULE_REF,
+    XR_EXISTENTIAL_FIXTURE_MODULE_REF_MISSING_TRAP,
 } XrProgramExistentialFixtureMutation;
 
 enum {
@@ -865,6 +868,46 @@ xr_program_existential_fixture_write_mutated(XrProgramExistentialFixtureMutation
         .functions = functions,
         .function_count = 5u,
     };
+    XrCoreIrModuleSlotInput module_slot = {
+        .key = xr_existential_fixture_key("module-rect"),
+        .type_id = XR_EXISTENTIAL_FIXTURE_RECT_TYPE,
+        .flags = mutation == XR_EXISTENTIAL_FIXTURE_CONST_MODULE_REF
+                     ? XR_PROGRAM_MODULE_SLOT_CONST : 0u,
+    };
+    XrCoreIrInstructionInput initializer_return = {.operation_id = XR_CORE_OP_CORE_RETURN};
+    XrCoreIrBlockInput initializer_block = {
+        .key = xr_existential_fixture_key("module-initializer-block"),
+        .instructions = &initializer_return, .instruction_count = 1u,
+    };
+    XrCoreIrFunctionInput module_functions[6];
+    if (mutation == XR_EXISTENTIAL_FIXTURE_MODULE_REF ||
+        mutation == XR_EXISTENTIAL_FIXTURE_CONST_MODULE_REF ||
+        mutation == XR_EXISTENTIAL_FIXTURE_MODULE_REF_MISSING_TRAP) {
+        memcpy(module_functions, functions, sizeof(functions));
+        module_functions[5] = (XrCoreIrFunctionInput) {
+            .key = xr_existential_fixture_key("module-initializer"),
+            .entry_block = initializer_block.key, .blocks = &initializer_block, .block_count = 1u,
+        };
+        if (mutation != XR_EXISTENTIAL_FIXTURE_MODULE_REF_MISSING_TRAP)
+            module_functions[4].effect_mask |= XR_CORE_EFFECT_TRAP;
+        module.functions = module_functions;
+        module.function_count = 6u;
+        module.initializer = module_functions[5].key;
+        module.slots = &module_slot;
+        module.slot_count = 1u;
+        for (size_t index = 0u; index < sizeof(entry_instructions) / sizeof(entry_instructions[0]);
+             ++index) {
+            XrCoreIrInstructionInput *instruction = &entry_instructions[index];
+            if (instruction->operation_id != XR_CORE_OP_CORE_PLACE_LOCAL)
+                continue;
+            instruction->operation_id = XR_CORE_OP_CORE_PLACE_MODULE;
+            instruction->operands = NULL;
+            instruction->operand_count = 0u;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_MODULE_SLOT;
+            instruction->immediate.module_slot.module = module.key;
+            instruction->immediate.module_slot.declaration = module_slot.key;
+        }
+    }
     XrCoreIrKey profile = xr_existential_fixture_key("wave4:semantic-profile");
     uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
     XrCoreIrProgramInput input = {

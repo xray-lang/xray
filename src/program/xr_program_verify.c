@@ -1119,7 +1119,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         instruction->operands[operand] = (uint32_t) value;
     }
     uint64_t immediate_kind = take_uvar(reader);
-    if (immediate_kind > XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND) {
+    if (immediate_kind > XR_CORE_IR_IMMEDIATE_MODULE_SLOT) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
         return false;
     }
@@ -1164,6 +1164,17 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
                 return false;
             }
             instruction->immediate.function_id = (uint32_t) value;
+            break;
+        }
+        case XR_CORE_IR_IMMEDIATE_MODULE_SLOT: {
+            uint64_t module = take_uvar(reader);
+            uint64_t slot = take_uvar(reader);
+            if (module > UINT32_MAX || slot > UINT32_MAX) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            instruction->immediate.module_slot.module_index = (uint32_t) module;
+            instruction->immediate.module_slot.slot_index = (uint32_t) slot;
             break;
         }
         case XR_CORE_IR_IMMEDIATE_FIELD: {
@@ -2901,7 +2912,8 @@ static bool operation_consumes_operand(const VerifyContext *context,
          instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE) &&
         operand_index == 0u)
         return true;
-    if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE && operand_index == 1u)
+    if ((instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
+         instruction->operation_id == XR_CORE_OP_CORE_PLACE_INITIALIZE) && operand_index == 1u)
         return true;
     if (instruction->operation_id == XR_CORE_OP_CORE_RETURN && operand_index == 0u)
         return true;
@@ -2973,6 +2985,180 @@ static const XrValidatedInstruction *affine_borrow_definition(const XrValidatedF
     const XrValidatedInstruction *instruction =
         &function->blocks[block_id].instructions[instruction_id];
     return instruction->result_id == value_id ? instruction : NULL;
+}
+
+static const XrValidatedModuleSlot *module_slot_for_instruction(
+    const XrValidatedProgram *program, const XrValidatedInstruction *instruction) {
+    if (!instruction || instruction->operation_id != XR_CORE_OP_CORE_PLACE_MODULE ||
+        instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_MODULE_SLOT ||
+        instruction->immediate.module_slot.module_index >= program->module_count)
+        return NULL;
+    const XrValidatedModule *module =
+        &program->modules[instruction->immediate.module_slot.module_index];
+    return instruction->immediate.module_slot.slot_index < module->slot_count
+               ? &module->slots[instruction->immediate.module_slot.slot_index]
+               : NULL;
+}
+
+enum {
+    MODULE_PLACE_PRESENT = 1u,
+    MODULE_PLACE_CONST = 2u,
+};
+
+/* Resolve SSA place aliases without publishing another semantic graph. A
+ * merged place retains the restrictions of every possible module origin. */
+static bool module_place_properties(VerifyContext *context, const XrValidatedFunction *function,
+                                     uint32_t value_id, uint8_t *properties) {
+    *properties = 0u;
+    if (context->program->module_slot_count == 0u ||
+        (function->value_categories[value_id] != XR_CORE_IR_PLACE &&
+         !type_is_existential_ref(context->program, function->value_types[value_id])))
+        return true;
+    uint32_t *pending = xr_malloc((size_t) function->value_count * sizeof(*pending));
+    bool *seen = xr_calloc(function->value_count, sizeof(*seen));
+    if (!pending || !seen) {
+        xr_free(pending);
+        xr_free(seen);
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, no_location());
+        return false;
+    }
+    uint32_t count = 1u;
+    pending[0] = value_id;
+    seen[value_id] = true;
+    bool valid = true;
+    for (uint32_t cursor = 0u; valid && cursor < count; ++cursor) {
+        uint32_t value = pending[cursor];
+        if (!spend(context, 1u, no_location())) {
+            valid = false;
+            break;
+        }
+        const XrValidatedInstruction *definition = affine_borrow_definition(function, value);
+        const XrValidatedModuleSlot *slot = module_slot_for_instruction(context->program, definition);
+        if (slot) {
+            *properties |= MODULE_PLACE_PRESENT;
+            if ((slot->flags & XR_PROGRAM_MODULE_SLOT_CONST) != 0u)
+                *properties |= MODULE_PLACE_CONST;
+        } else if (definition && definition->operand_count == 1u &&
+                   (definition->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
+                    definition->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
+                    definition->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT ||
+                    definition->operation_id == XR_CORE_OP_CORE_OWNER_MOVE)) {
+            uint32_t source = definition->operands[0];
+            if (source >= function->value_count) {
+                valid = false;
+                break;
+            }
+            if (!seen[source]) {
+                seen[source] = true;
+                pending[count++] = source;
+            }
+        } else if (!definition) {
+            uint32_t block_id = function->value_blocks[value];
+            if (block_id == function->entry_block)
+                continue;
+            const XrValidatedBlock *block = &function->blocks[block_id];
+            uint32_t ordinal = 0u;
+            while (ordinal < block->argument_count && block->argument_ids[ordinal] != value)
+                ++ordinal;
+            for (uint32_t predecessor = 0u; valid && predecessor < function->block_count;
+                 ++predecessor) {
+                const XrValidatedBlock *source_block = &function->blocks[predecessor];
+                if (!spend(context, 1u, no_location())) {
+                    valid = false;
+                    break;
+                }
+                if (source_block->instruction_count == 0u)
+                    continue;
+                const XrValidatedInstruction *edge =
+                    &source_block->instructions[source_block->instruction_count - 1u];
+                for (uint32_t successor = 0u; successor < edge->successor_count; ++successor) {
+                    uint32_t source = XR_PROGRAM_LOCATION_NONE;
+                    if (edge->successors[successor] != block_id ||
+                        !edge_argument_source(context->program, function, edge, successor,
+                                               ordinal, &source))
+                        continue;
+                    if (source >= function->value_count) {
+                        valid = false;
+                        break;
+                    }
+                    if (!seen[source]) {
+                        seen[source] = true;
+                        pending[count++] = source;
+                    }
+                }
+            }
+        }
+    }
+    xr_free(seen);
+    xr_free(pending);
+    return valid;
+}
+
+static bool module_place_use_is_valid(VerifyContext *context,
+                                       const XrValidatedFunction *function,
+                                       const XrValidatedInstruction *instruction,
+                                       uint32_t operand, XrProgramSemanticLocation location,
+                                       uint32_t *effects) {
+    uint8_t properties = 0u;
+    if (!module_place_properties(context, function, instruction->operands[operand], &properties))
+        return false;
+    if ((properties & MODULE_PLACE_PRESENT) == 0u)
+        return true;
+    bool replacement = instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
+                       instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE;
+    if (operand == 0u && (replacement || instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
+                          instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT))
+        *effects |= XR_CORE_EFFECT_TRAP;
+    const XrValidatedSignature *callee =
+        operation_call_signature(context->program, function, instruction);
+    uint32_t prefix = call_operand_prefix(instruction->operation_id);
+    bool mutable_call = callee && operand >= prefix &&
+                        operand - prefix < callee->parameter_count &&
+                        callee->parameter_modes[operand - prefix] == XR_PARAM_REF;
+    if (mutable_call)
+        *effects |= XR_CORE_EFFECT_TRAP;
+    bool mutable_interface = operand == 0u &&
+                             instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK &&
+                             type_is_existential_ref(context->program, instruction->result_type_id);
+    if ((properties & MODULE_PLACE_CONST) != 0u &&
+        (replacement || mutable_call || mutable_interface)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+        return false;
+    }
+    return true;
+}
+
+static bool verify_module_place(VerifyContext *context, uint32_t function_id,
+                                 const XrValidatedInstruction *instruction,
+                                 XrProgramSemanticLocation location) {
+    const XrValidatedFunction *function = &context->program->functions[function_id];
+    if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_MODULE) {
+        const XrValidatedModuleSlot *slot =
+            module_slot_for_instruction(context->program, instruction);
+        if (slot && expect_shape(context, instruction, location, 0u, 0u,
+                                  XR_CORE_IR_IMMEDIATE_MODULE_SLOT, slot->type_id, true) &&
+            instruction->result_category == XR_CORE_IR_PLACE &&
+            instruction->result_ownership == XR_CORE_IR_NON_OWNER)
+            return true;
+    } else if (instruction->operand_count == 2u) {
+        const XrValidatedInstruction *place =
+            affine_borrow_definition(function, instruction->operands[0]);
+        const XrValidatedModuleSlot *slot = module_slot_for_instruction(context->program, place);
+        if (slot &&
+            context->program->modules[place->immediate.module_slot.module_index].initializer ==
+                function_id &&
+            expect_shape(context, instruction, location, 2u, 0u,
+                          XR_CORE_IR_IMMEDIATE_NONE, XR_CORE_TYPE_VOID, false) &&
+            operand_type_is(function, instruction, 0u, slot->type_id) &&
+            operand_type_is(function, instruction, 1u, slot->type_id) &&
+            operand_category_is(function, instruction, 0u, XR_CORE_IR_PLACE) &&
+            operand_category_is(function, instruction, 1u, XR_CORE_IR_VALUE) &&
+            operand_ownership_is(function, instruction, 1u,
+                                  ownership_for_type(context->program, slot->type_id)))
+            return true;
+    }
+    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+    return false;
 }
 
 static bool frame_stable_non_owner_reference(VerifyContext *context,
@@ -3942,6 +4128,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
     *local_capabilities |= spec->capability_mask;
     XrCoreIrValueCategory expected_result_category =
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+                instruction->operation_id == XR_CORE_OP_CORE_PLACE_MODULE ||
                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
                 instruction->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE
             ? XR_CORE_IR_PLACE
@@ -3992,6 +4179,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_INITIALIZE ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_PROJECT ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE ||
         instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE ||
@@ -4004,6 +4192,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
             return false;
         }
+        if (!module_place_use_is_valid(context, function, instruction, operand, location,
+                                         local_effects))
+            return false;
         if (consumed[instruction->operands[operand]]) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
             return false;
@@ -5279,6 +5470,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             return true;
         }
+        case XR_CORE_OP_CORE_PLACE_MODULE:
+        case XR_CORE_OP_CORE_PLACE_INITIALIZE:
+            return verify_module_place(context, function_id, instruction, location);
         case XR_CORE_OP_CORE_PLACE_LOCAL:
             if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
                               instruction->result_type_id, true) ||

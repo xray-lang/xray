@@ -388,7 +388,7 @@ exactness is checked only after live-in propagation reaches its fixed point.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 29e783f5ca97543187e7ce88926c997f14b452ca10469f80dd570e583ea4081d
+anchor-sha256: CMakeLists.txt 47ee39ca24a9504213c739915c436c514ca17c48d1f48d1ed9675bbadcba4255
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d

@@ -710,6 +710,7 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.c
             ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_verify.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/program/xr_program_module_operation_checks.inc.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-verifier-v1.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-semantic-coverage.json
     COMMENT "Checking XrProgram semantic admission and evaluator coverage"

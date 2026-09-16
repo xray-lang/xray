@@ -501,7 +501,7 @@ verification-test: test_xtp_format
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 29e783f5ca97543187e7ce88926c997f14b452ca10469f80dd570e583ea4081d
+anchor-sha256: CMakeLists.txt 47ee39ca24a9504213c739915c436c514ca17c48d1f48d1ed9675bbadcba4255
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h 816a42a2d3d0843c90cf00b567eec69c45822d2545ed65b8807e86d4fe4dc62f
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d

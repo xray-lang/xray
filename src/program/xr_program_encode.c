@@ -874,6 +874,23 @@ static bool provider_operation_index(const XrCoreIrProgram *program, XrStableId 
     return false;
 }
 
+static void encode_module_slot(ByteBuffer *buffer, const XrCoreIrProgram *program,
+                                const XrCoreIrInstruction *instruction) {
+    const XrCoreIrModule *module =
+        module_for_key(program, instruction->immediate.module_slot.module);
+    if (module && !xr_core_ir_key_is_zero(module->initializer)) {
+        for (uint32_t slot = 0u; slot < module->slot_count; ++slot) {
+            if (!xr_core_ir_key_equal(module->slots[slot].key,
+                                      instruction->immediate.module_slot.declaration))
+                continue;
+            buffer_put_uvar(buffer, module->initialization_order);
+            buffer_put_uvar(buffer, slot);
+            return;
+        }
+    }
+    buffer->status = XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
+}
+
 static void encode_instruction(ByteBuffer *buffer, const XrCoreIrProgram *program,
                                const XrCoreIrInstruction *instruction,
                                const XrCoreIrFunction *function, const FunctionRef *functions,
@@ -915,6 +932,9 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrProgram *progra
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             (void) function_id(functions, function_count, instruction->immediate.key, &id);
             buffer_put_uvar(buffer, id);
+            break;
+        case XR_CORE_IR_IMMEDIATE_MODULE_SLOT:
+            encode_module_slot(buffer, program, instruction);
             break;
         case XR_CORE_IR_IMMEDIATE_FIELD:
             buffer_put_uvar(buffer, instruction->immediate.field_ordinal);

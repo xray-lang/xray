@@ -44,6 +44,10 @@ typedef struct XrBackendInstruction {
         bool boolean;
         uint32_t constant_id;
         uint32_t function_id;
+        struct {
+            uint32_t module_index;
+            uint32_t slot_index;
+        } module_slot;
         uint32_t field_ordinal;
         uint32_t variant_ordinal;
         struct {

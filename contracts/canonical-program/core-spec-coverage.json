@@ -1,9 +1,9 @@
 {
   "schema": "xray-core-spec-coverage/1",
-  "semantic_sha256": "204cc49d70e29708aaab90a71101fb670b19ce5d0781e7479fe830326b2ab297",
+  "semantic_sha256": "d76caa30d00d3f3f4b89b83af7b55eda220a3fff4bc855afca1cbf6e6228b8e7",
   "epoch": 1,
-  "operation_count": 68,
-  "normative_kat_count": 292,
+  "operation_count": 70,
+  "normative_kat_count": 306,
   "operations": [
     {
       "stable_id": 1,
@@ -2044,14 +2044,83 @@
           "task": 300
         }
       }
+    },
+    {
+      "stable_id": 152,
+      "spelling": "core.place.module",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 153,
+      "spelling": "core.place.initialize",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
     }
   ],
   "missing_rows": {
     "spec_oracle": [],
     "decoder": [],
     "verifier": [],
-    "evaluator": [],
-    "vm": [],
-    "aot": []
+    "evaluator": [
+      "core.place.module",
+      "core.place.initialize"
+    ],
+    "vm": [
+      "core.place.module",
+      "core.place.initialize"
+    ],
+    "aot": [
+      "core.place.module",
+      "core.place.initialize"
+    ]
   }
 }

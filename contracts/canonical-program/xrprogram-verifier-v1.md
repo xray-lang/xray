@@ -39,6 +39,24 @@ also participates in every-allocation failure injection. These are immutable
 declaration facts; mutable storage, initialization and drop still belong to the
 execution instance and are not established by admitting the table alone.
 
+Module place construction resolves immediate kind 13, a bounded pair of module
+and declaration-slot indices, against that immutable table. Its result has the
+slot's exact TypeId, place category and non-owner disposition. First publication
+accepts only a direct module place in its owning initializer and consumes the
+type's required ownership disposition. It cannot initialize a local, projected
+or foreign module place. Duplicate publication remains a runtime trap because
+control flow determines whether the first publication executed.
+
+Const restrictions follow projections and every incoming SSA edge, including
+loop backedges. A const-origin place cannot be stored, exchanged or passed to a
+mutable REF parameter. The traversal uses bounded temporary worklists and leaves
+the validated Program as the sole semantic owner. Accessing module storage, or
+passing it to a REF call, contributes the trap effect for uninitialized storage;
+ordinary local-place rules remain unchanged. Module places cannot satisfy the
+local-storage origin required by take. These admission checks do not establish
+instance storage lifetime, cross-entry scheduling or backend execution: VM and
+native activation are still refused until those mechanisms are implemented.
+
 The CoreSpec semantic fingerprint excludes consumer coverage, KAT routing, editorial descriptions
 and tombstone prose. Advancing a verifier/VM/AOT implementation therefore cannot invalidate a
 program whose language meaning did not change; changing a normative type, operation, effect,

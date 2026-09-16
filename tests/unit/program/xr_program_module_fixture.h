@@ -80,4 +80,52 @@ static inline void xr_program_module_fixture_add_slots(XrProgramModuleFixture *f
     }
 }
 
+static inline XrProgramBuildStatus xr_program_module_initializer_fixture_write(
+    bool string_value, XrProgramArtifact *artifact, char *diagnostic, size_t diagnostic_size) {
+    XrProgramModuleFixture fixture;
+    xr_program_module_fixture_init(&fixture);
+    xr_program_module_fixture_add_slots(&fixture);
+    XrCoreIrKey operands[] = {xr_core_ir_key("place", 5u), xr_core_ir_key("initial", 7u)};
+    XrCoreIrConstantInput constant = {
+        .key = xr_core_ir_key("forty", 5u), .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64, .value.i64 = 40,
+    };
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_PLACE_MODULE,
+         .result = operands[0], .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_MODULE_SLOT,
+         .immediate.module_slot = {fixture.modules[0].key, fixture.slots[0][0].key}},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = operands[1], .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT, .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_INITIALIZE,
+         .operands = operands, .operand_count = 2u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN},
+    };
+    if (string_value) {
+        fixture.slots[0][0].type_id = XR_CORE_TYPE_STRING;
+        constant.type_id = XR_CORE_TYPE_STRING;
+        constant.kind = XR_CORE_IR_CONSTANT_STRING;
+        constant.value.string.bytes = (const uint8_t *) "module-owned-text";
+        constant.value.string.size = 17u;
+        instructions[0].result_type_id = XR_CORE_TYPE_STRING;
+        instructions[1].operation_id = XR_CORE_OP_CORE_CONSTANT_STRING;
+        instructions[1].result_type_id = XR_CORE_TYPE_STRING;
+        instructions[1].result_ownership = XR_CORE_IR_OWNER;
+    }
+    fixture.modules[0].constants = &constant;
+    fixture.modules[0].constant_count = 1u;
+    fixture.blocks[0].instructions = instructions;
+    fixture.blocks[0].instruction_count = 4u;
+    fixture.functions[0].effect_mask = XR_CORE_EFFECT_TRAP;
+    XrCoreIrProgram *program = NULL;
+    XrProgramBuildStatus status =
+        xr_core_ir_program_build(&fixture.input, &program, diagnostic, diagnostic_size);
+    if (status == XR_PROGRAM_BUILD_OK)
+        status = xr_program_write(program, artifact, diagnostic, diagnostic_size);
+    xr_core_ir_program_free(program);
+    return status;
+}
+
 #endif  // XR_PROGRAM_MODULE_FIXTURE_H

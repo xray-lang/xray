@@ -374,11 +374,11 @@ static void test_determinism_roundtrip_and_identity(void) {
 
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
-    /* Independently derived from the fixed 3.1 byte vector by changing only
-     * the minor to two. Its empty module table has no slot rows. */
+    /* Independently derived from the fixed 3.2 byte vector by replacing only
+     * the semantic CoreSpec digest after hashing its normative registry projection. */
     CHECK(first.size == 477u);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
-    CHECK(strcmp(id_hex, "93be412037a9667162cc7ec2de9fd1ebf69d8071654c33ad418f3ce6276c4e22") == 0);
+    CHECK(strcmp(id_hex, "6682077204a66117463399407c84cf640b9633863ec8bfea0dafc9c4bf4363fe") == 0);
 
     xr_program_artifact_free(&reencoded);
     xr_program_artifact_free(&rerooted);
@@ -674,6 +674,10 @@ static XrProgramBuildStatus write_allocation_fixture(uint32_t fixture, XrProgram
             return write_module_initialization_fixture(artifact, diagnostic, diagnostic_size);
         case 5u:
             return write_module_slots_fixture(artifact, diagnostic, diagnostic_size);
+        case 6u:
+        case 7u:
+            return xr_program_module_initializer_fixture_write(fixture == 7u, artifact, diagnostic,
+                                                                 diagnostic_size);
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -939,7 +943,7 @@ int main(void) {
     test_module_slots_hostile_wire();
     test_module_initialization_construction();
     test_module_initialization_hostile_wire();
-    for (uint32_t fixture = 0u; fixture < 6u; ++fixture)
+    for (uint32_t fixture = 0u; fixture < 8u; ++fixture)
         test_constructor_allocation_failures(fixture);
     test_partial_core_ir_construction();
     test_determinism_roundtrip_and_identity();

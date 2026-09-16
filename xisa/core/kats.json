@@ -7987,6 +7987,264 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "id": "place-module-instance-slot",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "i64",
+        "operand_count": 0,
+        "module_exists": true,
+        "slot_exists": true,
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "storage_owner": "execution-instance"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-module-reject-slot_exists",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "i64",
+        "operand_count": 0,
+        "module_exists": true,
+        "slot_exists": false,
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "storage_owner": "execution-instance"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-module-reject-module_exists",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "i64",
+        "operand_count": 0,
+        "module_exists": false,
+        "slot_exists": true,
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "storage_owner": "execution-instance"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-module-reject-result_type",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "bool",
+        "operand_count": 0,
+        "module_exists": true,
+        "slot_exists": true,
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "storage_owner": "execution-instance"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-module-reject-storage_owner",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "i64",
+        "operand_count": 0,
+        "module_exists": true,
+        "slot_exists": true,
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "storage_owner": "code"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-module-reject-result_category",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "i64",
+        "operand_count": 0,
+        "module_exists": true,
+        "slot_exists": true,
+        "result_category": "value",
+        "result_ownership": "non-owner",
+        "storage_owner": "execution-instance"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-module-reject-operand_count",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "i64",
+        "operand_count": 1,
+        "module_exists": true,
+        "slot_exists": true,
+        "result_category": "place",
+        "result_ownership": "non-owner",
+        "storage_owner": "execution-instance"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-module-reject-result_ownership",
+      "operation": "core.place.module",
+      "kind": "contract",
+      "actual": {
+        "slot_type": "i64",
+        "result_type": "i64",
+        "operand_count": 0,
+        "module_exists": true,
+        "slot_exists": true,
+        "result_category": "place",
+        "result_ownership": "owner",
+        "storage_owner": "execution-instance"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-initialize-consume-owner",
+      "operation": "core.place.initialize",
+      "kind": "contract",
+      "actual": {
+        "place_type": "string",
+        "value_type": "string",
+        "place_category": "place",
+        "place_origin": "module-slot",
+        "value_category": "value",
+        "result_type": "void",
+        "owning_initializer": true,
+        "type_ownership": "affine",
+        "value_ownership": "owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-initialize-trivial",
+      "operation": "core.place.initialize",
+      "kind": "contract",
+      "actual": {
+        "place_type": "i64",
+        "value_type": "i64",
+        "place_category": "place",
+        "place_origin": "module-slot",
+        "value_category": "value",
+        "result_type": "void",
+        "owning_initializer": true,
+        "type_ownership": "trivial",
+        "value_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "place-initialize-reject-place_origin",
+      "operation": "core.place.initialize",
+      "kind": "contract",
+      "actual": {
+        "place_type": "string",
+        "value_type": "string",
+        "place_category": "place",
+        "place_origin": "local-storage-alias",
+        "value_category": "value",
+        "result_type": "void",
+        "owning_initializer": true,
+        "type_ownership": "affine",
+        "value_ownership": "owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-initialize-reject-owning_initializer",
+      "operation": "core.place.initialize",
+      "kind": "contract",
+      "actual": {
+        "place_type": "string",
+        "value_type": "string",
+        "place_category": "place",
+        "place_origin": "module-slot",
+        "value_category": "value",
+        "result_type": "void",
+        "owning_initializer": false,
+        "type_ownership": "affine",
+        "value_ownership": "owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-initialize-reject-value_type",
+      "operation": "core.place.initialize",
+      "kind": "contract",
+      "actual": {
+        "place_type": "string",
+        "value_type": "i64",
+        "place_category": "place",
+        "place_origin": "module-slot",
+        "value_category": "value",
+        "result_type": "void",
+        "owning_initializer": true,
+        "type_ownership": "affine",
+        "value_ownership": "owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "place-initialize-reject-value_ownership",
+      "operation": "core.place.initialize",
+      "kind": "contract",
+      "actual": {
+        "place_type": "string",
+        "value_type": "string",
+        "place_category": "place",
+        "place_origin": "module-slot",
+        "value_category": "value",
+        "result_type": "void",
+        "owning_initializer": true,
+        "type_ownership": "affine",
+        "value_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

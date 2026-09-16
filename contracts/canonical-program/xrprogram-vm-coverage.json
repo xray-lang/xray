@@ -23,7 +23,7 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 68,
+  "operation_count": 70,
   "operations": [
     {
       "stable_id": 1,
@@ -568,9 +568,28 @@
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 152,
+      "spelling": "core.place.module",
+      "vm": "NOT_YET_ACTIVE",
+      "baseline_view": "NOT_YET_ACTIVE",
+      "fixed_row_view": "NOT_YET_ACTIVE",
+      "differential_oracle": null
+    },
+    {
+      "stable_id": 153,
+      "spelling": "core.place.initialize",
+      "vm": "NOT_YET_ACTIVE",
+      "baseline_view": "NOT_YET_ACTIVE",
+      "fixed_row_view": "NOT_YET_ACTIVE",
+      "differential_oracle": null
     }
   ],
-  "incomplete_operations": [],
+  "incomplete_operations": [
+    "core.place.module",
+    "core.place.initialize"
+  ],
   "profile_matrix": [
     "lp64-x86_64-windows",
     "ilp32-wasm32-wasi"

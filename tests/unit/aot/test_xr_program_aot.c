@@ -3015,7 +3015,32 @@ static void seal_native_file(const char *path, const XrValidatedProgram *program
     xr_free(bytes);
 }
 
+#include "../program/xr_program_module_fixture.h"
+
+static void test_module_operations_require_native_activation(void) {
+    _Static_assert(XR_CORE_OP_CORE_PLACE_MODULE == 152, "module place stable id drifted");
+    _Static_assert(XR_CORE_OP_CORE_PLACE_INITIALIZE == 153, "initialization stable id drifted");
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_module_initializer_fixture_write(false, &artifact, NULL, 0u) ==
+            XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) ==
+            XR_PROGRAM_VERIFY_OK);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrBackendIR *ir = NULL;
+    XrBackendOptions options = xr_backend_default_options();
+    REQUIRE(xr_backend_ir_build(program, profile, &options, &ir, NULL) ==
+            XR_BACKEND_UNSUPPORTED_OPERATION);
+    REQUIRE(ir == NULL);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
 int main(int argc, char **argv) {
+    test_module_operations_require_native_activation();
     xr_test_suppress_dialogs();
     bool class_differential = argc == 3 &&
                               strcmp(argv[1], "--h2-class-differential") == 0;

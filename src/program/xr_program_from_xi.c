@@ -13432,6 +13432,49 @@ static bool cleanup_trap_capable_operation(uint16_t operation_id) {
     return operation && (operation->successor_mask & XR_CORE_SUCCESSOR_TRAP) != 0u;
 }
 
+static bool cleanup_place_has_local_storage(const XrCoreIrBlockInput *block, XrCoreIrKey place) {
+    /* Only a proved local or class-field root excludes module initialization
+     * traps. Unknown origins, including incoming place arguments, stay fallible. */
+    uint32_t before = block ? block->instruction_count : 0u;
+    while (before != 0u) {
+        const XrCoreIrInstructionInput *definition = NULL;
+        for (uint32_t index = before; index != 0u; --index) {
+            const XrCoreIrInstructionInput *candidate = &block->instructions[index - 1u];
+            if (candidate->result_category == XR_CORE_IR_PLACE &&
+                xr_core_ir_key_equal(candidate->result, place)) {
+                definition = candidate;
+                before = index - 1u;
+                break;
+            }
+        }
+        if (!definition || definition->operand_count != 1u || !definition->operands)
+            return false;
+        if (definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+            definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE)
+            return true;
+        if (definition->operation_id != XR_CORE_OP_CORE_PLACE_PROJECT)
+            return false;
+        place = definition->operands[0];
+    }
+    return false;
+}
+
+static bool cleanup_trap_capable_instruction(const XrCoreIrBlockInput *block,
+                                             const XrCoreIrInstructionInput *instruction) {
+    if (!instruction || !cleanup_trap_capable_operation(instruction->operation_id))
+        return false;
+    switch (instruction->operation_id) {
+    case XR_CORE_OP_CORE_PLACE_LOAD:
+    case XR_CORE_OP_CORE_PLACE_STORE:
+    case XR_CORE_OP_CORE_PLACE_PROJECT:
+    case XR_CORE_OP_CORE_PLACE_EXCHANGE:
+        return instruction->operand_count == 0u || !instruction->operands ||
+               !cleanup_place_has_local_storage(block, instruction->operands[0]);
+    default:
+        return true;
+    }
+}
+
 static bool cleanup_call_has_exact_active_handler_edge(const XrXiBuildContext *context,
                                                        const XrXiFunctionStorage *function,
                                                        const XiValue *call,
@@ -13603,7 +13646,7 @@ static XrProgramBuildStatus mark_cleanup_trap_projection_graph(
     projection->end_gap = end_limit;
     projection->ends_in_trap = false;
     for (uint32_t instruction = begin_gap; instruction < end_limit; ++instruction) {
-        if (!cleanup_trap_capable_operation(source->instructions[instruction].operation_id))
+        if (!cleanup_trap_capable_instruction(source, &source->instructions[instruction]))
             continue;
         projection->end_gap = instruction + 1u;
         projection->ends_in_trap = true;
@@ -13848,8 +13891,8 @@ static XrProgramBuildStatus prepare_cleanup_trap_projection_arguments(
 
     uint32_t owner_definition_limit = projection->begin_gap;
     if (owner_definition_limit > begin_limit &&
-        cleanup_trap_capable_operation(
-            source->instructions[owner_definition_limit - 1u].operation_id))
+        cleanup_trap_capable_instruction(
+            source, &source->instructions[owner_definition_limit - 1u]))
         --owner_definition_limit;
     uint64_t owner_capacity_wide = (uint64_t) source->argument_count + owner_definition_limit;
     if (owner_capacity_wide > UINT32_MAX || owner_capacity_wide > SIZE_MAX / sizeof(XrCoreIrKey))
@@ -14307,7 +14350,7 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
         uint32_t source_instruction = projection->begin_gap + instruction;
         XrCoreIrInstructionInput *candidate =
             &projection->trap_instructions[target_instruction - body_count + instruction];
-        if (!cleanup_trap_capable_operation(candidate->operation_id))
+        if (!cleanup_trap_capable_instruction(source, &source->instructions[source_instruction]))
             continue;
         if (!next || !projection->ends_in_trap || source_instruction + 1u != projection->end_gap) {
             xr_free(target_keys);
@@ -14525,7 +14568,9 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
             uint32_t trap_instruction_count = 0u;
             for (uint32_t instruction = span->begin; instruction < span->end; ++instruction) {
                 XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
-                if (!cleanup_trap_capable_operation(candidate->operation_id))
+                if (!cleanup_trap_capable_instruction(
+                        find_input_block(function, original_block_count,
+                                         block_key(function, block->xi)), candidate))
                     continue;
                 if (++trap_instruction_count != 1u)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -14603,7 +14648,9 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
             const XrXiEmissionSpan *span = &block->emission_spans[value_index];
             for (uint32_t instruction = span->begin; instruction < span->end; ++instruction) {
                 XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
-                if (!cleanup_trap_capable_operation(candidate->operation_id))
+                if (!cleanup_trap_capable_instruction(
+                        find_input_block(function, original_block_count,
+                                         block_key(function, block->xi)), candidate))
                     continue;
                 uint32_t handler_state = function->cleanup_handler_state_before_value[value->id];
                 if (handler_state != 0u) {

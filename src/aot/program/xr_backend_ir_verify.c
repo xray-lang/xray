@@ -1634,6 +1634,11 @@ static bool immediate_equal(const XrValidatedInstruction *source,
             return source->immediate.constant_id == lowered->immediate.constant_id;
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             return source->immediate.function_id == lowered->immediate.function_id;
+        case XR_CORE_IR_IMMEDIATE_MODULE_SLOT:
+            return source->immediate.module_slot.module_index ==
+                       lowered->immediate.module_slot.module_index &&
+                   source->immediate.module_slot.slot_index ==
+                       lowered->immediate.module_slot.slot_index;
         case XR_CORE_IR_IMMEDIATE_FIELD:
             return source->immediate.field_ordinal == lowered->immediate.field_ordinal;
         case XR_CORE_IR_IMMEDIATE_VARIANT:

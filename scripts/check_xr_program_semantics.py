@@ -19,6 +19,7 @@ PROGRAM_SCHEMA = Path("xisa/program/schema.json")
 VERIFIER = Path("src/program/xr_program_verify.c")
 EVALUATOR = Path("src/program/xr_reference_evaluator.c")
 TEST = Path("tests/unit/program/test_xr_program_verify.c")
+MODULE_TEST = Path("tests/unit/program/xr_program_module_operation_checks.inc.c")
 COVERAGE = Path("contracts/canonical-program/xrprogram-semantic-coverage.json")
 FORBIDDEN_DEPENDENCIES = ("/aot/", "/frontend/", "/ir/", "/plan/", "/vm/")
 
@@ -120,7 +121,9 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
 def validate_sources(registry: dict[str, Any], sources: dict[Path, str]) -> None:
     verifier = sources[VERIFIER]
     evaluator = sources[EVALUATOR]
-    test = sources[TEST]
+    require('#include "xr_program_module_operation_checks.inc.c"' in sources[TEST],
+            "module operation admission tests are not compiled")
+    test = sources[TEST] + "\n" + sources[MODULE_TEST]
     for path in (VERIFIER, EVALUATOR):
         for line in sources[path].splitlines():
             if not line.lstrip().startswith("#include"):
@@ -171,7 +174,7 @@ def check(root: Path, source_override: dict[Path, str] | None = None) -> None:
     header = (root / CORE_SPEC_HEADER).read_text(encoding="utf-8", errors="strict")
     sources = {
         path: (source_override or {}).get(path, (root / path).read_text(encoding="utf-8"))
-        for path in (VERIFIER, EVALUATOR, TEST)
+        for path in (VERIFIER, EVALUATOR, TEST, MODULE_TEST)
     }
     validate_sources(registry, sources)
     expected = canonical_json(expected_coverage(registry, program_schema, semantic_digest(header)))
@@ -181,6 +184,19 @@ def check(root: Path, source_override: dict[Path, str] | None = None) -> None:
 
 def self_test(root: Path) -> None:
     check(root)
+    test_source = (root / TEST).read_text(encoding="utf-8")
+    module_source = (root / MODULE_TEST).read_text(encoding="utf-8")
+    for overrides in (
+        {TEST: test_source.replace('#include "xr_program_module_operation_checks.inc.c"', '')},
+        {MODULE_TEST: module_source.replace('XR_CORE_OP_CORE_PLACE_MODULE', 'MISSING_OPERATION')},
+        {MODULE_TEST: module_source.replace('XR_CORE_OP_CORE_PLACE_INITIALIZE', 'MISSING_OPERATION')},
+    ):
+        try:
+            check(root, overrides)
+        except GateError:
+            pass
+        else:
+            raise GateError("missing module operation admission test was accepted")
     registry = read_json(root / REGISTRY)
     unmodeled = copy.deepcopy(registry)
     unmodeled["operations"][0]["coverage"]["evaluator"]["status"] = "NOT_APPLICABLE"
