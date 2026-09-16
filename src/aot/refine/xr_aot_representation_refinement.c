@@ -418,8 +418,8 @@ typedef struct VerifyAuthority {
 
 /* Program TargetPlans intentionally omit call rows for functions outside the
  * executable closure while retaining their complete semantic/type tables. The
- * representation pass must reproduce that same closure before treating an
- * absent call row as deliberate. Ordinary one-module TargetPlans have no
+ * representation pass must reproduce that same closure before collecting or
+ * replaying executable storage obligations. Ordinary one-module TargetPlans have no
  * partitioned program scope, so every function remains representation-live. */
 static bool aot_program_reachability_init(VerifyAuthority *ctx) {
     uint32_t partition_count = 0u;
@@ -7628,11 +7628,8 @@ static bool oracle_direct_local_callee_use(const VerifyAuthority *ctx, uint32_t 
         verify_target_function_index(ctx, operation->function, &caller_function) &&
         verify_target_function_index(ctx, ctx->direct_callee_target_by_value[source_value],
                                      &callee_function);
-    if (!exact_shape)
+    if (!exact_shape || !match)
         return false;
-    if (!match)
-        return ctx->program_reachability_active &&
-               !aot_program_function_is_reachable(ctx, operation->function);
     return match->semantic_call_target != XR_SEMANTIC_INDEX_NONE &&
            match->caller_function == caller_function && match->callee_function == callee_function &&
            match->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
@@ -7641,8 +7638,7 @@ static bool oracle_direct_local_callee_use(const VerifyAuthority *ctx, uint32_t 
 
 /* A direct yieldable native import is another resolution token. Reconstruct
  * the grounded import and the frozen semantic call target before consulting a
- * TargetPlan row. A missing row is valid only for a function proven outside
- * the exact program closure; a reachable call still requires its complete
+ * TargetPlan row. Every representation-live call requires its complete
  * suspending target row. */
 static bool oracle_native_yieldable_callee_use(const VerifyAuthority *ctx, uint32_t operation_index,
                                                uint16_t operand_index, uint32_t source_value) {
@@ -7741,8 +7737,7 @@ static bool oracle_native_yieldable_callee_use(const VerifyAuthority *ctx, uint3
     const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
     const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
     if (!call)
-        return ctx->program_reachability_active &&
-               !aot_program_function_is_reachable(ctx, operation->function);
+        return false;
     XrStableId expected_identity = {{0}};
     uint32_t caller_function = XR_SEMANTIC_INDEX_NONE;
     return verify_target_function_index(ctx, operation->function, &caller_function) &&
@@ -7788,11 +7783,8 @@ static bool oracle_native_module_scalar_callee_use(const VerifyAuthority *ctx,
         operands[operation->operand_begin].value == source_value &&
         operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
         xr_semantic_native_direct_scalar_call_shape_is_exact(ctx->semantic, operation, &entry);
-    if (!exact_shape)
+    if (!exact_shape || !call)
         return false;
-    if (!call)
-        return ctx->program_reachability_active &&
-               !aot_program_function_is_reachable(ctx, operation->function);
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
     XrStableId expected_identity = {{0}};
@@ -7851,7 +7843,8 @@ static bool oracle_resolution_only_use(const VerifyAuthority *ctx, uint32_t oper
     if (operation && operands && operand_index == 0 && operation->operand_count != 0 &&
         operation->operand_begin < operand_count &&
         operands[operation->operand_begin].value == source_value &&
-        xr_semantic_string_utf8_static_call_is_exact(ctx->semantic, operation, NULL, NULL))
+        (xr_semantic_string_utf8_static_call_is_exact(ctx->semantic, operation, NULL, NULL) ||
+         xr_semantic_runtime_constructor_is_exact(ctx->semantic, operation)))
         return true;
     const XrTargetValueRepRecord *binding = ctx ? verify_target_value_rep(ctx, source_value) : NULL;
     bool local = binding && binding->semantic_value == source_value &&
@@ -10257,6 +10250,8 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
             set_diag(ctx->diag, XR_AOT_REFINEMENT_USE_SITE, ctx->record_count, 0, i);
             return false;
         }
+        if (!aot_program_function_is_reachable(oracle, operation->function))
+            continue;
         for (uint16_t a = 0; a < operation->operand_count; a++) {
             uint32_t source_value = operands[operation->operand_begin + a].value;
             XrRep input_storage = XR_REP_TAGGED;
@@ -10314,7 +10309,8 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
     for (uint32_t i = 0; i < block_count; i++) {
         const XrSemanticBlockRecord *block = xr_semantic_plan_block(ctx->semantic, i);
         if (!block || block->kind != XI_BLOCK_RETURN ||
-            block->control_value == XR_SEMANTIC_INDEX_NONE)
+            block->control_value == XR_SEMANTIC_INDEX_NONE ||
+            !aot_program_function_is_reachable(oracle, block->function))
             continue;
         uint32_t source_operation = block->control_value < ctx->semantic_value_count
                                         ? ctx->operation_by_value[block->control_value]
@@ -11423,6 +11419,8 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
             set_diag(ctx->diag, XR_AOT_REFINEMENT_USE_SITE, i, 0, i);
             return false;
         }
+        if (!aot_program_function_is_reachable(ctx, operation->function))
+            continue;
         for (uint16_t a = 0; a < operation->operand_count; a++) {
             uint32_t source_value = operands[operation->operand_begin + a].value;
             XrRep output_storage = XR_REP_TAGGED;
@@ -11449,7 +11447,8 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
     }
     for (uint32_t i = 0; i < ctx->block_count; i++) {
         const XrSemanticBlockRecord *block = xr_semantic_plan_block(ctx->semantic, i);
-        if (!block || block->control_value == XR_SEMANTIC_INDEX_NONE)
+        if (!block || block->control_value == XR_SEMANTIC_INDEX_NONE ||
+            !aot_program_function_is_reachable(ctx, block->function))
             continue;
         if (!verify_charge_work(ctx, 1))
             return false;

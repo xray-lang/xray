@@ -297,11 +297,10 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", "net_udp_from_host", "normal", "", "xrt_net_udp_from_host", "v", "value", "", "", "", "runtime", "method", "fresh", "", "", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, true},
     {"net", "__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", "net_udp_from_port", "normal", "", "xrt_net_udp_from_port", "v", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 1, true},
 };
-#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
+#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) 153)
 
-static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
-};
-#define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
+static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[1] = {0};
+#define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) 0)
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
     {"Coro", "CoroStats", "active", "i64", true},
@@ -329,7 +328,7 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
 };
-#define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
+#define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) 3)
 
 static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroState_variants[] = {
     {"Unknown", NULL, 0},
@@ -354,7 +353,7 @@ static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
     {"Coro", "CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroGroupKey_variants, 2, UINT32_C(2434143071)},
     {"Coro", "CoroMetric", "Metric used to rank coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroMetric_variants, 2, UINT32_C(4039818693)},
 };
-#define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))
+#define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) 3)
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io___FileStat[] = {
     {"io", "__FileStat", "size", "i64", true},
@@ -372,13 +371,13 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io___FileStat[]
 static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
     {"io", "__FileStat", "Native handle type", xr_stdlib_handle_fields_io___FileStat, 10},
 };
-#define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
+#define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) 1)
 
 static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
     {"Coro", "CoroLocal", "set", "(value: T): ()", "Set this typed coroutine-local slot for the current coroutine"},
     {"Coro", "CoroLocal", "get", "(): T?", "Get this typed coroutine-local slot for the current coroutine"},
 };
-#define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
+#define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) 2)
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
     {"mem", "__BufferStorage", "objectClass", "memBufferClass", "xr_buffer_native_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER", "", ""},
@@ -386,19 +385,16 @@ static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = 
     {"net", "__NetListenerStorage", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NET_LISTENER_STORAGE", "NetListener", "_storage"},
     {"net", "__TlsContextStorage", "", "tlsContextStorageClass", "xr_tls_context_storage_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "", "", ""},
 };
-#define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
+#define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) 4)
 
-static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {
-};
-#define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_def_entries) / sizeof(xr_stdlib_class_def_entries[0])))
+static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[1] = {0};
+#define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) 0)
 
-static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {
-};
-#define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
+static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[1] = {0};
+#define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) 0)
 
-static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {
-};
-#define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_field_def_entries) / sizeof(xr_stdlib_class_field_def_entries[0])))
+static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[1] = {0};
+#define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT ((uint32_t) 0)
 
 #endif  /* XSTDLIB_DEFS_GENERATED_H */
 

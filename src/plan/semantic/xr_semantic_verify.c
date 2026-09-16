@@ -2316,10 +2316,10 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
     const XrSemanticTypeRecord *capacity_type =
         capacity && capacity->type < plan->type_count ? &plan->types[capacity->type] : NULL;
     uint8_t expected_storage = xr_semantic_array_element_storage(element);
-    bool source_class_element =
-        xr_semantic_class_instance_type_source_class(plan, element) != XR_SEMANTIC_INDEX_NONE;
+    bool managed_element =
+        xr_semantic_array_member_owned_reference_type_is_exact(plan, element);
     bool candidate = (expected_storage > XR_ELEM_ANY && expected_storage < XR_ELEM_RAWPTR) ||
-                     (source_class_element && expected_storage == XR_ELEM_ANY);
+                     (managed_element && expected_storage == XR_ELEM_ANY);
     if (!candidate)
         return operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR ||
                operation->array_element_storage == XR_ELEM_ANY ||
@@ -2331,7 +2331,7 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
         expected_storage == operation->array_element_storage &&
         ((operation->array_element_storage > XR_ELEM_ANY &&
           operation->array_element_storage < XR_ELEM_RAWPTR) ||
-         (source_class_element && operation->array_element_storage == XR_ELEM_ANY)) &&
+         (managed_element && operation->array_element_storage == XR_ELEM_ANY)) &&
         xr_semantic_array_member_i64_type_is_exact(capacity_type) &&
         capacity->role == XR_SEM_OPERAND_VALUE && capacity->parameter == -1 &&
         capacity->flags == 0 && capacity->ownership_action == XR_SEM_OPERAND_CONSUME &&
@@ -2347,8 +2347,15 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
         operation->result_alias_operand == -1 &&
         operation->return_provenance == XR_SEM_RETURN_OWNED && operation->return_parameter == -1 &&
         operation->return_complete == 1 && xr_semantic_allocation_identity_is_canonical(operation);
-    return exact || report(error, error_size, "XR_SEM_0019",
-                           "Array allocation element storage is not exact");
+    if (!exact && error && error_size)
+        snprintf(error, error_size,
+                 "XR_SEM_0019: Array allocation element storage is not exact "
+                 "(operation=%s line=%u element-kind=%u operands=%u storage=%u expected=%u "
+                 "intrinsic=%u immediate=%lld)",
+                 operation->canonical_key, operation->source_line, element ? element->kind : 0,
+                 operation->operand_count, operation->array_element_storage, expected_storage,
+                 operation->intrinsic_kind, (long long) operation->semantic_immediate);
+    return exact;
 }
 
 /* Independent frozen-row proof for the compiler-owned Array constructors.

@@ -875,7 +875,8 @@ set(XR_NATIVE_EXPECTED_optional_injection 747275650a66616c73650a2d370a747275650a
 set(XR_NATIVE_EXPECTED_unsigned_text 76616c75653d300a76616c75653d31383434363734343037333730393535313631350a)
 set(XR_NATIVE_EXPECTED_encoding_slice 48616c6c6f2048616c6c6f0a35203130340a747275652035203130340a747275652074727565207472756520747275650a)
 set(XR_NATIVE_EXPECTED_native_array 747275650a66616c73650a747275650a310a)
-foreach(XR_NATIVE_FIXTURE structural_root runtime_constructor coroutine_aggregate optional_injection unsigned_text encoding_slice native_array)
+set(XR_NATIVE_EXPECTED_structural_array "")
+foreach(XR_NATIVE_FIXTURE structural_root runtime_constructor coroutine_aggregate optional_injection unsigned_text encoding_slice native_array structural_array)
     string(REPLACE "_" "-" XR_NATIVE_SELECTOR ${XR_NATIVE_FIXTURE})
     if(XR_NATIVE_FIXTURE STREQUAL "optional_injection")
         set(XR_NATIVE_SELECTOR optional-injection-emission)
@@ -905,7 +906,7 @@ foreach(XR_NATIVE_FIXTURE structural_root runtime_constructor coroutine_aggregat
     add_test(NAME ${XR_NATIVE_TARGET}
         COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
             --executable $<TARGET_FILE:${XR_NATIVE_TARGET}>
-            --expected-exit 0 --expected-stdout-hex ${XR_NATIVE_EXPECTED_${XR_NATIVE_FIXTURE}})
+            --expected-exit 0 --expected-stdout-hex "${XR_NATIVE_EXPECTED_${XR_NATIVE_FIXTURE}}")
     set_tests_properties(${XR_NATIVE_TARGET} PROPERTIES LABELS "aot;cgen;ownership;native")
 endforeach()
 add_test(NAME test_xi_cgen_iterator_rune_nth_emission
@@ -2152,6 +2153,7 @@ add_test(
     NAME test_stdlib_generators_content_stable
     COMMAND ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/test_stdlib_generators_content_stable.py
+            --cc ${CMAKE_C_COMPILER}
 )
 set_tests_properties(test_stdlib_generators_content_stable PROPERTIES
     LABELS "stdlib;metadata;tooling;incremental-build"

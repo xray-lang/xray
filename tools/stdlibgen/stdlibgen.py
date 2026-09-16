@@ -2034,12 +2034,11 @@ def emit_aot_methods(
         if not enum:
             raise SystemExit(f"{e.symbol}: unknown aot_enum {e.module}.{e.aot_enum}")
         variants_name = f"g_aot_stdlib_{c_module_ident(e.module)}_{e.name}_enum_variants"
-        lines.append(f"static const char *const {variants_name}[] = {{")
-        for variant in enum.variants:
-            lines.append(f"    {c_string(variant.name)},")
-        lines.append("};")
-        lines.append("")
-    lines.append("static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {")
+        emit_metadata_table(
+            lines, "char *const", variants_name,
+            [f"    {c_string(variant.name)}," for variant in enum.variants]
+        )
+    method_rows = []
     for e in rows:
         if not e.aot:
             raise SystemExit(f"{e.symbol}: aot_direct requires aot symbol")
@@ -2055,7 +2054,7 @@ def emit_aot_methods(
         layout_id = stable_enum_layout_id(e.module, enum) if enum else 0
         enum_name = c_string(enum.name) if enum else "NULL"
         variant_count = len(enum.variants) if enum else 0
-        lines.append(
+        method_rows.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {argc_expr(e)}, {c_string(e.aot)}, "
             f"{c_string(e.arg_spec)}, "
@@ -2064,13 +2063,10 @@ def emit_aot_methods(
             f"{enum_name}, {variants_ref}, {variant_count}"
             "},"
         )
-    lines.append("};")
-    lines.append(
-        "#define CG_AOT_STDLIB_GENERATED_METHOD_COUNT "
-        "((int) (sizeof(g_aot_stdlib_generated_methods) / "
-        "sizeof(g_aot_stdlib_generated_methods[0])))"
+    emit_metadata_table(
+        lines, "CgAotStdlibMethod", "g_aot_stdlib_generated_methods", method_rows,
+        "CG_AOT_STDLIB_GENERATED_METHOD_COUNT", "int"
     )
-    lines.append("")
     lines.extend(
         [
             "typedef enum CgAotStdlibConstKind {",
@@ -2088,23 +2084,20 @@ def emit_aot_methods(
             "    int64_t i64_value;",
             "} CgAotStdlibConst;",
             "",
-            "static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {",
         ]
     )
+    constant_rows = []
     for c in const_rows:
-        lines.append(
+        constant_rows.append(
             "    {"
             f"{c_string(c.module)}, {c_string(c.name)}, {const_kind_expr(c)}, "
             f"{c_string(c.aot)}, {c_string(c.f64_value)}, {c_i64_literal(c.value)}"
             "},"
         )
-    lines.append("};")
-    lines.append(
-        "#define CG_AOT_STDLIB_GENERATED_CONST_COUNT "
-        "((int) (sizeof(g_aot_stdlib_generated_consts) / "
-        "sizeof(g_aot_stdlib_generated_consts[0])))"
+    emit_metadata_table(
+        lines, "CgAotStdlibConst", "g_aot_stdlib_generated_consts", constant_rows,
+        "CG_AOT_STDLIB_GENERATED_CONST_COUNT", "int"
     )
-    lines.append("")
     lines.append("static const CgAotStdlibConst *cg_aot_stdlib_generated_const_at(int index) {")
     lines.append("    if (index < 0 || index >= CG_AOT_STDLIB_GENERATED_CONST_COUNT)")
     lines.append("        return NULL;")
@@ -2505,6 +2498,22 @@ def emit_class_bindings(
     return "\n".join(lines)
 
 
+def emit_metadata_table(
+    lines: list[str], c_type: str, name: str, rows: list[str], count_macro: str = "",
+    count_type: str = "uint32_t"
+) -> None:
+    """Keep empty metadata tables valid C11 without counting the storage sentinel."""
+    if rows:
+        lines.append(f"static const {c_type} {name}[] = {{")
+        lines.extend(rows)
+        lines.append("};")
+    else:
+        lines.append(f"static const {c_type} {name}[1] = {{0}};")
+    if count_macro:
+        lines.append(f"#define {count_macro} (({count_type}) {len(rows)})")
+    lines.append("")
+
+
 def emit_defs_header(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
@@ -2655,9 +2664,9 @@ def emit_defs_header(
             "    const char *flags;",
             "} XrStdlibClassFieldDefEntry;",
             "",
-            "static const XrStdlibDefEntry xr_stdlib_def_entries[] = {",
         ]
     )
+    rows = []
     for e in entries:
         if e.argc == "variadic":
             argc = "UINT16_MAX"
@@ -2672,7 +2681,7 @@ def emit_defs_header(
         provider = e.provider_declaration
         if provider and admission_reasons(provider):
             provider = None
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {c_string(e.signature)}, "
             f"{c_string(e.doc)}, {c_string(e.vm)}, {c_string(e.vm_binding)}, "
@@ -2688,15 +2697,10 @@ def emit_defs_header(
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))",
-            "",
-            "static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibDefEntry", "xr_stdlib_def_entries", rows, "XR_STDLIB_DEF_ENTRY_COUNT"
     )
+    rows = []
     for c in constants:
         unknown_caps = [cap for cap in c.caps if cap not in RUNTIME_CAP_BITS]
         if unknown_caps:
@@ -2704,7 +2708,7 @@ def emit_defs_header(
         runtime_caps = (
             " | ".join(RUNTIME_CAP_BITS[cap] for cap in c.caps) if c.caps else "0"
         )
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(c.module)}, {c_string(c.name)}, {c_string(c.signature)}, "
             f"{c_string(c.doc)}, {c_string(c.vm)}, {c_string(c.vm_value)}, {c_string(c.aot)}, "
@@ -2713,44 +2717,33 @@ def emit_defs_header(
             f"{c_i64_literal(c.value)}, {c.f64_value}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_CONST_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_const_def_entries) / "
-            "sizeof(xr_stdlib_const_def_entries[0])))",
-            "",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibConstDefEntry", "xr_stdlib_const_def_entries", rows,
+        "XR_STDLIB_CONST_DEF_ENTRY_COUNT"
     )
     for object_shape in object_shapes:
         field_array = f"xr_stdlib_object_fields_{c_module_ident(object_shape.module)}_{object_shape.name}"
-        lines.append(f"static const XrStdlibHandleFieldDefEntry {field_array}[] = {{")
+        rows = []
         for field in object_shape.fields:
-            lines.append(
+            rows.append(
                 "    {"
                 f"{c_string(object_shape.module)}, {c_string(object_shape.name)}, {c_string(field.name)}, "
                 f"{c_string(field.type)}, {'true' if field.is_const else 'false'}"
                 "},"
             )
-        lines.append("};")
-        lines.append("")
-    lines.append("static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {")
+        emit_metadata_table(lines, "XrStdlibHandleFieldDefEntry", field_array, rows)
+    rows = []
     for object_shape in object_shapes:
         field_array = f"xr_stdlib_object_fields_{c_module_ident(object_shape.module)}_{object_shape.name}"
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(object_shape.module)}, {c_string(object_shape.name)}, {c_string(object_shape.doc)}, "
             f"{field_array}, {len(object_shape.fields)}, {'true' if object_shape.exact else 'false'}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / "
-            "sizeof(xr_stdlib_object_shape_def_entries[0])))",
-            "",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibObjectShapeDefEntry", "xr_stdlib_object_shape_def_entries", rows,
+        "XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT"
     )
     for enum in enums:
         enum_prefix = f"xr_stdlib_enum_{c_module_ident(enum.module)}_{enum.name}"
@@ -2764,87 +2757,70 @@ def emit_defs_header(
             lines.append("};")
             lines.append("")
         variant_array = f"{enum_prefix}_variants"
-        lines.append(f"static const XrStdlibEnumVariantDefEntry {variant_array}[] = {{")
+        rows = []
         for index, variant in enumerate(enum.variants):
             payload_ref = (
                 f"{enum_prefix}_variant_{index}_payloads" if variant.payload_types else "NULL"
             )
-            lines.append(
+            rows.append(
                 "    {"
                 f"{c_string(variant.name)}, {payload_ref}, {len(variant.payload_types)}"
                 "},"
             )
-        lines.append("};")
-        lines.append("")
-    lines.append("static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {")
+        emit_metadata_table(lines, "XrStdlibEnumVariantDefEntry", variant_array, rows)
+    rows = []
     for enum in enums:
         variant_array = f"xr_stdlib_enum_{c_module_ident(enum.module)}_{enum.name}_variants"
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(enum.module)}, {c_string(enum.name)}, {c_string(enum.doc)}, "
             f"{variant_array}, {len(enum.variants)}, "
             f"UINT32_C({stable_enum_layout_id(enum.module, enum)})"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_ENUM_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / "
-            "sizeof(xr_stdlib_enum_def_entries[0])))",
-            "",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibEnumDefEntry", "xr_stdlib_enum_def_entries", rows,
+        "XR_STDLIB_ENUM_DEF_ENTRY_COUNT"
     )
     for h in handles:
         field_array = f"xr_stdlib_handle_fields_{c_module_ident(h.module)}_{h.name}"
-        lines.append(f"static const XrStdlibHandleFieldDefEntry {field_array}[] = {{")
+        rows = []
         for field in h.fields:
-            lines.append(
+            rows.append(
                 "    {"
                 f"{c_string(h.module)}, {c_string(h.name)}, {c_string(field.name)}, "
                 f"{c_string(field.type)}, {'true' if field.is_const else 'false'}"
                 "},"
             )
-        lines.append("};")
-        lines.append("")
-    lines.append("static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {")
+        emit_metadata_table(lines, "XrStdlibHandleFieldDefEntry", field_array, rows)
+    rows = []
     for h in handles:
         field_array = f"xr_stdlib_handle_fields_{c_module_ident(h.module)}_{h.name}"
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(h.module)}, {c_string(h.name)}, {c_string(h.doc)}, "
             f"{field_array}, {len(h.fields)}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / "
-            "sizeof(xr_stdlib_handle_def_entries[0])))",
-            "",
-            "static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibHandleDefEntry", "xr_stdlib_handle_def_entries", rows,
+        "XR_STDLIB_HANDLE_DEF_ENTRY_COUNT"
     )
+    rows = []
     for tm in type_methods:
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(tm.module)}, {c_string(tm.type_name)}, {c_string(tm.name)}, "
             f"{c_string(tm.signature)}, {c_string(tm.doc)}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / "
-            "sizeof(xr_stdlib_type_method_def_entries[0])))",
-            "",
-            "static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibTypeMethodDefEntry", "xr_stdlib_type_method_def_entries", rows,
+        "XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT"
     )
+    rows = []
     for cls in native_classes:
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(cls.module)}, {c_string(cls.name)}, {c_string(cls.super_slot)}, "
             f"{c_string(cls.core_slot)}, {c_string(cls.native_body_expr)}, {c_string(cls.flags)}, "
@@ -2852,65 +2828,49 @@ def emit_defs_header(
             f"{c_string(cls.source_storage_field)}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / "
-            "sizeof(xr_stdlib_native_class_def_entries[0])))",
-            "",
-            "static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibNativeClassDefEntry", "xr_stdlib_native_class_def_entries", rows,
+        "XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT"
     )
+    rows = []
     for cls in classes:
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(cls.module)}, {c_string(cls.name)}, {c_string(cls.super_slot)}, "
             f"{c_string(cls.core_slot)}, {c_string(cls.flags)}, {c_string(cls.builtin_kind)}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_CLASS_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_class_def_entries) / "
-            "sizeof(xr_stdlib_class_def_entries[0])))",
-            "",
-            "static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibClassDefEntry", "xr_stdlib_class_def_entries", rows,
+        "XR_STDLIB_CLASS_DEF_ENTRY_COUNT"
     )
+    rows = []
     for method in class_methods:
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(method.module)}, {c_string(method.class_name)}, {c_string(method.name)}, "
             f"{c_string(method.vm)}, {c_int_expr(method.argc, method.symbol)}, "
             f"{c_string(method.flags)}"
             "},"
         )
-    lines.extend(
-        [
-            "};",
-            "#define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / "
-            "sizeof(xr_stdlib_class_method_def_entries[0])))",
-            "",
-            "static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {",
-        ]
+    emit_metadata_table(
+        lines, "XrStdlibClassMethodDefEntry", "xr_stdlib_class_method_def_entries", rows,
+        "XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT"
     )
+    rows = []
     for field in class_fields:
-        lines.append(
+        rows.append(
             "    {"
             f"{c_string(field.module)}, {c_string(field.class_name)}, "
             f"{c_string(field.name)}, {c_string(field.flags)}"
             "},"
         )
+    emit_metadata_table(
+        lines, "XrStdlibClassFieldDefEntry", "xr_stdlib_class_field_def_entries", rows,
+        "XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT"
+    )
     lines.extend(
         [
-            "};",
-            "#define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_class_field_def_entries) / "
-            "sizeof(xr_stdlib_class_field_def_entries[0])))",
-            "",
             "#endif  /* XSTDLIB_DEFS_GENERATED_H */",
             "",
             "/* clang-format on */",

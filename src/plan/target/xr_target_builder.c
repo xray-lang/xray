@@ -15762,9 +15762,9 @@ static bool materialize_calls_and_adapters(const XrTargetBuildContext *builder,
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                     !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
                     (native_direct && tagged_rep < 0)) {
-                    if (native_direct && target_trace_enabled()) {
+                    if (target_trace_enabled()) {
                         fprintf(stderr,
-                                "[target] refused in native-direct argument materialization: "
+                                "[target] refused in call argument materialization: "
                                 "call=%u argument=%u semantic-value=%u caller-bound=%u\n",
                                 i, ordinal, argument_intent->caller_storage_value,
                                 caller ? 1u : 0u);
@@ -15778,7 +15778,7 @@ static bool materialize_calls_and_adapters(const XrTargetBuildContext *builder,
                                 target_trace_operation(builder->semantic_plan, candidate,
                                                        definition);
                         }
-                        target_trace_type(builder->semantic_plan, "native-direct argument type",
+                        target_trace_type(builder->semantic_plan, "call argument type",
                                           semantic_operand ? semantic_operand->type
                                                            : XR_SEMANTIC_INDEX_NONE);
                     }

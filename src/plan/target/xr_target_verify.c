@@ -8614,10 +8614,14 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     caller_slot->memory_rep == caller_value->memory_rep &&
                     caller_slot->ownership == caller_register->ownership &&
                     caller_register->ownership == caller_memory->ownership &&
-                    (ordinal == 0   ? (caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED ||
-                                       caller_register->ownership == XR_TARGET_OWNERSHIP_BORROWED)
-                     : ordinal == 1 ? caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED
-                                    : caller_register->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
+                    /* The definition's carrier keeps its original ownership.
+                     * Admitted semantic ownership replay proves promotion
+                     * before a borrowed value reaches the consuming element
+                     * argument; a second physical owner class would lose that
+                     * ordered retain/consume fact. */
+                    (ordinal < 2 ? (caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED ||
+                                    caller_register->ownership == XR_TARGET_OWNERSHIP_BORROWED)
+                                 : caller_register->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
                 next_argument++;
             }
             if (!valid) {

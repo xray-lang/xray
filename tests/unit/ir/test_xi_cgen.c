@@ -3845,6 +3845,90 @@ TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
 
 static const char *g_native_array_c_output;
 
+static const char *g_structural_array_c_output;
+
+static void check_structural_array_requires_promotion(XiFunc *root) {
+    XiFunc *function = test_find_child_function(root, "observe");
+    TEST_REQUIRE(function, "structural Array fixture owns an observable function");
+    /* This fixture stops before backend lowering. Re-enter the semantic
+     * boundary on the same optimized graph to exercise fresh certificates. */
+    XiStage saved_stage = root->stage;
+    root->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    XrSemanticPlan *rebuilt = NULL;
+    bool built = xr_semantic_plan_build(root, &rebuilt, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "structural Array rebuild: %s\n", error);
+    TEST_REQUIRE(built,
+                 "unmodified structural Array facts independently rebuild");
+    xr_semantic_plan_free(rebuilt);
+    uint32_t checked = 0;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        XiBlock *block = function->blocks[b];
+        for (uint32_t v = 0; v < block->nvalues; v++) {
+            XiValue *retain = block->values[v];
+            if (!retain || retain->op != XI_RETAIN || retain->nargs != 1 ||
+                !retain->args[0] || retain->args[0]->op != XI_INDEX_GET ||
+                !retain->args[0]->type || retain->args[0]->type->kind != XR_KIND_STRUCT_OBJECT)
+                continue;
+            /* Rebuild from mutated source IR, so a stale certificate or digest
+             * cannot account for rejection of an absent promotion. */
+            memmove(&block->values[v], &block->values[v + 1],
+                    (block->nvalues - v - 1u) * sizeof(*block->values));
+            block->nvalues--;
+            rebuilt = NULL;
+            error[0] = '\0';
+            bool accepted = xr_semantic_plan_build(root, &rebuilt, error, sizeof(error));
+            memmove(&block->values[v + 1], &block->values[v],
+                    (block->nvalues - v) * sizeof(*block->values));
+            block->values[v] = retain;
+            block->nvalues++;
+            if (accepted || strncmp(error, "XR_OWN_", 7) != 0)
+                fprintf(stderr, "structural Array missing promotion: %s\n", error);
+            TEST_REQUIRE(!accepted && !rebuilt && strncmp(error, "XR_OWN_", 7) == 0,
+                         "removing a structural element retain fails ownership admission");
+            checked++;
+        }
+    }
+    TEST_REQUIRE(checked > 0, "structural Array fixture exercises explicit element promotion");
+    rebuilt = NULL;
+    TEST_REQUIRE(xr_semantic_plan_build(root, &rebuilt, error, sizeof(error)),
+                 "restored structural Array promotions independently rebuild");
+    xr_semantic_plan_free(rebuilt);
+    root->stage = saved_stage;
+}
+
+TEST(cgen_structural_array_preserves_element_owners) {
+    const char *source =
+        "type Item = { label: string }\n"
+        "fn observe() -> i64 {\n"
+        "    var items: Array<Item> = []\n"
+        "    items.push({label: \"alpha\"})\n"
+        "    var first = items[0]\n"
+        "    items[0] = {label: \"beta\"}\n"
+        "    assertEqual(first.label, \"alpha\")\n"
+        "    assertEqual(items[0].label, \"beta\")\n"
+        "    items.push(first)\n"
+        "    assertEqual(items[1].label, \"alpha\")\n"
+        "    return len(items)\n"
+        "}\n"
+        "assertEqual(observe(), 2)\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir, "structural Array source lowers with exact element ownership");
+    check_structural_array_requires_promotion(ir);
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "structural_array", &had_error);
+    TEST_REQUIRE(code && !had_error, "structural Array composes allocation, store and borrowed read");
+    if (g_structural_array_c_output) {
+        FILE *output = fopen(g_structural_array_c_output, "wb");
+        size_t length = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, length, output) == length && fclose(output) == 0,
+                     "structural Array generated C is complete");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
 TEST(cgen_native_array_arguments_share_generated_value_abi) {
     XrType unit = {
         .kind = XR_KIND_UNIT, .id = 2101, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE};
@@ -15712,6 +15796,12 @@ int main(int argc, char **argv) {
 
     g_test_filter = getenv("XRAY_TEST_FILTER");
     setup();
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "structural-array") == 0) {
+        g_structural_array_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_structural_array_preserves_element_owners();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "native-array") == 0) {
         g_native_array_c_output = argc == 3 ? argv[2] : NULL;
         run_cgen_native_array_arguments_share_generated_value_abi();
@@ -15819,6 +15909,7 @@ int main(int argc, char **argv) {
     run_cgen_native_direct_fresh_result_authority_mutations_fail_closed();
     run_cgen_native_direct_uses_verified_call_and_argument_view();
     run_cgen_native_array_arguments_share_generated_value_abi();
+    run_cgen_structural_array_preserves_element_owners();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
     run_cgen_string_runes_consumes_immutable_emission_recipe();
     run_cgen_string_slice_range_consumes_immutable_emission_recipe();

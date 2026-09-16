@@ -9009,8 +9009,8 @@ static bool emit_structured_loop_condition_expr_ctx(XiCgenCtx *ctx, FILE *out,
 static bool cg_structured_counted_loop_block_is_elided(XiCgenCtx *ctx, const XiFunc *f,
                                                        const XiBlock *blk);
 
-/* A scalar/null constant, or a string literal used only by a multi-part
- * concat, has no required C storage when every consumer
+/* A scalar/null constant or immutable string literal has no required C storage
+ * when every consumer
  * prints the literal through emit_value_as_rep_ctx() (or an equivalent
  * literal-aware helper).  This is deliberately a lowering-shape predicate,
  * not generic DCE: several native emitters still call emit_vref() and
@@ -9146,6 +9146,8 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         case XI_STORE_FIELD:
         case XI_AGG_UPDATE:
         case XI_AGG_SET:
+        case XI_OBJECT_SET_F:
+        case XI_OBJECT_INIT_F:
             /* Every field-store backend converts the stored value with the
              * literal-aware representation emitter. */
             return arg_index == 1 && user->nargs >= 2;
@@ -9304,21 +9306,6 @@ static bool cg_const_only_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const
                 if (user->args[a] != v)
                     continue;
                 seen_use = true;
-                if (v->type->kind == XR_KIND_STRING) {
-                    XrCValueEmissionView concat = {0};
-                    bool allowed_string_use =
-                        cg_string_concat_emission_view(ctx, f, user, &concat) ||
-                        (user->op == XI_SET_SHARED && a == 0);
-                    XrCValueEmissionView runes = {0};
-                    if (!allowed_string_use && cg_string_runes_emission_view(ctx, f, user, &runes))
-                        allowed_string_use = a == 0;
-                    XrCValueEmissionView string_slice = {0};
-                    if (!allowed_string_use &&
-                        cg_string_slice_range_emission_view(ctx, f, user, &string_slice))
-                        allowed_string_use = a == 0;
-                    if (!allowed_string_use)
-                        return false;
-                }
                 if (!cg_const_use_emits_immediate(ctx, f, user, a) &&
                     !cg_forwarded_const_only_emits_immediate(ctx, f, user, 0))
                     return false;

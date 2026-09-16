@@ -5092,14 +5092,24 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         value->type && XR_TYPE_IS_ARRAY(value->type) ? value->type->container.element_type : NULL;
     bool array_allocation_scalar =
         value->array_element_storage > XR_ELEM_ANY && value->array_element_storage < XR_ELEM_RAWPTR;
-    bool array_allocation_source_class =
+    const XrSemanticTypeRecord *array_allocation_type =
+        value->op == XI_ARRAY_NEW && array_allocation_element
+            ? xr_semantic_plan_type(ctx->plan, result_type)
+            : NULL;
+    const XrSemanticTypeRecord *array_allocation_element_row =
+        array_allocation_type && array_allocation_type->child_count == 1
+            ? xr_semantic_plan_type(
+                  ctx->plan, ctx->plan->type_children[array_allocation_type->child_begin])
+            : NULL;
+    bool array_allocation_managed =
         value->array_element_storage == XR_ELEM_ANY &&
-        source_class_for_type(ctx, array_allocation_element) != XR_SEMANTIC_INDEX_NONE;
+        xr_semantic_array_member_owned_reference_type_is_exact(
+            ctx->plan, array_allocation_element_row);
     bool array_allocation_exact = value->op == XI_ARRAY_NEW && value->type &&
                                   XR_TYPE_IS_ARRAY(value->type) && array_allocation_element &&
                                   value->nargs == 1 && value->args[0] && value->args[0]->type &&
                                   XR_TYPE_IS_INT(value->args[0]->type) &&
-                                  (array_allocation_scalar || array_allocation_source_class);
+                                  (array_allocation_scalar || array_allocation_managed);
     if (array_allocation_exact) {
         record->array_element_storage = value->array_element_storage;
         record->semantic_immediate = 0;
@@ -6323,10 +6333,8 @@ static bool canonicalize_entity_table(XrSemanticBuildContext *ctx) {
     return true;
 }
 
-static bool build_semantic_entities(XrSemanticBuildContext *ctx, const XiFunc *root) {
-    uint32_t package, module;
-    return build_module_entities(ctx, root, &package, &module) &&
-           build_type_entities(ctx, module) && build_function_entities(ctx, module) &&
+static bool build_body_entities(XrSemanticBuildContext *ctx, uint32_t module) {
+    return build_function_entities(ctx, module) &&
            build_operation_entities(ctx) && build_ownership_entities(ctx, module) &&
            build_coroutine_entities(ctx) && canonicalize_entity_table(ctx);
 }
@@ -6355,11 +6363,18 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
     ctx.dependency_modules = dependencies;
     ctx.dependency_module_count = dependency_count;
     ctx.plan = xr_semantic_plan_create();
+    uint32_t package_entity = XR_SEMANTIC_INDEX_NONE;
+    uint32_t module_entity = XR_SEMANTIC_INDEX_NONE;
+    /* Operation classification consumes structural field authority. Publish
+     * those immutable facts once, after canonicalizing types and before any
+     * operation asks for them; body and ownership entities follow their rows. */
     if (!ctx.plan || !prepare_program_authority(&ctx, root) ||
         !collect_functions(&ctx, root, XR_SEMANTIC_INDEX_NONE, 0) ||
         !validate_scalar_view_return_projection(&ctx) || !build_source_classes(&ctx, root) ||
         !verify_program_type_annotations(&ctx) || !collect_semantic_types(&ctx) ||
         !refine_value_aggregate_types(&ctx) || !canonicalize_type_table(&ctx) ||
+        !build_module_entities(&ctx, root, &package_entity, &module_entity) ||
+        !build_type_entities(&ctx, module_entity) ||
         !build_function_records(&ctx) || !build_source_methods(&ctx) ||
         !build_capture_records(&ctx) || !prepare_root_shared_store_index(&ctx, root) ||
         !build_source_exports(&ctx, root) || !build_blocks_and_operations(&ctx) ||
@@ -6369,7 +6384,7 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
     if (!xr_ownership_certificate_build(ctx.plan, &ownership, error, error_size))
         goto failure;
     xr_semantic_plan_set_ownership(ctx.plan, ownership);
-    if (!build_semantic_entities(&ctx, root) || !install_program_provenance(&ctx))
+    if (!build_body_entities(&ctx, module_entity) || !install_program_provenance(&ctx))
         goto failure;
     if (!xr_semantic_plan_freeze(ctx.plan, error, error_size))
         goto failure;

@@ -147,9 +147,12 @@ Every materialized RETAIN/RELEASE must preserve its frozen operation, source,
 type, block, and any declared representation adapter. This general check replaces
 the former string-concatenation-only cleanup loop; physical cleanup rows and
 negative tests remain required.
-Tagged call results use that shared temporary carrier proof and the frozen
-result ownership across ordinary, tail, builtin and receiver call forms. They
-do not require an executable call row in a cold function. Independent TargetPlan
+Representation obligations cover exactly the executable function closure rebuilt
+from the admitted program modules. Without a program partition every function
+remains live. Both collection and independent coverage verification apply that
+same scope to operands and returns; cold functions need no physical adapters.
+Tagged call results use the shared temporary carrier proof and frozen result
+ownership across ordinary, tail, builtin and receiver call forms. Independent TargetPlan
 admission continues to reject forged identity, calling convention, ownership
 and result representation after hashes are recomputed. A receiver method takes
 an already tagged reference argument in its proved carrier even when the policy
@@ -168,9 +171,10 @@ independent TargetPlan admission.
 Native-direct resolution and argument carriers come from the exact frozen
 signature. The duplicate physical-call/argument identity, ownership and ABI
 reconstruction in representation is removed; baseline TargetPlan admission
-retains those checks, including rehashed hostile rows. Cold native calls retain
-their semantic signature after executable rows are pruned. Changing a cold body
-into an initializer without restoring those rows remains invalid.
+retains those checks, including rehashed hostile rows. Removing executable rows
+from cold functions no longer requires callee-specific representation exceptions.
+Changing a cold body into an initializer without restoring those rows remains
+invalid; both native-direct and builtin native calls exercise this boundary.
 Array arguments reuse the generated tagged-value ABI with exact element types
 from the registry signature. Nullable, wrong-width and reference-writeback
 arguments remain rejected. A strict C11 native program observes equal buffers,
@@ -178,6 +182,34 @@ a byte mutation, and self-comparison against independent expected booleans.
 The String UTF-8 static receiver is a resolution token, using its existing exact
 method/type/producer proof. It acquires no invented runtime storage or adapter;
 ordinary data arguments and owned results retain their existing obligations.
+Runtime class constructors use the existing exact frozen constructor judgement
+for the same resolution-token rule. StringBuilder and Atomic scalar constructors
+must pass representation refinement; forged signatures and identities remain
+subject to independent admission.
+
+Generated standard-library metadata represents an empty table with one zeroed
+storage sentinel and an explicit logical count of zero. Lookup, iteration and
+registry fingerprints consume the logical count, never the sentinel. Declarative
+tables and AOT dispatch tables share this C11 emission rule. The generator test
+compiles and runs empty, mixed and repository metadata with the configured host
+C compiler; supported MSVC is checked with strict warnings and optimization.
+
+Structural object Array elements use the existing exact field-entity proof and
+tagged ownership root. Module and type entities are built once before operation
+classification; body and ownership entities follow their source rows. Array
+allocation reads its canonical child row, so distinct source type pointers with
+equal identities cannot leave a physical allocation hint in semantic facts.
+The definition carrier retains its original borrowed ownership after an explicit
+retain; ordered semantic ownership admission proves that promotion before a
+consuming store. Physical argument checks still require the exact type, slot,
+ABI and consume contract. Fresh semantic construction after deleting each element
+retain rejects the program. The generated native regression reads an element,
+replaces the array slot, reads the preserved object and inserts it again.
+Literal storage uses one consumer-emission judgement for scalar and immutable
+string constants. Structural field initialization and assignment already emit
+the stored literal directly; the duplicate string-use whitelist and unused C
+locals are removed. MSVC compiles the real structural-array output with
+`/W4 /WX`, and the native result and symbol inventory remain independently checked.
 
 Reference parameter C spelling follows its frozen declaration and parameter
 slot, independently of incoming calls. The removed incoming-call scan duplicated
@@ -571,6 +603,8 @@ verification-test: test_prelude_init
 verification-test: test_xi_emit
 verification-test: test_xi_native_array_native
 verification-test: test_xr_aot_refinement
+verification-test: test_stdlib_generators_content_stable
+verification-test: test_xi_structural_array_native
 verification-test: test_xr_program_process_provider_aot_native
 
 Builtin enum slot, name, member order, and payload declarations now project from
@@ -1083,14 +1117,14 @@ anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb
 anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc
 anchor-sha256: src/aot/xaot_verify.c bae55927291480a94df6a52cef43a5e8c918be9bc5c6a7e04d70488525afa26b
 anchor-sha256: src/aot/refine/xr_aot_refinement.h 5d275c7ba1f9d1bcee80ab1f98cf0507b7ee5a148d9a39119ba2901026da1231
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 214f027aeb8ff733fb89860b232626da54035b29ad4869679d85f0b488395fec
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c df5a76848181862a1b3072f0e464e22bcb71b0629ca4aabc2bba0e0b414f6d36
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.h 4a5e0dcc2a7cb10707bfeb45d2b5437d4751664edd89854ffeb241311ef766ee
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 0e8279c12aff4420603bcd09f38a70bad449fd27b99c1caa978657fd4bd2d9c3
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 4b97fe55b1b38c7fd0106cdd2be47b9bcd811b9a669457491c54ba1ba00bb152
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 8cce545b5a9772d739aa0a4a78f010bb205ce90140bc029b454683c06c3d7498
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c ee52680a993c58579341eb63cbca8986add99e4e9ba76364676750c967489388
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 30a871e40895837c1cf4818464ffb7766b9bea5bf1c4d5c73b3816497f16123c
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 650a3f6009010841b462567a86b104c00feb2112cc180905511da4f2f3040dff
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.h e95422b2cf84d1dc5e0a94e542344172e569660196da81ac2a9a79fc7d8123a4
@@ -1123,7 +1157,7 @@ anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c bfd1bf8927cc7562ca193bfc18215
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b1296f68ba37032061b8ba2fae7ffc5cd9b76bb03f9df6a34f4f3c7d9fedeb79
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ea9c4ac67c31537fc6f41326f09481e702c1592f159946d54da89eae8a5a1baf
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 08db1ebcd463d21d5a849a5f7bfcae7d41206818c04fc73c44566017c8e8a522
-anchor-sha256: src/aot/xi_cgen.c 8f9d89cb8768487cb63a20e790705debd80a2181d4101d0d67978f3e7ffdc5db
+anchor-sha256: src/aot/xi_cgen.c 94ebb75accf6859990298c952c031a32a8900c10d102b534feb1ca3852ec0987
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
 anchor-sha256: src/ir/xi_opt.c 7541e8f4bc982cbc6f9cd054ef0397473020cee74168055a28d667b2e5c78bb5
 anchor-sha256: src/aot/xrt_coll.h f699e3aecd8f3c408deca50e306274be74d0d700a61b29ca1dd170be48086511

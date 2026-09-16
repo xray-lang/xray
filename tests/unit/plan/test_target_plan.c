@@ -8245,6 +8245,14 @@ static void check_runtime_constructor_call_authority(XrType *element) {
             plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
             plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
 
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic refinement_diagnostic = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        plan, semantic, &policy, &refinement, &refinement_diagnostic));
+    REQUIRE(refinement != NULL);
+    xr_aot_refinement_plan_free(refinement);
+
     XrStableId saved_identity = call->identity;
     call->identity.bytes[0] ^= 1u;
     expect_verify_failure(plan, "XR_TARGET_1003");

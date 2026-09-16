@@ -63,6 +63,7 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../../src/shared/xr_print_plan.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -4004,23 +4005,31 @@ static void test_unreachable_native_direct_preserves_frozen_argument_authority(v
     xi_func_free(root);
 }
 
-static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_closed(void) {
-    static XrType callee_type = {
+static void check_unreachable_native_callee_authority(bool builtin) {
+    static XrType scalar_f64 = {
+        .kind = XR_KIND_FLOAT,
+        .id = 9228,
+        .frozen = true,
+        .scalar_rep = XR_NATIVE_F64,
+    };
+    XrType *result_type = builtin ? &scalar_f64 : &scalar_int;
+    XrFunctionParam parameters[] = {{.type = &scalar_f64}};
+    XrType callee_type = {
         .kind = XR_KIND_FUNCTION,
-        .id = 9203,
+        .id = builtin ? 9229 : 9203,
         .frozen = true,
         .scalar_rep = XR_SCALAR_REP_NONE,
         .function =
             {
-                .params = NULL,
-                .param_count = 0,
-                .min_params = 0,
-                .return_type = &scalar_int,
+                .params = builtin ? parameters : NULL,
+                .param_count = builtin ? 1 : 0,
+                .min_params = builtin ? 1 : 0,
+                .return_type = result_type,
                 .throw_effect = XR_FN_EFFECT_MAY_THROW,
             },
     };
     XiFunc *root = xi_func_new("unreachable_native_scalar_root", &scalar_unit);
-    XiFunc *wrapper = xi_func_new("unreachable_native_scalar_wrapper", &scalar_int);
+    XiFunc *wrapper = xi_func_new("unreachable_native_scalar_wrapper", result_type);
     XiBlock *root_entry = root ? xi_block_new(root) : NULL;
     XiBlock *wrapper_entry = wrapper ? xi_block_new(wrapper) : NULL;
     REQUIRE(root && wrapper && root_entry && wrapper_entry);
@@ -4034,11 +4043,12 @@ static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_cl
 
     XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(wrapper, (uint32_t) sizeof(*ref));
     XiValue *callee = xi_value_new(wrapper, wrapper_entry, XI_IMPORT_REF, &callee_type, 0u);
-    XiValue *call = xi_value_new(wrapper, wrapper_entry, XI_CALL, &scalar_int, 1u);
+    XiValue *argument = builtin ? xi_const_float(wrapper, wrapper_entry, 4.0, &scalar_f64) : NULL;
+    XiValue *call = xi_value_new(wrapper, wrapper_entry, XI_CALL, result_type, builtin ? 2u : 1u);
     REQUIRE(ref && callee && call);
     *ref = (XiImportRef) {
-        .module_path = "time",
-        .member_name = "__realtimeNanos",
+        .module_path = builtin ? "math" : "time",
+        .member_name = builtin ? "__sqrt" : "__realtimeNanos",
         .resolved_mod_index = -1,
         .resolved_shared_slot = -1,
         .resolved_export_slot = -1,
@@ -4046,6 +4056,10 @@ static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_cl
     };
     callee->aux = ref;
     call->args[0] = callee;
+    if (builtin) {
+        REQUIRE(argument != NULL);
+        call->args[1] = argument;
+    }
     xi_block_set_return(wrapper_entry, call);
     root->stage = wrapper->stage = XI_STAGE_OPTIMIZED;
     XiModule *module =
@@ -4067,7 +4081,8 @@ static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_cl
     }
     REQUIRE(operation_index < semantic->operation_count);
     XrSemanticOperationRecord *operation = &semantic->operations[operation_index];
-    REQUIRE(operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
+    REQUIRE(operation->intrinsic_kind == (builtin ? XR_SEM_INTRINSIC_NONE
+                                                  : XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL));
 
     XrTargetProfile *profile = build_target_profile();
     XrTargetPlan *target = NULL;
@@ -4087,6 +4102,20 @@ static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_cl
     REQUIRE(refinement != NULL);
     xr_aot_refinement_plan_free(refinement);
 
+    if (builtin) {
+        /* Without a closed program scope, every body remains live. The same
+         * unsupported native call must still fail physical admission. */
+        XrTargetPlan *unscoped = NULL;
+        bool admitted = xr_target_plan_build(semantic, profile, &unscoped, error, sizeof(error));
+        if (admitted) {
+            refinement = NULL;
+            REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+                unscoped, semantic, &policy, &refinement, &diag));
+            REQUIRE(refinement == NULL);
+        }
+        xr_target_plan_free(unscoped);
+    }
+
     /* The exact same absent call row must not become a general fallback. A
      * mutation that makes the frozen function a program root invalidates the
      * TargetPlan/SemanticPlan pair before that stale omission can be used. */
@@ -4103,6 +4132,11 @@ static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_cl
     xr_target_plan_free(target);
     xr_target_profile_free(profile);
     xi_func_free(root);
+}
+
+static void test_unreachable_native_scalar_callee_authority_is_exact_and_fail_closed(void) {
+    check_unreachable_native_callee_authority(false);
+    check_unreachable_native_callee_authority(true);
 }
 
 static XiFunc *borrowed_byte_slice_parameter_fixture(void) {
@@ -5011,22 +5045,65 @@ static void test_tagged_string_array_copy_refinement_is_exact(void) {
     xi_func_free(function);
 }
 
+static void check_structural_array_element_authority(const XrSemanticPlan *semantic,
+                                                      uint32_t array_type_index) {
+    const XrSemanticTypeRecord *array_type = xr_semantic_plan_type(semantic, array_type_index);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    REQUIRE(array_type && children && array_type->child_begin < child_count);
+    XrSemanticTypeRecord *element = (XrSemanticTypeRecord *)
+        xr_semantic_plan_type(semantic, children[array_type->child_begin]);
+    REQUIRE(element && xr_semantic_array_member_owned_reference_type_is_exact(semantic, element));
+    XrSemanticTypeRecord saved = *element;
+    REQUIRE(!xr_semantic_array_member_owned_reference_type_is_exact(semantic, &saved));
+    for (uint32_t mutation = 0; mutation < 3u; mutation++) {
+        *element = saved;
+        if (mutation == 0u)
+            element->flags |= XR_SEM_TYPE_NULLABLE;
+        else if (mutation == 1u)
+            element->flags |= XR_SEM_TYPE_VALUE;
+        else {
+            element->child_count++;
+            element->aggregate_extent++;
+        }
+        REQUIRE(!xr_semantic_array_member_owned_reference_type_is_exact(semantic, element));
+    }
+    *element = saved;
+    REQUIRE(xr_semantic_array_member_owned_reference_type_is_exact(semantic, element));
+}
+
 static void check_array_allocation_storage_is_exact_and_fail_closed(XrType *array_type,
                                                                     uint8_t semantic_storage,
                                                                     uint8_t target_storage) {
     XrType *element_type = array_type->container.element_type;
+    bool tagged_element = semantic_storage == XR_ELEM_ANY;
     XiFunc *function =
         xi_func_new("array_allocation_storage",
-                    element_type->kind == XR_KIND_STRING ? &scalar_unit : element_type);
+                    tagged_element ? &scalar_unit : element_type);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *count = xi_const_int(function, entry, 2, &scalar_int);
-    XiValue *array = xi_value_new(function, entry, XI_ARRAY_NEW, array_type, 1);
+    XrType equivalent_element = *element_type;
+    XrType equivalent_array = *array_type;
+    equivalent_array.container.element_type = &equivalent_element;
+    if (tagged_element) {
+        XiValue *first = xi_value_new(function, entry, XI_ARRAY_NEW, array_type, 1);
+        XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+        REQUIRE(first && release);
+        first->args[0] = count;
+        first->array_element_storage = semantic_storage;
+        release->args[0] = first;
+    }
+    XiValue *array = xi_value_new(function, entry, XI_ARRAY_NEW, &equivalent_array, 1);
     REQUIRE(count && array);
     array->args[0] = count;
     array->array_element_storage = semantic_storage;
-    if (element_type->kind == XR_KIND_STRING) {
+    /* An equivalent source container reuses the canonical child row without
+     * registering every child pointer. A prior physical allocation hint must
+     * still be erased by that canonical semantic authority. */
+    array->aux_int = XI_ARRAY_NEW;
+    if (tagged_element) {
         XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
         REQUIRE(release != NULL);
         release->args[0] = array;
@@ -5069,6 +5146,8 @@ static void check_array_allocation_storage_is_exact_and_fail_closed(XrType *arra
             operation->semantic_immediate == 0 && binding->slot < target->slots_count &&
             target->slots[binding->slot].semantic_operation == operation_index &&
             target->slots[binding->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+    if (element_type->kind == XR_KIND_STRUCT_OBJECT)
+        check_structural_array_element_authority(semantic, operation->result_type);
     uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < target->layouts_count; i++) {
         if (target->layouts[i].semantic_type != operation->result_type)
@@ -5091,7 +5170,7 @@ static void check_array_allocation_storage_is_exact_and_fail_closed(XrType *arra
         abort();
     }
     REQUIRE(refinement != NULL && xr_aot_refinement_plan_view(refinement).record_count ==
-                                      (element_type->kind == XR_KIND_STRING ? 0u : 1u));
+                                      (tagged_element ? 0u : 1u));
     xr_aot_refinement_plan_free(refinement);
 
     XrCEmissionPlan *emission = NULL;
@@ -5147,6 +5226,24 @@ static void test_array_allocation_storage_is_exact_and_fail_closed(void) {
     check_array_allocation_storage_is_exact_and_fail_closed(&direct_local_byte_array, XR_ELEM_U8,
                                                             XR_TARGET_ARRAY_STORAGE_U8);
     check_array_allocation_storage_is_exact_and_fail_closed(&tagged_string_array, XR_ELEM_ANY,
+                                                            XR_TARGET_ARRAY_STORAGE_TAGGED);
+    const char *field_names[] = {"label"};
+    XrType *field_types[] = {&scalar_string};
+    XrType object_type = {
+        .kind = XR_KIND_STRUCT_OBJECT,
+        .id = 9240,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .object = {.field_names = field_names, .field_types = field_types, .field_count = 1},
+    };
+    XrType array_type = {
+        .kind = XR_KIND_ARRAY,
+        .id = 9241,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .container = {.element_type = &object_type},
+    };
+    check_array_allocation_storage_is_exact_and_fail_closed(&array_type, XR_ELEM_ANY,
                                                             XR_TARGET_ARRAY_STORAGE_TAGGED);
 }
 

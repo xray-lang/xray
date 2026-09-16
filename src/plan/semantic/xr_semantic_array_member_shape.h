@@ -31,6 +31,7 @@
 #include "xr_semantic_array_type_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_string_shape.h"
+#include "xr_semantic_value_aggregate_shape.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include <stdint.h>
@@ -184,17 +185,26 @@ static inline bool xr_semantic_array_member_argument_is_exact(
 }
 
 /* Reference elements use the runtime's tagged XrValue lane. Its closed
- * ownership roster is an exact String, a frozen source-class instance, or an
- * exact compiler-owned Array. Each is one ownership root whose release is
- * already defined by the runtime value tag. Keeping this judgement beside the
- * selector lifecycle table prevents four plan layers from narrowing the same
- * language fact independently. */
+ * ownership roster is an exact String, a frozen source-class instance, an
+ * exact compiler-owned Array, or a source structural object. Each is one
+ * ownership root whose release is already defined by the runtime value tag.
+ * Keeping this judgement beside the selector lifecycle table prevents four
+ * plan layers from narrowing the same language fact independently. */
 static inline bool
 xr_semantic_array_member_owned_reference_type_is_exact(const XrSemanticPlan *plan,
                                                        const XrSemanticTypeRecord *type) {
-    return xr_semantic_tagged_string_type_is_exact(type) ||
-           xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
-           xr_semantic_array_type_row_is_exact(type);
+    if (xr_semantic_tagged_string_type_is_exact(type) ||
+        xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
+        xr_semantic_array_type_row_is_exact(type))
+        return true;
+    if (!plan || !type || type->kind != XR_KIND_STRUCT_OBJECT)
+        return false;
+    /* Structural authority belongs to the exact type row and its published
+     * field entities. A detached lookalike cannot borrow another row's proof. */
+    for (uint32_t i = 0; i < xr_semantic_plan_type_count(plan); i++)
+        if (xr_semantic_plan_type(plan, i) == type)
+            return xr_semantic_source_structural_shape_is_exact(plan, i);
+    return false;
 }
 
 static inline bool xr_semantic_array_member_reference_contract_is_exact(

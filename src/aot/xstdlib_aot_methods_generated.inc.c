@@ -128,7 +128,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__udpFromHost", 1, "xrt_net_udp_from_host", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpFromPort", 1, "xrt_net_udp_from_port", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
-#define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
+#define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) 119)
 
 typedef enum CgAotStdlibConstKind {
     CG_AOT_STDLIB_CONST_I64,
@@ -145,9 +145,8 @@ typedef struct CgAotStdlibConst {
     int64_t i64_value;
 } CgAotStdlibConst;
 
-static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {
-};
-#define CG_AOT_STDLIB_GENERATED_CONST_COUNT ((int) (sizeof(g_aot_stdlib_generated_consts) / sizeof(g_aot_stdlib_generated_consts[0])))
+static const CgAotStdlibConst g_aot_stdlib_generated_consts[1] = {0};
+#define CG_AOT_STDLIB_GENERATED_CONST_COUNT ((int) 0)
 
 static const CgAotStdlibConst *cg_aot_stdlib_generated_const_at(int index) {
     if (index < 0 || index >= CG_AOT_STDLIB_GENERATED_CONST_COUNT)
