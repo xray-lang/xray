@@ -149,6 +149,23 @@ typedef struct XrExecutionLease {
     uint64_t ticket;
 } XrExecutionLease;
 
+typedef enum XrExecutionInitializationStatus {
+    XR_EXECUTION_INITIALIZATION_INVALID = 0,
+    XR_EXECUTION_INITIALIZATION_RUN,
+    XR_EXECUTION_INITIALIZATION_WAIT,
+    XR_EXECUTION_INITIALIZATION_COMPLETE,
+    XR_EXECUTION_INITIALIZATION_FAILED,
+} XrExecutionInitializationStatus;
+
+/* RUN grants this lease the next initializer exactly once. The executor keeps
+ * the lease across suspension, then reports that module's terminal outcome.
+ * WAIT never transfers publication authority. Releasing the publisher before
+ * completion permanently fails initialization rather than stranding waiters. */
+typedef struct XrExecutionInitializationStep {
+    uint32_t module_index;
+    uint32_t function_id;
+} XrExecutionInitializationStep;
+
 typedef enum XrExecutionProviderCallResult {
     XR_EXECUTION_PROVIDER_CALL_OK = 0,
     XR_EXECUTION_PROVIDER_CALL_FAILED,
@@ -165,6 +182,10 @@ XR_FUNC XrExecutionStatus xr_execution_instance_create_successor(
 XR_FUNC bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease_out);
 XR_FUNC bool xr_execution_lease_release(XrExecutionLease *lease);
 XR_FUNC bool xr_execution_lease_is_valid(const XrExecutionLease *lease);
+XR_FUNC XrExecutionInitializationStatus xr_execution_lease_initialization_next(
+    const XrExecutionLease *lease, XrExecutionInitializationStep *step_out);
+XR_FUNC bool xr_execution_lease_initialization_finish(
+    const XrExecutionLease *lease, uint32_t module_index, bool succeeded);
 XR_FUNC XrValidatedProgram *xr_execution_lease_retain_program(const XrExecutionLease *lease);
 XR_FUNC XrTargetProfile *xr_execution_lease_retain_profile(const XrExecutionLease *lease);
 XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_i64_unary(

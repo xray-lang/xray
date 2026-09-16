@@ -16,6 +16,8 @@
 #include "../../../src/program/xr_program.h"
 #include "../plan/target_profile_test_fixture.h"
 #include "../program/xr_program_provider_fixture.h"
+#include "../program/xr_program_module_fixture.h"
+#include "../../../src/program/xr_validated_program_internal.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -323,7 +325,7 @@ static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile 
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = program,
         .profile = profile,
-        .providers = bindings->providers,
+        .providers = bindings->count ? bindings->providers : NULL,
         .provider_count = bindings->count,
         .generation = generation,
     };
@@ -807,6 +809,11 @@ static void test_nullary_provider_call_shape(void) {
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     XrExecutionLease lease = {0};
     REQUIRE(xr_execution_instance_acquire(instance, &lease));
+    XrExecutionInitializationStep step;
+    REQUIRE(xr_execution_lease_initialization_next(&lease, &step) ==
+            XR_EXECUTION_INITIALIZATION_COMPLETE);
+    REQUIRE(step.module_index == UINT32_MAX && step.function_id == UINT32_MAX);
+    REQUIRE(!xr_execution_lease_initialization_finish(&lease, 0u, true));
     int64_t result = 0;
     REQUIRE(xr_execution_lease_provider_call_i64_nullary(&lease, 0u, 0u, &result) ==
             XR_EXECUTION_PROVIDER_CALL_OK);
@@ -821,7 +828,183 @@ static void test_nullary_provider_call_shape(void) {
     xr_validated_program_free(program);
 }
 
+static XrValidatedProgram *build_module_program(void) {
+    XrProgramModuleFixture fixture;
+    xr_program_module_fixture_init(&fixture);
+    XrCoreIrProgram *core = NULL;
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    char diagnostic[256] = {0};
+    REQUIRE(xr_core_ir_program_build(&fixture.input, &core, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_write(core, &artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) ==
+            XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    xr_core_ir_program_free(core);
+    REQUIRE(program->module_count == 4u);
+    return program;
+}
+
+static void test_module_initialization_authority_and_failure(void) {
+    XrValidatedProgram *program = build_module_program();
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings = {0};
+    XrInstance *first = create_instance(program, profile, &bindings, 1u);
+    XrInstance *second = create_instance(program, profile, &bindings, 1u);
+    XrExecutionLease publisher = {0}, waiter = {0}, separate = {0};
+    REQUIRE(xr_execution_instance_acquire(first, &publisher));
+    REQUIRE(xr_execution_instance_acquire(first, &waiter));
+    REQUIRE(xr_execution_instance_acquire(second, &separate));
+    XrExecutionInitializationStep step = {0};
+    REQUIRE(xr_execution_lease_initialization_next(NULL, &step) ==
+            XR_EXECUTION_INITIALIZATION_INVALID);
+    REQUIRE(step.module_index == UINT32_MAX && step.function_id == UINT32_MAX);
+    REQUIRE(!xr_execution_lease_initialization_finish(&publisher, 0u, true));
+    REQUIRE(xr_execution_instance_begin_drain(first, NULL) == XR_EXECUTION_OK);
+    XrExecutionLease refused = {0};
+    REQUIRE(!xr_execution_instance_acquire(first, &refused));
+    for (uint32_t module = 0u; module < 4u; ++module) {
+        REQUIRE(xr_execution_lease_initialization_next(&publisher, &step) ==
+                XR_EXECUTION_INITIALIZATION_RUN);
+        REQUIRE(step.module_index == module);
+        REQUIRE(step.function_id == program->modules[module].initializer);
+        REQUIRE(xr_execution_lease_initialization_next(&publisher, &step) ==
+                XR_EXECUTION_INITIALIZATION_WAIT);
+        REQUIRE(xr_execution_lease_initialization_next(&waiter, &step) ==
+                XR_EXECUTION_INITIALIZATION_WAIT);
+        REQUIRE(step.module_index == UINT32_MAX && step.function_id == UINT32_MAX);
+        REQUIRE(!xr_execution_lease_initialization_finish(&waiter, module, true));
+        REQUIRE(!xr_execution_lease_initialization_finish(&publisher, module + 1u, true));
+        REQUIRE(xr_execution_lease_initialization_finish(&publisher, module, true));
+        REQUIRE(!xr_execution_lease_initialization_finish(&publisher, module, true));
+        if (module != 3u)
+            REQUIRE(xr_execution_lease_initialization_next(&waiter, &step) ==
+                    XR_EXECUTION_INITIALIZATION_WAIT);
+    }
+    REQUIRE(xr_execution_lease_initialization_next(&waiter, &step) ==
+            XR_EXECUTION_INITIALIZATION_COMPLETE);
+    REQUIRE(xr_execution_lease_initialization_next(&separate, &step) ==
+            XR_EXECUTION_INITIALIZATION_RUN);
+    REQUIRE(step.module_index == 0u);
+    REQUIRE(xr_execution_lease_initialization_finish(&separate, 0u, true));
+    REQUIRE(xr_execution_lease_initialization_next(&separate, &step) ==
+            XR_EXECUTION_INITIALIZATION_RUN);
+    REQUIRE(step.module_index == 1u);
+    REQUIRE(xr_execution_lease_initialization_finish(&separate, 1u, false));
+    REQUIRE(xr_execution_lease_initialization_next(&separate, &step) ==
+            XR_EXECUTION_INITIALIZATION_FAILED);
+    REQUIRE(!xr_execution_lease_initialization_finish(&separate, 1u, true));
+    REQUIRE(xr_execution_lease_release(&separate));
+    REQUIRE(xr_execution_instance_acquire(second, &separate));
+    REQUIRE(xr_execution_lease_initialization_next(&separate, &step) ==
+            XR_EXECUTION_INITIALIZATION_FAILED);
+    REQUIRE(xr_execution_lease_release(&separate));
+    XrExecutionLease stale = publisher;
+    REQUIRE(xr_execution_lease_release(&publisher));
+    REQUIRE(xr_execution_lease_initialization_next(&stale, &step) ==
+            XR_EXECUTION_INITIALIZATION_INVALID);
+    REQUIRE(xr_execution_lease_initialization_next(&waiter, &step) ==
+            XR_EXECUTION_INITIALIZATION_COMPLETE);
+    REQUIRE(xr_execution_lease_release(&waiter));
+    REQUIRE(xr_execution_instance_retire(first, NULL) == XR_EXECUTION_OK);
+    XrInstance *successor = NULL;
+    REQUIRE(xr_execution_instance_create_successor(first, NULL, 0u, &successor, NULL) ==
+            XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_generation(successor) == 2u);
+    REQUIRE(xr_execution_instance_acquire(successor, &publisher));
+    REQUIRE(xr_execution_lease_initialization_next(&publisher, &step) ==
+            XR_EXECUTION_INITIALIZATION_RUN);
+    REQUIRE(step.module_index == 0u);
+    REQUIRE(xr_execution_lease_release(&publisher));
+    retire_and_free(&successor);
+    REQUIRE(xr_execution_instance_free(&first, NULL) == XR_EXECUTION_OK);
+    retire_and_free(&second);
+
+    for (unsigned active = 0u; active < 2u; ++active) {
+        first = create_instance(program, profile, &bindings, 1u);
+        REQUIRE(xr_execution_instance_acquire(first, &publisher));
+        REQUIRE(xr_execution_instance_acquire(first, &waiter));
+        REQUIRE(xr_execution_lease_initialization_next(&publisher, &step) ==
+                XR_EXECUTION_INITIALIZATION_RUN);
+        if (!active)
+            REQUIRE(xr_execution_lease_initialization_finish(&publisher, 0u, true));
+        REQUIRE(xr_execution_instance_begin_drain(first, NULL) == XR_EXECUTION_OK);
+        REQUIRE(xr_execution_instance_retire(first, NULL) == XR_EXECUTION_GENERATION_REJECTED);
+        REQUIRE(xr_execution_lease_release(&publisher));
+        REQUIRE(xr_execution_lease_initialization_next(&waiter, &step) ==
+                XR_EXECUTION_INITIALIZATION_FAILED);
+        REQUIRE(xr_execution_lease_release(&waiter));
+        REQUIRE(xr_execution_instance_retire(first, NULL) == XR_EXECUTION_OK);
+        REQUIRE(xr_execution_instance_free(&first, NULL) == XR_EXECUTION_OK);
+    }
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+typedef struct InitializationRace {
+    XrInstance *instance;
+    atomic_bool start;
+    uint32_t published[4];
+} InitializationRace;
+
+static void *initialize_module_worker(void *opaque) {
+    InitializationRace *race = opaque;
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(race->instance, &lease));
+    while (!atomic_load_explicit(&race->start, memory_order_acquire))
+        xr_thread_yield();
+    for (;;) {
+        XrExecutionInitializationStep step;
+        XrExecutionInitializationStatus status =
+            xr_execution_lease_initialization_next(&lease, &step);
+        if (status == XR_EXECUTION_INITIALIZATION_COMPLETE)
+            break;
+        if (status == XR_EXECUTION_INITIALIZATION_WAIT) {
+            xr_thread_yield();
+            continue;
+        }
+        REQUIRE(status == XR_EXECUTION_INITIALIZATION_RUN && step.module_index < 4u);
+        REQUIRE(race->published[step.module_index] == 0u);
+        if (step.module_index)
+            REQUIRE(race->published[step.module_index - 1u] == 1u);
+        ++race->published[step.module_index];
+        xr_thread_yield();
+        REQUIRE(xr_execution_lease_initialization_finish(&lease, step.module_index, true));
+    }
+    for (uint32_t module = 0u; module < 4u; ++module)
+        REQUIRE(race->published[module] == 1u);
+    REQUIRE(xr_execution_lease_release(&lease));
+    return NULL;
+}
+
+static void test_concurrent_module_initialization(void) {
+    XrValidatedProgram *program = build_module_program();
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings = {0};
+    InitializationRace race = {.instance = create_instance(program, profile, &bindings, 1u)};
+    atomic_init(&race.start, false);
+    xr_thread_t threads[4];
+    for (size_t index = 0u; index < 4u; ++index)
+        REQUIRE(xr_thread_create(&threads[index], initialize_module_worker, &race));
+    atomic_store_explicit(&race.start, true, memory_order_release);
+    for (size_t index = 0u; index < 4u; ++index)
+        REQUIRE(xr_thread_join(threads[index], NULL) == 0);
+    retire_and_free(&race.instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "module-initialization") == 0) {
+        test_module_initialization_authority_and_failure();
+        test_concurrent_module_initialization();
+        puts("module initialization authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "provider-contract") == 0) {
         test_reentrant_provider_call_pins_lease_without_holding_lock();
         test_concurrent_release_drain_and_retire_during_provider_call();
@@ -833,6 +1016,8 @@ int main(int argc, char **argv) {
     }
     if (argc != 1)
         return 2;
+    test_module_initialization_authority_and_failure();
+    test_concurrent_module_initialization();
     test_profile_partitions_and_foreign_authority();
     test_execution_identity_and_lifecycle();
     test_reentrant_provider_call_pins_lease_without_holding_lock();

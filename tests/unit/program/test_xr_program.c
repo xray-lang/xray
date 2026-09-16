@@ -2,6 +2,7 @@
  * Task 296: canonical CoreIR -> XrProgram writer and bounded structural decode.
  */
 
+#include "xr_program_module_fixture.h"
 #include "core/xr_core_spec_gen.h"
 #include "program/xr_program.h"
 #include "program/xr_program_decode.h"
@@ -729,60 +730,11 @@ static void test_constructor_allocation_failures(uint32_t fixture) {
            builder_allocations, verifier_allocations);
 }
 
-typedef struct ModuleInitializationFixture {
-    XrCoreIrKey profile;
-    uint16_t feature;
-    XrCoreIrInstructionInput returns[4];
-    XrCoreIrBlockInput blocks[4];
-    XrCoreIrFunctionInput functions[4];
-    XrCoreIrKey dependencies[4][2];
-    XrCoreIrModuleInput modules[4];
-    XrCoreIrProgramInput input;
-} ModuleInitializationFixture;
-
-static void init_module_initialization_fixture(ModuleInitializationFixture *fixture) {
-    memset(fixture, 0, sizeof(*fixture));
-    const char *module_names[] = {"base", "left", "right", "main"};
-    const char *function_names[] = {"base:init", "left:init", "right:init", "main:init"};
-    for (uint32_t index = 0u; index < 4u; ++index) {
-        fixture->returns[index].operation_id = XR_CORE_OP_CORE_RETURN;
-        fixture->blocks[index] = (XrCoreIrBlockInput) {
-            .key = key(function_names[index]),
-            .instructions = &fixture->returns[index],
-            .instruction_count = 1u,
-        };
-        fixture->functions[index] = (XrCoreIrFunctionInput) {
-            .key = key(function_names[index]),
-            .entry_block = fixture->blocks[index].key,
-            .blocks = &fixture->blocks[index], .block_count = 1u,
-            .flags = index == 3u ? XR_PROGRAM_FUNCTION_ENTRY : 0u,
-        };
-        fixture->modules[index] = (XrCoreIrModuleInput) {
-            .key = key(module_names[index]),
-            .functions = &fixture->functions[index], .function_count = 1u,
-            .initializer = fixture->functions[index].key,
-            .dependencies = index ? fixture->dependencies[index] : NULL,
-            .dependency_count = index == 3u ? 2u : index ? 1u : 0u,
-        };
-    }
-    fixture->dependencies[1][0] = fixture->modules[0].key;
-    fixture->dependencies[2][0] = fixture->modules[0].key;
-    fixture->dependencies[3][0] = fixture->modules[1].key;
-    fixture->dependencies[3][1] = fixture->modules[2].key;
-    fixture->profile = key("module-initialization-profile");
-    fixture->feature = XR_CORE_FEATURE_CORE_BASE;
-    fixture->input = (XrCoreIrProgramInput) {
-        .semantic_profile_fingerprint = fixture->profile.bytes,
-        .required_features = &fixture->feature, .required_feature_count = 1u,
-        .modules = fixture->modules, .module_count = 4u,
-    };
-}
-
 static XrProgramBuildStatus write_module_initialization_fixture(XrProgramArtifact *artifact,
                                                                 char *diagnostic,
                                                                 size_t diagnostic_size) {
-    ModuleInitializationFixture fixture;
-    init_module_initialization_fixture(&fixture);
+    XrProgramModuleFixture fixture;
+    xr_program_module_fixture_init(&fixture);
     XrCoreIrProgram *program = NULL;
     XrProgramBuildStatus status =
         xr_core_ir_program_build(&fixture.input, &program, diagnostic, diagnostic_size);
@@ -793,8 +745,8 @@ static XrProgramBuildStatus write_module_initialization_fixture(XrProgramArtifac
 }
 
 static void test_module_initialization_hostile_wire(void) {
-    ModuleInitializationFixture fixture;
-    init_module_initialization_fixture(&fixture);
+    XrProgramModuleFixture fixture;
+    xr_program_module_fixture_init(&fixture);
     char diagnostic[256] = {0};
     XrProgramArtifact artifact = {0};
     XrProgramBuildStatus status =
@@ -887,8 +839,8 @@ static void test_module_initialization_hostile_wire(void) {
 }
 
 static void test_module_initialization_construction(void) {
-    ModuleInitializationFixture fixture;
-    init_module_initialization_fixture(&fixture);
+    XrProgramModuleFixture fixture;
+    xr_program_module_fixture_init(&fixture);
     char diagnostic[256] = {0};
     XrCoreIrProgram *program = NULL;
     CHECK(xr_core_ir_program_build(&fixture.input, &program, diagnostic, sizeof(diagnostic)) ==
@@ -931,7 +883,7 @@ static void test_module_initialization_construction(void) {
     xr_program_artifact_free(&artifact);
     xr_core_ir_program_free(program);
     for (uint32_t mutation = 0u; mutation < 7u; ++mutation) {
-        init_module_initialization_fixture(&fixture);
+        xr_program_module_fixture_init(&fixture);
         if (mutation == 0u)
             fixture.modules[1].initializer = fixture.functions[0].key;
         else if (mutation == 1u)
@@ -952,7 +904,7 @@ static void test_module_initialization_construction(void) {
         CHECK(program == NULL);
         xr_core_ir_program_free(program);
     }
-    init_module_initialization_fixture(&fixture);
+    xr_program_module_fixture_init(&fixture);
     size_t allocations = 0u;
     for (size_t fail_at = 1u; fail_at < 128u; ++fail_at) {
         allocation_probe_begin(fail_at);

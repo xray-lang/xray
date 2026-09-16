@@ -151,8 +151,24 @@ Module-table admission is exercised with direct wire mutations as well as
 constructor inputs. Allocation-failure checks compile the production CoreIR
 builder, writer (including buffer reallocation), and independent verifier with
 test-local allocators. Every injected failure must preserve empty output and
-release all owned allocations. This coverage does not establish module slot
-execution or instance initialization, which remain separate obligations.
+release all owned allocations.
+
+The instance owns initializer publication authority and the completed prefix of
+the immutable Program module order. A valid lease claims the next initializer
+once; repeated claims while it is active and other leases observe WAIT without
+acquiring publication authority. Only that lease may finish the exact current
+module. Success advances the prefix, and the last success publishes COMPLETE.
+Failure or premature publisher release permanently publishes FAILED. Invalid,
+stale, out-of-order and duplicate reports leave the state unchanged. Existing
+leases may finish initialization during drain; new leases remain rejected.
+Independent instances and successors start with an empty prefix. Function-only
+programs are immediately complete.
+
+Concurrent publication and visibility, failure persistence, abandoned publishers,
+drain and instance isolation have direct execution tests. The diamond module
+fixture is shared with the independent Program admission and allocation tests.
+This state protocol does not yet establish initializer execution by VM or AOT,
+module value ownership, or the complete source-program module closure.
 
 ## Digest anchors
 
@@ -160,8 +176,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h d21c09134a6469510fddfe0e10e96
 anchor-sha256: src/plan/target/xr_target_profile.c 7b5cfb5d561174bd1b2e4c834efe4290d3297a00a97a847ea4c83ead36e0f3ac
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 45c0cd1a438551071bd767e0a966e5950a03b809cbfbad7cbfeab3ed0f020c26
 anchor-sha256: src/plan/target/xr_target_verify.c 6a58af2b4a6270625b6260177e5bf2cfbceb273b5d07c9d19dd16dd575e58966
-anchor-sha256: src/execution/xr_execution.h 3a09783038967320ae3566e258de5ae7108b60d7ed5f4f01a4a020067b447867
-anchor-sha256: src/execution/xr_execution.c ec2d2268361393881707557b2331ae27b887bb35408f626681aa13ccd3817ded
+anchor-sha256: src/execution/xr_execution.h f0b2854d26d380c106441634465a5d60c2f3dc821fe33c830b5531f9c0f01e99
+anchor-sha256: src/execution/xr_execution.c 15ffbd4144fe343607b14d934c4e9ac12e8ecc63f0afee22773ed6bf43bc4a06
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 2b6c5b11049212bf0993b0bc95718004db2c4e51e7d08ee7ee75e960c368a5d1
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
@@ -173,7 +189,7 @@ anchor-sha256: src/runtime/abi/xr_runtime_contract.h 6f59e9d8d7d5f48035db68c7bc4
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 8c68657d160545bbfc3fafb6b54e347e9a0dbc959122e71d1763b1b5866443bf
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
 anchor-sha256: tests/unit/plan/test_target_profile.c e54b53070db66b309a07673c57fb1112781b19cd8eecacacb496fefb04079da6
-anchor-sha256: tests/unit/execution/test_xr_execution.c 0f61fac9edfa70cd1f3bae7aee32b0422bc4d2abb119fa00696cb7831bf44af6
+anchor-sha256: tests/unit/execution/test_xr_execution.c 4011e27598523ea821c8a2dbe45d5fdfc2e7017ad14ad3a05f125af7d6fccdc5
 anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 177583c0f785168d4693a33d035ce52c04c6bfd37eeb4de7dacf0843aeffb601
 anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858
 anchor-sha256: scripts/check_xr_execution_contracts.py 88b35a547b5f56febd0ccd625761dd47b18242c00f9fca858c616884c090234d
@@ -194,7 +210,7 @@ anchor-sha256: src/program/xr_program_decode.c ab7ec45d4b3e0e20316e6bc5f274af7a0
 anchor-sha256: src/program/xr_program_schema_gen.h a8854ccf5ce0a0c5cda994be76da18c85946a14e5c4d90a2b8d5c90c9eb1a926
 anchor-sha256: xisa/program/schema.json 66ebcb692bbdca5f7c4e9e1e037fd4529959f8e7bd8476d039ae7e507e628afe
 anchor-sha256: tools/programgen/programgen.py 039540bcc3bff25776373a061a9fbeb300da19d7a6c5e472b0f63295bf25206a
-anchor-sha256: tests/unit/program/test_xr_program.c 4297b5c1779aae0d2f30668d8b147c84d631bbc151b22527dc9ac472fe69d625
+anchor-sha256: tests/unit/program/test_xr_program.c d377b28b1a631040e5f3b5f6be11ebb473597e6085057f44d1ce2b564ba673a1
 anchor-sha256: tests/unit/program/test_xr_program_provider_requirements.c 0368d273bc7c783ff9c8e72f65e38cee49b2575af94c5a0bec03ec9a33390abf
 anchor-sha256: tests/unit/program/xr_program_provider_fixture.h 9a7116c1fdcad29ea945a8e7b651e24490f35fd52f5f3aaab5367e755e8affea
 anchor-sha256: contracts/canonical-program/xrprogram-format-v3.md 8bfe617f6cc769f2565e596d408c5bb0b8174ac852bc203e1876d862ebd12398
@@ -203,3 +219,4 @@ anchor-sha256: contracts/canonical-program/xrprogram-semantic-coverage.json 5e51
 anchor-sha256: tests/unit/execution/test_provider_logical_admission.c e18fa4f1c8dec8f96e4c5be777f639ce5b85b8258801a3355bbd4f54327facec
 anchor-sha256: scripts/canonical_program_test_profile.py 20343ab8152f7b1f5bdf1cf465df9520fe8e780ed337f50399fdd7d8f4511df2
 anchor-sha256: tests/lib/tests/test_canonical_program_test_profile.py a6ceb30eaaec443cd7c0f40a976735ae776caa8cd8a137a7174f1720416b9d6e
+anchor-sha256: tests/unit/program/xr_program_module_fixture.h f3c1ecd2216046843e9d0d604541fa11ebf259000ba0f992ed2ef413c89dd637

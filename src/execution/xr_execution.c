@@ -56,6 +56,10 @@ struct XrInstance {
     XrExecutionLeaseTicket *lease_tickets;
     size_t lease_ticket_capacity;
     uint64_t next_lease_ticket;
+    uint64_t initialization_ticket;
+    uint32_t initialized_modules;
+    bool initializer_active;
+    bool initialization_failed;
 };
 
 static void lease_lock(XrInstance *instance) {
@@ -577,6 +581,11 @@ bool xr_execution_lease_release(XrExecutionLease *lease) {
         lease_unlock(instance);
         return false;
     }
+    if (instance->initialization_ticket == lease->ticket) {
+        instance->initialization_failed = true;
+        instance->initialization_ticket = 0u;
+        instance->initializer_active = false;
+    }
     ticket->id = 0u;
     atomic_fetch_sub_explicit(&instance->leases, 1u, memory_order_relaxed);
     lease_unlock(instance);
@@ -591,6 +600,62 @@ bool xr_execution_lease_is_valid(const XrExecutionLease *lease) {
     XrInstance *instance = lease->instance;
     lease_lock(instance);
     bool valid = lease_ticket_is_active_locked(instance, lease->ticket);
+    lease_unlock(instance);
+    return valid;
+}
+
+XrExecutionInitializationStatus xr_execution_lease_initialization_next(
+    const XrExecutionLease *lease, XrExecutionInitializationStep *step_out) {
+    if (step_out)
+        *step_out = (XrExecutionInitializationStep) {UINT32_MAX, UINT32_MAX};
+    if (!lease || !lease->instance || lease->ticket == 0u || !step_out)
+        return XR_EXECUTION_INITIALIZATION_INVALID;
+    XrInstance *instance = lease->instance;
+    lease_lock(instance);
+    XrExecutionInitializationStatus status = XR_EXECUTION_INITIALIZATION_INVALID;
+    if (!lease_ticket_is_active_locked(instance, lease->ticket))
+        goto done;
+    if (instance->initialization_failed) {
+        status = XR_EXECUTION_INITIALIZATION_FAILED;
+    } else if (instance->initialized_modules == instance->program->module_count) {
+        status = XR_EXECUTION_INITIALIZATION_COMPLETE;
+    } else if (instance->initializer_active ||
+               (instance->initialization_ticket != 0u &&
+                instance->initialization_ticket != lease->ticket)) {
+        status = XR_EXECUTION_INITIALIZATION_WAIT;
+    } else {
+        instance->initialization_ticket = lease->ticket;
+        instance->initializer_active = true;
+        step_out->module_index = instance->initialized_modules;
+        step_out->function_id =
+            instance->program->modules[instance->initialized_modules].initializer;
+        status = XR_EXECUTION_INITIALIZATION_RUN;
+    }
+done:
+    lease_unlock(instance);
+    return status;
+}
+
+bool xr_execution_lease_initialization_finish(const XrExecutionLease *lease,
+                                              uint32_t module_index, bool succeeded) {
+    if (!lease || !lease->instance || lease->ticket == 0u)
+        return false;
+    XrInstance *instance = lease->instance;
+    lease_lock(instance);
+    bool valid = lease_ticket_is_active_locked(instance, lease->ticket) &&
+                 instance->initialization_ticket == lease->ticket &&
+                 instance->initializer_active && !instance->initialization_failed &&
+                 module_index == instance->initialized_modules &&
+                 module_index < instance->program->module_count;
+    if (valid) {
+        instance->initializer_active = false;
+        if (succeeded)
+            ++instance->initialized_modules;
+        else
+            instance->initialization_failed = true;
+        if (!succeeded || instance->initialized_modules == instance->program->module_count)
+            instance->initialization_ticket = 0u;
+    }
     lease_unlock(instance);
     return valid;
 }
