@@ -54,6 +54,7 @@ LIMIT_KEYS = {
     "coroutine_states_per_function",
     "coroutine_safepoints_per_function",
     "live_values_per_safepoint",
+    "module_slots",
 }
 IMPORT_KEYS = {"provider_requirement_table", "target_profile_binding"}
 TYPE_SYSTEM_KEYS = {
@@ -297,7 +298,7 @@ def validate(schema: dict[str, Any]) -> None:
     require(schema["schema"] == "xray-program-format-schema/3", "program schema version drifted")
     fmt = schema["format"]
     require(isinstance(fmt, dict) and set(fmt) == FORMAT_KEYS, "format fields drifted")
-    require(fmt["major"] == 3 and fmt["minor"] == 1, "XrProgram format must be 3.1")
+    require(fmt["major"] == 3 and fmt["minor"] == 2, "XrProgram format must be 3.2")
     require(isinstance(fmt["magic_hex"], str) and re.fullmatch(r"[0-9a-f]{16}", fmt["magic_hex"]),
             "program magic must be eight canonical lowercase hex bytes")
     require(fmt["program_id_domain"] == "xray-program-id-v3", "ProgramId domain drifted")
@@ -363,7 +364,7 @@ def validate(schema: dict[str, Any]) -> None:
         "signature_table": "content-addressed canonical rows shared by functions, callable types and interface slots; callable and interface rows expose effect and capability upper bounds while function rows state implementation requirements",
         "interface_table": "semantic-key order; each row contains an ordered object-safe SignatureId slot list",
         "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map",
-        "module_initialization_table": 'semantic-metadata ends with a dense initialization-order module table; each row is (unique nonzero semantic key, initializer FunctionId, nonempty sorted unique owned FunctionIds, sorted unique dependency ModuleIds); every initializer belongs to its module and takes no parameters or receiver; every dependency precedes its importer; function-only compilation units have no runtime module row',
+        "module_initialization_table": 'semantic-metadata ends with a dense initialization-order module table; each row is (unique nonzero semantic key, initializer FunctionId, nonempty sorted unique owned FunctionIds, sorted unique dependency ModuleIds, declaration-key-ordered data slots); each slot is (nonzero declaration key, non-void runtime TypeId, flags with bit 0 const); slot identity is the module key plus declaration key; imports and re-exports name the same owner slot; every initializer belongs to its module and takes no parameters or receiver; every dependency precedes its importer; function-only compilation units have no runtime module row or data slots',
         "operation_type_immediate_contract": "canonical program TypeId; used only by operations whose law names an exact semantic type and never carries layout or backend representation",
         "provider_operation_immediate_contract": "dense (ProviderRequirementIndex,OperationIndex) resolving an exact canonical imports row; every requirement operation is referenced by at least one provider-backed CoreSpec operation and no operation may reference an undeclared provider requirement",
         "coroutine_call_immediate_contract": "dense (FunctionId,SafepointId) naming one sealed child coroutine and one caller-local logical suspension point; it carries no executor frame or slot layout",

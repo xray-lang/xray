@@ -23,6 +23,7 @@ typedef struct XrProgramModuleFixture {
     XrCoreIrFunctionInput functions[4];
     XrCoreIrKey dependencies[4][2];
     XrCoreIrModuleInput modules[4];
+    XrCoreIrModuleSlotInput slots[4][2];
     XrCoreIrProgramInput input;
 } XrProgramModuleFixture;
 
@@ -63,6 +64,20 @@ static inline void xr_program_module_fixture_init(XrProgramModuleFixture *fixtur
         .required_features = &fixture->feature, .required_feature_count = 1u,
         .modules = fixture->modules, .module_count = 4u,
     };
+}
+
+static inline void xr_program_module_fixture_add_slots(XrProgramModuleFixture *fixture) {
+    for (uint32_t module = 0u; module < 4u; ++module) {
+        fixture->slots[module][0] = (XrCoreIrModuleSlotInput) {
+            .key = xr_core_ir_key("counter:1", 9u), .type_id = XR_CORE_TYPE_I64,
+        };
+        fixture->slots[module][1] = (XrCoreIrModuleSlotInput) {
+            .key = xr_core_ir_key("label:2", 7u), .type_id = XR_CORE_TYPE_STRING,
+            .flags = XR_PROGRAM_MODULE_SLOT_CONST,
+        };
+        fixture->modules[module].slots = fixture->slots[module];
+        fixture->modules[module].slot_count = 2u;
+    }
 }
 
 #endif  // XR_PROGRAM_MODULE_FIXTURE_H

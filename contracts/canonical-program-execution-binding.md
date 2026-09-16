@@ -153,6 +153,15 @@ builder, writer (including buffer reallocation), and independent verifier with
 test-local allocators. Every injected failure must preserve empty output and
 release all owned allocations.
 
+The Program 3.2 module table also owns immutable data-slot declarations, with
+exact types and const flags. Canonical slot identity combines the owning module
+and its declaration key; source imports and re-exports must name that same slot.
+The builder copies and sorts declarations, while the independent decoder and
+verifier reject malformed keys, types, flags and budgets. No initialized value
+is inferred from a declaration, and Code never owns mutable module storage.
+The fixed empty-module format vector is independently derived from its prior
+literal bytes by the minor-version change; version 3.1 is rejected outright.
+
 The instance owns initializer publication authority and the completed prefix of
 the immutable Program module order. A valid lease claims the next initializer
 once; repeated claims while it is active and other leases observe WAIT without
@@ -183,8 +192,8 @@ anchor-sha256: src/execution/xr_execution_identity.c 2b6c5b11049212bf0993b0bc957
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 0da4b3d5b59668a6e865bb7c1e20185049cfdbbb653c553418bee63d49119080
-anchor-sha256: src/program/xr_program_verify.c e08f00e5a54513e7f50875a5d5247219484eb4bac6c2be62944decd4c632e8aa
-anchor-sha256: src/program/xr_validated_program_internal.h b16db5739182ee5129fcd7b4183c2d9f4fe24349287010534aa182bf739a56bf
+anchor-sha256: src/program/xr_program_verify.c 5da8b1b66bce728f4d991f6d2f2f86a0afb145ec682195836f992f66621f6feb
+anchor-sha256: src/program/xr_validated_program_internal.h 302c2169102c999b6da8610c10ea46ddcd569bf86a494e71b3b30fabdff172ea
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h 6f59e9d8d7d5f48035db68c7bc4e32722a5c8bd09d573a5031bd87f7adffcf01
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 8c68657d160545bbfc3fafb6b54e347e9a0dbc959122e71d1763b1b5866443bf
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
@@ -202,21 +211,23 @@ anchor-sha256: stdlib/time/time.c 71bae1e19f5f0d74fac3065562f90c5ea159ef8505d2b2
 anchor-sha256: src/os/unix/pipe_unix.c cd846b292d23a19a6f1889be1f6ec2905b4021287889afde22709f9cfc071f5b
 anchor-sha256: tests/unit/runtime/test_time_utc_offset.c 6c0e67d39fc677f9f4c739d5e57e8747c6024c0a51562e7019e89962c683fc93
 anchor-sha256: tests/unit/execution/test_stdlib_provider_binding.c 55c41086c8733bed2a2c4b2196c1725cb370608e88c10338ac41d7086b6de358
-anchor-sha256: src/program/xr_program.h ff5c6b09e5226ff1206ac6ffabfc865f18764f101b8627208235a27a4062eb36
-anchor-sha256: src/program/xr_program_internal.h 5bf60ec9d924df66d9867c0a872008eba311053afcea426ddfcf7adc0dd8a3c1
-anchor-sha256: src/program/xr_core_ir.c 210f94e6b1e04e9987b573362419d088f7d2a52d48b4dcb674225b908af932be
-anchor-sha256: src/program/xr_program_encode.c c52df53c20d4a11b1341d8911c54fd5fa2fe7f33f71a16523e0276b9efa6939d
-anchor-sha256: src/program/xr_program_decode.c ab7ec45d4b3e0e20316e6bc5f274af7a007d3447e5bfbf2fda82b88e950166ae
-anchor-sha256: src/program/xr_program_schema_gen.h a8854ccf5ce0a0c5cda994be76da18c85946a14e5c4d90a2b8d5c90c9eb1a926
-anchor-sha256: xisa/program/schema.json 66ebcb692bbdca5f7c4e9e1e037fd4529959f8e7bd8476d039ae7e507e628afe
-anchor-sha256: tools/programgen/programgen.py 039540bcc3bff25776373a061a9fbeb300da19d7a6c5e472b0f63295bf25206a
-anchor-sha256: tests/unit/program/test_xr_program.c d377b28b1a631040e5f3b5f6be11ebb473597e6085057f44d1ce2b564ba673a1
+anchor-sha256: src/program/xr_program.h 0923e49e7ec0e701c8bd06697139c70ee9ccc89dad1341b1ebad7bbd3613abd3
+anchor-sha256: src/program/xr_program_internal.h 2e161a9e0e9e59e6e07fd58be44563341b451c8c206db5d1c56a2fa1cf1a2f34
+anchor-sha256: src/program/xr_core_ir.c 9ba7192443c227c19040807905b287400cc66267162c52a6f53ebe70f560907a
+anchor-sha256: src/program/xr_program_encode.c b4074c20393776f948f468f0b60abe0110cac2d264744303aa6e47e1ce922f53
+anchor-sha256: src/program/xr_program_decode.c 2e09f78265e7b8b27ee7ac3e7e4add226e00e15da6a15dbd8c6c35cea9ae29b7
+anchor-sha256: src/program/xr_program_schema_gen.h 634fc4884de9c7ccbdc3fd41b351efccac2cec318c91a3a7722c47d3c242890c
+anchor-sha256: xisa/program/schema.json 97a98b1f6805d39df92764b47da5599cce893b76e65a6951b7fa8b520928a715
+anchor-sha256: tools/programgen/programgen.py 368edb7148788f45fbdc8d79bf83ec4727c04751b0dfc789f5858ebaa1c04e1a
+anchor-sha256: tests/unit/program/test_xr_program.c 9c79edb98d15f0eb65e80d07a423ce2e10f06fe1eb9dd478266949e8cee3cb07
 anchor-sha256: tests/unit/program/test_xr_program_provider_requirements.c 0368d273bc7c783ff9c8e72f65e38cee49b2575af94c5a0bec03ec9a33390abf
 anchor-sha256: tests/unit/program/xr_program_provider_fixture.h 9a7116c1fdcad29ea945a8e7b651e24490f35fd52f5f3aaab5367e755e8affea
-anchor-sha256: contracts/canonical-program/xrprogram-format-v3.md 8bfe617f6cc769f2565e596d408c5bb0b8174ac852bc203e1876d862ebd12398
-anchor-sha256: contracts/canonical-program/xrprogram-format-coverage.json ea94e345733d2614486476b74e5b05fc065588d00f49d56f86c1f8f54cf99679
-anchor-sha256: contracts/canonical-program/xrprogram-semantic-coverage.json 5e51bc52585373d2134f123d6df5a92dc05634d83fe27132b14718230c29dfbb
+anchor-sha256: contracts/canonical-program/xrprogram-format-v3.md 823a5ae0dd29c8a9a7086614e029e9c758af24e14c24824bd57064115c905786
+anchor-sha256: contracts/canonical-program/xrprogram-format-coverage.json 852123b39c88e7464e5e6f8329b381e625e6cfe900e9914abfa4a1d538115150
+anchor-sha256: contracts/canonical-program/xrprogram-semantic-coverage.json 927960560f8018acaf19575f5e2125f3bfde41001021046e3f61624b2a9a7f66
 anchor-sha256: tests/unit/execution/test_provider_logical_admission.c e18fa4f1c8dec8f96e4c5be777f639ce5b85b8258801a3355bbd4f54327facec
 anchor-sha256: scripts/canonical_program_test_profile.py 20343ab8152f7b1f5bdf1cf465df9520fe8e780ed337f50399fdd7d8f4511df2
 anchor-sha256: tests/lib/tests/test_canonical_program_test_profile.py a6ceb30eaaec443cd7c0f40a976735ae776caa8cd8a137a7174f1720416b9d6e
-anchor-sha256: tests/unit/program/xr_program_module_fixture.h f3c1ecd2216046843e9d0d604541fa11ebf259000ba0f992ed2ef413c89dd637
+anchor-sha256: tests/unit/program/xr_program_module_fixture.h 2ba57c2761b7003a8c23981c4341eac10e326ad302d689619f86c7f1b2f08cba
+
+anchor-sha256: tests/unit/program/xr_program_module_slot_checks.inc.c b9c8ddd8b3bb766b9005c425ec5b6254ac1c8a1f9fe4a804412005c25b983f97

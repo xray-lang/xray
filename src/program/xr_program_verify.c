@@ -281,8 +281,10 @@ void xr_validated_program_free(XrValidatedProgram *program) {
          program->provider_requirements && provider < program->provider_requirement_count;
          ++provider)
         xr_free(program->provider_requirements[provider].operations);
-    for (uint32_t module = 0u; program->modules && module < program->module_count; ++module)
+    for (uint32_t module = 0u; program->modules && module < program->module_count; ++module) {
         xr_free(program->modules[module].dependencies);
+        xr_free(program->modules[module].slots);
+    }
     xr_free(program->types);
     xr_free(program->signatures);
     xr_free(program->interfaces);
@@ -1533,6 +1535,47 @@ static bool validated_signature_satisfies_interface(const XrValidatedProgram *pr
     return true;
 }
 
+static bool parse_module_slots(VerifyContext *context, VerifyReader *reader,
+                               XrValidatedModule *module, XrProgramSemanticLocation location) {
+    uint64_t count = take_uvar(reader);
+    if (!reader->valid || count > XR_PROGRAM_LIMIT_MODULE_SLOTS -
+                                     context->program->module_slot_count ||
+        count > SIZE_MAX / sizeof(*module->slots) || !spend(context, count, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+        return false;
+    }
+    module->slot_count = (uint32_t) count;
+    context->program->module_slot_count += module->slot_count;
+    if (count == 0u)
+        return true;
+    module->slots = xr_calloc((size_t) count, sizeof(*module->slots));
+    if (!module->slots) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+        return false;
+    }
+    for (uint32_t index = 0u; index < module->slot_count; ++index) {
+        XrValidatedModuleSlot *slot = &module->slots[index];
+        take_bytes(reader, slot->key.bytes, sizeof(slot->key.bytes));
+        uint64_t type_id = take_uvar(reader);
+        uint64_t flags = take_uvar(reader);
+        if (!reader->valid || key_is_zero(slot->key) || flags > XR_PROGRAM_MODULE_SLOT_CONST ||
+            (index != 0u && memcmp(module->slots[index - 1u].key.bytes, slot->key.bytes,
+                                   sizeof(slot->key.bytes)) >= 0)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+            return false;
+        }
+        if (type_id > UINT16_MAX || type_id == XR_CORE_TYPE_VOID ||
+            !type_is_runtime(context->program, type_id) ||
+            type_is_existential_ref(context->program, (uint16_t) type_id)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+        slot->type_id = (uint16_t) type_id;
+        slot->flags = (uint32_t) flags;
+    }
+    return true;
+}
+
 static bool parse_module_row(VerifyContext *context, VerifyReader *reader, uint32_t module_id,
                              XrProgramSemanticLocation location) {
     XrValidatedProgram *program = context->program;
@@ -1586,7 +1629,7 @@ static bool parse_module_row(VerifyContext *context, VerifyReader *reader, uint3
         module->dependencies[index] = (uint32_t) dependency;
         previous = dependency;
     }
-    return true;
+    return parse_module_slots(context, reader, module, location);
 }
 
 static int module_key_compare(const void *left, const void *right) {

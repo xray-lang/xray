@@ -705,6 +705,13 @@ static void encode_modules(ByteBuffer *buffer, const XrCoreIrProgram *program,
                 buffer_put_uvar(buffer, dependencies[dependency]);
             xr_free(dependencies);
         }
+        buffer_put_uvar(buffer, module->slot_count);
+        for (uint32_t slot = 0u; slot < module->slot_count; ++slot) {
+            const XrCoreIrModuleSlotInput *row = &module->slots[slot];
+            buffer_put_bytes(buffer, row->key.bytes, sizeof(row->key.bytes));
+            buffer_put_uvar(buffer, row->type_id);
+            buffer_put_uvar(buffer, row->flags);
+        }
         if (buffer->status != XR_PROGRAM_BUILD_OK)
             break;
     }

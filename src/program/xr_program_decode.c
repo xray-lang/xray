@@ -456,12 +456,39 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
     return section_done(&section, artifact);
 }
 
+static void decode_module_slots(Reader *section, uint64_t *slot_total) {
+    if (section->status != XR_PROGRAM_DECODE_OK)
+        return;
+    uint64_t count = take_uvar(section);
+    if (section->status != XR_PROGRAM_DECODE_OK)
+        return;
+    if (count > XR_PROGRAM_LIMIT_MODULE_SLOTS - *slot_total ||
+        !count_records(section, count)) {
+        section->status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+        return;
+    }
+    *slot_total += count;
+    uint8_t previous[XR_CORE_IR_KEY_SIZE] = {0};
+    for (uint64_t slot = 0u; slot < count && section->status == XR_PROGRAM_DECODE_OK; ++slot) {
+        uint8_t key[XR_CORE_IR_KEY_SIZE];
+        if (!take_bytes(section, key, sizeof(key)))
+            return;
+        uint64_t type_id = take_uvar(section);
+        uint64_t flags = take_uvar(section);
+        if (type_id > UINT16_MAX || flags > XR_PROGRAM_MODULE_SLOT_CONST ||
+            (slot != 0u && memcmp(previous, key, sizeof(key)) >= 0))
+            section->status = XR_PROGRAM_DECODE_NONCANONICAL;
+        memcpy(previous, key, sizeof(key));
+    }
+}
+
 static void decode_modules(Reader *section, uint64_t function_count) {
     uint64_t count = take_uvar(section);
     if (count > function_count || !count_records(section, count)) {
         section->status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
         return;
     }
+    uint64_t slot_total = 0u;
     for (uint64_t module = 0u; module < count && section->status == XR_PROGRAM_DECODE_OK;
          ++module) {
         uint8_t key[XR_CORE_IR_KEY_SIZE];
@@ -492,6 +519,7 @@ static void decode_modules(Reader *section, uint64_t function_count) {
                 section->status = XR_PROGRAM_DECODE_NONCANONICAL;
             previous = dependency;
         }
+        decode_module_slots(section, &slot_total);
     }
 }
 

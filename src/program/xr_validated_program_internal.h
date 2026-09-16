@@ -202,11 +202,19 @@ typedef struct XrValidatedFunction {
     uint32_t module_index_plus_one;
 } XrValidatedFunction;
 
+typedef struct XrValidatedModuleSlot {
+    XrCoreIrKey key;
+    uint16_t type_id;
+    uint32_t flags;
+} XrValidatedModuleSlot;
+
 typedef struct XrValidatedModule {
     XrCoreIrKey key;
     uint32_t initializer;
     uint32_t *dependencies;
     uint32_t dependency_count;
+    XrValidatedModuleSlot *slots;
+    uint32_t slot_count;
 } XrValidatedModule;
 
 struct XrValidatedProgram {
@@ -232,6 +240,7 @@ struct XrValidatedProgram {
     /* Dense module indices are the immutable initialization order. */
     XrValidatedModule *modules;
     uint32_t module_count;
+    uint32_t module_slot_count;
     uint32_t entry_function;
     uint64_t verifier_work;
 };

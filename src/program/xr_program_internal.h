@@ -153,6 +153,8 @@ typedef struct XrCoreIrModule {
     XrCoreIrKey *dependencies;
     uint32_t dependency_count;
     uint32_t initialization_order;
+    XrCoreIrModuleSlotInput *slots;
+    uint32_t slot_count;
 } XrCoreIrModule;
 
 typedef struct XrCoreIrInterface {

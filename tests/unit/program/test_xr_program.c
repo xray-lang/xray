@@ -374,11 +374,11 @@ static void test_determinism_roundtrip_and_identity(void) {
 
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
-    /* Independently derived by setting format minor to one and appending a
-     * zero module count to semantic metadata, including its directory length. */
+    /* Independently derived from the fixed 3.1 byte vector by changing only
+     * the minor to two. Its empty module table has no slot rows. */
     CHECK(first.size == 477u);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
-    CHECK(strcmp(id_hex, "c1fd51fb97573aed653736925758d033c4a6ccd00d84f1e2ca9e6d21b9d64abb") == 0);
+    CHECK(strcmp(id_hex, "93be412037a9667162cc7ec2de9fd1ebf69d8071654c33ad418f3ce6276c4e22") == 0);
 
     xr_program_artifact_free(&reencoded);
     xr_program_artifact_free(&rerooted);
@@ -430,6 +430,10 @@ static void test_hostile_structure_and_budget(void) {
 
     memcpy(mutated, artifact.bytes, artifact.size);
     mutated[XR_PROGRAM_MAGIC_SIZE] = 1u;
+    expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
+
+    memcpy(mutated, artifact.bytes, artifact.size);
+    mutated[XR_PROGRAM_MAGIC_SIZE + 2u] = 1u;
     expect_decode_status(mutated, artifact.size, NULL, XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
 
     expect_decode_status(artifact.bytes, artifact.size - 1u, NULL,
@@ -649,6 +653,8 @@ static void test_partial_core_ir_construction(void) {
 static XrProgramBuildStatus write_module_initialization_fixture(XrProgramArtifact *artifact,
                                                                 char *diagnostic,
                                                                 size_t diagnostic_size);
+static XrProgramBuildStatus write_module_slots_fixture(XrProgramArtifact *artifact,
+                                                       char *diagnostic, size_t diagnostic_size);
 
 static XrProgramBuildStatus write_allocation_fixture(uint32_t fixture, XrProgramArtifact *artifact,
                                                      char *diagnostic, size_t diagnostic_size) {
@@ -666,6 +672,8 @@ static XrProgramBuildStatus write_allocation_fixture(uint32_t fixture, XrProgram
                                                            artifact, diagnostic, diagnostic_size);
         case 4u:
             return write_module_initialization_fixture(artifact, diagnostic, diagnostic_size);
+        case 5u:
+            return write_module_slots_fixture(artifact, diagnostic, diagnostic_size);
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -924,10 +932,14 @@ static void test_module_initialization_construction(void) {
     printf("Module initialization constructor allocation points: %zu\n", allocations);
 }
 
+#include "xr_program_module_slot_checks.inc.c"
+
 int main(void) {
+    test_module_slots_construction();
+    test_module_slots_hostile_wire();
     test_module_initialization_construction();
     test_module_initialization_hostile_wire();
-    for (uint32_t fixture = 0u; fixture < 5u; ++fixture)
+    for (uint32_t fixture = 0u; fixture < 6u; ++fixture)
         test_constructor_allocation_failures(fixture);
     test_partial_core_ir_construction();
     test_determinism_roundtrip_and_identity();

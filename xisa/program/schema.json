@@ -2,7 +2,7 @@
   "schema": "xray-program-format-schema/3",
   "format": {
     "major": 3,
-    "minor": 1,
+    "minor": 2,
     "magic_hex": "585250524f470d0a",
     "program_id_domain": "xray-program-id-v3"
   },
@@ -95,7 +95,7 @@
     "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
     "coroutine_state_contract": "function-local dense states; state zero names entry and every nonzero state names one continuation block",
     "coroutine_safepoint_contract": "function-local dense safepoints name one nonzero resume state and a sorted unique exact live-across ValueId set",
-    "module_initialization_table": "semantic-metadata ends with a dense initialization-order module table; each row is (unique nonzero semantic key, initializer FunctionId, nonempty sorted unique owned FunctionIds, sorted unique dependency ModuleIds); every initializer belongs to its module and takes no parameters or receiver; every dependency precedes its importer; function-only compilation units have no runtime module row"
+    "module_initialization_table": "semantic-metadata ends with a dense initialization-order module table; each row is (unique nonzero semantic key, initializer FunctionId, nonempty sorted unique owned FunctionIds, sorted unique dependency ModuleIds, declaration-key-ordered data slots); each slot is (nonzero declaration key, non-void runtime TypeId, flags with bit 0 const); slot identity is the module key plus declaration key; imports and re-exports name the same owner slot; every initializer belongs to its module and takes no parameters or receiver; every dependency precedes its importer; function-only compilation units have no runtime module row or data slots"
   },
   "imports": {
     "provider_requirement_table": "target-neutral ascending unique contract IDs; each row has ascending unique nonempty operation IDs, each followed by minimal-uleb128 logical byte length and a canonical provider logical contract v1; complete signature, ownership, effects, resource transitions and execution constraints are semantic program identity",
@@ -161,6 +161,7 @@
     "provider_operations_per_contract": 65535,
     "coroutine_states_per_function": 1048576,
     "coroutine_safepoints_per_function": 1048576,
-    "live_values_per_safepoint": 65536
+    "live_values_per_safepoint": 65536,
+    "module_slots": 1048576
   }
 }

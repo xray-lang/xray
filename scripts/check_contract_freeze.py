@@ -460,6 +460,7 @@ CONTRACT_SPECS = (
             "tools/programgen/programgen.py",
             "tests/unit/program/test_xr_program.c",
             "tests/unit/program/xr_program_module_fixture.h",
+            "tests/unit/program/xr_program_module_slot_checks.inc.c",
             "tests/unit/program/test_xr_program_provider_requirements.c",
             "tests/unit/program/xr_program_provider_fixture.h",
             "contracts/canonical-program/xrprogram-format-v3.md",

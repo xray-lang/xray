@@ -22,6 +22,23 @@ invalid type semantics. The existing Program test compiles the real constructors
 allocator substitution and injects failure at every allocation in provider, text, nested aggregate
 and coroutine fixtures, checking empty rejected outputs and balanced physical allocation/free counts.
 
+Format 3.2 extends each runtime module with declaration-key-ordered data slots.
+The pair of module identity and declaration key identifies one storage owner;
+an import or re-export must resolve that owner rather than allocate a second slot.
+Each row contains a nonzero key, exact non-void runtime TypeId and declaration
+flags, currently only const. REF existentials remain confined and cannot become
+module storage. Dynamic type labels are remapped through the same canonical type
+owner as function and aggregate references. Slot counts have one program-wide
+ceiling in addition to structural record and verifier work budgets.
+
+Direct hostile wire tests reject missing types, meta/void storage, duplicate or
+zero declaration keys and unknown flags. Constructor tests cover malformed
+storage/count pairs, function-only units with slots, const/type identity changes,
+declaration reorder stability and input deep copies. The slot-bearing diamond
+also participates in every-allocation failure injection. These are immutable
+declaration facts; mutable storage, initialization and drop still belong to the
+execution instance and are not established by admitting the table alone.
+
 The CoreSpec semantic fingerprint excludes consumer coverage, KAT routing, editorial descriptions
 and tombstone prose. Advancing a verifier/VM/AOT implementation therefore cannot invalidate a
 program whose language meaning did not change; changing a normative type, operation, effect,
@@ -44,7 +61,7 @@ Values cannot flow implicitly between blocks. A successor receives all cross-blo
 typed block arguments. This makes dominance local and keeps verification work linear in records,
 operands and edges. Dynamic aggregate and variant rows are declaration-ordered logical value shapes:
 their IDs are canonical semantic-key order, every referenced type must exist, and recursive-by-value
-cycles are rejected. No offset, alignment, slot, register class or target ABI fact is admitted.
+cycles are rejected. No offset, alignment, executor slot, register class or target ABI fact is admitted.
 Every type has an explicit logical ownership class (`TRIVIAL` or `AFFINE`) and copy contract
 (`TRIVIAL`, `EXPLICIT` or `FORBIDDEN`). Every SSA definition carries `NON_OWNER` or `OWNER`.
 `core.owner.copy` admits only a permitted copy contract and creates an independent affine owner;

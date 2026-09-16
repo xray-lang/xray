@@ -372,6 +372,16 @@ typedef struct XrCoreIrFunctionInput {
     uint32_t flags;
 } XrCoreIrFunctionInput;
 
+enum { XR_PROGRAM_MODULE_SLOT_CONST = 1u };
+
+/* A declaration key is interpreted within its canonical module identity.
+ * Only data bindings have storage; imports and re-exports resolve to that owner. */
+typedef struct XrCoreIrModuleSlotInput {
+    XrCoreIrKey key;
+    uint16_t type_id;
+    uint32_t flags;
+} XrCoreIrModuleSlotInput;
+
 typedef struct XrCoreIrModuleInput {
     XrCoreIrKey key;
     const XrCoreIrConstantInput *constants;
@@ -383,6 +393,8 @@ typedef struct XrCoreIrModuleInput {
     XrCoreIrKey initializer;
     const XrCoreIrKey *dependencies;
     uint32_t dependency_count;
+    const XrCoreIrModuleSlotInput *slots;
+    uint32_t slot_count;
 } XrCoreIrModuleInput;
 
 typedef struct XrCoreIrInterfaceInput {

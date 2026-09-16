@@ -254,6 +254,7 @@ void xr_core_ir_program_free(XrCoreIrProgram *program) {
         }
         xr_free(module->constants);
         xr_free(module->dependencies);
+        xr_free(module->slots);
     }
     for (uint32_t type = 0; program->types && type < program->type_count; ++type)
         free_type(&program->types[type]);
@@ -685,6 +686,30 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     return XR_PROGRAM_BUILD_OK;
 }
 
+static int module_slot_compare(const void *left, const void *right) {
+    const XrCoreIrModuleSlotInput *a = left;
+    const XrCoreIrModuleSlotInput *b = right;
+    return memcmp(a->key.bytes, b->key.bytes, sizeof(a->key.bytes));
+}
+
+static XrProgramBuildStatus copy_module_slots(const XrCoreIrModuleInput *input,
+                                              XrCoreIrModule *output) {
+    if ((input->slot_count == 0u) != (input->slots == NULL) ||
+        (input->slot_count != 0u && xr_core_ir_key_is_zero(input->initializer)))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (input->slot_count > XR_PROGRAM_LIMIT_MODULE_SLOTS)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    output->slot_count = input->slot_count;
+    if (input->slot_count == 0u)
+        return XR_PROGRAM_BUILD_OK;
+    output->slots = xr_calloc(input->slot_count, sizeof(*output->slots));
+    if (!output->slots)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    memcpy(output->slots, input->slots, input->slot_count * sizeof(*output->slots));
+    qsort(output->slots, output->slot_count, sizeof(*output->slots), module_slot_compare);
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus copy_module(const XrCoreIrModuleInput *input, XrCoreIrModule *output,
                                         char *diagnostic, size_t diagnostic_size) {
     memset(output, 0, sizeof(*output));
@@ -693,6 +718,9 @@ static XrProgramBuildStatus copy_module(const XrCoreIrModuleInput *input, XrCore
     output->function_count = input->function_count;
     output->initializer = input->initializer;
     output->dependency_count = input->dependency_count;
+    XrProgramBuildStatus slot_status = copy_module_slots(input, output);
+    if (slot_status != XR_PROGRAM_BUILD_OK)
+        return slot_status;
     if ((input->dependency_count == 0u) != (input->dependencies == NULL) ||
         (input->dependency_count != 0u && xr_core_ir_key_is_zero(input->initializer))) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
@@ -931,6 +959,11 @@ static bool remap_program_types(XrCoreIrProgram *program) {
             return false;
     for (uint32_t module = 0; module < program->module_count; ++module) {
         XrCoreIrModule *module_row = &program->modules[module];
+        for (uint32_t slot = 0u; slot < module_row->slot_count; ++slot)
+            if (!remap_type_id(program->types, program->type_count,
+                               module_row->slots[slot].type_id,
+                               &module_row->slots[slot].type_id))
+                return false;
         for (uint32_t constant = 0; constant < module_row->constant_count; ++constant) {
             if (!remap_type_id(program->types, program->type_count,
                                module_row->constants[constant].type_id,
@@ -1707,10 +1740,24 @@ static bool validate_module_initialization(const XrCoreIrProgram *program) {
     return true;
 }
 
+static bool module_slots_are_valid(const XrCoreIrProgram *program, const XrCoreIrModule *module) {
+    for (uint32_t index = 0u; index < module->slot_count; ++index) {
+        const XrCoreIrModuleSlotInput *slot = &module->slots[index];
+        if (xr_core_ir_key_is_zero(slot->key) ||
+            (index != 0u && xr_core_ir_key_equal(module->slots[index - 1u].key, slot->key)) ||
+            !type_id_supported(program, slot->type_id) || slot->type_id == XR_CORE_TYPE_VOID ||
+            type_is_existential_ref(program, slot->type_id) ||
+            (slot->flags & ~(uint32_t) XR_PROGRAM_MODULE_SLOT_CONST) != 0u)
+            return false;
+    }
+    return true;
+}
+
 static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, char *diagnostic,
                                              size_t diagnostic_size) {
     uint64_t constant_count = 0;
     uint64_t function_count = 0;
+    uint64_t slot_count = 0u;
     bool has_base_feature = false;
     for (uint32_t index = 0; index < program->required_feature_count; ++index) {
         uint16_t feature = program->required_features[index];
@@ -1754,6 +1801,12 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
         }
         constant_count += module->constant_count;
         function_count += module->function_count;
+        slot_count += module->slot_count;
+        if (!module_slots_are_valid(program, module)) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "module slot identity, type or declaration flags are invalid");
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
         for (uint32_t index = 0; index < module->constant_count; ++index) {
             const XrCoreIrConstantInput *constant = &module->constants[index];
             if (xr_core_ir_key_is_zero(constant->key) ||
@@ -1770,7 +1823,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
             }
         }
     }
-    if (constant_count > XR_PROGRAM_LIMIT_CONSTANTS || function_count == 0 ||
+    if (slot_count > XR_PROGRAM_LIMIT_MODULE_SLOTS ||
+        constant_count > XR_PROGRAM_LIMIT_CONSTANTS || function_count == 0 ||
         function_count > XR_PROGRAM_LIMIT_FUNCTIONS) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "program constant/function count exceeds W2 limits");
