@@ -1958,109 +1958,91 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
         }
         return true;
     }
-    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
-        const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_module(bundle, module_index)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
-        const XrSemanticPlan *semantic =
-            xaot_bundle_program_semantic_for_module(bundle, module_index);
-        XrAotRefinementPlan *refinement = NULL;
-        XrAotRefinementDiagnostic diag = {0};
-        if (!module || !target_plan ||
-            !xr_aot_refinement_direct_call_authority_build(
-                target_plan, semantic, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement, &diag)) {
-            fprintf(stderr,
-                    "Error: module direct-call validation failed for '%s': "
-                    "%s record=%u target-call=%u\n",
-                    module && module->name ? module->name : "?",
-                    xr_aot_refinement_issue_name(diag.issue), diag.record_index,
-                    diag.target_call_index);
-            xr_aot_refinement_plan_free(refinement);
-            return false;
-        }
-        /* Re-verify the frozen plan through the public entry point: the
-         * builder's own freeze-time check must not be the only one. */
-        XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
-        if (!xr_aot_refinement_verify(&view, target_plan, semantic, &diag)) {
-            fprintf(stderr,
-                    "Error: module direct-call authority rejected for '%s': "
-                    "%s record=%u target-call=%u\n",
-                    module->name ? module->name : "?", xr_aot_refinement_issue_name(diag.issue),
-                    diag.record_index, diag.target_call_index);
-            xr_aot_refinement_plan_free(refinement);
-            return false;
-        }
-        XrAotTailCallConformance tail_conformance = {0};
+    uint32_t count = bundle->nmodules;
+    const XrSemanticPlan **semantics = xr_calloc(count, sizeof(*semantics));
+    const XiFunc **roots = xr_calloc(count, sizeof(*roots));
+    XrAotRefinementPlan **refinements = xr_calloc(count, sizeof(*refinements));
+    XrAotRefinementPlanView *views = xr_calloc(count, sizeof(*views));
+    XrAotTailCallConformance *conformances = xr_calloc(count, sizeof(*conformances));
+    bool valid = semantics && roots && refinements && views && conformances;
+    uint32_t failed_module = 0;
+    for (uint32_t i = 0; valid && i < count; ++i) {
+        const XiModule *module = bundle->modules[i];
+        semantics[i] = xaot_bundle_program_semantic_for_module(bundle, i);
+        roots[i] = module ? module->init : NULL;
+        valid = semantics[i] && roots[i];
+    }
+    XrAotRefinementDiagnostic diag = {0};
+    if (valid && !xr_aot_refinement_direct_call_authority_build_modules(
+                     program_target, semantics, count, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID,
+                     refinements, &failed_module, &diag)) {
+        fprintf(stderr, "Error: module %u direct-call validation failed: %s record=%u target-call=%u\n",
+                failed_module, xr_aot_refinement_issue_name(diag.issue), diag.record_index,
+                diag.target_call_index);
+        valid = false;
+    }
+    if (valid) {
+        for (uint32_t i = 0; i < count; ++i)
+            views[i] = xr_aot_refinement_plan_view(refinements[i]);
         XrAotTailCallDiagnostic tail_diag = {0};
-        if (!module->init || !xr_aot_tail_call_conformance_verify(module->init, target_plan, &view,
-                                                                  &tail_conformance, &tail_diag)) {
+        valid = xr_aot_tail_call_conformance_verify_modules(
+            roots, program_target, views, count, conformances, &failed_module, &tail_diag);
+        if (!valid)
             fprintf(stderr,
-                    "Error: module tail-call conformance failed for '%s': "
-                    "%s operation=%u target-call=%u function=%u value=%u\n",
-                    module->name ? module->name : "?",
-                    xr_aot_tail_call_conformance_issue_name(tail_diag.issue),
+                    "Error: module %u tail-call conformance failed: %s operation=%u "
+                    "target-call=%u function=%u value=%u\n",
+                    failed_module, xr_aot_tail_call_conformance_issue_name(tail_diag.issue),
                     tail_diag.semantic_operation, tail_diag.target_call_index,
                     tail_diag.semantic_function, tail_diag.semantic_value);
-            xr_aot_refinement_plan_free(refinement);
-            return false;
-        }
-        xr_aot_refinement_plan_free(refinement);
     }
-    return true;
+    for (uint32_t i = 0; refinements && i < count; ++i)
+        xr_aot_refinement_plan_free(refinements[i]);
+    xr_free(conformances);
+    xr_free(views);
+    xr_free(refinements);
+    xr_free(roots);
+    xr_free(semantics);
+    return valid;
 }
 
 static bool xaot_install_module_representation_refinements(XaotBundle *bundle,
                                                            const XiRepPolicy *policy) {
     if (!bundle || !policy || !bundle->modules || bundle->nmodules == 0)
         return false;
-    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
-        XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_module(bundle, module_index)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
-        const XrSemanticPlan *semantic =
-            xaot_bundle_program_semantic_for_module(bundle, module_index);
-        XrAotRefinementPlan *refinement = NULL;
-        XrAotRefinementDiagnostic diag = {0};
-        if (!module || !module->init || !target_plan ||
-            !xr_aot_representation_refinement_build_from_authority(target_plan, semantic, policy,
-                                                                   &refinement, &diag)) {
-            fprintf(stderr,
-                    "Error: module representation authority build failed for '%s': "
-                    "%s value=%u operation=%u\n",
-                    module && module->name ? module->name : "?",
-                    xr_aot_refinement_issue_name(diag.issue), diag.semantic_value,
-                    diag.semantic_operation);
-            xr_aot_refinement_plan_free(refinement);
-            return false;
-        }
-        XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
-        if (!xr_aot_representation_materialization_verify(&view, module->init, target_plan, policy,
-                                                          &diag)) {
-            const char *code =
-                diag.issue == XR_AOT_REFINEMENT_REPRESENTATION ? "XR_TARGET_1006: " : "";
-            fprintf(stderr,
-                    "Error: %smodule representation materialization failed for '%s': "
-                    "%s record=%u value=%u operation=%u\n",
-                    code, module->name ? module->name : "?",
-                    xr_aot_refinement_issue_name(diag.issue), diag.record_index,
-                    diag.semantic_value, diag.semantic_operation);
-            xr_aot_refinement_plan_free(refinement);
-            return false;
-        }
-        if (!xaot_bundle_install_representation_refinement(bundle, module_index, refinement,
-                                                           policy)) {
-            fprintf(stderr, "Error: module representation authority install failed for '%s': %s\n",
-                    module->name ? module->name : "?",
-                    bundle->error_msg ? bundle->error_msg : "unknown error");
-            xr_aot_refinement_plan_free(refinement);
-            return false;
-        }
+    uint32_t count = bundle->nmodules;
+    const XrSemanticPlan **semantics =
+        (const XrSemanticPlan **) xr_calloc(count, sizeof(*semantics));
+    XrAotRefinementPlan **refinements =
+        (XrAotRefinementPlan **) xr_calloc(count, sizeof(*refinements));
+    bool valid = semantics && refinements;
+    for (uint32_t i = 0; valid && i < count; ++i) {
+        semantics[i] = xaot_bundle_program_semantic_for_module(bundle, i);
+        valid = bundle->modules[i] && bundle->modules[i]->init && semantics[i];
     }
-    return true;
+    XrAotRefinementDiagnostic diag = {0};
+    uint32_t failed_module = 0;
+    if (valid)
+        valid = xr_aot_representation_refinement_build_modules(
+            xaot_bundle_program_target_plan(bundle), semantics, count, policy,
+            refinements, &failed_module, &diag);
+    if (!valid) {
+        XiModule *module = bundle->modules[failed_module];
+        fprintf(stderr,
+                "Error: module representation authority build failed for '%s': "
+                "%s value=%u operation=%u\n",
+                module && module->name ? module->name : "?",
+                xr_aot_refinement_issue_name(diag.issue), diag.semantic_value,
+                diag.semantic_operation);
+    } else if (!xaot_bundle_install_representation_refinements(bundle, refinements, policy)) {
+        fprintf(stderr, "Error: module representation authority install failed: %s\n",
+                bundle->error_msg ? bundle->error_msg : "unknown error");
+        valid = false;
+    }
+    for (uint32_t i = 0; !valid && refinements && i < count; ++i)
+        xr_aot_refinement_plan_free(refinements[i]);
+    xr_free(refinements);
+    xr_free(semantics);
+    return valid;
 }
 
 static bool xaot_build_module_emission_plans(const XaotBundle *bundle,
@@ -2175,11 +2157,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     type_name_profile = options->type_name_profile;
     imported_summary_payloads = options->imported_summary_payloads;
     imported_summary_payload_count = options->imported_summary_payload_count;
-    XgGlobalEvidence pre_mono_generic_evidence;
-    bool pre_mono_generic_evidence_initialized = false;
     XgGlobalEvidence cached_global_evidence;
     bool cached_global_evidence_initialized = false;
-    memset(&pre_mono_generic_evidence, 0, sizeof(pre_mono_generic_evidence));
     memset(&cached_global_evidence, 0, sizeof(cached_global_evidence));
 
     if (!quiet)
@@ -2373,19 +2352,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
 
-    if (cached_global_evidence_initialized) {
-        if (evidence_cache_verbose)
-            printf("[xi-native] evidence cache producer skip: pre_mono_generic_summary\n");
-    } else {
-        if (!xg_global_evidence_build_pre_monomorphization_from_module_graph(
-                &pre_mono_generic_evidence, graph, xg_profile, imported_summary_hash,
-                imported_summary_modules, imported_summary_module_count, shared_analyzer)) {
-            fprintf(stderr, "Error: failed to build pre-monomorphization generic evidence\n");
-            goto fail_free_analyzer;
-        }
-        pre_mono_generic_evidence_initialized = true;
-    }
-
     /* Mirror the VM compiler entry: monomorphize after the first graph-aware
      * analysis, then analyze again so cloned declarations have concrete
      * signatures and value-struct layouts before Xi lowering. */
@@ -2470,15 +2436,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
          * the graph authority above already answers who the program is. */
         memset(closure_error, 0, sizeof(closure_error));
         XaProgramSemanticClosurePublishStatus closure_status =
-            xa_program_semantic_closure_publish_source_module_scalar_private_leaf_call(
+            xa_program_semantic_closure_publish_scalar_module_graph(
                 shared_analyzer, graph, &source_program_closure, closure_error,
                 sizeof(closure_error));
-        if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED) {
-            memset(closure_error, 0, sizeof(closure_error));
-            closure_status = xa_program_semantic_closure_publish_scalar_module_graph(
-                shared_analyzer, graph, &source_program_closure, closure_error,
-                sizeof(closure_error));
-        }
         if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_INVALID ||
             closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
             fprintf(stderr, "Error: source program closure publication failed: %s\n",
@@ -2543,13 +2503,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             goto fail_free_ir;
         }
         global_evidence_initialized = true;
-        if (!xg_global_evidence_merge_generic_inst_roots(&global_evidence,
-                                                         &pre_mono_generic_evidence)) {
-            fprintf(stderr, "Error: failed to merge generic instantiation evidence\n");
-            goto fail_free_ir;
-        }
-        xg_global_evidence_free(&pre_mono_generic_evidence);
-        pre_mono_generic_evidence_initialized = false;
         if (imported_summary_payload_count > 0) {
             XgEvidencePackageImportReport import_report;
             if (!xg_global_evidence_import_package_payload_set(
@@ -3153,10 +3106,6 @@ fail_free_analyzer:
     if (cached_global_evidence_initialized) {
         xg_global_evidence_free(&cached_global_evidence);
         cached_global_evidence_initialized = false;
-    }
-    if (pre_mono_generic_evidence_initialized) {
-        xg_global_evidence_free(&pre_mono_generic_evidence);
-        pre_mono_generic_evidence_initialized = false;
     }
     if (shared_analyzer) {
         xa_analyzer_set_graph(shared_analyzer, NULL);

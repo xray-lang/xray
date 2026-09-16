@@ -1213,14 +1213,28 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    /* Only the aggregate branches below read this row, and a representation
-     * adapter is never an aggregate -- a box is the tagged carrier and an
-     * unbox is the scalar it produces. Skipping the lookup for them keeps the
-     * legacy plan out of a path whose answer it cannot change. */
+    /* Published view carriers have no legacy Xaot row. Convert their
+     * verified C storage at the common tagged argument boundary, including
+     * identity-forwarded Slice values. The borrowed wrapper cannot escape
+     * the call; it neither allocates nor transfers the backing owner. */
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, NULL, v, &emission);
     const XaotValuePlan *plan =
-        (ctx && v && v->op != XI_BOX && v->op != XI_UNBOX && v->op != XI_LOCAL_ADDR)
+        (emission_status != CG_VALUE_EMISSION_FOUND && ctx && v &&
+         v->op != XI_BOX && v->op != XI_UNBOX && v->op != XI_LOCAL_ADDR)
             ? cg_value_plan_require_legacy(ctx, v)
             : NULL;
+    bool span = emission_status == CG_VALUE_EMISSION_FOUND
+                    ? emission.rep == XR_C_VALUE_REP_VIEW && emission.c_type &&
+                          strcmp(emission.c_type, "xr_span_t") == 0
+                    : (plan && cg_value_rep_is_span_aggregate(plan->rep)) ||
+                          (v && v->op == XI_UNBOX && cg_value_plan_is_span_aggregate(ctx, v));
+    if (target_rep == XR_REP_TAGGED && span) {
+        fprintf(out, "xrt_span_to_value_ref((xr_span_t *)&");
+        emit_vref(out, v);
+        fprintf(out, ")");
+        return;
+    }
     if (v && v->op == XI_CONST) {
         XrRep from_rep = cg_value_plan_storage_rep(ctx, v);
         if (v->type && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE) {
@@ -1234,12 +1248,6 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         return;
     }
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
-        if (target_rep == XR_REP_TAGGED && cg_value_rep_is_span_aggregate(plan->rep)) {
-            fprintf(out, "xrt_span_to_value_ref((xr_span_t *)&");
-            emit_vref(out, v);
-            fprintf(out, ")");
-            return;
-        }
         if (target_rep == XR_REP_TAGGED && cg_value_rep_is_adt_aggregate(plan->rep)) {
             fprintf(out, "xrt_enum_aggregate_box(");
             emit_adt_aggregate_as_base_expr(ctx, out, v);

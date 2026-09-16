@@ -9,6 +9,7 @@
  */
 
 #include "xr_program_vm.h"
+#include "../runtime/core/xr_text_kernel.h"
 
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
@@ -21,6 +22,7 @@
 typedef struct XrVmExistentialValue XrVmExistentialValue;
 typedef struct XrVmCallableValue XrVmCallableValue;
 typedef struct XrVmClassValue XrVmClassValue;
+typedef struct XrVmStringValue XrVmStringValue;
 
 typedef struct XrVmFixedInstruction {
     uint16_t operation_id;
@@ -74,7 +76,7 @@ typedef struct XrVmFixedFunction {
 struct XrVmCode {
     atomic_uint_least32_t references;
     XrValidatedProgram *program;
-    XrExecutionCacheKey cache_key;
+    XrExecutionId execution_id;
     XrFingerprint private_digest;
     XrVmCodeOptions options;
     uint16_t pointer_width;
@@ -144,7 +146,17 @@ typedef struct XrVmContext {
     XrVmCallableValue **callables;
     uint32_t callable_count;
     uint32_t callable_capacity;
+    XrVmStringValue **strings;
+    uint32_t string_count;
+    uint32_t string_capacity;
 } XrVmContext;
+
+/* One immutable string owner in the VM arena.  Releasing it is not a
+ * semantic event, so drops leave the cell to arena teardown. */
+struct XrVmStringValue {
+    uint32_t size;
+    uint8_t *bytes;
+};
 
 typedef struct XrVmAggregateValue {
     uint16_t type_id;
@@ -273,6 +285,10 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
             return value.kind == XR_VM_VALUE_PANIC_INFO;
+        case XR_CORE_TYPE_STRING:
+            return value.kind == XR_VM_VALUE_STRING && value.as.string;
+        case XR_CORE_TYPE_RUNE:
+            return value.kind == XR_VM_VALUE_RUNE && xr_text_rune_is_scalar(value.as.rune);
         default: {
             const XrValidatedType *type = xr_validated_program_type(program, type_id);
             if (!type)
@@ -370,6 +386,56 @@ static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t typ
     context->aggregates[context->aggregate_count++] = aggregate;
     context->aggregate_cell_count += field_count;
     return aggregate;
+}
+
+/* Each string counts one cell plus its payload bytes against the VM budget. */
+static XrVmStringValue *allocate_string(XrVmContext *context, size_t size) {
+    if (size > XR_PROGRAM_CONSTANT_STRING_MAX_BYTES ||
+        (uint64_t) size + 1u >
+            (uint64_t) context->code->options.max_value_cells - context->aggregate_cell_count)
+        return NULL;
+    if (context->string_count == context->string_capacity) {
+        uint32_t capacity = context->string_capacity ? context->string_capacity * 2u : 8u;
+        if (capacity < context->string_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->strings))
+            return NULL;
+#endif
+        XrVmStringValue **grown =
+            xr_realloc(context->strings, (size_t) capacity * sizeof(*context->strings));
+        if (!grown)
+            return NULL;
+        context->strings = grown;
+        context->string_capacity = capacity;
+    }
+    XrVmStringValue *string = xr_calloc(1u, sizeof(*string));
+    if (!string)
+        return NULL;
+    string->bytes = xr_malloc(size != 0u ? size : 1u);
+    if (!string->bytes) {
+        xr_free(string);
+        return NULL;
+    }
+    string->size = (uint32_t) size;
+    context->strings[context->string_count++] = string;
+    context->aggregate_cell_count += (uint64_t) size + 1u;
+    return string;
+}
+
+static XrVmValue vm_string_value(const XrVmStringValue *string) {
+    XrVmValue value = {.kind = XR_VM_VALUE_STRING};
+    value.as.string = string;
+    return value;
+}
+
+static bool vm_string_view(XrVmValue value, const uint8_t **bytes_out, size_t *size_out) {
+    const XrVmStringValue *string = value.as.string;
+    if (value.kind != XR_VM_VALUE_STRING || !string)
+        return false;
+    *bytes_out = string->bytes;
+    *size_out = string->size;
+    return true;
 }
 
 static XrVmExistentialValue *allocate_existential(XrVmContext *context) {
@@ -510,6 +576,18 @@ static bool witness_receiver_argument(const XrVmExistentialValue *carrier,
 static bool clone_vm_value(XrVmContext *context, XrVmValue source, uint16_t type_id,
                            XrVmValue *output) {
     const XrValidatedType *type = xr_validated_program_type(context->code->program, type_id);
+    if (type_id == XR_CORE_TYPE_STRING) {
+        const XrVmStringValue *original = source.as.string;
+        if (source.kind != XR_VM_VALUE_STRING || !original)
+            return false;
+        XrVmStringValue *copy = allocate_string(context, original->size);
+        if (!copy)
+            return false;
+        if (original->size != 0u)
+            memcpy(copy->bytes, original->bytes, original->size);
+        *output = vm_string_value(copy);
+        return true;
+    }
     if (!type) {
         *output = source;
         return true;
@@ -631,6 +709,13 @@ consumed:
 }
 
 static void dispose_detached_vm_value(XrVmValue *value) {
+    if (value && value->kind == XR_VM_VALUE_STRING && value->as.string) {
+        XrVmStringValue *string = (XrVmStringValue *) (void *) value->as.string;
+        xr_free(string->bytes);
+        xr_free(string);
+        *value = void_value();
+        return;
+    }
     if (!value || value->kind != XR_VM_VALUE_AGGREGATE || !value->as.aggregate)
         return;
     XrVmAggregateValue *aggregate = (XrVmAggregateValue *) (void *) value->as.aggregate;
@@ -647,6 +732,25 @@ static bool detach_vm_value(XrVmValue source, XrVmValue *output) {
     *output = void_value();
     if (source.kind == XR_VM_VALUE_EXISTENTIAL || source.kind == XR_VM_VALUE_CALLABLE)
         return false;
+    if (source.kind == XR_VM_VALUE_STRING) {
+        /* A detached string is a private heap copy the outcome owner frees. */
+        const XrVmStringValue *original = source.as.string;
+        if (!original)
+            return false;
+        XrVmStringValue *copy = xr_calloc(1u, sizeof(*copy));
+        if (!copy)
+            return false;
+        copy->bytes = xr_malloc(original->size != 0u ? original->size : 1u);
+        if (!copy->bytes) {
+            xr_free(copy);
+            return false;
+        }
+        if (original->size != 0u)
+            memcpy(copy->bytes, original->bytes, original->size);
+        copy->size = original->size;
+        *output = vm_string_value(copy);
+        return true;
+    }
     if (source.kind != XR_VM_VALUE_AGGREGATE) {
         *output = source;
         return true;
@@ -705,6 +809,17 @@ static bool vm_outcome_contains_class(XrVmOutcome outcome) {
     return false;
 }
 
+bool xr_vm_value_string_view(const XrVmValue *value, XrVmStringView *view_out) {
+    if (view_out)
+        memset(view_out, 0, sizeof(*view_out));
+    if (!value || !view_out || value->kind != XR_VM_VALUE_STRING || !value->as.string)
+        return false;
+    const XrVmStringValue *string = value->as.string;
+    view_out->bytes = string->bytes;
+    view_out->size = string->size;
+    return true;
+}
+
 bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out) {
     if (view_out)
         memset(view_out, 0, sizeof(*view_out));
@@ -748,29 +863,186 @@ static void free_aggregates(XrVmContext *context) {
     for (uint32_t index = 0; index < context->callable_count; ++index)
         xr_free(context->callables[index]);
     xr_free(context->callables);
+    for (uint32_t index = 0; index < context->string_count; ++index) {
+        xr_free(context->strings[index]->bytes);
+        xr_free(context->strings[index]);
+    }
+    xr_free(context->strings);
+}
+
+/* Outcome of one text operation shared by both VM execution loops. */
+typedef enum VmTextStatus {
+    VM_TEXT_OK = 0,
+    VM_TEXT_RESOURCE_LIMIT,
+    VM_TEXT_PROVIDER_FAILED,
+    VM_TEXT_INVALID,
+} VmTextStatus;
+
+static bool vm_operation_is_text(uint16_t operation_id) {
+    return operation_id == XR_CORE_OP_CORE_CONSTANT_STRING ||
+           operation_id == XR_CORE_OP_CORE_CONSTANT_RUNE ||
+           operation_id == XR_CORE_OP_CORE_STRING_FROM_I64 ||
+           operation_id == XR_CORE_OP_CORE_STRING_CONCAT ||
+           operation_id == XR_CORE_OP_CORE_COMPARE_STRING ||
+           operation_id == XR_CORE_OP_CORE_COMPARE_RUNE ||
+           operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP;
+}
+
+/* Executes the string/rune/output family through the shared text kernel;
+ * both the baseline view and the fixed-row view route here. */
+static VmTextStatus vm_execute_text_operation(XrVmContext *context, uint16_t operation_id,
+                                              const uint32_t *operands, uint32_t operand_count,
+                                              uint32_t constant_id, uint32_t predicate,
+                                              uint32_t requirement_index, uint32_t operation_index,
+                                              const XrVmRuntimeValue *values, XrVmValue *produced) {
+    switch (operation_id) {
+        case XR_CORE_OP_CORE_CONSTANT_STRING: {
+            const XrValidatedConstant *constant = &context->code->program->constants[constant_id];
+            XrVmStringValue *string = allocate_string(context, constant->value.string.size);
+            if (!string)
+                return VM_TEXT_RESOURCE_LIMIT;
+            if (constant->value.string.size != 0u)
+                memcpy(string->bytes, constant->value.string.bytes, constant->value.string.size);
+            *produced = vm_string_value(string);
+            return VM_TEXT_OK;
+        }
+        case XR_CORE_OP_CORE_CONSTANT_RUNE: {
+            const XrValidatedConstant *constant = &context->code->program->constants[constant_id];
+            produced->kind = XR_VM_VALUE_RUNE;
+            produced->as.rune = constant->value.rune;
+            return VM_TEXT_OK;
+        }
+        case XR_CORE_OP_CORE_STRING_FROM_I64: {
+            int64_t source = values[operands[0]].as.value.as.i64;
+            size_t size = xr_text_display_i64(source, NULL);
+            XrVmStringValue *string = allocate_string(context, size);
+            if (!string)
+                return VM_TEXT_RESOURCE_LIMIT;
+            (void) xr_text_display_i64(source, string->bytes);
+            *produced = vm_string_value(string);
+            return VM_TEXT_OK;
+        }
+        case XR_CORE_OP_CORE_STRING_CONCAT: {
+            const uint8_t *left = NULL;
+            const uint8_t *right = NULL;
+            size_t left_size = 0u;
+            size_t right_size = 0u;
+            int ok = 0;
+            if (!vm_string_view(values[operands[0]].as.value, &left, &left_size) ||
+                !vm_string_view(values[operands[1]].as.value, &right, &right_size))
+                return VM_TEXT_INVALID;
+            size_t size = xr_text_concat_size(left_size, right_size, &ok);
+            if (!ok)
+                return VM_TEXT_RESOURCE_LIMIT;
+            XrVmStringValue *string = allocate_string(context, size);
+            if (!string)
+                return VM_TEXT_RESOURCE_LIMIT;
+            xr_text_concat(left, left_size, right, right_size, string->bytes);
+            *produced = vm_string_value(string);
+            return VM_TEXT_OK;
+        }
+        case XR_CORE_OP_CORE_COMPARE_STRING: {
+            const uint8_t *left = NULL;
+            const uint8_t *right = NULL;
+            size_t left_size = 0u;
+            size_t right_size = 0u;
+            if (!vm_string_view(values[operands[0]].as.value, &left, &left_size) ||
+                !vm_string_view(values[operands[1]].as.value, &right, &right_size))
+                return VM_TEXT_INVALID;
+            produced->kind = XR_VM_VALUE_BOOL;
+            produced->as.boolean =
+                xr_text_predicate(xr_text_compare(left, left_size, right, right_size), predicate) !=
+                0;
+            return VM_TEXT_OK;
+        }
+        case XR_CORE_OP_CORE_COMPARE_RUNE: {
+            uint32_t left = values[operands[0]].as.value.as.rune;
+            uint32_t right = values[operands[1]].as.value.as.rune;
+            int order = left == right ? 0 : (left < right ? -1 : 1);
+            produced->kind = XR_VM_VALUE_BOOL;
+            produced->as.boolean = xr_text_predicate(order, predicate) != 0;
+            return VM_TEXT_OK;
+        }
+        case XR_CORE_OP_CORE_OUTPUT_GROUP: {
+            XrTextDisplayOperand stack_operands[8];
+            XrTextDisplayOperand *display = stack_operands;
+            int ok = 0;
+            if (operand_count > sizeof(stack_operands) / sizeof(stack_operands[0])) {
+                display = xr_calloc(operand_count, sizeof(*display));
+                if (!display)
+                    return VM_TEXT_RESOURCE_LIMIT;
+            }
+            for (uint32_t index = 0u; index < operand_count; ++index) {
+                const XrVmValue *value = &values[operands[index]].as.value;
+                XrTextDisplayOperand *operand = &display[index];
+                memset(operand, 0, sizeof(*operand));
+                switch (value->kind) {
+                    case XR_VM_VALUE_I64:
+                        operand->kind = XR_TEXT_DISPLAY_I64;
+                        operand->i64 = value->as.i64;
+                        break;
+                    case XR_VM_VALUE_BOOL:
+                        operand->kind = XR_TEXT_DISPLAY_BOOL;
+                        operand->boolean = value->as.boolean ? 1 : 0;
+                        break;
+                    case XR_VM_VALUE_RUNE:
+                        operand->kind = XR_TEXT_DISPLAY_RUNE;
+                        operand->rune = value->as.rune;
+                        break;
+                    case XR_VM_VALUE_STRING: {
+                        const uint8_t *bytes = NULL;
+                        size_t size = 0u;
+                        if (!vm_string_view(*value, &bytes, &size)) {
+                            if (display != stack_operands)
+                                xr_free(display);
+                            return VM_TEXT_INVALID;
+                        }
+                        operand->kind = XR_TEXT_DISPLAY_STRING;
+                        operand->bytes = bytes;
+                        operand->size = size;
+                        break;
+                    }
+                    default:
+                        if (display != stack_operands)
+                            xr_free(display);
+                        return VM_TEXT_INVALID;
+                }
+            }
+            size_t size = xr_text_group_size(display, operand_count, &ok);
+            uint8_t *line = ok ? xr_malloc(size) : NULL;
+            if (!line) {
+                if (display != stack_operands)
+                    xr_free(display);
+                return VM_TEXT_RESOURCE_LIMIT;
+            }
+            (void) xr_text_group_render(display, operand_count, line);
+            XrExecutionProviderCallResult call = xr_execution_lease_provider_output_write(
+                context->lease, requirement_index, operation_index, line, size);
+            xr_free(line);
+            if (display != stack_operands)
+                xr_free(display);
+            return call == XR_EXECUTION_PROVIDER_CALL_OK ? VM_TEXT_OK : VM_TEXT_PROVIDER_FAILED;
+        }
+        default:
+            return VM_TEXT_INVALID;
+    }
+}
+
+static XrVmOutcome vm_text_outcome(const XrVmContext *context, VmTextStatus status) {
+    switch (status) {
+        case VM_TEXT_RESOURCE_LIMIT:
+            return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+        case VM_TEXT_PROVIDER_FAILED:
+            return vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
+        default:
+            return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
+    }
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
     if (bits <= (uint64_t) INT64_MAX)
         return (int64_t) bits;
     return -(int64_t) (~bits) - 1;
-}
-
-static size_t format_i64_line(int64_t value, uint8_t output[22]) {
-    uint8_t reverse[20];
-    size_t count = 0u;
-    uint64_t magnitude = value < 0 ? UINT64_C(0) - (uint64_t) value : (uint64_t) value;
-    do {
-        reverse[count++] = (uint8_t) ('0' + magnitude % UINT64_C(10));
-        magnitude /= UINT64_C(10);
-    } while (magnitude != 0u);
-    size_t cursor = 0u;
-    if (value < 0)
-        output[cursor++] = (uint8_t) '-';
-    while (count != 0u)
-        output[cursor++] = reverse[--count];
-    output[cursor++] = (uint8_t) '\n';
-    return cursor;
 }
 
 static bool checked_add(int64_t left, int64_t right, int64_t *result) {
@@ -1491,15 +1763,22 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     }
                     break;
                 }
-                case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {
-                    uint8_t bytes[22];
-                    size_t size =
-                        format_i64_line(values[instruction.operands[0]].as.value.as.i64, bytes);
-                    XrExecutionProviderCallResult call = xr_execution_lease_provider_output_write(
-                        context->lease, instruction.immediate.provider_operation.requirement_index,
-                        instruction.immediate.provider_operation.operation_index, bytes, size);
-                    if (call != XR_EXECUTION_PROVIDER_CALL_OK) {
-                        result = vm_trap(XR_VM_TRAP_PROVIDER_CALL_FAILED, context);
+                case XR_CORE_OP_CORE_CONSTANT_STRING:
+                case XR_CORE_OP_CORE_CONSTANT_RUNE:
+                case XR_CORE_OP_CORE_STRING_FROM_I64:
+                case XR_CORE_OP_CORE_STRING_CONCAT:
+                case XR_CORE_OP_CORE_COMPARE_STRING:
+                case XR_CORE_OP_CORE_COMPARE_RUNE:
+                case XR_CORE_OP_CORE_OUTPUT_GROUP: {
+                    VmTextStatus text_status = vm_execute_text_operation(
+                        context, instruction.operation_id, instruction.operands,
+                        instruction.operand_count, instruction.immediate.constant_id,
+                        instruction.immediate.u32,
+                        instruction.immediate.provider_operation.requirement_index,
+                        instruction.immediate.provider_operation.operation_index, values,
+                        &produced.as.value);
+                    if (text_status != VM_TEXT_OK) {
+                        result = vm_text_outcome(context, text_status);
                         goto done;
                     }
                     break;
@@ -1883,9 +2162,7 @@ static void compute_private_digest(XrVmCode *code) {
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    xr_sha256_update(&context, code->cache_key.execution_id.bytes,
-                     sizeof(code->cache_key.execution_id.bytes));
-    hash_u64(&context, code->cache_key.generation);
+    xr_sha256_update(&context, code->execution_id.bytes, sizeof(code->execution_id.bytes));
     xr_sha256_update(&context, (const uint8_t *) XR_VM_BUILD_ID, sizeof(XR_VM_BUILD_ID));
     xr_sha256_update(&context, &code->options.decode_policy, sizeof(code->options.decode_policy));
     xr_sha256_update(&context, &code->options.quickening_policy,
@@ -1951,15 +2228,17 @@ static bool vm_program_operations_active(const XrValidatedProgram *program,
     return true;
 }
 
-XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *options,
-                                XrVmCode **code_out, XrVmCodeDiagnostic *diagnostic_out) {
+XrVmCodeStatus xr_vm_code_build(const XrValidatedProgram *program, const XrTargetProfile *profile,
+                                const XrVmCodeOptions *options, XrVmCode **code_out,
+                                XrVmCodeDiagnostic *diagnostic_out) {
     if (code_out)
         *code_out = NULL;
     if (diagnostic_out)
         memset(diagnostic_out, 0, sizeof(*diagnostic_out));
     XrVmCodeOptions selected = options ? *options : xr_vm_code_default_options();
-    if (!instance || !code_out || selected.schema_version != XR_VM_CODE_OPTIONS_SCHEMA_VERSION ||
-        selected.reserved16 != 0u || selected.max_steps == 0u || selected.max_value_cells == 0u ||
+    if (!program || !profile || !code_out ||
+        selected.schema_version != XR_VM_CODE_OPTIONS_SCHEMA_VERSION || selected.reserved16 != 0u ||
+        selected.max_steps == 0u || selected.max_value_cells == 0u ||
         selected.max_call_depth == 0u) {
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INVALID_INPUT;
@@ -1972,41 +2251,29 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
             diagnostic_out->status = XR_VM_CODE_POLICY_REJECTED;
         return XR_VM_CODE_POLICY_REJECTED;
     }
-    XrExecutionLease lease = {0};
-    if (!xr_execution_instance_acquire(instance, &lease)) {
-        if (diagnostic_out)
-            diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
-        return XR_VM_CODE_INSTANCE_UNAVAILABLE;
-    }
-    XrValidatedProgram *program = xr_execution_lease_retain_program(&lease);
-    XrTargetProfile *profile = xr_execution_lease_retain_profile(&lease);
+    XrExecutionId execution_id;
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
-    if (!program || !machine) {
-        xr_target_profile_free(profile);
-        xr_validated_program_free(program);
-        (void) xr_execution_lease_release(&lease);
+    if (!machine || !xr_execution_id_compute(program, profile, &execution_id)) {
         if (diagnostic_out)
-            diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
-        return XR_VM_CODE_INSTANCE_UNAVAILABLE;
+            diagnostic_out->status = XR_VM_CODE_INVALID_INPUT;
+        return XR_VM_CODE_INVALID_INPUT;
     }
-    if (!vm_program_operations_active(program, diagnostic_out)) {
-        xr_target_profile_free(profile);
-        xr_validated_program_free(program);
-        (void) xr_execution_lease_release(&lease);
+    if (program->module_count != 0u) {
+        if (diagnostic_out)
+            diagnostic_out->status = XR_VM_CODE_UNSUPPORTED_OPERATION;
         return XR_VM_CODE_UNSUPPORTED_OPERATION;
     }
+    if (!vm_program_operations_active(program, diagnostic_out))
+        return XR_VM_CODE_UNSUPPORTED_OPERATION;
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
-        xr_target_profile_free(profile);
-        xr_validated_program_free(program);
-        (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_OUT_OF_MEMORY;
         return XR_VM_CODE_OUT_OF_MEMORY;
     }
     atomic_init(&code->references, 1u);
-    code->program = program;
-    code->cache_key = xr_execution_instance_cache_key(instance);
+    code->program = xr_validated_program_retain(program);
+    code->execution_id = execution_id;
     code->options = selected;
     code->pointer_width = (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8));
     code->operating_system = machine->operating_system;
@@ -2014,16 +2281,12 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
     code->native_abi = machine->native_abi;
     code->endianness = (uint16_t) machine->data_layout.endian;
     if (selected.decode_policy == XR_VM_DECODE_FIXED_ROWS && !fixed_view_build(code)) {
-        xr_target_profile_free(profile);
         xr_vm_code_free(code);
-        (void) xr_execution_lease_release(&lease);
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_OUT_OF_MEMORY;
         return XR_VM_CODE_OUT_OF_MEMORY;
     }
     compute_private_digest(code);
-    xr_target_profile_free(profile);
-    (void) xr_execution_lease_release(&lease);
     *code_out = code;
     return XR_VM_CODE_OK;
 }
@@ -2049,14 +2312,12 @@ XrVmCode *xr_vm_code_retain(const XrVmCode *code) {
 bool xr_vm_code_matches_instance(const XrVmCode *code, const XrInstance *instance) {
     if (!code || !instance)
         return false;
-    XrExecutionCacheKey key = xr_execution_instance_cache_key(instance);
-    return key.generation == code->cache_key.generation &&
-           xr_fingerprint_equal(key.execution_id, code->cache_key.execution_id);
+    return xr_fingerprint_equal(xr_execution_instance_id(instance), code->execution_id);
 }
 
-XrExecutionCacheKey xr_vm_code_cache_key(const XrVmCode *code) {
-    XrExecutionCacheKey key = {0};
-    return code ? code->cache_key : key;
+XrExecutionId xr_vm_code_execution_id(const XrVmCode *code) {
+    XrExecutionId id = {{0}};
+    return code ? code->execution_id : id;
 }
 
 XrFingerprint xr_vm_code_private_digest(const XrVmCode *code) {
@@ -2105,7 +2366,7 @@ static bool vm_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT ||
            operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
            operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_TRAP ||
-           operation_id == XR_CORE_OP_CORE_RETURN;
+           operation_id == XR_CORE_OP_CORE_RETURN || vm_operation_is_text(operation_id);
 }
 
 static void vm_execution_release_lease(XrVmExecution *execution) {
@@ -2183,8 +2444,8 @@ static bool vm_child_execution_create(XrVmExecution *parent, const XrVmInstructi
     static const uint8_t trace_domain[] = "xray-vm-coroutine-child-logical-trace-v1\0";
     xr_sha256_init(&child->context.trace);
     xr_sha256_update(&child->context.trace, trace_domain, sizeof(trace_domain) - 1u);
-    xr_sha256_update(&child->context.trace, parent->code->cache_key.execution_id.bytes,
-                     sizeof(parent->code->cache_key.execution_id.bytes));
+    xr_sha256_update(&child->context.trace, parent->code->execution_id.bytes,
+                     sizeof(parent->code->execution_id.bytes));
     hash_u32(&child->context.trace, function_id);
     if (carrier && carrier->has_capture) {
         uint32_t target = function->blocks[function->entry_block].argument_ids[0];
@@ -2354,8 +2615,8 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
     static const uint8_t trace_domain[] = "xray-vm-coroutine-logical-trace-v1\0";
     xr_sha256_init(&execution->context.trace);
     xr_sha256_update(&execution->context.trace, trace_domain, sizeof(trace_domain) - 1u);
-    xr_sha256_update(&execution->context.trace, code->cache_key.execution_id.bytes,
-                     sizeof(code->cache_key.execution_id.bytes));
+    xr_sha256_update(&execution->context.trace, code->execution_id.bytes,
+                     sizeof(code->execution_id.bytes));
     hash_u32(&execution->context.trace, function_id);
     for (uint32_t argument = 0; argument < argument_count; ++argument) {
         uint32_t value_id = function->blocks[function->entry_block].argument_ids[argument];
@@ -2743,6 +3004,38 @@ static XrVmOutcome vm_execution_step(XrVmExecution *execution) {
                     execution->values[instruction.operands[0]];
                 execution->initialized[instruction.result_id] = true;
                 break;
+            case XR_CORE_OP_CORE_CONSTANT_STRING:
+            case XR_CORE_OP_CORE_CONSTANT_RUNE:
+            case XR_CORE_OP_CORE_STRING_FROM_I64:
+            case XR_CORE_OP_CORE_STRING_CONCAT:
+            case XR_CORE_OP_CORE_COMPARE_STRING:
+            case XR_CORE_OP_CORE_COMPARE_RUNE:
+            case XR_CORE_OP_CORE_OUTPUT_GROUP: {
+                XrVmValue produced = void_value();
+                VmTextStatus text_status = vm_execute_text_operation(
+                    &execution->context, instruction.operation_id, instruction.operands,
+                    instruction.operand_count, instruction.immediate.constant_id,
+                    instruction.immediate.u32,
+                    instruction.immediate.provider_operation.requirement_index,
+                    instruction.immediate.provider_operation.operation_index, execution->values,
+                    &produced);
+                if (text_status != VM_TEXT_OK) {
+                    XrVmOutcome failure = vm_text_outcome(&execution->context, text_status);
+                    execution->finished = true;
+                    vm_execution_release_lease(execution);
+                    XrVmOutcome result = vm_execution_outcome(execution, failure.kind);
+                    result.trap = failure.trap;
+                    return result;
+                }
+                if (instruction.result_id != XR_PROGRAM_LOCATION_NONE) {
+                    execution->values[instruction.result_id] = (XrVmRuntimeValue) {
+                        .category = XR_CORE_IR_VALUE,
+                        .as.value = produced,
+                    };
+                    execution->initialized[instruction.result_id] = true;
+                }
+                break;
+            }
             case XR_CORE_OP_CORE_CLASS_CONSTRUCT: {
                 XrVmClassValue *instance = allocate_class(
                     &execution->context, instruction.result_type_id, instruction.operand_count);
@@ -3324,8 +3617,7 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     static const uint8_t trace_domain[] = "xray-vm-logical-trace-v1\0";
     xr_sha256_init(&context.trace);
     xr_sha256_update(&context.trace, trace_domain, sizeof(trace_domain) - 1u);
-    xr_sha256_update(&context.trace, code->cache_key.execution_id.bytes,
-                     sizeof(code->cache_key.execution_id.bytes));
+    xr_sha256_update(&context.trace, code->execution_id.bytes, sizeof(code->execution_id.bytes));
     hash_u32(&context.trace, function_id);
     const XrValidatedFunction *function = &code->program->functions[function_id];
     XrVmRuntimeValue *runtime_arguments =
@@ -3352,7 +3644,8 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     xr_free(runtime_arguments);
     if (vm_outcome_contains_class(outcome))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
-    if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE) {
+    if (outcome.kind == XR_VM_OUTCOME_RETURN &&
+        (outcome.value.kind == XR_VM_VALUE_AGGREGATE || outcome.value.kind == XR_VM_VALUE_STRING)) {
         XrVmValue detached = void_value();
         if (detach_vm_value(outcome.value, &detached)) {
             outcome.value = detached;
@@ -3402,8 +3695,6 @@ const char *xr_vm_code_status_name(XrVmCodeStatus status) {
             return "invalid-input";
         case XR_VM_CODE_UNSUPPORTED_OPERATION:
             return "unsupported-operation";
-        case XR_VM_CODE_INSTANCE_UNAVAILABLE:
-            return "instance-unavailable";
         case XR_VM_CODE_POLICY_REJECTED:
             return "policy-rejected";
         case XR_VM_CODE_OUT_OF_MEMORY:

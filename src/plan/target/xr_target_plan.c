@@ -330,7 +330,6 @@ static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *recor
     hash_u64(ctx, record->argument_count);
     hash_u64(ctx, record->adapter_count);
     hash_u64(ctx, record->native_abi);
-    hash_u64(ctx, record->native_leaf);
     hash_u64(ctx, record->flags);
     hash_u64(ctx, record->calling_convention);
     hash_u64(ctx, record->target_kind);
@@ -1179,8 +1178,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         bool program_direct = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT;
         bool channel_close = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
         bool source_export = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
-        bool stringbuilder_constructor =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR;
+        bool runtime_constructor =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNTIME_CONSTRUCTOR;
         bool string_byte_slice_view =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW;
         bool stringbuilder_append_rune =
@@ -1216,8 +1215,6 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR;
         bool native_namespace_yieldable =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
-        bool native_target_leaf =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR;
         bool native_direct = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT;
         /* The construction is one of the rows that names a SemanticPlan call
          * target rather than a sealed builtin, so its target index must index
@@ -1241,14 +1238,13 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT;
         if (!semantic ||
             (!direct_local && !program_direct && !channel_close && !source_export &&
-             !stringbuilder_constructor && !string_byte_slice_view && !stringbuilder_append_rune &&
+             !runtime_constructor && !string_byte_slice_view && !stringbuilder_append_rune &&
              !string_runes && !builtin_runtime_method && !iterator_rune_has_next &&
-             !iterator_rune_next &&
-             !iterator_rune_nth && !rune_to_uint32 && !rune_to_string && !rune_is_whitespace &&
-             !string_slice_range && !string_utf8_static && !stringbuilder_to_string &&
-             !stringbuilder_append_string && !stringbuilder_clear && !json_namespace_value &&
-             !array_member_scalar && !native_module_scalar && !native_namespace_yieldable &&
-             !native_target_leaf && !native_direct && !source_class_constructor &&
+             !iterator_rune_next && !iterator_rune_nth && !rune_to_uint32 && !rune_to_string &&
+             !rune_is_whitespace && !string_slice_range && !string_utf8_static &&
+             !stringbuilder_to_string && !stringbuilder_append_string && !stringbuilder_clear &&
+             !json_namespace_value && !array_member_scalar && !native_module_scalar &&
+             !native_namespace_yieldable && !native_direct && !source_class_constructor &&
              !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof &&
              !panic_info_constructor && !scalar_copy && !container_copy && !map_entries_iterator &&
              !map_entry_iterator_has_next && !map_entry_iterator_next) ||
@@ -1256,13 +1252,12 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             ((direct_local || program_direct || source_export || native_namespace_yieldable ||
               native_direct || source_class_constructor) &&
              plan->calls[i].semantic_call_target >= xr_semantic_plan_call_target_count(semantic)) ||
-            ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
+            ((channel_close || runtime_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
               stringbuilder_clear || string_runes || builtin_runtime_method ||
-              iterator_rune_has_next || iterator_rune_next ||
-              iterator_rune_nth || rune_to_uint32 || rune_to_string || rune_is_whitespace ||
-              string_slice_range || string_utf8_static || json_namespace_value ||
-              array_member_scalar || native_module_scalar || native_target_leaf ||
+              iterator_rune_has_next || iterator_rune_next || iterator_rune_nth || rune_to_uint32 ||
+              rune_to_string || rune_is_whitespace || string_slice_range || string_utf8_static ||
+              json_namespace_value || array_member_scalar || native_module_scalar ||
               adt_enum_constructor || array_intrinsic || array_fill || array_hof ||
               panic_info_constructor || scalar_copy || container_copy || map_entries_iterator ||
               map_entry_iterator_has_next || map_entry_iterator_next) &&

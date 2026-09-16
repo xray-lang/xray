@@ -2241,10 +2241,10 @@ static bool exact_type_key(const XrType *type, int depth, uint64_t *hash, bool *
         case XR_KIND_INSTANCE:
         case XR_KIND_INTERFACE: {
             XrClassInfo *info = type->instance.class_ref;
-            if (info && info->xg_nominal_key != 0u) {
+            if (info && info->declaration_key != 0u) {
                 *has_nominal = true;
                 *hash = exact_type_key_fold(*hash, UINT64_C(0x4e4f4d494e414c));
-                *hash = exact_type_key_fold(*hash, info->xg_nominal_key);
+                *hash = exact_type_key_fold(*hash, info->declaration_key);
             } else if (info && info->declaration_symbol &&
                        info->nominal_kind != XA_NOMINAL_INVALID) {
                 return false;
@@ -2261,10 +2261,10 @@ static bool exact_type_key(const XrType *type, int depth, uint64_t *hash, bool *
         }
         case XR_KIND_ENUM: {
             XrClassInfo *info = type->enum_type.nominal_ref;
-            if (info && info->xg_nominal_key != 0u) {
+            if (info && info->declaration_key != 0u) {
                 *has_nominal = true;
                 *hash = exact_type_key_fold(*hash, UINT64_C(0x4e4f4d494e414c));
-                *hash = exact_type_key_fold(*hash, info->xg_nominal_key);
+                *hash = exact_type_key_fold(*hash, info->declaration_key);
             } else if (info && info->declaration_symbol &&
                        info->nominal_kind != XA_NOMINAL_INVALID) {
                 return false;

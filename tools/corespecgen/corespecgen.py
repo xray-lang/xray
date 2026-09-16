@@ -211,6 +211,17 @@ def referenced_types(type_rule: dict[str, Any]) -> set[str]:
         result.add(result_type)
     require(isinstance(type_rule.get("immediates"), dict),
             "operation type_rule.immediates must be an object")
+    domain = type_rule.get("operand_domain")
+    if domain is not None:
+        require(isinstance(domain, list) and domain
+                and all(isinstance(name, str) and name not in GENERIC_TYPES for name in domain)
+                and len(domain) == len(set(domain)),
+                "operation type_rule.operand_domain must list unique concrete types")
+        require(any(name in VARIADIC_TYPES for name in operands),
+                "operation type_rule.operand_domain requires a variadic operand rule")
+        result.update(domain)
+    require(set(type_rule) <= {"operands", "result", "immediates", "operand_domain"},
+            "operation type_rule has unknown fields")
     return result
 
 
@@ -336,7 +347,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-reborrow-read", "existential-test",
-            "provider-call", "output-group-i64",
+            "provider-call", "output-group",
             "coroutine-yield", "coroutine-suspend", "coroutine-call",
             "coroutine-indirect-call",
         }, f"operation {spelling} has unknown KAT validator")
@@ -394,12 +405,132 @@ def wrap_i64(value: int) -> int:
     return unsigned if unsigned <= I64_MAX else unsigned - I64_MODULUS
 
 
+RUNE_MAX = 0x10FFFF
+SURROGATE_MIN = 0xD800
+SURROGATE_MAX = 0xDFFF
+COMPARE_PREDICATES: dict[str, Callable[[Any, Any], bool]] = {
+    "eq": lambda a, b: a == b,
+    "ne": lambda a, b: a != b,
+    "lt": lambda a, b: a < b,
+    "le": lambda a, b: a <= b,
+    "gt": lambda a, b: a > b,
+    "ge": lambda a, b: a >= b,
+}
+
+
+def rune_is_scalar_value(value: Any) -> bool:
+    return (isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= RUNE_MAX
+            and not SURROGATE_MIN <= value <= SURROGATE_MAX)
+
+
+def parse_rune(value: Any, owner: str) -> int:
+    require(rune_is_scalar_value(value), f"{owner} must be a Unicode scalar value")
+    return value
+
+
+def string_bytes(value: Any, owner: str) -> bytes | None:
+    """Decode one KAT string operand.
+
+    A JSON string names its UTF-8 encoding. An object with a `bytes_hex` field
+    names raw bytes so hostile sequences can be written down; the oracle
+    answers None for a sequence that is not valid UTF-8."""
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    require(isinstance(value, dict) and set(value) == {"bytes_hex"}
+            and isinstance(value["bytes_hex"], str)
+            and re.fullmatch(r"(?:[0-9a-f]{2})*", value["bytes_hex"]),
+            f"{owner} must be a string or a bytes_hex object")
+    raw = bytes.fromhex(value["bytes_hex"])
+    try:
+        decoded = raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return None
+    if any(SURROGATE_MIN <= ord(char) <= SURROGATE_MAX for char in decoded):
+        return None
+    return raw
+
+
+def string_result(raw: bytes) -> dict[str, Any]:
+    return {"value": raw.decode("utf-8", errors="strict"), "byte_length": len(raw)}
+
+
+def render_display_operand(operand: Any, owner: str) -> bytes | None:
+    """Render one typed output operand in its canonical display form."""
+    require(isinstance(operand, dict) and set(operand) == {"type", "value"},
+            f"{owner} must name a type and a value")
+    kind = operand["type"]
+    value = operand["value"]
+    if kind == "i64":
+        return str(parse_i64(value, owner)).encode("ascii")
+    if kind == "bool":
+        require(isinstance(value, bool), f"{owner} bool operand must be a JSON bool")
+        return b"true" if value else b"false"
+    if kind == "string":
+        return string_bytes(value, owner)
+    if kind == "rune":
+        return chr(parse_rune(value, owner)).encode("utf-8")
+    return None
+
+
+def render_output_group(operands: list[Any], owner: str) -> bytes | None:
+    pieces = []
+    for index, operand in enumerate(operands):
+        rendered = render_display_operand(operand, f"{owner} operand {index}")
+        if rendered is None:
+            return None
+        pieces.append(rendered)
+    return b" ".join(pieces) + b"\n"
+
+
 def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
     spelling = case["operation"]
     arguments = case.get("arguments")
     immediates = case.get("immediates")
     require(isinstance(arguments, list), f"KAT {case['id']} arguments must be an array")
     require(isinstance(immediates, dict), f"KAT {case['id']} immediates must be an object")
+
+    if spelling == "core.constant.string":
+        require(not arguments, f"KAT {case['id']} string constant must not have operands")
+        raw = string_bytes(immediates.get("value"), f"KAT {case['id']} value")
+        if raw is None:
+            return {"rejected": "invalid-utf8"}
+        return string_result(raw)
+    if spelling == "core.constant.rune":
+        require(not arguments, f"KAT {case['id']} rune constant must not have operands")
+        value = immediates.get("value")
+        require(isinstance(value, int) and not isinstance(value, bool),
+                f"KAT {case['id']} rune constant must be an integer")
+        if not rune_is_scalar_value(value):
+            return {"rejected": "not-a-unicode-scalar-value"}
+        return {"value": value}
+    if spelling == "core.string.from_i64":
+        require(len(arguments) == 1 and not immediates,
+                f"KAT {case['id']} string.from_i64 contract is malformed")
+        return string_result(str(parse_i64(arguments[0], f"KAT {case['id']} operand")).encode("ascii"))
+    if spelling == "core.string.concat":
+        require(len(arguments) == 2 and not immediates,
+                f"KAT {case['id']} string.concat arity is not two")
+        left = string_bytes(arguments[0], f"KAT {case['id']} lhs")
+        right = string_bytes(arguments[1], f"KAT {case['id']} rhs")
+        require(left is not None and right is not None,
+                f"KAT {case['id']} string.concat operands must be valid UTF-8")
+        return string_result(left + right)
+    if spelling == "core.compare.string":
+        require(len(arguments) == 2, f"KAT {case['id']} string compare arity is not two")
+        left = string_bytes(arguments[0], f"KAT {case['id']} lhs")
+        right = string_bytes(arguments[1], f"KAT {case['id']} rhs")
+        require(left is not None and right is not None,
+                f"KAT {case['id']} string compare operands must be valid UTF-8")
+        predicate = immediates.get("predicate")
+        require(predicate in COMPARE_PREDICATES, f"KAT {case['id']} compare predicate is invalid")
+        return {"value": COMPARE_PREDICATES[predicate](left, right)}
+    if spelling == "core.compare.rune":
+        require(len(arguments) == 2, f"KAT {case['id']} rune compare arity is not two")
+        left = parse_rune(arguments[0], f"KAT {case['id']} lhs")
+        right = parse_rune(arguments[1], f"KAT {case['id']} rhs")
+        predicate = immediates.get("predicate")
+        require(predicate in COMPARE_PREDICATES, f"KAT {case['id']} compare predicate is invalid")
+        return {"value": COMPARE_PREDICATES[predicate](left, right)}
 
     if spelling == "core.constant.i64":
         require(not arguments, f"KAT {case['id']} constant must not have operands")
@@ -657,11 +788,22 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_ownership") == "non-owner"
                 and actual.get("provider_requirement") is True
                 and (not has_trap_edge or trap_edge_valid))
-    if validator == "output-group-i64":
-        return (actual.get("operand_type") == "i64"
-                and actual.get("result_type") == "void"
-                and actual.get("operand_category") == "value"
-                and actual.get("operand_ownership") == "non-owner"
+    if validator == "output-group":
+        operands = actual.get("operands")
+        if not isinstance(operands, list):
+            return False
+        rendered = render_output_group(operands, f"KAT {case['id']}")
+        expected_hex = actual.get("rendered_hex")
+        if rendered is None:
+            return False
+        if expected_hex is not None and (not isinstance(expected_hex, str)
+                                         or bytes.fromhex(expected_hex) != rendered):
+            return False
+        categories = actual.get("operand_categories")
+        ownerships = actual.get("operand_ownerships")
+        return (actual.get("result_type") == "void"
+                and categories == ["value"] * len(operands)
+                and ownerships == ["non-owner"] * len(operands)
                 and actual.get("provider_requirement") is True
                 and actual.get("atomic_group") is True
                 and actual.get("separator") == "space"
@@ -1186,6 +1328,20 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
     lines.extend([
         "} XrCoreTypeId;",
         "",
+    ])
+    type_ids = {row["name"]: row["stable_id"] for row in registry["types"]}
+    for operation in registry["operations"]:
+        domain = operation["type_rule"].get("operand_domain")
+        if domain is None:
+            continue
+        mask = sum(1 << type_ids[name] for name in domain)
+        name = c_identifier(operation["spelling"])
+        lines.extend([
+            f"/* Operand types admitted by {operation['spelling']}: {', '.join(domain)}. */",
+            f"#define XR_CORE_OPERAND_DOMAIN_{name} UINT32_C({mask})",
+            "",
+        ])
+    lines.extend([
         "typedef enum XrCoreEffectMask {",
     ])
     for row in registry["effects"]:
@@ -1372,6 +1528,8 @@ def generate_markdown(registry: dict[str, Any], digest: str, kat_count: int) -> 
     for operation in registry["operations"]:
         type_rule = operation["type_rule"]
         operands = ", ".join(type_rule["operands"]) or "-"
+        if type_rule.get("operand_domain"):
+            operands += " in {" + ", ".join(type_rule["operand_domain"]) + "}"
         effects = ", ".join(operation["effects"]) or "-"
         consumers = ", ".join(
             f"{name}={operation['coverage'][name]['status']}"

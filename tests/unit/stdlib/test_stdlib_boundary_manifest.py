@@ -77,7 +77,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertIn('XR_BUILTIN_PRELUDE_TYPE("Array"', registry)
         self.assertIn('XR_BUILTIN_PRELUDE_TYPE("Map"', registry)
         self.assertIn('XR_BUILTIN_ENUM("Ordering"', registry)
-        self.assertIn("void xr_prelude_install", runtime)
+        self.assertIn("bool xr_prelude_install", runtime)
 
     def test_source_only_module_declares_no_native_entries(self) -> None:
         manifest = load_manifest(ROOT)
@@ -160,33 +160,36 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "duplicate VM binding rows disagree"):
             stdlibgen.unique_vm_binding_entries([original, divergent])
 
-    def test_target_leaf_source_owner_is_private_unique_and_canonical(self) -> None:
+    def test_native_ref_projection_follows_signature_mode(self) -> None:
         stdlibgen = load_stdlibgen(ROOT)
-        owners: dict[str, str] = {}
-        stdlibgen.validate_target_leaf_source_owner(
-            ROOT, "os", "__getpid", "i64-getpid", "internal", "nothrow", "no_heap", owners
-        )
-        self.assertEqual({"i64-getpid": "os.__getpid"}, owners)
-        with self.assertRaisesRegex(SystemExit, "must have internal visibility"):
-            stdlibgen.validate_target_leaf_source_owner(
-                ROOT, "os", "publicLeaf", "i64-public", "public", "nothrow", "no_heap", {}
-            )
-        with self.assertRaisesRegex(SystemExit, "must declare effect = nothrow"):
-            stdlibgen.validate_target_leaf_source_owner(
-                ROOT, "os", "__missingEffect", "i64-missing-effect", "internal", "", "no_heap", {}
-            )
-        with self.assertRaisesRegex(SystemExit, "must declare allocation = no_heap"):
-            stdlibgen.validate_target_leaf_source_owner(
-                ROOT, "os", "__missingAllocation", "i64-missing-allocation", "internal", "nothrow", "", {}
-            )
-        with self.assertRaisesRegex(SystemExit, "duplicate providers"):
-            stdlibgen.validate_target_leaf_source_owner(
-                ROOT, "os", "anotherPrivateLeaf", "i64-getpid", "internal", "nothrow", "no_heap", owners
-            )
-        with self.assertRaisesRegex(SystemExit, "requires canonical source module"):
-            stdlibgen.validate_target_leaf_source_owner(
-                ROOT, "missing_source_module", "__leaf", "i64-missing", "internal", "nothrow", "no_heap", {}
-            )
+        entries = stdlibgen.parse_defs(ROOT)
+        original = next(entry for entry in entries if entry.symbol == "crypto.__fillRandomBytes")
+        for name in (original.name, "__differentMutation"):
+            entry = dataclasses.replace(original, name=name)
+            generated = stdlibgen.emit_aot_methods([entry], [], [], [])
+            self.assertIn('"v", "r",', generated)
+            read_entry = dataclasses.replace(entry, signature="(bytes: Array<u8>): ()")
+            self.assertIn('"v", ".",', stdlibgen.emit_aot_methods([read_entry], [], [], []))
+            wrong_abi = dataclasses.replace(entry, arg_spec="s")
+            with self.assertRaisesRegex(SystemExit, "ref provider arguments require tagged storage"):
+                stdlibgen.emit_aot_methods([wrong_abi], [], [], [])
+
+    def test_provider_requires_its_canonical_source_module(self) -> None:
+        stdlibgen = load_stdlibgen(ROOT)
+        entries = stdlibgen.parse_defs(ROOT)
+        stdlibgen.validate_provider_source_owners(ROOT, entries)
+        process = next(entry for entry in entries if entry.symbol == "os.__getpid")
+        with tempfile.TemporaryDirectory(prefix="xray-provider-source.") as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(SystemExit, "requires canonical source module"):
+                stdlibgen.validate_provider_source_owners(root, [process])
+            source = root / "stdlib/os/os.xr"
+            source.parent.mkdir(parents=True)
+            source.write_text("export fn getpid() -> i64 { return __getpid() }\n")
+            stdlibgen.validate_provider_source_owners(root, [process])
+            foreign = dataclasses.replace(process, module="unrelated")
+            with self.assertRaisesRegex(SystemExit, "requires canonical source module"):
+                stdlibgen.validate_provider_source_owners(root, [foreign])
 
     def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))

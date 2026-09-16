@@ -185,9 +185,9 @@ TEST(wrong_program_authority_is_rejected_before_build_or_cache) {
     xr_test_program_plan_store_remove(root);
 }
 
-TEST(forged_private_leaf_family_is_rejected_before_cache) {
+TEST(unknown_program_family_is_rejected_before_cache) {
     char root[XR_PATH_MAX];
-    ASSERT_EQ_INT(xr_temp_dir_create("xray-program-target-private-leaf", root, sizeof(root)), 0);
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-program-target-unknown-family", root, sizeof(root)), 0);
     XrCacheStore *store = open_store(root);
     ASSERT_NOT_NULL(store);
     XrSemanticPlan *semantic = xr_test_program_plan_semantic(505u);
@@ -197,8 +197,7 @@ TEST(forged_private_leaf_family_is_rejected_before_cache) {
     ASSERT_NOT_NULL(profile);
 
     semantic->program_provenance.schema = XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION;
-    semantic->program_provenance.program_family =
-        XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+    semantic->program_provenance.program_family = UINT32_MAX;
 
     XrProgramTargetPlanBuildResult result = {0};
     char error[512] = {0};
@@ -221,5 +220,5 @@ TEST_MAIN_BEGIN()
 RUN_TEST(cold_warm_and_rebuild_preserve_one_program_plan);
 RUN_TEST(cancel_is_fail_closed_and_preserves_the_warm_entry);
 RUN_TEST(wrong_program_authority_is_rejected_before_build_or_cache);
-RUN_TEST(forged_private_leaf_family_is_rejected_before_cache);
+RUN_TEST(unknown_program_family_is_rejected_before_cache);
 TEST_MAIN_END()

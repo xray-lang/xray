@@ -9,6 +9,7 @@
  */
 
 #include "runtime/abi/xr_runtime_contract.h"
+#include "../program/xr_program_provider_fixture.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -823,9 +824,9 @@ static void test_provider_set_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_OK,
           "individual provider contract fingerprints");
     static const uint8_t expected_provider[XR_FINGERPRINT_BYTES] = {
-        0xe7, 0x9e, 0xa3, 0x4c, 0xf8, 0x0a, 0x02, 0x64, 0xdf, 0x11, 0x62,
-        0x80, 0xbc, 0x13, 0x54, 0x8e, 0x00, 0xb6, 0xf5, 0xe4, 0x61, 0xe8,
-        0xcf, 0x00, 0x47, 0x77, 0x5a, 0x90, 0xdc, 0x08, 0xe5, 0xb8,
+        0x01, 0x89, 0x67, 0xad, 0x81, 0x3c, 0x6e, 0x64, 0xe2, 0x77, 0xe0,
+        0xc9, 0x08, 0xdf, 0xba, 0xa8, 0x8b, 0xf4, 0xe3, 0x94, 0x28, 0x61,
+        0xa0, 0xfd, 0x1a, 0xa1, 0xf9, 0xa7, 0x79, 0xb6, 0x50, 0xfe,
     };
     if (memcmp(provider_fingerprint.bytes, expected_provider, sizeof(expected_provider)) != 0)
         print_fingerprint("provider contract fingerprint", provider_fingerprint);
@@ -850,9 +851,9 @@ static void test_provider_set_known_answer_and_mutation(void) {
     CHECK(provider_capabilities == expected_mask,
           "provider mask is derived exactly from verified provider contracts");
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
-        0x31, 0x42, 0xfb, 0xdb, 0x71, 0x05, 0xd9, 0xda, 0x10, 0x29, 0xf2,
-        0x5f, 0x02, 0xcb, 0xd4, 0xc7, 0x1c, 0x79, 0xa3, 0xce, 0x2f, 0x0c,
-        0x9e, 0x87, 0x0e, 0xba, 0xff, 0x90, 0xf7, 0x55, 0x81, 0x2f,
+        0x61, 0xa7, 0xba, 0x44, 0x73, 0x27, 0x5d, 0xd3, 0xe0, 0x25, 0xac,
+        0x20, 0x28, 0x0f, 0x7e, 0xde, 0x74, 0xf2, 0xbe, 0xa1, 0xdc, 0xf1,
+        0xf5, 0xa6, 0xea, 0x3a, 0xaf, 0x05, 0x55, 0x8c, 0xac, 0x98,
     };
     if (memcmp(fingerprint.bytes, expected, sizeof(expected)) != 0)
         print_fingerprint("provider-set fingerprint", fingerprint);
@@ -975,6 +976,7 @@ static XrTargetProviderContract make_operation_provider(uint8_t id_seed) {
         make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
                        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
     provider.operations[0] = make_operation(1, make_call_abi(result, NULL, 0), 0, 0, 0);
+    provider.operations[0].logical_contract = xr_program_fixture_scalar_contract(true);
     return provider;
 }
 
@@ -1039,12 +1041,52 @@ static void test_provider_identity_order_and_capability_separation(void) {
           "two panic contracts cannot ambiguously own the same runtime foundation role");
 }
 
+static void test_provider_logical_contract_required(void) {
+    XrTargetProviderContract providers[3];
+    make_providers(providers);
+    providers[2] = make_operation_provider(202);
+    const XrTargetProviderContract ordinary = providers[2];
+    const XrFingerprint untouched = sentinel_fingerprint(233);
+    for (unsigned mutation = 0u; mutation < 5u; ++mutation) {
+        make_providers(providers);
+        providers[2] = ordinary;
+        switch (mutation) {
+            case 0:
+                memset(&providers[2].operations[0].logical_contract, 0,
+                       sizeof(providers[2].operations[0].logical_contract));
+                break;
+            case 1:
+                providers[2].operations[0].logical_contract.runtime_profiles =
+                    XR_PROVIDER_LOGICAL_PROFILE_FREESTANDING;
+                break;
+            case 2:
+                providers[2].operations[0].logical_contract.reserved[0] = 1u;
+                break;
+            case 3:
+                providers[0].operations[0].logical_contract =
+                    ordinary.operations[0].logical_contract;
+                break;
+            case 4:
+                providers[1].operations[0].logical_contract =
+                    ordinary.operations[0].logical_contract;
+                break;
+        }
+        XrFingerprint output = untouched;
+        uint64_t capabilities = UINT64_C(0xfeed);
+        CHECK(xr_target_provider_set_fingerprint(providers, 3, &capabilities, &output) ==
+                      XR_RUNTIME_ABI_INVALID_PROVIDER_SET &&
+                  capabilities == UINT64_C(0xfeed) && fingerprint_equal(output, untouched),
+              "missing, malformed or inapplicable logical facts publish no provider authority");
+    }
+}
+
 int main(void) {
     test_object_header_known_answer_and_mutation();
     test_runtime_known_answer_and_mutation();
     test_provider_call_abi_known_answer_and_mutation();
     test_provider_set_known_answer_and_mutation();
     test_provider_identity_order_and_capability_separation();
+    test_provider_logical_contract_required();
     if (failures != 0) {
         fprintf(stderr, "%d runtime ABI contract test(s) failed\n", failures);
         return 1;

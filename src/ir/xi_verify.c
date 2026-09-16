@@ -707,6 +707,15 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
         return;
     }
 
+    if (v->initializes_module_slot &&
+        (v->op != XI_SET_SHARED || f->parent_func || v->aux_int < 0 ||
+         v->aux_int >= f->nshared || !f->module_slots ||
+         f->module_slots[v->aux_int].kind != XI_MODULE_SLOT_VALUE || v->nargs != 1u)) {
+        verr(ctx, "func '%s': v%u in b%u has invalid module declaration initialization", f->name,
+             v->id, blk->id);
+        return;
+    }
+
     if (v->op == XI_PHI) {
         verr(ctx,
              "func '%s': value-list entry v%u in b%u is XI_PHI; phi nodes must live on blk->phis",

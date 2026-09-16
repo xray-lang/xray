@@ -161,6 +161,41 @@ static bool profile_machine_features_are_consistent(const XrTargetMachineFacts *
            (!requires_little_endian || facts->data_layout.endian == XR_TARGET_ENDIAN_LITTLE);
 }
 
+static uint32_t provider_logical_platform(uint16_t operating_system) {
+    switch (operating_system) {
+        case XR_TARGET_OS_LINUX:
+            return XR_PROVIDER_PLATFORM_LINUX;
+        case XR_TARGET_OS_MACOS:
+            return XR_PROVIDER_PLATFORM_MACOS;
+        case XR_TARGET_OS_WINDOWS:
+            return XR_PROVIDER_PLATFORM_WINDOWS;
+        case XR_TARGET_OS_WASI:
+            return XR_PROVIDER_PLATFORM_WASI;
+        case XR_TARGET_OS_FREESTANDING:
+            return XR_PROVIDER_PLATFORM_FREESTANDING;
+        default:
+            return 0u;
+    }
+}
+
+static bool provider_matches_machine(const XrTargetProviderContract *provider,
+                                     const XrTargetMachineFacts *machine) {
+    if (provider->runtime_profile != machine->runtime_profile)
+        return false;
+    for (uint16_t index = 0u; index < provider->operation_count; ++index) {
+        const XrTargetProviderOperationContract *operation = &provider->operations[index];
+        if (operation->call_abi.pointer_width != machine->data_layout.pointer.size ||
+            operation->call_abi.pointer_alignment != machine->data_layout.pointer.align ||
+            operation->call_abi.target_endian != machine->data_layout.endian)
+            return false;
+        if (provider->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS &&
+            (operation->logical_contract.platforms &
+             provider_logical_platform(machine->operating_system)) == 0u)
+            return false;
+    }
+    return true;
+}
+
 bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_t error_size) {
     if (!profile || !profile->frozen)
         return report(error, error_size, "XR_TARGET_1000", "target profile is not frozen");
@@ -243,6 +278,10 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
             !xr_fingerprint_equal(provider_set_id, facts->provider_set_fingerprint))
             return report(error, error_size, "XR_TARGET_1000",
                           "materialized provider contracts do not match profile identity");
+        for (size_t index = 0u; index < profile->provider_count; ++index)
+            if (!provider_matches_machine(&profile->providers[index], machine))
+                return report(error, error_size, "XR_TARGET_1000",
+                              "provider contract is unavailable for the exact target machine");
     } else if (profile->providers || profile->provider_count != 0) {
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile has partial provider materialization");

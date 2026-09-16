@@ -50,11 +50,6 @@ static bool emission_fail(char *error, size_t error_size, const char *format, ..
     return false;
 }
 
-static bool stable_id_is_zero(XrStableId id) {
-    static const XrStableId zero = {{0}};
-    return memcmp(&id, &zero, sizeof(id)) == 0;
-}
-
 static XiModule *module_for_partition(const XrCProgramEmissionContext *ctx, uint32_t partition) {
     if (!ctx || partition >= ctx->partition_count)
         return NULL;
@@ -153,13 +148,8 @@ static bool machine_rep_is_i64(const XrTargetPlan *target, uint16_t rep) {
     return row && row->kind == XR_MACHINE_REP_I64;
 }
 
-static bool program_graph_is_private_leaf(const XrCProgramEmissionContext *ctx) {
-    return ctx && ctx->graph &&
-           ctx->graph->family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
-}
-
 static uint32_t program_graph_argument_count(const XrCProgramEmissionContext *ctx) {
-    return program_graph_is_private_leaf(ctx) ? 0u : 1u;
+    return ctx->graph->argument_count;
 }
 
 static bool locator_is_exact(XiSourceLocator xi, XrProgramSemanticSourceLocator psc) {
@@ -179,7 +169,6 @@ static bool builder_callee_carrier_is_exact(const XrCProgramEmissionContext *ctx
     if (!ctx || !binding || !program_call || !carrier || !carrier->block ||
         carrier->block->func != binding->caller.xi_function)
         return false;
-    bool private_leaf = program_graph_is_private_leaf(ctx);
     const XiImportRef *ref = xi_value_import_ref(binding->caller.xi_function, carrier);
     XiModule *source_module = module_for_partition(ctx, binding->caller.target_partition);
     XiModule *callee_module = module_for_partition(ctx, binding->callee.target_partition);
@@ -194,19 +183,16 @@ static bool builder_callee_carrier_is_exact(const XrCProgramEmissionContext *ctx
             callee_module_index = i;
     if (!ref || !dependency || !source_module || !callee_module)
         return false;
-    bool carrier_exact = private_leaf ? carrier->op == XI_IMPORT_REF && carrier->aux == ref
-                                      : carrier->op == XI_GET_SHARED && carrier->aux_int >= 0 &&
-                                            carrier->aux_int < source_module->nslots &&
-                                            source_module->slot_imports &&
-                                            source_module->slot_imports[carrier->aux_int] == ref;
+    bool carrier_exact = carrier->op == XI_GET_SHARED && carrier->aux_int >= 0 &&
+                         carrier->aux_int < source_module->nslots && source_module->slot_imports &&
+                         source_module->slot_imports[carrier->aux_int] == ref;
     return carrier_exact &&
            xr_stable_id_equal(dependency->source_module,
                               ctx->partitions[binding->caller.target_partition].module_identity) &&
            xr_stable_id_equal(dependency->dependency_module,
                               ctx->partitions[binding->callee.target_partition].module_identity) &&
-           (private_leaf ? stable_id_is_zero(dependency->exported_function)
-                         : xr_stable_id_equal(dependency->exported_function,
-                                              ctx->graph->producer_function_identity)) &&
+           xr_stable_id_equal(dependency->exported_function,
+                              ctx->graph->producer_function_identity) &&
            xr_stable_id_equal(dependency->resolver_binding, ctx->graph->resolver_binding) &&
            xr_stable_id_equal(ref->psc_resolver_binding, program_call->resolver_binding) &&
            xr_stable_id_equal(ref->psc_resolver_binding, dependency->resolver_binding) &&
@@ -527,59 +513,6 @@ static bool bind_direct_call(const XrCProgramEmissionContext *ctx,
     return true;
 }
 
-static bool verifier_callee_operand_has_one_use(const XiFunc *caller, const XiValue *call,
-                                                const XiValue *operand);
-
-static const XiValue *
-bind_private_leaf_native_callee_operand(const XrCProgramEmissionContext *ctx,
-                                        const XrCProgramDirectI64EmissionBinding *binding) {
-    if (!program_graph_is_private_leaf(ctx) || !binding)
-        return NULL;
-    uint32_t call_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target, &call_count);
-    const XrTargetCallRecord *target_call = NULL;
-    for (uint32_t i = 0; calls && i < call_count; i++) {
-        const XrTargetCallRecord *candidate = &calls[i];
-        if (candidate->caller_function != binding->callee.target_function ||
-            candidate->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
-            candidate->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
-            continue;
-        if (target_call)
-            return NULL;
-        target_call = candidate;
-    }
-    const XrSemanticPlan *semantic =
-        xr_target_plan_semantic_module(ctx->target, binding->callee.target_partition);
-    const XrSemanticProgramCallBinding *program_call =
-        semantic && target_call
-            ? xr_semantic_plan_program_call_for_operation(semantic, target_call->semantic_operation)
-            : NULL;
-    const XiValue *xi_call = program_call
-                                 ? xi_program_semantic_call_for_row(binding->callee.xi_function,
-                                                                    program_call->program_row)
-                                 : NULL;
-    const XiValue *carrier =
-        xi_call && xi_call->nargs == 1u && xi_call->args ? xi_call->args[0] : NULL;
-    const XiImportRef *ref =
-        carrier ? xi_value_import_ref(binding->callee.xi_function, carrier) : NULL;
-    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
-    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-    if (!target_call || !program_call || !xi_call || !carrier || !ref || xi_call->op != XI_CALL ||
-        carrier->op != XI_IMPORT_REF || carrier->aux != ref ||
-        !xi_import_ref_is_grounded_native(ref) ||
-        !verifier_callee_operand_has_one_use(binding->callee.xi_function, xi_call, carrier) ||
-        program_call->operation != target_call->semantic_operation ||
-        target_call->argument_count != 0u ||
-        target_call->callee_function != XR_SEMANTIC_INDEX_NONE ||
-        !xr_aot_scalar_program_semantic_value_id(
-            ctx->target, binding->callee.target_partition, binding->callee.target_function,
-            binding->callee.xi_function, xi_call, &semantic_function, &semantic_value, NULL, 0) ||
-        semantic_function != binding->callee.semantic_function ||
-        semantic_value != target_call->result_value)
-        return NULL;
-    return carrier;
-}
-
 static bool append_function_values(const XrCProgramEmissionContext *ctx,
                                    const XrCProgramXiFunctionBinding *function,
                                    const XiValue *elided, XrCProgramValueEmissionBinding *values,
@@ -757,15 +690,11 @@ static bool build_emission_rows(const XrCProgramEmissionContext *ctx,
             ? xr_semantic_plan_function(callee_semantic, binding->callee.semantic_function)
             : NULL;
     uint32_t callee_parameter_count = program_graph_argument_count(ctx);
-    const XiValue *native_leaf_callee_operand =
-        bind_private_leaf_native_callee_operand(ctx, binding);
     if (!caller_function || !callee_function || caller_function->parameter_count != 0u ||
         callee_function->parameter_count != callee_parameter_count ||
-        (program_graph_is_private_leaf(ctx) && !native_leaf_callee_operand) ||
         caller_function->value_count > UINT32_MAX - callee_function->value_count)
         return emission_fail(error, error_size,
                              "program function ABI shape is not bounded direct-i64");
-    binding->xi_native_leaf_callee_operand = native_leaf_callee_operand;
 
     uint32_t value_count = caller_function->value_count + callee_function->value_count;
     XrCProgramXiFunctionBinding *initializers =
@@ -811,8 +740,7 @@ static bool build_emission_rows(const XrCProgramEmissionContext *ctx,
         return emission_fail(error, error_size,
                              "caller values have no exact C-emission projection");
     }
-    if (!append_function_values(ctx, &binding->callee, native_leaf_callee_operand, values,
-                                value_count, &projected)) {
+    if (!append_function_values(ctx, &binding->callee, NULL, values, value_count, &projected)) {
         xr_free(values);
         return emission_fail(error, error_size,
                              "callee values have no exact C-emission projection");
@@ -878,19 +806,12 @@ static bool prepare_context(const XrTargetPlan *target_plan, XiModule *const *mo
         xr_target_plan_module_partitions(target_plan, &partition_count);
     bool supported_family =
         graphs && graph_count == 1u &&
-        (graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
-         graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
-    uint32_t expected_arguments =
-        graphs && graph_count == 1u &&
-                graphs[0].family ==
-                    XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL
-            ? 0u
-            : 1u;
+        graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
     if (!graphs || graph_count != 1u || !partitions || partition_count != module_count ||
         module_count != 2u || graphs[0].schema != XR_TARGET_PROGRAM_GRAPH_SCHEMA_VERSION ||
         !supported_family || graphs[0].module_count != module_count ||
         graphs[0].function_count != 2u || graphs[0].call_count != 1u ||
-        graphs[0].argument_count != expected_arguments ||
+        graphs[0].argument_count != 1u ||
         graphs[0].flags !=
             (XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN | XR_TARGET_PROGRAM_GRAPH_DIRECT_I64))
         return emission_fail(error, error_size, "program C-emission graph is not exact");
@@ -1158,7 +1079,6 @@ static bool verifier_callee_carrier_is_exact(const XrCProgramEmissionContext *ct
     if (!ctx || !binding || !program_call || !carrier || !carrier->block ||
         carrier->block->func != binding->caller.xi_function)
         return false;
-    bool private_leaf = program_graph_is_private_leaf(ctx);
     const XiImportRef *ref = xi_value_import_ref(binding->caller.xi_function, carrier);
     XiModule *source_module = module_for_partition(ctx, binding->caller.target_partition);
     XiModule *callee_module = module_for_partition(ctx, binding->callee.target_partition);
@@ -1173,19 +1093,16 @@ static bool verifier_callee_carrier_is_exact(const XrCProgramEmissionContext *ct
             callee_module_index = i;
     if (!ref || !dependency || !source_module || !callee_module)
         return false;
-    bool carrier_exact = private_leaf ? carrier->op == XI_IMPORT_REF && carrier->aux == ref
-                                      : carrier->op == XI_GET_SHARED && carrier->aux_int >= 0 &&
-                                            carrier->aux_int < source_module->nslots &&
-                                            source_module->slot_imports &&
-                                            source_module->slot_imports[carrier->aux_int] == ref;
+    bool carrier_exact = carrier->op == XI_GET_SHARED && carrier->aux_int >= 0 &&
+                         carrier->aux_int < source_module->nslots && source_module->slot_imports &&
+                         source_module->slot_imports[carrier->aux_int] == ref;
     if (!carrier_exact ||
         !xr_stable_id_equal(dependency->source_module,
                             ctx->partitions[binding->caller.target_partition].module_identity) ||
         !xr_stable_id_equal(dependency->dependency_module,
                             ctx->partitions[binding->callee.target_partition].module_identity) ||
-        (private_leaf ? !stable_id_is_zero(dependency->exported_function)
-                      : !xr_stable_id_equal(dependency->exported_function,
-                                            ctx->graph->producer_function_identity)) ||
+        !xr_stable_id_equal(dependency->exported_function,
+                            ctx->graph->producer_function_identity) ||
         !xr_stable_id_equal(dependency->resolver_binding, ctx->graph->resolver_binding) ||
         !xr_stable_id_equal(ref->psc_resolver_binding, program_call->resolver_binding) ||
         !xr_stable_id_equal(ref->psc_resolver_binding, dependency->resolver_binding) ||
@@ -1578,13 +1495,9 @@ bool xr_c_program_direct_i64_emission_verify(const XrCProgramDirectI64EmissionBi
             : NULL;
     uint32_t callee_parameter_count = program_graph_argument_count(&ctx);
     uint32_t program_abi_count = 2u + callee_parameter_count;
-    const XiValue *native_leaf_callee_operand =
-        bind_private_leaf_native_callee_operand(&ctx, binding);
     if (!caller_function || !callee_function || !binding->initializers ||
         binding->initializer_count != ctx.module_count || !binding->values ||
         !binding->function_abis ||
-        binding->xi_native_leaf_callee_operand != native_leaf_callee_operand ||
-        (program_graph_is_private_leaf(&ctx) && !native_leaf_callee_operand) ||
         binding->function_abi_count != program_abi_count + binding->initializer_count)
         return emission_fail(error, error_size, "program C-emission row coverage is incomplete");
 
@@ -1601,8 +1514,7 @@ bool xr_c_program_direct_i64_emission_verify(const XrCProgramDirectI64EmissionBi
         for (uint32_t local = 0; function && local < function->value_count; local++) {
             const XiValue *xi_value =
                 function_value_for_local_id(functions[fi]->xi_function, local);
-            if (!xi_value || (fi == 0u && xi_value == binding->xi_callee_operand) ||
-                (fi == 1u && xi_value == binding->xi_native_leaf_callee_operand))
+            if (!xi_value || (fi == 0u && xi_value == binding->xi_callee_operand))
                 continue;
             if (!binding->values || value_index >= binding->value_count ||
                 !verifier_value_binding_is_exact(&ctx, functions[fi], xi_value,
@@ -1794,5 +1706,5 @@ bool xr_c_program_direct_i64_callee_operand_is_elided(
         (binding->xi_call->nargs == 1u || binding->xi_call->nargs == 2u) &&
         binding->xi_call->args[0] == value)
         return true;
-    return binding->callee.xi_function == caller && binding->xi_native_leaf_callee_operand == value;
+    return false;
 }

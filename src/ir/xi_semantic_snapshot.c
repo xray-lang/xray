@@ -716,6 +716,14 @@ static bool snapshot_func(XiSemanticSnapshot *snapshot, XiFunc *func) {
 
     func->source_file = snapshot_strdup(snapshot, func->source_file);
     func->analyzer = NULL;
+    for (uint16_t i = 0; func->module_slots && i < func->nshared; i++) {
+        XrType *source = func->module_slots[i].type;
+        func->module_slots[i].type = snapshot_type(snapshot, source);
+        if (source && !func->module_slots[i].type) {
+            snapshot_note_failure(snapshot, "module slot declaration type");
+            return false;
+        }
+    }
     for (uint32_t i = 0; i < func->source_var_count; i++) {
         XrType *source = func->source_var_types ? func->source_var_types[i] : NULL;
         if (func->source_var_types)

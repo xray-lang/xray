@@ -825,11 +825,11 @@ static bool install_i64_overflow_global_evidence(XaotBundle *bundle, XiModule *m
     }
     for (uint32_t slot = 0; slot < module->nslots; slot++) {
         const char *name =
-            module->init->slot_owned_names ? module->init->slot_owned_names[slot] : NULL;
+            module->init->module_slots ? module->init->module_slots[slot].name : NULL;
         if (!name)
             continue;
         bool is_const =
-            module->init->slot_owned_consts && module->init->slot_owned_consts[slot] != 0;
+            module->init->module_slots && module->init->module_slots[slot].is_const != 0;
         uint32_t source_node_id = 2u + slot;
         XgDeclSummary storage = {
             .module_id = 1,
@@ -1242,7 +1242,7 @@ static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTarge
     ASSERT_NOT_NULL(semantic);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(xr_target_plan_schema_version(plan), XR_TARGET_PLAN_SCHEMA_VERSION);
-    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 60);
+    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 61);
     ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
     ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(plan));
     ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_semantic_fingerprint(plan),
@@ -2575,6 +2575,9 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_NOT_NULL(leaf_target);
     LeafAggregateTargetEvidence target_evidence = {0};
     assert_leaf_aggregate_target_shape(semantic, leaf_target, &target_evidence);
+    ASSERT_NOT_NULL(target_evidence.layout);
+    ASSERT_NOT_NULL(target_evidence.argument);
+    ASSERT_NOT_NULL(target_evidence.call);
     assert_leaf_projection_architecture_boundary(semantic, leaf_profile);
     assert_leaf_aggregate_vm_execution(leaf_target, &target_evidence);
     assert_leaf_aggregate_target_mutations(semantic, leaf_target, target_evidence);
@@ -3358,7 +3361,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
                  native_refinement_diag.record_index);
     ASSERT_MSG(native_materialization_ok, error);
     ASSERT_TRUE(
-        xaot_bundle_install_representation_refinement(&bundle, 0, native_refinement, &policy));
+        xaot_bundle_install_representation_refinements(&bundle, &native_refinement, &policy));
     native_refinement = NULL;
     bundle.module_emission_plans[0] = native_emission;
     ASSERT_MSG(xaot_prepare_bundle(&bundle, NULL),

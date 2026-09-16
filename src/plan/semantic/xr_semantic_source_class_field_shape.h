@@ -24,6 +24,7 @@
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_enum_shape.h"
 #include "xr_semantic_string_shape.h"
+#include "xr_semantic_value_aggregate_shape.h"
 
 typedef enum XrSemanticSourceClassFieldResultCarrier {
     XR_SEM_SOURCE_CLASS_FIELD_RESULT_NONE = 0,
@@ -39,7 +40,8 @@ static inline bool xr_semantic_managed_field_result_type_is_exact(const XrSemant
     return xr_semantic_tagged_string_type_is_exact(type) ||
            xr_semantic_array_type_row_is_exact(type) ||
            xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
-           xr_semantic_adt_enum_type_is_exact(type);
+           xr_semantic_adt_enum_type_is_exact(type) ||
+           xr_semantic_source_structural_shape_is_exact(plan, semantic_type);
 }
 
 /* An evidence-backed field selection on an exact source-class receiver.  The
@@ -79,7 +81,7 @@ xr_semantic_source_class_field_read_is_exact(const XrSemanticPlan *plan,
 
 /* The closed tagged-result roster is structural and result-type driven.  It
  * admits every currently exact managed XrValue carrier -- String, Array,
- * source-class instance, and source ADT enum -- without depending on a class,
+ * source-class instance, structural root, and source ADT enum -- without depending on a class,
  * selector, field name, or consumer.  Scalar, nullable, and aggregate field
  * results remain owned by their orthogonal type-storage families. */
 static inline bool

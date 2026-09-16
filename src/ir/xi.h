@@ -1334,6 +1334,7 @@ typedef struct XiValue {
     uint8_t param_mode;             /* XrParamMode for XI_PARAM values (the single param
                                      * contract source; default XR_PARAM_READ). Occupies
                                      * struct padding, so it costs no extra memory. */
+    bool initializes_module_slot;   /* Declaration's first XI_SET_SHARED, never a replacement. */
     struct XrType *type;            /* authoritative compile-time type (never NULL) */
     int64_t aux_int;                /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;                      /* auxiliary pointer: proto, string literal, etc. */
@@ -1492,6 +1493,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->mem_group = src->mem_group;
     dst->lowering_flags = src->lowering_flags;
     dst->param_mode = src->param_mode;
+    dst->initializes_module_slot = src->initializes_module_slot;
     dst->aux_int = src->aux_int;
     dst->aux = src->aux;
     dst->conversion = src->conversion;
@@ -2008,6 +2010,28 @@ typedef enum XiInlinePolicy {
     XI_INLINE_PRESERVE_CALL,
 } XiInlinePolicy;
 
+typedef enum XiModuleSlotKind {
+    XI_MODULE_SLOT_NONE = 0,
+    XI_MODULE_SLOT_VALUE,
+    XI_MODULE_SLOT_FUNCTION,
+    XI_MODULE_SLOT_TYPE,
+    XI_MODULE_SLOT_IMPORT
+} XiModuleSlotKind;
+
+/* Declaration facts are independent of the operations that happen to use a
+ * slot. Names belong to the function arena; types join its semantic snapshot
+ * before analyzer teardown. Source coordinates are local to the module's
+ * canonical identity, never to an analyzer symbol allocation or graph row. */
+typedef struct XiModuleSlot {
+    const char *name;
+    struct XrType *type;
+    XiModuleSlotKind kind;
+    uint32_t source_line;
+    uint32_t source_column;
+    bool is_const;
+    bool is_exported;
+} XiModuleSlot;
+
 typedef struct XiFunc {
     const char *name;                        /* function name (debug, not owned) */
     const char *source_file;                 /* source path for VM/DAP debug hooks (not owned) */
@@ -2071,24 +2095,14 @@ typedef struct XiFunc {
     XiCapture captures[XI_MAX_CAPTURES];
     uint16_t ncaptures;
 
-    /* Shared (module-level) variable count.  Top-level program functions
-     * use shared_array for variables that must be visible across closures
-     * and support forward references.  Emit records this count on the
-     * proto; the VM assigns shared_offset once when the proto is first
-     * executed/loaded into a VM.  Shared indices are 0-based local to
-     * this func. */
+    /* Module binding count. Indices are local to the initializer and remain
+     * stable when optimization removes uses. Data, callable, type and import
+     * bindings have distinct declaration kinds in module_slots. */
     uint16_t nshared;
 
-    /* Export table: maps shared slot → exported name.  Populated during
-     * lowering for top-level declarations so the AOT driver can build
-     * cross-module import resolution tables.  NULL entries = not exported. */
-    const char **export_names; /* array of nshared entries (arena-alloc'd) */
-
-    /* Per-slot declaration names for REPL/module symbol round-tripping. */
-    const char **slot_owned_names; /* array of nshared entries (arena-alloc'd) */
-
-    /* Per-slot const flag, parallel to slot_owned_names. */
-    uint8_t *slot_owned_consts; /* array of nshared bytes (arena-alloc'd) */
+    /* Declaration owner for module slots, including exact data/callable types.
+     * Sparse entries represent seeded or compiler-private bindings. */
+    XiModuleSlot *module_slots; /* nshared entries, function-arena-owned */
 
     /* Per-slot scalar literal metadata for top-level const bindings.  The
      * slot still exists and is initialized normally; optimization can replace

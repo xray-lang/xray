@@ -29,6 +29,7 @@ typedef struct CloneArenaCheckpoint {
     uint32_t class_count;
     uint32_t existential_count;
     uint32_t callable_count;
+    uint32_t string_count;
     uint64_t aggregate_cell_count;
 } CloneArenaCheckpoint;
 
@@ -53,6 +54,7 @@ static void clone_transaction_begin(CloneTransaction *transaction, EvalContext *
         .class_count = context->class_count,
         .existential_count = context->existential_count,
         .callable_count = context->callable_count,
+        .string_count = context->string_count,
         .aggregate_cell_count = context->aggregate_cell_count,
     };
 }
@@ -88,10 +90,19 @@ static void clone_transaction_rollback(CloneTransaction *transaction) {
         xr_free(context->callables[index - 1u]);
         context->callables[index - 1u] = NULL;
     }
+    for (uint32_t index = context->string_count; index > checkpoint->string_count; --index) {
+        XrReferenceStringValue *string = context->strings[index - 1u];
+        if (string) {
+            xr_free(string->bytes);
+            xr_free(string);
+        }
+        context->strings[index - 1u] = NULL;
+    }
     context->aggregate_count = checkpoint->aggregate_count;
     context->class_count = checkpoint->class_count;
     context->existential_count = checkpoint->existential_count;
     context->callable_count = checkpoint->callable_count;
+    context->string_count = checkpoint->string_count;
     context->aggregate_cell_count = checkpoint->aggregate_cell_count;
 }
 
@@ -133,7 +144,8 @@ static bool clone_type_is_pure_trivial_value_graph(const XrValidatedProgram *pro
                type_id == XR_CORE_TYPE_U32 || type_id == XR_CORE_TYPE_U16 ||
                type_id == XR_CORE_TYPE_TARGET_OS || type_id == XR_CORE_TYPE_TARGET_ARCH ||
                type_id == XR_CORE_TYPE_TARGET_ABI || type_id == XR_CORE_TYPE_TARGET_ENDIAN ||
-               type_id == XR_CORE_TYPE_ERROR || type_id == XR_CORE_TYPE_PANIC_INFO;
+               type_id == XR_CORE_TYPE_ERROR || type_id == XR_CORE_TYPE_PANIC_INFO ||
+               type_id == XR_CORE_TYPE_RUNE;
     }
     if (!program || depth > program->type_count)
         return false;
@@ -164,6 +176,19 @@ static CloneStatus clone_reference_value_inner(CloneTransaction *transaction,
                                                XrReferenceValue *output) {
     EvalContext *context = transaction->context;
     const XrValidatedType *type = xr_validated_program_type(context->program, type_id);
+    if (type_id == XR_CORE_TYPE_STRING) {
+        /* An explicit string copy is an independent owner with its own bytes. */
+        const XrReferenceStringValue *original = source.as.string;
+        if (source.kind != XR_REFERENCE_VALUE_STRING || !original)
+            return CLONE_STATUS_INVALID_VALUE;
+        XrReferenceStringValue *copy = allocate_string(context, original->size);
+        if (!copy)
+            return CLONE_STATUS_RESOURCE_LIMIT;
+        if (original->size != 0u)
+            memcpy(copy->bytes, original->bytes, original->size);
+        *output = string_value(copy);
+        return CLONE_STATUS_OK;
+    }
     if (!type) {
         *output = source;
         return CLONE_STATUS_OK;
@@ -352,6 +377,12 @@ static void free_detached_dispose_state(DetachedDisposeState *state) {
         state->callables = value->dispose_next;
         xr_free(value);
     }
+    while (state->strings) {
+        XrReferenceStringValue *value = state->strings;
+        state->strings = value->dispose_next;
+        xr_free(value->bytes);
+        xr_free(value);
+    }
 }
 
 static bool detach_reference_value(XrReferenceValue source, XrReferenceValue *output) {
@@ -406,6 +437,14 @@ static bool detach_reference_value(XrReferenceValue source, XrReferenceValue *ou
                 existential->owned_storage.value = detached;
             }
         }
+        *output = source;
+        return true;
+    }
+    if (source.kind == XR_REFERENCE_VALUE_STRING) {
+        XrReferenceStringValue *string = (XrReferenceStringValue *) (void *) source.as.string;
+        if (!string)
+            return false;
+        string->detached = true;
         *output = source;
         return true;
     }

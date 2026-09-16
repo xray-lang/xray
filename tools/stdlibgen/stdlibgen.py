@@ -47,10 +47,16 @@ import ast
 import dataclasses
 import difflib
 import hashlib
+import json
 import re
 import sys
 import tomllib
 from pathlib import Path
+
+from provider_declarations import (ProviderDeclaration, admission_reasons, declaration_inventory,
+                                   parse_provider_declaration)
+from provider_codegen import (emit_provider_aot_sources, emit_provider_bindings,
+                              emit_provider_descriptors, emit_provider_keys)
 
 
 CAP_BITS = {
@@ -102,45 +108,6 @@ FREESTANDING_HEADER_ONLY_SYMBOLS = {
     "mem.__volatileStore",
 }
 
-TARGET_LEAF_KINDS = {
-    "": "XR_STDLIB_TARGET_LEAF_NONE",
-    "i64-getpid": "XR_STDLIB_TARGET_LEAF_I64_GETPID",
-}
-
-
-def validate_target_leaf_source_owner(
-    root: Path,
-    module: str,
-    name: str,
-    target_leaf: str,
-    visibility: str,
-    effect: str,
-    allocation: str,
-    owners: dict[str, str],
-) -> None:
-    """Require each target leaf to be one audited private source-owned row."""
-    if not target_leaf:
-        return
-    symbol = f"{module}.{name}"
-    if visibility != "internal":
-        raise SystemExit(f"{symbol} target_leaf must have internal visibility")
-    if effect != "nothrow":
-        raise SystemExit(f"{symbol} target_leaf must declare effect = nothrow")
-    if allocation != "no_heap":
-        raise SystemExit(f"{symbol} target_leaf must declare allocation = no_heap")
-    canonical_source = root / "stdlib" / module / f"{module}.xr"
-    if not canonical_source.is_file():
-        raise SystemExit(
-            f"{symbol} target_leaf requires canonical source module {canonical_source}"
-        )
-    previous = owners.get(target_leaf)
-    if previous is not None:
-        raise SystemExit(
-            f"target_leaf {target_leaf} has duplicate providers: {previous}, {symbol}"
-        )
-    owners[target_leaf] = symbol
-
-
 def resolve_visibility(props: dict[str, object], default: str, context: str) -> str:
     """Read an entry's own visibility, falling back to the kind's default."""
     visibility = str(props.get("visibility", default))
@@ -185,11 +152,9 @@ class StdlibEntry:
     allocation: str
     return_ownership: str
     semantic_intrinsic: bool
-    target_leaf: str
     caps: tuple[str, ...]
-    provider_contract: str = ""
-    provider_operation: str = ""
     suspension_kind: str = ""
+    provider_declaration: ProviderDeclaration | None = None
 
     @property
     def symbol(self) -> str:
@@ -1161,7 +1126,6 @@ def parse_def_metadata(
     classes: list[StdlibClassEntry] = []
     class_methods: list[StdlibClassMethodEntry] = []
     class_fields: list[StdlibClassFieldEntry] = []
-    target_leaf_owners: dict[str, str] = {}
     if not defs_dir.exists():
         raise SystemExit(f"missing stdlib defs directory: {defs_dir}")
 
@@ -1316,109 +1280,22 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} returns reference-capable "
                     f"type {signature_return!r} and requires explicit return_ownership"
                 )
-            target_leaf = str(props.get("target_leaf", ""))
-            provider_contract = str(props.get("provider_contract", ""))
-            provider_operation = str(props.get("provider_operation", ""))
+            if "target_leaf" in props:
+                raise SystemExit(f"{path}:{line_no}: removed target_leaf declaration; use an explicit provider contract")
+            provider_declaration = parse_provider_declaration(
+                props,
+                tuple(function_parameter_type(fragment, f"{current_module}.{current_name}")
+                      for fragment in signature_params),
+                signature_return,
+                f"{path}:{line_no}: {current_module}.{current_name}",
+            )
             suspension_kind = str(props.get("suspension_kind", ""))
             effect = str(props.get("effect", ""))
-            if target_leaf not in TARGET_LEAF_KINDS:
-                raise SystemExit(
-                    f"{path}:{line_no}: unsupported target_leaf for "
-                    f"{current_module}.{current_name}: {target_leaf}"
-                )
-            if target_leaf and (
-                signature != "(): i64"
-                or argc_raw != "0"
-                or arg_spec
-                or not aot_direct
-                or aot_kind != "method"
-                or ret != "value"
-                or vm_binding != "normal"
-                or vm_ifdef
-                or aot_enum
-                or str(props.get("define", ""))
-                or caps
-            ):
-                raise SystemExit(
-                    f"{path}:{line_no}: {current_module}.{current_name} target_leaf "
-                    "requires one unconditional direct `(): i64` scalar member"
-                )
-            validate_target_leaf_source_owner(
-                root,
-                current_module,
-                current_name,
-                target_leaf,
-                visibility,
-                effect,
-                allocation,
-                target_leaf_owners,
-            )
-            if bool(provider_contract) != bool(provider_operation):
-                raise SystemExit(
-                    f"{path}:{line_no}: {current_module}.{current_name} provider_contract "
-                    "and provider_operation must be declared together"
-                )
-            provider_contract_match = re.fullmatch(
-                r"xray\.runtime\.provider\.v1/([a-z0-9][a-z0-9-]*)", provider_contract
-            ) if provider_contract else None
-            provider_operation_match = re.fullmatch(
-                r"xray\.runtime\.provider-operation\.v1/([a-z0-9][a-z0-9-]*)/"
-                r"([a-z0-9][a-z0-9-]*)",
-                provider_operation,
-            ) if provider_operation else None
-            if provider_contract and (
-                not provider_contract_match
-                or not provider_operation_match
-                or provider_contract_match.group(1) != provider_operation_match.group(1)
-            ):
-                raise SystemExit(
-                    f"{path}:{line_no}: {current_module}.{current_name} has malformed or "
-                    "cross-family provider identity"
-                )
-            provider_i64_shape = (
-                signature_return == "i64"
-                and len(signature_params) in {0, 1}
-                and all(
-                    function_parameter_type(
-                        fragment, f"{current_module}.{current_name} provider parameter"
-                    ) == "i64"
-                    for fragment in signature_params
-                )
-            )
-            provider_optional_pair_shape = (
-                signature_return == "(i64, i64)?" and len(signature_params) == 0
-            )
-            provider_bool_i64_shape = (
-                signature_return == "bool"
-                and len(signature_params) == 1
-                and function_parameter_type(
-                    signature_params[0],
-                    f"{current_module}.{current_name} provider parameter",
-                ) == "i64"
-            )
-            if provider_contract and (
-                visibility != "internal"
-                or effect != "nothrow"
-                or not (
-                    provider_i64_shape
-                    or provider_bool_i64_shape
-                    or provider_optional_pair_shape
-                )
-                or argc_raw != str(len(signature_params))
-                or not aot_direct
-                or aot_kind != "method"
-                or ret != "value"
-                or vm_binding != "normal"
-                or vm_ifdef
-                or str(props.get("define", ""))
-                or caps
-                or return_ownership
-                or semantic_intrinsic
-                or target_leaf
-            ):
+            if provider_declaration and (visibility != "internal" or semantic_intrinsic
+                                         or suspension_kind):
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} provider operation "
-                    "must use an admitted logical provider-call shape"
+                    "requires one private semantic owner"
                 )
             if suspension_kind not in {"", "timer-after-ms"}:
                 raise SystemExit(
@@ -1438,11 +1315,9 @@ def parse_def_metadata(
                 or aot_direct
                 or vm_binding != "yieldable"
                 or set(caps) != {"coro", "timer"}
-                or provider_contract
-                or provider_operation
+                or provider_declaration
                 or return_ownership
                 or semantic_intrinsic
-                or target_leaf
                 or effect != "nothrow"
             ):
                 raise SystemExit(
@@ -1474,10 +1349,8 @@ def parse_def_metadata(
                     allocation=allocation,
                     return_ownership=return_ownership,
                     semantic_intrinsic=semantic_intrinsic,
-                    target_leaf=target_leaf,
                     caps=caps,
-                    provider_contract=provider_contract,
-                    provider_operation=provider_operation,
+                    provider_declaration=provider_declaration,
                     suspension_kind=suspension_kind,
                 )
             )
@@ -1857,7 +1730,10 @@ def parse_def_metadata(
             if ":" not in line:
                 raise SystemExit(f"{path}:{line_no}: expected key: value")
             key, value = line.split(":", 1)
-            props[key.strip()] = parse_scalar(value)
+            key = key.strip()
+            if key in props:
+                raise SystemExit(f"{path}:{line_no}: duplicate declaration property: {key}")
+            props[key] = parse_scalar(value)
 
     if current_module is not None or current_kind is not None:
         raise SystemExit("unterminated stdlib .def block")
@@ -2137,7 +2013,12 @@ def emit_aot_methods(
                 type_text = function_parameter_type(fragment, entry.symbol)
             except ValueError as exc:
                 raise SystemExit(str(exc)) from exc
-            spec.append("w" if type_text in wrappers else ".")
+            if type_text.startswith("ref "):
+                if entry.arg_spec[len(spec)] != "v":
+                    raise SystemExit(f"{entry.symbol}: ref provider arguments require tagged storage")
+                spec.append("r")
+            else:
+                spec.append("w" if type_text in wrappers else ".")
         expected = int(entry.argc)
         if len(spec) != expected:
             raise SystemExit(
@@ -2280,10 +2161,6 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     object_rows = list({e.symbol: e for e in symbol_entries if e.link_object}.values())
     define_rows = list({e.symbol: e for e in symbol_entries if e.define}.values())
     cap_rows = list({e.symbol: e for e in symbol_entries if e.caps}.values())
-    builtin_rows = list(
-        {e.symbol: e for e in entries if e.aot_direct and e.aot_kind == "builtin"}.values()
-    )
-    const_rows = list({c.symbol: c for c in constants if c.aot_const_kind}.values())
     freestanding_header_only_const_rows = list(
         {
             c.symbol: c
@@ -2367,22 +2244,6 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
         cap_expr = " | ".join(CAP_BITS[cap] for cap in e.caps) if e.caps else "0"
         lines.append(f"    if (strcmp(symbol, {c_string(e.symbol)}) == 0)\n        return {cap_expr};")
     lines.append("    return 0;")
-    lines.append("}")
-    lines.append("")
-    lines.append("static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {")
-    lines.append("    if (!symbol)")
-    lines.append("        return false;")
-    for e in builtin_rows:
-        lines.append(f"    if (strcmp(symbol, {c_string(e.symbol)}) == 0)\n        return true;")
-    lines.append("    return false;")
-    lines.append("}")
-    lines.append("")
-    lines.append("static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {")
-    lines.append("    if (!symbol)")
-    lines.append("        return false;")
-    for c in const_rows:
-        lines.append(f"    if (strcmp(symbol, {c_string(c.symbol)}) == 0)\n        return true;")
-    lines.append("    return false;")
     lines.append("}")
     lines.append("")
     lines.append("static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(")
@@ -2667,12 +2528,6 @@ def emit_defs_header(
             "#include <stdint.h>",
             '#include "../base/xentry_plan.h"',
             "",
-            "typedef enum XrStdlibTargetLeafKind {",
-            "    XR_STDLIB_TARGET_LEAF_NONE = 0,",
-            "    XR_STDLIB_TARGET_LEAF_I64_GETPID = 1,",
-            "    XR_STDLIB_TARGET_LEAF_COUNT,",
-            "} XrStdlibTargetLeafKind;",
-            "",
             "typedef struct XrStdlibDefEntry {",
             "    const char *module;",
             "    const char *name;",
@@ -2695,7 +2550,6 @@ def emit_defs_header(
             "    const char *suspension_kind;",
             "    uint32_t runtime_capabilities;",
             "    uint16_t argc;",
-            "    uint16_t target_leaf;",
             "    bool aot_direct;",
             "} XrStdlibDefEntry;",
             "",
@@ -2815,6 +2669,9 @@ def emit_defs_header(
         runtime_caps = (
             " | ".join(RUNTIME_CAP_BITS[cap] for cap in e.caps) if e.caps else "0"
         )
+        provider = e.provider_declaration
+        if provider and admission_reasons(provider):
+            provider = None
         lines.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {c_string(e.signature)}, "
@@ -2824,10 +2681,10 @@ def emit_defs_header(
             f"{c_string(e.aot_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
             f"{c_string(e.aot_kind)}, {c_string(e.return_ownership)}, "
-            f"{c_string(e.provider_contract)}, {c_string(e.provider_operation)}, "
+            f"{c_string(provider.contract if provider else '')}, "
+            f"{c_string(provider.operation if provider else '')}, "
             f"{c_string(e.suspension_kind)}, "
             f"{runtime_caps}, {argc}, "
-            f"{TARGET_LEAF_KINDS[e.target_leaf]}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )
@@ -3063,6 +2920,17 @@ def emit_defs_header(
     return "\n".join(lines)
 
 
+def validate_provider_source_owners(root: Path, entries: list[StdlibEntry]) -> None:
+    for entry in entries:
+        if entry.provider_declaration is None:
+            continue
+        source = root / "stdlib" / entry.module / f"{entry.module}.xr"
+        if not source.is_file():
+            raise SystemExit(
+                f"{entry.symbol}: provider requires canonical source module {source}"
+            )
+
+
 def output_paths(root: Path) -> dict[Path, str]:
     (
         entries,
@@ -3076,8 +2944,17 @@ def output_paths(root: Path) -> dict[Path, str]:
         class_methods,
         class_fields,
     ) = parse_def_metadata(root)
+    validate_provider_source_owners(root, entries)
     declarations = parse_module_declarations(root)
     return {
+        root / "src/runtime/abi/xr_stdlib_provider_keys_gen.h": emit_provider_keys(entries),
+        root / "src/runtime/abi/xr_stdlib_provider_descriptors_gen.inc.c":
+            emit_provider_descriptors(entries),
+        root / "src/execution/xr_stdlib_provider_bindings_gen.inc.c": emit_provider_bindings(entries),
+        root / "src/aot/program/xr_provider_aot_sources_gen.inc.c": emit_provider_aot_sources(entries),
+        root / "stdlib" / "provider_inventory.generated.json": json.dumps(
+            declaration_inventory(entries), ensure_ascii=False, indent=2
+        ) + "\n",
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
             entries, constants, enums, native_classes
         ),

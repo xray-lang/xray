@@ -412,12 +412,17 @@ TEST(const_fold_no_fold_variable) {
 
 static void setup_shared_const_slots(XiFunc *f, uint16_t count) {
     f->nshared = count;
-    f->slot_owned_consts = (uint8_t *) xi_func_arena_alloc(f, count * sizeof(uint8_t));
+    f->module_slots = (XiModuleSlot *) xi_func_arena_alloc(f, count * sizeof(XiModuleSlot));
     f->shared_const_literals =
         (XiConstLiteral *) xi_func_arena_alloc(f, count * sizeof(XiConstLiteral));
     f->shared_const_literal_count = count;
-    assert(f->slot_owned_consts && f->shared_const_literals);
-    memset(f->slot_owned_consts, 1, count * sizeof(uint8_t));
+    assert(f->module_slots && f->shared_const_literals);
+    memset(f->module_slots, 0, count * sizeof(XiModuleSlot));
+    for (uint16_t i = 0; i < count; ++i) {
+        f->module_slots[i].is_const = true;
+        f->module_slots[i].kind = XI_MODULE_SLOT_VALUE;
+        f->module_slots[i].type = &stub_int;
+    }
     memset(f->shared_const_literals, 0, count * sizeof(XiConstLiteral));
 }
 
@@ -461,6 +466,13 @@ TEST(const_fold_shared_const_set_records_expression_result) {
     XiValue *load1 = xi_value_new(f, blk, XI_GET_SHARED, &stub_int, 0);
     load1->aux_int = 1;
 
+    /* An arbitrary write cannot publish a declaration's constant value. */
+    xi_opt_const_fold(f);
+    assert(load0->op == XI_GET_SHARED && load1->op == XI_GET_SHARED);
+    assert(f->shared_const_literals[0].kind == XI_CONST_LITERAL_NONE);
+    assert(f->shared_const_literals[1].kind == XI_CONST_LITERAL_NONE);
+    set0->initializes_module_slot = true;
+    set1->initializes_module_slot = true;
     xi_opt_const_fold(f);
 
     assert(f->shared_const_literals[0].kind == XI_CONST_LITERAL_INT);

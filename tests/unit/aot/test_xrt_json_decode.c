@@ -197,6 +197,32 @@ static void test_clone_and_storage_keep_static_shape(void) {
     destroy_object(source);
 }
 
+static void test_nested_structural_copy_owns_independent_roots(void) {
+    static const char *leaf_names[] = {"value"};
+    static const char *outer_names[] = {"child"};
+    const XrtObjectShape *leaf_shape = test_static_shape(1, leaf_names);
+    const XrtObjectShape *outer_shape = test_static_shape(1, outer_names);
+    size_t allocations_before = g_allocations;
+    size_t frees_before = g_frees;
+    XrValue leaf = xrt_object_new_shape(leaf_shape);
+    xrt_object_set_field(leaf, 0, XR_FROM_INT(42));
+    XrValue source = xrt_object_new_shape(outer_shape);
+    xrt_object_set_field(source, 0, leaf);
+    XrValue clone = xrt_object_clone_for_coro(source);
+    XrValue cloned_leaf = xrt_object_get_field(clone, 0);
+    ASSERT_TRUE(clone.ptr != source.ptr && cloned_leaf.ptr != leaf.ptr,
+                "explicit copy must allocate independent nested structural roots");
+    xrt_object_set_field(cloned_leaf, 0, XR_FROM_INT(7));
+    ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(leaf, 0)) == 42,
+                "mutating a nested copy must preserve the source graph");
+    destroy_object(source);
+    ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(cloned_leaf, 0)) == 7,
+                "nested copied root must remain live after the source is destroyed");
+    destroy_object(clone);
+    ASSERT_TRUE(g_allocations - allocations_before == 4 && g_frees - frees_before == 4,
+                "destroying both graphs must physically free each root exactly once");
+}
+
 static void test_json_encode_retains_borrowed_source_strings(void) {
     static const char *names[] = {"name"};
     XrValue source = xrt_object_new_shape(test_static_shape(1, names));
@@ -753,6 +779,7 @@ static void test_derived_value_struct_parse_and_decode_own_references(void) {
 int main(void) {
     test_static_shape_is_zero_copy_and_header_shrinks();
     test_clone_and_storage_keep_static_shape();
+    test_nested_structural_copy_owns_independent_roots();
     test_json_encode_retains_borrowed_source_strings();
     test_shape_guard_checks_table_after_key_hit();
     test_decode_validates_each_primitive_field();

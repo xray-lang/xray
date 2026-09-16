@@ -25,6 +25,20 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.const",
+      "result_type": "string",
+      "projection_kind": "constant",
+      "core_operation": "core.constant.string",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.const",
+      "result_type": "rune",
+      "projection_kind": "constant",
+      "core_operation": "core.constant.rune",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.add",
       "result_type": "i64",
       "projection_kind": "binary-arithmetic",
@@ -300,8 +314,22 @@
     {
       "xi_operation": "xi.print",
       "result_type": "void",
-      "projection_kind": "output-group-i64",
-      "core_operation": "core.output.group.i64",
+      "projection_kind": "output-group",
+      "core_operation": "core.output.group",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.str.concat",
+      "result_type": "string",
+      "projection_kind": "string-concat",
+      "core_operation": "core.string.concat",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.convert",
+      "result_type": "string",
+      "projection_kind": "string-from-i64",
+      "core_operation": "core.string.from_i64",
       "immediate_u32": 0
     }
   ],
@@ -431,6 +459,18 @@
     {
       "source": "xi.throw-after-explicit-cleanup-cfg",
       "core_operation": "core.panic.publish"
+    },
+    {
+      "source": "string-operand-xi.compare",
+      "core_operation": "core.compare.string"
+    },
+    {
+      "source": "rune-operand-xi.compare",
+      "core_operation": "core.compare.rune"
+    },
+    {
+      "source": "i64-piece-of-variadic-xi.str.concat",
+      "core_operation": "core.string.from_i64"
     }
   ]
 }

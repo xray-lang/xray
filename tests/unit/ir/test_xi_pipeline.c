@@ -10,6 +10,8 @@
 #include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_emit.h"
+#include "../../../src/ir/xi_edit.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_program_semantic.h"
 #include "../../../src/ir/xi_program_semantic_plan.h"
 #include "../../../src/aot/program/xr_backend_ir.h"
@@ -40,6 +42,8 @@
 #include "../../../src/vm/xr_program_vm.h"
 #include "../../../include/xray_vm.h"
 #include "../test_win_compat.h"
+
+#include "../program/xr_program_writer_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -515,6 +519,122 @@ TEST(e2e_with_verify) {
     XrProto *p = compile_source("var x = 42\nprint(x)", &cfg);
     assert(p != NULL);
     xr_instruction_unit_free(p);
+}
+
+static void check_module_initialization_facts(XiFunc *func) {
+    XiValue *initializer = NULL;
+    unsigned initializations = 0;
+    unsigned replacements = 0;
+    char error[256] = {0};
+    PIPELINE_TEST_REQUIRE(xi_verify(func, error, sizeof(error)));
+    for (uint32_t b = 0; b < func->nblocks; b++) {
+        const XiBlock *block = func->blocks[b];
+        for (uint32_t v = 0; v < block->nvalues; v++) {
+            XiValue *value = block->values[v];
+            if (value->initializes_module_slot) {
+                initializer = value;
+                initializations++;
+            } else if (value->op == XI_SET_SHARED && value->aux_int >= 0 &&
+                       value->aux_int < func->nshared &&
+                       func->module_slots[value->aux_int].kind == XI_MODULE_SLOT_VALUE) {
+                replacements++;
+            }
+        }
+    }
+    PIPELINE_TEST_REQUIRE(initializations == 4u && replacements == 1u);
+    PIPELINE_TEST_REQUIRE(initializer != NULL);
+    XiValue copied = {0};
+    xi_value_copy_metadata(&copied, initializer);
+    PIPELINE_TEST_REQUIRE(copied.initializes_module_slot);
+
+    XiEditFingerprint before = xi_edit_fingerprint(func);
+    initializer->initializes_module_slot = false;
+    XiEditFingerprint after = xi_edit_fingerprint(func);
+    PIPELINE_TEST_REQUIRE(before.values != after.values && before.memory != after.memory);
+    initializer->initializes_module_slot = true;
+
+    uint16_t saved_op = initializer->op;
+    initializer->op = XI_GET_SHARED;
+    PIPELINE_TEST_REQUIRE(!xi_verify(func, error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(strstr(error, "invalid module declaration initialization") != NULL);
+    initializer->op = saved_op;
+    XiModuleSlotKind saved_kind = func->module_slots[initializer->aux_int].kind;
+    func->module_slots[initializer->aux_int].kind = XI_MODULE_SLOT_FUNCTION;
+    PIPELINE_TEST_REQUIRE(!xi_verify(func, error, sizeof(error)));
+    func->module_slots[initializer->aux_int].kind = saved_kind;
+    int64_t saved_slot = initializer->aux_int;
+    initializer->aux_int = func->nshared;
+    PIPELINE_TEST_REQUIRE(!xi_verify(func, error, sizeof(error)));
+    initializer->aux_int = saved_slot;
+    PIPELINE_TEST_REQUIRE(xi_verify(func, error, sizeof(error)));
+}
+
+TEST(e2e_module_slot_declarations_survive_analyzer_and_optimization) {
+    const char *source = "var counter: i64 = 40\n"
+                         "export const label: string = \"module\"\n"
+                         "var items: Array<i64> = [1, 2]\n"
+                         "var maybe: i64? = null\n"
+                         "export fn next() -> i64 {\n"
+                         "  counter += 1\n"
+                         "  return counter\n"
+                         "}\n"
+                         "maybe = 7\n"
+                         "print(label, next())\n";
+    XrProto *protos[2] = {NULL, NULL};
+    for (int optimize = 0; optimize < 2; optimize++) {
+        XiPipelineConfig config = xi_pipeline_default_config();
+        config.run_optimize = optimize != 0;
+        protos[optimize] = compile_source(source, &config);
+        PIPELINE_TEST_REQUIRE(protos[optimize] != NULL);
+        check_module_initialization_facts((XiFunc *) protos[optimize]->xi_func);
+    }
+    /* Both compilation sessions have destroyed their AST and analyzer. Even
+     * unused declarations must keep their own exact type and source identity. */
+    static const char *names[] = {"counter", "label", "items", "maybe", "next"};
+    for (size_t n = 0; n < sizeof(names) / sizeof(names[0]); n++) {
+        const XiModuleSlot *declarations[2] = {NULL, NULL};
+        for (int optimize = 0; optimize < 2; optimize++) {
+            const XiFunc *func = (const XiFunc *) protos[optimize]->xi_func;
+            PIPELINE_TEST_REQUIRE(func != NULL && func->module_slots != NULL);
+            for (uint16_t slot = 0; slot < func->nshared; slot++) {
+                const XiModuleSlot *candidate = &func->module_slots[slot];
+                if (candidate->name && strcmp(candidate->name, names[n]) == 0) {
+                    PIPELINE_TEST_REQUIRE(declarations[optimize] == NULL);
+                    declarations[optimize] = candidate;
+                }
+            }
+            const XiModuleSlot *decl = declarations[optimize];
+            PIPELINE_TEST_REQUIRE(decl != NULL && decl->type != NULL);
+            PIPELINE_TEST_REQUIRE(decl->source_line == n + 1u);
+            PIPELINE_TEST_REQUIRE(decl->is_const == (n == 1u));
+            PIPELINE_TEST_REQUIRE(decl->is_exported == (n == 1u || n == 4u));
+            PIPELINE_TEST_REQUIRE(decl->kind ==
+                                  (n == 4u ? XI_MODULE_SLOT_FUNCTION : XI_MODULE_SLOT_VALUE));
+            PIPELINE_TEST_REQUIRE(decl->type->kind == (n == 0u || n == 3u ? XR_KIND_INT
+                                                       : n == 1u          ? XR_KIND_STRING
+                                                       : n == 2u          ? XR_KIND_ARRAY
+                                                                          : XR_KIND_FUNCTION));
+            PIPELINE_TEST_REQUIRE(decl->type->is_nullable == (n == 3u));
+            if (n == 2u) {
+                PIPELINE_TEST_REQUIRE(decl->type->container.element_type != NULL);
+                PIPELINE_TEST_REQUIRE(decl->type->container.element_type->kind == XR_KIND_INT);
+            }
+            if (decl->is_exported) {
+                bool found = false;
+                for (uint16_t e = 0; func->module && e < func->module->nexports; e++) {
+                    const XiModuleExport *exported = &func->module->exports[e];
+                    if (strcmp(exported->name, decl->name) == 0) {
+                        PIPELINE_TEST_REQUIRE(exported->value_type == decl->type);
+                        found = true;
+                    }
+                }
+                PIPELINE_TEST_REQUIRE(found);
+            }
+        }
+        PIPELINE_TEST_REQUIRE(declarations[0]->source_column == declarations[1]->source_column);
+    }
+    xr_instruction_unit_free(protos[0]);
+    xr_instruction_unit_free(protos[1]);
 }
 
 /* ========== Boolean & Comparison ========== */
@@ -1524,7 +1644,7 @@ static bool unreachable_callable_return_preserves_program(XiFunc *function,
     char diagnostic[512] = {0};
     XrProgramArtifact candidate = {0};
     XrProgramBuildStatus status =
-        xr_program_write_from_xi(input, &candidate, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(input, &candidate, diagnostic, sizeof(diagnostic));
 
     function->blocks = saved_blocks;
     function->blocks_cap = saved_block_capacity;
@@ -1547,7 +1667,7 @@ static bool xi_pipeline_program_write_has_status(const XrProgramFromXiInput *inp
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
     XrProgramBuildStatus status =
-        xr_program_write_from_xi(input, &artifact, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(input, &artifact, diagnostic, sizeof(diagnostic));
     bool matches = status == expected_status &&
                    (!diagnostic_fragment || strstr(diagnostic, diagnostic_fragment) != NULL);
     if (expected_status == XR_PROGRAM_BUILD_OK) {
@@ -1742,8 +1862,8 @@ static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
     scoped_input.entry_function = entry_function;
     char baseline_diagnostic[512] = {0};
     XrProgramArtifact baseline = {0};
-    if (xr_program_write_from_xi(&scoped_input, &baseline, baseline_diagnostic,
-                                 sizeof(baseline_diagnostic)) != XR_PROGRAM_BUILD_OK) {
+    if (xr_test_write_program_artifact(&scoped_input, &baseline, baseline_diagnostic,
+                                       sizeof(baseline_diagnostic)) != XR_PROGRAM_BUILD_OK) {
         xr_program_artifact_free(&baseline);
         return false;
     }
@@ -1788,7 +1908,7 @@ static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
     char diagnostic[512] = {0};
     XrProgramArtifact candidate = {0};
     XrProgramBuildStatus status =
-        xr_program_write_from_xi(&scoped_input, &candidate, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(&scoped_input, &candidate, diagnostic, sizeof(diagnostic));
 
     if (status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "same-successor producer failed: %s: %s\n",
@@ -1936,11 +2056,13 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     };
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &artifact, diagnostic,
-                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic)) ==
+        XR_PROGRAM_BUILD_OK);
     XrProgramArtifact repeated = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &repeated, diagnostic,
-                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_test_write_program_artifact(&input, &repeated, diagnostic, sizeof(diagnostic)) ==
+        XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(repeated.size == artifact.size &&
                           memcmp(repeated.bytes, artifact.bytes, artifact.size) == 0);
     xr_program_artifact_free(&repeated);
@@ -1993,8 +2115,8 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
-                          XR_VM_CODE_OK);
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(validated, fixture.profile, NULL, &vm_code,
+                                           &vm_diagnostic) == XR_VM_CODE_OK);
     XrVmExecution *vm_execution = NULL;
     PIPELINE_TEST_REQUIRE(
         xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
@@ -2124,7 +2246,7 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
     XrProgramBuildStatus build_status =
-        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic));
     if (build_status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "sealed coroutine call Program build failed: %s\n", diagnostic);
     PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
@@ -2212,8 +2334,8 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
-                          XR_VM_CODE_OK);
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(validated, fixture.profile, NULL, &vm_code,
+                                           &vm_diagnostic) == XR_VM_CODE_OK);
     XrVmExecution *vm_execution = NULL;
     PIPELINE_TEST_REQUIRE(
         xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
@@ -2349,7 +2471,7 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
     XrProgramBuildStatus build_status =
-        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic));
     if (build_status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "target pointerBits Program build failed: %s\n", diagnostic);
     PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
@@ -2393,8 +2515,8 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
-                          XR_VM_CODE_OK);
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(validated, fixture.profile, NULL, &vm_code,
+                                           &vm_diagnostic) == XR_VM_CODE_OK);
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry_function, NULL, 0u);
     PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(vm.value.kind == XR_VM_VALUE_U16);
@@ -2515,8 +2637,9 @@ TEST(e2e_program_target_os_member_equality_is_executable) {
     };
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &artifact, diagnostic,
-                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic)) ==
+        XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *validated = NULL;
     XrProgramDiagnostic verify_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
@@ -2557,8 +2680,8 @@ TEST(e2e_program_target_os_member_equality_is_executable) {
                                                        &execution_diagnostic) == XR_EXECUTION_OK);
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
-                          XR_VM_CODE_OK);
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(validated, fixture.profile, NULL, &vm_code,
+                                           &vm_diagnostic) == XR_VM_CODE_OK);
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance, entry_function, NULL, 0u);
     PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(vm.value.kind == XR_VM_VALUE_BOOL);
@@ -2631,7 +2754,7 @@ TEST(e2e_program_target_query_closes_interface_slot_contract) {
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
     XrProgramBuildStatus build_status =
-        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic));
     if (build_status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "target query interface Program build failed: %s\n", diagnostic);
     PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
@@ -3040,7 +3163,7 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
     };
     XrProgramArtifact first = {0};
     XrProgramBuildStatus first_status =
-        xr_program_write_from_xi(&input, &first, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(&input, &first, diagnostic, sizeof(diagnostic));
     if (first_status != XR_PROGRAM_BUILD_OK) {
         fprintf(stderr, "MOVE direct Program build failed: %s\n", diagnostic);
         fprintf(stderr, "target xg=%u consumer=%u library=%u\n",
@@ -3058,8 +3181,9 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
     }
     PIPELINE_TEST_REQUIRE(first_status == XR_PROGRAM_BUILD_OK);
     XrProgramArtifact repeated = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &repeated, diagnostic,
-                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_test_write_program_artifact(&input, &repeated, diagnostic, sizeof(diagnostic)) ==
+        XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(first.size == repeated.size);
     PIPELINE_TEST_REQUIRE(xr_program_id_equal(first.id, repeated.id));
     PIPELINE_TEST_REQUIRE(memcmp(first.bytes, repeated.bytes, first.size) == 0);
@@ -3173,7 +3297,7 @@ TEST(e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in) {
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
     XrProgramBuildStatus build_status =
-        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic));
     if (build_status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "cleanup trampoline Program build failed: %s\n", diagnostic);
     PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
@@ -3274,7 +3398,7 @@ TEST(e2e_program_witness_move_operands_are_consumed_once) {
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
     XrProgramBuildStatus build_status =
-        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic));
     if (build_status != XR_PROGRAM_BUILD_OK) {
         fprintf(stderr, "witness MOVE Program build failed: %s\n", diagnostic);
         xi_func_dump(direct_owner, stderr);
@@ -3305,7 +3429,8 @@ TEST(e2e_program_witness_move_operands_are_consumed_once) {
 
     input.entry_function = invoke_owner;
     memset(diagnostic, 0, sizeof(diagnostic));
-    build_status = xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+    build_status =
+        xr_test_write_program_artifact(&input, &artifact, diagnostic, sizeof(diagnostic));
     if (build_status != XR_PROGRAM_BUILD_OK) {
         fprintf(stderr, "witness MOVE Program build failed: %s\n", diagnostic);
         xi_func_dump(invoke_owner, stderr);
@@ -3856,7 +3981,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     };
     XrProgramArtifact artifact = {0};
     char producer_diagnostic[512] = {0};
-    XrProgramBuildStatus producer_status = xr_program_write_from_xi(
+    XrProgramBuildStatus producer_status = xr_test_write_program_artifact(
         &producer_input, &artifact, producer_diagnostic, sizeof(producer_diagnostic));
     if (producer_status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "program producer failed: %s: %s\n",
@@ -3866,9 +3991,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     sibling_error_regions_input.entry_function = sibling_error_regions_function;
     XrProgramArtifact sibling_error_regions_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&sibling_error_regions_input, &sibling_error_regions_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&sibling_error_regions_input,
+                                       &sibling_error_regions_artifact, producer_diagnostic,
+                                       sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(xi_pipeline_hostile_lexical_error_regions_are_fail_closed(
         sibling_error_regions_function, &sibling_error_regions_input,
         &sibling_error_regions_artifact));
@@ -3884,9 +4009,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     read_enum_target->error_effect_nothrow = false;
     XrProgramArtifact missing_read_enum_effect_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_read_enum_effect_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &missing_read_enum_effect_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_read_enum_effect_artifact.bytes == NULL);
     read_enum_target->analyzer_effect_id = saved_read_enum_effect_id;
     read_enum_target->analyzer_effect_complete = saved_read_enum_effect_complete;
@@ -3896,18 +4021,18 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     fallible_error_type->enum_type.layout = NULL;
     XrProgramArtifact missing_fallible_error_layout_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_fallible_error_layout_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &missing_fallible_error_layout_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_error_layout_artifact.bytes == NULL);
     fallible_error_type->enum_type.layout = saved_fallible_error_layout;
 
     fallible_error_type->enum_type.nominal_ref = NULL;
     XrProgramArtifact missing_fallible_error_nominal_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_fallible_error_nominal_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &missing_fallible_error_nominal_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_error_nominal_artifact.bytes == NULL);
     fallible_error_type->enum_type.nominal_ref = fallible_error_info;
 
@@ -3915,18 +4040,18 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     read_enum_schema->layout_id = 0u;
     XrProgramArtifact missing_read_enum_schema_identity_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_read_enum_schema_identity_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&producer_input, &missing_read_enum_schema_identity_artifact,
+                                       producer_diagnostic,
+                                       sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_read_enum_schema_identity_artifact.bytes == NULL);
     read_enum_schema->layout_id = saved_read_enum_layout_id;
 
     read_enum_receiver_type->enum_type.nominal_ref = NULL;
     XrProgramArtifact missing_read_enum_nominal_identity_artifact = {0};
-    PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_read_enum_nominal_identity_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
+                              &producer_input, &missing_read_enum_nominal_identity_artifact,
+                              producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_read_enum_nominal_identity_artifact.bytes == NULL);
     read_enum_receiver_type->enum_type.nominal_ref = read_enum_info;
 
@@ -3934,19 +4059,19 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     read_enum_receiver_type->enum_type.layout = NULL;
     XrProgramArtifact missing_read_enum_receiver_layout_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_read_enum_receiver_layout_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &missing_read_enum_receiver_layout_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_read_enum_receiver_layout_artifact.bytes == NULL);
     read_enum_receiver_type->enum_type.layout = saved_read_enum_layout;
 
     XgClassId saved_fallible_reader_class_id = fallible_reader_schema->xg_class_id;
     fallible_reader_schema->xg_class_id = XG_NO_ID;
     XrProgramArtifact missing_fallible_reader_schema_identity_artifact = {0};
-    PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_fallible_reader_schema_identity_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
+                              &producer_input, &missing_fallible_reader_schema_identity_artifact,
+                              producer_diagnostic,
+                              sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_fallible_reader_schema_identity_artifact.bytes == NULL);
     fallible_reader_schema->xg_class_id = saved_fallible_reader_class_id;
 
@@ -4001,9 +4126,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     empty_class_callsite->receiver_static_class_id = XG_NO_ID;
     XrProgramArtifact missing_allocation_identity_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_allocation_identity_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&producer_input, &missing_allocation_identity_artifact,
+                                       producer_diagnostic,
+                                       sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_allocation_identity_artifact.bytes == NULL);
     empty_class_callsite->receiver_static_class_id = saved_allocation_class_id;
 
@@ -4022,8 +4147,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramArtifact escaped_class_carrier_artifact = {0};
     memset(producer_diagnostic, 0, sizeof(producer_diagnostic));
     XrProgramBuildStatus escaped_class_carrier_status =
-        xr_program_write_from_xi(&producer_input, &escaped_class_carrier_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic));
+        xr_test_write_program_artifact(&producer_input, &escaped_class_carrier_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic));
     PIPELINE_TEST_REQUIRE(escaped_class_carrier_status == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
     PIPELINE_TEST_REQUIRE(escaped_class_carrier_artifact.bytes == NULL);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "GET_SHARED") != NULL);
@@ -4034,9 +4159,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     empty_class_error_block->kind = XI_BLOCK_PLAIN;
     XrProgramArtifact nonmechanical_allocation_error_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &nonmechanical_allocation_error_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&producer_input, &nonmechanical_allocation_error_artifact,
+                                       producer_diagnostic,
+                                       sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(nonmechanical_allocation_error_artifact.bytes == NULL);
     empty_class_error_block->kind = saved_error_block_kind;
 
@@ -4044,9 +4169,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     empty_struct_literal->lowering_flags &= ~XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     XrProgramArtifact missing_struct_constructor_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_struct_constructor_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&producer_input, &missing_struct_constructor_artifact,
+                                       producer_diagnostic,
+                                       sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_struct_constructor_artifact.bytes == NULL);
     empty_struct_literal->lowering_flags = saved_struct_lowering_flags;
 
@@ -4054,9 +4179,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     unit_enum_literal->aux_int = -1;
     XrProgramArtifact missing_unit_enum_symbol_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_unit_enum_symbol_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&producer_input, &missing_unit_enum_symbol_artifact,
+                                       producer_diagnostic,
+                                       sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_unit_enum_symbol_artifact.bytes == NULL);
     unit_enum_literal->aux_int = saved_unit_enum_symbol;
 
@@ -4089,18 +4214,18 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                                               : XG_NOMINAL_OWNERSHIP_AFFINE;
     XrProgramArtifact mismatched_frozen_contract_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &mismatched_frozen_contract_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &mismatched_frozen_contract_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_frozen_contract_artifact.bytes == NULL);
     source_existential_pack->xg_implementor_ownership = saved_frozen_ownership;
 
     uint32_t saved_object_use_id = source_existential_pack->xg_interface_object_use_id;
     source_existential_pack->xg_interface_object_use_id = XG_NO_ID;
     XrProgramArtifact missing_object_use_artifact = {0};
-    PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_object_use_artifact, producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
+                              &producer_input, &missing_object_use_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_object_use_artifact.bytes == NULL);
     source_existential_pack->xg_interface_object_use_id = saved_object_use_id;
 
@@ -4160,8 +4285,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         source_receiver_type->instance.class_ref = NULL;
         XrProgramArtifact missing_receiver_identity_artifact = {0};
         PIPELINE_TEST_REQUIRE(
-            xr_program_write_from_xi(&producer_input, &missing_receiver_identity_artifact,
-                                     producer_diagnostic, sizeof(producer_diagnostic)) ==
+            xr_test_write_program_artifact(&producer_input, &missing_receiver_identity_artifact,
+                                           producer_diagnostic, sizeof(producer_diagnostic)) ==
             XR_PROGRAM_BUILD_INVALID_INPUT);
         PIPELINE_TEST_REQUIRE(missing_receiver_identity_artifact.bytes == NULL);
         source_receiver_type->instance.class_ref = source_receiver_info;
@@ -4170,8 +4295,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         source_receiver_type->enum_type.nominal_ref = NULL;
         XrProgramArtifact missing_receiver_identity_artifact = {0};
         PIPELINE_TEST_REQUIRE(
-            xr_program_write_from_xi(&producer_input, &missing_receiver_identity_artifact,
-                                     producer_diagnostic, sizeof(producer_diagnostic)) ==
+            xr_test_write_program_artifact(&producer_input, &missing_receiver_identity_artifact,
+                                           producer_diagnostic, sizeof(producer_diagnostic)) ==
             XR_PROGRAM_BUILD_INVALID_INPUT);
         PIPELINE_TEST_REQUIRE(missing_receiver_identity_artifact.bytes == NULL);
         source_receiver_type->enum_type.nominal_ref = source_receiver_info;
@@ -4181,9 +4306,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     source_conformance->type_contract_complete = 0u;
     XrProgramArtifact incomplete_type_contract_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &incomplete_type_contract_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &incomplete_type_contract_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(incomplete_type_contract_artifact.bytes == NULL);
     source_conformance->type_contract_complete = saved_type_contract_complete;
 
@@ -4192,9 +4317,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     global_evidence.interface_witnesses[0].implementation_func_id = XG_NO_ID;
     XrProgramArtifact missing_witness_target_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_witness_target_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&producer_input, &missing_witness_target_artifact,
+                                       producer_diagnostic,
+                                       sizeof(producer_diagnostic)) != XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(missing_witness_target_artifact.bytes == NULL);
     global_evidence.interface_witnesses[0].implementation_func_id = saved_witness_target;
 
@@ -4203,9 +4328,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     global_evidence.interface_methods[0].result_type_key ^= UINT32_C(0x80000000);
     XrProgramArtifact mismatched_method_result_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &mismatched_method_result_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &mismatched_method_result_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_method_result_artifact.bytes == NULL);
     global_evidence.interface_methods[0].result_type_key = saved_method_result_key;
 
@@ -4213,19 +4338,19 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     source_interface_method->result_ownership.kind = XG_RETURN_OWNERSHIP_BORROWED_STATIC;
     XrProgramArtifact mismatched_method_ownership_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &mismatched_method_ownership_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &mismatched_method_ownership_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_method_ownership_artifact.bytes == NULL);
     source_interface_method->result_ownership.kind = saved_method_result_ownership;
 
     XrProgramFromXiInput missing_evidence_input = producer_input;
     missing_evidence_input.global_evidence = NULL;
     XrProgramArtifact missing_evidence_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&missing_evidence_input,
-                                                   &missing_evidence_artifact, producer_diagnostic,
-                                                   sizeof(producer_diagnostic)) ==
-                          XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(
+        xr_test_write_program_artifact(&missing_evidence_input, &missing_evidence_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_evidence_artifact.bytes == NULL);
 
     XiValue *indirect_call = NULL;
@@ -4299,8 +4424,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     indirect_call->xg_callsite_id = XG_NO_ID;
     XrProgramArtifact missing_callsite_artifact = {0};
     XrProgramBuildStatus missing_callsite_status =
-        xr_program_write_from_xi(&producer_input, &missing_callsite_artifact, producer_diagnostic,
-                                 sizeof(producer_diagnostic));
+        xr_test_write_program_artifact(&producer_input, &missing_callsite_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic));
     PIPELINE_TEST_REQUIRE(missing_callsite_status == XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "unresolved callable target set") != NULL);
     PIPELINE_TEST_REQUIRE(missing_callsite_artifact.bytes == NULL);
@@ -4309,7 +4434,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     uint32_t saved_callsite_flags = indirect_callsite->flags;
     indirect_callsite->flags &= ~XG_CALL_ERROR_EFFECT_VERIFIED;
     XrProgramArtifact unverified_callsite_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
                               &producer_input, &unverified_callsite_artifact, producer_diagnostic,
                               sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(unverified_callsite_artifact.bytes == NULL);
@@ -4319,9 +4444,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     fallible_indirect_callsite->flags &= ~XG_CALL_MAY_ERROR;
     XrProgramArtifact missing_fallible_effect_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_fallible_effect_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &missing_fallible_effect_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_effect_artifact.bytes == NULL);
     fallible_indirect_callsite->flags = saved_fallible_callsite_flags;
 
@@ -4329,9 +4454,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     fallible_indirect_call->xg_callable_target_count = saved_fallible_target_count + 1u;
     XrProgramArtifact missing_fallible_target_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &missing_fallible_target_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &missing_fallible_target_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(missing_fallible_target_artifact.bytes == NULL);
     fallible_indirect_call->xg_callable_target_count = saved_fallible_target_count;
 
@@ -4339,9 +4464,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     fallible_indirect_callsite->flags &= ~XG_CALL_TARGET_SET_VERIFIED;
     XrProgramArtifact rebound_fallible_target_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &rebound_fallible_target_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &rebound_fallible_target_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(rebound_fallible_target_artifact.bytes == NULL);
     fallible_indirect_callsite->flags = saved_fallible_target_flags;
 
@@ -4383,9 +4508,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     memset(producer_diagnostic, 0, sizeof(producer_diagnostic));
     XrProgramArtifact mismatched_fallible_error_region_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &mismatched_fallible_error_region_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &mismatched_fallible_error_region_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_fallible_error_region_artifact.bytes == NULL);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "error region") != NULL);
     fallible_error_check->error_region = saved_fallible_error_region;
@@ -4396,9 +4521,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     memset(producer_diagnostic, 0, sizeof(producer_diagnostic));
     XrProgramArtifact mismatched_fallible_error_token_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &mismatched_fallible_error_token_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &mismatched_fallible_error_token_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_fallible_error_token_artifact.bytes == NULL);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "typed catch") != NULL);
     fallible_error_type_test->aux = (void *) saved_fallible_error_test_nominal;
@@ -4408,9 +4533,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     memset(producer_diagnostic, 0, sizeof(producer_diagnostic));
     XrProgramArtifact mismatched_fallible_error_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &mismatched_fallible_error_artifact,
-                                 producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_test_write_program_artifact(&producer_input, &mismatched_fallible_error_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(mismatched_fallible_error_artifact.bytes == NULL);
     PIPELINE_TEST_REQUIRE(strstr(producer_diagnostic, "block argument") != NULL);
     fallible_error_catch->type = saved_fallible_error_type;
@@ -4437,8 +4562,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
 
     XrProgramArtifact repeated_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &repeated_artifact, producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
+        xr_test_write_program_artifact(&producer_input, &repeated_artifact, producer_diagnostic,
+                                       sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(repeated_artifact.size == artifact.size);
     PIPELINE_TEST_REQUIRE(memcmp(repeated_artifact.bytes, artifact.bytes, artifact.size) == 0);
     xr_program_artifact_free(&repeated_artifact);
@@ -4459,9 +4584,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     const char *saved_field_name = packet_schema->members[0].payload_names[0];
     packet_schema->members[0].payload_names[0] = "status";
     XrProgramArtifact renamed_field_artifact = {0};
-    PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &renamed_field_artifact, producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
+                              &producer_input, &renamed_field_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(!xr_program_id_equal(artifact.id, renamed_field_artifact.id));
     xr_program_artifact_free(&renamed_field_artifact);
     packet_schema->members[0].payload_names[0] = saved_field_name;
@@ -4469,7 +4594,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     const char *saved_second_field_name = packet_schema->members[0].payload_names[1];
     packet_schema->members[0].payload_names[1] = packet_schema->members[0].payload_names[0];
     XrProgramArtifact ambiguous_field_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
                               &producer_input, &ambiguous_field_artifact, producer_diagnostic,
                               sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
     PIPELINE_TEST_REQUIRE(ambiguous_field_artifact.bytes == NULL);
@@ -4504,9 +4629,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     int64_t saved_update_ordinal = aggregate_update->aux_int;
     aggregate_update->aux_int = INT64_C(99);
     XrProgramArtifact unreachable_update_artifact = {0};
-    PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &unreachable_update_artifact, producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
+                              &producer_input, &unreachable_update_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(unreachable_update_artifact.size == artifact.size);
     PIPELINE_TEST_REQUIRE(xr_program_id_equal(unreachable_update_artifact.id, artifact.id));
     PIPELINE_TEST_REQUIRE(
@@ -4517,7 +4642,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     int64_t saved_construct_ordinal = variant_construct->aux_int;
     variant_construct->aux_int = INT64_C(99);
     XrProgramArtifact invalid_variant_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
                               &producer_input, &invalid_variant_artifact, producer_diagnostic,
                               sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
     PIPELINE_TEST_REQUIRE(invalid_variant_artifact.bytes == NULL);
@@ -4526,7 +4651,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     int64_t saved_projection = variant_project->aux_int;
     variant_project->aux_int = xi_variant_pack_projection(0u, 99u);
     XrProgramArtifact invalid_projection_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
                               &producer_input, &invalid_projection_artifact, producer_diagnostic,
                               sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
     PIPELINE_TEST_REQUIRE(invalid_projection_artifact.bytes == NULL);
@@ -4536,8 +4661,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     variant_project->type = variant_construct->type;
     XrProgramArtifact invalid_projection_type_artifact = {0};
     PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&producer_input, &invalid_projection_type_artifact,
-                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
+        xr_test_write_program_artifact(&producer_input, &invalid_projection_type_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
         XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
     PIPELINE_TEST_REQUIRE(invalid_projection_type_artifact.bytes == NULL);
     variant_project->type = saved_projection_type;
@@ -4546,9 +4671,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XiFunc foreign_entry = {0};
     invalid_entry_input.entry_function = &foreign_entry;
     XrProgramArtifact invalid_entry_artifact = {0};
-    PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&invalid_entry_input, &invalid_entry_artifact, producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
+                              &invalid_entry_input, &invalid_entry_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(invalid_entry_artifact.bytes == NULL);
 
     XrValidatedProgram *validated = NULL;
@@ -4686,7 +4811,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    XrVmCodeStatus vm_status = xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic);
+    XrVmCodeStatus vm_status = xr_vm_code_build(validated, profile, NULL, &vm_code, &vm_diagnostic);
     if (vm_status != XR_VM_CODE_OK)
         fprintf(stderr,
                 "program VM code build failed: status=%d operation=%u function=%u block=%u "
@@ -4796,9 +4921,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         .semantic_profile_fingerprint = semantic_profile.bytes,
     };
     XrProgramArtifact witness_only_artifact = {0};
-    PIPELINE_TEST_REQUIRE(
-        xr_program_write_from_xi(&witness_only_input, &witness_only_artifact, producer_diagnostic,
-                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(
+                              &witness_only_input, &witness_only_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *witness_only_validated = NULL;
     PIPELINE_TEST_REQUIRE(
         xr_program_validate(witness_only_artifact.bytes, witness_only_artifact.size, NULL,
@@ -4986,6 +5111,7 @@ int main(int argc, char **argv) {
     /* Configuration */
     run_e2e_no_optimize();
     run_e2e_with_verify();
+    run_e2e_module_slot_declarations_survive_analyzer_and_optimization();
 
     /* Boolean & comparison */
     run_e2e_bool_ops();

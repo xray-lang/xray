@@ -22,7 +22,7 @@ struct XrCompilerSession;
 struct XrModuleIdentityAuthority;
 struct XrModuleResolver;
 
-#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(4)
+#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(5)
 #define XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES UINT32_C(1024)
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE 512u
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE 4096u
@@ -93,7 +93,6 @@ typedef enum XrProgramSourceBuildStage {
     XR_PROGRAM_SOURCE_STAGE_IMPORT_RESOLUTION,
     XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
     XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE,
-    XR_PROGRAM_SOURCE_STAGE_PROGRAM_VALIDATE,
     XR_PROGRAM_SOURCE_STAGE_SESSION_COMMIT,
 } XrProgramSourceBuildStage;
 
@@ -121,7 +120,6 @@ typedef struct XrProgramSourceDiagnostic {
     uint32_t source_column;
     uint32_t underlying_status;
     XrProgramBuildStatus writer_status;
-    XrProgramVerifyStatus verifier_status;
     char source_path[XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE];
     char message[XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE];
 } XrProgramSourceDiagnostic;
@@ -133,7 +131,9 @@ typedef struct XrProgramSourceProduct {
 
 /* product_out must be zero-initialized or previously freed. On success it owns
  * both the artifact and one validated-program reference; neither borrows the
- * compiler session, source graph, or the other's byte storage. */
+ * compiler session, source graph, or the other's byte storage. The program is
+ * transferred from the Xi writer under the default admission policy; request
+ * limits can only tighten that budget, and rejection releases both outputs. */
 XR_FUNC XrProgramSourceBuildStatus xr_program_source_build(
     const XrProgramSourceBuildInput *input, XrProgramSourceProduct *product_out,
     XrProgramSourceDiagnostic *diagnostic_out);

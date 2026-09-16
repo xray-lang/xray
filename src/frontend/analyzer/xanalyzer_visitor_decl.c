@@ -3040,6 +3040,13 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     links->owns_class_info = true;
     links->interface_decl_node = node;
     info->declaration_symbol = sym;
+    info->location =
+        (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
+    if (!xa_analyzer_publish_nominal_identity(ctx->analyzer, node, info)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
+                                   "nominal declaration identity is unavailable", &info->location);
+        return;
+    }
     // Represent the interface as a parameterized XR_KIND_INTERFACE: built-in
     // singletons stay as plain interface types; user `interface Foo<T>` keeps
     // its declared type parameters so generic resolution can plug arguments
@@ -3753,6 +3760,11 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                          : node->type == AST_STRUCT_DECL ? XA_NOMINAL_STRUCT
                                                          : XA_NOMINAL_INVALID;
     info->declaration_symbol = sym;
+    if (!xa_analyzer_publish_nominal_identity(ctx->analyzer, node, info)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
+                                   "nominal declaration identity is unavailable", &info->location);
+        return;
+    }
     if (!links->type) {
         links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
     }

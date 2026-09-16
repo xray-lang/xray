@@ -164,36 +164,36 @@ TEST(graph_linear_deps) {
 
 TEST(graph_diamond_deps) {
     setup();
-    create_file("main.xr", "import \"./left\"\nimport \"./right\"\n");
     create_file("left.xr", "import \"./base\"\nvar l = 1\n");
     create_file("right.xr", "import \"./base\"\nvar r = 2\n");
     create_file("base.xr", "var b = 0\n");
 
-    XrModuleResolverConfig cfg = {0};
-    XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_session, r);
-
-    char *err = NULL;
-    int rc = build_script_graph(g, abs_path("main.xr"), &err);
-    ASSERT_EQ_INT(rc, 0);
-    ASSERT_EQ_INT(g->spec_count, 4);
-
-    rc = xr_module_graph_topological_sort(g);
-    ASSERT_EQ_INT(rc, 0);
-    ASSERT_FALSE(g->has_cycle);
-    ASSERT_EQ_INT(g->topo_count, 4);
-
-    /* base must come before left and right in topo order */
-    int base_idx = -1;
-    for (int i = 0; i < g->spec_count; i++) {
-        if (strstr(g->specs[i].canonical, "base"))
-            base_idx = i;
+    const char *imports[] = {"import \"./left\"\nimport \"./right\"\n",
+                             "import \"./right\"\nimport \"./left\"\n"};
+    const char *expected[][4] = {{"base.xr", "left.xr", "right.xr", "main.xr"},
+                                 {"base.xr", "right.xr", "left.xr", "main.xr"}};
+    for (int order = 0; order < 2; order++) {
+        create_file("main.xr", imports[order]);
+        XrModuleResolverConfig cfg = {0};
+        XrModuleResolver *r = xr_module_resolver_new(&cfg);
+        XrModuleGraph *g = xr_module_graph_new(g_session, r);
+        char *err = NULL;
+        ASSERT_EQ_INT(build_script_graph(g, abs_path("main.xr"), &err), 0);
+        ASSERT_NULL(err);
+        ASSERT_EQ_INT(g->spec_count, 4);
+        ASSERT_EQ_INT(xr_module_graph_topological_sort(g), 0);
+        ASSERT_FALSE(g->has_cycle);
+        ASSERT_EQ_INT(g->topo_count, 4);
+        /* The independent order also proves the diamond's shared dependency
+         * is visited exactly once, before either importer. */
+        for (int i = 0; i < 4; i++) {
+            const XrModuleSpec *spec = &g->specs[g->topo_order[i]];
+            ASSERT_STR_EQ(spec->logical_path, expected[order][i]);
+            ASSERT_EQ_INT(spec->topo_index, i);
+        }
+        xr_module_graph_free(g);
+        xr_module_resolver_free(r);
     }
-    ASSERT_TRUE(base_idx >= 0);
-    ASSERT_TRUE(g->specs[base_idx].topo_index < g->specs[g->entry_index].topo_index);
-
-    xr_module_graph_free(g);
-    xr_module_resolver_free(r);
     teardown();
 }
 

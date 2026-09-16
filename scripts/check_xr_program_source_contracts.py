@@ -120,7 +120,8 @@ def validate_native_fixtures(root: Path, unit_cmake: str, owner_test: str) -> No
             "source native registration must consume exactly one manifest projection")
     functions = re.findall(
         r"function\(add_xr_program_source_native_fixture fixture_id native_target "
-        r"expected_exit fixture_labels\)(.*?)endfunction\(\)", unit_cmake, re.DOTALL)
+        r"expected_exit fixture_labels\s+expected_stdout_hex\)(.*?)endfunction\(\)",
+        unit_cmake, re.DOTALL)
     require(len(functions) == 1, "source natives require one fixture registration owner")
     for token in (
         'set(generated_c "${XR_PROGRAM_SOURCE_FIXTURE_DIR}/${fixture_id}_native.c")',
@@ -216,16 +217,14 @@ def validate(root: Path) -> None:
     for token in (
         "xr_module_graph_build",
         "xa_analyzer_analyze",
-        "pre_monomorphization_evidence",
         "xa_mono_graph_pass",
         "xr_canon_program",
         "xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer",
-        "xg_global_evidence_merge_generic_inst_roots",
         "xi_pipeline_program_input_config",
         "xi_resolve_imports",
         ".entry_function = entry",
         "xr_program_write_from_xi",
-        "xr_program_validate",
+        "&product->artifact, &product->program",
         "xr_program_source_product_free",
         "XR_ERR_ANALYZE_MONO_BUDGET",
         "XR_ERR_ANALYZE_MONO_DEPTH",
@@ -234,6 +233,20 @@ def validate(root: Path) -> None:
         "product->artifact.size > context->input->budget.max_program_bytes",
     ):
         require(token in owner, f"source owner implementation lacks {token}")
+    final_publication = "xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer("
+    require(owner.count(final_publication) == 1,
+            "source owner must publish the complete global evidence exactly once")
+    require("pre_monomorphization" not in owner and "merge_generic_inst_roots" not in owner,
+            "source owner regained a second complete evidence graph")
+    require("evidence_finalize_generic_body_root" in global_producer and
+            "allow_incomplete_exact_type_identity" not in global_producer,
+            "final publication must close analyzer-owned generic roots with exact type identity")
+    require("xr_program_validate(" not in owner,
+            "source owner must transfer the writer admission result without revalidation")
+    require("XrValidatedProgram **program_out" in header and
+            "*program_out = validated" in producer and
+            "xr_program_validate(artifact_out->bytes, artifact_out->size" in producer,
+            "Xi writer must transfer an independently validated owned program")
     for forbidden in ("XrProto", "XrTargetPlan", "XrInstance"):
         require(forbidden not in owner_header and forbidden not in owner,
                 f"source owner regained forbidden product dependency {forbidden}")
@@ -619,7 +632,11 @@ def validate(root: Path) -> None:
     }
     wave_five_provider = {"core.provider.call"}
     wave_five_reborrow = {"core.existential.reborrow_read"}
-    canonical_source_output = {"core.output.group.i64"}
+    canonical_source_output = {
+        "core.output.group", "core.constant.string", "core.constant.rune",
+        "core.string.concat", "core.string.from_i64", "core.compare.string",
+        "core.compare.rune",
+    }
     canonical_boolean = {
         "core.logical.not",
         "core.logical.and",
@@ -679,7 +696,7 @@ def validate(root: Path) -> None:
            for operation in wave_five_provider},
         **{operation: "COMPLETE_W7_WAVE5_REBORROW"
            for operation in wave_five_reborrow},
-        **{operation: "COMPLETE_CANONICAL_SOURCE_RUN_OUTPUT_SLICE"
+        **{operation: "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION"
            for operation in canonical_source_output},
         **{operation: "COMPLETE_W7_WAVE5_BOOLEAN" for operation in canonical_boolean},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
@@ -780,6 +797,19 @@ def self_test(root: Path) -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / relative, destination)
         validate(target)
+        source_owner = target / "src/program/xr_program_source_build.c"
+        original_owner = source_owner.read_text(encoding="utf-8")
+        source_owner.write_text(original_owner +
+            "\nvoid duplicate_evidence(void) { "
+            "xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(); }\n",
+            encoding="utf-8")
+        try:
+            validate(target)
+        except ContractError:
+            pass
+        else:
+            raise ContractError("a second final evidence publication was accepted")
+        source_owner.write_text(original_owner, encoding="utf-8")
         cmake = target / "tests/unit/CMakeLists.txt"
         original_cmake = cmake.read_text(encoding="utf-8")
         source_test = read(target, "tests/unit/program/test_xr_program_source_build.c")
@@ -918,6 +948,22 @@ def self_test(root: Path) -> None:
         else:
             raise ContractError("source owner without canonical writer was accepted")
         owner.write_text(original_owner, encoding="utf-8")
+        for old, replacement in (
+            ("*program_out = validated", "*program_out = NULL"),
+            ("xr_program_validate(artifact_out->bytes, artifact_out->size",
+             "unchecked_program(artifact_out->bytes, artifact_out->size"),
+        ):
+            mutated = original_producer.replace(old, replacement, 1)
+            require(mutated != original_producer, "writer handoff mutation did not apply")
+            producer.write_text(mutated, encoding="utf-8")
+            try:
+                validate(target)
+            except ContractError as exc:
+                require("independently validated owned program" in str(exc),
+                        f"writer handoff mutation reported the wrong invariant: {exc}")
+            else:
+                raise ContractError("unvalidated writer handoff was accepted")
+        producer.write_text(original_producer, encoding="utf-8")
 
 
 def main() -> int:

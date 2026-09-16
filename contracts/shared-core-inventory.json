@@ -1053,10 +1053,11 @@
       "id": "os",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/program/xr_provider_aot_sources_gen.inc.c",
         "src/aot/xrt_io.h",
         "src/aot/xrt_os.h",
-        "src/stdlib/xstdlib_target_leaf.h",
+        "src/execution/xr_stdlib_provider_bindings_gen.inc.c",
+        "src/runtime/abi/xr_stdlib_provider_descriptors_gen.inc.c",
         "stdlib/io/io.c",
         "stdlib/os/os.c"
       ],
@@ -1079,8 +1080,9 @@
       ],
       "status": "production",
       "test_callers": [
-        "tests/unit/frontend/test_xa_program_semantic_closure.c",
+        "tests/unit/execution/test_stdlib_provider_binding.c",
         "tests/unit/ir/test_xi_cgen.c",
+        "tests/unit/program/test_xr_program_process_provider.inc.c",
         "tests/unit/stdlib/test_os_core.c"
       ]
     },

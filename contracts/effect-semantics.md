@@ -260,6 +260,12 @@ Missing allocation coverage, a forged key or ID, a shadowed type, or any
 partial constructor shape fails closed. The generic builtin-call effect row is
 unchanged, and no TargetPlan or AOT execution authority follows from this
 SemanticPlan prerequisite alone.
+The same allocation identity relation now covers the exact reserved Atomic
+constructor with one `i64`, `f64`, or `bool` argument. The shared constructor
+signature determines whether an allocation exists; its result type parameter
+and unique builtin callee origin must agree with that argument. Target and C
+projection consumers retain their own physical layout, owner, and operand
+checks. An arbitrary call with an owned return cannot claim this signature.
 Schema 19 freezes a canonical builtin declaration identity in every semantic
 type row and in the `type-v3` canonical key. A user class with the same display
 name has builtin identity zero and cannot collide with a runtime builtin. The

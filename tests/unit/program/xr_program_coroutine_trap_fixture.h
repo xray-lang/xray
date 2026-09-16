@@ -19,6 +19,7 @@
 #include "core/xr_core_spec_gen.h"
 #include "plan/semantic/xr_semantic_ids.h"
 #include "program/xr_program.h"
+#include "xr_program_provider_fixture.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -486,8 +487,12 @@ static XrProgramBuildStatus xr_program_coroutine_trap_fixture_write_with_ids(
         .functions = functions,
         .function_count = 2u,
     };
+    XrProgramProviderOperationRequirement operation_requirement = {
+        .operation_id = operation,
+        .logical_contract = xr_program_fixture_scalar_contract(false),
+    };
     XrCoreIrProviderRequirementInput requirement = {
-        .contract_id = contract, .operation_ids = &operation, .operation_count = 1u};
+        .contract_id = contract, .operations = &operation_requirement, .operation_count = 1u};
     XrCoreIrKey semantic = xr_program_coroutine_trap_key("profile", "fixture");
     uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
     XrCoreIrProgramInput input = {

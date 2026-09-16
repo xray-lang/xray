@@ -3202,6 +3202,8 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
     cls->symbol_id = sym->id;
 
     XrClassInfo *info = xa_class_info_new(cls->name);
+    if (!info)
+        return;
     info->declaration_symbol = sym;
     info->explicit_final = cls->explicit_final;
     info->is_overlay_union = is_union_decl;
@@ -3214,6 +3216,11 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
     links->nominal_decl_node = node;
     links->class_info = info;
     links->owns_class_info = true;
+    if (!xa_analyzer_publish_nominal_identity(ctx->analyzer, node, info)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
+                                   "nominal declaration identity is unavailable", &info->location);
+        return;
+    }
     links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
     links->type->instance.class_ref = info;
     if (is_struct_decl || is_union_decl)
@@ -3244,6 +3251,15 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     if (links->class_info) {
         links->class_info->declaration_symbol = sym;
         links->class_info->nominal_kind = XA_NOMINAL_ENUM;
+        links->class_info->location =
+            (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
+        if (!xa_analyzer_publish_nominal_identity(ctx->analyzer, node, links->class_info)) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_MISSING_TYPE,
+                                       "nominal declaration identity is unavailable",
+                                       &links->class_info->location);
+            return;
+        }
     }
     if (links->type)
         links->type->enum_type.nominal_ref = links->class_info;
@@ -8474,8 +8490,7 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 3: Infer error sets for functions (value-return error system)
     xa_infer_error_sets(analyzer, ast);
 
-    // Pass 3a: Function-value throw effects are final now. Republish the exact
-    // effect dimension before any pre-monomorphization evidence is frozen.
+    // Republish final function-value throw effects before specialization consumes them.
     xa_finalize_generic_specialization_effects(ctx, ast);
 
     // Pass 3b: function definitions were provisionally POLY during structural

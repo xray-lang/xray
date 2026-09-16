@@ -52,6 +52,14 @@ XR_FUNC const char *xr_aot_tail_call_conformance_issue_name(uint32_t issue);
  * verified direct-local TargetPlan call and one applied direct-call authority
  * record. The certificate contains no Xi pointers and is deterministic across
  * processes; ordinary XI_CALL is never accepted as a materialized alias. */
+/* The module batch admits the target once and independently verifies every
+ * authority before reading live Xi. All certificates are cleared on failure. */
+XR_FUNC bool xr_aot_tail_call_conformance_verify_modules(
+    const struct XiFunc *const *roots, const XrTargetPlan *target_plan,
+    const XrAotRefinementPlanView *authorities, uint32_t module_count,
+    XrAotTailCallConformance *out_conformance, uint32_t *failed_module,
+    XrAotTailCallDiagnostic *diag);
+
 XR_FUNC bool xr_aot_tail_call_conformance_verify(
     const struct XiFunc *root, const XrTargetPlan *target_plan,
     const XrAotRefinementPlanView *direct_call_authority,

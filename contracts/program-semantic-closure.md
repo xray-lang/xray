@@ -10,13 +10,19 @@ and Xglobal callsite to one exact generated-stdlib suspension row before
 emitting the typed Program request. This contract
 continues to govern the old product path only until that path is deleted.
 
+PSC v10 removes the source-module scalar private-leaf execution family. No
+publisher, Xi binding, semantic classifier, TargetPlan projection, or runtime
+selector may reconstruct it. Canonical Program provider requirements own the
+replacement execution contract. The topology-only source-module graph remains
+separate from executable language authority.
+
 This contract freezes the target-neutral, pre-Xi semantic authority used by
 the bounded executable families and the complete reachable source-module graph. PSC itself contains no layout,
 storage, ABI, TargetProfile, executor recipe, or standalone artifact codec.
 Its verified rows may enter Xi and then the pointer-free SemanticPlan/XSM
 projection defined below; they never imply TargetPlan admission on their own.
 
-1. ProgramSemanticClosure schema v9 has one mutable builder, one explicit
+1. ProgramSemanticClosure schema v10 has one mutable builder, one explicit
    `XrProgramSemanticFamily`, bounded module/dependency/type/type-field/
    function/function-parameter/call tables, and a typed failure kind. The
    builder canonicalizes all rows before freeze and cannot be reopened after
@@ -61,7 +67,7 @@ projection defined below; they never imply TargetPlan admission on their own.
    zero. Its source kind and complete locator participate in the closed-world
    evidence. A cross-module call requires an exact dependency; every function
    and module must be reachable from an explicit entry/export root.
-6. Freeze hashes schema v9, family, complete policy, every canonical row and
+6. Freeze hashes schema v10, family, complete policy, every canonical row and
    locator, then derives `XrGenerationClosureId` from the full closure
    fingerprint. The independent verifier reconstructs typed fingerprints,
    identities, ordered type-field and function-parameter domains, graph
@@ -134,10 +140,13 @@ projection defined below; they never imply TargetPlan admission on their own.
     execution, legacy per-module C plans, product `EXECUTABLE` artifacts, and
     freestanding product emission remain fail-closed.
     Independently of those bounded PSC families, every SemanticPlan
-    `STRUCT_OBJECT` row is a copy-value aggregate wherever the type is named.
-    Its identity cannot depend on the construction-site-only `is_value_type`
-    bit. The builder derives `VALUE` from the frozen kind and the verifier
-    rejects a structural-object row with that identity removed.
+    `STRUCT_OBJECT` row carries a reference-capable ownership root wherever
+    the type is named. Assignment preserves that root; explicit copy creates
+    an independent root. Construction-site `is_value_type` cannot turn the
+    field shape into an inline aggregate. The builder excludes `VALUE`, and
+    independent verification rejects either a forged value flag or a missing
+    reference/root flag. Call-boundary storage and physical cleanup remain
+    subject to their existing TargetPlan and native execution checks.
 11. Only the scalar family builds `XrScalarCallDecision`. It requires the exact
     verified scalar PSC/GCI/TargetProfile and freezes native ABI,
     `DIRECT_LOCAL`, `STATIC_DIRECT`, `I64`, register-only argument/result, and
@@ -170,7 +179,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     fail closed. The verifier independently reconstructs the same unique local
     declaration/PSC join instead of trusting the publisher's annotation or
     scanning same-shaped PSC rows.
-15. SemanticPlan schema 49 and program-provenance schema 5 admit the bounded
+15. SemanticPlan schema 50 and program-provenance schema 5 admit the bounded
     scalar, leaf aggregate, leaf value-product, and graph families only after
     PSC-to-Xi verification. The plan stores pointer-free
     PSC schema/family/fingerprint/GCI/counts, its exact module row, and typed
@@ -211,7 +220,7 @@ projection defined below; they never imply TargetPlan admission on their own.
 17. XSM exact-version encoding serializes counts and provenance followed by all program
     type, type-field, function, dependency, and call bindings. Their counts participate in
     decoder storage/payload budgets; every field participates in the
-    SemanticPlan fingerprint. Decode requires schema 49, exact bounds and
+    SemanticPlan fingerprint. Decode requires schema 50, exact bounds and
     payload digest, reconstructs the frozen plan, and reruns generic semantic
     verification. A dependency-bearing graph entry is accepted only by the
     module-set decoder with the exact ordered producer plan; the zero-dependency
@@ -371,14 +380,15 @@ name, shape, import coordinate, or declaration pointer owned by another module
 cannot authorize the binding; analysis and global-evidence production both
 fail closed before executable call resolution.
 
-## Digest anchors
 
 Static cleanup closure is computed over the complete registration-derived Xi graph, including
 registrations inside cold handlers. Normal exits close active boundaries; an explicit fatal throw
 may abandon an outer closed boundary and must preserve its reason. Cancellation owner payload
 exactness is checked only after live-in propagation reaches its fixed point.
 
-anchor-sha256: CMakeLists.txt 9613dfaef68552718c74b2e19326cca610915bee2320da9c691bb9044140c92f
+## Digest anchors
+
+anchor-sha256: CMakeLists.txt c0c1778a536f028072248bfbb395a8bb416c14ec5afadffae1a086f6fa3b8e5b
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
@@ -395,12 +405,12 @@ anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.h beff336ef2725
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_internal.h d26adf137848c56d923d52b7bd85439105bcae1a48de736f989fc64685bcea17
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c 57e0d760a7d12f1cc5763ba3768eba48ae6859356018c37b9353d3d1e329113a
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 19d2eab8e1b2b36e6ef2bdc6452e246a63a056704d7785cec8c5d25274900f40
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h 21b93358c2354dc7253e8bab81e6c16820a74e8e50703779b9489c9953961428
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 7a93bc9fe9e5b086f611f2fcbe103cf0362bb26ebe05b3ecdff170a63f53b9e3
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h a7b9d78946d077e7d7563f6f896b3fedcf0f781bf0182d94f0353d9a99fe2a41
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h 9730a257074215d6458170ce570639f741cc9011abdb1066e91a53c9e15cb9fe
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 2ec074f65a1cc4d7e049e0595993362dec37c3c4716fb60e818d57093a0a606d
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 8d80da095edc951ea4ddb1efbe87309501bbc6fe41fb0ad7d8e27fa7e1b62da4
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 006da5f6b47f362c7e0296f648638bb396db27d6bcd9df65f58ae9cde1d5b03e
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 6ebd889e3ecd0dcd4eea5693e072fdcdf0c82de07a240a5b35962cfd2a9cebd4
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 7f87cf6f45ada079d7fb10a03f770276104ee1f5af25ea69a8700c86090bc8df
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 0684c1526adaf332ce73d05b933658dcbb53b81cfcbf6fb73d50845a4d1064eb
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 36a46352a850b476e641e9d4dbcd680faf3db065808598778cc55efa3d0a4cf5
 anchor-sha256: src/plan/semantic/xr_source_semantic_identity.h 5153e5d6a791b9d4b6ed83e914f380003a0c813128b1bc4fe890d606b8f4d2d3
 anchor-sha256: src/plan/semantic/xr_source_semantic_identity.c 833ecf4f6e42ebe14fe6c17eae216118a482418e38e8ef2f82f3726ab622990c
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
@@ -408,12 +418,12 @@ anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c fa5db76b60b567a12cfeff8e1905ec74340825b89edf0ec85d8f4f4f6ec2001a
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h c08a139463180986271b41e50b499bf91adacdc5da5794f2779a46d7c14ec842
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 2cb1abd4722af76e9684878b4c0a737d5ed45144a7673efcedcf85dfa926577c
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 812040061aa42a4f9353e9d269ccc23aec9cf3534813db0aa4c5d1f027544570
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h e2e28c2cc4d84d8f6325682709556edb1ffaed813f4a29ecc4dc8aedc92b5c91
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 15445afbdb7357fdafc243730f4df7ae93ad01546feceb260194223c0670a578
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 8f4a3996e856f99143c49ab0fb4e0b85a9f5ea23b14515509ecd6d471af51687
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 3c19b813de2b36aee68583b3e5b7e7c46b467d014d1a141d4dfd9c373e09e41c
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 642eff61fb0b06185d2aec4c0ce8d91919148de3d29d74a17e68bd1a5016b3fa
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 838f7adc60c3de52fda23ed25c07edb678a6274eb87d0deec2da033e701dca10
@@ -422,26 +432,26 @@ anchor-sha256: src/ir/xi.c 223c1c0e9d91168eb8b14d17e1b12ac27e03f44609721e6bd7175
 anchor-sha256: src/ir/xi_module.h 72ba2956cad9f36ed6fbaf5b4cd7aa67b7b867a72c31b8c77561c77456a46e85
 anchor-sha256: src/ir/xi_lower.h 6e1ca4397fcd78454b36f2cd52c04e2f0585287d5e7ab97c54a8d720006585ce
 anchor-sha256: src/ir/xi_lower.c f217757c936c4a223cf780a6392d4e26d5d430901c9ae16534b6d248419025ff
-anchor-sha256: src/ir/xi_lower_expr.c c9358b70b12e357bfed72a4ffafb9dad807174bc1ee2456c0674ff3416ab4e5f
+anchor-sha256: src/ir/xi_lower_expr.c f023962acce843057e52dd0a2e2c34e75d7d69bca0bc96360f0831a687a2a441
 anchor-sha256: src/ir/xi_lower_stmt.c 57b1643efd95af8e09ea858d70de36b30997380b4bf1828b810b25937bf2f4d5
-anchor-sha256: src/ir/xi_pipeline.c ae904ce3c77c1f3b64888e37e168170ac271bd07c29ceada7f3fb6fd6dcce64d
+anchor-sha256: src/ir/xi_pipeline.c 0d1709b6533b2c61ecaf394ace26dd2165924b4d4fd7a3b4af8eca71f1861e60
 anchor-sha256: src/ir/xi_program_semantic.h 090db1d96c7fe1d2102c24293669ea1bee060a390fa8bfcb9cc63985a8c4955e
-anchor-sha256: src/ir/xi_program_semantic.c b36f1a96c046a1e065bf3d3973dfa5c1826dc21af660ad274c306d5751422885
-anchor-sha256: src/ir/xi_program_semantic_verify.c 3011bf4feb7e5176dbca0d5f85b9272db0d21f96c846a1a36d51ef7536bc0b6d
+anchor-sha256: src/ir/xi_program_semantic.c 49dde887b1ea2540939036b722ef5ced8f0102ee4224bae58e9b565a81e3ae9c
+anchor-sha256: src/ir/xi_program_semantic_verify.c 333d2607bc1733e042b4ca54efba2295ea96be66946e8ec994d653d76483cfb2
 anchor-sha256: src/ir/xi_own.c 18c7fab596717ff788bdc01cef990cb7c15dde329cd70949f892889b67cb33d0
 anchor-sha256: src/ir/xi_program_semantic_plan.h c516db30bd0b7ec8fe0749bfd6fac4aecb8cfac217dad32f1954a7a66a7ee7ae
-anchor-sha256: src/ir/xi_program_semantic_plan.c 522efb1f811b8d8f1aac0312dc62da9604b97e4d69233b4619080f99e7db5eba
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 14b7af26f15a2c9add8ec4fa7d58a782b4bdfda1f69a18904d668627d2238562
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d34865a86bfd2ce3561c2e7328c4d9262c53cebc
+anchor-sha256: src/ir/xi_program_semantic_plan.c b778627997671ef02432644e12294e29731b20c16c44233e0acc701c9a4693bf
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 97085f29b14fd95ab3f942fa6782eafe79f5caaad0b7dab9d50b9d11cb7606a0
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.c cbc5cfc599653e3668f4b7dd6a81755baeb274b67a455e52155cc16205f68a23
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2b5667297212ffe1df19d87643c5045b1a6cfed11bc8683c
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
-anchor-sha256: tests/unit/plan/test_semantic_plan.c aebdf70cc4c04f630863382d174298661b8d1061cba5cf4f9634f1e481854de0
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 4bc85e972b9f8703966da9d3ee475a05a49e3cec902f7d61835a1ffb82f19a1f
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 5752336b4e08abff7a4fcd65fa9c3c067b4eb7819f1e4d4eb1a5217d5cd725be
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c eec8355e8f44b033a8688ac38d6a37af3f49eb576e7f2766863a716df9772f33
 anchor-sha256: tests/unit/frontend/test_parser.c 83d2fcc57c562b0def2f589440f0f7991ed049680c4941c5b7ccd48e22f56eb1
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c f649890040e9a26bcbadca53a6ebd8460b07564c0692afe5bdfe03ea6cf3e3f1
-anchor-sha256: tests/unit/CMakeLists.txt 0b3aca5cbb019086c9bde9dc71007bd0977a276ffe567a1e41fb79682d8ab1a8
+anchor-sha256: tests/unit/CMakeLists.txt f1dbeb6a56746804bbfd9560b154a799c9ae0086f56c797ad01beba1d2fec792
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
+anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
 anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc

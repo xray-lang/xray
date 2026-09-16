@@ -17,6 +17,12 @@ LOWERING = Path("src/aot/program/xr_backend_ir.c")
 VERIFY = Path("src/aot/program/xr_backend_ir_verify.c")
 EMITTER = Path("src/aot/program/xr_backend_ir_emit_c.c")
 COPY_EMITTER = Path("src/aot/program/xr_backend_ir_emit_copy.inc.c")
+PROVIDER_EMITTER = Path("src/aot/program/xr_backend_ir_provider.inc.c")
+PROVIDER_SOURCES = Path("src/aot/program/xr_provider_aot_sources_gen.inc.c")
+EMISSION_FRAGMENTS = (COPY_EMITTER, PROVIDER_EMITTER, PROVIDER_SOURCES)
+POINTER_ABI_ASSERT = (
+    '"_Static_assert(sizeof(void *) == %u && _Alignof(void *) == %u,\\n"'
+)
 ARTIFACT = Path("src/aot/program/xr_native_artifact.c")
 TEST = Path("tests/unit/aot/test_xr_program_aot.c")
 CMAKE = Path("CMakeLists.txt")
@@ -120,7 +126,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
 
 
 def sources(root: Path, overrides: dict[Path, str] | None = None) -> dict[Path, str]:
-    paths = (HEADER, LOWERING, VERIFY, EMITTER, COPY_EMITTER, ARTIFACT, TEST, CMAKE, TEST_CMAKE,
+    paths = (HEADER, LOWERING, VERIFY, EMITTER, *EMISSION_FRAGMENTS, ARTIFACT, TEST, CMAKE, TEST_CMAKE,
              IDENTITY, EXECUTION_IDENTITY_HEADER, EXECUTION_IDENTITY_SOURCE)
     return {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
@@ -135,7 +141,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     lowering = text[LOWERING]
     verifier = text[VERIFY]
     emitter = text[EMITTER]
-    emission = emitter + text[COPY_EMITTER]
+    emission = emitter + "".join(text[path] for path in EMISSION_FRAGMENTS)
     artifact = text[ARTIFACT]
     test = text[TEST]
     cmake = text[CMAKE]
@@ -183,7 +189,9 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
                 f"BackendIR depends on forbidden semantic/private owner {forbidden}")
     require("xr_reference_" not in aot_sources,
             "AOT implementation calls the reference evaluator")
-    require("sizeof(void" not in emission,
+    require(text[PROVIDER_EMITTER].count(POINTER_ABI_ASSERT) == 1,
+            "native provider pointer ABI must be checked against the selected target")
+    require("sizeof(void" not in emission.replace(POINTER_ABI_ASSERT, "", 1),
             "target query is inferred from the host compiler")
     require("int64_t v%u" not in emission,
             "typed local spelling must come from BackendIR representation")
@@ -255,9 +263,10 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     dependencies = re.search(r"\bDEPENDS\b(?P<paths>.*?)\bCOMMENT\b",
                              contract_command.group("body") if contract_command else "",
                              re.DOTALL)
-    require(dependencies is not None and
-            "${CMAKE_SOURCE_DIR}/" + COPY_EMITTER.as_posix() in dependencies.group("paths"),
-            "AOT contract stamp does not depend on the copy emitter")
+    for fragment in EMISSION_FRAGMENTS:
+        require(dependencies is not None and
+                "${CMAKE_SOURCE_DIR}/" + fragment.as_posix() in dependencies.group("paths"),
+                f"AOT contract stamp does not depend on {fragment}")
     require("src/execution/xr_execution_identity.c" in cmake,
             "pure execution identity is absent from the canonical product closure")
     require("include/xr_backend_ir.h" not in cmake and
@@ -304,27 +313,29 @@ def self_test(root: Path) -> None:
     else:
         raise GateError("live XrInstance AOT input was accepted")
 
-    copy_emitter = (root / COPY_EMITTER).read_text(encoding="utf-8")
-    for forbidden in ("XrInstance", "XrExecutionLease", "xr_execution_instance_",
-                      "xr_execution_lease_", "TargetPlan", "XrVmCode", "xr_vm_",
-                      "xvm_", "AstNode", "XiValue", "xr_reference_", "sizeof(void",
-                      "int64_t v%u", "XrAotValue"):
+    for fragment in EMISSION_FRAGMENTS:
+        source = (root / fragment).read_text(encoding="utf-8")
+        for forbidden in ("XrInstance", "XrExecutionLease", "xr_execution_instance_",
+                          "xr_execution_lease_", "TargetPlan", "XrVmCode", "xr_vm_",
+                          "xvm_", "AstNode", "XiValue", "xr_reference_", "sizeof(void",
+                          "int64_t v%u", "XrAotValue"):
+            try:
+                validate_sources(root, {fragment: source + f"\n/* {forbidden} */\n"})
+            except GateError:
+                pass
+            else:
+                raise GateError(f"{fragment} accepted forbidden authority/representation {forbidden}")
+
+    cmake = (root / CMAKE).read_text(encoding="utf-8")
+    for fragment in EMISSION_FRAGMENTS:
+        dependency = "            ${CMAKE_SOURCE_DIR}/" + fragment.as_posix() + "\n"
+        require(cmake.count(dependency) == 1, f"{fragment} dependency mutation is ambiguous")
         try:
-            validate_sources(root, {COPY_EMITTER: copy_emitter + f"\n/* {forbidden} */\n"})
+            validate_sources(root, {CMAKE: cmake.replace(dependency, "", 1)})
         except GateError:
             pass
         else:
-            raise GateError(f"copy emitter accepted forbidden authority/representation {forbidden}")
-
-    cmake = (root / CMAKE).read_text(encoding="utf-8")
-    dependency = "            ${CMAKE_SOURCE_DIR}/" + COPY_EMITTER.as_posix() + "\n"
-    require(cmake.count(dependency) == 1, "copy emitter dependency mutation is ambiguous")
-    try:
-        validate_sources(root, {CMAKE: cmake.replace(dependency, "", 1)})
-    except GateError:
-        pass
-    else:
-        raise GateError("missing copy emitter contract dependency was accepted")
+            raise GateError(f"missing {fragment} contract dependency was accepted")
 
     mutated, mutation_count = re.subn(
         r"(case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:\s*"

@@ -59,8 +59,8 @@ capabilities; they do not authorize general product graphs or dynamic reload.
    Only the non-suspending exact signed-`i64`, trivial-ownership,
    identity-adapter SOURCE_EXPORT subset becomes dynamic execution authority;
    all other dynamic rows remain non-executable.
-   Its sealed StringBuilder constructor call likewise remains non-executable
-   at this scalar-only runtime boundary.
+   The shared StringBuilder/Atomic runtime-constructor descriptor likewise remains
+   non-executable at this scalar-only runtime boundary.
    PREPARE performs the complete plan and instruction verification before it
    constructs and publishes one immutable decoded cache. For an ordinary plan,
    the independent READY verifier retains the exact sole-function and zero-call
@@ -273,12 +273,14 @@ capabilities; they do not authorize general product graphs or dynamic reload.
     rechecks RETIRED/zero-pin state before committing, preserving lock order and
     deterministic ownership on every failure.
 
+## Digest anchors
+
 anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
 anchor-sha256: src/runtime/xr_module_generation_internal.h 0f80619cde6e8994ad2ae4b4dc93f50e0ce0735decb487e22c8b3b33202138b2
-anchor-sha256: src/runtime/xr_module_generation.c 84ac5ca94c73d63608716c8e6c3e6f28d41bf29f2caf49b54a1958e89bfd8a23
-anchor-sha256: src/runtime/xr_module_generation_verify.c 4db82699293a50b010225a2ea46de972cfb5381f419cadf02dbc883382730367
+anchor-sha256: src/runtime/xr_module_generation.c 0acb05d75ff95decad6125a2fc56688202d12ffd9eff13d3257d5e92c617cedb
+anchor-sha256: src/runtime/xr_module_generation_verify.c b9099690edf5fbd7cba90a8ea0ef284c546ef6032fccbc8fa32522a3999169ec
 anchor-sha256: src/vm/xr_typed_dispatch.h 5764853b278b367a0713c461e7e997ed67d50093d990b1a67e6fe93041b1a90f
-anchor-sha256: src/vm/xr_typed_dispatch.c c266fda805b5a7ab09537715601c853cce641c1ed7eed9cccbefe1e3d127dace
+anchor-sha256: src/vm/xr_typed_dispatch.c a7e7ea6e44cd53e78ef74d2410cfa29a110f826456f15acb457806745012e038
 anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0
 anchor-sha256: src/vm/xr_vm_decoded_cache.c f1f420b39d78f39e372b3378425809fb6c7049bad84aa02f84df5e542cfd83de
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
@@ -291,7 +293,7 @@ anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py ce359885c88ab943fb5e8b61782770361083568db413aa3e6b940809457cb75c
 anchor-sha256: tests/install/run_install_public_surface_tests.py 7573dcf14236aebbad3f3840844d14f7060618d661e64886e31fb5f5ce3820be
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
-anchor-sha256: src/runtime/xr_runtime_api.c 2309834ec6034b4347200cf2776102d474b60ab5617e760a92e4178af3f343e4
+anchor-sha256: src/runtime/xr_runtime_api.c d829970cacc48b6a5debca44e535c555d3c32c65a4eadde83169345ae2c2fda2
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c b7ef1d75a66f12b0b408dcd73a672e3e7df8af4a140ce612612996b60a778b9a
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c c2bc18e2eb0c40767bff70b0137387a81d55bbe0b767673befcdc5acce4386a0

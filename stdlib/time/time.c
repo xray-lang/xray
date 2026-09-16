@@ -16,6 +16,7 @@
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_time.h"
 #include "../../src/shared/xr_time_offset.h"
+#include "../../src/runtime/object/xpanic_info.h"
 #include <time.h>
 
 // ========== Module-private native leaves ==========
@@ -50,11 +51,15 @@ static XrValue time_cpuNanos(XrVMRuntime *isolate, XrValue *args, int nargs) {
 
 // time.__utcOffsetAt(seconds: int) -> int (minutes east of UTC at a Unix time)
 static XrValue time_utcOffsetAt(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    int64_t ts = 0;
-    if (nargs > 0 && XR_IS_INT(args[0]))
-        ts = XR_TO_INT(args[0]);
-    return xr_int((int64_t) xr_time_utc_offset_at((time_t) ts));
+    int64_t result;
+    if (nargs != 1 || !args || !XR_IS_INT(args[0]) ||
+        !xr_time_utc_offset_at(XR_TO_INT(args[0]), &result)) {
+        xr_vm_unwind_with_trace(
+            isolate, xr_panic_info_new(isolate, XR_ERR_RUNTIME,
+                                       "UTC offset query failed for the supplied timestamp"));
+        return xr_null();
+    }
+    return xr_int(result);
 }
 
 /*

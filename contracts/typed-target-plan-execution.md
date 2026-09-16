@@ -487,20 +487,13 @@ providers execute the complete 48-byte carrier only after independent
 program verification grants the tuple6 execution-family mask. The same
 verified rows bind the hosted-fragment AOT/C emitter; legacy managed tuple,
 tagged place/aggregate-reference, name, and boxed paths reject this family.
-Schema 54 also appends `CALL_NATIVE_LEAF_I64` as opcode 44 and extends each
-call row with a generated numeric native-leaf kind plus a stable native-callee
-identity. SemanticPlan 44 admits only an exact direct `XI_IMPORT_REF`/`XI_CALL`
-shape selected by the generated standard-library registry; the first admitted
-leaf is the zero-argument signed-`i64` process-id query. Target construction and
-independent verification rejoin that semantic operation, registry entry,
-result representation, call row, and one typed instruction. Both VM providers
-dispatch the numeric leaf through the runtime-neutral scalar provider. AOT
-first excludes the row from the direct-local family, then projects the same
-verified numeric leaf to its portable C scalar helper. Neither backend may use
-module/member spelling, a native-module factory, the tagged wrapper, or a
-legacy dispatch table to recover a covered leaf. Missing, duplicate, unknown,
-wrong-identity, wrong-shape, or live-Xi-drifted authority fails closed. No v53
-artifact is widened or translated into this authority.
+TargetPlan and XTP schema 61 remove the getpid-specific numeric call kind,
+call convention, native-leaf field, and opcode 44. The generated target
+instruction registry contains opcodes 1 through 43. There is no opcode 44
+translation or compatibility dispatch. Canonical provider descriptors and
+generated typed bindings own the migrated operation. Its source execution,
+contract mutation, and generated-C evidence are tracked in the governed
+retirement inventory; pending evidence migration cannot be reported as PASS.
 A suspend row names both the exact coroutine
 state and that state's independently frozen resume instruction. Unknown,
 duplicated, redirected, mismatched, or absent rows fail closed. No v50 or
@@ -578,10 +571,15 @@ selector spelling, live types, or arity. Target builder and independent
 verifier each construct one sorted lifecycle projection and merge it with
 operation traversal; all source rows, state-by-release pairs, and sort work are
 checked against the common work ceiling before allocation. The registered
-projection gate rejects nested entity/operation/release scans. Schema 16 added a sealed
-`StringBuilder()` constructor call whose
-identity binds the exact Semantic allocation ID and whose result is an owned
-dynamic slot. It grants no generic builtin call authority. Its
+projection gate rejects nested entity/operation/release scans. The runtime-constructor
+call replaces the StringBuilder-only descriptor. Its shared signature rule admits
+zero-argument `StringBuilder()` and one-argument `Atomic<i64/f64/bool>` construction.
+The Atomic callee must be the unique reserved builtin definition, and its argument
+must match the exact instance type parameter. Every constructor binds a canonical
+allocation identity to an owned dynamic result slot. C emission schema 41 binds
+the verified runtime symbol and optional scalar operand; unknown scalar kinds
+have no integer fallback. This grants no generic builtin call authority or typed
+frame execution. The
 schema-58 `StringBuilder.clear()` family is a separate exact receiver-alias
 method authority: the frozen `clear` symbol, one exact `StringBuilder`
 receiver, zero call arguments, and the receiver-alias result must all match.
@@ -919,7 +917,6 @@ Evidence:
   frontend KAT mutates values, ABIs, graph rows, resolver/import joins, valid
   wrong shared slots, and the direct edge and requires fail-closed rejection
   with no per-module or legacy ABI fallback.
-
 
 ## Verification
 

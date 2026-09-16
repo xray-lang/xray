@@ -394,7 +394,7 @@ static bool verify_execution(XrValidatedProgram *program, XrTargetProfile *profi
         options.decode_policy = policy;
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic code_diagnostic = {0};
-        ok = xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK;
+        ok = xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) == XR_VM_CODE_OK;
         if (ok) {
             XrVmOutcome result = xr_vm_code_execute(code, instance, entry, NULL, 0u);
             ok = result.kind == XR_VM_OUTCOME_RETURN && result.value.kind == XR_VM_VALUE_I64 &&

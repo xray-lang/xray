@@ -9,6 +9,7 @@
  */
 
 #include "xr_aot_refinement.h"
+#include "xr_aot_representation_refinement.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../plan/semantic/xr_semantic_type_admission_shape.h"
@@ -43,6 +44,7 @@ struct XrAotRefinementBuilder {
     uint32_t record_count;
     uint32_t record_capacity;
     XrAotTargetIndex target_index;
+    const XrTargetPlan *scoped_admitted_target;
     bool frozen;
 };
 
@@ -1405,21 +1407,17 @@ XrAotPassProtocol xr_aot_refinement_representation_protocol(uint32_t pass_id) {
     };
 }
 
-XrAotRefinementBuilder *xr_aot_refinement_builder_create(
+static XrAotRefinementBuilder *builder_create_admitted(
     const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan,
-    XrAotRefinementDiagnostic *diag) {
-    XrAotBaselineRef baseline;
-    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &baseline,
-                                                      diag))
-        return NULL;
+    const XrAotBaselineRef *baseline, XrAotRefinementDiagnostic *diag) {
     XrAotRefinementBuilder *builder =
         (XrAotRefinementBuilder *) xr_calloc(1, sizeof(*builder));
     if (!builder) {
         fail_diag(diag, XR_AOT_REFINEMENT_OUT_OF_MEMORY, 0, 0, 0);
         return NULL;
     }
-    builder->baseline = baseline;
-    builder->initial_state = xr_aot_refinement_initial_state(&baseline);
+    builder->baseline = *baseline;
+    builder->initial_state = xr_aot_refinement_initial_state(baseline);
     builder->current_state = builder->initial_state;
     if (!target_index_init(target_plan, semantic_plan, &builder->target_index)) {
         fail_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, 0, 0);
@@ -1427,6 +1425,15 @@ XrAotRefinementBuilder *xr_aot_refinement_builder_create(
         return NULL;
     }
     return builder;
+}
+
+XrAotRefinementBuilder *xr_aot_refinement_builder_create(const XrTargetPlan *target_plan,
+                                                         const XrSemanticPlan *semantic_plan,
+                                                         XrAotRefinementDiagnostic *diag) {
+    XrAotBaselineRef baseline;
+    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &baseline, diag))
+        return NULL;
+    return builder_create_admitted(target_plan, semantic_plan, &baseline, diag);
 }
 
 void xr_aot_refinement_builder_free(XrAotRefinementBuilder *builder) {
@@ -1437,10 +1444,11 @@ void xr_aot_refinement_builder_free(XrAotRefinementBuilder *builder) {
     xr_free(builder);
 }
 
-bool xr_aot_refinement_try_direct_call(
+static bool try_direct_call_admitted(
     XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
     const XrTargetPlan *target_plan, const XrAotDirectCallRequest *request,
-    uint32_t *out_decision, XrAotRefinementDiagnostic *diag) {
+    uint32_t *out_decision, const XrAotBaselineRef *current,
+    XrAotRefinementDiagnostic *diag) {
     clear_diag(diag);
     if (out_decision)
         *out_decision = 0;
@@ -1451,11 +1459,7 @@ bool xr_aot_refinement_try_direct_call(
                          builder ? builder->record_count : 0,
                          protocol ? protocol->pass_id : 0,
                          request ? request->target_call_index : 0);
-    XrAotBaselineRef current;
-    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current,
-                                                      diag))
-        return false;
-    if (!baseline_equal(&builder->baseline, &current))
+    if (!baseline_equal(&builder->baseline, current))
         return fail_diag(diag, XR_AOT_REFINEMENT_BASELINE_FINGERPRINT,
                          builder->record_count, protocol->pass_id,
                          request->target_call_index);
@@ -1538,6 +1542,20 @@ bool xr_aot_refinement_try_direct_call(
     return true;
 }
 
+bool xr_aot_refinement_try_direct_call(XrAotRefinementBuilder *builder,
+                                       const XrAotPassProtocol *protocol,
+                                       const XrTargetPlan *target_plan,
+                                       const XrAotDirectCallRequest *request,
+                                       uint32_t *out_decision, XrAotRefinementDiagnostic *diag) {
+    XrAotBaselineRef current;
+    if (out_decision)
+        *out_decision = 0;
+    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current, diag))
+        return false;
+    return try_direct_call_admitted(builder, protocol, target_plan, request, out_decision, &current,
+                                    diag);
+}
+
 bool xr_aot_refinement_try_representation_adapter(
     XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
     const XrTargetPlan *target_plan,
@@ -1554,7 +1572,9 @@ bool xr_aot_refinement_try_representation_adapter(
                          builder ? builder->record_count : 0,
                          protocol ? protocol->pass_id : 0, 0);
     XrAotBaselineRef current;
-    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current, diag))
+    if (builder->scoped_admitted_target == target_plan)
+        current = builder->baseline;
+    else if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current, diag))
         return false;
     if (!baseline_equal(&builder->baseline, &current))
         return fail_diag(diag, XR_AOT_REFINEMENT_BASELINE_FINGERPRINT,
@@ -1857,19 +1877,16 @@ static bool verify_view(const XrAotRefinementPlanView *view,
     return true;
 }
 
-bool xr_aot_refinement_builder_freeze(
+static bool builder_freeze_admitted(
     XrAotRefinementBuilder *builder, const XrTargetPlan *target_plan,
-    XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag) {
+    XrAotRefinementPlan **out_plan, const XrAotBaselineRef *current,
+    XrAotRefinementDiagnostic *diag) {
     clear_diag(diag);
     if (out_plan)
         *out_plan = NULL;
     if (!builder || builder->frozen || !target_plan || !out_plan)
         return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, 0, 0);
-    XrAotBaselineRef current;
-    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current,
-                                                      diag))
-        return false;
-    if (!baseline_equal(&builder->baseline, &current))
+    if (!baseline_equal(&builder->baseline, current))
         return fail_diag(diag, XR_AOT_REFINEMENT_BASELINE_FINGERPRINT,
                          builder->record_count, 0, 0);
     XrAotRefinementPlan *plan =
@@ -1912,7 +1929,7 @@ bool xr_aot_refinement_builder_freeze(
         .frozen = true,
     };
     refinement_plan_fingerprint(&plan->view);
-    if (!verify_view(&plan->view, &current, target_plan,
+    if (!verify_view(&plan->view, current, target_plan,
                      &builder->target_index, false, diag)) {
         xr_aot_refinement_plan_free(plan);
         return false;
@@ -1921,6 +1938,79 @@ bool xr_aot_refinement_builder_freeze(
     builder->frozen = true;
     *out_plan = plan;
     return true;
+}
+
+bool xr_aot_refinement_builder_freeze(XrAotRefinementBuilder *builder,
+                                      const XrTargetPlan *target_plan,
+                                      XrAotRefinementPlan **out_plan,
+                                      XrAotRefinementDiagnostic *diag) {
+    XrAotBaselineRef current;
+    if (out_plan)
+        *out_plan = NULL;
+    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current, diag))
+        return false;
+    return builder_freeze_admitted(builder, target_plan, out_plan, &current, diag);
+}
+
+static bool representation_build_admitted(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic,
+    const struct XiRepPolicy *policy, XrAotRefinementPlan **out_plan,
+    const XrAotBaselineRef *baseline, XrAotRefinementDiagnostic *diag) {
+    uint32_t partition = UINT32_MAX;
+    if (!semantic || !xr_target_plan_partition_for_semantic(target_plan, semantic, &partition))
+        return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, 0, 0);
+    XrAotRefinementBuilder *builder =
+        builder_create_admitted(target_plan, semantic, baseline, diag);
+    if (!builder)
+        return false;
+    /* Only this synchronous scope owns the builder. The collector has no
+     * callbacks or mutable target access. Incremental API builders never gain
+     * this admission, and final record derivation remains independent. */
+    builder->scoped_admitted_target = target_plan;
+    bool valid =
+        xr_aot_representation_collect_authority(builder, target_plan, semantic, policy, diag) &&
+        builder_freeze_admitted(builder, target_plan, out_plan, baseline, diag);
+    builder->scoped_admitted_target = NULL;
+    xr_aot_refinement_builder_free(builder);
+    return valid;
+}
+
+bool xr_aot_representation_refinement_build_modules(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *const *semantics,
+    uint32_t module_count, const struct XiRepPolicy *policy,
+    XrAotRefinementPlan **out_plans, uint32_t *failed_module,
+    XrAotRefinementDiagnostic *diag) {
+    clear_diag(diag);
+    if (failed_module)
+        *failed_module = 0;
+    if (!semantics || !out_plans || module_count == 0 ||
+        module_count > XR_TARGET_MAX_PROGRAM_MODULES)
+        return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, 0, 0);
+    memset(out_plans, 0, sizeof(*out_plans) * module_count);
+    XrAotBaselineRef baseline;
+    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &baseline, diag))
+        return false;
+    for (uint32_t i = 0; i < module_count; ++i) {
+        if (!representation_build_admitted(target_plan, semantics[i], policy, &out_plans[i],
+                                             &baseline, diag)) {
+            if (failed_module)
+                *failed_module = i;
+            for (uint32_t j = 0; j < module_count; ++j) {
+                xr_aot_refinement_plan_free(out_plans[j]);
+                out_plans[j] = NULL;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+bool xr_aot_representation_refinement_build_from_authority(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic,
+    const struct XiRepPolicy *policy, XrAotRefinementPlan **out_plan,
+    XrAotRefinementDiagnostic *diag) {
+    return xr_aot_representation_refinement_build_modules(
+        target_plan, &semantic, 1, policy, out_plan, NULL, diag);
 }
 
 void xr_aot_refinement_plan_free(XrAotRefinementPlan *plan) {
@@ -1936,9 +2026,9 @@ XrAotRefinementPlanView xr_aot_refinement_plan_view(
     return plan ? plan->view : empty;
 }
 
-bool xr_aot_refinement_direct_call_authority_build(
+static bool direct_call_authority_build_admitted(
     const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan, uint32_t pass_id,
-    XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag) {
+    XrAotRefinementPlan **out_plan, const XrAotBaselineRef *baseline, XrAotRefinementDiagnostic *diag) {
     clear_diag(diag);
     if (!target_plan || !semantic_plan || pass_id == 0 || !out_plan)
         return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, pass_id, 0);
@@ -1965,7 +2055,7 @@ bool xr_aot_refinement_direct_call_authority_build(
         scoped_call_count = partitions[partition].calls_count;
     }
     XrAotRefinementBuilder *builder =
-        xr_aot_refinement_builder_create(target_plan, semantic_plan, diag);
+        builder_create_admitted(target_plan, semantic_plan, baseline, diag);
     if (!builder)
         return false;
     XrAotPassProtocol protocol = xr_aot_refinement_direct_call_protocol(pass_id);
@@ -1974,14 +2064,15 @@ bool xr_aot_refinement_direct_call_authority_build(
     for (uint32_t i = call_begin; i < call_begin + scoped_call_count; i++) {
         XrAotDirectCallRequest request = {.target_call_index = i};
         uint32_t decision = 0;
-        if (!xr_aot_refinement_try_direct_call(builder, &protocol, target_plan,
-                                               &request, &decision, diag)) {
+        if (!try_direct_call_admitted(builder, &protocol, target_plan,
+                                               &request, &decision,
+                                      baseline, diag)) {
             xr_aot_refinement_builder_free(builder);
             return false;
         }
     }
     XrAotRefinementPlan *plan = NULL;
-    if (!xr_aot_refinement_builder_freeze(builder, target_plan, &plan, diag)) {
+    if (!builder_freeze_admitted(builder, target_plan, &plan, baseline, diag)) {
         xr_aot_refinement_builder_free(builder);
         return false;
     }
@@ -1990,20 +2081,77 @@ bool xr_aot_refinement_direct_call_authority_build(
     return true;
 }
 
+bool xr_aot_refinement_direct_call_authority_build_modules(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *const *semantics,
+    uint32_t module_count, uint32_t pass_id, XrAotRefinementPlan **out_plans,
+    uint32_t *failed_module, XrAotRefinementDiagnostic *diag) {
+    clear_diag(diag);
+    if (failed_module)
+        *failed_module = 0;
+    if (!semantics || !out_plans || module_count == 0 ||
+        module_count > XR_TARGET_MAX_PROGRAM_MODULES || pass_id == 0)
+        return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, pass_id, 0);
+    memset(out_plans, 0, sizeof(*out_plans) * module_count);
+    /* Admission and all builds occur without callbacks or mutation of the
+     * immutable target. Each freeze still independently derives its records. */
+    XrAotBaselineRef baseline;
+    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &baseline, diag))
+        return false;
+    for (uint32_t i = 0; i < module_count; ++i) {
+        if (!direct_call_authority_build_admitted(target_plan, semantics[i], pass_id,
+                                                  &out_plans[i], &baseline, diag)) {
+            if (failed_module)
+                *failed_module = i;
+            for (uint32_t j = 0; j < module_count; ++j) {
+                xr_aot_refinement_plan_free(out_plans[j]);
+                out_plans[j] = NULL;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+bool xr_aot_refinement_direct_call_authority_build(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan, uint32_t pass_id,
+    XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag) {
+    return xr_aot_refinement_direct_call_authority_build_modules(
+        target_plan, &semantic_plan, 1, pass_id, out_plan, NULL, diag);
+}
+
+bool xr_aot_refinement_verify_modules(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *const *semantics,
+    const XrAotRefinementPlanView *views, uint32_t module_count, uint32_t *failed_module,
+    XrAotRefinementDiagnostic *diag) {
+    clear_diag(diag);
+    if (failed_module)
+        *failed_module = 0;
+    if (!semantics || !views || module_count == 0 || module_count > XR_TARGET_MAX_PROGRAM_MODULES)
+        return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, 0, 0);
+    XrAotBaselineRef current;
+    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current, diag))
+        return false;
+    for (uint32_t i = 0; i < module_count; ++i) {
+        XrAotTargetIndex target_index = {0};
+        bool valid = target_index_init(target_plan, semantics[i], &target_index);
+        if (!valid)
+            fail_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, 0, 0);
+        else
+            valid = verify_view(&views[i], &current, target_plan, &target_index, true, diag);
+        target_index_dispose(&target_index);
+        if (!valid) {
+            if (failed_module)
+                *failed_module = i;
+            return false;
+        }
+    }
+    return true;
+}
+
 bool xr_aot_refinement_verify(const XrAotRefinementPlanView *view,
                               const XrTargetPlan *target_plan,
                               const XrSemanticPlan *semantic_plan,
                               XrAotRefinementDiagnostic *diag) {
-    clear_diag(diag);
-    XrAotBaselineRef current;
-    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current,
-                                                      diag))
-        return false;
-    XrAotTargetIndex target_index = {0};
-    if (!target_index_init(target_plan, semantic_plan, &target_index))
-        return fail_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, 0, 0);
-    bool valid = verify_view(view, &current, target_plan, &target_index, true,
+    return xr_aot_refinement_verify_modules(target_plan, &semantic_plan, view, 1, NULL,
                              diag);
-    target_index_dispose(&target_index);
-    return valid;
 }

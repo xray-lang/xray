@@ -14,7 +14,7 @@
 #include "../execution/xr_execution.h"
 
 #define XR_VM_CODE_OPTIONS_SCHEMA_VERSION UINT32_C(1)
-#define XR_VM_BUILD_ID "xray-program-vm-v1"
+#define XR_VM_BUILD_ID "xray-program-vm-v2"
 
 typedef enum XrVmDecodePolicy {
     XR_VM_DECODE_INVALID = 0,
@@ -90,6 +90,8 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_CLASS_REFERENCE,
     XR_VM_VALUE_EXISTENTIAL,
     XR_VM_VALUE_CALLABLE,
+    XR_VM_VALUE_STRING,
+    XR_VM_VALUE_RUNE,
 } XrVmValueKind;
 
 typedef struct XrVmValue {
@@ -106,8 +108,17 @@ typedef struct XrVmValue {
         const void *class_reference;
         const void *existential;
         const void *callable;
+        const void *string;
+        uint32_t rune;
     } as;
 } XrVmValue;
+
+/* Borrowed view of a string value; bytes belong to the VM arena or to a
+ * detached outcome until that owner is disposed. */
+typedef struct XrVmStringView {
+    const uint8_t *bytes;
+    uint32_t size;
+} XrVmStringView;
 
 typedef enum XrVmOutcomeKind {
     XR_VM_OUTCOME_RETURN = 0,
@@ -159,7 +170,6 @@ typedef enum XrVmCodeStatus {
     XR_VM_CODE_OK = 0,
     XR_VM_CODE_INVALID_INPUT,
     XR_VM_CODE_UNSUPPORTED_OPERATION,
-    XR_VM_CODE_INSTANCE_UNAVAILABLE,
     XR_VM_CODE_POLICY_REJECTED,
     XR_VM_CODE_OUT_OF_MEMORY,
 } XrVmCodeStatus;
@@ -177,12 +187,17 @@ typedef struct XrVmCode XrVmCode;
 typedef struct XrVmExecution XrVmExecution;
 
 XR_FUNC XrVmCodeOptions xr_vm_code_default_options(void);
-XR_FUNC XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *options,
-                                        XrVmCode **code_out, XrVmCodeDiagnostic *diagnostic_out);
+/* Immutable code depends only on admitted Program/Profile and code options.
+ * It owns a Program reference and requires no active provider instance. Every
+ * execution separately admits its instance and holds that instance's lease. */
+XR_FUNC XrVmCodeStatus xr_vm_code_build(const XrValidatedProgram *program,
+                                        const XrTargetProfile *profile,
+                                        const XrVmCodeOptions *options, XrVmCode **code_out,
+                                        XrVmCodeDiagnostic *diagnostic_out);
 XR_FUNC void xr_vm_code_free(XrVmCode *code);
 XR_FUNC XrVmCode *xr_vm_code_retain(const XrVmCode *code);
 XR_FUNC bool xr_vm_code_matches_instance(const XrVmCode *code, const XrInstance *instance);
-XR_FUNC XrExecutionCacheKey xr_vm_code_cache_key(const XrVmCode *code);
+XR_FUNC XrExecutionId xr_vm_code_execution_id(const XrVmCode *code);
 XR_FUNC XrFingerprint xr_vm_code_private_digest(const XrVmCode *code);
 XR_FUNC size_t xr_vm_code_private_size(const XrVmCode *code);
 XR_FUNC XrVmDecodePolicy xr_vm_code_decode_policy(const XrVmCode *code);
@@ -193,6 +208,7 @@ XR_FUNC XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instanc
  * detached tree. Views
  * borrow that tree until the outcome is disposed. */
 XR_FUNC bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out);
+XR_FUNC bool xr_vm_value_string_view(const XrVmValue *value, XrVmStringView *view_out);
 XR_FUNC void xr_vm_outcome_dispose(XrVmOutcome *outcome);
 XR_FUNC bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance,
                                     uint32_t function_id, const XrVmValue *arguments,

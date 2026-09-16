@@ -19,6 +19,7 @@
 #define XR_SEMANTIC_ENUM_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "../../base/xbuiltin_enum.h"
 #include "xr_semantic_local_call_target_shape.h"
 #include "xr_semantic_shared_read_shape.h"
 #include "../../ir/xi.h"
@@ -27,6 +28,49 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+
+/* The builtin index, metadata spelling and frozen class type must identify
+ * the same declaration. Registry expansion never supplies a verifier answer. */
+static inline bool xr_semantic_builtin_enum_namespace_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    const XrBuiltinEnumRow *row =
+        operation && operation->semantic_immediate >= 0 &&
+                operation->semantic_immediate <= INT_MAX
+            ? xr_builtin_enum_registry_row((int) operation->semantic_immediate)
+            : NULL;
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    char expected_type_key[192];
+    int written =
+        row ? snprintf(expected_type_key, sizeof(expected_type_key),
+                       "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:%u:%s[0]",
+                       (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL,
+                       (unsigned) XR_SCALAR_REP_NONE, (unsigned) strlen(row->enum_name),
+                       row->enum_name)
+            : -1;
+    XrStableId zero = {{0}};
+    return plan && operation && row && type && metadata && written > 0 &&
+           (size_t) written < sizeof(expected_type_key) && operation->opcode == XI_GET_BUILTIN &&
+           operation->operand_count == 0 && operation->metadata_count == 1 &&
+           operation->metadata_begin < metadata_count && metadata[operation->metadata_begin] &&
+           strcmp(metadata[operation->metadata_begin], row->enum_name) == 0 &&
+           operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+           operation->semantic_immediate == (int64_t) row->builtin_index &&
+           operation->constant == XR_SEMANTIC_INDEX_NONE &&
+           operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
+           operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+           operation->effects == xi_generated_op_effects(XI_GET_BUILTIN) &&
+           operation->flags == xi_generated_op_default_flags(XI_GET_BUILTIN) &&
+           operation->result_alias_operand == -1 && type->kind == XR_KIND_CLASS &&
+           type->builtin_type == XR_TID_NULL && type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
+           strcmp(type->canonical_key, expected_type_key) == 0;
+}
 
 typedef struct XrSemanticAdtEnumConstructorShape {
     uint32_t receiver_value;

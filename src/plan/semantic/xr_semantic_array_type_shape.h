@@ -33,61 +33,53 @@
  * The canonical key encodes it as a field, so it is matched in both spellings
  * rather than by skipping past it. */
 static inline bool xr_semantic_array_type_row_is_exact(const XrSemanticTypeRecord *type) {
-    char expected[96];
-    char expected_nullable[96];
-    int length = snprintf(expected, sizeof(expected),
-                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                          (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    int nullable_length =
-        snprintf(expected_nullable, sizeof(expected_nullable),
-                 "type-v3:%u:0:%u:1:0:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                 (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
-    /* The key encodes const in its fifth field, so admitting the flag without
-     * admitting the spelling would still refuse a constant array. */
-    char expected_const[96];
-    int const_length =
-        snprintf(expected_const, sizeof(expected_const),
-                 "type-v3:%u:0:%u:0:1:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
-                 (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
     XrStableId zero = {{0}};
     const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
-    if (!type || length <= 0 || (size_t) length >= sizeof(expected) || nullable_length <= 0 ||
-        (size_t) nullable_length >= sizeof(expected_nullable))
-        return false;
-    if (type->kind != XR_KIND_ARRAY || type->builtin_type != XR_TID_NULL ||
+    if (!type || type->kind != XR_KIND_ARRAY || type->builtin_type != XR_TID_NULL ||
         type->child_count != 1 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
         type->scalar_rep != XR_SCALAR_REP_NONE ||
-        /* `const` states that the binding cannot be reassigned; it does not
-         * change how the array is held, and the canonical key does not encode
-         * it. Admitting only nullable here left `const xs = ...` outside every
-         * Array family, so a constant array had no storage anywhere. */
         (type->flags & ~(uint8_t) (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST)) != required ||
         type->source_class != XR_SEMANTIC_INDEX_NONE ||
         !xr_stable_id_equal(type->source_class_identity, zero) || !type->canonical_key)
         return false;
-    if (const_length <= 0 || (size_t) const_length >= sizeof(expected_const))
-        return false;
-    if (type->flags & XR_SEM_TYPE_NULLABLE)
-        return strncmp(type->canonical_key, expected_nullable, (size_t) nullable_length) == 0;
-    if (type->flags & XR_SEM_TYPE_CONST)
-        return strncmp(type->canonical_key, expected_const, (size_t) const_length) == 0;
-    return strncmp(type->canonical_key, expected, (size_t) length) == 0;
+    /* Qualifiers compose independently; matching one selected spelling would
+     * reject a const nullable reference even though its carrier is unchanged. */
+    char expected[96];
+    int length = snprintf(
+        expected, sizeof(expected),
+        "type-v3:%u:0:%u:%u:%u:0:0:0:0:%u:0:;element:", (unsigned) XR_KIND_ARRAY,
+        (unsigned) XR_TID_NULL, (unsigned) ((type->flags & XR_SEM_TYPE_NULLABLE) != 0),
+        (unsigned) ((type->flags & XR_SEM_TYPE_CONST) != 0), (unsigned) XR_SCALAR_REP_NONE);
+    return length > 0 && (size_t) length < sizeof(expected) &&
+           strncmp(type->canonical_key, expected, (size_t) length) == 0;
 }
 
-/* An Array parameter handed over by value uses the same tagged carrier whether
+/* A reference parameter uses the same ownership contract whether
  * the callee borrows or consumes the allocation. The declaration is the sole
  * ownership authority: a read-only body borrows, while a body that retains or
  * consumes the value owns and releases it. Target construction, independent
  * verification, and AOT refinement all use this judgement before applying
- * their target-specific element-storage checks. */
-static inline bool xr_semantic_direct_local_array_value_parameter_is_exact(
+ * their exact type and target storage checks. */
+static inline bool xr_semantic_direct_local_reference_parameter_is_exact(
     const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, bool *callee_owns) {
     if (!plan || !parameter || parameter->function >= xr_semantic_plan_function_count(plan) ||
         parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_READ ||
         (parameter->ownership != XI_OWN_BORROWED && parameter->ownership != XI_OWN_OWNED) ||
         parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
-        !xr_semantic_array_type_row_is_exact(xr_semantic_plan_type(plan, parameter->type)))
+        (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_VARIADIC)) != 0 ||
+        parameter->reserved != 0 || parameter->type >= xr_semantic_plan_type_count(plan) ||
+        (xr_semantic_plan_type(plan, parameter->type)->flags &
+         (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    /* A rest parameter is an Array at the callee boundary. Its declaration
+     * retains the same ownership and storage contract as an ordinary Array
+     * parameter; only argument collection differs at the call boundary. */
+    if ((parameter->flags & XR_SEM_PARAMETER_VARIADIC) != 0 &&
+        ((parameter->flags & XR_SEM_PARAMETER_REQUIRED) != 0 ||
+         parameter->ordinal + 1u !=
+             xr_semantic_plan_function(plan, parameter->function)->parameter_count ||
+         !xr_semantic_array_type_row_is_exact(xr_semantic_plan_type(plan, parameter->type))))
         return false;
     if (callee_owns)
         *callee_owns = parameter->ownership == XI_OWN_OWNED;

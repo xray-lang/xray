@@ -71,9 +71,7 @@ static void set_error(char *error, size_t error_size, const char *format, ...) {
 static bool program_graph_family_is_supported(const XrSemanticPlan *semantic_plan) {
     const XrSemanticProgramProvenance *program = xr_semantic_plan_program_provenance(semantic_plan);
     return program &&
-           (program->program_family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
-            program->program_family ==
-                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
+           program->program_family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
 }
 
 static bool rejected_load_status(XrCacheLoadStatus status) {

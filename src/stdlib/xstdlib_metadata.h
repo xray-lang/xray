@@ -76,7 +76,6 @@ static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
         xr_stdlib_metadata_hash_string(&ctx, entry->suspension_kind);
         xr_stdlib_metadata_hash_u64(&ctx, entry->runtime_capabilities);
         xr_stdlib_metadata_hash_u64(&ctx, entry->argc);
-        xr_stdlib_metadata_hash_u64(&ctx, entry->target_leaf);
         xr_stdlib_metadata_hash_u64(&ctx, entry->aot_direct ? 1u : 0u);
     }
     xr_stdlib_metadata_hash_u64(&ctx, XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT);
@@ -282,17 +281,6 @@ xr_stdlib_metadata_exact_native_direct_member(const char *module, const char *na
     return module ? xr_stdlib_metadata_exact_native_direct_member_span(module, strlen(module), name,
                                                                        argument_count)
                   : NULL;
-}
-
-static inline const XrStdlibDefEntry *
-xr_stdlib_metadata_exact_native_target_leaf(const char *module, const char *name,
-                                            uint16_t argument_count) {
-    const XrStdlibDefEntry *entry =
-        xr_stdlib_metadata_exact_native_direct_member(module, name, argument_count);
-    return entry && entry->target_leaf > XR_STDLIB_TARGET_LEAF_NONE &&
-                   entry->target_leaf < XR_STDLIB_TARGET_LEAF_COUNT
-               ? entry
-               : NULL;
 }
 
 static inline bool xr_stdlib_metadata_func_is_yieldable(const char *module, const char *name) {

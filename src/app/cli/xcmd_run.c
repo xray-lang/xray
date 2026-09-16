@@ -19,12 +19,11 @@
 #include "../../api/xisolate_profile.h"
 #include "../../base/xplatform.h"
 #include "../../execution/xr_execution.h"
-#include "../../os/os_pipe.h"
+#include "../../execution/xr_stdlib_provider_binding.h"
 #include "../../os/os_time.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 #include "../../plan/target/xr_target_profile.h"
 #include "../../runtime/abi/xr_builtin_provider_contract.h"
-#include "../../shared/xr_time_offset.h"
 #include "../../vm/xr_program_vm.h"
 
 #include "xray_vm.h"
@@ -93,64 +92,6 @@ static XrProviderCallStatus stdout_output_write(void *context, const uint8_t *by
     return fwrite(bytes, 1u, size, stream) == size ? XR_PROVIDER_CALL_OK : XR_PROVIDER_CALL_FAILED;
 }
 
-static XrProviderCallStatus clock_realtime_nanos(void *context, int64_t *result_out) {
-    (void) context;
-    if (!result_out)
-        return XR_PROVIDER_CALL_FAILED;
-    *result_out = (int64_t) xr_time_realtime_ns();
-    return XR_PROVIDER_CALL_OK;
-}
-
-static XrProviderCallStatus clock_monotonic_nanos(void *context, int64_t *result_out) {
-    (void) context;
-    if (!result_out)
-        return XR_PROVIDER_CALL_FAILED;
-    *result_out = (int64_t) xr_time_monotonic_ns();
-    return XR_PROVIDER_CALL_OK;
-}
-
-static XrProviderCallStatus clock_process_cpu_nanos(void *context, int64_t *result_out) {
-    (void) context;
-    if (!result_out)
-        return XR_PROVIDER_CALL_FAILED;
-    *result_out = (int64_t) xr_time_process_cpu_ns();
-    return XR_PROVIDER_CALL_OK;
-}
-
-static XrProviderCallStatus clock_utc_offset_at(void *context, int64_t argument,
-                                                int64_t *result_out) {
-    (void) context;
-    if (!result_out)
-        return XR_PROVIDER_CALL_FAILED;
-    *result_out = (int64_t) xr_time_utc_offset_at((time_t) argument);
-    return XR_PROVIDER_CALL_OK;
-}
-
-static XrProviderCallStatus pipe_open(void *context, bool *present_out, int64_t *first_out,
-                                      int64_t *second_out) {
-    (void) context;
-    if (!present_out || !first_out || !second_out)
-        return XR_PROVIDER_CALL_FAILED;
-    *present_out = false;
-    *first_out = 0;
-    *second_out = 0;
-    XrPipe pipe = {XR_PIPE_INVALID, XR_PIPE_INVALID};
-    if (xr_pipe_create(&pipe, NULL) != 0)
-        return XR_PROVIDER_CALL_OK;
-    *present_out = true;
-    *first_out = (int64_t) pipe.read;
-    *second_out = (int64_t) pipe.write;
-    return XR_PROVIDER_CALL_OK;
-}
-
-static XrProviderCallStatus pipe_close(void *context, int64_t argument, bool *result_out) {
-    (void) context;
-    if (!result_out)
-        return XR_PROVIDER_CALL_FAILED;
-    *result_out = xr_pipe_close((XrPipeHandle) argument) == 0;
-    return XR_PROVIDER_CALL_OK;
-}
-
 typedef struct XrRunProviderBindings {
     XrProviderBinding providers[XR_RUNTIME_ABI_MAX_PROVIDERS];
     XrProviderOperationBinding operations[XR_RUNTIME_ABI_MAX_PROVIDERS]
@@ -169,24 +110,8 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
         return false;
     XrStableId output_contract = {{0}};
     XrStableId output_operation = {{0}};
-    XrStableId pipe_open_operation = {{0}};
-    XrStableId pipe_close_operation = {{0}};
-    XrStableId clock_contract = {{0}};
-    XrStableId clock_realtime = {{0}};
-    XrStableId clock_monotonic = {{0}};
-    XrStableId clock_process_cpu = {{0}};
-    XrStableId clock_utc_offset = {{0}};
     if (!builtin_provider_id(XR_PROVIDER_IO_CONTRACT_KEY, &output_contract) ||
-        !builtin_provider_id(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY, &output_operation) ||
-        !builtin_provider_id(XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY, &pipe_open_operation) ||
-        !builtin_provider_id(XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY, &pipe_close_operation) ||
-        !builtin_provider_id(XR_PROVIDER_CLOCK_CONTRACT_KEY, &clock_contract) ||
-        !builtin_provider_id(XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY, &clock_realtime) ||
-        !builtin_provider_id(XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY, &clock_monotonic) ||
-        !builtin_provider_id(XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY,
-                             &clock_process_cpu) ||
-        !builtin_provider_id(XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
-                             &clock_utc_offset))
+        !builtin_provider_id(XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY, &output_operation))
         return false;
 
     for (uint32_t provider_index = 0u; provider_index < bindings->count; ++provider_index) {
@@ -201,8 +126,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
             return false;
         XrProviderBinding *provider = &bindings->providers[provider_index];
         provider->contract_id = requirement.contract_id;
-        provider->behavior_flags =
-            XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT;
+        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
         provider->operations = bindings->operations[provider_index];
         provider->operation_count = (uint16_t) requirement.operation_count;
         if (xr_target_provider_contract_fingerprint(contract, &provider->contract_fingerprint) !=
@@ -210,7 +134,7 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
             return false;
         for (uint16_t operation_index = 0u; operation_index < provider->operation_count;
              ++operation_index) {
-            XrStableId required_operation = requirement.operation_ids[operation_index];
+            XrStableId required_operation = requirement.operations[operation_index].operation_id;
             const XrTargetProviderOperationContract *operation_contract = NULL;
             for (uint16_t candidate = 0u; candidate < contract->operation_count; ++candidate) {
                 if (!stable_id_equal(contract->operations[candidate].stable_id, required_operation))
@@ -230,34 +154,16 @@ static bool build_run_provider_binding(const XrValidatedProgram *program,
                 operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE;
                 operation->entry.output_write = stdout_output_write;
                 operation->context = stdout;
-            } else if (stable_id_equal(requirement.contract_id, output_contract) &&
-                       stable_id_equal(required_operation, pipe_open_operation) &&
-                       contract->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
-                operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
-                operation->entry.optional_i64_pair_nullary = pipe_open;
-            } else if (stable_id_equal(requirement.contract_id, output_contract) &&
-                       stable_id_equal(required_operation, pipe_close_operation) &&
-                       contract->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
-                operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY;
-                operation->entry.bool_i64_unary = pipe_close;
-            } else if (stable_id_equal(requirement.contract_id, clock_contract) &&
-                       contract->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
-                if (stable_id_equal(required_operation, clock_utc_offset)) {
-                    operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_UNARY;
-                    operation->entry.i64_unary = clock_utc_offset_at;
-                } else {
-                    operation->trampoline_kind = XR_PROVIDER_TRAMPOLINE_I64_NULLARY;
-                    if (stable_id_equal(required_operation, clock_realtime))
-                        operation->entry.i64_nullary = clock_realtime_nanos;
-                    else if (stable_id_equal(required_operation, clock_monotonic))
-                        operation->entry.i64_nullary = clock_monotonic_nanos;
-                    else if (stable_id_equal(required_operation, clock_process_cpu))
-                        operation->entry.i64_nullary = clock_process_cpu_nanos;
-                    else
-                        return false;
-                }
+                provider->behavior_flags &=
+                    XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT;
             } else {
-                return false;
+                const XrStdlibProviderDescriptor *descriptor =
+                    xr_stdlib_provider_find(requirement.contract_id, required_operation);
+                uint32_t behavior = 0u;
+                if (contract->provider_role != XR_TARGET_PROVIDER_ROLE_OPERATIONS ||
+                    !xr_stdlib_provider_operation_binding(descriptor, operation, &behavior))
+                    return false;
+                provider->behavior_flags &= behavior;
             }
         }
     }
@@ -349,6 +255,17 @@ static int execute_program(XrProgramSourceProduct *product, XrTargetProfile *pro
         }
         providers = bindings.providers;
     }
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    XrVmCodeDiagnostic code_diagnostic;
+    XrVmCode *code = NULL;
+    XrVmCodeStatus code_status =
+        xr_vm_code_build(product->program, profile, &options, &code, &code_diagnostic);
+    if (code_status != XR_VM_CODE_OK) {
+        fprintf(stderr, "XR_RUN_6002: VM-private code build failed: %s\n",
+                xr_vm_code_status_name(code_status));
+        return XR_CLI_EXIT_FAIL;
+    }
+
     XrExecutionBindingInput binding = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = product->program,
@@ -365,17 +282,7 @@ static int execute_program(XrProgramSourceProduct *product, XrTargetProfile *pro
         fprintf(stderr, "XR_RUN_6002: execution binding failed: %s/%s\n",
                 xr_execution_status_name(execution_status),
                 xr_execution_diagnostic_kind_name(execution_diagnostic.kind));
-        return XR_CLI_EXIT_FAIL;
-    }
-
-    XrVmCodeOptions options = xr_vm_code_default_options();
-    XrVmCodeDiagnostic code_diagnostic;
-    XrVmCode *code = NULL;
-    XrVmCodeStatus code_status = xr_vm_code_build(instance, &options, &code, &code_diagnostic);
-    if (code_status != XR_VM_CODE_OK) {
-        fprintf(stderr, "XR_RUN_6002: VM-private code build failed: %s\n",
-                xr_vm_code_status_name(code_status));
-        (void) retire_instance(&instance);
+        xr_vm_code_free(code);
         return XR_CLI_EXIT_FAIL;
     }
 

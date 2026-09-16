@@ -47,8 +47,8 @@ static inline bool xr_semantic_source_structural_field_read_is_exact(
         operation->ownership_use != xi_generated_op_own_use(XI_OBJECT_GET_F) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
         operation->evidence[0] != 0 || operation->evidence[1] != 0 || operation->evidence[2] != 0 ||
-        operation->evidence[3] == 0 || operation->evidence[4] != 0 || operation->evidence[5] != 0 ||
-        operation->evidence[6] != 0 || operation->evidence[7] != XR_SEMANTIC_INDEX_NONE ||
+        operation->evidence[4] != 0 || operation->evidence[5] != 0 || operation->evidence[6] != 0 ||
+        operation->evidence[7] != XR_SEMANTIC_INDEX_NONE ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_alias_operand != -1 ||
         operation->return_provenance != XR_SEM_RETURN_NONE || operation->return_parameter != -1 ||
@@ -81,6 +81,9 @@ static inline bool xr_semantic_source_structural_field_read_is_exact(
         operation->semantic_immediate < 0 ||
         operation->semantic_immediate >= (int64_t) type->child_count)
         return false;
+    /* The frozen shape, ordinal and result type prove the selection. The
+     * optional source access identity is diagnostic provenance; requiring it
+     * would exclude equivalent selections synthesized by lowering. */
     uint32_t ordinal = (uint32_t) operation->semantic_immediate;
     if (children[type->child_begin + ordinal] != operation->result_type)
         return false;

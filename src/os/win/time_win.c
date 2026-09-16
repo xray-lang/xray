@@ -8,9 +8,8 @@
  * xtime_win.c - Windows implementation of xtime.h.
  *
  * - Monotonic clock: QueryPerformanceCounter is the canonical
- *   choice. The frequency is fetched once and cached; conversion
- *   to nanoseconds is done with 128-bit math via mul/div tricks
- *   to avoid overflow on long-running processes.
+ *   choice. Query state belongs to the call, so simultaneous first
+ *   queries never initialize shared mutable storage.
  * - Realtime clock: GetSystemTimePreciseAsFileTime gives 100ns
  *   resolution on Windows 8+. The 1601 → 1970 epoch shift is
  *   the standard 11644473600 seconds.
@@ -30,26 +29,48 @@
 // Unix epoch (1970-01-01), expressed in 100ns ticks.
 #define XR_FILETIME_TO_UNIX_100NS 116444736000000000ULL
 
-static LARGE_INTEGER xr_qpc_freq__;
-
-static void xr_qpc_init__(void) {
-    if (xr_qpc_freq__.QuadPart == 0) {
-        QueryPerformanceFrequency(&xr_qpc_freq__);
+static uint64_t xr_time_fractional_ns__(uint64_t remainder, uint64_t frequency) {
+    const uint64_t scale = UINT64_C(1000000000);
+    if (remainder <= UINT64_MAX / scale)
+        return remainder * scale / frequency;
+    /* Long multiplication with a reduced residue keeps every intermediate
+     * bounded, including frequencies near the signed host counter limit. */
+    uint64_t nanos = 0;
+    uint64_t residue = 0;
+    for (uint32_t bit = UINT32_C(1) << 29; bit != 0; bit >>= 1) {
+        nanos *= 2;
+        if (residue >= frequency - residue) {
+            residue -= frequency - residue;
+            ++nanos;
+        } else {
+            residue *= 2;
+        }
+        if ((scale & bit) != 0) {
+            if (residue >= frequency - remainder) {
+                residue -= frequency - remainder;
+                ++nanos;
+            } else {
+                residue += remainder;
+            }
+        }
     }
+    return nanos;
 }
 
 uint64_t xr_time_monotonic_ns(void) {
-    xr_qpc_init__();
+    LARGE_INTEGER frequency;
     LARGE_INTEGER counter;
-    QueryPerformanceCounter(&counter);
+    if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0 ||
+        !QueryPerformanceCounter(&counter) || counter.QuadPart < 0)
+        return 0;
     // Convert ticks to nanoseconds without losing precision:
     //   ns = counter * 1e9 / freq
     // Split counter into seconds and remainder so the multiply
     // by 1e9 cannot overflow on multi-day uptimes.
-    uint64_t freq = (uint64_t) xr_qpc_freq__.QuadPart;
+    uint64_t freq = (uint64_t) frequency.QuadPart;
     uint64_t whole_seconds = (uint64_t) counter.QuadPart / freq;
     uint64_t remainder = (uint64_t) counter.QuadPart % freq;
-    return whole_seconds * 1000000000ULL + (remainder * 1000000000ULL) / freq;
+    return whole_seconds * 1000000000ULL + xr_time_fractional_ns__(remainder, freq);
 }
 
 uint64_t xr_time_realtime_ns(void) {
@@ -83,9 +104,10 @@ void xr_time_sleep_ns(uint64_t ns) {
     // Sleep() resolution is 1ms. Round up: the contract is
     // "at least ns nanoseconds", so over-sleeping is allowed but
     // under-sleeping is not.
-    uint64_t ms = (ns + 999999ULL) / 1000000ULL;
+    uint64_t ms = ns / 1000000ULL + (ns % 1000000ULL != 0);
     while (ms > 0) {
-        DWORD chunk = (ms > MAXDWORD) ? MAXDWORD : (DWORD) ms;
+        // MAXDWORD is the infinite-wait sentinel, never a finite chunk.
+        DWORD chunk = (ms >= MAXDWORD) ? MAXDWORD - 1u : (DWORD) ms;
         Sleep(chunk);
         ms -= chunk;
     }

@@ -26,6 +26,7 @@
 
 #include "xr_target_plan.h"
 #include "../semantic/xr_semantic_array_element_storage_shape.h"
+#include "../semantic/xr_semantic_array_member_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -94,17 +95,46 @@ static inline bool xr_target_array_storage_from_type(const XrSemanticTypeRecord 
     return xr_target_array_storage_from_semantic(element, out);
 }
 
-/* Container copy is the one family that proves a reference-capable element's
- * lifecycle before asking the target for its physical lane. Semantic ANY is
+/* Allocation uses the same closed ownership roster as Array member stores.
+ * A tagged lane requires an exact runtime-owned element and explicit ANY
+ * storage; an unclassified ANY never supplies storage authority. */
+static inline bool xr_target_array_allocation_element_storage(const XrSemanticPlan *plan,
+                                                              const XrSemanticTypeRecord *element,
+                                                              uint8_t semantic_storage,
+                                                              uint8_t *out) {
+    uint8_t type_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    uint8_t frozen_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    if (!plan || !element || !out)
+        return false;
+    if (xr_target_array_storage_from_type(element, &type_storage)) {
+        if (!xr_target_array_storage_from_semantic(semantic_storage, &frozen_storage) ||
+            type_storage != frozen_storage)
+            return false;
+        *out = type_storage;
+        return true;
+    }
+    if (semantic_storage != XR_ELEM_ANY ||
+        !xr_semantic_array_member_owned_reference_type_is_exact(plan, element))
+        return false;
+    *out = XR_TARGET_ARRAY_STORAGE_TAGGED;
+    return true;
+}
+
+/* Container copy proves a reference-capable element's lifecycle before
+ * asking the target for its physical lane. Semantic ANY is
  * therefore translated only after the copy shape has narrowed it to an exact
  * tagged String or frozen source-class instance. */
 static inline bool xr_target_container_copy_storage(const XrSemanticPlan *plan,
                                                     const XrSemanticOperationRecord *operation,
                                                     uint8_t *out) {
     uint8_t semantic_storage = XR_ELEM_ANY;
-    if (!out ||
-        !xr_semantic_container_copy_is_exact(plan, operation, NULL, &semantic_storage))
+    if (!out || !xr_semantic_container_copy_is_exact(plan, operation, NULL, &semantic_storage))
         return false;
+    const XrSemanticTypeRecord *result = xr_semantic_plan_type(plan, operation->result_type);
+    if (result && result->kind == XR_KIND_STRUCT_OBJECT) {
+        *out = XR_TARGET_ARRAY_STORAGE_NONE;
+        return true;
+    }
     if (semantic_storage == XR_ELEM_ANY) {
         *out = XR_TARGET_ARRAY_STORAGE_TAGGED;
         return true;

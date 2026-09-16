@@ -1193,10 +1193,11 @@ xr_target_provider_call_abi_fingerprint(const XrTargetProviderCallAbiContract *a
 }
 
 static bool provider_operation_is_zero(const XrTargetProviderOperationContract *operation) {
-    return id_is_zero(operation->stable_id) && provider_call_abi_is_zero(&operation->call_abi) &&
-           operation->effect_flags == 0 && operation->lifetime_flags == 0 &&
-           operation->failure_flags == 0 && operation->reserved32 == 0 &&
-           operation->reserved64 == 0;
+    return id_is_zero(operation->stable_id) &&
+           xr_provider_logical_contract_is_zero(&operation->logical_contract) &&
+           provider_call_abi_is_zero(&operation->call_abi) && operation->effect_flags == 0 &&
+           operation->lifetime_flags == 0 && operation->failure_flags == 0 &&
+           operation->reserved32 == 0 && operation->reserved64 == 0;
 }
 
 static XrRuntimeAbiStatus verify_provider_operations(const XrTargetProviderContract *provider,
@@ -1210,6 +1211,17 @@ static XrRuntimeAbiStatus verify_provider_operations(const XrTargetProviderContr
     uint32_t failures = 0;
     for (size_t i = 0; i < provider->operation_count; i++) {
         const XrTargetProviderOperationContract *operation = &provider->operations[i];
+        const XrProviderLogicalContract *logical = &operation->logical_contract;
+        if (provider->provider_role == XR_TARGET_PROVIDER_ROLE_OPERATIONS) {
+            uint8_t profile = provider->runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED
+                                  ? XR_PROVIDER_LOGICAL_PROFILE_HOSTED
+                                  : XR_PROVIDER_LOGICAL_PROFILE_FREESTANDING;
+            if (!xr_provider_logical_contract_verify(logical) ||
+                (logical->runtime_profiles & profile) == 0u)
+                return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
+        } else if (!xr_provider_logical_contract_is_zero(logical)) {
+            return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
+        }
         uint32_t call_lifetime_flags = 0;
         XrRuntimeAbiStatus call_status =
             verify_provider_call_abi(&operation->call_abi, &call_lifetime_flags);
@@ -1352,6 +1364,9 @@ static bool provider_has_io_byte_sink(const XrTargetProviderContract *provider,
         const XrTargetProviderCallAbiContract *abi = &operation->call_abi;
         if (id_compare(operation->stable_id, expected) != 0)
             continue;
+        XrProviderLogicalContract logical = xr_builtin_provider_byte_sink_logical_contract();
+        if (!xr_provider_logical_contract_equal(&operation->logical_contract, &logical))
+            return false;
         if (operation->effect_flags != XR_TARGET_PROVIDER_EFFECT_IO ||
             operation->lifetime_flags != XR_TARGET_PROVIDER_LIFETIME_BORROWS ||
             operation->failure_flags != XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS ||
@@ -1434,16 +1449,29 @@ static XrRuntimeAbiStatus verify_provider_set(const XrTargetProviderContract *pr
     return XR_RUNTIME_ABI_OK;
 }
 
-static void hash_provider_operation(XrSHA256Context *ctx,
+static bool hash_provider_operation(XrSHA256Context *ctx,
                                     const XrTargetProviderOperationContract *operation) {
     hash_id(ctx, operation->stable_id);
+    /* Verification has already established whether this is a complete
+     * language contract or an absent foundation contract. */
+    hash_u32(ctx, operation->logical_contract.schema_version);
+    if (operation->logical_contract.schema_version != 0u) {
+        uint8_t bytes[XR_PROVIDER_LOGICAL_MAX_ENCODED_BYTES];
+        size_t size = 0u;
+        if (!xr_provider_logical_contract_encode(&operation->logical_contract, bytes, sizeof(bytes),
+                                                 &size))
+            return false;
+        hash_u32(ctx, (uint32_t) size);
+        xr_sha256_update(ctx, bytes, size);
+    }
     hash_provider_call_abi(ctx, &operation->call_abi);
     hash_u32(ctx, operation->effect_flags);
     hash_u32(ctx, operation->lifetime_flags);
     hash_u32(ctx, operation->failure_flags);
+    return true;
 }
 
-static void hash_provider(XrSHA256Context *ctx, const XrTargetProviderContract *provider) {
+static bool hash_provider(XrSHA256Context *ctx, const XrTargetProviderContract *provider) {
     hash_u32(ctx, provider->schema_version);
     hash_u8(ctx, provider->runtime_profile);
     hash_u8(ctx, provider->provider_role);
@@ -1457,7 +1485,9 @@ static void hash_provider(XrSHA256Context *ctx, const XrTargetProviderContract *
     hash_u8(ctx, provider->panic_behavior);
     hash_u16(ctx, provider->operation_count);
     for (size_t i = 0; i < provider->operation_count; i++)
-        hash_provider_operation(ctx, &provider->operations[i]);
+        if (!hash_provider_operation(ctx, &provider->operations[i]))
+            return false;
+    return true;
 }
 
 XrRuntimeAbiStatus xr_target_provider_contract_fingerprint(const XrTargetProviderContract *provider,
@@ -1469,7 +1499,8 @@ XrRuntimeAbiStatus xr_target_provider_contract_fingerprint(const XrTargetProvide
         return status;
     XrSHA256Context context;
     hash_begin(&context, XR_RUNTIME_CONTRACT_PROVIDER);
-    hash_provider(&context, provider);
+    if (!hash_provider(&context, provider))
+        return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
     xr_sha256_final(&context, out->bytes);
     return XR_RUNTIME_ABI_OK;
 }
@@ -1491,7 +1522,8 @@ XrRuntimeAbiStatus xr_target_provider_set_fingerprint(const XrTargetProviderCont
     hash_u16(&ctx, (uint16_t) provider_count);
     hash_u64(&ctx, provider_capabilities);
     for (size_t i = 0; i < provider_count; i++)
-        hash_provider(&ctx, &providers[i]);
+        if (!hash_provider(&ctx, &providers[i]))
+            return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
     XrFingerprint fingerprint;
     xr_sha256_final(&ctx, fingerprint.bytes);
     *out_provider_capabilities = provider_capabilities;

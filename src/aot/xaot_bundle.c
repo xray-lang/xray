@@ -750,31 +750,75 @@ XR_FUNC const XrTargetPlan *xaot_bundle_program_target_plan(const XaotBundle *bu
     return bundle ? bundle->program_target_plan : NULL;
 }
 
-XR_FUNC bool xaot_bundle_install_representation_refinement(XaotBundle *bundle,
-                                                           uint32_t module_index,
-                                                           XrAotRefinementPlan *refinement,
-                                                           const struct XiRepPolicy *policy) {
-    if (!bundle || !bundle->representation_refinements ||
-        !bundle->representation_policy_fingerprints || !bundle->program_target_plan ||
-        module_index >= bundle->nmodules || !refinement || !policy || !bundle->modules ||
-        !bundle->modules[module_index] || !bundle->modules[module_index]->init ||
-        !xaot_bundle_program_semantic_for_module(bundle, module_index))
+static bool bundle_representation_materialization_verify(
+    XaotBundle *bundle, XrAotRefinementPlan *const *refinements,
+    const struct XiRepPolicy *policy) {
+    if (!bundle || !refinements || !policy || !bundle->modules ||
+        !bundle->program_target_plan || bundle->nmodules == 0 ||
+        bundle->nmodules > XR_TARGET_MAX_PROGRAM_MODULES)
         return false;
-    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
-    if (!xr_aot_representation_materialization_verify(&view, bundle->modules[module_index]->init,
-                                                      bundle->program_target_plan, policy, NULL)) {
+    XrAotRefinementPlanView *views =
+        (XrAotRefinementPlanView *) xr_calloc(bundle->nmodules, sizeof(*views));
+    const XiFunc **roots = (const XiFunc **) xr_calloc(bundle->nmodules, sizeof(*roots));
+    bool valid = views && roots;
+    for (uint32_t i = 0; valid && i < bundle->nmodules; ++i) {
+        roots[i] = bundle->modules[i] ? bundle->modules[i]->init : NULL;
+        valid = roots[i] && refinements[i] && xaot_bundle_program_semantic_for_module(bundle, i);
+        views[i] = xr_aot_refinement_plan_view(refinements[i]);
+    }
+    if (valid)
+        valid = xr_aot_representation_materialization_verify_modules(
+            views, roots, bundle->nmodules, bundle->program_target_plan, policy, NULL, NULL);
+    xr_free(roots);
+    xr_free(views);
+    if (!valid)
         bundle->error_msg = "module representation authority is incomplete, stale, or bound to a "
                             "different materialization";
+    return valid;
+}
+
+XR_FUNC bool xaot_bundle_install_representation_refinements(
+    XaotBundle *bundle, XrAotRefinementPlan *const *refinements,
+    const struct XiRepPolicy *policy) {
+    if (!bundle || !refinements || !policy || !bundle->representation_refinements ||
+        !bundle->representation_policy_fingerprints || bundle->nmodules == 0 ||
+        bundle->nmodules > XR_TARGET_MAX_PROGRAM_MODULES)
         return false;
-    }
     XrFingerprint policy_fingerprint = xr_aot_representation_policy_fingerprint(policy);
-    if (bundle->representation_refinements[module_index] == refinement)
-        return xr_fingerprint_equal(bundle->representation_policy_fingerprints[module_index],
-                                    policy_fingerprint);
-    xr_aot_refinement_plan_free(bundle->representation_refinements[module_index]);
-    bundle->representation_refinements[module_index] = refinement;
-    bundle->representation_policy_fingerprints[module_index] = policy_fingerprint;
+    for (uint32_t i = 0; i < bundle->nmodules; ++i) {
+        if (!refinements[i] ||
+            (bundle->representation_refinements[i] == refinements[i] &&
+             !xr_fingerprint_equal(bundle->representation_policy_fingerprints[i],
+                                     policy_fingerprint)))
+            return false;
+        for (uint32_t j = 0; j < bundle->nmodules; ++j)
+            if (j != i && (refinements[i] == refinements[j] ||
+                           refinements[i] == bundle->representation_refinements[j]))
+                return false;
+    }
+    if (!bundle_representation_materialization_verify(bundle, refinements, policy))
+        return false;
+    /* Validation has no callbacks. Commit ownership only after every module
+     * succeeds, so a later invalid module cannot leave a partial installation. */
+    for (uint32_t i = 0; i < bundle->nmodules; ++i) {
+        if (bundle->representation_refinements[i] != refinements[i])
+            xr_aot_refinement_plan_free(bundle->representation_refinements[i]);
+        bundle->representation_refinements[i] = refinements[i];
+        bundle->representation_policy_fingerprints[i] = policy_fingerprint;
+    }
     return true;
+}
+
+XR_FUNC bool xaot_bundle_verify_representation_refinements(XaotBundle *bundle,
+                                                           const struct XiRepPolicy *policy) {
+    if (!bundle || !policy || !bundle->representation_policy_fingerprints)
+        return false;
+    XrFingerprint expected = xr_aot_representation_policy_fingerprint(policy);
+    for (uint32_t i = 0; i < bundle->nmodules; ++i)
+        if (!xr_fingerprint_equal(bundle->representation_policy_fingerprints[i], expected))
+            return false;
+    return bundle_representation_materialization_verify(
+        bundle, bundle->representation_refinements, policy);
 }
 
 XR_FUNC const XrAotRefinementPlan *

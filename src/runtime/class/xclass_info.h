@@ -133,6 +133,7 @@ struct XrClassInfo {
     int interface_conformance_count;
     uint8_t nominal_kind;         /* XaNominalKind */
     XaSymbol *declaration_symbol; /* exact analyzer declaration identity */
+    uint64_t declaration_key;     /* module/declaration identity, independent of evidence rows */
 
     // Stable global-evidence class id for this declaration (0 = none). The
     // evidence producer backfills it while building the class summary so that

@@ -9,6 +9,7 @@
  */
 
 #include "xr_program_from_xi.h"
+#include "../runtime/core/xr_text_kernel.h"
 #include "xr_program_internal.h"
 #include "xr_program_xi_projection_gen.h"
 #include "../ir/xi_op_name.h"
@@ -28,6 +29,7 @@
 #include "../ir/xi_own.h"
 #include "../plan/semantic/xr_semantic_ids.h"
 #include "../runtime/abi/xr_builtin_provider_contract.h"
+#include "../runtime/abi/xr_stdlib_provider_contract.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/value/xenum_layout.h"
@@ -386,6 +388,20 @@ static XrProgramBuildStatus require_provider_operation(XrXiBuildContext *context
         !builtin_provider_id(operation_key, &operation_id))
         return XR_PROGRAM_BUILD_INVALID_INPUT;
 
+    XrProviderLogicalContract logical;
+    const XrStdlibProviderDescriptor *descriptor =
+        xr_stdlib_provider_find(contract_id, operation_id);
+    if (descriptor) {
+        if (!xr_stdlib_provider_logical(descriptor, &logical))
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+    } else if (strcmp(contract_key, XR_PROVIDER_IO_CONTRACT_KEY) == 0 &&
+               (strcmp(operation_key, XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY) == 0 ||
+                strcmp(operation_key, XR_PROVIDER_IO_ASSERTION_REPORT_OPERATION_KEY) == 0)) {
+        logical = xr_builtin_provider_byte_sink_logical_contract();
+    } else {
+        return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
+    }
+
     uint32_t requirement_index = context->provider_requirement_count;
     for (uint32_t index = 0u; index < context->provider_requirement_count; ++index) {
         if (stable_id_equal(context->provider_requirements[index].contract_id, contract_id)) {
@@ -430,7 +446,7 @@ static XrProgramBuildStatus require_provider_operation(XrXiBuildContext *context
     XrCoreIrProviderRequirementInput *requirement =
         &context->provider_requirements[requirement_index];
     for (uint32_t index = 0u; index < requirement->operation_count; ++index) {
-        if (stable_id_equal(requirement->operation_ids[index], operation_id)) {
+        if (stable_id_equal(requirement->operations[index].operation_id, operation_id)) {
             if (contract_id_out)
                 *contract_id_out = contract_id;
             if (operation_id_out)
@@ -446,14 +462,17 @@ static XrProgramBuildStatus require_provider_operation(XrXiBuildContext *context
         if (capacity < operation_capacity ||
             capacity > XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT)
             capacity = XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT;
-        XrStableId *operations = xr_realloc((void *) requirement->operation_ids,
-                                            (size_t) capacity * sizeof(*operations));
+        XrProgramProviderOperationRequirement *operations =
+            xr_realloc((void *) requirement->operations, (size_t) capacity * sizeof(*operations));
         if (!operations)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-        requirement->operation_ids = operations;
+        requirement->operations = operations;
         context->provider_operation_capacities[requirement_index] = capacity;
     }
-    ((XrStableId *) requirement->operation_ids)[requirement->operation_count++] = operation_id;
+    ((XrProgramProviderOperationRequirement *)
+         requirement->operations)[requirement->operation_count++] =
+        (XrProgramProviderOperationRequirement) {.operation_id = operation_id,
+                                                 .logical_contract = logical};
     if (contract_id_out)
         *contract_id_out = contract_id;
     if (operation_id_out)
@@ -496,6 +515,35 @@ static XrCoreIrKey constant_key(XrStableId module_id, uint16_t type_id, int64_t 
     material[2u + sizeof(module_id.bytes)] = (uint8_t) type_id;
     put_u64_be(material + 3u + sizeof(module_id.bytes), (uint64_t) value);
     return xr_core_ir_key(material, sizeof(material));
+}
+
+static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value);
+static XrCoreIrKey key_from_key_and_u32(uint8_t domain, XrCoreIrKey key, uint32_t value);
+
+/* A string constant is identified by its exact bytes, never by a pointer. */
+static XrCoreIrKey string_constant_key(XrStableId module_id, const uint8_t *bytes, uint32_t size) {
+    uint8_t material[1u + XR_STABLE_ID_BYTES + 2u + 4u];
+    material[0] = UINT8_C(0x68);
+    memcpy(material + 1u, module_id.bytes, sizeof(module_id.bytes));
+    material[1u + sizeof(module_id.bytes)] = (uint8_t) (XR_CORE_TYPE_STRING >> 8u);
+    material[2u + sizeof(module_id.bytes)] = (uint8_t) XR_CORE_TYPE_STRING;
+    put_u32_be(material + 3u + sizeof(module_id.bytes), size);
+    XrCoreIrKey prefix = xr_core_ir_key(material, sizeof(material));
+    uint8_t *joined = xr_malloc((size_t) XR_CORE_IR_KEY_SIZE + size);
+    if (!joined)
+        return prefix;
+    memcpy(joined, prefix.bytes, XR_CORE_IR_KEY_SIZE);
+    if (size != 0u)
+        memcpy(joined + XR_CORE_IR_KEY_SIZE, bytes, size);
+    XrCoreIrKey key = xr_core_ir_key(joined, (size_t) XR_CORE_IR_KEY_SIZE + size);
+    xr_free(joined);
+    return key;
+}
+
+/* Instructions synthesized while expanding one variadic Xi text operation. */
+static XrCoreIrKey text_expansion_key(const XrXiFunctionStorage *function, const XiValue *value,
+                                      uint32_t ordinal) {
+    return key_from_key_and_u32(UINT8_C(0x69), value_key(function, value), ordinal);
 }
 
 static XrCoreIrKey key_from_key_and_u32(uint8_t domain, XrCoreIrKey key, uint32_t value) {
@@ -605,6 +653,13 @@ static XrCoreIrKey existential_owner_acquire_key(const XrXiFunctionStorage *func
     return key_from_key_and_u32(UINT8_C(0x59), value_key(function, pack), 0u);
 }
 
+static XrCoreIrKey return_owner_acquire_key(const XrXiFunctionStorage *function,
+                                            const XiBlock *block) {
+    /* Distinct return sites can borrow the same value, but each defines its
+     * own owner. The result identity belongs to the return site. */
+    return key_from_key_and_u32(UINT8_C(0x6a), block_key(function, block), 0u);
+}
+
 static XrCoreIrKey aggregate_field_place_key(const XrXiFunctionStorage *function,
                                              const XiValue *access) {
     return key_from_key_and_u32(UINT8_C(0x5a), value_key(function, access), 0u);
@@ -644,6 +699,12 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
                 return true;
             }
             return false;
+        case XR_KIND_STRING:
+            *type_id = XR_CORE_TYPE_STRING;
+            return true;
+        case XR_KIND_RUNE:
+            *type_id = XR_CORE_TYPE_RUNE;
+            return true;
         case XR_KIND_ENUM:
             if (!type->enum_type.enum_name)
                 return false;
@@ -2090,8 +2151,10 @@ static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
 
 static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildContext *context,
                                                                uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_PANIC_INFO)
-        return XR_CORE_IR_OWNER;
+    const XrProgramBuiltinTypeRow *builtin = xr_program_builtin_type_row(type_id);
+    if (builtin)
+        return builtin->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ? XR_CORE_IR_OWNER
+                                                                      : XR_CORE_IR_NON_OWNER;
     const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
     return type && type->input.ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ? XR_CORE_IR_OWNER
                                                                              : XR_CORE_IR_NON_OWNER;
@@ -2099,8 +2162,9 @@ static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildCo
 
 static XrCoreIrCopyContract logical_copy_contract_for_type(const XrXiBuildContext *context,
                                                            uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_VOID || type_id == XR_CORE_TYPE_PANIC_INFO)
-        return XR_CORE_IR_COPY_FORBIDDEN;
+    const XrProgramBuiltinTypeRow *builtin = xr_program_builtin_type_row(type_id);
+    if (builtin)
+        return builtin->copy_contract;
     const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
     return type ? type->input.copy_contract : XR_CORE_IR_COPY_TRIVIAL;
 }
@@ -6222,6 +6286,11 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
     if (value->op == XI_VARIANT_PROJECT)
         return value->nargs == 1u && value->args && value->args[0] &&
                logical_value_produces_owner(context, function, value->args[0], depth + 1u);
+    /* Every string producer yields a fresh owner: literals, concatenation
+     * chains and the i64 renderings folded into them. */
+    if (type_id == XR_CORE_TYPE_STRING &&
+        (value->op == XI_CONST || value->op == XI_STR_CONCAT || value->op == XI_CONVERT))
+        return true;
     return (value->op == XI_CLOSURE_NEW && value->nargs != 0u) ||
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
            value->xg_existential_kind == XI_EXISTENTIAL_PROJECT || value->op == XI_SUM_INJECT ||
@@ -6642,11 +6711,33 @@ static XrProgramBuildStatus add_constant(XrXiBuildContext *context, XrXiModuleSt
                                          char *diagnostic, size_t diagnostic_size) {
     uint16_t type_id = XR_CORE_TYPE_VOID;
     if (!map_type(context, value->type, &type_id) ||
-        (type_id != XR_CORE_TYPE_I64 && type_id != XR_CORE_TYPE_BOOL))
+        (type_id != XR_CORE_TYPE_I64 && type_id != XR_CORE_TYPE_BOOL &&
+         type_id != XR_CORE_TYPE_STRING && type_id != XR_CORE_TYPE_RUNE))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi constant v%u has no active CoreSpec type", value->id);
+    /* Xi keeps string literals as NUL-terminated arena text; the byte length
+     * is the canonical constant payload and must already be strict UTF-8. */
+    const uint8_t *string_bytes = NULL;
+    size_t string_size = 0u;
+    if (type_id == XR_CORE_TYPE_STRING) {
+        string_bytes = (const uint8_t *) (value->aux ? value->aux : "");
+        string_size = strlen((const char *) string_bytes);
+        if (string_size > XR_PROGRAM_CONSTANT_STRING_MAX_BYTES ||
+            !xr_text_utf8_is_valid(string_bytes, string_size))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi string constant v%u is not strict UTF-8 within the constant ceiling",
+                        value->id);
+    }
+    if (type_id == XR_CORE_TYPE_RUNE &&
+        (value->aux_int < 0 || value->aux_int > (int64_t) XR_TEXT_RUNE_MAX ||
+         !xr_text_rune_is_scalar((uint32_t) value->aux_int)))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi rune constant v%u is not a Unicode scalar value", value->id);
     XrCoreIrKey key =
-        constant_key(module->source_authority->module_identity, type_id, value->aux_int);
+        type_id == XR_CORE_TYPE_STRING
+            ? string_constant_key(module->source_authority->module_identity, string_bytes,
+                                  (uint32_t) string_size)
+            : constant_key(module->source_authority->module_identity, type_id, value->aux_int);
     for (uint32_t index = 0; index < module->constant_count; ++index) {
         if (xr_core_ir_key_equal(module->constants[index].key, key)) {
             *constant_key_out = key;
@@ -6669,12 +6760,24 @@ static XrProgramBuildStatus add_constant(XrXiBuildContext *context, XrXiModuleSt
     memset(constant, 0, sizeof(*constant));
     constant->key = key;
     constant->type_id = type_id;
-    if (type_id == XR_CORE_TYPE_I64) {
-        constant->kind = XR_CORE_IR_CONSTANT_I64;
-        constant->value.i64 = value->aux_int;
-    } else {
-        constant->kind = XR_CORE_IR_CONSTANT_BOOL;
-        constant->value.boolean = value->aux_int != 0;
+    switch (type_id) {
+        case XR_CORE_TYPE_I64:
+            constant->kind = XR_CORE_IR_CONSTANT_I64;
+            constant->value.i64 = value->aux_int;
+            break;
+        case XR_CORE_TYPE_STRING:
+            constant->kind = XR_CORE_IR_CONSTANT_STRING;
+            constant->value.string.bytes = string_bytes;
+            constant->value.string.size = (uint32_t) string_size;
+            break;
+        case XR_CORE_TYPE_RUNE:
+            constant->kind = XR_CORE_IR_CONSTANT_RUNE;
+            constant->value.rune = (uint32_t) value->aux_int;
+            break;
+        default:
+            constant->kind = XR_CORE_IR_CONSTANT_BOOL;
+            constant->value.boolean = value->aux_int != 0;
+            break;
     }
     *constant_key_out = key;
     return XR_PROGRAM_BUILD_OK;
@@ -6808,7 +6911,7 @@ static void free_context(XrXiBuildContext *context) {
     xr_free(context->conformances);
     for (uint32_t requirement = 0u; requirement < context->provider_requirement_count;
          ++requirement)
-        xr_free((void *) context->provider_requirements[requirement].operation_ids);
+        xr_free((void *) context->provider_requirements[requirement].operations);
     xr_free(context->provider_requirements);
     xr_free(context->provider_operation_capacities);
     xr_free(context->trap_edges);
@@ -7506,6 +7609,55 @@ translate_existential_owner_acquire(XrXiBuildContext *context, XrXiFunctionStora
     return status;
 }
 
+/* A function whose result type is an affine value with an explicit copy
+ * contract must return an owner, but source may return a borrowed value such
+ * as a READ string parameter.  Source semantics are by value, so the return
+ * materializes one independent copy; class references are not copied here
+ * because returning a borrowed class is an aliasing question the class rules
+ * decide. */
+static bool returned_value_needs_owner_copy(XrXiBuildContext *context, const XiFunc *function,
+                                            const XiValue *returned) {
+    uint16_t type_id = XR_CORE_TYPE_VOID;
+    if (!context || !function || !returned ||
+        !map_logical_value_type(context, function, returned, &type_id) ||
+        type_id == XR_CORE_TYPE_VOID ||
+        logical_ownership_for_type(context, type_id) != XR_CORE_IR_OWNER ||
+        logical_copy_contract_for_type(context, type_id) != XR_CORE_IR_COPY_EXPLICIT ||
+        logical_value_produces_owner(context, function, returned, 0u))
+        return false;
+    const XrXiTypeStorage *concrete = find_dynamic_type_by_id(context, type_id);
+    return !(concrete && concrete->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE);
+}
+
+static XrProgramBuildStatus
+translate_return_owner_acquire(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                               const XiValue *returned, const XrXiBlockStorage *block,
+                               XrCoreIrInstructionInput *instruction, bool *emitted,
+                               char *diagnostic, size_t diagnostic_size) {
+    if (emitted)
+        *emitted = false;
+    if (!context || !function || !returned || !block || !instruction || !emitted)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (!returned_value_needs_owner_copy(context, function->xi, returned))
+        return XR_PROGRAM_BUILD_OK;
+    uint16_t type_id = XR_CORE_TYPE_VOID;
+    if (!map_logical_value_type(context, function->xi, returned, &type_id))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    memset(instruction, 0, sizeof(*instruction));
+    instruction->operation_id = XR_CORE_OP_CORE_OWNER_COPY;
+    instruction->result = return_owner_acquire_key(function, block->xi);
+    instruction->result_type_id = type_id;
+    instruction->result_category = XR_CORE_IR_VALUE;
+    instruction->result_ownership = XR_CORE_IR_OWNER;
+    instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+    XiValue *sources[] = {(XiValue *) returned};
+    XrProgramBuildStatus status = set_operands(context, instruction, function, block, sources, 1u,
+                                               diagnostic, diagnostic_size);
+    if (status == XR_PROGRAM_BUILD_OK)
+        *emitted = true;
+    return status;
+}
+
 static XrProgramBuildStatus
 translate_reconstructed_place(XrXiBuildContext *context, XrXiFunctionStorage *function,
                               const XrXiBlockStorage *block,
@@ -7798,6 +7950,129 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
     return XR_PROGRAM_BUILD_OK;
 }
 
+/* Interpolation and `+` chains reach Xi as one variadic XI_STR_CONCAT whose
+ * pieces are strings or i64 values already evaluated in source order.  The
+ * canonical program has no variadic text operation: every i64 piece becomes
+ * core.string.from_i64, the pieces fold left to right through binary
+ * core.string.concat, and each intermediate owner is dropped right after the
+ * concatenation that borrowed it, so the block never carries hidden text
+ * temporaries past their last use. */
+static bool value_is_variadic_string_concat(const XiValue *value) {
+    return value && value->op == XI_STR_CONCAT && value->nargs != 0u && value->args &&
+           value->type && value->type->kind == XR_KIND_STRING && !value->type->is_nullable;
+}
+
+/* Upper bound on canonical instructions one concatenation expands into. */
+static uint32_t string_concat_expansion_capacity(const XiValue *value) {
+    return (uint32_t) value->nargs * 4u;
+}
+
+static XrProgramBuildStatus
+translate_string_concat(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                        const XiValue *value, const XrXiBlockStorage *block,
+                        XrCoreIrInstructionInput *instructions, uint32_t instruction_capacity,
+                        uint32_t *instruction_count, char *diagnostic, size_t diagnostic_size) {
+    uint32_t cursor = 0u;
+    uint32_t ordinal = 0u;
+    XrCoreIrKey accumulated = {{0}};
+    bool accumulated_is_temporary = false;
+    if (!value_is_variadic_string_concat(value) ||
+        instruction_capacity < string_concat_expansion_capacity(value))
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    for (uint16_t piece = 0u; piece < value->nargs; ++piece) {
+        uint16_t piece_type = XR_CORE_TYPE_VOID;
+        XrCoreIrKey piece_key = {{0}};
+        bool piece_is_temporary = false;
+        if (!value->args[piece] ||
+            !map_logical_value_type(context, function->xi, value->args[piece], &piece_type) ||
+            (piece_type != XR_CORE_TYPE_STRING && piece_type != XR_CORE_TYPE_I64))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi string concatenation v%u piece %u is neither string nor i64", value->id,
+                        piece);
+        if (!value_operand_key(context, function, block, value->args[piece], &piece_key))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi string concatenation v%u piece %u has no canonical value", value->id,
+                        piece);
+        if (piece_type == XR_CORE_TYPE_I64) {
+            XrCoreIrInstructionInput *convert = &instructions[cursor++];
+            XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+            if (!operand)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            *operand = piece_key;
+            memset(convert, 0, sizeof(*convert));
+            convert->operation_id = XR_CORE_OP_CORE_STRING_FROM_I64;
+            convert->result = text_expansion_key(function, value, ordinal++);
+            convert->result_type_id = XR_CORE_TYPE_STRING;
+            convert->result_ownership = XR_CORE_IR_OWNER;
+            convert->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            convert->operands = operand;
+            convert->operand_count = 1u;
+            piece_key = convert->result;
+            piece_is_temporary = true;
+        }
+        bool last = piece + 1u == value->nargs;
+        if (piece == 0u) {
+            accumulated = piece_key;
+            accumulated_is_temporary = piece_is_temporary;
+            if (!last)
+                continue;
+            /* A single piece still yields a fresh owner: reuse the conversion
+             * result or copy the sole string operand. */
+            XrCoreIrInstructionInput *sole = &instructions[cursor++];
+            XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+            if (!operand)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            *operand = accumulated;
+            memset(sole, 0, sizeof(*sole));
+            sole->operation_id =
+                accumulated_is_temporary ? XR_CORE_OP_CORE_OWNER_MOVE : XR_CORE_OP_CORE_OWNER_COPY;
+            sole->result = value_key(function, value);
+            sole->result_type_id = XR_CORE_TYPE_STRING;
+            sole->result_ownership = XR_CORE_IR_OWNER;
+            sole->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            sole->operands = operand;
+            sole->operand_count = 1u;
+            break;
+        }
+        XrCoreIrInstructionInput *concat = &instructions[cursor++];
+        XrCoreIrKey *operands = xr_calloc(2u, sizeof(*operands));
+        if (!operands)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        operands[0] = accumulated;
+        operands[1] = piece_key;
+        memset(concat, 0, sizeof(*concat));
+        concat->operation_id = XR_CORE_OP_CORE_STRING_CONCAT;
+        concat->result =
+            last ? value_key(function, value) : text_expansion_key(function, value, ordinal++);
+        concat->result_type_id = XR_CORE_TYPE_STRING;
+        concat->result_ownership = XR_CORE_IR_OWNER;
+        concat->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+        concat->operands = operands;
+        concat->operand_count = 2u;
+        const XrCoreIrKey drops[2] = {accumulated, piece_key};
+        const bool drop_flags[2] = {accumulated_is_temporary, piece_is_temporary};
+        for (uint32_t index = 0u; index < 2u; ++index) {
+            if (!drop_flags[index])
+                continue;
+            XrCoreIrInstructionInput *drop = &instructions[cursor++];
+            XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+            if (!operand)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            *operand = drops[index];
+            memset(drop, 0, sizeof(*drop));
+            drop->operation_id = XR_CORE_OP_CORE_OWNER_DROP;
+            drop->result_type_id = XR_CORE_TYPE_VOID;
+            drop->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            drop->operands = operand;
+            drop->operand_count = 1u;
+        }
+        accumulated = concat->result;
+        accumulated_is_temporary = !last;
+    }
+    *instruction_count = cursor;
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModuleStorage *module,
                                             XrXiFunctionStorage *function, const XiValue *value,
                                             const XrXiBlockStorage *block,
@@ -8002,6 +8277,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = result_type;
+            instruction->result_ownership = logical_ownership_for_type(context, result_type);
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT;
             instruction->immediate.key = constant;
             return XR_PROGRAM_BUILD_OK;
@@ -8054,13 +8330,17 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                             value->id);
             bool target_enum_compare =
                 left_type >= XR_CORE_TYPE_TARGET_OS && left_type <= XR_CORE_TYPE_TARGET_ENDIAN;
-            if ((!target_enum_compare && left_type != XR_CORE_TYPE_I64) ||
+            bool text_compare = left_type == XR_CORE_TYPE_STRING || left_type == XR_CORE_TYPE_RUNE;
+            if ((!target_enum_compare && !text_compare && left_type != XR_CORE_TYPE_I64) ||
                 (target_enum_compare && projection.immediate_u32 > 1u))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi comparison v%u is outside the active exact comparison domain",
                             value->id);
-            instruction->operation_id = target_enum_compare ? XR_CORE_OP_CORE_COMPARE_TARGET_ENUM
-                                                            : projection.core_operation_id;
+            instruction->operation_id =
+                target_enum_compare                ? XR_CORE_OP_CORE_COMPARE_TARGET_ENUM
+                : left_type == XR_CORE_TYPE_STRING ? XR_CORE_OP_CORE_COMPARE_STRING
+                : left_type == XR_CORE_TYPE_RUNE   ? XR_CORE_OP_CORE_COMPARE_RUNE
+                                                   : projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = XR_CORE_TYPE_BOOL;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
@@ -8435,20 +8715,28 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
             return XR_PROGRAM_BUILD_OK;
         }
-        case XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64: {
+        case XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP: {
             const XrPrintPlan *plan = xi_print_plan(value);
-            uint16_t operand_type = XR_CORE_TYPE_VOID;
-            if (value->op != XI_PRINT || value->nargs != 1u || result_type != XR_CORE_TYPE_VOID ||
-                !plan || !xr_print_plan_validate(plan) || plan->arity != 1u ||
+            if (value->op != XI_PRINT || result_type != XR_CORE_TYPE_VOID || !plan ||
+                !xr_print_plan_validate(plan) || plan->arity != value->nargs ||
                 plan->separator != XR_PRINT_SEPARATOR_SPACE ||
                 plan->terminator != XR_PRINT_TERMINATOR_NEWLINE ||
                 plan->required_capabilities != XR_PRINT_CAPABILITY_OUTPUT_WRITE ||
-                plan->flags != XR_PRINT_PLAN_FLAG_ATOMIC_GROUP ||
-                !map_logical_value_type(context, function->xi, value->args[0], &operand_type) ||
-                operand_type != XR_CORE_TYPE_I64)
+                plan->flags != XR_PRINT_PLAN_FLAG_ATOMIC_GROUP)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                            "Xi print v%u is not the exact atomic i64-line output contract",
-                            value->id);
+                            "Xi print v%u is not the exact atomic line output contract", value->id);
+            /* Every operand must have a canonical display form; the admitted
+             * set is the registry's operand domain for core.output.group. */
+            for (uint16_t operand = 0u; operand < value->nargs; ++operand) {
+                uint16_t operand_type = XR_CORE_TYPE_VOID;
+                if (!map_logical_value_type(context, function->xi, value->args[operand],
+                                            &operand_type) ||
+                    operand_type >= 32u ||
+                    ((XR_CORE_OPERAND_DOMAIN_CORE_OUTPUT_GROUP >> operand_type) & 1u) == 0u)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi print v%u operand %u has no canonical display type", value->id,
+                                operand);
+            }
             XrStableId contract_id = {{0}};
             XrStableId operation_id = {{0}};
             XrProgramBuildStatus requirement_status = require_provider_operation(
@@ -8461,6 +8749,29 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
             instruction->immediate.provider_operation.contract_id = contract_id;
             instruction->immediate.provider_operation.operation_id = operation_id;
+            return set_operands(context, instruction, function, block, value->args, value->nargs,
+                                diagnostic, diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_STRING_CONCAT:
+            /* Variadic concatenation is expanded into a binary chain by the
+             * block emitter; reaching the single-instruction path means the
+             * emitter did not claim the value. */
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi string concatenation v%u was not expanded", value->id);
+        case XR_PROGRAM_XI_PROJECTION_STRING_FROM_I64: {
+            /* `string(n)` renders exactly the display form typed output and
+             * interpolation use; only the i64 source is canonical here. */
+            uint16_t operand_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 1u || result_type != XR_CORE_TYPE_STRING ||
+                !map_logical_value_type(context, function->xi, value->args[0], &operand_type) ||
+                operand_type != XR_CORE_TYPE_I64)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi conversion v%u is not an exact i64-to-string rendering", value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = XR_CORE_TYPE_STRING;
+            instruction->result_ownership = XR_CORE_IR_OWNER;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
             return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
                                 diagnostic_size);
         }
@@ -15268,9 +15579,23 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     ++affine_exchange_share_count;
                 }
             }
+            if (value_is_variadic_string_concat(value)) {
+                uint32_t expansion = string_concat_expansion_capacity(value);
+                if (construction_literal_count > UINT32_MAX - expansion)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += expansion;
+            }
             ++emitted;
         }
         ++emitted;
+        /* A return of a borrowed explicit-copy value adds one owner copy
+         * before the terminator. */
+        uint32_t return_copy_count =
+            xi_block->kind == XI_BLOCK_RETURN && xi_block->control &&
+                    xi_block->control->op != XI_ERR_RETURN &&
+                    returned_value_needs_owner_copy(context, xi, xi_block->control)
+                ? 1u
+                : 0u;
         /* The two-times emission budget covers either one instruction plus its
          * possible lifetime-closing drop, or an aggregate place plus its access.
          * An affine class replacement needs place, exchange, and adjacent drop.
@@ -15278,7 +15603,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
          * place is exposed, so reserve both additions exactly. */
         uint64_t instruction_capacity_wide =
             (uint64_t) emitted * 2u + block_storage->argument_count + affine_exchange_drop_count +
-            affine_exchange_share_count + construction_literal_count;
+            affine_exchange_share_count + construction_literal_count + return_copy_count;
         if (instruction_capacity_wide > UINT32_MAX)
             return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
         uint32_t instruction_capacity = (uint32_t) instruction_capacity_wide;
@@ -15490,6 +15815,34 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     }
                 }
             }
+            if (value_is_variadic_string_concat(value)) {
+                XrCoreIrInstructionInput *instructions =
+                    &block_storage->instructions[instruction_index];
+                uint32_t translated_instruction_count = 0u;
+                if (instruction_index > instruction_capacity)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                status = translate_string_concat(
+                    context, storage, value, block_storage, instructions,
+                    instruction_capacity - instruction_index, &translated_instruction_count,
+                    diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                for (uint32_t emitted_instruction = 0u;
+                     emitted_instruction < translated_instruction_count; ++emitted_instruction) {
+                    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
+                        instructions[emitted_instruction].operation_id);
+                    if (!operation)
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "translated Xi string concatenation v%u has no CoreSpec "
+                                    "operation",
+                                    value->id);
+                    storage->local_effect_mask |= operation->effect_mask;
+                    storage->local_capability_mask |= operation->capability_mask;
+                }
+                instruction_index += translated_instruction_count;
+                span->end = instruction_index;
+                continue;
+            }
             XrCoreIrInstructionInput *instruction =
                 &block_storage->instructions[instruction_index++];
             status = translate_value(context, module, storage, value, block_storage, instruction,
@@ -15517,6 +15870,23 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi block b%u has no exact CoreIR emission spans", xi_block->id);
 
+        bool return_owner_acquired = false;
+        XrCoreIrInstructionInput *return_owner = &block_storage->instructions[instruction_index];
+        if (xi_block->kind == XI_BLOCK_RETURN && xi_block->control &&
+            xi_block->control->op != XI_ERR_RETURN) {
+            status = translate_return_owner_acquire(
+                context, storage, xi_block->control, block_storage, return_owner,
+                &return_owner_acquired, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+            if (return_owner_acquired) {
+                ++instruction_index;
+                storage->local_effect_mask |=
+                    xr_core_spec_operation_by_id(return_owner->operation_id)->effect_mask;
+                storage->local_capability_mask |=
+                    xr_core_spec_operation_by_id(return_owner->operation_id)->capability_mask;
+            }
+        }
         XrCoreIrInstructionInput *terminator = &block_storage->instructions[instruction_index++];
         terminator->result_type_id = XR_CORE_TYPE_VOID;
         terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
@@ -15645,7 +16015,14 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 return status;
         } else if (xi_block->kind == XI_BLOCK_RETURN) {
             terminator->operation_id = XR_CORE_OP_CORE_RETURN;
-            if (xi_block->control) {
+            if (return_owner_acquired) {
+                XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+                if (!operand)
+                    return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                *operand = return_owner->result;
+                terminator->operands = operand;
+                terminator->operand_count = 1u;
+            } else if (xi_block->control) {
                 XiValue *returned[] = {xi_block->control};
                 status = set_operands(context, terminator, storage, block_storage, returned, 1u,
                                       diagnostic, diagnostic_size);
@@ -16611,14 +16988,18 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
 }
 
 XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
-                                              XrProgramArtifact *artifact_out, char *diagnostic,
+                                              XrProgramArtifact *artifact_out,
+                                              XrValidatedProgram **program_out, char *diagnostic,
                                               size_t diagnostic_size) {
     if (artifact_out)
         memset(artifact_out, 0, sizeof(*artifact_out));
+    if (program_out)
+        *program_out = NULL;
     if (diagnostic && diagnostic_size != 0)
         diagnostic[0] = '\0';
-    if (!input || !artifact_out || !input->module_roots || input->module_count == 0u ||
-        !input->entry_function || !input->global_evidence || !input->semantic_profile_fingerprint)
+    if (!input || !artifact_out || !program_out || !input->module_roots ||
+        input->module_count == 0u || !input->entry_function || !input->global_evidence ||
+        !input->semantic_profile_fingerprint)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi program producer input is incomplete");
     XrXiBuildContext context = {.source = input};
@@ -16664,8 +17045,8 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
         XrProgramDiagnostic verify_diagnostic;
         XrProgramVerifyStatus verify = xr_program_validate(artifact_out->bytes, artifact_out->size,
                                                            NULL, &validated, &verify_diagnostic);
-        xr_validated_program_free(validated);
         if (verify != XR_PROGRAM_VERIFY_OK) {
+            xr_validated_program_free(validated);
             const XrCoreIrFunction *failed_function = NULL;
             const XrCoreIrInstruction *failed_instruction = NULL;
             uint16_t failed_value_type = XR_CORE_TYPE_VOID;
@@ -16761,6 +17142,8 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                 failed_function ? failed_function->capability_mask : 0u,
                 failed_function ? failed_function->coroutine_state_count : 0u,
                 failed_function ? failed_function->coroutine_safepoint_count : 0u);
+        } else {
+            *program_out = validated;
         }
     }
     xr_core_ir_program_free(program);

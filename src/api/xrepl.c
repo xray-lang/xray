@@ -240,26 +240,26 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
 }
 
 /* Collect new declarations from the compiled Xi IR function.
- * slot_owned_names has a non-NULL entry for every top-level name
- * declared by this compilation unit; REPL-seeded prior slots are
- * NULL.  Names from the arena are interned so they outlive the
+ * module_slots records every top-level name
+ * declared by this compilation unit; REPL-seeded prior slots have
+ * no declaration name. Names from the arena are interned so they outlive the
  * XiFunc. */
 static bool repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrVMRuntime *isolate,
                                          XaAnalyzer *analyzer, XrProto *proto) {
     if (!table || !proto || !proto->xi_func)
         return false;
     XiFunc *xf = (XiFunc *) proto->xi_func;
-    if (!xf->slot_owned_names || xf->nshared == 0)
+    if (!xf->module_slots || xf->nshared == 0)
         return true;
     for (uint16_t slot = 0; slot < xf->nshared; slot++) {
-        const char *name = xf->slot_owned_names[slot];
+        const char *name = xf->module_slots[slot].name;
         if (!name)
             continue;
         size_t nlen = strlen(name);
         XrString *interned = xr_string_intern(isolate, name, nlen, 0);
         if (!interned)
             return false;
-        bool is_const = xf->slot_owned_consts && xf->slot_owned_consts[slot] != 0;
+        bool is_const = xf->module_slots[slot].is_const;
         XrReplSymbol published;
         if (!repl_symbol_from_analyzer(analyzer, interned, is_const, &published) ||
             !repl_symbols_add_or_update(table, &published))

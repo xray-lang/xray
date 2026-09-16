@@ -4,6 +4,7 @@
 #include "core/xr_core_spec_gen.h"
 #include "plan/semantic/xr_semantic_ids.h"
 #include "program/xr_program.h"
+#include "xr_program_provider_fixture.h"
 #include "runtime/abi/xr_builtin_provider_contract.h"
 
 #include <string.h>
@@ -55,7 +56,7 @@ static XrProgramBuildStatus xr_program_output_fixture_write_mutated(
          .result_type_id = constants[0].type_id,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
          .immediate.key = constants[0].key},
-        {.operation_id = XR_CORE_OP_CORE_OUTPUT_GROUP_I64,
+        {.operation_id = XR_CORE_OP_CORE_OUTPUT_GROUP,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = output_operands,
          .operand_count = 1u,
@@ -96,9 +97,13 @@ static XrProgramBuildStatus xr_program_output_fixture_write_mutated(
         .functions = &function,
         .function_count = 1u,
     };
+    XrProgramProviderOperationRequirement operation_requirement = {
+        .operation_id = operation_id,
+        .logical_contract = xr_builtin_provider_byte_sink_logical_contract(),
+    };
     XrCoreIrProviderRequirementInput requirement = {
         .contract_id = contract_id,
-        .operation_ids = &operation_id,
+        .operations = &operation_requirement,
         .operation_count = 1u,
     };
     XrCoreIrKey semantic = xr_program_output_fixture_key("output:semantic");

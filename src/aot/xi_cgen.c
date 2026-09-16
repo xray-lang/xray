@@ -80,6 +80,7 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xenum_layout.h"
 #include "../base/xglobal_indices.h"
+#include "../base/xbuiltin_enum.h"
 #include "../base/xnumber_parse_error.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -2943,78 +2944,6 @@ cg_semantic_operation_for_value(XiCgenCtx *ctx, const XiFunc *function, const Xi
     return match;
 }
 
-/* Source-module namespace imports are compile-time carrier tokens in a closed
- * program graph. Their tagged C spelling is null, but only after the verified
- * C row, SemanticPlan dependency, resolved Xi module, and TargetPlan partition
- * all identify the same module. */
-static bool cg_program_source_namespace_import_is_exact(XiCgenCtx *ctx, const XiFunc *function,
-                                                        const XiValue *value) {
-    if (!ctx || !ctx->program_direct_i64_required || !ctx->program_direct_i64_bound ||
-        !ctx->program_direct_i64.verified || !function || !value || value->op != XI_IMPORT_REF ||
-        !value->aux || !function->semantic_plan)
-        return false;
-    XrCValueEmissionView emission = {0};
-    if (cg_value_emission_view(ctx, function, value, &emission) != CG_VALUE_EMISSION_FOUND ||
-        emission.rep != XR_C_VALUE_REP_TAGGED ||
-        emission.target_register_kind != XR_MACHINE_REP_DYN_VALUE ||
-        emission.target_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
-        emission.materialization != XR_C_VALUE_MATERIALIZATION_NONE || !emission.c_type ||
-        strcmp(emission.c_type, "XrValue") != 0)
-        return false;
-    const XrSemanticOperationRecord *operation =
-        cg_semantic_operation_for_value(ctx, function, value);
-    uint32_t metadata_count = 0;
-    const char *const *metadata =
-        xr_semantic_plan_metadata(function->semantic_plan, &metadata_count);
-    const XiImportRef *ref = (const XiImportRef *) value->aux;
-    const XrSemanticFunctionRecord *semantic_function =
-        xr_semantic_plan_function(function->semantic_plan, function->semantic_plan_function_index);
-    if (!operation || !metadata || operation->opcode != XI_IMPORT_REF ||
-        operation->function != function->semantic_plan_function_index || !semantic_function ||
-        !semantic_function->is_module_initializer || operation->operand_count != 0u ||
-        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
-        operation->metadata_count != 2u || operation->metadata_begin + 1u >= metadata_count)
-        return false;
-    const char *module_path = metadata[operation->metadata_begin];
-    const char *member = metadata[operation->metadata_begin + 1u];
-    if (!module_path || !module_path[0] || !member || member[0] != '\0' || !ref->module_path ||
-        !ref->module_path[0] || (ref->member_name && ref->member_name[0] != '\0') ||
-        !ref->resolution_attempted || !ref->resolved_module || ref->resolved_func ||
-        ref->resolved_shared_slot != -1 || ref->resolved_export_slot != -1)
-        return false;
-    uint32_t dependency_index = XR_SEMANTIC_INDEX_NONE;
-    size_t dependency_count = xr_semantic_plan_dependency_count(function->semantic_plan);
-    if (dependency_count > UINT32_MAX)
-        return false;
-    for (size_t i = 0; i < dependency_count; i++) {
-        const XrSemanticDependencyRecord *candidate =
-            xr_semantic_plan_dependency(function->semantic_plan, (uint32_t) i);
-        if (!candidate || !candidate->module_path ||
-            strcmp(candidate->module_path, module_path) != 0)
-            continue;
-        if (dependency_index != XR_SEMANTIC_INDEX_NONE)
-            return false;
-        dependency_index = (uint32_t) i;
-    }
-    uint32_t target_partition = UINT32_MAX;
-    const XrTargetPlan *target = xaot_bundle_program_target_plan(ctx->aot_bundle);
-    const XrSemanticDependencyRecord *dependency =
-        dependency_index != XR_SEMANTIC_INDEX_NONE
-            ? xr_semantic_plan_dependency(function->semantic_plan, dependency_index)
-            : NULL;
-    const XrSemanticPlan *target_semantic =
-        target && xaot_bundle_program_partition_for_xi_module(ctx->aot_bundle, ref->resolved_module,
-                                                              &target_partition)
-            ? xr_target_plan_semantic_module(target, target_partition)
-            : NULL;
-    return dependency && ref->psc_dependency_index == XI_PSC_ROW_NONE && target_semantic &&
-           xr_target_plan_is_verified(target) && xr_target_plan_fingerprint_is_intact(target) &&
-           xr_fingerprint_equal(ctx->program_direct_i64.target_fingerprint,
-                                xr_target_plan_fingerprint(target)) &&
-           xr_fingerprint_equal(dependency->semantic_fingerprint,
-                                xr_semantic_plan_fingerprint(target_semantic));
-}
-
 static bool cg_number_parse_error_namespace_is_exact(XiCgenCtx *ctx, const XiFunc *function,
                                                      const XiValue *value) {
     return function && function->semantic_plan &&
@@ -4297,10 +4226,10 @@ static const XiConstLiteral *cg_module_static_data_literal(const XiModule *modul
 }
 
 static const char *cg_module_const_slot_name(const XiModule *module, int64_t slot) {
-    if (!module || !module->init || !module->init->slot_owned_names || slot < 0 ||
+    if (!module || !module->init || !module->init->module_slots || slot < 0 ||
         slot >= module->init->nshared)
         return NULL;
-    return module->init->slot_owned_names[slot];
+    return module->init->module_slots[slot].name;
 }
 
 static bool cg_shared_initializer_literal_supported(const XiConstLiteral *lit) {
@@ -9421,8 +9350,6 @@ static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, 
         return false;
     if (cg_program_direct_i64_callee_operand_is_elided(ctx, f, v))
         return true;
-    if (cg_native_target_leaf_import_is_exact_callee(ctx, f, v))
-        return true;
     bool seen_use = false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -9738,7 +9665,7 @@ static bool cg_span_phi_snapshot_has_no_release_use(XiCgenCtx *ctx, const XiFunc
 static bool cg_static_prelude_enum_namespace_is_elided(const XiFunc *f, const XiValue *v) {
     if (!f || !v || v->op != XI_GET_BUILTIN)
         return false;
-    const CgPreludeEnumData *enum_data = cg_prelude_enum_data((int) v->aux_int);
+    const XrBuiltinEnumRow *enum_data = xr_builtin_enum_registry_row((int) v->aux_int);
     if (!enum_data || cg_prelude_enum_has_payload_member(enum_data))
         return false;
 
@@ -15337,7 +15264,6 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
         return true;
 
     if (value->op == XI_IMPORT_REF &&
-        !cg_native_target_leaf_import_is_exact_callee(ctx, func, value) &&
         !cg_import_ref_has_aot_resolution(ctx, func, value, cg_value_import_ref(value))) {
         const XiImportRef *ref = cg_value_import_ref(value);
         cg_ctx_set_error(ctx);

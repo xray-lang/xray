@@ -129,7 +129,7 @@ static XiConstLiteral *shared_const_literal_slot(XiFunc *f, int64_t slot) {
         uint16_t s = (uint16_t) slot;
         if (!cur->shared_const_literals || s >= cur->shared_const_literal_count)
             continue;
-        if (!cur->slot_owned_consts || s >= cur->nshared || !cur->slot_owned_consts[s])
+        if (!cur->module_slots || s >= cur->nshared || !cur->module_slots[s].is_const)
             continue;
         return &cur->shared_const_literals[s];
     }
@@ -712,7 +712,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 }
             }
 
-            if (v->op == XI_SET_SHARED && v->nargs == 1) {
+            if (v->op == XI_SET_SHARED && v->initializes_module_slot && v->nargs == 1) {
                 if (record_shared_const_literal(f, v->aux_int, v->args[0]))
                     chg.values_changed = true;
                 continue;
@@ -1786,11 +1786,11 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
          * adapter no storage row can state. */
         case XR_KIND_ARRAY:
         case XR_KIND_STRING:
+        case XR_KIND_TUPLE:
             return XR_REP_TAGGED;
         case XR_KIND_SLICE:
         case XR_KIND_MAP:
         case XR_KIND_SET:
-        case XR_KIND_TUPLE:
             return XR_REP_PTR;
         default:
             return XR_REP_TAGGED;

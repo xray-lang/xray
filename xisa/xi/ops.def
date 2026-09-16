@@ -2658,9 +2658,10 @@
 ; Optional<T> injection published while normalizing source nullable control
 ; flow into canonical closed sums. aux_int 0 forms None with no operand;
 ; aux_int 1 forms Some with one non-null T operand. XrProgram consumes it as
-; core.variant.construct, so AOT C never sees it. The VM bytecode target keeps
-; Optional<T> in its tagged representation, where None is the null tag and
-; Some(T) is the payload itself, and lowers the injection to exactly that.
+; core.variant.construct. Retained VM bytecode and C consumers lower the same
+; injection into their private representation. Tagged optionals keep None as
+; the null tag; pointer optionals keep None as NULL. Some transfers the payload
+; without changing its value or introducing a second owner.
 (define-xi-op xi.sum.inject
   :class arithmetic
   :arity variadic
@@ -2670,7 +2671,7 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c))
 
 ; Compiler-owned target.pointerBits query. It remains occurrence-sensitive
 ; because the Xglobal row identity is part of the proof consumed by Program.

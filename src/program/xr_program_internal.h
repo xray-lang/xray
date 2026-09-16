@@ -149,6 +149,10 @@ typedef struct XrCoreIrModule {
     uint32_t constant_count;
     XrCoreIrFunction *functions;
     uint32_t function_count;
+    XrCoreIrKey initializer;
+    XrCoreIrKey *dependencies;
+    uint32_t dependency_count;
+    uint32_t initialization_order;
 } XrCoreIrModule;
 
 typedef struct XrCoreIrInterface {
@@ -168,7 +172,7 @@ typedef struct XrCoreIrConformance {
 
 typedef struct XrCoreIrProviderRequirement {
     XrStableId contract_id;
-    XrStableId *operation_ids;
+    XrProgramProviderOperationRequirement *operations;
     uint32_t operation_count;
 } XrCoreIrProviderRequirement;
 

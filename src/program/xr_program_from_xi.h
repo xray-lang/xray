@@ -11,7 +11,7 @@
 #ifndef XR_PROGRAM_FROM_XI_H
 #define XR_PROGRAM_FROM_XI_H
 
-#include "xr_program.h"
+#include "xr_program_verify.h"
 
 struct XiFunc;
 struct XgGlobalEvidence;
@@ -30,10 +30,15 @@ typedef struct XrProgramFromXiInput {
  * as the linked-program entry. Calls consume the same verified global evidence
  * identities that were bound during Xi lowering; no source spelling, Xi value
  * shape, or legacy plan row is used to infer a target. The result is the
- * canonical distributable XrProgram artifact; unsupported Xi operations fail
- * closed. */
+ * canonical distributable artifact and one independently owned immutable
+ * program validated with the default admission policy and budget. Both output
+ * pointers are required and must be empty on entry. On failure they remain
+ * empty; on success neither output borrows Xi or the other's byte storage.
+ * A consumer with a different admission policy must validate the bytes under
+ * that policy. Unsupported Xi operations fail closed. */
 XR_FUNC XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                                                       XrProgramArtifact *artifact_out,
+                                                      XrValidatedProgram **program_out,
                                                       char *diagnostic, size_t diagnostic_size);
 
 #endif /* XR_PROGRAM_FROM_XI_H */

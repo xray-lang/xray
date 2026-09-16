@@ -18,6 +18,7 @@
 
 #include "xr_runtime_descriptor.h"
 #include "xr_target_runtime_profile.h"
+#include "xr_provider_logical_contract.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -500,6 +501,9 @@ typedef struct XrTargetProviderCallAbiContract {
 
 typedef struct XrTargetProviderOperationContract {
     XrStableId stable_id;
+    /* Ordinary operations carry the same logical facts required by Program.
+     * Allocator and panic foundations use their dedicated policy contract. */
+    XrProviderLogicalContract logical_contract;
     XrTargetProviderCallAbiContract call_abi;
     uint32_t effect_flags;
     uint32_t lifetime_flags;

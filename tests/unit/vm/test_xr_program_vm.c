@@ -10,6 +10,7 @@
 #include "vm/xr_program_vm.h"
 #include "os/os_thread.h"
 #include "../plan/target_profile_test_fixture.h"
+#include "../program/xr_program_provider_fixture.h"
 #include "../program/xr_program_invoke_fixture.h"
 #include "../program/xr_program_existential_fixture.h"
 #include "../program/xr_program_reborrow_fixture.h"
@@ -19,6 +20,7 @@
 #include "../program/xr_program_coroutine_fixture.h"
 #include "../program/xr_program_coroutine_trap_fixture.h"
 #include "../program/xr_program_output_fixture.h"
+#include "../program/xr_program_text_fixture.h"
 #include "../program/xr_program_trap_fixture.h"
 #include "../program/xr_program_construct_fixture.h"
 #include "../program/xr_program_cleanup_graph_fixture.h"
@@ -51,7 +53,13 @@ _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id dri
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ == 90,
                "existential READ reborrow stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP == 148, "output group stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CONSTANT_STRING == 4, "string constant stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CONSTANT_RUNE == 5, "rune constant stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COMPARE_RUNE == 26, "rune compare stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COMPARE_STRING == 27, "string compare stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_FROM_I64 == 150, "string from i64 stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_CONCAT == 151, "string concat stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_SUSPEND == 140, "coroutine suspension stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
@@ -1919,10 +1927,13 @@ static XrValidatedProgram *build_provider_call_program(const XrTargetProfile *pr
                                   .function_count = 1u};
     XrCoreIrKey semantic = fixture_key("provider:semantic");
     uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
-    XrStableId operation = contract->operations[0].stable_id;
+    XrProgramProviderOperationRequirement operation = {
+        .operation_id = contract->operations[0].stable_id,
+        .logical_contract = xr_program_fixture_scalar_contract(nullary),
+    };
     XrCoreIrProviderRequirementInput requirement = {
         .contract_id = contract->contract_id,
-        .operation_ids = &operation,
+        .operations = &operation,
         .operation_count = 1u,
     };
     XrCoreIrProgramInput input = {.semantic_profile_fingerprint = semantic.bytes,
@@ -2020,10 +2031,13 @@ static XrValidatedProgram *build_pipe_provider_program(const XrTargetProfile *pr
     };
     XrCoreIrKey semantic = fixture_key("pipe:semantic");
     uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
-    XrStableId operation = contract->operations[0].stable_id;
+    XrProgramProviderOperationRequirement operation = {
+        .operation_id = contract->operations[0].stable_id,
+        .logical_contract = xr_program_fixture_pipe_contract(),
+    };
     XrCoreIrProviderRequirementInput requirement = {
         .contract_id = contract->contract_id,
-        .operation_ids = &operation,
+        .operations = &operation,
         .operation_count = 1u,
     };
     XrCoreIrProgramInput input = {
@@ -2194,6 +2208,20 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
             REQUIRE(vm.kind == XR_VM_VALUE_ERROR);
             REQUIRE(reference.as.error == vm.as.error);
             break;
+        case XR_REFERENCE_VALUE_RUNE:
+            REQUIRE(vm.kind == XR_VM_VALUE_RUNE);
+            REQUIRE(reference.as.rune == vm.as.rune);
+            break;
+        case XR_REFERENCE_VALUE_STRING: {
+            XrReferenceStringView expected;
+            XrVmStringView actual;
+            REQUIRE(xr_reference_value_string_view(&reference, &expected));
+            REQUIRE(xr_vm_value_string_view(&vm, &actual));
+            REQUIRE(expected.size == actual.size);
+            REQUIRE(expected.size == 0u ||
+                    memcmp(expected.bytes, actual.bytes, expected.size) == 0);
+            break;
+        }
         case XR_REFERENCE_VALUE_PANIC_INFO:
             REQUIRE(vm.kind == XR_VM_VALUE_PANIC_INFO);
             REQUIRE(reference.as.panic_info == vm.as.panic_info);
@@ -2223,17 +2251,21 @@ static void compare_outcomes(XrReferenceOutcome reference, XrVmOutcome vm) {
 }
 
 static XrVmOutcome execute_differential(XrValidatedProgram *program, XrInstance *instance,
-                                        uint16_t pointer_width,
+                                        const XrTargetProfile *profile,
                                         const XrReferenceValue *reference_arguments,
                                         const XrVmValue *vm_arguments, uint32_t argument_count) {
+    uint16_t pointer_width =
+        (uint16_t) (xr_target_profile_machine_facts(profile)->data_layout.pointer.size * 8u);
     XrVmCodeOptions baseline_options = xr_vm_code_default_options();
     XrVmCodeOptions fixed_options = baseline_options;
     fixed_options.decode_policy = XR_VM_DECODE_FIXED_ROWS;
     XrVmCode *baseline = NULL;
     XrVmCode *fixed = NULL;
     XrVmCodeDiagnostic diagnostic;
-    REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) == XR_VM_CODE_OK);
-    REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &baseline_options, &baseline, &diagnostic) ==
+            XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &fixed_options, &fixed, &diagnostic) ==
+            XR_VM_CODE_OK);
     REQUIRE(xr_vm_code_matches_instance(baseline, instance));
     REQUIRE(xr_vm_code_matches_instance(fixed, instance));
     REQUIRE(xr_vm_code_decode_policy(baseline) == XR_VM_DECODE_BASELINE_VIEW);
@@ -2250,15 +2282,15 @@ static XrVmOutcome execute_differential(XrValidatedProgram *program, XrInstance 
     REQUIRE(target_profile != NULL);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(target_profile);
     REQUIRE(machine != NULL);
-    XrReferenceProfile profile = {.pointer_width = pointer_width,
-                                  .operating_system = machine->operating_system,
-                                  .architecture = machine->architecture,
-                                  .native_abi = machine->native_abi,
-                                  .endianness = machine->data_layout.endian};
+    XrReferenceProfile reference_profile = {.pointer_width = pointer_width,
+                                            .operating_system = machine->operating_system,
+                                            .architecture = machine->architecture,
+                                            .native_abi = machine->native_abi,
+                                            .endianness = machine->data_layout.endian};
     REQUIRE(xr_execution_lease_release(&lease));
     xr_target_profile_free(target_profile);
-    XrReferenceOutcome reference =
-        xr_reference_evaluate(program, entry, reference_arguments, argument_count, &profile, NULL);
+    XrReferenceOutcome reference = xr_reference_evaluate(program, entry, reference_arguments,
+                                                         argument_count, &reference_profile, NULL);
     XrVmOutcome baseline_result =
         xr_vm_code_execute(baseline, instance, entry, vm_arguments, argument_count);
     XrVmOutcome fixed_result =
@@ -2289,8 +2321,8 @@ static void run_program(XrValidatedProgram *program, bool ilp32,
     TestProviderBindings bindings;
     build_provider_bindings(profile, &bindings);
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
-    XrVmOutcome result = execute_differential(program, instance, ilp32 ? 32u : 64u,
-                                              reference_arguments, vm_arguments, argument_count);
+    XrVmOutcome result = execute_differential(program, instance, profile, reference_arguments,
+                                              vm_arguments, argument_count);
     REQUIRE(result.kind == expected_kind);
     if (expected_kind == XR_VM_OUTCOME_RETURN) {
         REQUIRE(result.value.kind == expected_value_kind);
@@ -2359,9 +2391,10 @@ static void test_provider_call_differential(void) {
         XrVmCode *baseline = NULL;
         XrVmCode *fixed = NULL;
         XrVmCodeDiagnostic diagnostic;
-        REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) ==
+        REQUIRE(xr_vm_code_build(program, profile, &baseline_options, &baseline, &diagnostic) ==
                 XR_VM_CODE_OK);
-        REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) == XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(program, profile, &fixed_options, &fixed, &diagnostic) ==
+                XR_VM_CODE_OK);
         XrExecutionLease lease = {0};
         REQUIRE(xr_execution_instance_acquire(instance, &lease));
         XrReferenceProviderBinding reference_binding = {
@@ -2379,6 +2412,26 @@ static void test_provider_call_differential(void) {
         REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
         REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
         REQUIRE(reference.value.as.i64 == (nullary ? 73 : 42));
+        if (nullary) {
+            TestProviderBindings other_bindings;
+            build_scalar_clock_binding(profile, true, &other_bindings);
+            ProviderRefusalProbe refusal = {0};
+            other_bindings.operations[0][0].entry.i64_nullary = provider_refuse_nullary;
+            other_bindings.operations[0][0].context = &refusal;
+            XrInstance *other = create_instance(program, profile, &other_bindings, 99u);
+            REQUIRE(xr_vm_code_matches_instance(baseline, other));
+            XrVmOutcome refused = xr_vm_code_execute(baseline, other, entry, NULL, 0u);
+            REQUIRE(refused.kind == XR_VM_OUTCOME_TRAP);
+            REQUIRE(refused.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED);
+            REQUIRE(refusal.calls == 1u);
+            xr_vm_outcome_dispose(&refused);
+            XrVmOutcome original = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
+            REQUIRE(original.kind == XR_VM_OUTCOME_RETURN);
+            REQUIRE(original.value.as.i64 == 73);
+            REQUIRE(refusal.calls == 1u);
+            xr_vm_outcome_dispose(&original);
+            retire_and_free(&other);
+        }
         REQUIRE(xr_execution_lease_release(&lease));
         xr_vm_code_free(fixed);
         xr_vm_code_free(baseline);
@@ -2418,8 +2471,10 @@ static void test_provider_trap_continuation_differential(void) {
     XrVmCode *baseline = NULL;
     XrVmCode *fixed = NULL;
     XrVmCodeDiagnostic diagnostic;
-    REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &diagnostic) == XR_VM_CODE_OK);
-    REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &baseline_options, &baseline, &diagnostic) ==
+            XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &fixed_options, &fixed, &diagnostic) ==
+            XR_VM_CODE_OK);
     XrExecutionLease lease = {0};
     REQUIRE(xr_execution_instance_acquire(instance, &lease));
     XrReferenceProviderBinding reference_binding = {
@@ -2458,7 +2513,7 @@ static void test_pipe_provider_call_differential(void) {
         XrVmCodeOptions options = xr_vm_code_default_options();
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic diagnostic;
-        REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, &diagnostic) == XR_VM_CODE_OK);
         XrExecutionLease lease = {0};
         REQUIRE(xr_execution_instance_acquire(instance, &lease));
         XrReferenceProviderBinding reference_binding = {
@@ -2536,6 +2591,81 @@ static bool reference_output_write(void *context, uint32_t requirement_index,
                                                     bytes, size) == XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
+/* The typed text family runs identically on the reference evaluator, the
+ * baseline view and the fixed-row view, and every executor writes the exact
+ * canonical byte stream through the same provider sink. */
+static void test_text_differential(void) {
+    XrProgramArtifact artifact = {0};
+    char build_diagnostic[256] = {0};
+    REQUIRE(xr_program_text_fixture_write(&artifact, build_diagnostic, sizeof(build_diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    OutputCapture capture = {0};
+    TestProviderBindings bindings;
+    build_output_binding(profile, &capture, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    XrVmCodeOptions baseline_options = xr_vm_code_default_options();
+    XrVmCodeOptions fixed_options = baseline_options;
+    fixed_options.decode_policy = XR_VM_DECODE_FIXED_ROWS;
+    XrVmCode *baseline = NULL;
+    XrVmCode *fixed = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    REQUIRE(xr_vm_code_build(program, profile, &baseline_options, &baseline, &vm_diagnostic) ==
+            XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &fixed_options, &fixed, &vm_diagnostic) ==
+            XR_VM_CODE_OK);
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(instance, &lease));
+    XrReferenceProviderBinding reference_binding = {
+        .context = &lease,
+        .output_write = reference_output_write,
+    };
+    uint32_t entry = xr_validated_program_entry_function(program);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    XrVmOutcome baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
+    XrVmOutcome fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
+    compare_outcomes(reference, baseline_result);
+    compare_outcomes(reference, fixed_result);
+    REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+    REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
+    REQUIRE(reference.value.as.i64 == 0);
+    size_t stream_size = sizeof(XR_PROGRAM_TEXT_FIXTURE_STDOUT) - 1u;
+    REQUIRE(capture.calls == 9u);
+    REQUIRE(capture.size == stream_size * 3u);
+    for (size_t copy = 0u; copy < 3u; ++copy)
+        REQUIRE(memcmp(capture.bytes + copy * stream_size, XR_PROGRAM_TEXT_FIXTURE_STDOUT,
+                       stream_size) == 0);
+
+    /* A refused sink traps every executor at the first group with nothing
+     * written and no owner left behind for the outcome to carry. */
+    capture = (OutputCapture) {.fail = true};
+    reference =
+        xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
+    baseline_result = xr_vm_code_execute(baseline, instance, entry, NULL, 0u);
+    fixed_result = xr_vm_code_execute(fixed, instance, entry, NULL, 0u);
+    compare_outcomes(reference, baseline_result);
+    compare_outcomes(reference, fixed_result);
+    REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_TRAP);
+    REQUIRE(reference.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+    REQUIRE(capture.calls == 3u);
+    REQUIRE(capture.size == 0u);
+
+    REQUIRE(xr_execution_lease_release(&lease));
+    xr_vm_code_free(fixed);
+    xr_vm_code_free(baseline);
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void test_provider_output_differential(void) {
     static const struct {
         int64_t value;
@@ -2571,9 +2701,9 @@ static void test_provider_output_differential(void) {
         XrVmCode *baseline = NULL;
         XrVmCode *fixed = NULL;
         XrVmCodeDiagnostic vm_diagnostic;
-        REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &vm_diagnostic) ==
+        REQUIRE(xr_vm_code_build(program, profile, &baseline_options, &baseline, &vm_diagnostic) ==
                 XR_VM_CODE_OK);
-        REQUIRE(xr_vm_code_build(instance, &fixed_options, &fixed, &vm_diagnostic) ==
+        REQUIRE(xr_vm_code_build(program, profile, &fixed_options, &fixed, &vm_diagnostic) ==
                 XR_VM_CODE_OK);
         XrExecutionLease lease = {0};
         REQUIRE(xr_execution_instance_acquire(instance, &lease));
@@ -2760,7 +2890,7 @@ static void test_operation_semantics(void) {
     aggregate_budget.max_value_cells = 1u;
     XrVmCodeDiagnostic aggregate_diagnostic;
     XrVmCode *aggregate_code = NULL;
-    REQUIRE(xr_vm_code_build(aggregate_instance, &aggregate_budget, &aggregate_code,
+    REQUIRE(xr_vm_code_build(aggregate, aggregate_profile, &aggregate_budget, &aggregate_code,
                              &aggregate_diagnostic) == XR_VM_CODE_OK);
     XrVmOutcome aggregate_limited =
         xr_vm_code_execute(aggregate_code, aggregate_instance,
@@ -2927,7 +3057,7 @@ static void test_concurrent_execution_and_drain(void) {
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic code_diagnostic;
-    REQUIRE(xr_vm_code_build(instance, NULL, &code, &code_diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, NULL, &code, &code_diagnostic) == XR_VM_CODE_OK);
     VmRace race = {
         .code = code,
         .instance = instance,
@@ -2967,18 +3097,24 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
     REQUIRE(profile != NULL);
     TestProviderBindings bindings;
     build_provider_bindings(profile, &bindings);
-    XrInstance *instance = create_instance(program, profile, &bindings, 41u);
     XrVmCodeDiagnostic code_diagnostic;
     XrVmCodeOptions rejected = xr_vm_code_default_options();
     rejected.quickening_policy = 1u;
     XrVmCode *code = NULL;
-    REQUIRE(xr_vm_code_build(instance, &rejected, &code, &code_diagnostic) ==
+    REQUIRE(xr_vm_code_build(program, profile, &rejected, &code, &code_diagnostic) ==
             XR_VM_CODE_POLICY_REJECTED);
+    REQUIRE(code == NULL);
+    REQUIRE(xr_vm_code_build(NULL, profile, NULL, &code, &code_diagnostic) ==
+            XR_VM_CODE_INVALID_INPUT);
+    REQUIRE(code == NULL);
+    REQUIRE(xr_vm_code_build(program, NULL, NULL, &code, &code_diagnostic) ==
+            XR_VM_CODE_INVALID_INPUT);
     REQUIRE(code == NULL);
 
     XrVmCodeOptions limited = xr_vm_code_default_options();
     limited.max_steps = 1u;
-    REQUIRE(xr_vm_code_build(instance, &limited, &code, &code_diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &limited, &code, &code_diagnostic) == XR_VM_CODE_OK);
+    XrInstance *instance = create_instance(program, profile, &bindings, 41u);
     uint32_t entry = xr_validated_program_entry_function(program);
     XrVmOutcome result = xr_vm_code_execute(code, instance, entry, NULL, 0);
     REQUIRE(result.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
@@ -2989,11 +3125,12 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
     fixed_options.decode_policy = XR_VM_DECODE_FIXED_ROWS;
     XrVmCode *baseline = NULL;
     clock_t baseline_build_begin = clock();
-    REQUIRE(xr_vm_code_build(instance, &baseline_options, &baseline, &code_diagnostic) ==
+    REQUIRE(xr_vm_code_build(program, profile, &baseline_options, &baseline, &code_diagnostic) ==
             XR_VM_CODE_OK);
     clock_t baseline_build_ticks = clock() - baseline_build_begin;
     clock_t fixed_build_begin = clock();
-    REQUIRE(xr_vm_code_build(instance, &fixed_options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &fixed_options, &code, &code_diagnostic) ==
+            XR_VM_CODE_OK);
     clock_t fixed_build_ticks = clock() - fixed_build_begin;
     clock_t baseline_begin = clock();
     for (unsigned iteration = 0; iteration < 20000u; ++iteration) {
@@ -3022,11 +3159,30 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
     REQUIRE(xr_execution_instance_create_successor(
                 instance, bindings.count ? bindings.providers : NULL, bindings.count, &successor,
                 &execution_diagnostic) == XR_EXECUTION_OK);
-    REQUIRE(!xr_vm_code_matches_instance(code, successor));
+    REQUIRE(xr_vm_code_matches_instance(code, successor));
     result = xr_vm_code_execute(code, successor, entry, NULL, 0);
-    REQUIRE(result.kind == XR_VM_OUTCOME_STALE_CODE);
+    REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+    REQUIRE(result.value.kind == XR_VM_VALUE_BOOL);
+    REQUIRE(result.value.as.boolean);
+    xr_vm_outcome_dispose(&result);
     result = xr_vm_code_execute(code, instance, entry, NULL, 0);
     REQUIRE(result.kind == XR_VM_OUTCOME_STALE_CODE);
+    XrVmCode *rebuilt = NULL;
+    REQUIRE(xr_vm_code_build(program, profile, &fixed_options, &rebuilt, &code_diagnostic) ==
+            XR_VM_CODE_OK);
+    REQUIRE(fingerprint_equal(xr_vm_code_private_digest(code), xr_vm_code_private_digest(rebuilt)));
+    xr_vm_code_free(rebuilt);
+    XrTargetProfile *foreign_profile =
+        xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(foreign_profile != NULL);
+    TestProviderBindings foreign_bindings;
+    build_provider_bindings(foreign_profile, &foreign_bindings);
+    XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 42u);
+    REQUIRE(!xr_vm_code_matches_instance(code, foreign));
+    result = xr_vm_code_execute(code, foreign, entry, NULL, 0);
+    REQUIRE(result.kind == XR_VM_OUTCOME_STALE_CODE);
+    retire_and_free(&foreign);
+    xr_target_profile_free(foreign_profile);
     xr_vm_code_free(code);
     REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) == XR_EXECUTION_OK);
     retire_and_free(&successor);
@@ -3117,14 +3273,15 @@ static void require_class_alias_reference_oracle(const ClassLifecycleLog *log,
 }
 
 static XrVmOutcome execute_class_alias_vm(XrValidatedProgram *program, XrInstance *instance,
-                                          XrVmDecodePolicy policy, ClassLifecycleLog *log) {
+                                          const XrTargetProfile *profile, XrVmDecodePolicy policy,
+                                          ClassLifecycleLog *log) {
     XrVmCodeOptions options = xr_vm_code_default_options();
     options.decode_policy = policy;
     options.lifecycle_context = log;
     options.lifecycle_event = record_vm_class_lifecycle;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
-    REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &options, &code, &diagnostic) == XR_VM_CODE_OK);
     XrVmOutcome result = xr_vm_code_execute(
         code, instance, xr_validated_program_entry_function(program), NULL, 0u);
     xr_vm_code_free(code);
@@ -3153,7 +3310,8 @@ static void test_class_reference_semantics_differential(void) {
     xr_reference_outcome_dispose(&reference);
     for (uint32_t index = 0u; index < sizeof(policies) / sizeof(policies[0]); ++index) {
         ClassLifecycleLog log = {0};
-        XrVmOutcome result = execute_class_alias_vm(program, instance, policies[index], &log);
+        XrVmOutcome result =
+            execute_class_alias_vm(program, instance, profile, policies[index], &log);
         REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
         REQUIRE(result.value.kind == XR_VM_VALUE_I64);
         require_class_alias_vm_oracle(&log, result);
@@ -3190,7 +3348,8 @@ static void test_class_ref_receiver_direct_call(void) {
     XrInstance *instance = create_instance(program, profile, &bindings, 2u);
     for (uint32_t index = 0u; index < sizeof(policies) / sizeof(policies[0]); ++index) {
         ClassLifecycleLog log = {0};
-        XrVmOutcome result = execute_class_alias_vm(program, instance, policies[index], &log);
+        XrVmOutcome result =
+            execute_class_alias_vm(program, instance, profile, policies[index], &log);
         REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
         REQUIRE(result.value.kind == XR_VM_VALUE_I64);
         REQUIRE(result.value.as.i64 == 42);
@@ -3254,7 +3413,7 @@ static void test_class_owned_exchange_and_self_assignment(void) {
         for (uint32_t policy = 0u; policy < sizeof(policies) / sizeof(policies[0]); ++policy) {
             ClassLifecycleLog log = {0};
             XrVmOutcome result =
-                execute_class_alias_vm(program, instance, policies[policy], &log);
+                execute_class_alias_vm(program, instance, profile, policies[policy], &log);
             REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
             REQUIRE(result.value.kind == XR_VM_VALUE_I64);
             REQUIRE(result.value.as.i64 == (self_assignment ? 7 : 42));
@@ -3304,7 +3463,7 @@ static void test_class_trivial_field_load_is_snapshot_and_bounded(void) {
         options.max_value_cells = 2u;
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic diagnostic;
-        REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, &diagnostic) == XR_VM_CODE_OK);
         XrVmOutcome result = xr_vm_code_execute(
             code, instance, xr_validated_program_entry_function(program), NULL, 0u);
         REQUIRE(result.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
@@ -3335,7 +3494,8 @@ static void test_class_error_outcomes_fail_closed(void) {
             options.lifecycle_event = record_vm_class_lifecycle;
             XrVmCode *code = NULL;
             XrVmCodeDiagnostic diagnostic;
-            REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+            REQUIRE(xr_vm_code_build(program, profile, &options, &code, &diagnostic) ==
+                    XR_VM_CODE_OK);
             XrVmOutcome result = xr_vm_code_execute(
                 code, instance, xr_validated_program_entry_function(program), NULL, 0u);
             REQUIRE(result.kind == XR_VM_OUTCOME_INVALID_INVOCATION);
@@ -3421,7 +3581,8 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
         options.decode_policy = policies[policy_index];
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic code_diagnostic;
-        REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) ==
+                XR_VM_CODE_OK);
         XrVmOutcome one_shot = xr_vm_code_execute(code, instance, 0u, NULL, 0u);
         REQUIRE(one_shot.kind == XR_VM_OUTCOME_INVALID_INVOCATION);
         XrVmExecution *execution = NULL;
@@ -3456,7 +3617,7 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
         XrInstance *cancel_instance =
             create_instance(program, profile, &bindings, 301u + policy_index);
         XrVmCode *cancel_code = NULL;
-        REQUIRE(xr_vm_code_build(cancel_instance, &options, &cancel_code, &code_diagnostic) ==
+        REQUIRE(xr_vm_code_build(program, profile, &options, &cancel_code, &code_diagnostic) ==
                 XR_VM_CODE_OK);
         XrVmExecution *cancel_execution = NULL;
         REQUIRE(
@@ -3535,7 +3696,8 @@ static void test_coroutine_cancel_drops_exact_live_owner(void) {
 
         XrInstance *instance = create_instance(program, profile, &bindings, 501u + policy_index);
         XrVmCode *code = NULL;
-        REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) ==
+                XR_VM_CODE_OK);
         XrVmExecution *execution = NULL;
         REQUIRE(xr_vm_execution_create(code, instance, owner_function, &argument, 1u, &execution));
         XrVmOutcome yielded = xr_vm_execution_step(execution);
@@ -3550,7 +3712,8 @@ static void test_coroutine_cancel_drops_exact_live_owner(void) {
 
         instance = create_instance(program, profile, &bindings, 601u + policy_index);
         code = NULL;
-        REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) ==
+                XR_VM_CODE_OK);
         execution = NULL;
         REQUIRE(xr_vm_execution_create(code, instance, owner_function, &argument, 1u, &execution));
         yielded = xr_vm_execution_step(execution);
@@ -3706,9 +3869,10 @@ static XrFingerprint run_vm_coroutine_trap_case(XrValidatedProgram *program,
     options.decode_policy = policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic code_diagnostic;
-    REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+    REQUIRE(xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
     REQUIRE(xr_vm_code_decode_policy(code) == policy);
-    REQUIRE(xr_vm_code_cache_key(code).generation == 701u);
+    REQUIRE(
+        xr_fingerprint_equal(xr_vm_code_execution_id(code), xr_execution_instance_id(instance)));
     REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
     XrVmExecution *execution = NULL;
     REQUIRE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
@@ -3923,7 +4087,8 @@ static void test_coroutine_self_edge_parallel_arguments(void) {
             options.decode_policy = policies[policy];
             XrVmCode *code = NULL;
             XrVmCodeDiagnostic code_diagnostic;
-            REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+            REQUIRE(xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) ==
+                    XR_VM_CODE_OK);
             XrVmExecution *execution = NULL;
             REQUIRE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
             XrVmOutcome result = xr_vm_execution_step(execution);
@@ -3954,14 +4119,15 @@ static void test_reason_private_cleanup_graph_differential(void) {
     XrProgramCleanupGraphFixture fixture;
     REQUIRE(xr_program_cleanup_graph_fixture_init(&fixture));
     fixture.requirement.contract_id = contract->contract_id;
-    fixture.operation = contract->operations[0].stable_id;
+    fixture.operation_requirement.operation_id = contract->operations[0].stable_id;
     for (uint32_t block = 0u; block < XR_CLEANUP_GRAPH_BLOCK_COUNT; ++block) {
         for (uint32_t index = 0u; index < fixture.blocks[block].instruction_count; ++index) {
             XrCoreIrInstructionInput *instruction = &fixture.instructions[block][index];
             if (instruction->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
                 instruction->immediate.provider_operation.contract_id =
                     fixture.requirement.contract_id;
-                instruction->immediate.provider_operation.operation_id = fixture.operation;
+                instruction->immediate.provider_operation.operation_id =
+                    fixture.operation_requirement.operation_id;
             }
         }
     }
@@ -4024,7 +4190,8 @@ static void test_reason_private_cleanup_graph_differential(void) {
             options.decode_policy = policies[policy];
             XrVmCode *code = NULL;
             XrVmCodeDiagnostic code_diagnostic;
-            REQUIRE(xr_vm_code_build(instance, &options, &code, &code_diagnostic) == XR_VM_CODE_OK);
+            REQUIRE(xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) ==
+                    XR_VM_CODE_OK);
             XrVmExecution *execution = NULL;
             REQUIRE(xr_vm_execution_create(code, instance, entry, NULL, 0u, &execution));
             REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
@@ -4108,9 +4275,9 @@ static int run_h2_class_differential_probe(const char *mode) {
     build_provider_bindings(profile, &bindings);
     XrInstance *instance = create_instance(program, profile, &bindings, 1u);
     ClassLifecycleLog log = {0};
-    XrVmOutcome result = execute_class_alias_vm(
-        program, instance,
-        fixed ? XR_VM_DECODE_FIXED_ROWS : XR_VM_DECODE_BASELINE_VIEW, &log);
+    XrVmOutcome result =
+        execute_class_alias_vm(program, instance, profile,
+                               fixed ? XR_VM_DECODE_FIXED_ROWS : XR_VM_DECODE_BASELINE_VIEW, &log);
     require_class_alias_vm_oracle(&log, result);
     retire_and_free(&instance);
     xr_target_profile_free(profile);
@@ -4152,6 +4319,7 @@ int main(int argc, char **argv) {
     test_provider_trap_continuation_differential();
     test_pipe_provider_call_differential();
     test_provider_output_differential();
+    test_text_differential();
     test_sealed_invoke_and_cleanup_cfg();
     test_typed_panic_invoke_and_cleanup_cfg();
     test_condition_assert_panic_cleanup_cfg();

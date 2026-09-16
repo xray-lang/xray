@@ -97,7 +97,7 @@ static XrType stub_channel = {
     .container = {.element_type = &stub_int},
 };
 static XrType stub_module_namespace = {
-    .kind = XR_KIND_STRUCT_OBJECT,
+    .kind = XR_KIND_UNKNOWN,
     .id = 5,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
@@ -751,9 +751,8 @@ static XtpFixture make_source_export_fixture(void) {
     fixture.profile = build_profile();
     const XrSemanticPlan *dependencies[] = {fixture.dependency};
     char error[512] = {0};
-    bool built = xr_target_plan_build_module_set(fixture.semantic, dependencies, 1,
-                                                 fixture.profile, &fixture.plan, error,
-                                                 sizeof(error));
+    bool built = xr_target_plan_build_module_set(fixture.semantic, dependencies, 1, fixture.profile,
+                                                 &fixture.plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "source-export XTP fixture TargetPlan failed: %s\n", error);
     REQUIRE(built);
@@ -1040,8 +1039,8 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
             xr_xtp_take_u32(fixture.bytes + call_offset + 32) == XR_SEMANTIC_INDEX_NONE &&
             xr_xtp_take_u32(fixture.bytes + call_offset + 104) == XR_SEMANTIC_INDEX_NONE &&
             xr_xtp_take_u16(fixture.bytes + call_offset + 128) == 0 &&
-            fixture.bytes[call_offset + 138] == XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
-            fixture.bytes[call_offset + 139] == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
+            fixture.bytes[call_offset + 136] == XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
+            fixture.bytes[call_offset + 137] == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
 
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
@@ -1060,11 +1059,11 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
     static const size_t mutations[] = {
         20,  /* semantic_call_target */
         32,  /* callee_function */
-        84,  /* caller_storage_slot */
-        108, /* argument_count */
-        114, /* flags */
-        116, /* calling_convention */
-        117, /* target_kind */
+        104, /* caller_storage_slot */
+        128, /* argument_count */
+        134, /* flags */
+        136, /* calling_convention */
+        137, /* target_kind */
     };
     for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
         uint8_t *copy = copy_artifact(&fixture);
@@ -1086,8 +1085,8 @@ static void test_stringbuilder_row_roundtrip_and_mutate(void) {
     REQUIRE(calls && count == 1 && calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
             calls[0].argument_count == 0 && calls[0].flags == 0 &&
             calls[0].result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
-            calls[0].calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR &&
-            calls[0].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR);
+            calls[0].calling_convention == XR_TARGET_CALL_CONVENTION_RUNTIME_CONSTRUCTOR &&
+            calls[0].target_kind == XR_TARGET_CALL_TARGET_RUNTIME_CONSTRUCTOR);
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
@@ -1096,7 +1095,7 @@ static void test_stringbuilder_row_roundtrip_and_mutate(void) {
                                            error, sizeof(error)));
     const XrTargetCallRecord *decoded_calls = xr_target_plan_calls(decoded, &count);
     REQUIRE(decoded_calls && count == 1 &&
-            decoded_calls[0].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR &&
+            decoded_calls[0].target_kind == XR_TARGET_CALL_TARGET_RUNTIME_CONSTRUCTOR &&
             decoded_calls[0].result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
             xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
                                  xr_target_plan_fingerprint(fixture.plan)));
@@ -1644,9 +1643,11 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 }
 
 static void test_wire_row_inventory(void) {
+    /* Schema 61 removes the U16 native-leaf selector from the 182-byte call
+     * row; logical provider identity remains in the existing stable ID. */
     static const uint32_t expected[] = {
         0,  448, 58, 12, 24, 108, 28, 40, 24, 12,  48,  58,  112,
-        32, 182, 58, 20, 4,  20,  44, 12, 48, 144, 132, 216, 340,
+        32, 180, 58, 20, 4,  20,  44, 12, 48, 144, 132, 216, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -2099,6 +2100,11 @@ static int write_runtime_fixture_header(const char *path) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "runtime-constructor") == 0) {
+        test_stringbuilder_row_roundtrip_and_mutate();
+        puts("Runtime constructor projection tests passed");
+        return 0;
+    }
     if (argc == 3 && strcmp(argv[1], "--write") == 0)
         return write_fixture(argv[2]);
     if (argc == 4 && strcmp(argv[1], "--write-runtime-artifacts") == 0)

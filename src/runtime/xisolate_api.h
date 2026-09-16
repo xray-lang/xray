@@ -34,6 +34,7 @@ typedef struct XrRuntimeCore XrRuntimeCore;
 
 // Runtime core
 XR_FUNC XrRuntimeCore *xr_isolate_get_runtime_core(XrVMRuntime *X);
+XR_FUNC bool xr_isolate_register_runtime_prelude_enums(XrVMRuntime *X);
 
 // Scheduler runtime
 XR_FUNC XrRuntime *xr_isolate_get_scheduler_runtime(XrVMRuntime *X);

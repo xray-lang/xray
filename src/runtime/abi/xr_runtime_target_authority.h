@@ -16,8 +16,6 @@
 #include "xr_runtime_string_object.h"
 #include "xr_target_machine_facts.h"
 
-#define XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT 4
-
 /* Owned, pointer-free snapshot. The native runtime constructs this from its
  * concrete C layouts and canonical registries; consumers may copy the value
  * but must not synthesize or patch individual fingerprints. */
@@ -26,16 +24,14 @@ typedef struct XrRuntimeTargetAuthority {
     XrRuntimeObjectHeaderMaterializationFacts object_header_materialization;
     XrRuntimeStringObjectContract string_contract;
     XrRuntimeAbiContract runtime_abi;
-    XrTargetProviderContract
-        providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT];
+    XrTargetProviderContract providers[XR_RUNTIME_ABI_MAX_PROVIDERS];
     size_t provider_count;
 } XrRuntimeTargetAuthority;
 
 /* The current production owner is the native hosted runtime. Cross-target and
  * freestanding authorities require independently validated manifests and are
  * deliberately not inferred from the host. */
-XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
-    XrRuntimeTargetAuthority *out);
+XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuthority *out);
 
 /* Builds the native freestanding ABI from the standard hook contract.  The
  * selector is only an allow-list for canonical provider rows; callers cannot
@@ -46,8 +42,7 @@ XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(
 /* Exact comparison is field-wise so C padding can never become authority.
  * The current native authority deliberately supports only scalar execution;
  * a nonzero vector feature or width therefore never matches. */
-XR_FUNC bool xr_runtime_target_authority_machine_matches(
-    const XrRuntimeTargetAuthority *authority,
-    const XrTargetMachineFacts *candidate);
+XR_FUNC bool xr_runtime_target_authority_machine_matches(const XrRuntimeTargetAuthority *authority,
+                                                         const XrTargetMachineFacts *candidate);
 
 #endif  // XR_RUNTIME_TARGET_AUTHORITY_H

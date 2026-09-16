@@ -11,6 +11,8 @@
 #include "xglobal_producer.h"
 
 #include "../base/xhash.h"
+#include "../base/xarena.h"
+#include "../toolchain/xcompiler_session.h"
 #include "../base/xmalloc.h"
 #include "../os/os_fs.h"
 #include "../os/os_proc.h"
@@ -138,7 +140,6 @@ typedef struct XgProducer {
     uint32_t callable_target_set_cap;
     XgFuncId next_func_id;
     XaAnalyzer *analyzer;
-    bool allow_incomplete_exact_type_identity;
     bool failed;
 } XgProducer;
 
@@ -901,7 +902,7 @@ static uint64_t hash_exact_generic_arg(uint64_t hash, XgProducer *producer,
     bool has_nominal = false;
     XaAnalyzer *analyzer = producer ? producer->analyzer : NULL;
     if (!xr_tref_exact_semantic_key(analyzer, type_arg, &exact_key, &has_nominal)) {
-        if (producer && !producer->allow_incomplete_exact_type_identity)
+        if (producer)
             producer->failed = true;
         return hash_tref(hash, type_arg);
     }
@@ -2621,10 +2622,6 @@ producer_generic_method_receiver_matches(XgProducer *producer, XgClassId receive
             return receiver_class_id == source_owner->class_id;
         }
     }
-    if (producer->allow_incomplete_exact_type_identity &&
-        receiver_class_id == source_owner->class_id)
-        return true;
-
     XgClassNameRow *receiver_row = producer_lookup_class_row_by_id(producer, receiver_class_id);
     const XgClassSummary *receiver =
         receiver_row && receiver_row->summary_index < producer->evidence->nclasses
@@ -4875,6 +4872,29 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return body_struct_literal_type_key(bc, expr);
         default:
             break;
+    }
+    /* Expressions without a source type annotation still have an inferred
+     * carrier. Use the same type-to-syntax conversion as specialization so
+     * inline and named arguments publish the same legacy shape identity.
+     * Top-level const is carried by ownership/use facts, not syntax TypeKey. */
+    XaAnalyzer *analyzer = bc->producer ? bc->producer->analyzer : NULL;
+    XrType *inferred = analyzer ? xa_analyzer_get_node_type(analyzer, expr) : NULL;
+    if (inferred) {
+        XrType carrier = *inferred;
+        carrier.is_const = false;
+        XrArena scratch;
+        XrCompilerSessionScope scope;
+        xr_arena_init(&scratch, 4096);
+        if (!xr_compiler_session_push_arena(analyzer->compiler_session, &scratch, NULL, &scope)) {
+            xr_arena_destroy(&scratch);
+            bc->producer->failed = true;
+            return 0;
+        }
+        XrTypeRef *type_ref = xa_synthesize_type_ref(analyzer->compiler_session, &carrier);
+        uint32_t key = type_ref ? hash_tref32(type_ref) : 0;
+        xr_compiler_session_pop_arena(&scope);
+        xr_arena_destroy(&scratch);
+        return key;
     }
     return 0;
 }
@@ -8544,8 +8564,10 @@ static void body_bind_map_shape_local_from_source(XgBodyCollect *bc, const char 
     target = body_find_local(bc, name);
     if (!target)
         return;
-    if (target->type_key != 0 && source->map_receiver_type_key != 0 &&
-        target->type_key != source->map_receiver_type_key)
+    /* Local TypeKeys describe the complete declared/inferred carrier. The
+     * container shape key uses a separate hash domain over key/value types;
+     * comparing those identities would discard valid analyzed aliases. */
+    if (target->type_key != 0 && target->type_key != source->type_key)
         return;
     body_bind_map_shape_local(bc, name, source->map_shape_id, source->map_container_kind,
                               source->map_receiver_type_key, source->map_key_type_key,
@@ -10264,36 +10286,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         } else if (syntactic_generic_type_arg_count > 0 &&
                    (generic_origin_decl_id != XG_NO_ID || generic_origin_func_id != XG_NO_ID ||
                     generic_origin_method_id != XG_NO_ID || generic_origin_class_id != XG_NO_ID)) {
-            /* A class allocation can be an AST_CALL_EXPR even though there is
-             * no
-             * user constructor body and therefore no analyzer call fact.
-             *
-             * Pre-monomorphization root discovery may retain that declaration-
-             *
-             * anchored tuple; the final producer still requires analyzer-owned
-             *
-             * specialization evidence and rejects this path. */
-            if (bc->producer->allow_incomplete_exact_type_identity &&
-                generic_kind == XG_GENERIC_INST_CLASS && generic_origin_class_id != XG_NO_ID) {
-                XgGenericInstInput input = {
-                    .name = generic_name,
-                    .declaration_type_args = call->as.call_expr.type_args,
-                    .declaration_type_arg_count = (uint32_t) syntactic_generic_type_arg_count,
-                    .origin_decl_id = generic_origin_decl_id,
-                    .origin_func_id = generic_origin_func_id,
-                    .origin_method_id = generic_origin_method_id,
-                    .origin_class_id = generic_origin_class_id,
-                    .origin_nominal_key =
-                        producer_lookup_class_nominal_key(bc->producer, generic_origin_class_id),
-                    .root_callsite_id = row.callsite_id,
-                    .source_span_id = (uint32_t) call->line,
-                    .kind = XG_GENERIC_INST_CLASS,
-                    .specialization_effect = XG_GENERIC_SPECIALIZATION_EFFECT_NONE,
-                };
-                if (!body_add_generic_inst(bc, &input))
-                    bc->producer->failed = true;
-            } else if (!body_type_args_contain_type_param(call->as.call_expr.type_args,
-                                                          syntactic_generic_type_arg_count)) {
+            if (!body_type_args_contain_type_param(call->as.call_expr.type_args,
+                                                    syntactic_generic_type_arg_count)) {
                 /* An instantiation whose tuple is still open, such as
                  * RouteMatch<T> constructed inside Router<T>, is a template
                  * edge of the generic source body rather than an executable
@@ -13117,8 +13111,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
 static bool xg_global_evidence_build_from_module_graph_impl(
     XgGlobalEvidence *evidence, const XrModuleGraph *graph, uint32_t profile,
     uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
-    uint32_t imported_module_count, XaAnalyzer *analyzer,
-    bool allow_incomplete_exact_type_identity) {
+    uint32_t imported_module_count, XaAnalyzer *analyzer) {
     XgBuildKey key;
     XgProducer producer;
     if (!evidence || !graph || (imported_module_count > 0 && !imported_modules))
@@ -13132,7 +13125,6 @@ static bool xg_global_evidence_build_from_module_graph_impl(
     producer.module_graph = graph;
     producer.next_func_id = 1;
     producer.analyzer = analyzer;
-    producer.allow_incomplete_exact_type_identity = allow_incomplete_exact_type_identity;
 
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int idx = graph->topo_order[ti];
@@ -13236,48 +13228,26 @@ static bool xg_global_evidence_build_from_module_graph_impl(
     return true;
 }
 
+static bool evidence_finalize_generic_body_root(XgGlobalEvidence *evidence,
+                                                XgGenericInstSummary *inst);
+
 XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
     XgGlobalEvidence *evidence, const XrModuleGraph *graph, uint32_t profile,
     uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
     uint32_t imported_module_count, XaAnalyzer *analyzer) {
-    return xg_global_evidence_build_from_module_graph_impl(evidence, graph, profile,
-                                                           imported_summary_hash, imported_modules,
-                                                           imported_module_count, analyzer, false);
-}
-
-XR_FUNC bool xg_global_evidence_build_pre_monomorphization_from_module_graph(
-    XgGlobalEvidence *evidence, const XrModuleGraph *graph, uint32_t profile,
-    uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
-    uint32_t imported_module_count, XaAnalyzer *analyzer) {
-    return xg_global_evidence_build_from_module_graph_impl(evidence, graph, profile,
-                                                           imported_summary_hash, imported_modules,
-                                                           imported_module_count, analyzer, true);
-}
-
-static const XgDeclSummary *evidence_find_decl_by_id(const XgGlobalEvidence *ev, XgDeclId id) {
-    if (!ev || id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < ev->ndecls; i++) {
-        if (ev->decls[i].decl_id == id)
-            return &ev->decls[i];
+    if (!xg_global_evidence_build_from_module_graph_impl(
+            evidence, graph, profile, imported_summary_hash, imported_modules,
+            imported_module_count, analyzer))
+        return false;
+    /* Mono retains declaration-anchored origins on each rewritten root. All
+     * target, storage and effect rows now belong to this one completed graph. */
+    for (uint32_t i = 0u; i < evidence->ngeneric_insts; ++i) {
+        if (!evidence_finalize_generic_body_root(evidence, &evidence->generic_insts[i])) {
+            xg_global_evidence_free(evidence);
+            return false;
+        }
     }
-    return NULL;
-}
-
-static const XgDeclSummary *evidence_find_matching_decl(const XgGlobalEvidence *ev,
-                                                        const XgDeclSummary *src) {
-    const XgDeclSummary *match = NULL;
-    if (!ev || !src || src->source_node_id == 0)
-        return NULL;
-    for (uint32_t i = 0; i < ev->ndecls; i++) {
-        const XgDeclSummary *decl = &ev->decls[i];
-        if (decl->module_id != src->module_id || decl->source_node_id != src->source_node_id)
-            continue;
-        if (match)
-            return NULL;
-        match = decl;
-    }
-    return match;
+    return true;
 }
 
 static const XgBodySummary *evidence_find_body_by_func_id(const XgGlobalEvidence *ev,
@@ -13302,77 +13272,6 @@ static const XgBodySummary *evidence_find_body_by_method_id(const XgGlobalEviden
     return NULL;
 }
 
-static const XgBodySummary *evidence_find_matching_body(const XgGlobalEvidence *ev,
-                                                        const XgBodySummary *src) {
-    const XgBodySummary *match = NULL;
-    if (!ev || !src || (src->source_node_id == 0 && src->kind != XG_BODY_MODULE_INIT))
-        return NULL;
-    for (uint32_t i = 0; i < ev->nbodies; i++) {
-        const XgBodySummary *body = &ev->bodies[i];
-        if (body->module_id != src->module_id || body->source_node_id != src->source_node_id)
-            continue;
-        if (match)
-            return NULL;
-        match = body;
-    }
-    return match;
-}
-
-static const XgClassSummary *evidence_find_class_by_id(const XgGlobalEvidence *ev,
-                                                       XgClassId class_id) {
-    if (!ev || class_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < ev->nclasses; i++) {
-        if (ev->classes[i].class_id == class_id)
-            return &ev->classes[i];
-    }
-    return NULL;
-}
-
-static const XgClassSummary *evidence_find_matching_class(const XgGlobalEvidence *ev,
-                                                          const XgClassSummary *src,
-                                                          XgDeclId remapped_decl_id) {
-    if (!ev || !src)
-        return NULL;
-    for (uint32_t i = 0; i < ev->nclasses; i++) {
-        const XgClassSummary *cls = &ev->classes[i];
-        if (cls->module_id == src->module_id && cls->decl_kind == src->decl_kind &&
-            cls->name_id == src->name_id &&
-            (remapped_decl_id == XG_NO_ID || cls->decl_id == remapped_decl_id))
-            return cls;
-    }
-    return NULL;
-}
-
-static const XgMethodSummary *evidence_find_method_by_id(const XgGlobalEvidence *ev,
-                                                         XgMethodId method_id) {
-    if (!ev || method_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < ev->nmethods; i++) {
-        if (ev->methods[i].method_id == method_id)
-            return &ev->methods[i];
-    }
-    return NULL;
-}
-
-static const XgMethodSummary *evidence_find_matching_method(const XgGlobalEvidence *ev,
-                                                            const XgMethodSummary *src,
-                                                            XgClassId remapped_owner_class_id) {
-    const XgMethodSummary *match = NULL;
-    if (!ev || !src || src->source_node_id == 0 || remapped_owner_class_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < ev->nmethods; i++) {
-        const XgMethodSummary *method = &ev->methods[i];
-        if (method->owner_class_id != remapped_owner_class_id ||
-            method->source_node_id != src->source_node_id)
-            continue;
-        if (match)
-            return NULL;
-        match = method;
-    }
-    return match;
-}
-
 static const XgCallsiteSummary *evidence_find_callsite_by_id(const XgGlobalEvidence *ev,
                                                              XgCallsiteId callsite_id) {
     if (!ev || callsite_id == XG_NO_ID)
@@ -13382,63 +13281,6 @@ static const XgCallsiteSummary *evidence_find_callsite_by_id(const XgGlobalEvide
             return &ev->callsites[i];
     }
     return NULL;
-}
-
-static const XgCallsiteSummary *
-evidence_find_matching_callsite(const XgGlobalEvidence *ev, const XgCallsiteSummary *src,
-                                const XgBodySummary *remapped_owner_body) {
-    const XgCallsiteSummary *match = NULL;
-    if (!ev || !src || src->source_node_id == 0 || !remapped_owner_body)
-        return NULL;
-    for (uint32_t i = 0; i < ev->ncallsites; i++) {
-        const XgCallsiteSummary *call = &ev->callsites[i];
-        if (call->owner_func_id != remapped_owner_body->func_id)
-            continue;
-        if (call->source_node_id != src->source_node_id)
-            continue;
-        if (match)
-            return NULL;
-        match = call;
-    }
-    return match;
-}
-
-static bool evidence_has_equivalent_generic_inst(const XgGlobalEvidence *ev,
-                                                 const XgGenericInstSummary *inst) {
-    if (!ev || !inst)
-        return false;
-    for (uint32_t i = 0; i < ev->ngeneric_insts; i++) {
-        const XgGenericInstSummary *row = &ev->generic_insts[i];
-        if (row->module_id != inst->module_id || row->kind != inst->kind ||
-            row->name_id != inst->name_id || row->receiver_class_id != inst->receiver_class_id ||
-            row->origin_nominal_key != inst->origin_nominal_key ||
-            row->receiver_type_key != inst->receiver_type_key ||
-            row->receiver_type_arg_key_start != inst->receiver_type_arg_key_start ||
-            row->receiver_type_arg_count != inst->receiver_type_arg_count ||
-            row->declaration_type_key != inst->declaration_type_key ||
-            row->declaration_type_arg_key_start != inst->declaration_type_arg_key_start ||
-            row->declaration_type_arg_count != inst->declaration_type_arg_count ||
-            row->specialization_effect != inst->specialization_effect ||
-            row->origin_decl_id != inst->origin_decl_id ||
-            row->origin_func_id != inst->origin_func_id ||
-            row->origin_method_id != inst->origin_method_id ||
-            row->origin_class_id != inst->origin_class_id ||
-            row->constraint_interface_id != inst->constraint_interface_id)
-            continue;
-        if (inst->specialized_func_id != XG_NO_ID || row->specialized_func_id != XG_NO_ID) {
-            if (row->specialized_func_id == inst->specialized_func_id)
-                return true;
-            continue;
-        }
-        if (inst->specialized_class_id != XG_NO_ID || row->specialized_class_id != XG_NO_ID) {
-            if (row->specialized_class_id == inst->specialized_class_id)
-                return true;
-            continue;
-        }
-        if (row->root_callsite_id == inst->root_callsite_id)
-            return true;
-    }
-    return false;
 }
 
 static uint32_t evidence_body_size_estimate(const XgBodySummary *body) {
@@ -13610,17 +13452,6 @@ static bool evidence_add_generic_body_deepen_rows(XgGlobalEvidence *dst,
     return xg_global_evidence_add_generic_code_size(dst, &code_size) != NULL;
 }
 
-static bool evidence_has_generic_body_use(const XgGlobalEvidence *evidence,
-                                          XgGenericInstId generic_inst_id) {
-    if (!evidence || generic_inst_id == XG_NO_ID)
-        return false;
-    for (uint32_t i = 0u; i < evidence->ngeneric_body_uses; ++i) {
-        if (evidence->generic_body_uses[i].generic_inst_id == generic_inst_id)
-            return true;
-    }
-    return false;
-}
-
 static bool evidence_finalize_generic_body_root(XgGlobalEvidence *evidence,
                                                 XgGenericInstSummary *inst) {
     if (!evidence || !inst ||
@@ -13652,162 +13483,5 @@ static bool evidence_finalize_generic_body_root(XgGlobalEvidence *evidence,
         return true;
     inst->specialized_func_id = specialized->func_id;
     inst->flags |= XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI;
-    if (evidence_has_generic_body_use(evidence, inst->generic_inst_id))
-        return true;
     return evidence_add_generic_body_deepen_rows(evidence, inst, call, owner, origin, specialized);
-}
-
-XR_FUNC bool xg_global_evidence_merge_generic_inst_roots(XgGlobalEvidence *dst,
-                                                         const XgGlobalEvidence *roots) {
-    if (!dst || !roots)
-        return false;
-    /* Final evidence may already contain analyzer-published mono roots. Close
-     * their
-     * specialized target before comparing pre-mono roots, otherwise the
-     * same semantic root
-     * differs only by a not-yet-derived specialized id and
-     * is appended twice. */
-    for (uint32_t i = 0u; i < dst->ngeneric_insts; ++i) {
-        if (!evidence_finalize_generic_body_root(dst, &dst->generic_insts[i]))
-            return false;
-    }
-    for (uint32_t i = 0; i < roots->ngeneric_insts; i++) {
-        const XgGenericInstSummary *src = &roots->generic_insts[i];
-        XgGenericInstSummary mapped = *src;
-        const XgDeclSummary *src_decl = evidence_find_decl_by_id(roots, src->origin_decl_id);
-        const XgDeclSummary *dst_decl = evidence_find_matching_decl(dst, src_decl);
-        const XgBodySummary *src_origin_body =
-            evidence_find_body_by_func_id(roots, src->origin_func_id);
-        const XgBodySummary *dst_origin_body = NULL;
-        const XgClassSummary *src_class = evidence_find_class_by_id(roots, src->origin_class_id);
-        const XgClassSummary *dst_class = NULL;
-        const XgClassSummary *src_receiver_class =
-            evidence_find_class_by_id(roots, src->receiver_class_id);
-        const XgClassSummary *dst_receiver_class = NULL;
-        const XgMethodSummary *src_method =
-            evidence_find_method_by_id(roots, src->origin_method_id);
-        const XgMethodSummary *dst_method = NULL;
-        const XgCallsiteSummary *src_call =
-            evidence_find_callsite_by_id(roots, src->root_callsite_id);
-        const XgBodySummary *src_owner_body =
-            src_call ? evidence_find_body_by_func_id(roots, src_call->owner_func_id) : NULL;
-        const XgBodySummary *dst_owner_body = NULL;
-        const XgCallsiteSummary *dst_call = NULL;
-        const XgBodySummary *dst_specialized_body = NULL;
-
-        mapped.generic_inst_id = (XgGenericInstId) (dst->ngeneric_insts + 1);
-        mapped.origin_decl_id = dst_decl ? dst_decl->decl_id : XG_NO_ID;
-        if ((mapped.kind == XG_GENERIC_INST_CLASS || mapped.kind == XG_GENERIC_INST_METHOD) &&
-            (!dst_decl || mapped.origin_nominal_key == 0 ||
-             mapped.origin_nominal_key != dst_decl->nominal_key))
-            return false;
-        if (mapped.kind != XG_GENERIC_INST_CLASS && mapped.kind != XG_GENERIC_INST_METHOD &&
-            mapped.origin_nominal_key != 0)
-            return false;
-
-        if (src_origin_body)
-            dst_origin_body = evidence_find_matching_body(dst, src_origin_body);
-        mapped.origin_func_id = dst_origin_body ? dst_origin_body->func_id : XG_NO_ID;
-
-        if (src_class) {
-            XgDeclId remapped_class_decl = mapped.origin_decl_id;
-            if (src_class->decl_id != src->origin_decl_id) {
-                const XgDeclSummary *class_decl =
-                    evidence_find_decl_by_id(roots, src_class->decl_id);
-                const XgDeclSummary *mapped_class_decl =
-                    evidence_find_matching_decl(dst, class_decl);
-                remapped_class_decl = mapped_class_decl ? mapped_class_decl->decl_id : XG_NO_ID;
-            }
-            dst_class = evidence_find_matching_class(dst, src_class, remapped_class_decl);
-        }
-        mapped.origin_class_id = dst_class ? dst_class->class_id : XG_NO_ID;
-
-        if (src->receiver_class_id != XG_NO_ID) {
-            const XgDeclSummary *receiver_decl;
-            const XgDeclSummary *mapped_receiver_decl;
-            if (!src_receiver_class)
-                return false;
-            receiver_decl = evidence_find_decl_by_id(roots, src_receiver_class->decl_id);
-            mapped_receiver_decl = evidence_find_matching_decl(dst, receiver_decl);
-            if (!mapped_receiver_decl)
-                return false;
-            dst_receiver_class = evidence_find_matching_class(dst, src_receiver_class,
-                                                              mapped_receiver_decl->decl_id);
-            if (!dst_receiver_class)
-                return false;
-        }
-        mapped.receiver_class_id = dst_receiver_class ? dst_receiver_class->class_id : XG_NO_ID;
-
-        if (src_method) {
-            XgClassId remapped_owner_class = XG_NO_ID;
-            const XgClassSummary *src_owner_class =
-                evidence_find_class_by_id(roots, src_method->owner_class_id);
-            if (src_owner_class) {
-                const XgDeclSummary *owner_decl =
-                    evidence_find_decl_by_id(roots, src_owner_class->decl_id);
-                const XgDeclSummary *mapped_owner_decl =
-                    evidence_find_matching_decl(dst, owner_decl);
-                const XgClassSummary *dst_owner_class = evidence_find_matching_class(
-                    dst, src_owner_class,
-                    mapped_owner_decl ? mapped_owner_decl->decl_id : XG_NO_ID);
-                remapped_owner_class = dst_owner_class ? dst_owner_class->class_id : XG_NO_ID;
-            }
-            dst_method = evidence_find_matching_method(dst, src_method, remapped_owner_class);
-        }
-        mapped.origin_method_id = dst_method ? dst_method->method_id : XG_NO_ID;
-
-        if (src_owner_body)
-            dst_owner_body = evidence_find_matching_body(dst, src_owner_body);
-        dst_call = evidence_find_matching_callsite(dst, src_call, dst_owner_body);
-        mapped.root_callsite_id = dst_call ? dst_call->callsite_id : XG_NO_ID;
-        if (mapped.kind == XG_GENERIC_INST_METHOD && mapped.receiver_type_arg_count > 0u) {
-            const XgClassSummary *concrete_receiver =
-                dst_call ? evidence_find_class_by_id(dst, dst_call->receiver_static_class_id)
-                         : NULL;
-            if (!concrete_receiver || (concrete_receiver->flags & XG_CLASS_MONOMORPHIZED) == 0u ||
-                concrete_receiver->decl_kind != XG_DECL_STRUCT ||
-                concrete_receiver->generic_origin_class_id != mapped.origin_class_id ||
-                concrete_receiver->generic_origin_nominal_key != mapped.origin_nominal_key ||
-                concrete_receiver->generic_type_key !=
-                    xg_generic_nominal_type_key(
-                        mapped.origin_nominal_key, concrete_receiver->generic_type_arg_key_start,
-                        concrete_receiver->generic_type_arg_count, XG_GENERIC_INST_CLASS) ||
-                concrete_receiver->generic_type_arg_count != mapped.receiver_type_arg_count)
-                return false;
-            mapped.receiver_class_id = concrete_receiver->class_id;
-            mapped.receiver_type_key = concrete_receiver->generic_type_key;
-            mapped.receiver_type_arg_key_start = concrete_receiver->generic_type_arg_key_start;
-        }
-
-        mapped.specialized_func_id = XG_NO_ID;
-        mapped.specialized_class_id = XG_NO_ID;
-        mapped.flags &= ~(XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI |
-                          XG_GENERIC_INST_CONCRETE_STORAGE);
-        if (mapped.kind == XG_GENERIC_INST_FUNCTION && dst_call &&
-            dst_call->kind == XG_CALL_DIRECT_FUNC && dst_call->static_target_func_id != XG_NO_ID &&
-            dst_call->static_target_func_id != mapped.origin_func_id)
-            dst_specialized_body =
-                evidence_find_body_by_func_id(dst, dst_call->static_target_func_id);
-        else if (mapped.kind == XG_GENERIC_INST_METHOD && dst_call &&
-                 dst_call->kind == XG_CALL_METHOD && dst_call->method_id != XG_NO_ID &&
-                 dst_call->method_id != mapped.origin_method_id)
-            dst_specialized_body = evidence_find_body_by_method_id(dst, dst_call->method_id);
-        if (dst_specialized_body) {
-            mapped.specialized_func_id = dst_specialized_body->func_id;
-            mapped.flags |= XG_GENERIC_INST_SPECIALIZED_BODY | XG_GENERIC_INST_SPECIALIZED_ABI;
-        }
-
-        if (evidence_has_equivalent_generic_inst(dst, &mapped))
-            continue;
-        if (!xg_global_evidence_add_generic_inst(dst, &mapped))
-            return false;
-        if (!evidence_add_generic_body_deepen_rows(dst, &mapped, dst_call, dst_owner_body,
-                                                   dst_origin_body, dst_specialized_body))
-            return false;
-    }
-    for (uint32_t i = 0u; i < dst->ngeneric_insts; ++i) {
-        if (!evidence_finalize_generic_body_root(dst, &dst->generic_insts[i]))
-            return false;
-    }
-    return true;
 }

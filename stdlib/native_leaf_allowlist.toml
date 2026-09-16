@@ -22,7 +22,7 @@
 #   effect           comma-separated tokens from `LEAF_EFFECT_TOKENS`, plus
 #                    any `Enum.Variant` the `.def` entry declares it raises. A
 #                    leaf the `.def` binds as `yieldable` must carry
-#                    `suspends`. `nothrow` is exclusive.
+#                    `suspends`. `nothrow` excludes throwing effects but can suspend.
 #   deletion_trigger the decidable condition under which this leaf can be
 #                    deleted. It has to be checkable by reading the repository
 #                    or by asking whether a named capability exists -- never a
@@ -1391,7 +1391,7 @@ symbol = "__sleep"
 class = "runtime_leaf"
 abi = "Xray scheduler timer-wheel suspension and coroutine resumption"
 ownership = "none"
-effect = "suspends"
+effect = "nothrow,suspends"
 provider = "the runtime timer wheel; time.xr owns validation and maximum-duration policy"
 deletion_trigger = "none while source-level sleep requires scheduler integration"
 

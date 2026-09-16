@@ -11,7 +11,7 @@
  *   Single nanosecond-precision API used everywhere instead of
  *   raw POSIX clock_gettime / nanosleep / usleep / gettimeofday.
  *
- *   - xr_time_monotonic_ns(): strictly increasing wall-independent
+ *   - xr_time_monotonic_ns(): nondecreasing wall-independent
  *     timer. Use for elapsed-time math, timeouts, deadlines.
  *   - xr_time_realtime_ns():  Unix-epoch wall clock. Use only for
  *     human-facing timestamps; never for elapsed math (NTP can
@@ -39,13 +39,14 @@
 extern "C" {
 #endif
 
-// Nanoseconds since an arbitrary, process-stable epoch. Strictly
-// monotonic. Suitable for measuring elapsed time and computing
-// timeouts/deadlines.
+// Nanoseconds since an arbitrary, process-stable epoch. Successful
+// queries are nondecreasing. Returns 0 when the host query fails.
+// Suitable for measuring elapsed time and computing timeouts/deadlines.
 XR_FUNC uint64_t xr_time_monotonic_ns(void);
 
 // Nanoseconds since the Unix epoch (1970-01-01 UTC). Wall clock;
 // may jump forward or backward when the system clock is adjusted.
+// Returns 0 when the host query fails.
 XR_FUNC uint64_t xr_time_realtime_ns(void);
 
 // Nanoseconds of CPU time consumed by the current process (user +

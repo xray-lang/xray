@@ -1674,6 +1674,12 @@ static inline XrValue xrt_enum_variant_field_get(XrValue boxed, int64_t variant,
     return xrt_enum_field_get(boxed, field + 1);
 }
 
+static inline XrValue xrt_optional_payload_get(XrValue value) {
+    if (XR_IS_NULL(value))
+        xrt_freestanding_trap("optional projection requires Some");
+    return value;
+}
+
 static inline XrValue xrt_enum_box_ordinal(XrValue obj) {
     if (XR_IS_INT(obj))
         return obj;

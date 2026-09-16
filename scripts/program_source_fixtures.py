@@ -101,8 +101,14 @@ def validate_registry(payload: object, source: str,
         if fixture is None:
             continue
         if (not isinstance(fixture, dict) or
-                set(fixture) != {"id", "expected_exit", "labels", "backends"}):
+                not {"id", "expected_exit", "labels", "backends"} <= set(fixture) or
+                not set(fixture) <= {"id", "expected_exit", "labels", "backends",
+                                     "expected_stdout_hex"}):
             raise FixtureError(f"invalid fixture record for {name}")
+        stdout_hex = fixture.get("expected_stdout_hex", "")
+        if (not isinstance(stdout_hex, str) or len(stdout_hex) % 2 != 0 or
+                not re.fullmatch(r"[0-9a-f]*", stdout_hex)):
+            raise FixtureError(f"fixture {name} requires lowercase even-length stdout hex")
         ident = fixture["id"]
         if (not isinstance(ident, str) or not IDENTIFIER.fullmatch(ident)
                 or ident == "none" or ident in fixtures):
@@ -205,6 +211,7 @@ def project_registry(registry: dict) -> tuple[bytes, bytes]:
     native_fixtures = native_fixture_records(registry)
     header = ["/* Generated source-test registry. Do not edit. */",
               "#ifndef XR_PROGRAM_SOURCE_CASES_GEN_H", "#define XR_PROGRAM_SOURCE_CASES_GEN_H",
+              "#include <stdint.h>",
               f'#define XR_SOURCE_REGISTRY_ID "{registry_identity(registry)}"',
               f'#define XR_SOURCE_CASE_COUNT {len(registry["cases"])}u',
               "typedef enum XrSourceFixtureId {", "    XR_SOURCE_FIXTURE_NONE = 0,"]
@@ -244,8 +251,9 @@ def project_registry(registry: dict) -> tuple[bytes, bytes]:
     cmake = ["# Generated source-native fixture registration. Do not edit."]
     for fixture, target in zip(native_fixtures, native_target_names(registry)):
         labels = ";".join(fixture["labels"])
+        stdout_hex = fixture.get("expected_stdout_hex", "")
         cmake.append(f'add_xr_program_source_native_fixture({fixture["id"]} '
-                     f'{target} {fixture["expected_exit"]} "{labels}")')
+                     f'{target} {fixture["expected_exit"]} "{labels}" "{stdout_hex}")')
     for (case, fixture), test_name in zip(pending_fixture_cases(registry),
                                           pending_test_names(registry)):
         labels = ";".join(fixture["labels"])

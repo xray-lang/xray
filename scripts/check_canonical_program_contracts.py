@@ -74,7 +74,7 @@ MIGRATION_FIELDS = {
 OPERATION_FIELDS = {
     "aot_lowering",
     "core_spec_contract",
-    "decoder_verifier_evaluator",
+    "decoder_verifier_oracle",
     "evidence",
     "id",
     "old_owner_deletion",
@@ -252,7 +252,7 @@ def validate_migration(root: Path, data: dict[str, Any]) -> None:
 
 
 def validate_operations(data: dict[str, Any]) -> None:
-    require(data.get("schema") == "xray-canonical-program-operation-capability/1",
+    require(data.get("schema") == "xray-canonical-program-operation-capability/2",
             "operation matrix schema must be v1")
     operations = data.get("operations")
     require(isinstance(operations, list) and operations, "operation matrix must be non-empty")

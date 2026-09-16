@@ -342,100 +342,7 @@ static bool emit_enum_namespace_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
     return true;
 }
 
-typedef struct CgPreludeEnumMember {
-    const char *name; /* owned: static prelude enum member literal (compiler-owned descriptor) */
-    bool has_payload;
-} CgPreludeEnumMember;
-
-typedef struct CgPreludeEnumData {
-    int builtin_index;
-    const char *enum_name; /* owned: static prelude enum name literal */
-    const CgPreludeEnumMember *members;
-    uint32_t member_count;
-} CgPreludeEnumData;
-
-static const int cg_prelude_enum_builtin_indices[] = {
-    XR_GLOBAL_VAR_ORDERING,
-    XR_GLOBAL_VAR_ENDIAN,
-    XR_GLOBAL_VAR_RECV,
-    XR_GLOBAL_VAR_SEND_RESULT,
-    XR_GLOBAL_VAR_TASK_RESULT,
-    XR_GLOBAL_VAR_TASK_STATUS,
-    XR_GLOBAL_VAR_UTF8_ERROR,
-    XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-    XR_GLOBAL_VAR_STRING_SLICE_ERROR,
-    XR_GLOBAL_VAR_COMPRESSION_ERROR,
-    XR_GLOBAL_VAR_CRYPTO_ERROR,
-};
-
-static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
-    static const CgPreludeEnumMember ordering[] = {
-        {"Relaxed", false},        {"Acquire", false}, {"Release", false},
-        {"AcquireRelease", false}, {"SeqCst", false},
-    };
-    static const CgPreludeEnumMember endian[] = {
-        {"Native", false},
-        {"LE", false},
-        {"BE", false},
-    };
-    static const CgPreludeEnumMember recv[] = {
-        {"Value", true},
-        {"Empty", false},
-        {"Timeout", false},
-        {"Closed", false},
-    };
-    static const CgPreludeEnumMember send_result[] = {
-        {"Sent", false},
-        {"Full", false},
-        {"Timeout", false},
-        {"Closed", false},
-    };
-    static const CgPreludeEnumMember task_result[] = {
-        {"Success", true},  {"Failed", true},   {"Cancelled", false},
-        {"Timeout", false}, {"Pending", false},
-    };
-    static const CgPreludeEnumMember task_status[] = {
-        {"Pending", false}, {"Running", false},   {"Success", false},
-        {"Failed", false},  {"Cancelled", false},
-    };
-    static const CgPreludeEnumMember utf8_error[] = {
-        {"InvalidUtf8", false},
-    };
-    static const CgPreludeEnumMember number_parse_error[] = {
-        {XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME, false},
-        {XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME, false},
-    };
-    static const CgPreludeEnumMember string_slice_error[] = {
-        {"InvalidByteRange", false},
-    };
-    static const CgPreludeEnumMember compression_error[] = {
-        {"InvalidData", false},
-    };
-    static const CgPreludeEnumMember crypto_error[] = {
-        {"InvalidLength", false},
-    };
-    static const CgPreludeEnumData enums[] = {
-        {XR_GLOBAL_VAR_ORDERING, "Ordering", ordering, 5},
-        {XR_GLOBAL_VAR_ENDIAN, "Endian", endian, 3},
-        {XR_GLOBAL_VAR_RECV, "Recv", recv, 4},
-        {XR_GLOBAL_VAR_SEND_RESULT, "SendResult", send_result, 4},
-        {XR_GLOBAL_VAR_TASK_RESULT, "TaskResult", task_result, 5},
-        {XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus", task_status, 5},
-        {XR_GLOBAL_VAR_UTF8_ERROR, "Utf8Error", utf8_error, 1},
-        {XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, XR_NUMBER_PARSE_ERROR_NAME, number_parse_error,
-         XR_NUMBER_PARSE_ERROR_MEMBER_COUNT},
-        {XR_GLOBAL_VAR_STRING_SLICE_ERROR, "StringSliceError", string_slice_error, 1},
-        {XR_GLOBAL_VAR_COMPRESSION_ERROR, "CompressionError", compression_error, 1},
-        {XR_GLOBAL_VAR_CRYPTO_ERROR, "CryptoError", crypto_error, 1},
-    };
-    for (uint32_t i = 0; i < (uint32_t) (sizeof(enums) / sizeof(enums[0])); i++) {
-        if (enums[i].builtin_index == builtin_index)
-            return &enums[i];
-    }
-    return NULL;
-}
-
-static int cg_prelude_enum_member_index(const CgPreludeEnumData *ed, const char *name) {
+static int cg_prelude_enum_member_index(const XrBuiltinEnumRow *ed, const char *name) {
     if (!ed || !name)
         return -1;
     for (uint32_t i = 0; i < ed->member_count; i++) {
@@ -445,7 +352,7 @@ static int cg_prelude_enum_member_index(const CgPreludeEnumData *ed, const char 
     return -1;
 }
 
-static bool cg_prelude_enum_has_payload_member(const CgPreludeEnumData *ed) {
+static bool cg_prelude_enum_has_payload_member(const XrBuiltinEnumRow *ed) {
     if (!ed)
         return false;
     for (uint32_t i = 0; i < ed->member_count; i++) {
@@ -455,19 +362,19 @@ static bool cg_prelude_enum_has_payload_member(const CgPreludeEnumData *ed) {
     return false;
 }
 
-static int cg_prelude_enum_scalar_sidecar_slot(const CgPreludeEnumData *ed) {
+static int cg_prelude_enum_scalar_sidecar_slot(const XrBuiltinEnumRow *ed) {
     if (!ed)
         return -1;
-    for (uint32_t i = 0; i < (uint32_t) (sizeof(cg_prelude_enum_builtin_indices) /
-                                         sizeof(cg_prelude_enum_builtin_indices[0]));
-         i++) {
-        if (cg_prelude_enum_builtin_indices[i] == ed->builtin_index)
+    size_t count = 0;
+    const XrBuiltinEnumRow *rows = xr_builtin_enum_registry(&count);
+    for (size_t i = 0; i < count; i++) {
+        if (rows[i].builtin_index == ed->builtin_index)
             return (int) i;
     }
     return -1;
 }
 
-static bool cg_mark_prelude_enum_scalar_sidecar(XiCgenCtx *ctx, const CgPreludeEnumData *ed,
+static bool cg_mark_prelude_enum_scalar_sidecar(XiCgenCtx *ctx, const XrBuiltinEnumRow *ed,
                                                 uint32_t *out_slot) {
     int slot = cg_prelude_enum_scalar_sidecar_slot(ed);
     if (!ctx || slot < 0 || slot >= 32 || cg_prelude_enum_has_payload_member(ed)) {
@@ -491,12 +398,12 @@ static void emit_prelude_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
         return;
     const char *module_prefix =
         ctx->module && ctx->module->name && ctx->module->name[0] ? ctx->module->name : "mod";
-    for (uint32_t slot = 0; slot < (uint32_t) (sizeof(cg_prelude_enum_builtin_indices) /
-                                               sizeof(cg_prelude_enum_builtin_indices[0]));
-         slot++) {
+    size_t count = 0;
+    const XrBuiltinEnumRow *rows = xr_builtin_enum_registry(&count);
+    for (size_t slot = 0; slot < count; slot++) {
         if ((ctx->prelude_enum_scalar_sidecar_mask & (UINT32_C(1) << slot)) == 0)
             continue;
-        const CgPreludeEnumData *ed = cg_prelude_enum_data(cg_prelude_enum_builtin_indices[slot]);
+        const XrBuiltinEnumRow *ed = &rows[slot];
         if (!ed || cg_prelude_enum_has_payload_member(ed)) {
             ctx->error = true;
             return;
@@ -540,7 +447,7 @@ static const XaotEnumPlan *cg_unique_unit_enum_scalar_plan_named(XiCgenCtx *ctx,
 
 static bool emit_portable_scalar_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
                                                         const XiValue *value, const char *enum_name,
-                                                        const CgPreludeEnumData *prelude_enum,
+                                                        const XrBuiltinEnumRow *prelude_enum,
                                                         uint32_t member_index) {
     const XaotEnumPlan *plan = cg_unit_enum_scalar_plan(ctx, value ? value->type : NULL);
     if (!plan)
@@ -567,9 +474,9 @@ static bool emit_portable_scalar_enum_member_value_expr(XiCgenCtx *ctx, FILE *ou
 }
 
 static void emit_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
-                                                const CgPreludeEnumData *ed,
+                                                const XrBuiltinEnumRow *ed,
                                                 uint32_t member_index) {
-    const CgPreludeEnumMember *member =
+    const XrBuiltinEnumMember *member =
         ed && member_index < ed->member_count ? &ed->members[member_index] : NULL;
     if (!ed || !member) {
         fprintf(out, "XR_NULL_VAL");
@@ -585,7 +492,7 @@ static void emit_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
 }
 
 static bool emit_prelude_enum_type_expr(XiCgenCtx *ctx, FILE *out, int builtin_index) {
-    const CgPreludeEnumData *ed = cg_prelude_enum_data(builtin_index);
+    const XrBuiltinEnumRow *ed = xr_builtin_enum_registry_row(builtin_index);
     if (!ed)
         return false;
     fprintf(out, "({ XrValue _e = xrt_map_new(%u); ", (unsigned) ed->member_count);
@@ -600,7 +507,7 @@ static bool emit_prelude_enum_type_expr(XiCgenCtx *ctx, FILE *out, int builtin_i
 
 static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                        int builtin_index, const char *member_name) {
-    const CgPreludeEnumData *ed = cg_prelude_enum_data(builtin_index);
+    const XrBuiltinEnumRow *ed = xr_builtin_enum_registry_row(builtin_index);
     int member_index = cg_prelude_enum_member_index(ed, member_name);
     if (!ed || member_index < 0 || (uint32_t) member_index >= ed->member_count)
         return false;
@@ -624,7 +531,7 @@ static bool emit_static_number_parse_error_member_value_expr(XiCgenCtx *ctx, FIL
                                                               uint32_t member_index) {
     const XrNumberParseErrorRegistryRow *row =
         xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
-    const CgPreludeEnumData *ed = cg_prelude_enum_data(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+    const XrBuiltinEnumRow *ed = xr_builtin_enum_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
     if (!row || !ed || ed->builtin_index != (int) row->global_index ||
         ed->member_count != XR_NUMBER_PARSE_ERROR_MEMBER_COUNT ||
         member_index >= ed->member_count || ed->members[member_index].has_payload ||

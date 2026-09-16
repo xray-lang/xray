@@ -10,6 +10,7 @@
 
 #include "xr_runtime_target_authority.h"
 #include "xr_builtin_provider_contract.h"
+#include "xr_stdlib_provider_projection.h"
 #include "../value/xvalue.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 
@@ -603,9 +604,51 @@ static int compare_provider_contracts(const void *left, const void *right) {
     return memcmp(a->contract_id.bytes, b->contract_id.bytes, sizeof(a->contract_id.bytes));
 }
 
-static bool make_hosted_providers(
-    XrTargetProviderContract providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT],
-    uint8_t target_endian) {
+static bool append_declared_providers(XrTargetProviderContract *providers,
+                                      const XrTargetMachineFacts *machine, size_t *count) {
+    for (size_t index = 0u; index < xr_stdlib_provider_count(); ++index) {
+        const XrStdlibProviderDescriptor *descriptor = xr_stdlib_provider_at(index);
+        XrTargetProviderOperationContract operation;
+        XrStdlibProviderProjectionStatus status =
+            xr_stdlib_provider_project(descriptor, machine, &operation);
+        if (status == XR_STDLIB_PROVIDER_PROJECTION_UNAVAILABLE)
+            continue;
+        if (status != XR_STDLIB_PROVIDER_PROJECTION_OK)
+            return false;
+        size_t provider = 0u;
+        while (provider < *count && memcmp(providers[provider].contract_id.bytes,
+                                           descriptor->contract_id.bytes, XR_STABLE_ID_BYTES) != 0)
+            ++provider;
+        if (provider == *count) {
+            if (*count >= XR_RUNTIME_ABI_MAX_PROVIDERS)
+                return false;
+            providers[provider] = (XrTargetProviderContract) {
+                .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+                .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+                .contract_id = descriptor->contract_id,
+                .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
+                .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
+                .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
+            };
+            ++*count;
+        }
+        XrTargetProviderContract *contract = &providers[provider];
+        if (contract->provider_role != XR_TARGET_PROVIDER_ROLE_OPERATIONS ||
+            contract->operation_count >= XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS)
+            return false;
+        contract->operations[contract->operation_count++] = operation;
+    }
+    for (size_t index = 0u; index < *count; ++index)
+        qsort(providers[index].operations, providers[index].operation_count,
+              sizeof(providers[index].operations[0]), compare_stable_id_first);
+    return true;
+}
+
+static bool make_hosted_providers(XrTargetProviderContract providers[XR_RUNTIME_ABI_MAX_PROVIDERS],
+                                  const XrTargetMachineFacts *machine, size_t *count_out) {
+    uint8_t target_endian = machine->data_layout.endian == XR_TARGET_ENDIAN_LITTLE
+                                ? XR_RUNTIME_ENDIAN_LITTLE
+                                : XR_RUNTIME_ENDIAN_BIG;
     uint8_t pointer_width = (uint8_t) sizeof(void *);
     uint8_t pointer_alignment = (uint8_t) _Alignof(void *);
     XrTargetProviderCallSlotAbi void_result = make_call_slot(
@@ -633,30 +676,16 @@ static bool make_hosted_providers(
     XrTargetProviderCallSlotAbi status_result =
         make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 1, 1,
                        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
-    XrTargetProviderCallSlotAbi signed_i64 =
-        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
-                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
-    XrTargetProviderCallSlotAbi consumed_i64 =
-        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER, 8, 8,
-                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED, 0);
     XrTargetProviderCallSlotAbi output_parameters[] = {
-        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
-                       pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
                        XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE),
-        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
-                       pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
                        XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE),
         usize_slot,
     };
-    XrTargetProviderCallSlotAbi pipe_open_parameters[] = {
-        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
-                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED, 0),
-        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
-                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED, 0),
-        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width, pointer_alignment,
-                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED, 0),
-    };
-    memset(providers, 0, XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT * sizeof(providers[0]));
+    memset(providers, 0, XR_RUNTIME_ABI_MAX_PROVIDERS * sizeof(providers[0]));
     providers[0] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -701,63 +730,29 @@ static bool make_hosted_providers(
                         XR_TARGET_PROVIDER_FAILURE_PANICS))
         return false;
 
-    providers[3] = (XrTargetProviderContract) {
-        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
-        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
-        .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
-        .operation_count = 3,
-        .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
-        .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
-    };
-    if (!canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[3].contract_id) ||
-        !make_operation(&providers[3].operations[0], XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
-                        make_call_abi(status_result, output_parameters, 3, target_endian),
-                        XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
-                        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS) ||
-        !make_operation(&providers[3].operations[1], XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY,
-                        make_call_abi(status_result, pipe_open_parameters, 3, target_endian),
-                        XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
-                        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS) ||
-        !make_operation(&providers[3].operations[2], XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY,
-                        make_call_abi(status_result, &consumed_i64, 1, target_endian),
-                        XR_TARGET_PROVIDER_EFFECT_IO,
-                        XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED,
-                        0))
-        return false;
-    qsort(providers[3].operations, providers[3].operation_count, sizeof(providers[3].operations[0]),
-          compare_stable_id_first);
-
     providers[2] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .flags = XR_TARGET_PROVIDER_AVAILABLE_HOSTED,
-        .operation_count = 4,
+        .operation_count = 1,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
         .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
-    if (!canonical_id(XR_PROVIDER_CLOCK_CONTRACT_KEY, &providers[2].contract_id) ||
-        !make_operation(&providers[2].operations[0],
-                        XR_PROVIDER_CLOCK_REALTIME_NANOS_OPERATION_KEY,
-                        make_call_abi(signed_i64, NULL, 0, target_endian), 0, 0, 0) ||
-        !make_operation(&providers[2].operations[1],
-                        XR_PROVIDER_CLOCK_MONOTONIC_NANOS_OPERATION_KEY,
-                        make_call_abi(signed_i64, NULL, 0, target_endian), 0, 0, 0) ||
-        !make_operation(&providers[2].operations[2],
-                        XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY,
-                        make_call_abi(signed_i64, NULL, 0, target_endian), 0, 0, 0) ||
-        !make_operation(&providers[2].operations[3],
-                        XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY,
-                        make_call_abi(signed_i64, &signed_i64, 1, target_endian), 0, 0, 0))
+    if (!canonical_id(XR_PROVIDER_IO_CONTRACT_KEY, &providers[2].contract_id) ||
+        !make_operation(&providers[2].operations[0], XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY,
+                        make_call_abi(status_result, output_parameters, 3, target_endian),
+                        XR_TARGET_PROVIDER_EFFECT_IO, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+                        XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS))
         return false;
-    qsort(providers[2].operations, providers[2].operation_count,
-          sizeof(providers[2].operations[0]), compare_stable_id_first);
-    return true;
+    *count_out = 3u;
+    providers[2].operations[0].logical_contract = xr_builtin_provider_byte_sink_logical_contract();
+    return append_declared_providers(providers, machine, count_out);
 }
 
-static bool make_freestanding_providers(
-    uint64_t provider_capabilities,
-    XrTargetProviderContract providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT],
-    size_t *out_count, uint8_t target_endian) {
+static bool
+make_freestanding_providers(uint64_t provider_capabilities,
+                            XrTargetProviderContract providers[XR_RUNTIME_ABI_MAX_PROVIDERS],
+                            size_t *out_count, uint8_t target_endian) {
     if (!providers || !out_count)
         return false;
     uint8_t pointer_width = (uint8_t) sizeof(void *);
@@ -793,7 +788,7 @@ static bool make_freestanding_providers(
         const_pointer_borrowed,
         usize_slot,
     };
-    memset(providers, 0, XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT * sizeof(providers[0]));
+    memset(providers, 0, XR_RUNTIME_ABI_MAX_PROVIDERS * sizeof(providers[0]));
     providers[0] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -881,6 +876,9 @@ static bool make_freestanding_providers(
             return false;
         /* Operations are ordered by stable id. The ids are content-derived and
          * need not agree with the order they were declared here. */
+        for (uint16_t index = 0u; index < operation_count; ++index)
+            providers[2].operations[index].logical_contract =
+                xr_builtin_provider_byte_sink_logical_contract();
         if (operation_count == 2 &&
             memcmp(providers[2].operations[0].stable_id.bytes,
                    providers[2].operations[1].stable_id.bytes,
@@ -955,12 +953,11 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(XrRuntimeTargetAuth
         make_native_authority_base(XR_TARGET_RUNTIME_PROFILE_HOSTED, &authority);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    uint8_t target_endian = authority.object_header_materialization.target_endian;
-    if (!make_hosted_providers(authority.providers, target_endian))
+    size_t hosted_provider_count = 0u;
+    if (!make_hosted_providers(authority.providers, &authority.machine, &hosted_provider_count))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     XrFingerprint fingerprint;
     uint64_t provider_capabilities = 0;
-    const size_t hosted_provider_count = 4;
     qsort(authority.providers, hosted_provider_count, sizeof(authority.providers[0]),
           compare_provider_contracts);
     status = xr_target_provider_set_fingerprint(authority.providers, hosted_provider_count,

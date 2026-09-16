@@ -268,6 +268,9 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name);
 /* Returns an owned canonical owner string; caller frees with xr_free(). */
 XR_FUNC bool xa_analyzer_path_is_stdlib(const char *file);
 XR_FUNC char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file);
+XR_FUNC bool xa_analyzer_publish_nominal_identity(XaAnalyzer *analyzer,
+                                                  const struct AstNode *declaration,
+                                                  struct XrClassInfo *info);
 XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
                                                    const char *member_name);
 XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name);
@@ -310,6 +313,11 @@ XR_FUNC void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file);
 XR_FUNC void xa_analyzer_set_node_type(XaAnalyzer *analyzer, struct AstNode *node,
                                        struct XrType *type);
 XR_FUNC struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstNode *node);
+// Synthesize the existing syntax-representable type subset into the compiler
+// session's active arena. Returns NULL when syntax cannot preserve the type.
+// The returned reference borrows that arena lifetime, not the input type.
+XR_FUNC struct XrTypeRef *xa_synthesize_type_ref(XrCompilerSession *session,
+                                                const struct XrType *type);
 XR_FUNC bool xa_analyzer_bind_type_ref_type(XaAnalyzer *analyzer, const struct XrTypeRef *type_ref,
                                             struct XrType *type);
 XR_FUNC struct XrType *xa_analyzer_get_type_ref_type(XaAnalyzer *analyzer,

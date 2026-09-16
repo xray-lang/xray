@@ -12,6 +12,7 @@
 #define XRT_TIME_H
 
 #include "xrt_value.h"
+#include "xrt_coll.h"
 #include "../shared/xr_time_offset.h"
 #include <stdint.h>
 #include <time.h>
@@ -124,8 +125,10 @@ static inline XrValue xrt_time_cpu_nanos(void) {
 }
 
 static inline XrValue xrt_time_utc_offset_at(XrValue timestamp) {
-    int64_t ts = XR_IS_INT(timestamp) ? XR_TO_INT(timestamp) : 0;
-    return XR_FROM_INT((int64_t) xr_time_utc_offset_at((time_t) ts));
+    int64_t result;
+    if (!XR_IS_INT(timestamp) || !xr_time_utc_offset_at(XR_TO_INT(timestamp), &result))
+        xrt_throw_error(XR_ERR_RUNTIME, "UTC offset query failed for the supplied timestamp");
+    return XR_FROM_INT(result);
 }
 
 #endif

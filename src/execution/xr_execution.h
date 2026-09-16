@@ -69,6 +69,9 @@ typedef struct XrProviderOperationBinding {
         XrProviderOptionalI64PairNullaryEntry optional_i64_pair_nullary;
         XrProviderOutputWriteEntry output_write;
     } entry;
+    /* The binding owner keeps entry code and context alive until retirement
+     * and completion of every pinned call or callback. Instance construction
+     * copies this pointer; it does not retain an arbitrary external object. */
     void *context;
 } XrProviderOperationBinding;
 

@@ -17,12 +17,6 @@ static XaotDirectI64TargetStatus cg_direct_i64_call_view(XiCgenCtx *ctx, const X
         const XrCProgramDirectI64EmissionBinding *binding = &ctx->program_direct_i64;
         if (!ctx->program_direct_i64_bound)
             goto invalid_program_binding;
-        if (current == binding->callee.xi_function) {
-            if (call && call->op == XI_CALL && call->nargs == 1u && call->args &&
-                call->args[0] == binding->xi_native_leaf_callee_operand)
-                return XAOT_DIRECT_I64_TARGET_UNCOVERED;
-            goto invalid_program_binding;
-        }
         if (current != binding->caller.xi_function)
             goto invalid_program_binding;
         const XrTargetPlan *target = xaot_bundle_program_target_plan(ctx->aot_bundle);

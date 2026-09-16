@@ -48,8 +48,7 @@
  *   XR_BUILTIN_ENUM(name, arity, vm_slot, variants)
  *       Prelude enum.
  *       vm_slot   XR_GLOBAL_VAR_* suffix naming the VM builtin slot that holds
- *                 the canonical XrEnumType, or NONE for enums the runtime does
- *                 not bind (their values never cross a module boundary).
+ *                 the canonical XrEnumType. Every declared enum has a fixed slot.
  *       variants  a parenthesis-free sequence of
  *                 XR_BUILTIN_ENUM_VARIANT(name, payload) with payload one of:
  *                   NONE          no payload
@@ -184,20 +183,20 @@ XR_BUILTIN_ENUM("Endian", 0, ENDIAN,
                 XR_BUILTIN_ENUM_VARIANT("LE", NONE)
                 XR_BUILTIN_ENUM_VARIANT("BE", NONE))
 
-XR_BUILTIN_ENUM("Utf8Error", 0, NONE,
+XR_BUILTIN_ENUM("Utf8Error", 0, UTF8_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidUtf8", NONE))
 
-XR_BUILTIN_ENUM("NumberParseError", 0, NONE,
+XR_BUILTIN_ENUM("NumberParseError", 0, NUMBER_PARSE_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidSyntax", NONE)
                 XR_BUILTIN_ENUM_VARIANT("OutOfRange", NONE))
 
-XR_BUILTIN_ENUM("StringSliceError", 0, NONE,
+XR_BUILTIN_ENUM("StringSliceError", 0, STRING_SLICE_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidByteRange", NONE))
 
-XR_BUILTIN_ENUM("CompressionError", 0, NONE,
+XR_BUILTIN_ENUM("CompressionError", 0, COMPRESSION_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidData", NONE))
 
-XR_BUILTIN_ENUM("CryptoError", 0, NONE,
+XR_BUILTIN_ENUM("CryptoError", 0, CRYPTO_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidLength", NONE))
 
 XR_BUILTIN_ENUM("Recv", 1, RECV,

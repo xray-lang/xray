@@ -31,6 +31,12 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CONSTANT_I64:
         case XR_CORE_OP_CORE_CONSTANT_BOOL:
         case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
+        case XR_CORE_OP_CORE_CONSTANT_STRING:
+        case XR_CORE_OP_CORE_CONSTANT_RUNE:
+        case XR_CORE_OP_CORE_COMPARE_STRING:
+        case XR_CORE_OP_CORE_COMPARE_RUNE:
+        case XR_CORE_OP_CORE_STRING_FROM_I64:
+        case XR_CORE_OP_CORE_STRING_CONCAT:
         case XR_CORE_OP_CORE_ADD_I64:
         case XR_CORE_OP_CORE_SUB_I64:
         case XR_CORE_OP_CORE_MUL_I64:
@@ -65,7 +71,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_PROVIDER_CALL:
-        case XR_CORE_OP_CORE_OUTPUT_GROUP_I64:
+        case XR_CORE_OP_CORE_OUTPUT_GROUP:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
@@ -217,6 +223,12 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
             break;
         case XR_CORE_TYPE_PANIC_INFO:
             representation = XR_BACKEND_VALUE_PANIC_U32;
+            break;
+        case XR_CORE_TYPE_STRING:
+            representation = XR_BACKEND_VALUE_STRING_HANDLE;
+            break;
+        case XR_CORE_TYPE_RUNE:
+            representation = XR_BACKEND_VALUE_RUNE_U32;
             break;
         default:
             if (type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
@@ -567,10 +579,17 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
         const XrValidatedConstant *value = &ir->constants[constant];
         hash_u16(&context, value->type_id);
         hash_u32(&context, (uint32_t) value->kind);
-        if (value->kind == XR_CORE_IR_CONSTANT_I64)
+        if (value->kind == XR_CORE_IR_CONSTANT_I64) {
             hash_u64(&context, (uint64_t) value->value.i64);
-        else if (value->kind == XR_CORE_IR_CONSTANT_BOOL)
+        } else if (value->kind == XR_CORE_IR_CONSTANT_BOOL) {
             hash_u32(&context, value->value.boolean ? 1u : 0u);
+        } else if (value->kind == XR_CORE_IR_CONSTANT_STRING) {
+            hash_u32(&context, value->value.string.size);
+            if (value->value.string.size != 0u)
+                xr_sha256_update(&context, value->value.string.bytes, value->value.string.size);
+        } else if (value->kind == XR_CORE_IR_CONSTANT_RUNE) {
+            hash_u32(&context, value->value.rune);
+        }
     }
     hash_u32(&context, ir->function_count);
     for (uint32_t function = 0; function < ir->function_count; ++function) {
@@ -648,6 +667,10 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
         !xr_target_profile_verify(profile, NULL, 0)) {
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INVALID_INPUT;
+    }
+    if (program->module_count != 0u) {
+        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION, 0u, 0u, 0u, 0u);
+        return XR_BACKEND_UNSUPPORTED_OPERATION;
     }
     XrBackendStatus class_status = class_storage_status(program);
     if (class_status != XR_BACKEND_OK) {

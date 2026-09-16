@@ -40,7 +40,6 @@ typedef struct XrProgramSourceBuildContext {
     const XrProgramSourceBuildInput *input;
     XrModuleGraph *graph;
     XaAnalyzer *analyzer;
-    XgGlobalEvidence pre_monomorphization_evidence;
     XgGlobalEvidence evidence;
     AstNode **ast_roots;
     XiPipelineResult *pipelines;
@@ -142,7 +141,6 @@ static void build_context_free(XrProgramSourceBuildContext *context) {
     xr_free(context->pipelines);
     xr_free(context->ast_roots);
     xr_free(context->reachable_bodies);
-    xg_global_evidence_free(&context->pre_monomorphization_evidence);
     xg_global_evidence_free(&context->evidence);
     if (context->analyzer) {
         xa_analyzer_set_graph(context->analyzer, NULL);
@@ -379,12 +377,6 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
     XrProgramSourceBuildStatus status = analyze_modules(context, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK)
         return status;
-    if (!xg_global_evidence_build_pre_monomorphization_from_module_graph(
-            &context->pre_monomorphization_evidence, context->graph,
-            evidence_profile(context->input->source_profile), 0u, NULL, 0u, context->analyzer))
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
-                      "pre-monomorphization generic evidence construction failed");
     XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
     XaMonoBudget mono_budget = {
         .max_depth = context->input->budget.max_monomorphization_depth,
@@ -462,12 +454,6 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
                       XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
                       "global evidence construction failed");
-    if (!xg_global_evidence_merge_generic_inst_roots(&context->evidence,
-                                                     &context->pre_monomorphization_evidence))
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
-                      "generic instantiation evidence merge failed");
-    xg_global_evidence_free(&context->pre_monomorphization_evidence);
     return prepare_entry_reachability(context, diagnostic);
 }
 
@@ -540,8 +526,9 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
         .semantic_profile_fingerprint = context->input->semantic_profile_fingerprint.bytes,
     };
     char writer_diagnostic[XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE] = {0};
-    XrProgramBuildStatus writer = xr_program_write_from_xi(
-        &writer_input, &product->artifact, writer_diagnostic, sizeof(writer_diagnostic));
+    XrProgramBuildStatus writer =
+        xr_program_write_from_xi(&writer_input, &product->artifact, &product->program,
+                                 writer_diagnostic, sizeof(writer_diagnostic));
     if (writer != XR_PROGRAM_BUILD_OK) {
         if (diagnostic)
             diagnostic->writer_status = writer;
@@ -557,18 +544,6 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
                       (uint32_t) product->artifact.size,
                       "canonical Program size %zu exceeds request limit %u bytes",
                       product->artifact.size, context->input->budget.max_program_bytes);
-    XrProgramDiagnostic verifier_diagnostic;
-    XrProgramVerifyStatus verifier =
-        xr_program_validate(product->artifact.bytes, product->artifact.size, NULL,
-                            &product->program, &verifier_diagnostic);
-    if (verifier != XR_PROGRAM_VERIFY_OK || !product->program) {
-        if (diagnostic)
-            diagnostic->verifier_status = verifier;
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_VALIDATE, context->entry_topological_index,
-                      0u, (uint32_t) verifier, "canonical program validation failed: %s",
-                      xr_program_verify_status_name(verifier));
-    }
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 

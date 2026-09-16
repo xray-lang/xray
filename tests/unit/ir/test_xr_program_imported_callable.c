@@ -36,6 +36,8 @@
 #include "vm/xr_program_vm.h"
 #include "xray_vm.h"
 
+#include "../program/xr_program_writer_fixture.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -438,7 +440,7 @@ static bool imported_callable_producer_rejects(const XrProgramFromXiInput *input
                                                char *diagnostic, size_t diagnostic_size) {
     XrProgramArtifact rejected = {0};
     XrProgramBuildStatus status =
-        xr_program_write_from_xi(input, &rejected, diagnostic, diagnostic_size);
+        xr_test_write_program_artifact(input, &rejected, diagnostic, diagnostic_size);
     bool failed_closed = status != XR_PROGRAM_BUILD_OK && rejected.bytes == NULL;
     xr_program_artifact_free(&rejected);
     return failed_closed;
@@ -552,8 +554,8 @@ TEST(test_imported_callable_multi_target_program) {
                       (int64_t) xr_type_to_tid(import_checks[index]->type) << 1);
     }
     XrProgramArtifact artifact = {0};
-    XrProgramBuildStatus producer_status = xr_program_write_from_xi(
-        &producer_input, &artifact, diagnostic, sizeof(diagnostic));
+    XrProgramBuildStatus producer_status =
+        xr_test_write_program_artifact(&producer_input, &artifact, diagnostic, sizeof(diagnostic));
     if (producer_status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "imported callable producer failed: %s: %s\n",
                 xr_program_build_status_name(producer_status), diagnostic);
@@ -709,8 +711,8 @@ TEST(test_imported_callable_multi_target_program) {
     imports[0]->module_path = "renamed_path_debug_only";
     imports[0]->resolved_func->name = "renamed_function_debug_only";
     XrProgramArtifact renamed_artifact = {0};
-    ASSERT_EQ_INT(xr_program_write_from_xi(&producer_input, &renamed_artifact, diagnostic,
-                                           sizeof(diagnostic)),
+    ASSERT_EQ_INT(xr_test_write_program_artifact(&producer_input, &renamed_artifact, diagnostic,
+                                                 sizeof(diagnostic)),
                   XR_PROGRAM_BUILD_OK);
     ASSERT_EQ_UINT(renamed_artifact.size, artifact.size);
     ASSERT_EQ_INT(memcmp(renamed_artifact.bytes, artifact.bytes, artifact.size), 0);
@@ -725,8 +727,8 @@ TEST(test_imported_callable_multi_target_program) {
     XiFunc *saved_target = imports[0]->resolved_func;
     imports[0]->resolved_func = imports[1]->resolved_func;
     XrProgramArtifact forged_artifact = {0};
-    ASSERT_EQ_INT(xr_program_write_from_xi(&producer_input, &forged_artifact, diagnostic,
-                                           sizeof(diagnostic)),
+    ASSERT_EQ_INT(xr_test_write_program_artifact(&producer_input, &forged_artifact, diagnostic,
+                                                 sizeof(diagnostic)),
                   XR_PROGRAM_BUILD_INVALID_INPUT);
     ASSERT_NULL(forged_artifact.bytes);
     imports[0]->resolved_func = saved_target;
@@ -795,7 +797,8 @@ TEST(test_imported_callable_multi_target_program) {
     ASSERT_NOT_NULL(instance);
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic), XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(validated, profile, NULL, &vm_code, &vm_diagnostic),
+                  XR_VM_CODE_OK);
     XrVmOutcome vm = xr_vm_code_execute(vm_code, instance,
                                         xr_validated_program_entry_function(validated), NULL, 0u);
     ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_RETURN);

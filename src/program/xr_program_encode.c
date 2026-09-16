@@ -12,6 +12,7 @@
 
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
+#include "../runtime/core/xr_text_kernel.h"
 #include "xr_program_schema_gen.h"
 
 #include <stdlib.h>
@@ -140,6 +141,11 @@ static int constant_value_compare(const XrCoreIrConstantInput *left,
         return left->value.i64 < right->value.i64 ? -1 : 1;
     if (left->kind == XR_CORE_IR_CONSTANT_BOOL && left->value.boolean != right->value.boolean)
         return left->value.boolean ? 1 : -1;
+    if (left->kind == XR_CORE_IR_CONSTANT_STRING)
+        return xr_text_compare(left->value.string.bytes, left->value.string.size,
+                               right->value.string.bytes, right->value.string.size);
+    if (left->kind == XR_CORE_IR_CONSTANT_RUNE && left->value.rune != right->value.rune)
+        return left->value.rune < right->value.rune ? -1 : 1;
     return 0;
 }
 
@@ -490,27 +496,15 @@ static bool root_id(const RootRef *roots, uint32_t count, XrCoreIrKey key, uint3
 
 static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
                          const SignatureRef *signatures, uint32_t signature_count) {
-    /* type-id, kind, logical ownership, copy contract, then logical shape */
-    static const uint8_t rows[][4] = {
-        {XR_CORE_TYPE_VOID, 0u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_FORBIDDEN},
-        {XR_CORE_TYPE_BOOL, 1u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_I64, 2u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_U32, 3u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_ERROR, 4u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_PANIC_INFO, 5u, XR_CORE_IR_TYPE_OWNERSHIP_AFFINE, XR_CORE_IR_COPY_FORBIDDEN},
-        {XR_CORE_TYPE_U16, 6u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_TARGET_OS, 7u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_TARGET_ARCH, 8u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_TARGET_ABI, 9u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
-        {XR_CORE_TYPE_TARGET_ENDIAN, 10u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
-         XR_CORE_IR_COPY_TRIVIAL},
-    };
-    buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]) + program->type_count);
-    for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
-        buffer_put_uvar(buffer, rows[index][0]);
-        buffer_put_uvar(buffer, rows[index][1]);
-        buffer_put_uvar(buffer, rows[index][2]);
-        buffer_put_uvar(buffer, rows[index][3]);
+    /* type-id, kind, logical ownership, copy contract, then logical shape;
+     * a builtin row's kind is its type id */
+    buffer_put_uvar(buffer, XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT + program->type_count);
+    for (uint32_t index = 0; index < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++index) {
+        const XrProgramBuiltinTypeRow *row = xr_program_builtin_type_row_at(index);
+        buffer_put_uvar(buffer, row->type_id);
+        buffer_put_uvar(buffer, row->type_id);
+        buffer_put_uvar(buffer, (uint32_t) row->ownership);
+        buffer_put_uvar(buffer, (uint32_t) row->copy_contract);
     }
     for (uint32_t index = 0; index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
@@ -573,10 +567,21 @@ static void encode_constants(ByteBuffer *buffer, const ConstantRef *constants, u
         buffer_put_uvar(buffer, id++);
         buffer_put_uvar(buffer, constant->type_id);
         buffer_put_uvar(buffer, constant->kind);
-        if (constant->kind == XR_CORE_IR_CONSTANT_I64)
-            buffer_put_svar(buffer, constant->value.i64);
-        else
-            buffer_put_uvar(buffer, constant->value.boolean ? 1u : 0u);
+        switch (constant->kind) {
+            case XR_CORE_IR_CONSTANT_I64:
+                buffer_put_svar(buffer, constant->value.i64);
+                break;
+            case XR_CORE_IR_CONSTANT_BOOL:
+                buffer_put_uvar(buffer, constant->value.boolean ? 1u : 0u);
+                break;
+            case XR_CORE_IR_CONSTANT_STRING:
+                buffer_put_uvar(buffer, constant->value.string.size);
+                buffer_put_bytes(buffer, constant->value.string.bytes, constant->value.string.size);
+                break;
+            case XR_CORE_IR_CONSTANT_RUNE:
+                buffer_put_uvar(buffer, constant->value.rune);
+                break;
+        }
     }
 }
 
@@ -630,6 +635,80 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
         buffer_put_uvar(buffer, function_value_count(function));
         buffer_put_uvar(buffer, function->flags);
     }
+}
+
+static int module_dependency_id_compare(const void *left, const void *right) {
+    uint32_t a = *(const uint32_t *) left;
+    uint32_t b = *(const uint32_t *) right;
+    return (a > b) - (a < b);
+}
+
+static const XrCoreIrModule *module_for_key(const XrCoreIrProgram *program, XrCoreIrKey key) {
+    uint32_t low = 0u;
+    uint32_t high = program->module_count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        int comparison = memcmp(program->modules[middle].key.bytes, key.bytes, sizeof(key.bytes));
+        if (comparison < 0)
+            low = middle + 1u;
+        else if (comparison > 0)
+            high = middle;
+        else
+            return &program->modules[middle];
+    }
+    return NULL;
+}
+
+static void encode_modules(ByteBuffer *buffer, const XrCoreIrProgram *program,
+                           const FunctionRef *functions, uint32_t function_count) {
+    uint32_t count = 0u;
+    for (uint32_t index = 0u; index < program->module_count; ++index)
+        count += !xr_core_ir_key_is_zero(program->modules[index].initializer);
+    buffer_put_uvar(buffer, count);
+    if (count == 0u || buffer->status != XR_PROGRAM_BUILD_OK)
+        return;
+    const XrCoreIrModule **modules = xr_calloc(count, sizeof(*modules));
+    if (!modules) {
+        buffer->status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        return;
+    }
+    for (uint32_t index = 0u; index < program->module_count; ++index) {
+        const XrCoreIrModule *module = &program->modules[index];
+        if (!xr_core_ir_key_is_zero(module->initializer))
+            modules[module->initialization_order] = module;
+    }
+    for (uint32_t index = 0u; index < count; ++index) {
+        const XrCoreIrModule *module = modules[index];
+        uint32_t initializer = 0u;
+        (void) function_id(functions, function_count, module->initializer, &initializer);
+        buffer_put_bytes(buffer, module->key.bytes, sizeof(module->key.bytes));
+        buffer_put_uvar(buffer, initializer);
+        buffer_put_uvar(buffer, module->function_count);
+        for (uint32_t function = 0u; function < module->function_count; ++function) {
+            uint32_t id = 0u;
+            (void) function_id(functions, function_count, module->functions[function].key, &id);
+            buffer_put_uvar(buffer, id);
+        }
+        buffer_put_uvar(buffer, module->dependency_count);
+        if (module->dependency_count != 0u) {
+            uint32_t *dependencies = xr_calloc(module->dependency_count, sizeof(*dependencies));
+            if (!dependencies) {
+                buffer->status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                break;
+            }
+            for (uint32_t dependency = 0u; dependency < module->dependency_count; ++dependency)
+                dependencies[dependency] =
+                    module_for_key(program, module->dependencies[dependency])->initialization_order;
+            qsort(dependencies, module->dependency_count, sizeof(*dependencies),
+                  module_dependency_id_compare);
+            for (uint32_t dependency = 0u; dependency < module->dependency_count; ++dependency)
+                buffer_put_uvar(buffer, dependencies[dependency]);
+            xr_free(dependencies);
+        }
+        if (buffer->status != XR_PROGRAM_BUILD_OK)
+            break;
+    }
+    xr_free(modules);
 }
 
 static void encode_semantic_metadata(ByteBuffer *buffer, const XrCoreIrProgram *program,
@@ -776,7 +855,7 @@ static bool provider_operation_index(const XrCoreIrProgram *program, XrStableId 
         if (memcmp(requirement->contract_id.bytes, contract_id.bytes, XR_STABLE_ID_BYTES) != 0)
             continue;
         for (uint32_t operation = 0; operation < requirement->operation_count; ++operation) {
-            if (memcmp(requirement->operation_ids[operation].bytes, operation_id.bytes,
+            if (memcmp(requirement->operations[operation].operation_id.bytes, operation_id.bytes,
                        XR_STABLE_ID_BYTES) != 0)
                 continue;
             *provider_out = provider;
@@ -914,9 +993,20 @@ static void encode_imports(ByteBuffer *buffer, const XrCoreIrProgram *program) {
         const XrCoreIrProviderRequirement *requirement = &program->provider_requirements[provider];
         buffer_put_bytes(buffer, requirement->contract_id.bytes, XR_STABLE_ID_BYTES);
         buffer_put_uvar(buffer, requirement->operation_count);
-        for (uint32_t operation = 0; operation < requirement->operation_count; ++operation)
-            buffer_put_bytes(buffer, requirement->operation_ids[operation].bytes,
+        for (uint32_t operation = 0; operation < requirement->operation_count; ++operation) {
+            buffer_put_bytes(buffer, requirement->operations[operation].operation_id.bytes,
                              XR_STABLE_ID_BYTES);
+            uint8_t bytes[XR_PROVIDER_LOGICAL_MAX_ENCODED_BYTES];
+            size_t size = 0u;
+            if (!xr_provider_logical_contract_encode(
+                    &requirement->operations[operation].logical_contract, bytes, sizeof(bytes),
+                    &size)) {
+                buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
+                return;
+            }
+            buffer_put_uvar(buffer, size);
+            buffer_put_bytes(buffer, bytes, size);
+        }
     }
 }
 
@@ -991,6 +1081,7 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
     buffer_put_uvar(&sections[5], 0u);
     encode_semantic_metadata(&sections[6], program, functions, function_count, signatures,
                              signature_count);
+    encode_modules(&sections[6], program, functions, function_count);
     for (size_t index = 0; index < SECTION_COUNT; ++index) {
         if (sections[index].status != XR_PROGRAM_BUILD_OK) {
             status = sections[index].status;

@@ -1567,6 +1567,8 @@ XR_FUNC const char *xg_evidence_cache_phase_name(uint32_t phase);
 
 XR_FUNC void xg_global_evidence_init(XgGlobalEvidence *evidence, XgBuildKey key);
 XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence);
+/* Copy all owned tables into an empty destination without changing stable IDs. */
+XR_FUNC bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEvidence *source);
 
 XR_FUNC bool xg_global_evidence_reserve_modules(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_decls(XgGlobalEvidence *evidence, uint32_t capacity);

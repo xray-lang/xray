@@ -26,6 +26,7 @@ MODULE_NEGATIVE = Path("tests/fixtures/removed_compiler_surface/strconv_module_r
 MODULE_EXPECTED = Path(str(MODULE_NEGATIVE) + ".expected")
 NUMBER_PARSE_REGISTRY = Path("src/base/xnumber_parse_error.h")
 NUMBER_PARSE_PRELUDE = Path("stdlib/prelude/builtin_symbols.def")
+BUILTIN_ENUM_REGISTRY = Path("src/base/xbuiltin_enum.h")
 NUMBER_PARSE_SOURCE = Path("stdlib/types/i64.xr")
 NUMBER_PARSE_GENERATED = Path("src/frontend/analyzer/xnative_type_defs.inc.c")
 NUMBER_PARSE_RUNTIME_CONSUMERS = (
@@ -79,7 +80,7 @@ PUBLIC_BINDING_RE = re.compile(
 )
 SOURCE_SIGNATURE_RE = re.compile(
     r"(?:->|:|<|\bas\b|\bis\b)\s*(?:int|byte|float)\b"
-    r"|\b(?:int|byte|float)\s*(?:\?|>(?![>=]))"
+    r"|\b(?:int|byte|float)\s*(?:\?|>(?![>=])(?=\s*(?:$|[>,;)\]}?])))"
 )
 SOURCE_EXACT_BARE_IDENTIFIER_RE = re.compile(
     r"^\s*(?P<name>" + "|".join(EXACT_NAMES) + r")\s*,?\s*$"
@@ -241,6 +242,7 @@ def _check_number_parse_error_projections(root: Path, errors: list[str]) -> None
     paths = (
         NUMBER_PARSE_REGISTRY,
         NUMBER_PARSE_PRELUDE,
+        BUILTIN_ENUM_REGISTRY,
         NUMBER_PARSE_SOURCE,
         NUMBER_PARSE_GENERATED,
         *NUMBER_PARSE_RUNTIME_CONSUMERS,
@@ -272,7 +274,7 @@ def _check_number_parse_error_projections(root: Path, errors: list[str]) -> None
         r"enum\s+NumberParseError\s*\{\s*InvalidSyntax\s*,\s*OutOfRange\s*\}", re.DOTALL
     )
     prelude_enum = re.compile(
-        r'XR_BUILTIN_ENUM\("NumberParseError",\s*0,\s*NONE,\s*'
+        r'XR_BUILTIN_ENUM\("NumberParseError",\s*0,\s*NUMBER_PARSE_ERROR,\s*'
         r'XR_BUILTIN_ENUM_VARIANT\("InvalidSyntax",\s*NONE\)\s*'
         r'XR_BUILTIN_ENUM_VARIANT\("OutOfRange",\s*NONE\)\)',
         re.DOTALL,
@@ -290,11 +292,18 @@ def _check_number_parse_error_projections(root: Path, errors: list[str]) -> None
             errors.append(f"{rel.as_posix()}: runtime does not consume the typed registry row")
         if "number_parse_error_members[]" in text:
             errors.append(f"{rel.as_posix()}: duplicate NumberParseError member table remains")
+    registry = texts[BUILTIN_ENUM_REGISTRY]
+    for token in ('#include "../../stdlib/prelude/builtin_symbols.def"',
+                  "XR_GLOBAL_VAR_##slot", "XR_ENUM_PAYLOAD_##payload"):
+        if token not in registry:
+            errors.append(f"{BUILTIN_ENUM_REGISTRY.as_posix()}: missing shared enum projection {token}")
+    # Runtime identity/layout and real C emission are checked by the existing
+    # CTest fixture; the residue gate retains the single declaration owner and
+    # the separate frozen NumberParseError ABI admission, not a handwritten table.
     cgen = texts[NUMBER_PARSE_CGEN_PROJECTION]
     for token in (
-        "XR_NUMBER_PARSE_ERROR_NAME",
-        "XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME",
-        "XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME",
+        "xr_number_parse_error_registry_row",
+        "xr_builtin_enum_registry_row",
         "XR_NUMBER_PARSE_ERROR_MEMBER_COUNT",
     ):
         if token not in cgen:
@@ -563,28 +572,31 @@ def self_test() -> int:
         )
         number_parse_enum = "enum NumberParseError { InvalidSyntax, OutOfRange }\n"
         number_parse_prelude = (
-            'XR_BUILTIN_ENUM("NumberParseError", 0, NONE,\n'
+            'XR_BUILTIN_ENUM("NumberParseError", 0, NUMBER_PARSE_ERROR,\n'
             '  XR_BUILTIN_ENUM_VARIANT("InvalidSyntax", NONE)\n'
             '  XR_BUILTIN_ENUM_VARIANT("OutOfRange", NONE))\n'
         )
         _write(root / NUMBER_PARSE_REGISTRY, number_parse_registry)
         _write(root / NUMBER_PARSE_PRELUDE, number_parse_prelude)
+        builtin_enum_registry = ('#include "../../stdlib/prelude/builtin_symbols.def"\n'
+                                 'XR_GLOBAL_VAR_##slot XR_ENUM_PAYLOAD_##payload\n')
+        _write(root / BUILTIN_ENUM_REGISTRY, builtin_enum_registry)
         _write(root / NUMBER_PARSE_SOURCE, number_parse_enum)
         _write(root / NUMBER_PARSE_GENERATED, number_parse_enum)
         for rel in NUMBER_PARSE_RUNTIME_CONSUMERS:
             _write(root / rel, "xr_number_parse_error_registry_row(global_index);\n")
         _write(
             root / NUMBER_PARSE_CGEN_PROJECTION,
-            "XR_NUMBER_PARSE_ERROR_NAME\n"
-            "XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME\n"
-            "XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME\n"
+            "xr_number_parse_error_registry_row\n"
+            "xr_builtin_enum_registry_row\n"
             "XR_NUMBER_PARSE_ERROR_MEMBER_COUNT\n",
         )
         _write(root / POSITIVE_FIXTURE,
                "fn int(value: i64) -> i64 { return value }\n"
                "fn byte(value: u8) -> u8 { return value }\n"
                "fn float(value: f64) -> f64 { return value }\n"
-               "print(int(41))\nprint(byte(7))\nprint(float(3.5))\n")
+               "print(int(41))\nprint(byte(7))\nprint(float(3.5))\n"
+               "fn compare(byte: i64) -> bool { return byte > 57 }\n")
         _write(root / TYPE_NEGATIVE,
                "fn a(value: int) -> int { return value }\n"
                "fn b(value: byte) -> byte { return value }\n"
@@ -617,6 +629,15 @@ def self_test() -> int:
             for error in errors:
                 print(f"  {error}", file=sys.stderr)
             return 1
+        for spelling in ("var value: int", "var items: Array<byte>",
+                         "var pairs: Map<i64, float>", "value as byte", "value is int"):
+            probe = root / "tests/scalar_surface_probe.xr"
+            _write(probe, spelling + "\n")
+            errors, _ = verify(root)
+            if not any("unmigrated bound scalar spelling" in error for error in errors):
+                print(f"retired scalar type mutation was admitted: {spelling}", file=sys.stderr)
+                return 1
+            probe.unlink()
         _write(root / NUMBER_PARSE_PRELUDE,
                number_parse_prelude.replace("OutOfRange", "Overflow"))
         errors, _ = verify(root)
@@ -631,6 +652,13 @@ def self_test() -> int:
             print("NumberParseError order mutation did not fail closed", file=sys.stderr)
             return 1
         _write(root / NUMBER_PARSE_SOURCE, number_parse_enum)
+        _write(root / BUILTIN_ENUM_REGISTRY, builtin_enum_registry.replace(
+            'XR_GLOBAL_VAR_##slot', '0'))
+        errors, _ = verify(root)
+        if not any("missing shared enum projection" in error for error in errors):
+            print("builtin enum slot projection mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / BUILTIN_ENUM_REGISTRY, builtin_enum_registry)
         _write(root / NUMBER_PARSE_REGISTRY,
                number_parse_registry.replace("3802613823", "3802613822"))
         errors, _ = verify(root)

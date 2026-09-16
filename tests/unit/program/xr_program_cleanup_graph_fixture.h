@@ -14,6 +14,7 @@
 #include "core/xr_core_spec_gen.h"
 #include "plan/semantic/xr_semantic_ids.h"
 #include "program/xr_program.h"
+#include "xr_program_provider_fixture.h"
 
 #include <assert.h>
 #include <string.h>
@@ -49,7 +50,7 @@ typedef struct XrProgramCleanupGraphFixture {
     XrCoreIrFunctionInput functions[2];
     XrCoreIrModuleInput module;
     XrCoreIrProviderRequirementInput requirement;
-    XrStableId operation;
+    XrProgramProviderOperationRequirement operation_requirement;
     uint16_t field_type;
     XrCoreIrTypeInput type;
 } XrProgramCleanupGraphFixture;
@@ -146,7 +147,7 @@ static void xr_program_cleanup_graph_provider(XrProgramCleanupGraphFixture *fixt
     call->result_type_id = XR_CORE_TYPE_I64;
     call->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
     call->immediate.provider_operation.contract_id = fixture->requirement.contract_id;
-    call->immediate.provider_operation.operation_id = fixture->operation;
+    call->immediate.provider_operation.operation_id = fixture->operation_requirement.operation_id;
     uint32_t target = XR_CLEANUP_GRAPH_TRAP_ADAPTER;
     xr_program_cleanup_graph_edges(fixture, block, call, &target, 1u);
 }
@@ -192,9 +193,14 @@ static bool xr_program_cleanup_graph_fixture_init(XrProgramCleanupGraphFixture *
     XrFingerprint fingerprint;
     if (!xr_stable_id_from_key("fixture.cleanup-graph.provider", &fixture->requirement.contract_id,
                                &fingerprint) ||
-        !xr_stable_id_from_key("fixture.cleanup-graph.poll", &fixture->operation, &fingerprint))
+        !xr_stable_id_from_key("fixture.cleanup-graph.poll",
+                               &fixture->operation_requirement.operation_id, &fingerprint))
         return false;
-    fixture->requirement.operation_ids = &fixture->operation;
+    fixture->operation_requirement = (XrProgramProviderOperationRequirement) {
+        .operation_id = fixture->operation_requirement.operation_id,
+        .logical_contract = xr_program_fixture_scalar_contract(false),
+    };
+    fixture->requirement.operations = &fixture->operation_requirement;
     fixture->requirement.operation_count = 1u;
     const int64_t values[] = {11, 0, 1, 71, 72};
     for (uint32_t index = 0u; index < 5u; ++index) {

@@ -1234,14 +1234,13 @@ static void test_adt_enum_constructor_c_emission_recipe_is_exact(void) {
     REQUIRE(entry != NULL);
     XiValue *namespace_value = xi_value_new(function, entry, XI_CONST, &enum_type, 0);
     XiValue *payload = xi_const_str(function, entry, "payload", &scalar_string);
-    XiValue *constructor = xi_value_new(function, entry, XI_CALL_METHOD, &enum_type, 2);
+    XiValue *constructor = xi_value_new(function, entry, XI_VARIANT_CONSTRUCT, &enum_type, 2);
     REQUIRE(namespace_value && payload && constructor);
     namespace_value->aux = &enum_data;
     namespace_value->aux_kind = XI_AUX_KIND_ENUM_NAMESPACE;
     constructor->args[0] = namespace_value;
     constructor->args[1] = payload;
     constructor->aux = "Text";
-    constructor->flags = XI_FLAG_CALL_EFFECTS;
     constructor->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
     constructor->call_return_ownership.param_index = -1;
     constructor->call_return_ownership.complete = true;
@@ -1415,7 +1414,7 @@ static void test_stringbuilder_new_c_emission_recipe_is_exact(void) {
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, builder_value, &view, error, sizeof(error)));
     REQUIRE(view.rep == XR_C_VALUE_REP_TAGGED &&
-            view.materialization == XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_RUNTIME_CONSTRUCTOR &&
             view.recipe_operand_value == UINT32_MAX && view.recipe_symbol &&
             strcmp(view.recipe_symbol, "xrt_strbuf_new") == 0 && view.literal_bytes == NULL &&
             view.literal_byte_length == 0);
@@ -2338,6 +2337,11 @@ static void test_channel_receive_c_emission_recipe_is_exact(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "runtime-constructor") == 0) {
+        test_stringbuilder_new_c_emission_recipe_is_exact();
+        puts("Runtime constructor projection tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "string-runes-emission") == 0) {
         test_string_runes_c_emission_recipe_is_exact();
         printf("String.runes C emission authority tests passed\n");

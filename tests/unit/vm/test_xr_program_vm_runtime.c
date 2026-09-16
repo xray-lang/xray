@@ -43,6 +43,10 @@ int main(void) {
     REQUIRE(profile != NULL);
     RuntimeBindings bindings;
     build_bindings(profile, &bindings);
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic code_diagnostic;
+    REQUIRE(xr_vm_code_build(program, profile, NULL, &code, &code_diagnostic) == XR_VM_CODE_OK);
+    uint32_t entry = xr_validated_program_entry_function(program);
     XrExecutionBindingInput input = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
         .program = program,
@@ -56,21 +60,17 @@ int main(void) {
     REQUIRE(xr_execution_instance_create(&input, &instance, &execution_diagnostic) ==
             XR_EXECUTION_OK);
 
-    XrVmCode *code = NULL;
-    XrVmCodeDiagnostic code_diagnostic;
-    REQUIRE(xr_vm_code_build(instance, NULL, &code, &code_diagnostic) == XR_VM_CODE_OK);
-    XrVmOutcome result =
-        xr_vm_code_execute(code, instance, xr_validated_program_entry_function(program), NULL, 0u);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+    XrVmOutcome result = xr_vm_code_execute(code, instance, entry, NULL, 0u);
     REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
     REQUIRE(result.value.kind == XR_VM_VALUE_I64);
     REQUIRE(result.value.as.i64 == 42);
-    xr_vm_code_free(code);
 
     REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) == XR_EXECUTION_OK);
     REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) == XR_EXECUTION_OK);
     REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) == XR_EXECUTION_OK);
-    xr_target_profile_free(profile);
-    xr_validated_program_free(program);
+    xr_vm_code_free(code);
     puts("task-299 runtime-only embedder passed");
     return 0;
 }

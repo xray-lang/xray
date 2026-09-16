@@ -77,13 +77,14 @@ static XrProgramBuildStatus write_cleanup_program(const XrTargetProfile *profile
     if (!clock || clock->operation_count != 1u)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     fixture.requirement.contract_id = clock->contract_id;
-    fixture.operation = clock->operations[0].stable_id;
+    fixture.operation_requirement.operation_id = clock->operations[0].stable_id;
     for (uint32_t b = 0u; b < XR_CLEANUP_GRAPH_BLOCK_COUNT; ++b) {
         for (uint32_t i = 0u; i < fixture.blocks[b].instruction_count; ++i) {
             XrCoreIrInstructionInput *op = &fixture.instructions[b][i];
             if (op->operation_id == XR_CORE_OP_CORE_PROVIDER_CALL) {
                 op->immediate.provider_operation.contract_id = fixture.requirement.contract_id;
-                op->immediate.provider_operation.operation_id = fixture.operation;
+                op->immediate.provider_operation.operation_id =
+                    fixture.operation_requirement.operation_id;
             }
         }
     }

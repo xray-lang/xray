@@ -103,7 +103,27 @@ target_include_directories(xr_program_test_core PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(xr_program_test_core PUBLIC xray_program_vm_runtime)
 add_dependencies(xr_program_test_core gen-core-spec gen-xr-program-schema)
 
-add_executable(test_xr_program program/test_xr_program.c)
+add_executable(test_xr_program
+    program/test_xr_program.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_core_ir.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c)
+# Compile the real constructors with allocator substitution confined to this
+# executable. Other consumers link the ordinary production objects.
+if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
+    target_compile_options(test_xr_program PRIVATE
+        "/FI${CMAKE_CURRENT_SOURCE_DIR}/program/xr_program_allocation_probe.h")
+else()
+    target_compile_options(test_xr_program PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/program/xr_program_allocation_probe.h")
+endif()
+add_executable(test_xr_program_provider_requirements
+    program/test_xr_program_provider_requirements.c)
+target_include_directories(test_xr_program_provider_requirements PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xr_program_provider_requirements PRIVATE xr_program_test_core)
+add_test(NAME test_xr_program_provider_requirements
+    COMMAND $<TARGET_FILE:test_xr_program_provider_requirements>)
+set_tests_properties(test_xr_program_provider_requirements PROPERTIES
+    LABELS "unit;canonical-program;program-format;semantic-verifier")
 target_include_directories(test_xr_program PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -115,6 +135,14 @@ set_tests_properties(test_xr_program PROPERTIES
 )
 
 add_executable(test_xr_program_verify program/test_xr_program_verify.c)
+add_executable(test_provider_logical_admission
+    execution/test_provider_logical_admission.c plan/target_profile_test_fixture.c)
+target_include_directories(test_provider_logical_admission PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_provider_logical_admission PRIVATE
+    xr_program_test_core xray_program_vm_runtime xray_program_aot_compiler)
+add_test(NAME test_provider_logical_admission COMMAND $<TARGET_FILE:test_provider_logical_admission>)
+set_tests_properties(test_provider_logical_admission PROPERTIES
+    LABELS "unit;provider;canonical-program;execution;aot")
 target_include_directories(test_xr_program_verify PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -255,6 +283,7 @@ set_tests_properties(test_runtime_descriptor PROPERTIES LABELS "runtime;abi;targ
 add_executable(test_runtime_abi_contract
     runtime/test_runtime_abi_contract.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_provider_logical_contract.c
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
 )
 target_include_directories(test_runtime_abi_contract PRIVATE
@@ -263,10 +292,95 @@ target_include_directories(test_runtime_abi_contract PRIVATE
 add_test(NAME test_runtime_abi_contract COMMAND $<TARGET_FILE:test_runtime_abi_contract>)
 set_tests_properties(test_runtime_abi_contract PROPERTIES LABELS "runtime;abi;target-machine")
 
+if(WIN32)
+    set(XRAY_PROVIDER_TEST_HOST_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/os/win/time_win.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/pipe_win.c)
+else()
+    set(XRAY_PROVIDER_TEST_HOST_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/os/unix/time_unix.c
+        ${CMAKE_SOURCE_DIR}/src/os/unix/pipe_unix.c)
+endif()
+add_executable(test_stdlib_provider_binding
+    execution/test_stdlib_provider_binding.c
+    ${CMAKE_SOURCE_DIR}/src/execution/xr_stdlib_provider_binding.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_provider_logical_contract.c
+    ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
+    ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ids.c
+    ${XRAY_PROVIDER_TEST_HOST_SOURCES}
+)
+target_include_directories(test_stdlib_provider_binding PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/include)
+add_dependencies(test_stdlib_provider_binding gen-stdlib-metadata)
+add_test(NAME test_stdlib_provider_binding COMMAND $<TARGET_FILE:test_stdlib_provider_binding>)
+set_tests_properties(test_stdlib_provider_binding PROPERTIES LABELS "runtime;provider;unit")
+
+add_executable(test_time_utc_offset runtime/test_time_utc_offset.c)
+target_include_directories(test_time_utc_offset PRIVATE ${CMAKE_SOURCE_DIR}/src)
+if(NOT WIN32)
+    target_compile_definitions(test_time_utc_offset PRIVATE _POSIX_C_SOURCE=200809L)
+    target_compile_definitions(test_stdlib_provider_binding PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
+add_test(NAME test_time_utc_offset COMMAND $<TARGET_FILE:test_time_utc_offset>)
+set_tests_properties(test_time_utc_offset PROPERTIES LABELS "runtime;provider;unit")
+add_executable(test_windows_time_query os/test_windows_time_query.c)
+target_include_directories(test_windows_time_query PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/os/clock_api_fixture ${CMAKE_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test_windows_time_query PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_windows_time_query PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_windows_time_query COMMAND $<TARGET_FILE:test_windows_time_query>)
+set_tests_properties(test_windows_time_query PROPERTIES LABELS "runtime;provider;unit;api-injection")
+if(NOT WIN32)
+    add_executable(test_time_query_failure os/test_time_query_failure.c)
+    target_include_directories(test_time_query_failure PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(test_time_query_failure PRIVATE _POSIX_C_SOURCE=200809L)
+    target_compile_options(test_time_query_failure PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME test_time_query_failure COMMAND $<TARGET_FILE:test_time_query_failure>)
+    set_tests_properties(test_time_query_failure PROPERTIES LABELS "runtime;provider;unit")
+endif()
+
+add_executable(test_provider_logical_contract
+    runtime/test_provider_logical_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_provider_logical_contract.c
+    ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
+)
+target_include_directories(test_provider_logical_contract PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_provider_logical_contract COMMAND $<TARGET_FILE:test_provider_logical_contract>)
+set_tests_properties(test_provider_logical_contract PROPERTIES
+    LABELS "runtime;provider;canonical-program;unit"
+)
+
+add_executable(test_stdlib_provider_contract
+    runtime/test_stdlib_provider_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_projection.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_provider_logical_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_target_authority.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_object_header.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_descriptor.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_string_object.c
+    ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ids.c
+    ${CMAKE_SOURCE_DIR}/src/base/xtarget_data_layout.c
+    ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
+)
+target_include_directories(test_stdlib_provider_contract PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/include)
+add_dependencies(test_stdlib_provider_contract gen-stdlib-metadata)
+add_test(NAME test_stdlib_provider_contract COMMAND $<TARGET_FILE:test_stdlib_provider_contract>)
+set_tests_properties(test_stdlib_provider_contract PROPERTIES
+    LABELS "runtime;provider;canonical-program;unit"
+)
+
 add_executable(test_runtime_object_header
     runtime/test_runtime_object_header.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_object_header.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_provider_logical_contract.c
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
 )
 target_include_directories(test_runtime_object_header PRIVATE
@@ -275,12 +389,24 @@ target_include_directories(test_runtime_object_header PRIVATE
 add_test(NAME test_runtime_object_header COMMAND $<TARGET_FILE:test_runtime_object_header>)
 set_tests_properties(test_runtime_object_header PROPERTIES LABELS "runtime;abi;target-machine")
 
+# The shared typed text kernel is header-only and executor-independent, so its
+# boundary and fault tests link nothing but the header.
+add_executable(test_text_kernel
+    runtime/test_text_kernel.c
+)
+target_include_directories(test_text_kernel PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+add_test(NAME test_text_kernel COMMAND $<TARGET_FILE:test_text_kernel>)
+set_tests_properties(test_text_kernel PROPERTIES LABELS "runtime;string;canonical")
+
 add_executable(test_runtime_string_object
     runtime/test_runtime_string_object.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_string_object.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_object_header.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_descriptor.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_provider_logical_contract.c
     ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ids.c
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
 )
@@ -598,7 +724,10 @@ set_tests_properties(test_xr_program_coroutine_call_aot_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;coroutine;call;generated-c;native;task-293")
 
 # Each manifest fixture has one producer and one independent native qualification.
-function(add_xr_program_source_native_fixture fixture_id native_target expected_exit fixture_labels)
+# An empty expected_stdout_hex only checks the exit byte; otherwise the native
+# process must write exactly those bytes to stdout.
+function(add_xr_program_source_native_fixture fixture_id native_target expected_exit fixture_labels
+         expected_stdout_hex)
     set(generated_c "${XR_PROGRAM_SOURCE_FIXTURE_DIR}/${fixture_id}_native.c")
     add_custom_command(
         OUTPUT "${generated_c}"
@@ -613,6 +742,7 @@ function(add_xr_program_source_native_fixture fixture_id native_target expected_
         VERBATIM)
     set_source_files_properties("${generated_c}" PROPERTIES GENERATED TRUE)
     add_executable(${native_target} "${generated_c}")
+    target_link_libraries(${native_target} PRIVATE xray_native_provider_runtime)
     xr_enable_pure_aot_symbol_map(${native_target})
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
             OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
@@ -622,11 +752,15 @@ function(add_xr_program_source_native_fixture fixture_id native_target expected_
         target_compile_options(${native_target} PRIVATE
             -std=c11 -pedantic-errors -Wall -Wextra -Werror)
     endif()
+    set(stdout_arguments)
+    if(NOT expected_stdout_hex STREQUAL "")
+        set(stdout_arguments --expected-stdout-hex ${expected_stdout_hex})
+    endif()
     add_test(NAME ${native_target}
         COMMAND ${XRAY_PYTHON}
             ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
             --executable $<TARGET_FILE:${native_target}>
-            --expected-exit ${expected_exit})
+            --expected-exit ${expected_exit} ${stdout_arguments})
     set_tests_properties(${native_target} PROPERTIES
         LABELS "unit;aot;canonical-program;source;${fixture_labels};generated-c;native;task-293")
 endfunction()
@@ -680,44 +814,95 @@ set_tests_properties(test_xr_program_imported_callable_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;callable;multi-module;generated-c;native;task-301")
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
-add_test(NAME test_xi_cgen_native_target_leaf_emission
-    COMMAND $<TARGET_FILE:test_xi_cgen> native-target-leaf-emission)
-set_tests_properties(test_xi_cgen_native_target_leaf_emission PROPERTIES
-    LABELS "aot;cgen;native;target-machine;stdlib")
-set(XR_NATIVE_TARGET_LEAF_SOURCE
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/native_target_leaf.c)
+add_test(NAME test_xi_cgen_optional_injection
+    COMMAND $<TARGET_FILE:test_xi_cgen> optional-injection-emission)
+add_test(NAME test_xi_cgen_optional_storage
+    COMMAND $<TARGET_FILE:test_xi_cgen> optional-storage-emission)
+set_tests_properties(test_xi_cgen_optional_injection PROPERTIES
+    LABELS "aot;cgen;optional;stdlib")
+set_tests_properties(test_xi_cgen_optional_storage PROPERTIES
+    LABELS "aot;cgen;optional")
+set(XR_OPTIONAL_STORAGE_SOURCE_PREFIX
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/optional_storage)
 add_custom_command(
-    OUTPUT ${XR_NATIVE_TARGET_LEAF_SOURCE}
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xi_cgen>
-            native-target-leaf-emission
-            ${XR_NATIVE_TARGET_LEAF_SOURCE}
+    OUTPUT ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.0.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.1.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.2.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.3.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.4.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.5.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.6.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.7.c
+           ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.8.c
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xi_cgen> optional-storage-emission
+            ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}
     DEPENDS test_xi_cgen
-    COMMENT "Generating verified native target leaf C fixture"
+    COMMENT "Generating verified optional scalar C fixtures"
     VERBATIM)
-set_source_files_properties(${XR_NATIVE_TARGET_LEAF_SOURCE}
-    PROPERTIES GENERATED TRUE)
-add_executable(test_native_target_leaf_native
-    ${XR_NATIVE_TARGET_LEAF_SOURCE})
-target_link_libraries(test_native_target_leaf_native PRIVATE xray_core)
-target_include_directories(test_native_target_leaf_native SYSTEM PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/aot
-    ${CMAKE_SOURCE_DIR}/include)
-set_target_properties(test_native_target_leaf_native PROPERTIES
-    C_STANDARD 11
-    C_STANDARD_REQUIRED TRUE)
-if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
-        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
-            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
-    target_compile_options(test_native_target_leaf_native PRIVATE /W4 /WX /wd4702)
-else()
-    target_compile_options(test_native_target_leaf_native PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_native_target_leaf_native
-    COMMAND $<TARGET_FILE:test_native_target_leaf_native>)
-set_tests_properties(test_native_target_leaf_native PROPERTIES
-    LABELS "aot;cgen;native;target-machine;stdlib")
+foreach(XR_OPTIONAL_SCENARIO RANGE 0 8)
+    set(XR_OPTIONAL_NATIVE_TARGET test_xi_optional_native_${XR_OPTIONAL_SCENARIO})
+    set(XR_OPTIONAL_NATIVE_SOURCE ${XR_OPTIONAL_STORAGE_SOURCE_PREFIX}.${XR_OPTIONAL_SCENARIO}.c)
+    set_source_files_properties(${XR_OPTIONAL_NATIVE_SOURCE}
+        PROPERTIES GENERATED TRUE HEADER_FILE_ONLY TRUE)
+    add_executable(${XR_OPTIONAL_NATIVE_TARGET}
+        aot/xi_optional_storage_native.c ${XR_OPTIONAL_NATIVE_SOURCE})
+    target_compile_definitions(${XR_OPTIONAL_NATIVE_TARGET} PRIVATE
+        XR_OPTIONAL_SCENARIO=${XR_OPTIONAL_SCENARIO}
+        XR_OPTIONAL_GENERATED_C="${XR_OPTIONAL_NATIVE_SOURCE}")
+    target_link_libraries(${XR_OPTIONAL_NATIVE_TARGET} PRIVATE xray_core)
+    target_include_directories(${XR_OPTIONAL_NATIVE_TARGET} SYSTEM PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/aot ${CMAKE_SOURCE_DIR}/include)
+    set_target_properties(${XR_OPTIONAL_NATIVE_TARGET} PROPERTIES
+        C_STANDARD 11 C_STANDARD_REQUIRED TRUE C_EXTENSIONS FALSE)
+    if(MSVC)
+        target_compile_options(${XR_OPTIONAL_NATIVE_TARGET} PRIVATE /W4 /WX /wd4702)
+    else()
+        target_compile_options(${XR_OPTIONAL_NATIVE_TARGET} PRIVATE -Wall -Wextra -Werror -pedantic-errors)
+    endif()
+    add_test(NAME ${XR_OPTIONAL_NATIVE_TARGET} COMMAND $<TARGET_FILE:${XR_OPTIONAL_NATIVE_TARGET}>)
+    set_tests_properties(${XR_OPTIONAL_NATIVE_TARGET} PROPERTIES LABELS "aot;cgen;optional;native")
+endforeach()
+set(XR_NATIVE_EXPECTED_structural_root 34320a330a2d310a31370a39390a34320a390a)
+set(XR_NATIVE_EXPECTED_runtime_constructor 520a3d0a34320a747275650a322e350a)
+set(XR_NATIVE_EXPECTED_coroutine_aggregate 626574610a34320a)
+set(XR_NATIVE_EXPECTED_optional_injection 747275650a66616c73650a2d370a747275650a66616c73650a747275650a)
+set(XR_NATIVE_EXPECTED_unsigned_text 76616c75653d300a76616c75653d31383434363734343037333730393535313631350a)
+set(XR_NATIVE_EXPECTED_encoding_slice 48616c6c6f2048616c6c6f0a35203130340a747275652035203130340a747275652074727565207472756520747275650a)
+set(XR_NATIVE_EXPECTED_native_array 747275650a66616c73650a747275650a310a)
+foreach(XR_NATIVE_FIXTURE structural_root runtime_constructor coroutine_aggregate optional_injection unsigned_text encoding_slice native_array)
+    string(REPLACE "_" "-" XR_NATIVE_SELECTOR ${XR_NATIVE_FIXTURE})
+    if(XR_NATIVE_FIXTURE STREQUAL "optional_injection")
+        set(XR_NATIVE_SELECTOR optional-injection-emission)
+    endif()
+    set(XR_NATIVE_GENERATED_C ${CMAKE_CURRENT_BINARY_DIR}/generated/${XR_NATIVE_FIXTURE}.c)
+    set(XR_NATIVE_TARGET test_xi_${XR_NATIVE_FIXTURE}_native)
+    add_custom_command(
+        OUTPUT ${XR_NATIVE_GENERATED_C}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+        COMMAND $<TARGET_FILE:test_xi_cgen> ${XR_NATIVE_SELECTOR} ${XR_NATIVE_GENERATED_C}
+        DEPENDS test_xi_cgen
+        COMMENT "Generating verified ${XR_NATIVE_FIXTURE} C fixture"
+        VERBATIM)
+    set_source_files_properties(${XR_NATIVE_GENERATED_C} PROPERTIES GENERATED TRUE)
+    add_executable(${XR_NATIVE_TARGET} ${XR_NATIVE_GENERATED_C})
+    target_link_libraries(${XR_NATIVE_TARGET} PRIVATE xray_core)
+    target_include_directories(${XR_NATIVE_TARGET} SYSTEM PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/aot ${CMAKE_SOURCE_DIR}/include)
+    set_target_properties(${XR_NATIVE_TARGET} PROPERTIES
+        C_STANDARD 11 C_STANDARD_REQUIRED TRUE C_EXTENSIONS FALSE)
+    xr_enable_pure_aot_symbol_map(${XR_NATIVE_TARGET})
+    if(MSVC)
+        target_compile_options(${XR_NATIVE_TARGET} PRIVATE /W4 /WX /wd4702)
+    else()
+        target_compile_options(${XR_NATIVE_TARGET} PRIVATE -Wall -Wextra -Werror -pedantic-errors)
+    endif()
+    add_test(NAME ${XR_NATIVE_TARGET}
+        COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+            --executable $<TARGET_FILE:${XR_NATIVE_TARGET}>
+            --expected-exit 0 --expected-stdout-hex ${XR_NATIVE_EXPECTED_${XR_NATIVE_FIXTURE}})
+    set_tests_properties(${XR_NATIVE_TARGET} PROPERTIES LABELS "aot;cgen;ownership;native")
+endforeach()
 add_test(NAME test_xi_cgen_iterator_rune_nth_emission
     COMMAND $<TARGET_FILE:test_xi_cgen> iterator-rune-nth-emission)
 target_sources(test_xi_cgen PRIVATE plan/target_profile_test_fixture.c)
@@ -891,6 +1076,9 @@ set_tests_properties(test_xr_program_vm_runtime PROPERTIES
 
 add_executable(test_xr_program_aot
     aot/test_xr_program_aot.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_target_profile.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_target_authority.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_projection.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 target_compile_definitions(test_xr_program_aot PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
 target_include_directories(test_xr_program_aot PRIVATE
@@ -1043,6 +1231,7 @@ function(add_xr_program_aot_native_case case_name mode expected_exit)
         VERBATIM)
     set_source_files_properties(${case_source} PROPERTIES GENERATED TRUE)
     add_executable(test_xr_program_aot_${case_name} ${case_source})
+    target_link_libraries(test_xr_program_aot_${case_name} PRIVATE xray_native_provider_runtime)
     xr_enable_pure_aot_symbol_map(test_xr_program_aot_${case_name})
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
             OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
@@ -1104,6 +1293,36 @@ add_test(NAME test_xr_program_aot_provider_output
         --expected-stdout-hex 34320a)
 set_tests_properties(test_xr_program_aot_provider_output PROPERTIES
     LABELS "unit;aot;canonical-program;generated-c;native;provider;pure-aot;task-300")
+
+set(XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE
+    ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_text_output.c)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE}
+    COMMAND $<TARGET_FILE:test_xr_program_aot>
+        ${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE} text-output
+    DEPENDS test_xr_program_aot
+    COMMENT "Generating typed text output canonical XrProgram C fixture"
+    VERBATIM)
+set_source_files_properties(${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE} PROPERTIES GENERATED TRUE)
+add_executable(test_xr_program_aot_text_output ${XR_PROGRAM_AOT_TEXT_OUTPUT_SOURCE})
+xr_enable_pure_aot_symbol_map(test_xr_program_aot_text_output)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_aot_text_output PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_aot_text_output PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+# Expected bytes: "-5 true abcd <U+1F600> true abcd\nabcd\n\n"
+add_test(NAME test_xr_program_aot_text_output
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+        --executable $<TARGET_FILE:test_xr_program_aot_text_output>
+        --expected-exit 0
+        --expected-stdout-hex 2d352074727565206162636420f09f9880207472756520616263640a616263640a0a)
+set_tests_properties(test_xr_program_aot_text_output PROPERTIES
+    LABELS "unit;aot;canonical-program;generated-c;native;provider;string;pure-aot;task-309")
 
 set(XR_PROGRAM_AOT_COROUTINE_STEP_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_coroutine_step.c)
@@ -1185,22 +1404,10 @@ add_test(NAME test_target_program_reachability
     COMMAND $<TARGET_FILE:test_target_plan> program-reachability)
 set_tests_properties(test_target_program_reachability PROPERTIES
     LABELS "target-machine;aot;typed-plan;reachability")
-add_test(NAME test_target_native_target_leaf_authority
-    COMMAND $<TARGET_FILE:test_target_plan> native-target-leaf-authority)
-set_tests_properties(test_target_native_target_leaf_authority PROPERTIES
-    LABELS "target-machine;vm;typed-plan;stdlib")
 add_test(NAME test_target_native_direct_ref_authority
     COMMAND $<TARGET_FILE:test_target_plan> native-direct-ref-authority)
 set_tests_properties(test_target_native_direct_ref_authority PROPERTIES
     LABELS "target-machine;aot;typed-plan;stdlib")
-add_test(NAME test_target_plan_fingerprint_snapshot_determinism
-    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-snapshot-determinism)
-add_test(NAME test_target_plan_fingerprint_channel_close
-    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-channel-close)
-add_test(NAME test_target_plan_fingerprint_direct_local_call
-    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-direct-local-call)
-add_test(NAME test_target_plan_fingerprint_tail_coroutine_chain
-    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-tail-coroutine-chain)
 add_test(NAME test_target_assertion_capability_authority
     COMMAND $<TARGET_FILE:test_target_plan> assertion-capability-authority)
 add_test(NAME test_target_array_intrinsic_authority
@@ -1911,6 +2118,8 @@ if(XR_STDLIB_COMPRESS)
 endif()
 add_xray_unit_test(test_xml_node stdlib/test_xml_node.c)
 add_xray_unit_test(test_prelude_init stdlib/test_prelude_init.c)
+set_property(TEST test_prelude_init test_xi_emit test_xi_encoding_slice_native
+    APPEND PROPERTY FIXTURES_SETUP prelude_enum_identity)
 add_xray_unit_test(test_native_type_surface stdlib/test_native_type_surface.c)
 set_tests_properties(test_native_type_surface PROPERTIES LABELS "stdlib;metadata;native-types")
 if(XRAY_STDLIB_VM_FASTPATHS)

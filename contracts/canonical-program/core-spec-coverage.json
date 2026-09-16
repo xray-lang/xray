@@ -1,9 +1,9 @@
 {
   "schema": "xray-core-spec-coverage/1",
-  "semantic_sha256": "482b2ea7f575cf3eeff773b5095e1c4c575c4903c9abf70dc2c65b06e3b5a713",
+  "semantic_sha256": "204cc49d70e29708aaab90a71101fb670b19ce5d0781e7479fe830326b2ab297",
   "epoch": 1,
-  "operation_count": 62,
-  "normative_kat_count": 243,
+  "operation_count": 68,
+  "normative_kat_count": 292,
   "operations": [
     {
       "stable_id": 1,
@@ -68,6 +68,66 @@
     {
       "stable_id": 3,
       "spelling": "core.constant.target_enum",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 4,
+      "spelling": "core.constant.string",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 5,
+      "spelling": "core.constant.rune",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",
@@ -338,6 +398,66 @@
     {
       "stable_id": 25,
       "spelling": "core.compare.target_enum",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 26,
+      "spelling": "core.compare.rune",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 27,
+      "spelling": "core.compare.string",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",
@@ -1596,36 +1716,6 @@
       }
     },
     {
-      "stable_id": 137,
-      "spelling": "core.output.group.i64",
-      "coverage": {
-        "spec_oracle": {
-          "status": "COMPLETE",
-          "task": 295
-        },
-        "decoder": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "verifier": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "evaluator": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "vm": {
-          "status": "COMPLETE",
-          "task": 299
-        },
-        "aot": {
-          "status": "COMPLETE",
-          "task": 300
-        }
-      }
-    },
-    {
       "stable_id": 138,
       "spelling": "core.coroutine.call.sealed",
       "coverage": {
@@ -1838,6 +1928,96 @@
     {
       "stable_id": 146,
       "spelling": "core.place.exchange",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 148,
+      "spelling": "core.output.group",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 150,
+      "spelling": "core.string.from_i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 151,
+      "spelling": "core.string.concat",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

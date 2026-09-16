@@ -33,6 +33,7 @@
 #include "../parser/xast_types.h"
 #include "../../base/xintmap.h"
 #include "../../base/xhashmap.h"
+#include "../../base/xhash.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
 #include "../../module/xmodule_graph.h"
@@ -1913,6 +1914,8 @@ char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file)
         return NULL;
     if (analyzer->current_module_identity && analyzer->current_module_identity[0])
         return xr_strdup(analyzer->current_module_identity);
+    if (!file)
+        return NULL;
 
     XrModuleGraph *graph = analyzer->graph;
     for (int i = 0; graph && i < graph->spec_count; i++) {
@@ -1935,6 +1938,33 @@ char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file)
     }
 
     return NULL;
+}
+
+XR_FUNC bool xa_analyzer_publish_nominal_identity(XaAnalyzer *analyzer, const AstNode *declaration,
+                                                  XrClassInfo *info) {
+    if (!analyzer || !declaration || !info || !info->name || !info->declaration_symbol)
+        return false;
+    char *owner = xa_analyzer_nominal_owner_for_file(analyzer, analyzer->current_file);
+    /* Standalone editor analysis may have no module authority. It can check
+     * local types, but a zero key cannot enter specialization or publication. */
+    if (!owner)
+        return !analyzer->graph && !analyzer->current_module_identity;
+    /* Declaration coordinates and names survive analysis and body rewrites.
+     * Neither graph order nor analyzer-local symbol allocation contributes. */
+    uint64_t fields[] = {
+        UINT64_C(0x58524445434c4944),   xr_hash_bytes64(owner, strlen(owner)),
+        (uint64_t) declaration->type,   (uint64_t) declaration->line,
+        (uint64_t) declaration->column, xr_hash_bytes64(info->name, strlen(info->name))};
+    uint8_t bytes[sizeof(fields)];
+    for (size_t i = 0u; i < sizeof(fields) / sizeof(fields[0]); ++i)
+        for (unsigned byte = 0u; byte < 8u; ++byte)
+            bytes[i * 8u + byte] = (uint8_t) (fields[i] >> (byte * 8u));
+    xr_free(owner);
+    uint64_t key = xr_hash_bytes64(bytes, sizeof(bytes));
+    if (key == 0u || (info->declaration_key != 0u && info->declaration_key != key))
+        return false;
+    info->declaration_key = key;
+    return true;
 }
 
 static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope, const char *file,

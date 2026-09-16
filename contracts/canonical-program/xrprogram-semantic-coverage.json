@@ -1,8 +1,8 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "482b2ea7f575cf3eeff773b5095e1c4c575c4903c9abf70dc2c65b06e3b5a713",
-  "program_schema_sha256": "8a42de2b883d4bc4b5f37217751e5d6e1200d083303e5fa003d155bc96c79086",
+  "core_spec_semantic_sha256": "204cc49d70e29708aaab90a71101fb670b19ce5d0781e7479fe830326b2ab297",
+  "program_schema_sha256": "d34e714653b0da67aa3ccb40f4301c45b4cef710c3225560e5350a30be19619c",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "execution_budgets": [
@@ -10,7 +10,7 @@
     "call-depth",
     "aggregate-value-cells"
   ],
-  "operation_count": 62,
+  "operation_count": 68,
   "operations": [
     {
       "stable_id": 1,
@@ -31,6 +31,22 @@
     {
       "stable_id": 3,
       "spelling": "core.constant.target_enum",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 4,
+      "spelling": "core.constant.string",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 5,
+      "spelling": "core.constant.rune",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",
@@ -103,6 +119,22 @@
     {
       "stable_id": 25,
       "spelling": "core.compare.target_enum",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 26,
+      "spelling": "core.compare.rune",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 27,
+      "spelling": "core.compare.string",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",
@@ -437,14 +469,6 @@
       "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     },
     {
-      "stable_id": 137,
-      "spelling": "core.output.group.i64",
-      "decoder": "COMPLETE",
-      "verifier": "COMPLETE",
-      "evaluator": "COMPLETE",
-      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
-    },
-    {
       "stable_id": 138,
       "spelling": "core.coroutine.call.sealed",
       "decoder": "COMPLETE",
@@ -503,6 +527,30 @@
     {
       "stable_id": 146,
       "spelling": "core.place.exchange",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 148,
+      "spelling": "core.output.group",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 150,
+      "spelling": "core.string.from_i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 151,
+      "spelling": "core.string.concat",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",

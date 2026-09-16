@@ -1,6 +1,6 @@
 # Canonical XrProgram VM contract
 
-The VM consumes only `XrValidatedProgram` plus one active `XrInstance`. It does not decode program
+VM code construction consumes only `XrValidatedProgram` and a verified `XrTargetProfile`; execution requires one active `XrInstance`. It does not decode program
 bytes, call the reference evaluator, reconstruct source types or effects, or consult TargetPlan,
 legacy Proto bytecode, or AOT. Every active CoreSpec operation has one explicit typed handler.
 
@@ -11,8 +11,12 @@ rows and retains references to validated operands and successors. Both views pro
 logical operation trace. Adaptive quickening remains disabled until a measured policy and its
 traceability proof exist.
 
-VM code is qualified by `ExecutionId`, generation, VM build identity, decode policy, and quickening
-policy. Execution pins the active generation and refuses retired or successor instances. A private
+VM code is qualified by `ExecutionId`, VM build identity, decode policy, and quickening policy.
+Construction owns a Program reference and does not require a live provider binding or generation.
+Execution separately checks Program/Profile compatibility and pins the actual instance lease.
+A compatible successor or independent instance can reuse code; a retired instance cannot execute.
+Provider admission and binding-context lifetime remain instance-owned, and resource values or
+leases from one instance do not gain authority in another by sharing an ExecutionId. A private
 view can always be discarded and rebuilt from `XrValidatedProgram`; corruption or mismatch cannot
 fall back to an older executor.
 
@@ -25,8 +29,10 @@ reason-private edges; no executor-local search for a convenient terminal is perm
 
 The `xray_program_vm_runtime` archive is the embeddable product boundary for this stage. Its exact
 source closure contains the CoreSpec projection, XrProgram decoder/verifier, immutable target
-profile, BoundaryABI/runtime contracts, execution instance, and typed VM. It excludes frontend,
-CoreIR writer, reference evaluator, TargetPlan, legacy Proto VM, and AOT. The runtime-only test
+profile, BoundaryABI/runtime contracts, execution instance, and typed VM. The target-neutral
+provider logical decoder is part of that runtime closure. It excludes declaration generation,
+native host-binding construction, frontend, CoreIR writer, reference evaluator, TargetPlan,
+legacy Proto VM, and AOT. The runtime-only test
 links a source-committed canonical XrProgram artifact against this archive and verifies the
 resulting symbol closure. The artifact is deliberately outside the executor build graph: schema or
 CoreSpec drift fails closed during validation instead of rebuilding and executing a compiler-side
@@ -34,7 +40,7 @@ fixture writer whenever VM or verifier sources change. An excluded, opt-in write
 to regenerate the committed artifact when its schema intentionally changes; it is never a runtime
 test dependency.
 
-The executor covers all fifty-six current CoreSpec operations. `core.logical.not`,
+The executor covers all current CoreSpec operations. `core.logical.not`,
 `core.logical.and`, and `core.logical.or` operate only on canonical `bool` SSA values. The binary
 operations are eager at the Program level because their operands are already evaluated; source
 `&&` and `||` expressions whose right-hand side can trap or perform effects are instead projected
@@ -121,8 +127,13 @@ executes its complete source, reference, VM, and C-emission assertions before pu
 artifact; default execution still runs the complete source suite. Free-function and static-method
 coroutine cases have independent native outputs and checks. Registry identity, declaration census,
 and projection checks reject missing or mismatched evidence rather than silently narrowing the
-canonical preflight. The source owner retains pre-monomorphization generic roots, merges them into
-post-monomorphization evidence, and closes Program reachability over concrete instances only. A
+canonical preflight. Declaration analysis publishes stable module/declaration identity before
+monomorphization. Rewritten roots and clones retain the analyzer-owned source declaration,
+receiver/type tuple and effect facts; invalidated type and selection facts are rebuilt before
+lowering. Both source and native build owners publish one final Xglobal graph, closing its generic
+root/body/storage relations without a complete pre-monomorphization snapshot or root merge.
+Standalone analysis without module authority cannot publish exact nominal specialization keys.
+Program reachability closes over concrete instances only. A
 generic fixture proves two i64 callsites share one exact specialization, a bool callsite receives a
 distinct typed specialization, both VM decode policies return the reference value, and selecting
 the open generic template as entry fails instead of executing an erased fallback. Generic value
@@ -214,6 +225,22 @@ boundary. The affine Pipe source proves normal return and four cancellation poin
 including class finalization/reclamation before frame disposal and no implicit copy.
 A separate invocation of the same child as a host entry verifies export rejection.
 
+Canonical `string` (builtin type 12, an affine owned value with explicit copy) and `rune`
+(builtin type 13, a trivial Unicode scalar value) share one header-only typed text kernel with the
+reference evaluator and with generated C. The kernel owns strict UTF-8 admission, scalar admission,
+canonical i64 and bool display, byte-lexicographic comparison, concatenation sizing, and atomic
+output-group assembly; no executor carries a second copy of those rules, and an executor-independent
+boundary test with mutation evidence governs the kernel itself. The VM keeps string payloads in
+execution-private arena cells, never exposes a shared physical layout, detaches a string result by
+deep copy, and drops a string owner without a lifecycle event. `core.output.group` accepts i64,
+bool, string, and rune operands, renders one exact line through the kernel, and performs one
+byte-sink provider call. A string constant that is not strict UTF-8 is rejected at decode and never
+reaches a handler. A real-source fixture proves that returned, concatenated, interpolated, compared,
+branch-assigned, and loop-accumulated strings plus rune output satisfy independent value and stdout
+expectations in the existing local model, both VM decode policies, and native C. Borrowed explicit-copy
+results acquire one owner at each return site, including two sites returning the same parameter. `string?` owners transferred
+across unbalanced branches, aggregates or classes with string fields, and text methods remain
+outside this slice.
 
 ## Verification
 
@@ -221,3 +248,7 @@ verification-test: test_xr_program_vm
 verification-test: test_xr_program_vm_runtime
 verification-test: xr_program_h2_backend_differential
 verification-test: test_xr_program_source_build
+verification-test: test_mono
+verification-test: test_xglobal_summary
+verification-test: test_xglobal_cache_payload
+verification-test: test_text_kernel

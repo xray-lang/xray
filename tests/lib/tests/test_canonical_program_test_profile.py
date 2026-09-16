@@ -26,8 +26,6 @@ SPEC.loader.exec_module(profile)
 
 class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_inventory_is_unique_and_build_targets_are_test_evidence(self) -> None:
-        self.assertEqual(len(profile.CTEST_NAMES), 63)
-        self.assertEqual(len(profile.BUILD_TARGETS), 37)
         self.assertEqual(len(profile.CTEST_NAMES), len(set(profile.CTEST_NAMES)))
         self.assertEqual(len(profile.BUILD_TARGETS), len(set(profile.BUILD_TARGETS)))
         self.assertLessEqual(
@@ -38,7 +36,14 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         self.assertIn("xray", profile.BUILD_TARGETS)
         self.assertIn("test_xi_pipeline_canonical", profile.CTEST_NAMES)
         self.assertIn("test_xi_pipeline", profile.BUILD_TARGETS)
+        for name in ("test_text_kernel", "test_xr_program_aot_text_output"):
+            self.assertIn(name, profile.CTEST_NAMES)
+            self.assertIn(name, profile.BUILD_TARGETS)
         self.assertIn("test_xr_program_vm_runtime", profile.BUILD_TARGETS)
+        for required in ("test_xr_program_provider_requirements", "test_provider_logical_admission",
+                         "test_xr_program_text_program_aot_native"):
+            self.assertIn(required, profile.CTEST_NAMES)
+            self.assertIn(required, profile.BUILD_TARGETS)
 
     def test_generic_identity_is_an_exact_canonical_subset(self) -> None:
         self.assertEqual(len(profile.GENERIC_IDENTITY_CTEST_NAMES), 4)
@@ -61,7 +66,7 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
     def test_h2_reference_is_an_exact_canonical_subset(self) -> None:
         self.assertEqual(
             profile.H2_REFERENCE_CTEST_NAMES,
-            ("test_core_spec", "test_xr_program_verify"),
+            ("test_core_spec", "test_xr_program_verify", "test_xr_program_provider_requirements"),
         )
         self.assertIs(
             profile.H2_REFERENCE_BUILD_TARGETS,
@@ -84,6 +89,13 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             self.assertEqual(len(targets), len(set(targets)))
             self.assertLessEqual(set(tests), set(profile.CTEST_NAMES))
             self.assertLessEqual(set(targets), set(profile.BUILD_TARGETS))
+
+    def test_both_backends_require_complete_provider_logical_admission(self) -> None:
+        for inventory in (
+            profile.H2_VM_CTEST_NAMES, profile.H2_VM_BUILD_TARGETS,
+            profile.H2_AOT_CTEST_NAMES, profile.H2_AOT_BUILD_TARGETS,
+        ):
+            self.assertIn("test_provider_logical_admission", inventory)
 
     def test_h2_aot_executes_the_two_active_lifecycle_native_witnesses(self) -> None:
         required = {
@@ -118,8 +130,8 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
         ))
         self.assertEqual(profile.H2_CTEST_NAMES, expected_tests)
         self.assertEqual(profile.H2_BUILD_TARGETS, expected_targets)
-        self.assertEqual(len(profile.H2_CTEST_NAMES), 29)
-        self.assertEqual(len(profile.H2_BUILD_TARGETS), 9)
+        self.assertEqual(len(profile.H2_CTEST_NAMES), 30)
+        self.assertEqual(len(profile.H2_BUILD_TARGETS), 11)
         self.assertEqual(len(profile.H2_CTEST_NAMES), len(set(profile.H2_CTEST_NAMES)))
         self.assertEqual(len(profile.H2_BUILD_TARGETS), len(set(profile.H2_BUILD_TARGETS)))
         self.assertLessEqual(set(profile.H2_CTEST_NAMES), set(profile.CTEST_NAMES))
@@ -294,6 +306,7 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_core_spec",
             "test_xr_program",
             "test_xr_program_verify",
+            "test_xr_program_provider_requirements",
             "test_xr_program_source_build",
             "test_xr_program_vm",
             "test_xr_program_vm_runtime",
@@ -309,10 +322,11 @@ class CanonicalProgramTestProfileTests(unittest.TestCase):
             "test_xr_program_provider_trap_cleanup_aot_native",
             "test_xr_program_child_coroutine_trap_cleanup_aot_native",
             "meta_ownership_inventory",
-            "contract_freeze",
             "contract_freeze_injection",
         }
         self.assertLessEqual(required, set(profile.CTEST_NAMES))
+        self.assertNotIn("contract_freeze", profile.CTEST_NAMES)
+        self.assertNotIn("contract_freeze", profile.H2_SOURCE_CTEST_NAMES)
 
 
 if __name__ == "__main__":

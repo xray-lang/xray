@@ -450,6 +450,28 @@ CONTRACT_SPECS = (
     ContractSpec(
         "canonical-program-execution-binding.md",
         (
+            "src/program/xr_program.h",
+            "src/program/xr_program_internal.h",
+            "src/program/xr_core_ir.c",
+            "src/program/xr_program_encode.c",
+            "src/program/xr_program_decode.c",
+            "src/program/xr_program_schema_gen.h",
+            "xisa/program/schema.json",
+            "tools/programgen/programgen.py",
+            "tests/unit/program/test_xr_program.c",
+            "tests/unit/program/test_xr_program_provider_requirements.c",
+            "tests/unit/program/xr_program_provider_fixture.h",
+            "contracts/canonical-program/xrprogram-format-v3.md",
+            "contracts/canonical-program/xrprogram-format-coverage.json",
+            "contracts/canonical-program/xrprogram-semantic-coverage.json",
+            "src/execution/xr_stdlib_provider_binding.h",
+            "src/execution/xr_stdlib_provider_binding.c",
+            "src/execution/xr_stdlib_provider_bindings_gen.inc.c",
+            "src/shared/xr_time_offset.h",
+            "stdlib/time/time.c",
+            "src/os/unix/pipe_unix.c",
+            "tests/unit/runtime/test_time_utc_offset.c",
+            "tests/unit/execution/test_stdlib_provider_binding.c",
             "src/plan/target/xr_target_profile.h",
             "src/plan/target/xr_target_profile.c",
             "src/plan/target/xr_target_profile_verify.c",
@@ -467,6 +489,9 @@ CONTRACT_SPECS = (
             "src/runtime/abi/xr_runtime_contract.c",
             "src/runtime/class/xinstance.h",
             "tests/unit/plan/test_target_profile.c",
+            "tests/unit/execution/test_provider_logical_admission.c",
+            "scripts/canonical_program_test_profile.py",
+            "tests/lib/tests/test_canonical_program_test_profile.py",
             "tests/unit/execution/test_xr_execution.c",
             "tests/unit/execution/test_xr_boundary_materialization.c",
             "tests/unit/runtime/test_runtime_abi_contract.c",
@@ -486,12 +511,10 @@ ASSERTION_FIXTURE = "semantic_contract_assertions"
 def assertion_tests(contracts_dir: Path, specs=CONTRACT_SPECS) -> set[str]:
     tests: set[str] = set()
     for spec in specs:
-        if spec.anchors:
-            continue
         path = contracts_dir / spec.name
         declared: set[str] = set()
         for line in path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("anchor-sha256:"):
+            if line.startswith("anchor-sha256:") and not spec.anchors:
                 raise ValueError(f"{path}: retired source digest record")
             if not line.startswith("verification-test:"):
                 continue
@@ -502,7 +525,7 @@ def assertion_tests(contracts_dir: Path, specs=CONTRACT_SPECS) -> set[str]:
             if name in declared or name.startswith("contract_freeze"):
                 raise ValueError(f"{path}: duplicate or recursive verification test {name}")
             declared.add(name)
-        if not declared:
+        if not declared and not spec.anchors:
             raise ValueError(f"{path}: missing verification tests")
         tests.update(declared)
     return tests
@@ -656,6 +679,21 @@ def self_test() -> int:
         assert any("digest drift" in error for error in verify_digests(root, root / "contracts", (spec,)))
         assert refresh_digests(root, root / "contracts", (spec,)) == []
         assert verify_digests(root, root / "contracts", (spec,)) == []
+        assert assertion_tests(root / "contracts", (spec,)) == set()
+        contract.write_text(contract.read_text(encoding="utf-8") +
+                            "verification-test: sample_behavior\n", encoding="utf-8")
+        assert assertion_tests(root / "contracts", (spec,)) == {"sample_behavior"}
+        assert verify_digests(root, root / "contracts", (spec,)) == []
+        anchor.write_text("pending migration changed\n", encoding="utf-8")
+        assert any("digest drift" in error for error in verify_digests(root, root / "contracts", (spec,)))
+        contract.write_text(contract.read_text(encoding="utf-8") +
+                            "verification-test: sample_behavior\n", encoding="utf-8")
+        try:
+            assertion_tests(root / "contracts", (spec,))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("accepted duplicate assertion in anchored contract")
         migrated = ContractSpec("sample.md", ())
         contract.write_text("verification-test: sample_behavior\n", encoding="utf-8")
         assert assertion_tests(root / "contracts", (migrated,)) == {"sample_behavior"}

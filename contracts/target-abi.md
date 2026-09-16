@@ -116,6 +116,101 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
+Direct-call authority construction admits its immutable TargetPlan once for
+one synchronous module batch, then reuses that result without callbacks or
+external mutation. The freeze verifier independently derives every recorded binding.
+Public incremental operations and public conformance verification still admit
+their inputs; a corrupt call row remains rejected even if its content hashes
+are recomputed. Tail conformance supplies the independent final verification,
+so the driver does not replay the same full check immediately before it.
+The batch verifier checks all module records, reports the failing module, and
+clears every certificate on failure; the builder releases partial plans.
+Representation collection likewise retains admission only inside its synchronous
+module batch. Its private builder never escapes or invokes external callbacks;
+each adapter is still independently derived again when the plan freezes.
+Incremental builders retain full admission per operation. Both entry paths reject
+corrupt physical rows even after the enclosing fingerprint is recomputed.
+Materialization admits all module records together, then independently checks
+each live graph. Bundle installation transfers all refinement owners atomically;
+failure in a later module leaves the bundle unchanged. Prepare repeats this
+check at its own boundary, where the live graphs may have changed, without
+replaying the same immutable plan admission once per module.
+
+Representation joins use the semantic module's existing TargetPlan partition.
+Local function/type/value ordinals never identify another module's rows, and a
+VIEW representation's detail names its published global layout row, not a local
+semantic type ordinal. The same storage proof covers borrowed parameters, range
+slices, and runtime-produced views. View origin and lifetime remain independently
+admitted by TargetPlan. Tagged reference uses consume the existing definition
+storage proof rather than maintaining another producer whitelist.
+Every materialized RETAIN/RELEASE must preserve its frozen operation, source,
+type, block, and any declared representation adapter. This general check replaces
+the former string-concatenation-only cleanup loop; physical cleanup rows and
+negative tests remain required.
+Tagged call results use that shared temporary carrier proof and the frozen
+result ownership across ordinary, tail, builtin and receiver call forms. They
+do not require an executable call row in a cold function. Independent TargetPlan
+admission continues to reject forged identity, calling convention, ownership
+and result representation after hashes are recomputed. A receiver method takes
+an already tagged reference argument in its proved carrier even when the policy
+prefers native scalars. Return edges likewise reuse the definition's carrier
+after selecting native scalar ABI storage. The duplicate return-producer list
+and its redundant leaf-aggregate branch are removed; return type, ownership,
+aggregate layout and physical ABI admission remain required.
+String slicing uses the same call-result carrier proof; its receiver and bounds
+retain their independently checked String/i64 contract. The duplicate slice
+receiver and result producer paths are removed.
+PanicInfo construction also uses the shared call-result carrier instead of a
+separate physical-call reconstruction. A cold partial-match body exercises this
+path; rehashed constructor identity and result ownership mutations still fail
+independent TargetPlan admission.
+
+Native-direct resolution and argument carriers come from the exact frozen
+signature. The duplicate physical-call/argument identity, ownership and ABI
+reconstruction in representation is removed; baseline TargetPlan admission
+retains those checks, including rehashed hostile rows. Cold native calls retain
+their semantic signature after executable rows are pruned. Changing a cold body
+into an initializer without restoring those rows remains invalid.
+Array arguments reuse the generated tagged-value ABI with exact element types
+from the registry signature. Nullable, wrong-width and reference-writeback
+arguments remain rejected. A strict C11 native program observes equal buffers,
+a byte mutation, and self-comparison against independent expected booleans.
+The String UTF-8 static receiver is a resolution token, using its existing exact
+method/type/producer proof. It acquires no invented runtime storage or adapter;
+ordinary data arguments and owned results retain their existing obligations.
+
+Reference parameter C spelling follows its frozen declaration and parameter
+slot, independently of incoming calls. The removed incoming-call scan duplicated
+argument verification and rejected forwarded reference parameters. Existing
+call-argument projection still proves source origin, lifetime, ownership,
+parameter identity and physical ABI. A local reference address joins its source
+to the callee declaration within its semantic module; it no longer scans the
+global physical call table, whose rows may be absent in cold bodies. Forwarding
+a reference reuses the parameter's exact borrowed pointer carrier. Cold parameter
+ownership mutations, source-class/Array boundary mutations, and two independently
+built source modules verify these obligations.
+Ordinary consumers preserve the frozen native scalar demand, including required
+unboxing, then reuse the definition carrier for references. Array consumers check
+the exact container type and that carrier; separate produced/borrowed producer
+lists are removed. Optional call results can consequently be tested, projected,
+indexed, copied and passed by reference through the same rules. Exact element
+types, nullable narrowing, ownership and physical release checks remain required.
+
+A Slice argument at a tagged runtime boundary uses the existing borrowed span
+wrapper, including a verified UNBOX view adapter. This conversion is shared by
+published C-emission views and remaining aggregate projections; it does not
+allocate or transfer the backing owner. Inline and annotated Slice expressions
+publish the same source encoding type shape, with temporary type references
+owned and destroyed by a scoped arena. Strict C11 native execution compares
+both UTF-8 conversions against an independent output expectation. The same
+fixture reads a string byte view through a direct Slice parameter and checks its
+length and first byte. A native view parameter preserves the two-word value;
+only a tagged parameter boundary removes the borrowed wrapper.
+The fixture also forwards an Array reference through an ordinary function,
+modifies its first byte, and observes that change through both UTF-8 conversions.
+It constructs both Some and None, mutates the projected array, and reads length
+and an element directly from a projected call result.
+
 An unsafe checked conversion out of a source union consumes its tagged carrier
 only when the frozen target type id and spelling identify exactly one structural
 scalar or String member of that union. Safe conversions, non-member targets,
@@ -143,12 +238,26 @@ member, ordered operands, direct-local TargetPlan call, exact callee, and
 applied direct-call authority record. Missing, duplicate, reordered, stale, or
 ordinary-`XI_CALL` substitutions fail closed; prepare has no normalization or
 compatibility path. This changes no public ABI or plan schema.
-The C emission projection schema 40 preserves the exact materialization recipe
+The C emission projection schema 41 preserves the exact materialization recipe
 and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
 reordered, stale, or incorrectly spelled rows fail before emission; this does
 not authorize general owned Strings, tuples, or object bodies.
+The runtime-constructor recipe replaces the StringBuilder-only recipe. Exact
+`StringBuilder()` and `Atomic<i64/f64/bool>(value)` signatures use one owned
+tagged-result contract. The recipe records the exact runtime symbol and scalar
+operand identity, whose Target register kind must match the logical type.
+The C emitter consumes these facts without inferring an integer constructor
+for an unknown type. Constructor identity, borrowed-result substitution,
+argument type/mode, builtin origin, physical slot, symbol, and operand mutations
+are rejected. A mixed native program checks `R`, `42`, `true`, and `2.5` output.
+Dynamic layout publication is owned by the existing layout registry: a prior
+use of a type does not establish a layout. Identical geometry is deduplicated,
+conflicting geometry is rejected. StringBuilder receiver-alias recipes preserve
+borrowed or owned return facts, including an addressable `ref` receiver;
+source classes, structural roots, and StringBuilder reuse the existing
+`XrValue *` call projection with independently checked borrow and slot facts.
 For an exact String concatenation, C emission schema 30 freezes every ordered logical
 operand identity separately from the exact source identity consumed by C. An
 owned String remains a tagged part. An exact non-null, non-aggregate `u64`
@@ -159,6 +268,12 @@ adapter only after the immutable recipe, both semantic identities, and the
 exact AOT adapter independently agree. Missing, swapped, widened, stale, or
 wrong-kind rows fail closed, and selector text, mutable Xi types, or tagged
 fallback display grant no authority.
+The unsigned interpolation source test retains these shape and mutation
+assertions and deterministic emission checks. Its former whole-SemanticPlan
+digest also changed on unrelated stdlib registry edits; that redundant snapshot
+is retired in the evidence inventory. The strict C11 native fixture independently
+requires `value=0` and `value=18446744073709551615`. Semantic serialization and
+runtime identity KATs retain their own responsibilities.
 Schema 16 also carries exact unaliased SemanticPlan `Ptr` and `MutPtr` values
 through TargetPlan `RAW_PTR`, target-profile pointer layout, and a trivial,
 non-root, null-zero lifecycle into the immutable C emission row. Builder,
@@ -423,16 +538,12 @@ shared read, a by-value parameter -- is one list, so a carrier the length read
 admits cannot be one a call argument, an equality, a retain, a store into a
 shared cell, or a print refuses. A use that consumes a reference without caring
 which container it is -- a refcount adjustment, a store into a shared cell, a
-print -- asks one further list naming every reference family this authority can
-name, each in the tagged carrier its own family bound, so no such site can
-admit a reference another one refuses either. An identity copy gives a value
-that already exists a second name and allocates nothing, so each of those
-lists, and the definition oracle alike, resolves a value through its chain of
-renames before asking which family it belongs to. That resolution is one shared
-judgement rather than a walk each list repeats: it terminates on the operand
-numbering Xi guarantees, refuses a plan that breaks that numbering, and leaves
-a value that is not a rename standing for itself. A carrier therefore cannot
-depend on which of its names a use site happens to spell. These bindings do not
+print -- asks the definition storage proof for a tagged dynamic carrier. It
+maintains no separate producer roster. Inline aggregates retain their explicit
+boxing proof. An identity copy gives an existing value another name and allocates
+nothing; the shared identity resolver follows the frozen operand numbering and
+rejects cycles or malformed forwarding. A carrier therefore cannot depend on
+which of its names a use site spells. These bindings do not
 authorize a `ref` or moved String parameter, a SOURCE_EXPORT String parameter,
 an optional String, a shared read of any other container this generation has not
 bound, or a String reached through a slice receiver.
@@ -443,6 +554,56 @@ parameter, argument, call result, and function return. That is one judgement
 about the kind rather than a special case restated per boundary, so no
 compensating BOX/UNBOX adapter is valid on any of them, and no boundary can
 authorize one by disagreeing with the others.
+
+Identity and owner forwarding share one storage closure, including mixed
+chains. A top-level const seal may preserve a reference carrier only when the
+canonical type key and every structural row agree except for adding constness;
+removing constness, changing child types, or widening to Optional is rejected.
+Optional injection and projection use the same structural comparison while
+requiring their own nullable relation and payload ordinal. Coroutine primitive
+results retain their generated effects and owned tagged result contract with
+the actual operand list; their storage is not restricted to nullary primitives.
+Cleanup addresses remain bound to the exact resulting value and ownership.
+
+verification-test: test_xi_unsigned_text_native
+verification-test: test_xi_encoding_slice_native
+verification-test: test_prelude_init
+verification-test: test_xi_emit
+verification-test: test_xi_native_array_native
+verification-test: test_xr_aot_refinement
+verification-test: test_xr_program_process_provider_aot_native
+
+Builtin enum slot, name, member order, and payload declarations now project from
+one prelude registry into runtime installation and C emission. Installation
+publishes the per-isolate enum objects once and reports allocation/ABI failure.
+The independent runtime test names all eleven fixed slots and member layouts,
+checks distinct isolate objects with equal nominal identity, and checks repeat
+installation preserves them. NumberParseError retains its separately frozen
+layout and C emission admission. Exact-scalar residue checks require these
+runtime and generated-native fixtures, replacing their requirement for a second
+handwritten CGen table. The encoding source/native fixture exercises four error
+enum namespaces together with borrowed arrays and string decoding. Field uses
+consume the shared exact tagged carrier; field identity and result types retain
+independent admission.
+
+A direct native declaration's `ref Array<T>` parameter now projects a borrowed
+tagged-slot address from its signature. The existing generator emits the `r`
+argument projection, TargetPlan binds the local address and call-bounded loan,
+and C emission passes an actual `XrValue *`. The provider can therefore observe
+and update the same slot. Ordinary value parameters retain their tagged ABI.
+The local-address and borrowed-load mechanisms are shared with ordinary calls;
+no member-name branch or additional opcode selects the native path. Independent
+signature-mode tests include a renamed declaration, while the native array
+program exercises value comparison, element mutation, a real mutable provider
+call, and the subsequent place load. Rehashed wrong argument identity, mode,
+ownership, addressability, and callee representation remain rejected.
+
+The retired numeric getpid Xi fixture no longer requires the deleted leaf
+owner. The existing native-direct fixture checks function-token elision along
+with frozen provider and argument mutations. The generated process-provider
+fixture builds from source, exercises VM binding, and runs real native code
+against a positive, repeatable process identity. Its requirement and provider
+descriptor checks remain active.
 
 The first Task 283 AOT ABI-owner cutover is deliberately narrower: an exact
 direct-local call between closed scalar-i64 functions consumes the bound
@@ -518,15 +679,15 @@ Representation refinement then materializes the frozen Slice as the portable
 No selector-only decoder, mutable argument boundary, nested-const erasure,
 dynamic String method, or legacy pointer adapter is authorized.
 
-Schema 54 also freezes an exact zero-argument native target-leaf scalar ABI.
-The call row carries a generated numeric leaf kind, stable native-callee
-identity, signed-`i64` register and memory representations, no callee function,
-no argument or adapter rows, and one `CALL_NATIVE_LEAF_I64` instruction. The VM
-and AOT paths independently verify that authority before selecting the shared
-runtime-neutral scalar provider. The C spelling is a final numeric-leaf
-projection to the portable scalar helper; the `os.__getpid` source spelling,
-native-module factory, tagged `XrValue` wrapper, and legacy function table are
-not ABI owners and cannot repair missing or mutated rows.
+The numeric getpid call kind and its dedicated VM instruction are retired.
+Ordinary provider operations use the canonical Program's complete logical
+contract and the exact TargetProfile operation identity. Generated typed host
+bindings and backend-private AOT emission consume that contract. TargetPlan
+schema 61 removes the numeric native-leaf field and call convention; XTP v61
+rejects earlier call-row layouts. The stable native-callee identity remains
+for retained ordinary native-direct and builtin-runtime consumers. Evidence
+migration is tracked in `canonical-program/retired-evidence.tsv`; retirement
+of the old representation does not itself grant execution qualification.
 
 The schema-58 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
@@ -848,27 +1009,26 @@ emission rather than falling back to compiler-host layout.
   construction, and hands an element read back as the tagged carrier a native
   consumer adapts from. A non-scalar, nested, rooted, renamed, or stale lane
   fails closed, and no tuple may enter the named-aggregate path.
-- T18: a bare structural object occupies no aggregate slot and receives no C
-  projection at all. It is reference capable and roots its own ownership, so
-  the shared aggregate judgement places it outside every aggregate family and
-  the target plan states no representation for it; representation refinement
-  admits such a value only while that absence holds, and demands it of the name
-  it is asked about as well as of the allocation that name resolves to, so a
-  row some other family placed can never be claimed here. The authority is
-  rebuilt independently from the frozen rows rather than read back: the
-  construction proves its canonical allocation identity, its field-name
-  metadata and its field count; a shared-cell read proves the borrowed load
-  that hands the same allocation back; and a field access proves its receiver
-  as one of those two, as a field read whose own result is an object, or as a
-  rename of any of them, within a fixed nesting bound. Every
-  field holds a full tagged value, so a write reaches the store in the carrier
-  whatever native storage its own definition named, and a read hands the
-  carrier back for a native consumer to adapt from. CGen converts on both edges
-  through the storage the emission plan named and never references the emitted
-  local directly. A value-flagged struct object, an object crossing a call
-  parameter or a call result, and any operation shape that is not exactly
-  reconstructible fail closed, and no object may enter the named-aggregate
-  path.
+- T18: a structural object is a reference-capable ownership root, never an
+  inline value aggregate or a named C aggregate. Construction, shared reads,
+  identity forwarding, exact direct-local parameters/results, and explicit
+  copy use the existing tagged reference slots. Declaration and operation
+  ownership determine whether a slot borrows or owns; independent target and
+  representation checks still verify the slot, root kind, ABI, profile and
+  call result. Slot absence is not representation authority.
+  Construction proves its canonical allocation identity, field-name metadata
+  and field count. Field access proves the frozen receiver shape, ordinal and
+  field type, including the existing nullable-store rules and nesting bound.
+  A source access ID is optional provenance for an otherwise exact selection;
+  source-backed and lowering-synthesized reads/writes obey the same checks.
+  Each field travels as a full tagged value with explicit storage adaptation.
+  Assignment preserves the root, while explicit copy creates an independent
+  graph, including nested structural roots. Source destruction must not
+  invalidate that graph, and both graphs must physically release every owned
+  root exactly once. VALUE flags, missing root flags, wrong field identities,
+  borrowed copy results, false array-element lanes and mismatched call
+  ownership fail closed. Native fixtures cover ordinary direct-local calls;
+  this does not grant unproved coroutine, host-result or artifact boundaries.
 - T19: `NumberParseError` is the sole scalar-text parse failure ABI. Its
   builtin global index is 30, its enum layout ID is 3802613823, and member
   indices zero and one name `InvalidSyntax` and `OutOfRange`. Semantic
@@ -938,8 +1098,8 @@ anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 8d187b7e0f3efb58d606
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 8f6a906a9c27c7517fe2bafa3f4a6bf1e635de4020681e0f12e9462145b4aa2d
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 022a99ffcd7990f061e219356081f2f6f864a7f83b2b56c231f8a1fa16c5e6d0
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 14b7af26f15a2c9add8ec4fa7d58a782b4bdfda1f69a18904d668627d2238562
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d34865a86bfd2ce3561c2e7328c4d9262c53cebc
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 97085f29b14fd95ab3f942fa6782eafe79f5caaad0b7dab9d50b9d11cb7606a0
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.c cbc5cfc599653e3668f4b7dd6a81755baeb274b67a455e52155cc16205f68a23
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 3a1b50209d93f7e098b67a9b23b79175050b1bf4ad297060b93e7aad257ad950
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 5c15a320923a30c60c771f9618f6fe23dc9ed22af8a59bc96016c447043f894f
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd948a4a9fcd64adfab03c177fd125f577686043223b601f524
@@ -960,16 +1120,16 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c ef69a37f0508160df042ba4e84268750d0b2e0fc31ff7f11c2f5f65c12fab36e
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c bfd1bf8927cc7562ca193bfc182158a928b2c6e8dec77d1c02fbc88c8df1d959
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 922e370c40e60e113fba8e0a40889c4f379c74cc43bb7543ea7b5d56241d9044
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b1296f68ba37032061b8ba2fae7ffc5cd9b76bb03f9df6a34f4f3c7d9fedeb79
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ea9c4ac67c31537fc6f41326f09481e702c1592f159946d54da89eae8a5a1baf
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 08db1ebcd463d21d5a849a5f7bfcae7d41206818c04fc73c44566017c8e8a522
-anchor-sha256: src/aot/xi_cgen.c 9b93d97300afad661e4fc8ff4092bcdd78e908506858f6c5c9dd53c1f3c1be5e
+anchor-sha256: src/aot/xi_cgen.c 8f9d89cb8768487cb63a20e790705debd80a2181d4101d0d67978f3e7ffdc5db
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
 anchor-sha256: src/ir/xi_opt.c 7541e8f4bc982cbc6f9cd054ef0397473020cee74168055a28d667b2e5c78bb5
 anchor-sha256: src/aot/xrt_coll.h f699e3aecd8f3c408deca50e306274be74d0d700a61b29ca1dd170be48086511
 anchor-sha256: src/aot/xrt_core_freestanding.h 5ea90e48514a3bbaa483634bfa58dd0f4c9566d790c284ecc337b9bef274c55f
 anchor-sha256: src/aot/xrt_method.h 4a4b691a60a66b84e216221bb3c124e9c09edc0fb7c01db3dc8265645c2c6a55
-anchor-sha256: src/aot/xrt_time.h 952014f00082d8ca8ab66452176fd736596819c2158efa35762c332841f9fdf9
+anchor-sha256: src/aot/xrt_time.h f4e38e81e6bb62b0286e722cdd9b4a334c0587ca968fcb0f9bebb4a05c5c01ac
 anchor-sha256: include/xray_hosted_fragment_abi.h 7006c7c84c50e138c7837e1737de9756c153a29fc757256e593782f52f535678
 anchor-sha256: src/app/cli/xcmd_build.c 4b94bdab394e8ed691c387bf5609b64ce1a6593b5605f083db3defad3b86ce74
 anchor-sha256: tests/aot/run_aot_incremental_cache.py e93b33ce73699eca5ca83c9b17f42e721f971a0f2403b5e7dd5db71ea20f2f66
@@ -984,6 +1144,6 @@ anchor-sha256: src/aot/xrt_provider_abi.h c38c4c8f9bf7893f6d6dbc0b0c518f703d80a2
 anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1bfd9f84613580b3b6b5ece8bfd9eaa4
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
-anchor-sha256: src/aot/xaot_driver.c f151e0d441de6a5bebcf6ef36e97d2658d7b191296d98f6ffa59b06819c28a41
+anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
+anchor-sha256: src/aot/xaot_driver.c c2abf8701a94321beada41f0fe97f8d4ceb25accd0a564a918b58f1a3f88677c
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 8137258328d858ab5109a184c159a5375077de2dd9301fc16e798ebfd69e99ba

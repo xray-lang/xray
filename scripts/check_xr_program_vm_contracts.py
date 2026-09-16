@@ -22,6 +22,7 @@ CMAKE = Path("CMakeLists.txt")
 COVERAGE = Path("contracts/canonical-program/xrprogram-vm-coverage.json")
 
 RUNTIME_SOURCES = (
+    "src/runtime/abi/xr_provider_logical_contract.c",
     "src/base/xsha256.c",
     "src/base/xtarget_data_layout.c",
     "src/core/xr_core_spec_gen.c",
@@ -115,7 +116,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": "xray-program-vm-coverage/1",
         "task": 299,
-        "vm_build_id": "xray-program-vm-v1",
+        "vm_build_id": "xray-program-vm-v2",
         "input_authority": "XrValidatedProgram",
         "execution_authority": "XrInstance",
         "distribution_format": "XrProgram",
@@ -126,7 +127,6 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         "execution_budgets": ["steps", "call-depth", "aggregate-value-cells"],
         "private_qualification": [
             "ExecutionId",
-            "generation",
             "vm-build-id",
             "decode-policy",
             "quickening-policy",
@@ -137,8 +137,8 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         "profile_matrix": ["lp64-x86_64-windows", "ilp32-wasm32-wasi"],
         "lifecycle_matrix": [
             "active-execute",
-            "retired-code-refused",
-            "successor-generation-refused",
+            "retired-instance-refused",
+            "same-program-profile-successor-reuses-code",
         ],
         "runtime_product": {
             "target": "xray_program_vm_runtime",
@@ -188,17 +188,26 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     runtime_test = sources[RUNTIME_TEST]
     cmake = sources[CMAKE]
 
-    require('#define XR_VM_BUILD_ID "xray-program-vm-v1"' in header,
+    require('#define XR_VM_BUILD_ID "xray-program-vm-v2"' in header,
             "VM build identity is missing")
     for token in ("XR_VM_DECODE_BASELINE_VIEW", "XR_VM_DECODE_FIXED_ROWS",
-                  "XR_VM_QUICKENING_NONE", "XrExecutionCacheKey", "max_value_cells"):
+                  "XR_VM_QUICKENING_NONE", "XrExecutionId", "max_value_cells"):
         require(token in header or token in vm, f"missing VM contract token {token}")
     for forbidden in FORBIDDEN_VM_TOKENS:
         require(forbidden not in vm, f"VM depends on forbidden semantic owner {forbidden}")
     require("xr_execution_instance_acquire" in vm and
             "xr_execution_lease_release" in vm,
             "VM does not hold exact generation leases")
-    require("xr_vm_code_matches_instance" in vm, "VM code has no exact generation match")
+    require("xr_vm_code_matches_instance" in vm, "VM code has no exact Program/Profile compatibility match")
+    build = vm[vm.index("XrVmCodeStatus xr_vm_code_build("):vm.index("void xr_vm_code_free(")]
+    require("const XrValidatedProgram *program" in build and
+            "const XrTargetProfile *profile" in build and
+            "xr_execution_id_compute(program, profile" in build and
+            "xr_validated_program_retain(program)" in build,
+            "VM code construction must own Program and validate Profile compatibility")
+    require("XrInstance" not in build and "xr_execution_instance_acquire" not in build and
+            "XrExecutionCacheKey" not in vm and "cache_key.generation" not in vm,
+            "VM code construction regained an instance generation dependency")
     require("xr_program_validate" not in vm,
             "VM must consume a validated graph instead of decoding bytes")
     require("serialize" not in vm.lower() and "deserialize" not in vm.lower(),
@@ -295,6 +304,16 @@ def self_test(root: Path) -> None:
         pass
     else:
         raise GateError("reference-evaluator dependency mutation was accepted")
+
+    mutated = vm.replace("code->execution_id = execution_id;",
+                         "code->execution_id = execution_id; /* XrInstance */", 1)
+    require(mutated != vm, "instance-bound construction mutation did not apply")
+    try:
+        validate_sources(root, {VM_SOURCE: mutated})
+    except GateError:
+        pass
+    else:
+        raise GateError("instance-bound VM code construction was accepted")
 
     mutated = vm.replace("produced.as.value.kind = XR_VM_VALUE_U16",
                          "produced.as.value.kind = XR_VM_VALUE_U32", 1)

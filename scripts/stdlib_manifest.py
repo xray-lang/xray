@@ -104,6 +104,7 @@ def loadable_modules(root: Path) -> set[str]:
 
 def load_stdlibgen(root: Path):
     module_path = root / "tools/stdlibgen/stdlibgen.py"
+    sys.path.insert(0, str(module_path.parent))
     spec = importlib.util.spec_from_file_location("xray_stdlibgen_for_boundary", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load stdlib metadata parser: {module_path}")

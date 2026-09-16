@@ -328,7 +328,7 @@ const char *xr_aot_tail_call_conformance_issue_name(uint32_t issue) {
     return "XR_AOT_TAIL_CALL_CONFORMANCE_UNKNOWN";
 }
 
-bool xr_aot_tail_call_conformance_verify(
+static bool tail_call_conformance_verify_admitted(
     const XiFunc *root, const XrTargetPlan *target_plan,
     const XrAotRefinementPlanView *direct_call_authority,
     XrAotTailCallConformance *out_conformance,
@@ -340,7 +340,6 @@ bool xr_aot_tail_call_conformance_verify(
     TailVerifyContext ctx = {.target = target_plan,
                              .authority = direct_call_authority,
                              .diag = diag};
-    char error[256] = {0};
     if (!root || !target_plan || !direct_call_authority || !out_conformance)
         return fail(&ctx, XR_AOT_TAIL_CALL_CONFORMANCE_INVALID_ARGUMENT,
                     0, 0, 0, 0);
@@ -349,10 +348,7 @@ bool xr_aot_tail_call_conformance_verify(
     if (!ctx.semantic ||
         !xr_target_plan_partition_for_semantic(target_plan, ctx.semantic, &partition) ||
         !xr_target_plan_is_verified(target_plan) ||
-        !xr_target_plan_fingerprint_is_intact(target_plan) ||
-        !xr_target_plan_verify(target_plan, error, sizeof(error)) ||
-        !direct_call_authority->frozen || !direct_call_authority->verified ||
-        !xr_aot_refinement_verify(direct_call_authority, target_plan, ctx.semantic, NULL))
+        !direct_call_authority->frozen || !direct_call_authority->verified)
         return fail(&ctx, XR_AOT_TAIL_CALL_CONFORMANCE_PLAN_STATE,
                     0, 0, 0, 0);
     size_t function_count = xr_semantic_plan_function_count(ctx.semantic);
@@ -427,4 +423,54 @@ bool xr_aot_tail_call_conformance_verify(
     if (diag)
         diag->issue = XR_AOT_TAIL_CALL_CONFORMANCE_OK;
     return true;
+}
+
+bool xr_aot_tail_call_conformance_verify_modules(
+    const XiFunc *const *roots, const XrTargetPlan *target_plan,
+    const XrAotRefinementPlanView *authorities, uint32_t module_count,
+    XrAotTailCallConformance *out_conformance, uint32_t *failed_module,
+    XrAotTailCallDiagnostic *diag) {
+    TailVerifyContext context = {.diag = diag};
+    if (diag)
+        memset(diag, 0, sizeof(*diag));
+    if (failed_module)
+        *failed_module = 0;
+    if (!roots || !authorities || !out_conformance || module_count == 0 ||
+        module_count > XR_TARGET_MAX_PROGRAM_MODULES)
+        return fail(&context, XR_AOT_TAIL_CALL_CONFORMANCE_INVALID_ARGUMENT, 0, 0, 0, 0);
+    memset(out_conformance, 0, sizeof(*out_conformance) * module_count);
+    const XrSemanticPlan **semantics = xr_calloc(module_count, sizeof(*semantics));
+    if (!semantics)
+        return fail(&context, XR_AOT_TAIL_CALL_CONFORMANCE_RESOURCE_BUDGET, 0, 0, 0, 0);
+    bool valid = true;
+    for (uint32_t i = 0; i < module_count; ++i) {
+        if (!roots[i]) {
+            if (failed_module)
+                *failed_module = i;
+            valid = fail(&context, XR_AOT_TAIL_CALL_CONFORMANCE_INVALID_ARGUMENT, 0, 0, 0, 0);
+            break;
+        }
+        semantics[i] = roots[i]->semantic_plan;
+    }
+    if (valid && !xr_aot_refinement_verify_modules(target_plan, semantics, authorities,
+                                                   module_count, failed_module, NULL))
+        valid = fail(&context, XR_AOT_TAIL_CALL_CONFORMANCE_PLAN_STATE, 0, 0, 0, 0);
+    xr_free(semantics);
+    for (uint32_t i = 0; valid && i < module_count; ++i) {
+        valid = tail_call_conformance_verify_admitted(roots[i], target_plan, &authorities[i],
+                                                       &out_conformance[i], diag);
+        if (!valid && failed_module)
+            *failed_module = i;
+    }
+    if (!valid)
+        memset(out_conformance, 0, sizeof(*out_conformance) * module_count);
+    return valid;
+}
+
+bool xr_aot_tail_call_conformance_verify(
+    const XiFunc *root, const XrTargetPlan *target_plan,
+    const XrAotRefinementPlanView *direct_call_authority,
+    XrAotTailCallConformance *out_conformance, XrAotTailCallDiagnostic *diag) {
+    return xr_aot_tail_call_conformance_verify_modules(
+        &root, target_plan, direct_call_authority, 1, out_conformance, NULL, diag);
 }

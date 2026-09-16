@@ -62,7 +62,7 @@ typedef struct XrValidatedConformance {
 
 typedef struct XrValidatedProviderRequirement {
     XrStableId contract_id;
-    XrStableId *operation_ids;
+    XrProgramProviderOperationRequirement *operations;
     uint32_t operation_count;
 } XrValidatedProviderRequirement;
 
@@ -100,12 +100,19 @@ typedef struct XrValidatedCoroutineSafepoint {
     uint32_t live_value_count;
 } XrValidatedCoroutineSafepoint;
 
+/* String constants borrow their bytes from the validated program's own
+ * artifact copy, so they live exactly as long as the program handle. */
 typedef struct XrValidatedConstant {
     uint16_t type_id;
     XrCoreIrConstantKind kind;
     union {
         int64_t i64;
         bool boolean;
+        struct {
+            const uint8_t *bytes;
+            uint32_t size;
+        } string;
+        uint32_t rune;
     } value;
 } XrValidatedConstant;
 
@@ -191,7 +198,16 @@ typedef struct XrValidatedFunction {
     uint32_t coroutine_safepoint_count;
     uint32_t value_count;
     uint32_t flags;
+    /* Zero denotes a function outside the runtime module table. */
+    uint32_t module_index_plus_one;
 } XrValidatedFunction;
+
+typedef struct XrValidatedModule {
+    XrCoreIrKey key;
+    uint32_t initializer;
+    uint32_t *dependencies;
+    uint32_t dependency_count;
+} XrValidatedModule;
 
 struct XrValidatedProgram {
     atomic_uint_least32_t references;
@@ -213,6 +229,9 @@ struct XrValidatedProgram {
     uint32_t constant_count;
     XrValidatedFunction *functions;
     uint32_t function_count;
+    /* Dense module indices are the immutable initialization order. */
+    XrValidatedModule *modules;
+    uint32_t module_count;
     uint32_t entry_function;
     uint64_t verifier_work;
 };
@@ -231,18 +250,34 @@ static inline const XrValidatedType *xr_validated_program_type(const XrValidated
 
 static inline XrCoreIrTypeOwnership
 xr_validated_program_type_ownership(const XrValidatedProgram *program, uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_PANIC_INFO)
-        return XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    const XrProgramBuiltinTypeRow *builtin = xr_program_builtin_type_row(type_id);
+    if (builtin)
+        return builtin->ownership;
     const XrValidatedType *type = xr_validated_program_type(program, type_id);
     return type ? type->ownership : XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
 }
 
 static inline XrCoreIrCopyContract
 xr_validated_program_copy_contract(const XrValidatedProgram *program, uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_VOID || type_id == XR_CORE_TYPE_PANIC_INFO)
-        return XR_CORE_IR_COPY_FORBIDDEN;
+    const XrProgramBuiltinTypeRow *builtin = xr_program_builtin_type_row(type_id);
+    if (builtin)
+        return builtin->copy_contract;
     const XrValidatedType *type = xr_validated_program_type(program, type_id);
     return type ? type->copy_contract : XR_CORE_IR_COPY_TRIVIAL;
+}
+
+/* A `string` owner is pure immutable memory: it has no finalizer, holds no
+ * resource and its release is never observable, so an implicit trap exit may
+ * leave it for executor-private reclamation.  Every other affine owner must
+ * be explicitly cleaned up before an operation that can trap. */
+static inline bool xr_validated_program_owner_needs_cleanup_before_trap(uint16_t type_id) {
+    return type_id != XR_CORE_TYPE_STRING;
+}
+
+/* Bit mask over builtin type ids that core.output.group renders. */
+static inline bool xr_validated_program_type_is_displayable(uint16_t type_id) {
+    return type_id < 32u &&
+           ((XR_CORE_OPERAND_DOMAIN_CORE_OUTPUT_GROUP >> type_id) & UINT32_C(1)) != 0u;
 }
 
 static inline bool xr_validated_program_type_is_optional_i64_pair(const XrValidatedProgram *program,

@@ -5,12 +5,78 @@
 #include "core/xr_core_spec_gen.h"
 #include "program/xr_program.h"
 #include "program/xr_program_decode.h"
+#include "program/xr_program_verify.h"
+#include "program/xr_program_internal.h"
+#include "program/xr_validated_program_internal.h"
+#include "xr_program_allocation_probe.h"
+#include "xr_program_provider_fixture.h"
+#include "xr_program_construct_fixture.h"
+#include "xr_program_coroutine_trap_fixture.h"
+#include "xr_program_text_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static int failures = 0;
+
+static struct {
+    bool enabled;
+    size_t fail_at;
+    size_t attempts;
+    size_t allocated;
+    size_t released;
+    void *live[1024];
+} allocation_probe;
+
+static bool allocation_probe_reject(void) {
+    return allocation_probe.enabled && ++allocation_probe.attempts == allocation_probe.fail_at;
+}
+
+static void *allocation_probe_record(void *pointer) {
+    if (!pointer || !allocation_probe.enabled)
+        return pointer;
+    for (size_t index = 0u; index < XR_COUNTOF(allocation_probe.live); ++index) {
+        if (allocation_probe.live[index])
+            continue;
+        allocation_probe.live[index] = pointer;
+        ++allocation_probe.allocated;
+        return pointer;
+    }
+    fprintf(stderr, "Program allocation probe capacity exceeded\n");
+    abort();
+}
+
+void *xr_program_test_malloc(size_t size) {
+    return allocation_probe_reject() ? NULL
+                                     : allocation_probe_record(xr_program_test_system_malloc(size));
+}
+
+void *xr_program_test_calloc(size_t count, size_t size) {
+    return allocation_probe_reject()
+               ? NULL
+               : allocation_probe_record(xr_program_test_system_calloc(count, size));
+}
+
+void xr_program_test_free(void *pointer) {
+    if (pointer && allocation_probe.enabled) {
+        bool found = false;
+        for (size_t index = 0u; index < XR_COUNTOF(allocation_probe.live); ++index) {
+            if (allocation_probe.live[index] != pointer)
+                continue;
+            allocation_probe.live[index] = NULL;
+            ++allocation_probe.released;
+            found = true;
+            break;
+        }
+        if (!found) {
+            fprintf(stderr, "Program freed unowned memory at allocation failure %zu\n",
+                    allocation_probe.fail_at);
+            abort();
+        }
+    }
+    xr_program_test_system_free(pointer);
+}
 
 #define CHECK(condition)                                                                           \
     do {                                                                                           \
@@ -20,11 +86,28 @@ static int failures = 0;
         }                                                                                          \
     } while (0)
 
+static void allocation_probe_begin(size_t fail_at) {
+    memset(&allocation_probe, 0, sizeof(allocation_probe));
+    allocation_probe.enabled = true;
+    allocation_probe.fail_at = fail_at;
+}
+
+static void allocation_probe_end(void) {
+    if (allocation_probe.allocated != allocation_probe.released)
+        fprintf(stderr, "Program failure %zu leaked %zu allocations\n", allocation_probe.fail_at,
+                allocation_probe.allocated - allocation_probe.released);
+    CHECK(allocation_probe.allocated == allocation_probe.released);
+    allocation_probe.enabled = false;
+}
+
 typedef enum FixtureMutation {
     FIXTURE_VALID = 0,
     FIXTURE_UNKNOWN_OPERATION,
     FIXTURE_UNRESOLVED_OPERAND,
     FIXTURE_DUPLICATE_RESULT,
+    FIXTURE_CONFLICTING_PROVIDER_CONTRACT,
+    FIXTURE_CHANGED_PROVIDER_EFFECT,
+    FIXTURE_INVALID_PROVIDER_CONTRACT,
 } FixtureMutation;
 
 static XrCoreIrKey key(const char *text) {
@@ -194,17 +277,31 @@ static XrProgramBuildStatus build_fixture(bool reverse_modules, bool alternate_r
     }
     XrCoreIrKey profile = key(profile_name);
     uint16_t features[] = {XR_CORE_FEATURE_CORE_BASE};
-    XrStableId operations_ab[] = {operation_a, operation_b};
-    XrStableId operations_ba[] = {operation_b, operation_a};
+    XrProgramProviderOperationRequirement requirement_a = {
+        .operation_id = operation_a,
+        .logical_contract = xr_program_fixture_scalar_contract(false),
+    };
+    if (mutation == FIXTURE_CHANGED_PROVIDER_EFFECT)
+        requirement_a.logical_contract.effects = XR_PROVIDER_EFFECT_READS_PROCESS;
+    if (mutation == FIXTURE_INVALID_PROVIDER_CONTRACT)
+        requirement_a.logical_contract.refusal = 0u;
+    XrProgramProviderOperationRequirement requirement_b = {
+        .operation_id = operation_b,
+        .logical_contract = xr_program_fixture_scalar_contract(false),
+    };
+    XrProgramProviderOperationRequirement operations_ab[] = {requirement_a, requirement_b};
+    XrProgramProviderOperationRequirement operations_ba[] = {requirement_b, requirement_a};
+    if (mutation == FIXTURE_CONFLICTING_PROVIDER_CONTRACT)
+        requirement_a.logical_contract.effects = XR_PROVIDER_EFFECT_READS_PROCESS;
     XrCoreIrProviderRequirementInput forward_requirements[] = {
-        {.contract_id = contract_b, .operation_ids = &operation_a, .operation_count = 1u},
-        {.contract_id = contract_a, .operation_ids = operations_ba, .operation_count = 2u},
-        {.contract_id = contract_a, .operation_ids = &operation_a, .operation_count = 1u},
+        {.contract_id = contract_b, .operations = &requirement_a, .operation_count = 1u},
+        {.contract_id = contract_a, .operations = operations_ba, .operation_count = 2u},
+        {.contract_id = contract_a, .operations = &requirement_a, .operation_count = 1u},
     };
     XrCoreIrProviderRequirementInput reverse_requirements[] = {
-        {.contract_id = contract_a, .operation_ids = &operation_a, .operation_count = 1u},
-        {.contract_id = contract_a, .operation_ids = operations_ab, .operation_count = 2u},
-        {.contract_id = contract_b, .operation_ids = &operation_a, .operation_count = 1u},
+        {.contract_id = contract_a, .operations = &requirement_a, .operation_count = 1u},
+        {.contract_id = contract_a, .operations = operations_ab, .operation_count = 2u},
+        {.contract_id = contract_b, .operations = &requirement_a, .operation_count = 1u},
     };
     XrCoreIrProgramInput input = {
         .semantic_profile_fingerprint = profile.bytes,
@@ -258,9 +355,11 @@ static void test_determinism_roundtrip_and_identity(void) {
 
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
-    CHECK(first.size == 383u);
+    /* Independently derived by setting format minor to one and appending a
+     * zero module count to semantic metadata, including its directory length. */
+    CHECK(first.size == 477u);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
-    CHECK(strcmp(id_hex, "335fbda8de3877d374f32d61aae86818e2bb0c76f1573fb8706e010d295d9a0f") == 0);
+    CHECK(strcmp(id_hex, "c1fd51fb97573aed653736925758d033c4a6ccd00d84f1e2ca9e6d21b9d64abb") == 0);
 
     xr_program_artifact_free(&reencoded);
     xr_program_artifact_free(&rerooted);
@@ -359,12 +458,393 @@ static void test_semantic_profile_and_invalid_core_ir(void) {
                         diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE);
     CHECK(build_fixture(false, false, FIXTURE_DUPLICATE_RESULT, "profile:checked", &unused,
                         diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_DUPLICATE_IDENTITY);
+    CHECK(build_fixture(false, false, FIXTURE_CONFLICTING_PROVIDER_CONTRACT, "profile:checked",
+                        &unused, diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    CHECK(build_fixture(false, false, FIXTURE_INVALID_PROVIDER_CONTRACT, "profile:checked", &unused,
+                        diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+}
+
+static void test_provider_semantics_are_program_identity(void) {
+    char diagnostic[256] = {0};
+    XrProgramArtifact clock = {0};
+    XrProgramArtifact process = {0};
+    CHECK(build_fixture(false, false, FIXTURE_VALID, "profile:checked", &clock, diagnostic,
+                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(build_fixture(false, false, FIXTURE_CHANGED_PROVIDER_EFFECT, "profile:checked", &process,
+                        diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    CHECK(!xr_program_id_equal(clock.id, process.id));
+    CHECK(clock.size == process.size && memcmp(clock.bytes, process.bytes, clock.size) != 0);
+    xr_program_artifact_free(&process);
+    xr_program_artifact_free(&clock);
+}
+
+static void test_partial_core_ir_construction(void) {
+    uint8_t first_bytes[] = "first";
+    uint8_t last_bytes[] = "last";
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("string:first"),
+         .type_id = XR_CORE_TYPE_STRING,
+         .kind = XR_CORE_IR_CONSTANT_STRING,
+         .value.string = {.bytes = first_bytes, .size = sizeof(first_bytes) - 1u}},
+        {.key = key("string:missing"),
+         .type_id = XR_CORE_TYPE_STRING,
+         .kind = XR_CORE_IR_CONSTANT_STRING,
+         .value.string = {.size = 1u}},
+        {.key = key("string:last"),
+         .type_id = XR_CORE_TYPE_STRING,
+         .kind = XR_CORE_IR_CONSTANT_STRING,
+         .value.string = {.bytes = last_bytes, .size = sizeof(last_bytes) - 1u}},
+    };
+    XrCoreIrInstructionInput instruction = {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
+    };
+    XrCoreIrBlockInput block = {
+        .key = key("partial:block"),
+        .instructions = &instruction,
+        .instruction_count = 1u,
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("partial:function"),
+        .entry_block = block.key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("partial:module"),
+        .functions = &function,
+        .function_count = 1u,
+        .constants = constants,
+        .constant_count = 3u,
+    };
+    XrCoreIrKey profile = key("partial:profile");
+    uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
+    XrCoreIrProgramInput input = {
+        .semantic_profile_fingerprint = profile.bytes,
+        .required_features = &feature,
+        .required_feature_count = 1u,
+        .modules = &module,
+        .module_count = 1u,
+    };
+    XrCoreIrProgram *program = NULL;
+    char diagnostic[256];
+    CHECK(xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+    CHECK(program == NULL);
+    CHECK(memcmp(first_bytes, "first", sizeof(first_bytes)) == 0);
+    CHECK(memcmp(last_bytes, "last", sizeof(last_bytes)) == 0);
+
+    constants[1].value.string.size = 0u;
+    CHECK(xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    CHECK(program != NULL);
+    memset(first_bytes, 'x', sizeof(first_bytes) - 1u);
+    memset(last_bytes, 'y', sizeof(last_bytes) - 1u);
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_write(program, &artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    CHECK(contains_bytes(artifact.bytes, artifact.size, "first"));
+    CHECK(contains_bytes(artifact.bytes, artifact.size, "last"));
+    xr_program_artifact_free(&artifact);
+    xr_core_ir_program_free(program);
+
+    uint16_t payload_type = XR_CORE_TYPE_I64;
+    XrCoreIrVariantInput variants[] = {
+        {.payload_types = &payload_type, .payload_count = 1u},
+        {.payload_count = 1u},
+    };
+    XrCoreIrCallableSignatureInput signature = {
+        .parameter_types = &payload_type,
+        .parameter_count = 1u,
+        .result_borrow_origin_count = 1u,
+    };
+    XrCoreIrTypeInput type = {
+        .key = key("partial:type"),
+        .local_id = XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE,
+        .kind = XR_CORE_IR_TYPE_VARIANT,
+        .variant_count = 2u,
+    };
+    XrCoreIrInterfaceInput interface = {
+        .key = key("partial:interface"),
+        .slot_count = 2u,
+    };
+    for (uint32_t mutation = 0u; mutation < 9u; ++mutation) {
+        XrCoreIrModuleInput bad_module = module;
+        XrCoreIrFunctionInput bad_function = function;
+        XrCoreIrBlockInput bad_block = block;
+        XrCoreIrProgramInput bad_input = input;
+        bad_module.constants = NULL;
+        bad_module.constant_count = 0u;
+        bad_module.functions = &bad_function;
+        bad_function.blocks = &bad_block;
+        bad_input.modules = &bad_module;
+        switch (mutation) {
+            case 0u:  // Unallocated module function storage.
+                bad_module.functions = NULL;
+                bad_module.function_count = 2u;
+                break;
+            case 1u:  // Unallocated function block storage.
+                bad_function.blocks = NULL;
+                bad_function.block_count = 2u;
+                break;
+            case 2u:  // Unallocated instruction storage.
+                bad_block.instructions = NULL;
+                bad_block.instruction_count = 2u;
+                break;
+            case 3u:  // Unallocated value-root storage.
+                bad_function.value_root_set_count = 2u;
+                break;
+            case 4u:  // Unallocated safepoint storage.
+                bad_function.coroutine_safepoint_count = 2u;
+                break;
+            case 5u:  // Unallocated variant storage.
+                type.variants = NULL;
+                bad_input.types = &type;
+                bad_input.type_count = 1u;
+                break;
+            case 6u:  // Failure after a preceding variant payload was copied.
+                type.variants = variants;
+                bad_input.types = &type;
+                bad_input.type_count = 1u;
+                break;
+            case 7u:  // Unallocated interface slot storage.
+                bad_input.interfaces = &interface;
+                bad_input.interface_count = 1u;
+                break;
+            case 8u:  // Failure after signature parameters were copied.
+                interface.slots = &signature;
+                interface.slot_count = 1u;
+                bad_input.interfaces = &interface;
+                bad_input.interface_count = 1u;
+                break;
+        }
+        program = NULL;
+        CHECK(xr_core_ir_program_build(&bad_input, &program, diagnostic, sizeof(diagnostic)) !=
+              XR_PROGRAM_BUILD_OK);
+        CHECK(program == NULL);
+        xr_core_ir_program_free(program);
+    }
+}
+
+static XrProgramBuildStatus write_allocation_fixture(uint32_t fixture, XrProgramArtifact *artifact,
+                                                     char *diagnostic, size_t diagnostic_size) {
+    switch (fixture) {
+        case 0u:
+            return build_fixture(false, false, FIXTURE_VALID, "profile:checked", artifact,
+                                 diagnostic, diagnostic_size);
+        case 1u:
+            return xr_program_text_fixture_write(artifact, diagnostic, diagnostic_size);
+        case 2u:
+            return xr_program_construct_fixture_write(XR_PROGRAM_CONSTRUCT_NESTED_TRANSFER,
+                                                      artifact, diagnostic, diagnostic_size);
+        case 3u:
+            return xr_program_coroutine_trap_fixture_write(XR_PROGRAM_COROUTINE_TRAP_VALID,
+                                                           artifact, diagnostic, diagnostic_size);
+        default:
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+}
+
+static void test_constructor_allocation_failures(uint32_t fixture) {
+    char diagnostic[256];
+    size_t builder_allocations = 0u;
+    for (size_t fail_at = 1u; fail_at < 1024u; ++fail_at) {
+        XrProgramArtifact artifact = {0};
+        allocation_probe_begin(fail_at);
+        XrProgramBuildStatus status =
+            write_allocation_fixture(fixture, &artifact, diagnostic, sizeof(diagnostic));
+        xr_program_artifact_free(&artifact);
+        size_t attempts = allocation_probe.attempts;
+        allocation_probe_end();
+        if (status == XR_PROGRAM_BUILD_OK) {
+            CHECK(attempts + 1u == fail_at);
+            builder_allocations = attempts;
+            break;
+        }
+        if (status != XR_PROGRAM_BUILD_OUT_OF_MEMORY)
+            fprintf(stderr, "Program build fixture %u failure %zu returned %s: %s\n", fixture,
+                    fail_at, xr_program_build_status_name(status), diagnostic);
+        CHECK(status == XR_PROGRAM_BUILD_OUT_OF_MEMORY);
+    }
+    CHECK(builder_allocations != 0u);
+
+    XrProgramArtifact artifact = {0};
+    CHECK(write_allocation_fixture(fixture, &artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    size_t verifier_allocations = 0u;
+    for (size_t fail_at = 1u; fail_at < 1024u; ++fail_at) {
+        XrValidatedProgram *validated = NULL;
+        XrProgramDiagnostic rejection;
+        allocation_probe_begin(fail_at);
+        XrProgramVerifyStatus status =
+            xr_program_validate(artifact.bytes, artifact.size, NULL, &validated, &rejection);
+        if (status != XR_PROGRAM_VERIFY_OK)
+            CHECK(validated == NULL);
+        xr_validated_program_free(validated);
+        size_t attempts = allocation_probe.attempts;
+        allocation_probe_end();
+        if (status == XR_PROGRAM_VERIFY_OK) {
+            CHECK(attempts + 1u == fail_at);
+            verifier_allocations = attempts;
+            break;
+        }
+        if (status != XR_PROGRAM_VERIFY_OUT_OF_MEMORY)
+            fprintf(stderr, "Program verify fixture %u failure %zu returned %s: %s\n", fixture,
+                    fail_at, xr_program_verify_status_name(status),
+                    xr_program_diagnostic_kind_name(rejection.kind));
+        CHECK(status == XR_PROGRAM_VERIFY_OUT_OF_MEMORY);
+    }
+    CHECK(verifier_allocations != 0u);
+    xr_program_artifact_free(&artifact);
+    printf("Program allocation failures: fixture=%u builder=%zu verifier=%zu\n", fixture,
+           builder_allocations, verifier_allocations);
+}
+
+typedef struct ModuleInitializationFixture {
+    XrCoreIrKey profile;
+    uint16_t feature;
+    XrCoreIrInstructionInput returns[4];
+    XrCoreIrBlockInput blocks[4];
+    XrCoreIrFunctionInput functions[4];
+    XrCoreIrKey dependencies[4][2];
+    XrCoreIrModuleInput modules[4];
+    XrCoreIrProgramInput input;
+} ModuleInitializationFixture;
+
+static void init_module_initialization_fixture(ModuleInitializationFixture *fixture) {
+    memset(fixture, 0, sizeof(*fixture));
+    const char *module_names[] = {"base", "left", "right", "main"};
+    const char *function_names[] = {"base:init", "left:init", "right:init", "main:init"};
+    for (uint32_t index = 0u; index < 4u; ++index) {
+        fixture->returns[index].operation_id = XR_CORE_OP_CORE_RETURN;
+        fixture->blocks[index] = (XrCoreIrBlockInput) {
+            .key = key(function_names[index]),
+            .instructions = &fixture->returns[index],
+            .instruction_count = 1u,
+        };
+        fixture->functions[index] = (XrCoreIrFunctionInput) {
+            .key = key(function_names[index]),
+            .entry_block = fixture->blocks[index].key,
+            .blocks = &fixture->blocks[index], .block_count = 1u,
+            .flags = index == 3u ? XR_PROGRAM_FUNCTION_ENTRY : 0u,
+        };
+        fixture->modules[index] = (XrCoreIrModuleInput) {
+            .key = key(module_names[index]),
+            .functions = &fixture->functions[index], .function_count = 1u,
+            .initializer = fixture->functions[index].key,
+            .dependencies = index ? fixture->dependencies[index] : NULL,
+            .dependency_count = index == 3u ? 2u : index ? 1u : 0u,
+        };
+    }
+    fixture->dependencies[1][0] = fixture->modules[0].key;
+    fixture->dependencies[2][0] = fixture->modules[0].key;
+    fixture->dependencies[3][0] = fixture->modules[1].key;
+    fixture->dependencies[3][1] = fixture->modules[2].key;
+    fixture->profile = key("module-initialization-profile");
+    fixture->feature = XR_CORE_FEATURE_CORE_BASE;
+    fixture->input = (XrCoreIrProgramInput) {
+        .semantic_profile_fingerprint = fixture->profile.bytes,
+        .required_features = &fixture->feature, .required_feature_count = 1u,
+        .modules = fixture->modules, .module_count = 4u,
+    };
+}
+
+static void test_module_initialization_construction(void) {
+    ModuleInitializationFixture fixture;
+    init_module_initialization_fixture(&fixture);
+    char diagnostic[256] = {0};
+    XrCoreIrProgram *program = NULL;
+    CHECK(xr_core_ir_program_build(&fixture.input, &program, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    if (!program)
+        return;
+    fixture.dependencies[3][0] = key("mutated-producer-storage");
+    for (uint32_t index = 0u; index < 4u; ++index) {
+        const XrCoreIrModule *module = &program->modules[index];
+        uint32_t order = module->initialization_order;
+        CHECK(order < 4u && xr_core_ir_key_equal(module->key, fixture.modules[order].key));
+        CHECK(xr_core_ir_key_equal(module->initializer, fixture.functions[order].key));
+        if (order == 3u) {
+            CHECK(module->dependency_count == 2u);
+            for (uint32_t dependency = 0u; dependency < module->dependency_count; ++dependency)
+                CHECK(xr_core_ir_key_equal(module->dependencies[dependency], fixture.modules[1].key) ||
+                      xr_core_ir_key_equal(module->dependencies[dependency], fixture.modules[2].key));
+        }
+    }
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_write(program, &artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic rejection = {0};
+    CHECK(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated, &rejection) ==
+          XR_PROGRAM_VERIFY_OK);
+    if (validated) {
+        CHECK(validated->module_count == 4u);
+        for (uint32_t index = 0u; index < validated->module_count; ++index) {
+            const XrValidatedModule *module = &validated->modules[index];
+            CHECK(xr_core_ir_key_equal(module->key, fixture.modules[index].key));
+            CHECK(module->initializer < validated->function_count);
+            CHECK(validated->functions[module->initializer].module_index_plus_one == index + 1u);
+            CHECK(module->dependency_count == fixture.modules[index].dependency_count);
+            for (uint32_t dependency = 0u; dependency < module->dependency_count; ++dependency)
+                CHECK(module->dependencies[dependency] == (index == 3u ? dependency + 1u : 0u));
+        }
+    }
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xr_core_ir_program_free(program);
+    for (uint32_t mutation = 0u; mutation < 7u; ++mutation) {
+        init_module_initialization_fixture(&fixture);
+        if (mutation == 0u)
+            fixture.modules[1].initializer = fixture.functions[0].key;
+        else if (mutation == 1u)
+            fixture.dependencies[1][0] = key("missing-module");
+        else if (mutation == 2u)
+            fixture.dependencies[1][0] = fixture.modules[1].key;
+        else if (mutation == 3u)
+            fixture.dependencies[3][1] = fixture.dependencies[3][0];
+        else if (mutation == 4u)
+            fixture.dependencies[1][0] = fixture.modules[3].key;
+        else if (mutation == 5u)
+            memset(&fixture.modules[1].initializer, 0, sizeof(XrCoreIrKey));
+        else
+            fixture.modules[1].dependencies = NULL;
+        program = NULL;
+        CHECK(xr_core_ir_program_build(&fixture.input, &program, diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_INVALID_INPUT);
+        CHECK(program == NULL);
+        xr_core_ir_program_free(program);
+    }
+    init_module_initialization_fixture(&fixture);
+    size_t allocations = 0u;
+    for (size_t fail_at = 1u; fail_at < 128u; ++fail_at) {
+        allocation_probe_begin(fail_at);
+        XrProgramBuildStatus status =
+            xr_core_ir_program_build(&fixture.input, &program, diagnostic, sizeof(diagnostic));
+        if (status != XR_PROGRAM_BUILD_OK)
+            CHECK(status == XR_PROGRAM_BUILD_OUT_OF_MEMORY && program == NULL);
+        xr_core_ir_program_free(program);
+        allocations = allocation_probe.attempts;
+        allocation_probe_end();
+        if (status == XR_PROGRAM_BUILD_OK) {
+            CHECK(allocations + 1u == fail_at);
+            break;
+        }
+    }
+    CHECK(allocations != 0u && allocations < 127u);
+    printf("Module initialization constructor allocation points: %zu\n", allocations);
 }
 
 int main(void) {
+    test_module_initialization_construction();
+    for (uint32_t fixture = 0u; fixture < 4u; ++fixture)
+        test_constructor_allocation_failures(fixture);
+    test_partial_core_ir_construction();
     test_determinism_roundtrip_and_identity();
     test_hostile_structure_and_budget();
     test_semantic_profile_and_invalid_core_ir();
+    test_provider_semantics_are_program_identity();
     if (failures != 0) {
         fprintf(stderr, "XrProgram tests failed: %d\n", failures);
         return 1;

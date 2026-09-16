@@ -54,8 +54,14 @@ static inline const XrSemanticOperandRecord *xr_semantic_owner_transfer_base_is_
         return NULL;
 
     if (operation->opcode == XI_OWNER_FORWARD) {
-        if (operation->result_alias_operand != -1 ||
-            operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_complete != 1)
+        /* A retained local borrow has no function-return provenance. The
+         * ownership ledger proves its retain/consume balance independently;
+         * forwarding it still preserves the source representation. */
+        bool exact_return = (operation->return_provenance == XR_SEM_RETURN_NONE &&
+                             operation->return_complete == 0) ||
+                            (operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                             operation->return_complete == 1);
+        if (operation->result_alias_operand != -1 || !exact_return)
             return NULL;
     } else {
         /* SOURCE_MOVE preserves the source value's return provenance. A move

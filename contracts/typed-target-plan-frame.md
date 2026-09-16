@@ -268,10 +268,12 @@ frozen SemanticPlan receiver, selector, arity, and Unit-result facts. The
 receiver is only the dispatch target. The row has no callee function,
 argument row, receiver slot, caller storage, or general method-call authority,
 and this frame contract grants it no execution path.
-It also admits one sealed zero-argument `StringBuilder()` constructor call
-descriptor. The row binds the exact Semantic allocation identity to an owned
-dynamic result slot and grants no generic builtin dispatch, object-body
-layout, cleanup, or typed execution path.
+The shared runtime-constructor descriptor covers zero-argument `StringBuilder()`
+and one-argument `Atomic<i64/f64/bool>`. The row binds the exact Semantic
+allocation identity to an owned dynamic result slot. The frozen signature,
+reserved builtin origin, type parameter, and argument must agree. It grants no
+generic builtin dispatch, object-body layout, cleanup, or typed frame execution
+path.
 
 The frame retains the plan, binds its exact fingerprint, freezes the actual
 arena size, alignment, and selected slot range, keeps initialization and poison
@@ -358,10 +360,12 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h cf9a268526ed2260ea4390e5acd7049f5c0ddd8bff356f1813f1ba2816203f93
+## Digest anchors
+
+anchor-sha256: src/plan/target/xr_target_plan.h cc2f39d480b85c73e1bf69933d16ebb754bdb9c7565f7dfa4dcfe29b26520bdc
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
-anchor-sha256: src/vm/xr_typed_dispatch.c c266fda805b5a7ab09537715601c853cce641c1ed7eed9cccbefe1e3d127dace
+anchor-sha256: src/vm/xr_typed_dispatch.c a7e7ea6e44cd53e78ef74d2410cfa29a110f826456f15acb457806745012e038
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 26ce3e68c82fae8c1f035ea4daff3da8bd909146ca359d7e7b56983bed68b8a3
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041

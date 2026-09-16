@@ -36,10 +36,10 @@ static const XgDeclSummary *find_storage_decl(const XaotBundle *bundle, const Xi
     const char *name;
     uint32_t name_id;
     const XgDeclSummary *match = NULL;
-    if (!bundle || !module || !module->init || !module->init->slot_owned_names ||
+    if (!bundle || !module || !module->init || !module->init->module_slots ||
         slot >= module->init->nshared)
         return NULL;
-    name = module->init->slot_owned_names[slot];
+    name = module->init->module_slots[slot].name;
     if (!name)
         return NULL;
     evidence = bundle->global_evidence_plan.evidence;
@@ -381,7 +381,7 @@ bool xaot_storage_capture_plans_build(XaotBundle *bundle) {
         }
         for (uint32_t slot = 0; slot < module->nslots; slot++) {
             XaotStoragePlan plan;
-            if (!module->init->slot_owned_names || !module->init->slot_owned_names[slot])
+            if (!module->init->module_slots || !module->init->module_slots[slot].name)
                 continue;
             if (!derive_storage(bundle, module, mi, slot, &plan)) {
                 bundle->error_msg = "module storage provenance is missing";
@@ -474,7 +474,7 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
         const XiModule *module = bundle->modules[mi];
         for (uint32_t slot = 0; module && slot < module->nslots; slot++) {
             XaotStoragePlan expected;
-            if (!module->init->slot_owned_names || !module->init->slot_owned_names[slot])
+            if (!module->init->module_slots || !module->init->module_slots[slot].name)
                 continue;
             if (!derive_storage(bundle, module, mi, slot, &expected)) {
                 if (errbuf && errbuf_len)

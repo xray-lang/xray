@@ -826,13 +826,15 @@ TEST(member_access) {
 }
 
 TEST(member_access_field_symbols_are_distinct) {
-    XiFunc *f = lower_source("fn worker() -> i64 {\n"
-                             "    Coro.yield()\n"
-                             "    return 1\n"
-                             "}\n"
-                             "var task = go worker()\n"
-                             "print(task.done)\n"
-                             "print(task.status)\n");
+    XgGlobalEvidence evidence = {0};
+    XiFunc *f = lower_source_with_global_evidence("fn worker() -> i64 {\n"
+                                                  "    Coro.yield()\n"
+                                                  "    return 1\n"
+                                                  "}\n"
+                                                  "var task = go worker()\n"
+                                                  "print(task.done)\n"
+                                                  "print(task.status)\n",
+                                                  &evidence);
     assert(f != NULL);
 
     int64_t done_symbol = 0;
@@ -855,6 +857,7 @@ TEST(member_access_field_symbols_are_distinct) {
     assert(status_symbol > 0 && "task.status should carry a field symbol");
     assert(done_symbol != status_symbol && "different task fields need distinct symbols");
     xi_func_free(f);
+    xg_global_evidence_free(&evidence);
 }
 
 TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
@@ -1261,19 +1264,22 @@ TEST(nullish_coalesce) {
                              "var y = x ?? 42\n"
                              "print(y)\n");
     assert(f != NULL);
-    /* Canonicalized to: x == null ? 42 : x → ternary with EQ null check.
-     * Produces: entry, then_branch, else_branch, merge blocks. */
+    /* The closed Optional sum branches on the absent variant; it must not
+     * compare a payload's scalar bits against an erased null representation. */
     assert(f->nblocks >= 3);
-    /* Verify EQ op exists (null-check from canonicalized ternary) */
-    int found_eq = 0;
+    int found_absent_test = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (blk->values[i]->op == XI_EQ)
-                found_eq = 1;
+            const XiValue *value = blk->values[i];
+            if (value->op == XI_VARIANT_TEST) {
+                assert(value->aux_int == 0 && value->nargs == 1);
+                assert(value->args[0]->type && value->args[0]->type->is_nullable);
+                found_absent_test++;
+            }
         }
     }
-    assert(found_eq && "should have EQ op for null check");
+    assert(found_absent_test == 1 && "coalesce must test the Optional absent variant once");
     xi_func_free(f);
 }
 
@@ -4333,8 +4339,10 @@ TEST(class_decl_skip) {
 }
 
 TEST(yield_stmt) {
-    XiFunc *f = lower_source("Coro.yield()\n"
-                             "print(1)\n");
+    XgGlobalEvidence evidence = {0};
+    XiFunc *f = lower_source_with_global_evidence("Coro.yield()\n"
+                                                  "print(1)\n",
+                                                  &evidence);
     assert(f != NULL);
     int found_yield = 0;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
@@ -4343,6 +4351,7 @@ TEST(yield_stmt) {
     }
     assert(found_yield && "should have YIELD op");
     xi_func_free(f);
+    xg_global_evidence_free(&evidence);
 }
 
 TEST(canonical_effect_sidecars_reach_xi) {

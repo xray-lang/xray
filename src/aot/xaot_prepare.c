@@ -46,38 +46,31 @@ static bool value_reps_equal(XaotValueRep a, XaotValueRep b) {
 static bool prepare_require_target_plan(XaotBundle *bundle) {
     char error[256] = {0};
     XiRepPolicy policy = xi_rep_policy_native_boundary();
-
     if (!bundle || !bundle->modules || !bundle->program_target_plan) {
         if (bundle)
             bundle->error_msg = "AOT prepare requires one program TargetPlan";
         return false;
     }
-    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
-        const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_module(bundle, module_index)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
-        if (!module || !module->init || !target_plan ||
-            xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES ||
-            !xr_target_plan_is_verified(target_plan) ||
-            !xr_target_plan_verify(target_plan, error, sizeof(error))) {
+    const XrTargetPlan *target_plan = bundle->program_target_plan;
+    if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES ||
+        !xr_target_plan_is_verified(target_plan) ||
+        (!bundle->representation_refinements_required &&
+         !xr_target_plan_verify(target_plan, error, sizeof(error)))) {
+        bundle->error_msg = "AOT prepare rejected a missing or corrupt module TargetPlan";
+        return false;
+    }
+    for (uint32_t i = 0; i < bundle->nmodules; ++i) {
+        const XiModule *module = bundle->modules[i];
+        if (!module || !module->init || !xaot_bundle_program_semantic_for_module(bundle, i)) {
             bundle->error_msg = "AOT prepare rejected a missing or corrupt module TargetPlan";
             return false;
         }
-        if (bundle->representation_refinements_required) {
-            const XrAotRefinementPlan *refinement =
-                xaot_bundle_representation_refinement_for_module(bundle, module_index);
-            XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
-            if (!refinement ||
-                !xaot_bundle_representation_policy_matches(bundle, module_index, &policy) ||
-                !xr_aot_representation_materialization_verify(&view, module->init, target_plan,
-                                                              &policy, NULL)) {
-                bundle->error_msg =
-                    "AOT prepare rejected a missing, corrupt, or stale representation refinement";
-                return false;
-            }
-        }
+    }
+    if (bundle->representation_refinements_required &&
+        !xaot_bundle_verify_representation_refinements(bundle, &policy)) {
+        bundle->error_msg =
+            "AOT prepare rejected a missing, corrupt, or stale representation refinement";
+        return false;
     }
     return true;
 }
@@ -126,38 +119,11 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
         if (getenv("XRAY_AOT_REFINE_TRACE"))
             fprintf(stderr,
                     "[aot-prepare] value identity failure function=%s value=%u op=%u:%s "
-                    "backend-origin=%u reason=%s\n",
+                    "backend-origin=%u semantic=%s adapter=%s\n",
                     func->name ? func->name : "<anonymous>", value->id, value->op,
                     xi_generated_op_name(value->op), value->backend_origin,
-                    scalar_error[0] ? scalar_error
-                                    : (error[0] ? error : "no scalar or adapter identity"));
-        if (getenv("XRAY_AOT_REFINE_TRACE")) {
-            const XrSemanticFunctionRecord *semantic_row =
-                xr_semantic_plan_function(semantic, func->semantic_plan_function_index);
-            uint32_t expected_value =
-                semantic_row && semantic_row->value_begin <= UINT32_MAX - value->id
-                    ? semantic_row->value_begin + value->id
-                    : UINT32_MAX;
-            for (uint32_t operation_index = 0;
-                 operation_index < xr_semantic_plan_operation_count(semantic); ++operation_index) {
-                const XrSemanticOperationRecord *operation =
-                    xr_semantic_plan_operation(semantic, operation_index);
-                if (!operation || operation->function != func->semantic_plan_function_index ||
-                    operation->result_value != expected_value)
-                    continue;
-                const XrSemanticTypeRecord *semantic_type =
-                    xr_semantic_plan_type(semantic, operation->result_type);
-                fprintf(stderr,
-                        "[aot-prepare] frozen value=%u op=%u:%s type-kind=%u type-flags=%u "
-                        "live-kind=%u live-value=%u\n",
-                        operation->result_value, operation->opcode,
-                        xi_generated_op_name(operation->opcode),
-                        semantic_type ? semantic_type->kind : UINT32_MAX,
-                        semantic_type ? semantic_type->flags : UINT32_MAX,
-                        value->type ? value->type->kind : UINT32_MAX,
-                        value->type && value->type->is_value_type ? 1u : 0u);
-            }
-        }
+                    scalar_error[0] ? scalar_error : "unavailable",
+                    error[0] ? error : "unavailable");
         bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
         return false;
     }
@@ -209,8 +175,20 @@ static const char *prepare_exact_raw_pointer_c_type(const XaotBundle *bundle, co
         view.target_memory_rep != binding->memory_rep ||
         view.target_register_kind != XR_MACHINE_REP_RAW_PTR ||
         view.target_memory_kind != XR_MACHINE_REP_RAW_PTR || view.rep != XR_C_VALUE_REP_RAW_PTR ||
-        !view.c_type)
+        !view.c_type) {
+        if (getenv("XRAY_AOT_REFINE_TRACE"))
+            fprintf(stderr,
+                    "[aot-prepare] raw pointer projection failure function=%s value=%u "
+                    "register=%u/%u memory=%u/%u kinds=%u/%u rep=%u reason=%s\n",
+                    func && func->name ? func->name : "<anonymous>",
+                    binding ? binding->semantic_value : XR_SEMANTIC_INDEX_NONE,
+                    binding ? binding->register_rep : XR_SEMANTIC_INDEX_NONE,
+                    view.target_register_rep,
+                    binding ? binding->memory_rep : XR_SEMANTIC_INDEX_NONE, view.target_memory_rep,
+                    view.target_register_kind, view.target_memory_kind, view.rep,
+                    error[0] ? error : "unavailable");
         return NULL;
+    }
     return view.c_type;
 }
 

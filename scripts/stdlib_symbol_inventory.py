@@ -113,10 +113,10 @@ def leaf_ownership_is_valid(value: str) -> bool:
     """Keep allowlist ownership aligned with the `.def` ownership grammar."""
     return value in LEAF_OWNERSHIP or re.fullmatch(r"borrowed_param:[0-9]+", value) is not None
 
-# Effect is a comma-separated token sequence. `nothrow` is exclusive: a leaf
-# that cannot throw and cannot suspend has nothing else to state.
+# Error propagation and suspension are independent facts. A nothrow leaf can
+# park its coroutine without gaining a typed error exit.
 LEAF_EFFECT_TOKENS = {
-    "nothrow": "cannot throw and cannot suspend",
+    "nothrow": "cannot raise an Xray exception",
     "may_throw": "can raise an Xray exception",
     "suspends": "can park the coroutine and return the worker to the scheduler",
 }
@@ -557,8 +557,10 @@ def leaf_record_errors(record: LeafRecord, raw: dict[str, Any]) -> list[str]:
         problem = effect_token_error(token)
         if problem:
             errors.append(problem)
-    if "nothrow" in tokens and len(tokens) > 1:
-        errors.append("effect 'nothrow' is exclusive; it cannot be combined with other tokens")
+    if "nothrow" in tokens and any(
+        token == "may_throw" or THROWN_VARIANT_RE.fullmatch(token) for token in tokens
+    ):
+        errors.append("effect 'nothrow' contradicts a throwing effect")
     return errors
 
 

@@ -34,7 +34,7 @@ static bool cg_const_int_value_in_func(XiCgenCtx *ctx, const XiFunc *f, const Xi
     uint16_t slot = (uint16_t) v->aux_int;
     for (const XiFunc *cur = f; cur; cur = cur->parent_func) {
         if (!cur->shared_const_literals || slot >= cur->shared_const_literal_count ||
-            !cur->slot_owned_consts || slot >= cur->nshared || !cur->slot_owned_consts[slot])
+            !cur->module_slots || slot >= cur->nshared || !cur->module_slots[slot].is_const)
             continue;
         const XiConstLiteral *lit = &cur->shared_const_literals[slot];
         if (lit->kind == XI_CONST_LITERAL_INT) {

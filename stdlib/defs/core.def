@@ -13,6 +13,23 @@ module time {
     visibility: "internal"
     provider_contract: "xray.runtime.provider.v1/clock"
     provider_operation: "xray.runtime.provider-operation.v1/clock/realtime-nanos"
+    provider_parameter_modes: ""
+    provider_parameter_owners: ""
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: []
+    provider_effects: "reads-clock"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "i64-nullary-u64"
+    provider_host_header: "os/os_time.h"
+    provider_host_symbol: "xr_time_realtime_ns"
   }
 
   fn __monotonicNanos {
@@ -29,6 +46,23 @@ module time {
     visibility: "internal"
     provider_contract: "xray.runtime.provider.v1/clock"
     provider_operation: "xray.runtime.provider-operation.v1/clock/monotonic-nanos"
+    provider_parameter_modes: ""
+    provider_parameter_owners: ""
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: []
+    provider_effects: "reads-clock"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "i64-nullary-u64"
+    provider_host_header: "os/os_time.h"
+    provider_host_symbol: "xr_time_monotonic_ns"
   }
 
   fn __cpuNanos {
@@ -45,6 +79,23 @@ module time {
     visibility: "internal"
     provider_contract: "xray.runtime.provider.v1/clock"
     provider_operation: "xray.runtime.provider-operation.v1/clock/process-cpu-nanos"
+    provider_parameter_modes: ""
+    provider_parameter_owners: ""
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: []
+    provider_effects: "reads-clock"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "i64-nullary-u64"
+    provider_host_header: "os/os_time.h"
+    provider_host_symbol: "xr_time_process_cpu_ns"
   }
 
   fn __utcOffsetAt {
@@ -61,6 +112,23 @@ module time {
     visibility: "internal"
     provider_contract: "xray.runtime.provider.v1/clock"
     provider_operation: "xray.runtime.provider-operation.v1/clock/utc-offset-minutes-at"
+    provider_parameter_modes: "in"
+    provider_parameter_owners: "trivial"
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: []
+    provider_effects: "reads-environment"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "i64-unary-status-out"
+    provider_host_header: "shared/xr_time_offset.h"
+    provider_host_symbol: "xr_time_utc_offset_at"
   }
 
   fn __sleep {
@@ -648,6 +716,23 @@ module sys {
     effect: "nothrow"
     provider_contract: "xray.runtime.provider.v1/io"
     provider_operation: "xray.runtime.provider-operation.v1/io/pipe-open"
+    provider_parameter_modes: ""
+    provider_parameter_owners: ""
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: [{"resource":"xray.runtime.resource.v1/pipe-endpoint","value":"result.some.0","action":"acquire","when":"result-present"},{"resource":"xray.runtime.resource.v1/pipe-endpoint","value":"result.some.1","action":"acquire","when":"result-present"}]
+    provider_effects: "io"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "optional-i64-pair-pipe-create"
+    provider_host_header: "os/os_pipe.h"
+    provider_host_symbol: "xr_pipe_create"
   }
 
   fn __pipeRead {
@@ -693,6 +778,23 @@ module sys {
     effect: "nothrow"
     provider_contract: "xray.runtime.provider.v1/io"
     provider_operation: "xray.runtime.provider-operation.v1/io/pipe-close"
+    provider_parameter_modes: "in"
+    provider_parameter_owners: "trivial"
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: [{"resource":"xray.runtime.resource.v1/pipe-endpoint","value":"parameter.0","action":"consume","when":"call-enter"}]
+    provider_effects: "io"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "bool-i64-pipe-close"
+    provider_host_header: "os/os_pipe.h"
+    provider_host_symbol: "xr_pipe_close"
   }
 }
 
@@ -816,7 +918,26 @@ module os {
     argc: 0
     arg_spec: ""
     aot_direct: true
-    target_leaf: "i64-getpid"
+    visibility: "internal"
+    provider_contract: "xray.runtime.provider.v1/process"
+    provider_operation: "xray.runtime.provider-operation.v1/process/getpid"
+    provider_parameter_modes: ""
+    provider_parameter_owners: ""
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: []
+    provider_effects: "reads-process"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "i64-nullary-i64"
+    provider_host_header: "shared/xr_os_core.h"
+    provider_host_symbol: "xr_os_core_getpid"
     link_object: false
     layer: "system"
   }

@@ -127,18 +127,15 @@ static const XrTargetProviderContract *find_profile_provider(const XrTargetProfi
     return NULL;
 }
 
-static uint32_t required_provider_behavior(
-    const XrTargetProfile *profile, const XrTargetProviderContract *contract,
-    const XrProgramProviderRequirementView *requirement) {
-    uint32_t required = XR_PROVIDER_BEHAVIOR_REENTRANT;
-    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
-    if (machine && machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED)
-        required |= XR_PROVIDER_BEHAVIOR_THREAD_SAFE;
+static uint32_t required_provider_behavior(const XrProgramProviderRequirementView *requirement) {
+    uint32_t required = 0u;
     for (uint32_t index = 0; requirement && index < requirement->operation_count; ++index) {
-        const XrTargetProviderOperationContract *operation =
-            find_profile_operation(contract, requirement->operation_ids[index]);
-        if (operation &&
-            (operation->lifetime_flags & XR_TARGET_PROVIDER_LIFETIME_CALLBACK) != 0u)
+        const XrProviderLogicalContract *logical = &requirement->operations[index].logical_contract;
+        if (logical->threads == XR_PROVIDER_THREADS_ANY)
+            required |= XR_PROVIDER_BEHAVIOR_THREAD_SAFE;
+        if (logical->reentry == XR_PROVIDER_REENTRY_ALLOWED)
+            required |= XR_PROVIDER_BEHAVIOR_REENTRANT;
+        if (logical->callbacks == XR_PROVIDER_CALLBACK_SYNCHRONOUS)
             required |= XR_PROVIDER_BEHAVIOR_CALLBACK_SAFE;
     }
     return required;
@@ -231,7 +228,7 @@ static XrProviderTrampolineKind program_operation_trampoline_kind(const XrValida
                  ++instruction) {
                 const XrValidatedInstruction *op = &block_row->instructions[instruction];
                 if ((op->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL &&
-                     op->operation_id != XR_CORE_OP_CORE_OUTPUT_GROUP_I64) ||
+                     op->operation_id != XR_CORE_OP_CORE_OUTPUT_GROUP) ||
                     op->immediate.provider_operation.requirement_index != requirement_index ||
                     op->immediate.provider_operation.operation_index != operation_index)
                     continue;
@@ -338,8 +335,7 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
             return reject(diagnostic, XR_EXECUTION_DIAGNOSTIC_PROVIDER_CONTRACT,
                           provider, 0, requirement.contract_id, (XrStableId) {{0}},
                           XR_EXECUTION_PROVIDER_REJECTED);
-        uint32_t required_behavior =
-            required_provider_behavior(input->profile, expected, &requirement);
+        uint32_t required_behavior = required_provider_behavior(&requirement);
         if (actual->reserved16 != 0 ||
             (actual->behavior_flags & ~XR_PROVIDER_BEHAVIOR_FLAGS_ALL) != 0u ||
             (actual->behavior_flags & required_behavior) != required_behavior)
@@ -352,11 +348,13 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
                           XR_EXECUTION_PROVIDER_REJECTED);
         for (uint16_t operation = 0; operation < actual->operation_count; ++operation) {
             const XrTargetProviderOperationContract *expected_operation =
-                find_profile_operation(expected, requirement.operation_ids[operation]);
+                find_profile_operation(expected, requirement.operations[operation].operation_id);
             const XrProviderOperationBinding *actual_operation = &actual->operations[operation];
-            if (!expected_operation)
+            if (!expected_operation || !xr_provider_logical_contract_equal(
+                                           &requirement.operations[operation].logical_contract,
+                                           &expected_operation->logical_contract))
                 return reject(diagnostic, XR_EXECUTION_DIAGNOSTIC_PROFILE, provider, operation,
-                              expected->contract_id, requirement.operation_ids[operation],
+                              expected->contract_id, requirement.operations[operation].operation_id,
                               XR_EXECUTION_PROFILE_REJECTED);
             XrProviderTrampolineKind expected_trampoline = XR_PROVIDER_TRAMPOLINE_INVALID;
             if (provider_operation_uses_i64_unary_trampoline(expected_operation))
@@ -376,7 +374,7 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
                 return reject(diagnostic, XR_EXECUTION_DIAGNOSTIC_PROVIDER_ABI, provider,
                               operation, expected->contract_id, expected_operation->stable_id,
                               XR_EXECUTION_PROVIDER_REJECTED);
-            if (!stable_id_equal(requirement.operation_ids[operation],
+            if (!stable_id_equal(requirement.operations[operation].operation_id,
                                  actual_operation->operation_id) ||
                 actual_operation->trampoline_kind != expected_trampoline ||
                 (expected_trampoline == XR_PROVIDER_TRAMPOLINE_I64_UNARY
@@ -651,9 +649,8 @@ XrExecutionProviderCallResult xr_execution_lease_provider_call_i64_unary(
     if (operation_index >= provider->operation_count ||
         !stable_id_equal(provider->contract_id, requirement.contract_id) ||
         !stable_id_equal(provider->operations[operation_index].operation_id,
-                         requirement.operation_ids[operation_index]) ||
-        provider->operations[operation_index].trampoline_kind !=
-            XR_PROVIDER_TRAMPOLINE_I64_UNARY ||
+                         requirement.operations[operation_index].operation_id) ||
+        provider->operations[operation_index].trampoline_kind != XR_PROVIDER_TRAMPOLINE_I64_UNARY ||
         !provider->operations[operation_index].entry.i64_unary ||
         ticket->in_flight_calls == UINT32_MAX) {
         lease_unlock(instance);
@@ -709,7 +706,7 @@ XrExecutionProviderCallResult xr_execution_lease_provider_call_i64_nullary(
     if (operation_index >= provider->operation_count ||
         !stable_id_equal(provider->contract_id, requirement.contract_id) ||
         !stable_id_equal(provider->operations[operation_index].operation_id,
-                         requirement.operation_ids[operation_index]) ||
+                         requirement.operations[operation_index].operation_id) ||
         provider->operations[operation_index].trampoline_kind !=
             XR_PROVIDER_TRAMPOLINE_I64_NULLARY ||
         !provider->operations[operation_index].entry.i64_nullary ||
@@ -767,7 +764,7 @@ XrExecutionProviderCallResult xr_execution_lease_provider_call_bool_i64_unary(
     if (operation_index >= provider->operation_count ||
         !stable_id_equal(provider->contract_id, requirement.contract_id) ||
         !stable_id_equal(provider->operations[operation_index].operation_id,
-                         requirement.operation_ids[operation_index]) ||
+                         requirement.operations[operation_index].operation_id) ||
         provider->operations[operation_index].trampoline_kind !=
             XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY ||
         !provider->operations[operation_index].entry.bool_i64_unary ||
@@ -829,7 +826,7 @@ XrExecutionProviderCallResult xr_execution_lease_provider_call_optional_i64_pair
     if (operation_index >= provider->operation_count ||
         !stable_id_equal(provider->contract_id, requirement.contract_id) ||
         !stable_id_equal(provider->operations[operation_index].operation_id,
-                         requirement.operation_ids[operation_index]) ||
+                         requirement.operations[operation_index].operation_id) ||
         provider->operations[operation_index].trampoline_kind !=
             XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY ||
         !provider->operations[operation_index].entry.optional_i64_pair_nullary ||
@@ -892,7 +889,7 @@ XrExecutionProviderCallResult xr_execution_lease_provider_output_write(
     if (operation_index >= provider->operation_count ||
         !stable_id_equal(provider->contract_id, requirement.contract_id) ||
         !stable_id_equal(provider->operations[operation_index].operation_id,
-                         requirement.operation_ids[operation_index]) ||
+                         requirement.operations[operation_index].operation_id) ||
         provider->operations[operation_index].trampoline_kind !=
             XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE ||
         !provider->operations[operation_index].entry.output_write ||

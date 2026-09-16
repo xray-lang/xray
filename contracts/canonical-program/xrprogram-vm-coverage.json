@@ -1,7 +1,7 @@
 {
   "schema": "xray-program-vm-coverage/1",
   "task": 299,
-  "vm_build_id": "xray-program-vm-v1",
+  "vm_build_id": "xray-program-vm-v2",
   "input_authority": "XrValidatedProgram",
   "execution_authority": "XrInstance",
   "distribution_format": "XrProgram",
@@ -19,12 +19,11 @@
   ],
   "private_qualification": [
     "ExecutionId",
-    "generation",
     "vm-build-id",
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 62,
+  "operation_count": 68,
   "operations": [
     {
       "stable_id": 1,
@@ -45,6 +44,22 @@
     {
       "stable_id": 3,
       "spelling": "core.constant.target_enum",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 4,
+      "spelling": "core.constant.string",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 5,
+      "spelling": "core.constant.rune",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",
@@ -117,6 +132,22 @@
     {
       "stable_id": 25,
       "spelling": "core.compare.target_enum",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 26,
+      "spelling": "core.compare.rune",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 27,
+      "spelling": "core.compare.string",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",
@@ -451,14 +482,6 @@
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
-      "stable_id": 137,
-      "spelling": "core.output.group.i64",
-      "vm": "COMPLETE",
-      "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
-      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
-    },
-    {
       "stable_id": 138,
       "spelling": "core.coroutine.call.sealed",
       "vm": "COMPLETE",
@@ -521,6 +544,30 @@
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 148,
+      "spelling": "core.output.group",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 150,
+      "spelling": "core.string.from_i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 151,
+      "spelling": "core.string.concat",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     }
   ],
   "incomplete_operations": [],
@@ -530,12 +577,12 @@
   ],
   "lifecycle_matrix": [
     "active-execute",
-    "retired-code-refused",
-    "successor-generation-refused"
+    "retired-instance-refused",
+    "same-program-profile-successor-reuses-code"
   ],
   "runtime_product": {
     "target": "xray_program_vm_runtime",
-    "source_count": 18,
+    "source_count": 19,
     "forbidden_closures": [
       "frontend",
       "CoreIR-writer",

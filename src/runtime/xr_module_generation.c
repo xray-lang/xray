@@ -820,10 +820,8 @@ xr_module_generation_execute_program_direct_i64(XrLoadedModuleGeneration *genera
     XrFingerprint module_set = {{0}};
     bool family_shape =
         graphs && graph_count == 1u &&
-        ((graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
-          graphs[0].argument_count == 1u) ||
-         (graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
-          graphs[0].argument_count == 0u));
+        graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+        graphs[0].argument_count == 1u;
     bool exact =
         xr_runtime_generation_live_manifest_snapshot(generation, &manifest) &&
         manifest.program_target_plan == generation->plan &&

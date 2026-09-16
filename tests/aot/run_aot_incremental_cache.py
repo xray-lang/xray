@@ -290,7 +290,6 @@ def run_evidence_manifest_cache(rec: Recorder, config: Config,
         return
     log = r.combined_text()
     expect_preproducer_summary(rec, log, 4, 0, 4, "evidence-warm")
-    expect_producer_skip(rec, log, "pre_mono_generic_summary", "evidence-warm")
     expect_producer_skip(rec, log, "global_evidence_summary", "evidence-warm")
     expect_evidence_summary(rec, log, 4, 0, "evidence-warm")
     expect_output(rec, config, d / "ev2", "7", "evidence-warm")

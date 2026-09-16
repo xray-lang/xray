@@ -1023,8 +1023,32 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
     switch (instruction->operation_id) {
         case XR_CORE_OP_CORE_CONSTANT_I64:
         case XR_CORE_OP_CORE_CONSTANT_BOOL:
+        case XR_CORE_OP_CORE_CONSTANT_STRING:
+        case XR_CORE_OP_CORE_CONSTANT_RUNE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_CONSTANT &&
                    instruction->immediate.constant_id < ir->constant_count;
+        case XR_CORE_OP_CORE_STRING_FROM_I64:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                   instruction->operand_count == 1u &&
+                   function->value_types[instruction->operands[0]] == XR_CORE_TYPE_I64 &&
+                   instruction->result_type_id == XR_CORE_TYPE_STRING;
+        case XR_CORE_OP_CORE_STRING_CONCAT:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                   instruction->operand_count == 2u &&
+                   function->value_types[instruction->operands[0]] == XR_CORE_TYPE_STRING &&
+                   function->value_types[instruction->operands[1]] == XR_CORE_TYPE_STRING &&
+                   instruction->result_type_id == XR_CORE_TYPE_STRING;
+        case XR_CORE_OP_CORE_COMPARE_STRING:
+        case XR_CORE_OP_CORE_COMPARE_RUNE: {
+            uint16_t operand_type = instruction->operation_id == XR_CORE_OP_CORE_COMPARE_STRING
+                                        ? XR_CORE_TYPE_STRING
+                                        : XR_CORE_TYPE_RUNE;
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
+                   instruction->immediate.u32 <= 5u && instruction->operand_count == 2u &&
+                   function->value_types[instruction->operands[0]] == operand_type &&
+                   function->value_types[instruction->operands[1]] == operand_type &&
+                   instruction->result_type_id == XR_CORE_TYPE_BOOL;
+        }
         case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 <= UINT16_MAX &&
@@ -1117,7 +1141,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
                     instruction->successor_count == typed + 1u);
         }
         case XR_CORE_OP_CORE_PROVIDER_CALL:
-        case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {
+        case XR_CORE_OP_CORE_OUTPUT_GROUP: {
             uint32_t requirement = instruction->immediate.provider_operation.requirement_index;
             uint32_t operation = instruction->immediate.provider_operation.operation_index;
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION &&
@@ -1192,9 +1216,11 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
     }
     for (uint32_t constant = 0; constant < ir->constant_count; ++constant) {
         const XrValidatedConstant *value = &ir->constants[constant];
-        if ((value->kind == XR_CORE_IR_CONSTANT_I64 && value->type_id != XR_CORE_TYPE_I64) ||
-            (value->kind == XR_CORE_IR_CONSTANT_BOOL && value->type_id != XR_CORE_TYPE_BOOL) ||
-            (value->kind != XR_CORE_IR_CONSTANT_I64 && value->kind != XR_CORE_IR_CONSTANT_BOOL)) {
+        if (!xr_program_constant_payload_is_canonical(
+                value->type_id, value->kind,
+                value->kind == XR_CORE_IR_CONSTANT_STRING ? value->value.string.bytes : NULL,
+                value->kind == XR_CORE_IR_CONSTANT_STRING ? value->value.string.size : 0u,
+                value->kind == XR_CORE_IR_CONSTANT_RUNE ? value->value.rune : 0u)) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u, 0u, 0u,
                                       0u);
             return false;

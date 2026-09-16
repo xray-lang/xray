@@ -74,7 +74,7 @@ typedef struct XrValidatedProgram XrValidatedProgram;
 
 typedef struct XrProgramProviderRequirementView {
     XrStableId contract_id;
-    const XrStableId *operation_ids;
+    const XrProgramProviderOperationRequirement *operations;
     uint32_t operation_count;
 } XrProgramProviderRequirementView;
 

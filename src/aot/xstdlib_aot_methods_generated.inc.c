@@ -14,7 +14,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"time", "__utcOffsetAt", 1, "xrt_time_utc_offset_at", "v", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"math", "__random", 0, "xrt_math_random", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"math", "__randomInt", 2, "xrt_math_random_int", "vv", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"crypto", "__fillRandomBytes", 1, "xrt_crypto_fill_random_bytes", "v", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"crypto", "__fillRandomBytes", 1, "xrt_crypto_fill_random_bytes", "v", "r", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"crypto", "__timingSafeEqualBytes", 2, "xrt_crypto_timing_safe_equal_bytes", "vv", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__threadYield", 0, "xrt_sys_thread_yield", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__pinToCpu", 1, "xrt_sys_pin_to_cpu", "v", ".", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

@@ -394,6 +394,11 @@ set(XRAY_GEN_AOT_METADATA_DEPS
 )
 
 set(XRAY_GEN_STDLIB_METADATA_DEPS
+    ${CMAKE_SOURCE_DIR}/src/aot/program/xr_provider_aot_sources_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/execution/xr_stdlib_provider_bindings_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_keys_gen.h
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_stdlib_provider_descriptors_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/stdlib/provider_inventory.generated.json
     ${CMAKE_SOURCE_DIR}/src/aot/xstdlib_aot_methods_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_stdlib_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_vm_bindings_generated.inc.c
@@ -516,6 +521,8 @@ add_custom_command(
             --root ${CMAKE_SOURCE_DIR}
     COMMAND ${XRAY_PYTHON} ${GEN_STDLIB_TYPES}
     DEPENDS ${STDLIBGEN}
+            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py
+            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_codegen.py
             ${GEN_STDLIB_TYPES}
             ${XRAY_STDLIB_DEF_FILES}
             ${XRAY_STDLIB_METADATA_SOURCES}
@@ -677,7 +684,7 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_schema_gen.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
-            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v2.md
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v3.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-coverage.json
     COMMENT "programgen: verifying canonical XrProgram schema projections"
     VERBATIM
@@ -774,6 +781,8 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_verify.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_copy.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_provider.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_provider_aot_sources_gen.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_native_artifact.c
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.c
@@ -1781,7 +1790,7 @@ add_custom_target(gen-stdlib-embedded-sources
 # C include fragments use *.inc.c for editor support, but they are included
 # from owning .c files and must never be compiled as standalone translation units.
 foreach(XRAY_SRC_LIST
-        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_CORE_SRC RUNTIME_VALUE_SRC RUNTIME_MEM_SRC
+        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_ABI_SRC RUNTIME_CORE_SRC RUNTIME_VALUE_SRC RUNTIME_MEM_SRC
         RUNTIME_OBJECT_SRC RUNTIME_OBJECT_BUILTINS_SRC RUNTIME_CLASS_SRC
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
@@ -1928,6 +1937,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/aot/emit_c/xr_c_scalar_ref_projection.c
     src/aot/xr_target_aggregate_c_projection.c
     src/runtime/abi/xr_runtime_contract.c
+    src/runtime/abi/xr_provider_logical_contract.c
     src/runtime/abi/xr_runtime_descriptor.c
     src/runtime/abi/xr_runtime_object_header.c
     src/runtime/abi/xr_runtime_string_object.c
@@ -1982,13 +1992,15 @@ list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/class/xinstance\\
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/(xcoro_monitor|xthread_obj)\\.c$")
 
 add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
-add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata
+    gen-stdlib-metadata)
 
 # Canonical XrProgram execution is a self-contained embeddable product. It owns
 # only format admission, immutable target binding, generation lifecycle, and
 # the private typed VM view. Source/frontend builders, the reference evaluator,
 # the legacy Proto VM, TargetPlan, and AOT are deliberately absent.
 set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
+    src/runtime/abi/xr_provider_logical_contract.c
     src/base/xsha256.c
     src/base/xtarget_data_layout.c
     src/core/xr_core_spec_gen.c
@@ -2024,10 +2036,45 @@ else()
     target_compile_options(xray_program_vm_runtime PRIVATE -Wall -Wextra -Werror)
 endif()
 
+# Native provider programs reuse the OS implementation without linking any
+# compiler, Program loader, VM, or legacy tagged runtime.
+if(WIN32)
+    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/win/time_win.c src/os/win/pipe_win.c)
+else()
+    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/unix/time_unix.c src/os/unix/pipe_unix.c)
+endif()
+add_library(xray_native_provider_runtime STATIC ${XRAY_NATIVE_PROVIDER_OS_SOURCES})
+target_include_directories(xray_native_provider_runtime PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_compile_features(xray_native_provider_runtime PUBLIC c_std_11)
+if(NOT WIN32)
+    target_compile_definitions(xray_native_provider_runtime PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
+
+# Generated C embeds the shared text kernel verbatim, so the emitter carries
+# the header's bytes rather than a second copy of the string semantics.
+set(XRAY_TEXT_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_text_kernel.h)
+set(XRAY_TEXT_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_text_kernel_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_TEXT_KERNEL_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_TEXT_KERNEL_HEADER}
+            -DOUTPUT=${XRAY_TEXT_KERNEL_EMBED}
+            -DSYMBOL=xr_text_kernel_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_TEXT_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared text kernel for generated C"
+    VERBATIM
+)
+add_custom_target(gen-text-kernel-embed DEPENDS ${XRAY_TEXT_KERNEL_EMBED})
+set_source_files_properties(src/aot/program/xr_backend_ir_emit_c.c PROPERTIES
+    OBJECT_DEPENDS ${XRAY_TEXT_KERNEL_EMBED})
+
 # The canonical-program AOT compiler is a private build product. This narrow
 # target keeps its warning contract independent from the legacy Xi/TargetPlan
 # backend while unresolved verifier/runtime services remain link-time inputs.
 set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
+    src/runtime/abi/xr_stdlib_provider_contract.c
     src/aot/program/xr_backend_ir.c
     src/aot/program/xr_backend_ir_verify.c
     src/aot/program/xr_backend_ir_emit_c.c
@@ -2037,7 +2084,8 @@ set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
 add_library(xray_program_aot_compiler STATIC
     ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})
 add_dependencies(xray_program_aot_compiler
-    gen-core-spec gen-xr-program-schema check-xr-program-semantics
+    gen-stdlib-metadata
+    gen-core-spec gen-xr-program-schema gen-text-kernel-embed check-xr-program-semantics
     check-xr-execution-contracts check-xr-program-aot-contracts)
 target_include_directories(xray_program_aot_compiler PRIVATE
     ${XRAY_COMMON_INCLUDES}
@@ -3139,6 +3187,28 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_provider_metadata.py
     )
     set_tests_properties(test_stdlib_provider_metadata PROPERTIES
+        LABELS "stdlib;metadata;provider;canonical-program;task-293;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME test_provider_declarations
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_provider_declarations.py
+    )
+    set_tests_properties(test_provider_declarations PROPERTIES
+        LABELS "stdlib;metadata;provider;canonical-program;task-293;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME test_provider_codegen
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_provider_codegen.py
+    )
+    set_tests_properties(test_provider_codegen PROPERTIES
         LABELS "stdlib;metadata;provider;canonical-program;task-293;unit"
         PROCESSORS 1
         TIMEOUT 30
@@ -5032,6 +5102,7 @@ if(BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(exact_scalar_surface_residue PROPERTIES
+        FIXTURES_REQUIRED prelude_enum_identity
         LABELS "meta;surface;exact-scalar"
         PROCESSORS 1
         TIMEOUT 60

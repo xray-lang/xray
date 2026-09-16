@@ -1,10 +1,10 @@
 {
-  "schema": "xray-program-format-schema/2",
+  "schema": "xray-program-format-schema/3",
   "format": {
-    "major": 2,
-    "minor": 0,
+    "major": 3,
+    "minor": 1,
     "magic_hex": "585250524f470d0a",
-    "program_id_domain": "xray-program-id-v2"
+    "program_id_domain": "xray-program-id-v3"
   },
   "encoding": {
     "fixed_integers": "little-endian",
@@ -26,7 +26,9 @@
       "7:TargetOs",
       "8:TargetArch",
       "9:TargetAbi",
-      "10:TargetEndian"
+      "10:TargetEndian",
+      "12:string",
+      "13:rune"
     ],
     "dynamic_type_base": 16,
     "dynamic_kinds": [
@@ -46,6 +48,8 @@
       "1:explicit",
       "2:forbidden"
     ],
+    "builtin_ownership": "void, bool, i64, u32, u16, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune are trivial with trivial copy; string is affine with explicit copy; panic-info is affine with forbidden copy",
+    "constant_shape": "ascending unique (TypeId, kind, value) rows; kinds are 1:i64 2:bool 3:string 4:rune; string rows carry a minimal-ULEB128 byte length followed by valid UTF-8 bytes ordered by unsigned byte lexicographic order; rune rows carry one Unicode scalar value",
     "identity_order": "ascending-semantic-key",
     "aggregate_shape": "declaration-ordered-field-type-ids",
     "class_reference_shape": "declaration-ordered-field-type-ids; nominal CLASS is implied by the type kind; physical object layout and lifetime representation are forbidden",
@@ -90,10 +94,11 @@
     "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
     "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
     "coroutine_state_contract": "function-local dense states; state zero names entry and every nonzero state names one continuation block",
-    "coroutine_safepoint_contract": "function-local dense safepoints name one nonzero resume state and a sorted unique exact live-across ValueId set"
+    "coroutine_safepoint_contract": "function-local dense safepoints name one nonzero resume state and a sorted unique exact live-across ValueId set",
+    "module_initialization_table": "semantic-metadata ends with a dense initialization-order module table; each row is (unique nonzero semantic key, initializer FunctionId, nonempty sorted unique owned FunctionIds, sorted unique dependency ModuleIds); every initializer belongs to its module and takes no parameters or receiver; every dependency precedes its importer; function-only compilation units have no runtime module row"
   },
   "imports": {
-    "provider_requirement_table": "target-neutral ascending unique contract IDs; each row has ascending unique nonempty operation IDs",
+    "provider_requirement_table": "target-neutral ascending unique contract IDs; each row has ascending unique nonempty operation IDs, each followed by minimal-uleb128 logical byte length and a canonical provider logical contract v1; complete signature, ownership, effects, resource transitions and execution constraints are semantic program identity",
     "target_profile_binding": "exact required provider and operation subset; target profile owns call ABI and contract fingerprints; extra bindings are rejected"
   },
   "sections": [

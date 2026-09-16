@@ -18,6 +18,9 @@
 struct XrSemanticGraph;
 struct XrSemanticPlan;
 
+/* Requires certificate tuple bounds and strict edge order already checked by
+ * xr_ownership_certificate_check. Replay independently verifies event order,
+ * use liveness, PHI frontiers and terminal dispositions. */
 XR_FUNC bool xr_ownership_replay_check(const struct XrSemanticPlan *plan,
                                        const struct XrSemanticGraph *graph, char *error,
                                        size_t error_size);

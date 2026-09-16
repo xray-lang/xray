@@ -13,6 +13,7 @@
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
 #include "../runtime/abi/xr_target_machine_facts.h"
+#include "../runtime/core/xr_text_kernel.h"
 #include "xr_validated_program_internal.h"
 
 #include <limits.h>
@@ -21,6 +22,7 @@
 typedef struct XrReferenceExistentialValue XrReferenceExistentialValue;
 typedef struct XrReferenceCallableValue XrReferenceCallableValue;
 typedef struct XrReferenceClassValue XrReferenceClassValue;
+typedef struct XrReferenceStringValue XrReferenceStringValue;
 typedef struct DetachedDisposeState DetachedDisposeState;
 
 static bool class_value_is_live(const XrReferenceClassValue *value, uint16_t type_id);
@@ -45,6 +47,9 @@ typedef struct EvalContext {
     XrReferenceCallableValue **callables;
     uint32_t callable_count;
     uint32_t callable_capacity;
+    XrReferenceStringValue **strings;
+    uint32_t string_count;
+    uint32_t string_capacity;
 } EvalContext;
 
 static void drop_class_value(EvalContext *context, XrReferenceClassValue *value,
@@ -111,10 +116,21 @@ struct XrReferenceCallableValue {
     XrReferenceCallableValue *dispose_next;
 };
 
+/* One immutable string owner.  Bytes are private to the cell; every logical
+ * copy is a distinct cell so ownership stays exactly-once observable. */
+struct XrReferenceStringValue {
+    uint32_t size;
+    bool detached;
+    bool dispose_queued;
+    XrReferenceStringValue *dispose_next;
+    uint8_t *bytes;
+};
+
 struct DetachedDisposeState {
     XrReferenceAggregateValue *aggregates;
     XrReferenceExistentialValue *existentials;
     XrReferenceCallableValue *callables;
+    XrReferenceStringValue *strings;
 };
 
 struct XrReferenceExecution {
@@ -150,23 +166,6 @@ static XrReferenceOutcome trap_outcome(EvalContext *context, XrReferenceTrap tra
     XrReferenceOutcome result = outcome(XR_REFERENCE_OUTCOME_TRAP, context);
     result.trap = trap;
     return result;
-}
-
-static size_t format_i64_line(int64_t value, uint8_t output[22]) {
-    uint8_t reverse[20];
-    size_t count = 0u;
-    uint64_t magnitude = value < 0 ? UINT64_C(0) - (uint64_t) value : (uint64_t) value;
-    do {
-        reverse[count++] = (uint8_t) ('0' + magnitude % UINT64_C(10));
-        magnitude /= UINT64_C(10);
-    } while (magnitude != 0u);
-    size_t cursor = 0u;
-    if (value < 0)
-        output[cursor++] = (uint8_t) '-';
-    while (count != 0u)
-        output[cursor++] = reverse[--count];
-    output[cursor++] = (uint8_t) '\n';
-    return cursor;
 }
 
 static XrReferenceValue void_value(void) {
@@ -207,6 +206,10 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
             return value.kind == XR_REFERENCE_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
             return value.kind == XR_REFERENCE_VALUE_PANIC_INFO;
+        case XR_CORE_TYPE_STRING:
+            return value.kind == XR_REFERENCE_VALUE_STRING && value.as.string;
+        case XR_CORE_TYPE_RUNE:
+            return value.kind == XR_REFERENCE_VALUE_RUNE && xr_text_rune_is_scalar(value.as.rune);
         default: {
             const XrValidatedType *type = xr_validated_program_type(program, type_id);
             if (!type)
@@ -266,6 +269,57 @@ static XrReferenceAggregateValue *allocate_aggregate(EvalContext *context, uint1
     context->aggregates[context->aggregate_count++] = aggregate;
     context->aggregate_cell_count += field_count;
     return aggregate;
+}
+
+/* Every string cell counts one value cell plus its payload bytes against the
+ * evaluator budget, so runaway concatenation surfaces as a resource limit
+ * instead of unbounded host memory. */
+static XrReferenceStringValue *allocate_string(EvalContext *context, size_t size) {
+    if (size > XR_PROGRAM_CONSTANT_STRING_MAX_BYTES ||
+        (uint64_t) size + 1u > context->budget.max_value_cells - context->aggregate_cell_count)
+        return NULL;
+    if (context->string_count == context->string_capacity) {
+        uint32_t capacity = context->string_capacity ? context->string_capacity * 2u : 8u;
+        if (capacity < context->string_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->strings))
+            return NULL;
+#endif
+        XrReferenceStringValue **grown =
+            xr_realloc(context->strings, (size_t) capacity * sizeof(*context->strings));
+        if (!grown)
+            return NULL;
+        context->strings = grown;
+        context->string_capacity = capacity;
+    }
+    XrReferenceStringValue *string = xr_calloc(1u, sizeof(*string));
+    if (!string)
+        return NULL;
+    string->bytes = xr_malloc(size != 0u ? size : 1u);
+    if (!string->bytes) {
+        xr_free(string);
+        return NULL;
+    }
+    string->size = (uint32_t) size;
+    context->strings[context->string_count++] = string;
+    context->aggregate_cell_count += (uint64_t) size + 1u;
+    return string;
+}
+
+static XrReferenceValue string_value(const XrReferenceStringValue *string) {
+    XrReferenceValue value = {.kind = XR_REFERENCE_VALUE_STRING};
+    value.as.string = string;
+    return value;
+}
+
+static bool string_view(XrReferenceValue value, const uint8_t **bytes_out, size_t *size_out) {
+    const XrReferenceStringValue *string = value.as.string;
+    if (value.kind != XR_REFERENCE_VALUE_STRING || !string)
+        return false;
+    *bytes_out = string->bytes;
+    *size_out = string->size;
+    return true;
 }
 
 static bool function_parameter_is_class_receiver(const XrValidatedProgram *program,
@@ -462,6 +516,25 @@ static void drop_reference_value(EvalContext *context, XrReferenceValue *value,
                     xr_free(callable);
             }
             break;
+        case XR_REFERENCE_VALUE_STRING:
+            /* Releasing text is not a semantic event: no finalizer, no
+             * resource, nothing an observer can distinguish. */
+            if (value->as.string) {
+                XrReferenceStringValue *string =
+                    (XrReferenceStringValue *) (void *) value->as.string;
+                if (dispose_state && string->dispose_queued)
+                    break;
+                if (dispose_state) {
+                    string->dispose_queued = true;
+                    string->dispose_next = dispose_state->strings;
+                    dispose_state->strings = string;
+                }
+                if (!context && !dispose_state) {
+                    xr_free(string->bytes);
+                    xr_free(string);
+                }
+            }
+            break;
         default:
             break;
     }
@@ -602,6 +675,18 @@ bool xr_reference_value_aggregate_view(const XrReferenceValue *value,
     return true;
 }
 
+bool xr_reference_value_string_view(const XrReferenceValue *value,
+                                    XrReferenceStringView *view_out) {
+    if (view_out)
+        memset(view_out, 0, sizeof(*view_out));
+    if (!value || !view_out || value->kind != XR_REFERENCE_VALUE_STRING || !value->as.string)
+        return false;
+    const XrReferenceStringValue *string = value->as.string;
+    view_out->bytes = string->bytes;
+    view_out->size = string->size;
+    return true;
+}
+
 void xr_reference_outcome_dispose(XrReferenceOutcome *outcome) {
     if (!outcome)
         return;
@@ -645,6 +730,189 @@ static void free_eval_arena(EvalContext *context) {
             xr_free(context->callables[index]);
     }
     xr_free(context->callables);
+    for (uint32_t index = 0; index < context->string_count; ++index) {
+        if (context->strings[index]->detached)
+            continue;
+        xr_free(context->strings[index]->bytes);
+        xr_free(context->strings[index]);
+    }
+    xr_free(context->strings);
+}
+
+/* Outcome of one text operation shared by both evaluation loops. */
+typedef enum TextOperationStatus {
+    TEXT_OPERATION_OK = 0,
+    TEXT_OPERATION_RESOURCE_LIMIT,
+    TEXT_OPERATION_PROVIDER_FAILED,
+    TEXT_OPERATION_INVALID,
+} TextOperationStatus;
+
+static bool operation_is_text(uint16_t operation_id) {
+    return operation_id == XR_CORE_OP_CORE_CONSTANT_STRING ||
+           operation_id == XR_CORE_OP_CORE_CONSTANT_RUNE ||
+           operation_id == XR_CORE_OP_CORE_STRING_FROM_I64 ||
+           operation_id == XR_CORE_OP_CORE_STRING_CONCAT ||
+           operation_id == XR_CORE_OP_CORE_COMPARE_STRING ||
+           operation_id == XR_CORE_OP_CORE_COMPARE_RUNE ||
+           operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP;
+}
+
+/* Evaluates the string/rune/output family against the shared text kernel.
+ * Values are read through the operand table; the produced value, when the
+ * operation has one, is written to *produced. */
+static TextOperationStatus evaluate_text_operation(EvalContext *context,
+                                                   const XrValidatedInstruction *instruction,
+                                                   const EvalRuntimeValue *values,
+                                                   XrReferenceValue *produced) {
+    switch (instruction->operation_id) {
+        case XR_CORE_OP_CORE_CONSTANT_STRING: {
+            const XrValidatedConstant *constant =
+                &context->program->constants[instruction->immediate.constant_id];
+            XrReferenceStringValue *string = allocate_string(context, constant->value.string.size);
+            if (!string)
+                return TEXT_OPERATION_RESOURCE_LIMIT;
+            if (constant->value.string.size != 0u)
+                memcpy(string->bytes, constant->value.string.bytes, constant->value.string.size);
+            *produced = string_value(string);
+            return TEXT_OPERATION_OK;
+        }
+        case XR_CORE_OP_CORE_CONSTANT_RUNE: {
+            const XrValidatedConstant *constant =
+                &context->program->constants[instruction->immediate.constant_id];
+            produced->kind = XR_REFERENCE_VALUE_RUNE;
+            produced->as.rune = constant->value.rune;
+            return TEXT_OPERATION_OK;
+        }
+        case XR_CORE_OP_CORE_STRING_FROM_I64: {
+            int64_t source = values[instruction->operands[0]].as.value.as.i64;
+            size_t size = xr_text_display_i64(source, NULL);
+            XrReferenceStringValue *string = allocate_string(context, size);
+            if (!string)
+                return TEXT_OPERATION_RESOURCE_LIMIT;
+            (void) xr_text_display_i64(source, string->bytes);
+            *produced = string_value(string);
+            return TEXT_OPERATION_OK;
+        }
+        case XR_CORE_OP_CORE_STRING_CONCAT: {
+            const uint8_t *left = NULL;
+            const uint8_t *right = NULL;
+            size_t left_size = 0u;
+            size_t right_size = 0u;
+            int ok = 0;
+            if (!string_view(values[instruction->operands[0]].as.value, &left, &left_size) ||
+                !string_view(values[instruction->operands[1]].as.value, &right, &right_size))
+                return TEXT_OPERATION_INVALID;
+            size_t size = xr_text_concat_size(left_size, right_size, &ok);
+            if (!ok)
+                return TEXT_OPERATION_RESOURCE_LIMIT;
+            XrReferenceStringValue *string = allocate_string(context, size);
+            if (!string)
+                return TEXT_OPERATION_RESOURCE_LIMIT;
+            xr_text_concat(left, left_size, right, right_size, string->bytes);
+            *produced = string_value(string);
+            return TEXT_OPERATION_OK;
+        }
+        case XR_CORE_OP_CORE_COMPARE_STRING: {
+            const uint8_t *left = NULL;
+            const uint8_t *right = NULL;
+            size_t left_size = 0u;
+            size_t right_size = 0u;
+            if (!string_view(values[instruction->operands[0]].as.value, &left, &left_size) ||
+                !string_view(values[instruction->operands[1]].as.value, &right, &right_size))
+                return TEXT_OPERATION_INVALID;
+            produced->kind = XR_REFERENCE_VALUE_BOOL;
+            produced->as.boolean =
+                xr_text_predicate(xr_text_compare(left, left_size, right, right_size),
+                                  instruction->immediate.u32) != 0;
+            return TEXT_OPERATION_OK;
+        }
+        case XR_CORE_OP_CORE_COMPARE_RUNE: {
+            uint32_t left = values[instruction->operands[0]].as.value.as.rune;
+            uint32_t right = values[instruction->operands[1]].as.value.as.rune;
+            int order = left == right ? 0 : (left < right ? -1 : 1);
+            produced->kind = XR_REFERENCE_VALUE_BOOL;
+            produced->as.boolean = xr_text_predicate(order, instruction->immediate.u32) != 0;
+            return TEXT_OPERATION_OK;
+        }
+        case XR_CORE_OP_CORE_OUTPUT_GROUP: {
+            XrTextDisplayOperand stack_operands[8];
+            XrTextDisplayOperand *operands = stack_operands;
+            size_t count = instruction->operand_count;
+            int ok = 0;
+            if (count > sizeof(stack_operands) / sizeof(stack_operands[0])) {
+                operands = xr_calloc(count, sizeof(*operands));
+                if (!operands)
+                    return TEXT_OPERATION_RESOURCE_LIMIT;
+            }
+            for (size_t index = 0u; index < count; ++index) {
+                const XrReferenceValue *value = &values[instruction->operands[index]].as.value;
+                XrTextDisplayOperand *operand = &operands[index];
+                memset(operand, 0, sizeof(*operand));
+                switch (value->kind) {
+                    case XR_REFERENCE_VALUE_I64:
+                        operand->kind = XR_TEXT_DISPLAY_I64;
+                        operand->i64 = value->as.i64;
+                        break;
+                    case XR_REFERENCE_VALUE_BOOL:
+                        operand->kind = XR_TEXT_DISPLAY_BOOL;
+                        operand->boolean = value->as.boolean ? 1 : 0;
+                        break;
+                    case XR_REFERENCE_VALUE_RUNE:
+                        operand->kind = XR_TEXT_DISPLAY_RUNE;
+                        operand->rune = value->as.rune;
+                        break;
+                    case XR_REFERENCE_VALUE_STRING: {
+                        const uint8_t *bytes = NULL;
+                        size_t size = 0u;
+                        if (!string_view(*value, &bytes, &size)) {
+                            if (operands != stack_operands)
+                                xr_free(operands);
+                            return TEXT_OPERATION_INVALID;
+                        }
+                        operand->kind = XR_TEXT_DISPLAY_STRING;
+                        operand->bytes = bytes;
+                        operand->size = size;
+                        break;
+                    }
+                    default:
+                        if (operands != stack_operands)
+                            xr_free(operands);
+                        return TEXT_OPERATION_INVALID;
+                }
+            }
+            size_t size = xr_text_group_size(operands, count, &ok);
+            uint8_t *line = ok ? xr_malloc(size) : NULL;
+            if (!line) {
+                if (operands != stack_operands)
+                    xr_free(operands);
+                return TEXT_OPERATION_RESOURCE_LIMIT;
+            }
+            (void) xr_text_group_render(operands, count, line);
+            bool written =
+                context->providers && context->providers->output_write &&
+                context->providers->output_write(
+                    context->providers->context,
+                    instruction->immediate.provider_operation.requirement_index,
+                    instruction->immediate.provider_operation.operation_index, line, size);
+            xr_free(line);
+            if (operands != stack_operands)
+                xr_free(operands);
+            return written ? TEXT_OPERATION_OK : TEXT_OPERATION_PROVIDER_FAILED;
+        }
+        default:
+            return TEXT_OPERATION_INVALID;
+    }
+}
+
+static XrReferenceOutcome text_operation_outcome(EvalContext *context, TextOperationStatus status) {
+    switch (status) {
+        case TEXT_OPERATION_RESOURCE_LIMIT:
+            return outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+        case TEXT_OPERATION_PROVIDER_FAILED:
+            return trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+        default:
+            return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
+    }
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
@@ -1308,17 +1576,17 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     }
                     break;
                 }
-                case XR_CORE_OP_CORE_OUTPUT_GROUP_I64: {
-                    uint8_t bytes[22];
-                    size_t size =
-                        format_i64_line(values[instruction->operands[0]].as.value.as.i64, bytes);
-                    if (!context->providers || !context->providers->output_write ||
-                        !context->providers->output_write(
-                            context->providers->context,
-                            instruction->immediate.provider_operation.requirement_index,
-                            instruction->immediate.provider_operation.operation_index, bytes,
-                            size)) {
-                        result = trap_outcome(context, XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+                case XR_CORE_OP_CORE_CONSTANT_STRING:
+                case XR_CORE_OP_CORE_CONSTANT_RUNE:
+                case XR_CORE_OP_CORE_STRING_FROM_I64:
+                case XR_CORE_OP_CORE_STRING_CONCAT:
+                case XR_CORE_OP_CORE_COMPARE_STRING:
+                case XR_CORE_OP_CORE_COMPARE_RUNE:
+                case XR_CORE_OP_CORE_OUTPUT_GROUP: {
+                    TextOperationStatus text_status =
+                        evaluate_text_operation(context, instruction, values, &produced.as.value);
+                    if (text_status != TEXT_OPERATION_OK) {
+                        result = text_operation_outcome(context, text_status);
                         goto done;
                     }
                     break;
@@ -1727,7 +1995,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT ||
            operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
            operation_id == XR_CORE_OP_CORE_CANCEL_PUBLISH || operation_id == XR_CORE_OP_CORE_TRAP ||
-           operation_id == XR_CORE_OP_CORE_RETURN;
+           operation_id == XR_CORE_OP_CORE_RETURN || operation_is_text(operation_id);
 }
 
 static void reference_execution_release_lease(XrReferenceExecution *execution) {
@@ -1894,7 +2162,7 @@ bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
     if (!xr_execution_instance_acquire(instance, &lease))
         return false;
     XrValidatedProgram *program = xr_execution_lease_retain_program(&lease);
-    if (!program || function_id >= program->function_count) {
+    if (!program || program->module_count != 0u || function_id >= program->function_count) {
         xr_validated_program_free(program);
         (void) xr_execution_lease_release(&lease);
         return false;
@@ -2340,6 +2608,34 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                     execution->values[instruction->operands[0]];
                 execution->initialized[instruction->result_id] = true;
                 break;
+            case XR_CORE_OP_CORE_CONSTANT_STRING:
+            case XR_CORE_OP_CORE_CONSTANT_RUNE:
+            case XR_CORE_OP_CORE_STRING_FROM_I64:
+            case XR_CORE_OP_CORE_STRING_CONCAT:
+            case XR_CORE_OP_CORE_COMPARE_STRING:
+            case XR_CORE_OP_CORE_COMPARE_RUNE:
+            case XR_CORE_OP_CORE_OUTPUT_GROUP: {
+                XrReferenceValue produced = void_value();
+                TextOperationStatus text_status = evaluate_text_operation(
+                    execution->context, instruction, execution->values, &produced);
+                if (text_status != TEXT_OPERATION_OK) {
+                    XrReferenceOutcome failure =
+                        text_operation_outcome(execution->context, text_status);
+                    execution->finished = true;
+                    reference_execution_release_lease(execution);
+                    XrReferenceOutcome result = execution_outcome(execution, failure.kind);
+                    result.trap = failure.trap;
+                    return result;
+                }
+                if (instruction->result_id != XR_PROGRAM_LOCATION_NONE) {
+                    execution->values[instruction->result_id] = (EvalRuntimeValue) {
+                        .category = XR_CORE_IR_VALUE,
+                        .as.value = produced,
+                    };
+                    execution->initialized[instruction->result_id] = true;
+                }
+                break;
+            }
             case XR_CORE_OP_CORE_CLASS_CONSTRUCT: {
                 XrReferenceClassValue *value = allocate_class(
                     execution->context, instruction->result_type_id, instruction->operand_count);
@@ -2891,7 +3187,7 @@ xr_reference_evaluate_bound(const XrValidatedProgram *program, uint32_t function
     if (program && function_id < program->function_count &&
         program->functions[function_id].coroutine_safepoint_count != 0u)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
-    if (!program || function_id >= program->function_count || (argument_count != 0 && !arguments) ||
+    if (!program || program->module_count != 0u || function_id >= program->function_count || (argument_count != 0 && !arguments) ||
         selected.max_steps == 0 || selected.max_value_cells == 0 || selected.max_call_depth == 0)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     const XrValidatedFunction *function = &program->functions[function_id];
@@ -2914,7 +3210,8 @@ xr_reference_evaluate_bound(const XrValidatedProgram *program, uint32_t function
     xr_free(runtime_arguments);
     if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
         (result.value.kind == XR_REFERENCE_VALUE_AGGREGATE ||
-         result.value.kind == XR_REFERENCE_VALUE_CLASS_REFERENCE)) {
+         result.value.kind == XR_REFERENCE_VALUE_CLASS_REFERENCE ||
+         result.value.kind == XR_REFERENCE_VALUE_STRING)) {
         XrReferenceValue detached = void_value();
         if (detach_reference_value(result.value, &detached)) {
             result.value = detached;

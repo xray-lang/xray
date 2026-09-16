@@ -136,6 +136,8 @@ Evidence:
   debug-session, debug-plan/control, and request-based dispatcher symbols link
   from `xray_vm`.
 
+## Digest anchors
+
 anchor-sha256: src/vm/debug/xr_vm_trace.h 4e5ed29033c195caa74028ca75f52013abdd340af4d368a04337e692e3067e0a
 anchor-sha256: src/vm/debug/xr_vm_trace.c 6206123d9b212506679303049b1ec983cd6696614b1a2a1c36173aad9d7a88de
 anchor-sha256: src/vm/debug/xr_vm_trace_internal.h 715c757e80e375f9a4923d9c367cdc22d500fa838c1fff61a1e2a842a9840cf2
@@ -147,9 +149,9 @@ anchor-sha256: src/vm/debug/xr_vm_profile.c d4a1cd75c1d520f3a14721e64757559952ff
 anchor-sha256: src/vm/debug/xr_vm_materialize.h d87726c0853aafe634f6888fb242167be4bac256ab117f24a58df5aa711ccb8f
 anchor-sha256: src/vm/debug/xr_vm_materialize.c b86beab806b748e1eced0aa4c04c2a87da11f5e774289227fa4d144320195d2a
 anchor-sha256: src/vm/xr_typed_dispatch.h 5764853b278b367a0713c461e7e997ed67d50093d990b1a67e6fe93041b1a90f
-anchor-sha256: src/vm/xr_typed_dispatch.c c266fda805b5a7ab09537715601c853cce641c1ed7eed9cccbefe1e3d127dace
+anchor-sha256: src/vm/xr_typed_dispatch.c a7e7ea6e44cd53e78ef74d2410cfa29a110f826456f15acb457806745012e038
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 0da767e005e18d0c836267554f6fde719516c1ef0096825ddb14e04b8e2180c0
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py ce359885c88ab943fb5e8b61782770361083568db413aa3e6b940809457cb75c
-anchor-sha256: CMakeLists.txt 9613dfaef68552718c74b2e19326cca610915bee2320da9c691bb9044140c92f
+anchor-sha256: CMakeLists.txt c0c1778a536f028072248bfbb395a8bb416c14ec5afadffae1a086f6fa3b8e5b
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c d9a9dcdfc2a9231c75e1ed3e35a0cb5dcc54a423aa60741b14d2e7c25e7930cb

@@ -933,7 +933,7 @@ static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, Ast
  * Those still reach the generic origin erased, which stays a correct callable
  * body — see xaot_callable_func_has_executable_body_plan.
  */
-static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrType *t) {
+XrTypeRef *xa_synthesize_type_ref(XrCompilerSession *session, const XrType *t) {
     if (!session || !t)
         return NULL;
     /* A nullable carrier is the same shape one optional level down. Handled
@@ -941,7 +941,7 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
     if (t->is_nullable && !t->is_const) {
         XrType bare = *t;
         bare.is_nullable = false;
-        XrTypeRef *inner = xa_synth_tref_from_type(session, &bare);
+        XrTypeRef *inner = xa_synthesize_type_ref(session, &bare);
         return inner ? xr_tref_optional(session, inner) : NULL;
     }
     switch (t->kind) {
@@ -964,7 +964,7 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
         case XR_KIND_SET: {
             if (t->is_const)
                 return NULL;
-            XrTypeRef *elem = xa_synth_tref_from_type(session, t->container.element_type);
+            XrTypeRef *elem = xa_synthesize_type_ref(session, t->container.element_type);
             if (!elem)
                 return NULL;
             const char *head = t->kind == XR_KIND_ARRAY   ? "Array"
@@ -976,8 +976,8 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
             if (t->is_const)
                 return NULL;
             XrTypeRef *kv[2];
-            kv[0] = xa_synth_tref_from_type(session, t->map.key_type);
-            kv[1] = xa_synth_tref_from_type(session, t->map.value_type);
+            kv[0] = xa_synthesize_type_ref(session, t->map.key_type);
+            kv[1] = xa_synthesize_type_ref(session, t->map.value_type);
             if (!kv[0] || !kv[1])
                 return NULL;
             return xr_tref_generic(session, "Map", kv, 2);
@@ -995,7 +995,7 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
                 return NULL;
             bool complete = true;
             for (int i = 0; i < n; i++) {
-                elems[i] = xa_synth_tref_from_type(session, t->tuple.element_types[i]);
+                elems[i] = xa_synthesize_type_ref(session, t->tuple.element_types[i]);
                 if (!elems[i]) {
                     complete = false;
                     break;
@@ -1032,7 +1032,7 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
             bool complete = true;
             for (int i = 0; i < n; i++) {
                 names[i] = t->object.field_names[i];
-                types[i] = xa_synth_tref_from_type(session, t->object.field_types[i]);
+                types[i] = xa_synthesize_type_ref(session, t->object.field_types[i]);
                 readonly[i] = t->object.field_readonly && t->object.field_readonly[i];
                 if (!names[i] || !types[i]) {
                     complete = false;
@@ -1098,7 +1098,7 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
                 return NULL;
             bool complete = true;
             for (int i = 0; i < n; i++) {
-                args[i] = xa_synth_tref_from_type(session, t->instance.type_args[i]);
+                args[i] = xa_synthesize_type_ref(session, t->instance.type_args[i]);
                 if (!args[i]) {
                     complete = false;
                     break;
@@ -1126,7 +1126,7 @@ XrTypeRef **xa_synthesize_type_arg_refs(XaAnalyzer *analyzer, XrType **types, in
     if (!synth)
         return NULL;
     for (int i = 0; i < type_count; i++) {
-        synth[i] = xa_synth_tref_from_type(session, types[i]);
+        synth[i] = xa_synthesize_type_ref(session, types[i]);
         if (!synth[i]) {
             if (synth != stack_synth)
                 xr_free(synth);

@@ -3714,7 +3714,14 @@ static void stmt_write_decl_value(XiLower *l, int var_id, XiValue *init_val) {
         .type = l->vars[var_id].type,
     };
     stmt_record_shared_function_value(l, binding.slot, init_val);
-    xi_lower_emit_top_store(l, binding, init_val);
+    XiValue *store = xi_lower_emit_top_store(l, binding, init_val);
+    if (!store) {
+        l->had_error = true;
+        return;
+    }
+    /* REPL publication may replace a prior input's binding. Module data
+     * declarations instead own the unique first initialization of their slot. */
+    store->initializes_module_slot = !l->repl_mode;
 }
 
 static void lower_var_decl(XiLower *l, AstNode *node) {

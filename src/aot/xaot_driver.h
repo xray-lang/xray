@@ -11,7 +11,7 @@
  *   Full pipeline from source to generated C:
  *   1. Bundle discovery (topo-sorted module list)
  *   2. Per-module: parse → analyze → Xi IR lower → optimize
- *   3. Cross-module import resolution via export_names + import table
+ *   3. Cross-module import resolution via module declarations and the import table
  *   4. C code generation via xi_cgen
  *   5. Main() generation calling module inits in topo order
  *

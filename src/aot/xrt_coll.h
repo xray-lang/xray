@@ -151,7 +151,8 @@ static inline XrValue xrt_array_index_get_portable(xrt_array_t *array, int64_t i
         xrt_index_oob(index, array ? array->length : 0);
         return XR_NULL_VAL;
     }
-    XrValue value = xr_typed_get(array->data, (int32_t) index, array->elem_type);
+    const size_t offset = (size_t) index * array->elem_size;
+    XrValue value = xr_typed_get((uint8_t *) array->data + offset, 0, array->elem_type);
     return owned ? xrt_value_to_owned(value) : value;
 }
 
@@ -161,7 +162,8 @@ static inline XrValue xrt_array_index_set_portable(xrt_array_t *array, int64_t i
         xrt_index_oob(index, array ? array->length : 0);
         return XR_NULL_VAL;
     }
-    if (xr_typed_set(array->data, (int32_t) index, value, array->elem_type))
+    const size_t offset = (size_t) index * array->elem_size;
+    if (xr_typed_set((uint8_t *) array->data + offset, 0, value, array->elem_type))
         XR_ARRAY_MARK_MUTATED(array);
     return XR_NULL_VAL;
 }
@@ -744,6 +746,12 @@ static inline XrValue xrt_enum_variant_field_get(XrValue boxed, int64_t variant,
     if (!XR_IS_INT(tag) || tag.i != variant)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, "enum variant projection tag mismatch");
     return xrt_enum_field_get(boxed, field + 1);
+}
+
+static inline XrValue xrt_optional_payload_get(XrValue value) {
+    if (XR_IS_NULL(value))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "optional projection requires Some");
+    return value;
 }
 
 /* Splice every element of `src_val` onto the end of `dst_val` (array spread
@@ -7607,6 +7615,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
         case XR_TAG_PTR: {
             if (!val.ptr)
                 return val;
+            if (xrt_is_struct_object_value(val))
+                return xrt_object_clone_for_coro(val);
             if (val.heap_type == XR_TINSTANCE) {
                 uint16_t type_id = xrt_aot_class_type_id((const XrObjHeader *) val.ptr);
                 if (type_id != 0 && type_id < xrt_type_count) {

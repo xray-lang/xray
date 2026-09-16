@@ -64,6 +64,10 @@ EXPECTED_COVERAGE = {
         "thread-safety",
         "reentrancy",
         "callback-safety",
+        "complete-logical-contract-equality",
+        "logical-thread-reentry-callback-policy",
+        "explicit-target-platform-applicability",
+        "pure-aot-logical-admission",
     ],
     "generation_states": ["ACTIVE", "DRAINING", "RETIRED"],
     "generation_transitions": [

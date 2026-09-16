@@ -260,7 +260,7 @@ TEST(repl_eval_let_registers_symbol) {
 
 TEST(repl_eval_const_marks_is_const) {
     /* `const PI = ...` must round-trip the const bit through
-     * XiFunc.slot_owned_consts so .vars can distinguish var from
+     * XiFunc.module_slots so .vars can distinguish var from
      * const without re-parsing. */
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);

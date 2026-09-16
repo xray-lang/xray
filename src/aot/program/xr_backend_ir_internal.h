@@ -25,6 +25,8 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_PANIC_U32,
     XR_BACKEND_VALUE_AGGREGATE,
     XR_BACKEND_VALUE_CLASS_HANDLE,
+    XR_BACKEND_VALUE_STRING_HANDLE,
+    XR_BACKEND_VALUE_RUNE_U32,
 } XrBackendValueRepresentation;
 
 typedef struct XrBackendInstruction {

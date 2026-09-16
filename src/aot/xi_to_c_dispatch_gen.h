@@ -154,6 +154,7 @@
     X(TUPLE_NEW, "xi.tuple.new", xicgen_tuple_new) \
     X(TUPLE_GET, "xi.tuple.get", xicgen_tuple_get) \
     X(VARIANT_CONSTRUCT, "xi.variant.construct", xicgen_variant_construct) \
+    X(SUM_INJECT, "xi.sum.inject", xicgen_sum_inject) \
     X(VARIANT_TEST, "xi.variant.test", xicgen_variant_test) \
     X(VARIANT_PROJECT, "xi.variant.project", xicgen_variant_project) \
     X(BYTE_SLICE_LOAD_U16, "xi.byte.slice.load.u16", xicgen_byte_slice_load_u16) \

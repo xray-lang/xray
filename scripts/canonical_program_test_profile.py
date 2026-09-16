@@ -27,13 +27,13 @@ GENERIC_IDENTITY_BUILD_TARGETS = GENERIC_IDENTITY_CTEST_NAMES
 H2_REFERENCE_CTEST_NAMES = (
     "test_core_spec",
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
 )
 H2_REFERENCE_BUILD_TARGETS = H2_REFERENCE_CTEST_NAMES
 
 H2_SOURCE_CTEST_NAMES = (
     "canonical_cutover_manifests",
     "canonical_cutover_manifests_self_test",
-    "contract_freeze",
     "contract_freeze_injection",
     "core_spec_registry",
     "core_spec_registry_self_test",
@@ -41,6 +41,7 @@ H2_SOURCE_CTEST_NAMES = (
     "test_core_spec",
     "test_xr_program",
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
     "test_xr_program_vm",
     "test_xr_program_source_build",
     "xr_program_schema",
@@ -55,6 +56,7 @@ H2_SOURCE_BUILD_TARGETS = (
     "test_core_spec",
     "test_xr_program",
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
     "test_xr_program_vm",
     "test_xr_program_source_build",
 )
@@ -62,6 +64,8 @@ H2_SOURCE_BUILD_TARGETS = (
 H2_VM_CTEST_NAMES = (
     "test_core_spec",
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
+    "test_provider_logical_admission",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
     "xr_program_vm_contracts",
@@ -70,6 +74,8 @@ H2_VM_CTEST_NAMES = (
 H2_VM_BUILD_TARGETS = (
     "test_core_spec",
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
+    "test_provider_logical_admission",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
 )
@@ -77,6 +83,8 @@ H2_VM_BUILD_TARGETS = (
 H2_AOT_CTEST_NAMES = (
     "test_core_spec",
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
+    "test_provider_logical_admission",
     "test_xr_program_aot",
     "test_xr_program_panic_defer_cleanup_aot_native",
     "test_xr_program_ref_parameter_coroutine_aot_native",
@@ -86,6 +94,8 @@ H2_AOT_CTEST_NAMES = (
 H2_AOT_BUILD_TARGETS = (
     "test_core_spec",
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
+    "test_provider_logical_admission",
     "test_xr_program_aot",
     "test_xr_program_panic_defer_cleanup_aot_native",
     "test_xr_program_ref_parameter_coroutine_aot_native",
@@ -128,17 +138,20 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
     "canonical_source_run_cli",
     "canonical_cutover_manifests",
     "canonical_cutover_manifests_self_test",
-    "contract_freeze",
     "contract_freeze_injection",
     "core_spec_registry",
     "core_spec_registry_self_test",
     "meta_ownership_inventory",
     "test_core_spec",
+    "test_text_kernel",
     "test_xr_program",
     "test_xr_program_aot",
     "test_xr_program_aot_condition_assert",
+    "test_xr_program_aot_text_output",
 ) + GENERIC_IDENTITY_CTEST_NAMES + (
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
+    "test_provider_logical_admission",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
     "test_xi_pipeline_canonical",
@@ -164,15 +177,23 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
     "xr_program_wave4_contract_self_test",
 )
 
+# Full contract assertion fixtures run at completed batch boundaries and in the
+# full CTest suite. These narrow feedback inventories keep the checker injection
+# test, without silently pulling unrelated assertion executables into a lane
+# whose build list and executed-case denominator are intentionally exact.
 # Script-only gates have no Ninja target. Native source fixtures are projected
 # from the same registry as CMake; the CLI is not a blanket build proxy.
 _EXECUTABLE_TARGETS = (
     "test_core_spec",
+    "test_text_kernel",
     "test_xr_program",
     "test_xr_program_aot",
     "test_xr_program_aot_condition_assert",
+    "test_xr_program_aot_text_output",
 ) + GENERIC_IDENTITY_BUILD_TARGETS + (
     "test_xr_program_verify",
+    "test_xr_program_provider_requirements",
+    "test_provider_logical_admission",
     "test_xr_program_vm",
     "test_xr_program_vm_runtime",
     "test_xi_verify_ext",

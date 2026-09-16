@@ -62,6 +62,16 @@
       "stable_id": 11,
       "name": "type-variable",
       "description": "Registry meta-type resolved by a verified function or block signature."
+    },
+    {
+      "stable_id": 12,
+      "name": "string",
+      "description": "Immutable managed UTF-8 text: a valid UTF-8 byte sequence with an exact byte length; identity is unobservable and equality is by content."
+    },
+    {
+      "stable_id": 13,
+      "name": "rune",
+      "description": "Exactly one Unicode scalar value in [0, 0x10FFFF] excluding the surrogate range [0xD800, 0xDFFF]."
     }
   ],
   "effects": [
@@ -198,6 +208,11 @@
       "stable_id": 15,
       "spelling": "core.reserved.pre293",
       "reason": "Permanent tombstone proving active IDs cannot reuse retired values."
+    },
+    {
+      "stable_id": 137,
+      "spelling": "core.output.group.i64",
+      "reason": "Retired by the typed output cutover: core.output.group renders every display-typed operand through one contract, and the i64-only spelling never decodes as an alias."
     },
     {
       "stable_id": 139,
@@ -374,6 +389,136 @@
       "determinism": {
         "kind": "deterministic",
         "allowed_trace": "one member of the exact declared target enum domain"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 4,
+      "spelling": "core.constant.string",
+      "class": "constant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "string",
+        "immediates": {
+          "value": "program-constant-utf8-bytes"
+        }
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "immutable-managed-text",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one fresh owner of the exact constant-table UTF-8 byte sequence; the bytes are valid UTF-8 and the length is the byte count"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 5,
+      "spelling": "core.constant.rune",
+      "class": "constant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "rune",
+        "immediates": {
+          "value": "unicode-scalar-value"
+        }
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one exact Unicode scalar value; surrogates and values above 0x10FFFF are rejected at decode"
       },
       "kat_validator": "scalar-oracle",
       "coverage": {
@@ -1063,6 +1208,162 @@
       "determinism": {
         "kind": "deterministic",
         "allowed_trace": "one canonical bool from equal logical target enum domains"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 26,
+      "spelling": "core.compare.rune",
+      "class": "comparison",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "rune",
+          "rune"
+        ],
+        "result": "bool",
+        "immediates": {
+          "predicate": [
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one canonical bool from the numeric order of two Unicode scalar values"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 27,
+      "spelling": "core.compare.string",
+      "class": "comparison",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "string",
+          "string"
+        ],
+        "result": "bool",
+        "immediates": {
+          "predicate": [
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one canonical bool from unsigned byte lexicographic order of the two UTF-8 sequences, which equals Unicode scalar order; a proper prefix orders first"
       },
       "kat_validator": "scalar-oracle",
       "coverage": {
@@ -3996,81 +4297,6 @@
       }
     },
     {
-      "stable_id": 137,
-      "spelling": "core.output.group.i64",
-      "class": "provider-output",
-      "feature": "core.base",
-      "epoch": 1,
-      "type_rule": {
-        "operands": [
-          "i64"
-        ],
-        "result": "void",
-        "immediates": {
-          "provider_operation": "program-provider-requirement-operation-index"
-        }
-      },
-      "evaluation_order": "left-to-right",
-      "successors": {
-        "normal": true,
-        "error": false,
-        "panic": false,
-        "trap": false,
-        "cancel": false,
-        "suspend": false
-      },
-      "arithmetic": {
-        "kind": "none"
-      },
-      "effects": [
-        "trap",
-        "call",
-        "provider-call"
-      ],
-      "capability_requirements": [
-        "provider.binding"
-      ],
-      "ownership": {
-        "operands": [
-          "borrow-value"
-        ],
-        "result": "none"
-      },
-      "profile_dependency": "provider_contract",
-      "materialization": "atomic-i64-line-output-trampoline",
-      "determinism": {
-        "kind": "deterministic",
-        "allowed_trace": "one exact output-write provider event containing the canonical signed decimal i64 representation followed by one line-feed byte; provider failure normalizes to trap 7"
-      },
-      "kat_validator": "output-group-i64",
-      "coverage": {
-        "spec_oracle": {
-          "status": "COMPLETE",
-          "task": 295
-        },
-        "decoder": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "verifier": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "evaluator": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "vm": {
-          "status": "COMPLETE",
-          "task": 299
-        },
-        "aot": {
-          "status": "COMPLETE",
-          "task": 300
-        }
-      }
-    },
-    {
       "stable_id": 138,
       "spelling": "core.coroutine.call.sealed",
       "class": "coroutine-call-terminator",
@@ -4625,6 +4851,223 @@
         "allowed_trace": "the replacement becomes the complete place value atomically and the previous complete value is returned without a control transfer"
       },
       "kat_validator": "place-exchange",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 148,
+      "spelling": "core.output.group",
+      "class": "provider-output",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "void",
+        "immediates": {
+          "provider_operation": "program-provider-requirement-operation-index"
+        },
+        "operand_domain": [
+          "i64",
+          "bool",
+          "string",
+          "rune"
+        ]
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "trap",
+        "call",
+        "provider-call"
+      ],
+      "capability_requirements": [
+        "provider.binding"
+      ],
+      "ownership": {
+        "operands": [
+          "borrow-value..."
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "provider_contract",
+      "materialization": "atomic-typed-line-output-trampoline",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one exact output-write provider event: operands rendered left to right in canonical display form (i64 signed decimal, bool true/false, string UTF-8 bytes verbatim, rune UTF-8 encoding) joined by one space byte and followed by one line-feed byte; provider failure normalizes to trap 7"
+      },
+      "kat_validator": "output-group",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 150,
+      "spelling": "core.string.from_i64",
+      "class": "string",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64"
+        ],
+        "result": "string",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "immutable-managed-text",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one fresh owner holding the canonical signed decimal representation of the operand, identical to its output display form"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 151,
+      "spelling": "core.string.concat",
+      "class": "string",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "string",
+          "string"
+        ],
+        "result": "string",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "immutable-managed-text",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one fresh owner holding the left operand bytes followed by the right operand bytes; both operands stay borrowed and unchanged"
+      },
+      "kat_validator": "scalar-oracle",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

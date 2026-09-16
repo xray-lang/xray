@@ -66,6 +66,35 @@ static inline const char *xr_semantic_type_key_split_nullable(const char *key, s
                                             value);
 }
 
+/* Qualifier conversions preserve all structural rows. Their callers separately
+ * prove the allowed flag and canonical-key difference. */
+static inline bool xr_semantic_type_same_structure(const XrSemanticPlan *plan,
+                                                    const XrSemanticTypeRecord *left,
+                                                    const XrSemanticTypeRecord *right) {
+    if (!left || !right || left->kind != right->kind ||
+        left->builtin_type != right->builtin_type || left->source_class != right->source_class ||
+        !xr_stable_id_equal(left->source_class_identity, right->source_class_identity) ||
+        !xr_stable_id_equal(left->source_enum_identity, right->source_enum_identity) ||
+        left->enum_layout_id != right->enum_layout_id ||
+        left->enum_member_count != right->enum_member_count ||
+        left->enum_flags != right->enum_flags || left->reserved_enum != right->reserved_enum ||
+        left->scalar_rep != right->scalar_rep || left->child_count != right->child_count ||
+        left->aggregate_extent != right->aggregate_extent ||
+        left->aggregate_align != right->aggregate_align)
+        return false;
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (left->child_begin > child_count || right->child_begin > child_count ||
+        left->child_count > child_count - left->child_begin ||
+        right->child_count > child_count - right->child_begin ||
+        (left->child_count != 0 && !children))
+        return false;
+    for (uint16_t i = 0; i < left->child_count; i++)
+        if (children[left->child_begin + i] != children[right->child_begin + i])
+            return false;
+    return true;
+}
+
 /* A read parameter cannot mutate the caller's binding. Consequently the
  * caller's top-level const spelling and the declaration's unqualified spelling
  * are one admissible call shape even though they remain separate frozen type
@@ -137,12 +166,10 @@ xr_semantic_type_is_nullable_widening(const XrSemanticTypeRecord *value_type,
 /* Null has no payload to convert. It may cross a call boundary only when the
  * frozen parameter describes a nullable reference representation: null is
  * one of the values that carrier already encodes, exactly the judgement the
- * nullable widening above makes for a definite value. Value semantics do not
- * change the carrier -- a structural object is copied on assignment yet
- * still lives behind a reference, which is why the row is both a value type
- * and reference capable -- so the two rules ask about the carrier and nothing
- * else. Unknown types and value aggregates with inline storage, which are
- * never reference capable, stay unclaimed. */
+ * nullable widening above makes for a definite value. Structural objects keep
+ * the same heap root across assignments, so their nullable spelling uses this
+ * reference carrier too. Unknown types and inline value aggregates remain
+ * unclaimed. */
 static inline bool xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecord *operand_type,
                                                        const XrSemanticTypeRecord *parameter_type) {
     return operand_type && parameter_type && operand_type->kind == (uint32_t) XR_KIND_NULL &&

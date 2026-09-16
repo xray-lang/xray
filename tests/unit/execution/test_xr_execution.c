@@ -15,6 +15,7 @@
 #include "../../../src/plan/semantic/xr_semantic_ids.h"
 #include "../../../src/program/xr_program.h"
 #include "../plan/target_profile_test_fixture.h"
+#include "../program/xr_program_provider_fixture.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -127,9 +128,13 @@ static XrValidatedProgram *build_validated_provider_program(
     instructions[provider_instruction].immediate.provider_operation.contract_id =
         required_contract->contract_id;
     instructions[provider_instruction].immediate.provider_operation.operation_id = operation_id;
+    XrProgramProviderOperationRequirement operation_requirement = {
+        .operation_id = operation_id,
+        .logical_contract = xr_program_fixture_scalar_contract(nullary),
+    };
     XrCoreIrProviderRequirementInput provider_requirement = {
         .contract_id = required_contract->contract_id,
-        .operation_ids = &operation_id,
+        .operations = &operation_requirement,
         .operation_count = 1u,
     };
     XrCoreIrProgramInput input = {
@@ -161,7 +166,7 @@ static XrValidatedProgram *build_validated_provider_program(
     REQUIRE(memcmp(requirement_view.contract_id.bytes, required_contract->contract_id.bytes,
                    XR_STABLE_ID_BYTES) == 0);
     REQUIRE(requirement_view.operation_count == 1u);
-    REQUIRE(memcmp(requirement_view.operation_ids[0].bytes, operation_id.bytes,
+    REQUIRE(memcmp(requirement_view.operations[0].operation_id.bytes, operation_id.bytes,
                    XR_STABLE_ID_BYTES) == 0);
     return validated;
 }
@@ -293,8 +298,8 @@ static void build_provider_bindings(const XrValidatedProgram *program,
         provider->operation_count = (uint16_t) requirement.operation_count;
         for (uint16_t operation_index = 0; operation_index < provider->operation_count;
              ++operation_index) {
-            const XrTargetProviderOperationContract *contract_operation =
-                find_profile_operation(contract, requirement.operation_ids[operation_index]);
+            const XrTargetProviderOperationContract *contract_operation = find_profile_operation(
+                contract, requirement.operations[operation_index].operation_id);
             REQUIRE(contract_operation != NULL);
             XrProviderOperationBinding *operation =
                 &bindings->operations[provider_index][operation_index];
@@ -345,25 +350,25 @@ static void test_profile_partitions_and_foreign_authority(void) {
     REQUIRE(native && same && foreign);
 
     require_fingerprint(xr_target_profile_fingerprint(native),
-                        "745631840895bfe714599f8686cf82d549da59c68b07a2bb9c5cc8859b96bb84");
+                        "378857327ac945ad3254e6ed808095ae2344aa860d038818e3d3d0354cbdf96e");
     require_fingerprint(xr_target_profile_target_semantics_id(native),
                         "dd824775cc3c64949d9d8421f230fc506a1a5f7018479442e56eba9b7d638d72");
     require_fingerprint(xr_target_profile_boundary_abi(native)->id,
                         "1f77211f058a7a6464d002a86dc4121160f3fcedfa12b0dbee47e6bdbd5d7464");
     require_fingerprint(xr_target_profile_runtime_kernel(native)->id,
-                        "0321f092cacc6245be6ac87aed998c66d50dc9b095d9206efd6ae1380e9597d6");
+                        "b4154c1d6fdfc6e54c2ae30b6873e11ec308b1cbf4148ef7428fed0c05f4ec55");
     require_fingerprint(xr_target_profile_provider_contract_set_id(native),
-                        "3142fbdb7105d9da1029f25f02cbd4c71c79a3ce2f0c9e870ebaff90f755812f");
+                        "61a7ba4473275dd3e025ac20280f7ede74f2bea1dcf1f5a6ea3aaf05558cac98");
     require_fingerprint(xr_target_profile_fingerprint(foreign),
-                        "d18add7bfa26da93088cc72d1caeeba28dfb9a3facc362a4a0577d7ae4695b1d");
+                        "091656d302eea37d9a09a5e19569841744dd795602948ad47c68f686676702d7");
     require_fingerprint(xr_target_profile_target_semantics_id(foreign),
                         "1787c35ebce26c68f77df851158611abc6f72fb786cb714b58e11b67886f1ff6");
     require_fingerprint(xr_target_profile_boundary_abi(foreign)->id,
                         "afccc033804cac95af572d15ba7735271bab46e47cc53cb14256d32d130ad0ed");
     require_fingerprint(xr_target_profile_runtime_kernel(foreign)->id,
-                        "06f4d3f767462fa702cc5b84540d5845c362b64791aab8c0eb1ec1e820f7259f");
+                        "1fe7176670e77c0a0fa15ad3ca430320eff7e15a0854a3a76e6b16f67a69ad11");
     require_fingerprint(xr_target_profile_provider_contract_set_id(foreign),
-                        "136a4ef4f9f56df1e4b8f3ba4323124860f852cedca14dd9a9842a1579a53359");
+                        "d9fe3d2bc1bcfb6939cde134820ac22407ad89d96e7034726a9a4fd237ad8293");
 
     REQUIRE(xr_fingerprint_equal(xr_target_profile_fingerprint(native),
                                  xr_target_profile_fingerprint(same)));
@@ -444,9 +449,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-        "e3d5e3e421ff288abd8e4d3fa2c84688ad655d723a96e32da4a96aa0c24dabb8");
+                        "de7d406a812502e67f219de215430c1b845528005deacee80edab634c8626ad5");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "91e5f349a34c670a5483e2cc178b2979fa1f06f41829fc92290760de0462adb7");
+                        "89b7da9aa281ee6ec4a2e76f8af145692bf08770c2199c5f9108bd26b46ae54c");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));

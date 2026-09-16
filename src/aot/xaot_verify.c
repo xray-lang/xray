@@ -14,6 +14,7 @@
 #include "xaot_prepare.h"
 #include "xaot_callable.h"
 #include "xaot_link.h"
+#include "xr_target_aggregate_c_projection.h"
 #include "refine/xr_aot_scalar_value.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xhash.h"
@@ -179,6 +180,37 @@ static bool verify_target_machine_value_rep(const XaotBundle *bundle, const XiFu
     machine = xr_target_plan_machine_rep(target_plan, binding->memory_rep);
     if (!machine)
         return false;
+    if (machine->kind == XR_MACHINE_REP_AGGREGATE) {
+        XrCAggregateProjection projection = {0};
+        XrCValueEmissionView view = {0};
+        const XrCEmissionPlan *emission = xaot_bundle_emission_plan_for_func(bundle, func);
+        if (!emission || !xr_c_aggregate_projection(target_plan, binding, &projection) ||
+            !xr_c_emission_plan_value_view(emission, binding->semantic_value, &view, NULL, 0) ||
+            view.semantic_value != binding->semantic_value ||
+            view.target_register_rep != binding->register_rep ||
+            view.target_memory_rep != binding->memory_rep ||
+            view.target_register_kind != XR_MACHINE_REP_AGGREGATE ||
+            view.target_memory_kind != XR_MACHINE_REP_AGGREGATE ||
+            view.rep != XR_C_VALUE_REP_AGGREGATE || view.address_projection != projection.kind ||
+            !view.c_type || strcmp(view.c_type, projection.c_type) != 0)
+            return false;
+        memset(out, 0, sizeof(*out));
+        if (projection.kind == XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT) {
+            out->kind = XAOT_VALUE_AGGREGATE;
+            out->flags = XAOT_VALUE_FLAG_STRUCT;
+        } else if (projection.kind == XR_C_AGGREGATE_PROJECTION_FIXED_ARRAY_BACKING ||
+                   projection.kind == XR_C_AGGREGATE_PROJECTION_TUPLE_BACKING) {
+            out->kind = XAOT_VALUE_TAGGED;
+        } else {
+            return false;
+        }
+        out->rep = XAOT_REP_TAGGED;
+        out->type = value->type;
+        /* The frozen emission plan owns this spelling for the bundle lifetime. */
+        out->c_type = view.c_type;
+        out->flags |= XAOT_VALUE_FLAG_DYNAMIC_C_TYPE;
+        return true;
+    }
     switch ((XrMachineRepKind) machine->kind) {
         case XR_MACHINE_REP_VOID:
             rep = XAOT_REP_VOID;

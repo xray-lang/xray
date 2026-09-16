@@ -20,7 +20,7 @@ XI_REGISTRY_PATH = Path("xisa/xi/ops.def")
 HEADER_PATH = Path("src/program/xr_program_schema_gen.h")
 SOURCE_PROJECTION_HEADER_PATH = Path("src/program/xr_program_xi_projection_gen.h")
 SOURCE_PROJECTION_SOURCE_PATH = Path("src/program/xr_program_xi_projection_gen.c")
-SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v2.md")
+SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v3.md")
 COVERAGE_PATH = Path("contracts/canonical-program/xrprogram-format-coverage.json")
 TOP_KEYS = {
     "schema", "format", "encoding", "type_system", "value_system", "imports", "sections",
@@ -62,6 +62,8 @@ TYPE_SYSTEM_KEYS = {
     "dynamic_kinds",
     "ownership_kinds",
     "copy_contracts",
+    "builtin_ownership",
+    "constant_shape",
     "identity_order",
     "aggregate_shape",
     "class_reference_shape",
@@ -89,6 +91,7 @@ VALUE_SYSTEM_KEYS = {
     "signature_table",
     "interface_table",
     "conformance_table",
+    "module_initialization_table",
     "operation_type_immediate_contract",
     "provider_operation_immediate_contract",
     "coroutine_call_immediate_contract",
@@ -140,9 +143,11 @@ PROJECTION_KINDS = {
     "callable-pack": "XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK",
     "target-query": "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
     "coroutine-yield": "XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD",
-    "output-group-i64": "XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64",
+    "output-group": "XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP",
     "logical-unary": "XR_PROGRAM_XI_PROJECTION_LOGICAL_UNARY",
     "logical-binary": "XR_PROGRAM_XI_PROJECTION_LOGICAL_BINARY",
+    "string-concat": "XR_PROGRAM_XI_PROJECTION_STRING_CONCAT",
+    "string-from-i64": "XR_PROGRAM_XI_PROJECTION_STRING_FROM_I64",
 }
 SEMANTIC_MAPPING_KEYS = {
     "xi_operation",
@@ -223,7 +228,21 @@ CORE_TYPE_NAMES = {
     "TargetArch": "XR_CORE_TYPE_TARGET_ARCH",
     "TargetAbi": "XR_CORE_TYPE_TARGET_ABI",
     "TargetEndian": "XR_CORE_TYPE_TARGET_ENDIAN",
+    "string": "XR_CORE_TYPE_STRING",
+    "rune": "XR_CORE_TYPE_RUNE",
 }
+
+
+BUILTIN_OWNERSHIP = (
+    "void, bool, i64, u32, u16, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune "
+    "are trivial with trivial copy; string is affine with explicit copy; panic-info is affine "
+    "with forbidden copy"
+)
+CONSTANT_SHAPE = (
+    "ascending unique (TypeId, kind, value) rows; kinds are 1:i64 2:bool 3:string 4:rune; string "
+    "rows carry a minimal-ULEB128 byte length followed by valid UTF-8 bytes ordered by unsigned "
+    "byte lexicographic order; rune rows carry one Unicode scalar value"
+)
 
 
 class ProgramSchemaError(ValueError):
@@ -275,13 +294,13 @@ def c_identifier(name: str) -> str:
 
 def validate(schema: dict[str, Any]) -> None:
     require(set(schema) == TOP_KEYS, "program schema top-level fields drifted")
-    require(schema["schema"] == "xray-program-format-schema/2", "program schema version drifted")
+    require(schema["schema"] == "xray-program-format-schema/3", "program schema version drifted")
     fmt = schema["format"]
     require(isinstance(fmt, dict) and set(fmt) == FORMAT_KEYS, "format fields drifted")
-    require(fmt["major"] == 2 and fmt["minor"] == 0, "XrProgram format must be 2.0")
+    require(fmt["major"] == 3 and fmt["minor"] == 1, "XrProgram format must be 3.1")
     require(isinstance(fmt["magic_hex"], str) and re.fullmatch(r"[0-9a-f]{16}", fmt["magic_hex"]),
             "program magic must be eight canonical lowercase hex bytes")
-    require(fmt["program_id_domain"] == "xray-program-id-v2", "ProgramId domain drifted")
+    require(fmt["program_id_domain"] == "xray-program-id-v3", "ProgramId domain drifted")
 
     encoding = schema["encoding"]
     require(isinstance(encoding, dict) and set(encoding) == ENCODING_KEYS,
@@ -302,7 +321,8 @@ def validate(schema: dict[str, Any]) -> None:
     require(type_system == {
         "builtin_rows": [
             "0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info", "6:u16",
-            "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian",
+            "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian", "12:string",
+            "13:rune",
         ],
         "dynamic_type_base": 16,
         "dynamic_kinds": [
@@ -310,6 +330,8 @@ def validate(schema: dict[str, Any]) -> None:
         ],
         "ownership_kinds": ["0:trivial", "1:affine"],
         "copy_contracts": ["0:trivial", "1:explicit", "2:forbidden"],
+        "builtin_ownership": BUILTIN_OWNERSHIP,
+        "constant_shape": CONSTANT_SHAPE,
         "identity_order": "ascending-semantic-key",
         "aggregate_shape": "declaration-ordered-field-type-ids",
         "class_reference_shape": "declaration-ordered-field-type-ids; nominal CLASS is implied by the type kind; physical object layout and lifetime representation are forbidden",
@@ -341,6 +363,7 @@ def validate(schema: dict[str, Any]) -> None:
         "signature_table": "content-addressed canonical rows shared by functions, callable types and interface slots; callable and interface rows expose effect and capability upper bounds while function rows state implementation requirements",
         "interface_table": "semantic-key order; each row contains an ordered object-safe SignatureId slot list",
         "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map",
+        "module_initialization_table": 'semantic-metadata ends with a dense initialization-order module table; each row is (unique nonzero semantic key, initializer FunctionId, nonempty sorted unique owned FunctionIds, sorted unique dependency ModuleIds); every initializer belongs to its module and takes no parameters or receiver; every dependency precedes its importer; function-only compilation units have no runtime module row',
         "operation_type_immediate_contract": "canonical program TypeId; used only by operations whose law names an exact semantic type and never carries layout or backend representation",
         "provider_operation_immediate_contract": "dense (ProviderRequirementIndex,OperationIndex) resolving an exact canonical imports row; every requirement operation is referenced by at least one provider-backed CoreSpec operation and no operation may reference an undeclared provider requirement",
         "coroutine_call_immediate_contract": "dense (FunctionId,SafepointId) naming one sealed child coroutine and one caller-local logical suspension point; it carries no executor frame or slot layout",
@@ -355,7 +378,7 @@ def validate(schema: dict[str, Any]) -> None:
     require(isinstance(imports, dict) and set(imports) == IMPORT_KEYS,
             "import contract fields drifted")
     require(imports == {
-        "provider_requirement_table": "target-neutral ascending unique contract IDs; each row has ascending unique nonempty operation IDs",
+        "provider_requirement_table": "target-neutral ascending unique contract IDs; each row has ascending unique nonempty operation IDs, each followed by minimal-uleb128 logical byte length and a canonical provider logical contract v1; complete signature, ownership, effects, resource transitions and execution constraints are semantic program identity",
         "target_profile_binding": "exact required provider and operation subset; target profile owns call ABI and contract fingerprints; extra bindings are rejected",
     }, "provider import policy drifted")
 
@@ -500,6 +523,9 @@ def validate_source_projection(projection: dict[str, Any], core: dict[str, Any],
         "resolved-fallible-call-plus-xi.err.check-cfg",
         "xi.err.return-after-explicit-cleanup-cfg",
         "xi.throw-after-explicit-cleanup-cfg",
+        "string-operand-xi.compare",
+        "rune-operand-xi.compare",
+        "i64-piece-of-variadic-xi.str.concat",
     }, "structural projection set drifted")
 
 
@@ -543,9 +569,11 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,",
         "    XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,",
         "    XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD = 18,",
-        "    XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64 = 19,",
+        "    XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP = 19,",
         "    XR_PROGRAM_XI_PROJECTION_LOGICAL_UNARY = 20,",
         "    XR_PROGRAM_XI_PROJECTION_LOGICAL_BINARY = 21,",
+        "    XR_PROGRAM_XI_PROJECTION_STRING_CONCAT = 22,",
+        "    XR_PROGRAM_XI_PROJECTION_STRING_FROM_I64 = 23,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",
@@ -871,7 +899,7 @@ def generate_header(schema: dict[str, Any], digest: str) -> str:
 
 def generate_spec(schema: dict[str, Any], digest: str) -> str:
     lines = [
-        "# XrProgram format v2",
+        f"# XrProgram format v{schema['format']['major']}",
         "",
         "> AUTO-GENERATED by `tools/programgen/programgen.py`; do not edit.",
         f"> Schema SHA-256: `{digest}`.",
@@ -890,12 +918,14 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         "",
         "## Logical type rows",
         "",
-        "The type section starts with the eleven fixed runtime builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
+        "The type section starts with the fixed runtime builtin rows (IDs below `16`; ID `11` is the registry meta type and never a program type), followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
         "",
         f"- Builtins: `{', '.join(type_system['builtin_rows'])}`",
         f"- Dynamic kinds: `{', '.join(type_system['dynamic_kinds'])}`",
         f"- Ownership kinds: `{', '.join(type_system['ownership_kinds'])}`",
         f"- Copy contracts: `{', '.join(type_system['copy_contracts'])}`",
+        f"- Builtin ownership: `{type_system['builtin_ownership']}`",
+        f"- Constant table: `{type_system['constant_shape']}`",
         f"- Aggregate shape: `{type_system['aggregate_shape']}`",
         f"- Class-reference shape: `{type_system['class_reference_shape']}`",
         f"- Variant shape: `{type_system['variant_shape']}`",
@@ -925,6 +955,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Signature table: `{value_system['signature_table']}`",
         f"- Interface table: `{value_system['interface_table']}`",
         f"- Conformance table: `{value_system['conformance_table']}`",
+        f"- Module initialization table: `{value_system['module_initialization_table']}`",
         f"- Operation TypeId immediate: `{value_system['operation_type_immediate_contract']}`",
         f"- Provider operation immediate: `{value_system['provider_operation_immediate_contract']}`",
         f"- Coroutine call immediate: `{value_system['coroutine_call_immediate_contract']}`",
@@ -949,7 +980,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
 def generate_coverage(schema: dict[str, Any], digest: str) -> str:
     value = {
         "schema": "xray-program-format-coverage/1",
-        "format": "2.0",
+        "format": f"{schema['format']['major']}.{schema['format']['minor']}",
         "schema_sha256": digest,
         "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
         "structural_decoder": "COMPLETE",

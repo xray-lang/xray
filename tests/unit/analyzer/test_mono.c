@@ -85,8 +85,8 @@ TEST(mono_mangle_uses_exact_nominal_declaration_identity) {
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     ASSERT_NOT_NULL(analyzer);
 
-    XrClassInfo first_info = {.name = "LocalCounter", .xg_nominal_key = UINT64_C(0x1111)};
-    XrClassInfo second_info = {.name = "LocalCounter", .xg_nominal_key = UINT64_C(0x2222)};
+    XrClassInfo first_info = {.name = "LocalCounter", .declaration_key = UINT64_C(0x100001111)};
+    XrClassInfo second_info = {.name = "LocalCounter", .declaration_key = UINT64_C(0x200001111)};
     XrType *first_type = xr_type_new_instance(analyzer->isolate, &first_info);
     XrType *same_first_type = xr_type_new_instance(analyzer->isolate, &first_info);
     XrType *second_type = xr_type_new_instance(analyzer->isolate, &second_info);
@@ -151,6 +151,18 @@ TEST(mono_mangle_uses_exact_nominal_declaration_identity) {
     ASSERT_NOT_NULL(first_nested);
     ASSERT_NOT_NULL(second_nested);
     ASSERT_TRUE(strcmp(first_nested, second_nested) != 0);
+
+    first_info.xg_nominal_key = UINT64_MAX;
+    first_info.xg_decl_id = UINT32_MAX;
+    char *after_evidence = xr_mono_mangle_in_analyzer(analyzer, "read", first_args, 1);
+    ASSERT_NOT_NULL(after_evidence);
+    ASSERT_STR_EQ(first, after_evidence);
+    xr_free(after_evidence);
+    XaSymbol declaration = {0};
+    first_info.declaration_symbol = &declaration;
+    first_info.nominal_kind = XA_NOMINAL_STRUCT;
+    first_info.declaration_key = 0u;
+    ASSERT_NULL(xr_mono_mangle_in_analyzer(analyzer, "read", first_args, 1));
 
     first_ref.name = "MutatedCounter";
     ASSERT_NULL(xa_analyzer_get_type_ref_type(analyzer, &first_ref));

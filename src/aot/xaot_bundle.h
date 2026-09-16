@@ -1804,11 +1804,12 @@ XR_FUNC const XrSemanticPlan *
 xaot_bundle_program_semantic_for_func(const XaotBundle *bundle,
                                       const XiFunc *func,
                                       uint32_t *partition_out);
-/* Ownership transfers to the bundle only when installation succeeds. */
-XR_FUNC bool xaot_bundle_install_representation_refinement(XaotBundle *bundle,
-                                                           uint32_t module_index,
-                                                           XrAotRefinementPlan *refinement,
-                                                           const struct XiRepPolicy *policy);
+/* The complete module array transfers only when every materialization succeeds. */
+XR_FUNC bool xaot_bundle_install_representation_refinements(
+    XaotBundle *bundle, XrAotRefinementPlan *const *refinements,
+    const struct XiRepPolicy *policy);
+XR_FUNC bool xaot_bundle_verify_representation_refinements(
+    XaotBundle *bundle, const struct XiRepPolicy *policy);
 XR_FUNC const XrAotRefinementPlan *
 xaot_bundle_representation_refinement_for_module(const XaotBundle *bundle, uint32_t module_index);
 XR_FUNC bool xaot_bundle_representation_policy_matches(const XaotBundle *bundle,

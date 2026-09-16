@@ -20,20 +20,11 @@
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_plan.h"
 #include "xr_semantic_string_shape.h"
+#include "xr_semantic_value_aggregate_shape.h"
 
-/* `copy(c)` on a container.  Unlike the scalar spelling -- where the result is a
- * second name for the same bits -- this one materialises: it allocates a fresh
- * Array and fills it from what the argument borrows, so the result is a new
- * ownership root while the argument stays a borrow.
- *
- * Two argument shapes reach it, and they differ only in what the argument is:
- *
- *   copy(Slice<T>) -> Array<T>    a borrowed window becomes an owned array
- *   copy(Array<T>) -> Array<T>    an owned array becomes a second owner
- *
- * The result is always an owned `Array<T>` whose element type is the argument's,
- * which is what makes the shape provable: a copy that changed element type, or
- * handed back a borrow, would be some other operation wearing this selector.
+/* Explicit copy borrows its source and produces a fresh ownership root.
+ * Array and Slice copies preserve the element type; structural copies preserve
+ * the exact field graph. A borrowed result cannot satisfy this contract.
  *
  * The element must have a storage class this plan can name. Plain scalars use
  * their unboxed storage class. An exact String or a frozen source-class
@@ -77,6 +68,20 @@ static inline bool xr_semantic_container_copy_is_exact(const XrSemanticPlan *pla
         argument->origin != 0 || argument->lifetime != 0 || argument->escape != 0 || !result ||
         !source)
         return false;
+    /* Structural objects use the same explicit deep-copy call and owned tagged
+     * result as containers. Field values are cloned by the existing object
+     * graph copier; there is no homogeneous element lane on the outer root. */
+    if (result->kind == XR_KIND_STRUCT_OBJECT) {
+        if (argument->type != operation->result_type ||
+            result->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+            !xr_semantic_source_structural_shape_is_exact(plan, operation->result_type))
+            return false;
+        if (argument_value)
+            *argument_value = argument->value;
+        if (element_storage)
+            *element_storage = XR_ELEM_ANY;
+        return true;
+    }
     /* The result is the owned array; the argument is either that same array or a
      * borrowed window over the same elements. */
     if (result->kind != XR_KIND_ARRAY ||

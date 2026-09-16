@@ -137,7 +137,9 @@ KATs, shape gates, or ports evidence must be migrated.
   blocks the contract gate. They replace manual whole-source hashes only after
   the replacement tests pass. Contracts still listing `anchor-sha256` retain
   that protection and require refresh in the same commit until their failing
-  replacement tests are repaired and migrated. Never refresh a runtime,
+  replacement tests are repaired and migrated. Declared verification tests also
+  run for contracts that still retain source hashes; both protections apply
+  during migration. Never refresh a runtime,
   schema, provider, ABI, or artifact fingerprint merely to silence a failure.
 - Do not add a dedicated contract-change trailer to the commit message.
 - Record how affected evidence was rerun, regenerated, or retired. Retirement

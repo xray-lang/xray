@@ -13,6 +13,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
 #include "../core/xr_core_spec_gen.h"
+#include "../runtime/core/xr_text_kernel.h"
 #include "xr_program_schema_gen.h"
 
 #include <stdio.h>
@@ -26,6 +27,10 @@ static int key_compare_value(XrCoreIrKey left, XrCoreIrKey right) {
 static int module_compare(const void *left, const void *right) {
     return key_compare_value(((const XrCoreIrModule *) left)->key,
                              ((const XrCoreIrModule *) right)->key);
+}
+
+static int module_dependency_compare(const void *left, const void *right) {
+    return key_compare_value(*(const XrCoreIrKey *) left, *(const XrCoreIrKey *) right);
 }
 
 static int function_compare(const void *left, const void *right) {
@@ -56,6 +61,7 @@ static int conformance_compare(const void *left, const void *right) {
 typedef struct ProviderOperationRef {
     XrStableId contract_id;
     XrStableId operation_id;
+    XrProviderLogicalContract logical_contract;
 } ProviderOperationRef;
 
 static int stable_id_compare(XrStableId left, XrStableId right) {
@@ -111,15 +117,9 @@ bool xr_core_ir_key_is_zero(XrCoreIrKey key) {
     return combined == 0;
 }
 
-static bool type_id_is_builtin(uint16_t type_id) {
-    return type_id < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT;
-}
-
 static bool type_id_supported(const XrCoreIrProgram *program, uint16_t type_id) {
-    if (type_id <= XR_CORE_TYPE_TARGET_ENDIAN)
+    if (xr_program_builtin_type_row(type_id))
         return true;
-    if (type_id_is_builtin(type_id))
-        return false;
     if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
         return false;
     return (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count;
@@ -134,16 +134,18 @@ static bool ownership_disposition_is_valid(XrCoreIrOwnershipDisposition ownershi
 }
 
 static XrCoreIrTypeOwnership type_ownership(const XrCoreIrProgram *program, uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_PANIC_INFO)
-        return XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    const XrProgramBuiltinTypeRow *builtin = xr_program_builtin_type_row(type_id);
+    if (builtin)
+        return builtin->ownership;
     if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
         return XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
     return program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].ownership;
 }
 
 static XrCoreIrCopyContract type_copy_contract(const XrCoreIrProgram *program, uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_VOID || type_id == XR_CORE_TYPE_PANIC_INFO)
-        return XR_CORE_IR_COPY_FORBIDDEN;
+    const XrProgramBuiltinTypeRow *builtin = xr_program_builtin_type_row(type_id);
+    if (builtin)
+        return builtin->copy_contract;
     if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
         return XR_CORE_IR_COPY_TRIVIAL;
     return program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].copy_contract;
@@ -174,6 +176,9 @@ static bool copy_bytes(void **destination, const void *source, size_t count, siz
     return true;
 }
 
+/* Copy helpers publish only owned allocations into zero-initialized rows.
+ * The program owner unwinds the entire partially built tree exactly once;
+ * child constructors never independently release a published allocation. */
 static void free_instruction(XrCoreIrInstruction *instruction) {
     if (!instruction)
         return;
@@ -193,7 +198,7 @@ static void free_signature(XrCoreIrCallableSignature *signature) {
 static void free_type(XrCoreIrType *type) {
     if (!type)
         return;
-    for (uint32_t variant = 0; variant < type->variant_count; ++variant)
+    for (uint32_t variant = 0; type->variants && variant < type->variant_count; ++variant)
         xr_free(type->variants[variant].payload_types);
     xr_free(type->variants);
     xr_free(type->field_types);
@@ -203,7 +208,7 @@ static void free_type(XrCoreIrType *type) {
 static void free_block(XrCoreIrBlock *block) {
     if (!block)
         return;
-    for (uint32_t index = 0; index < block->instruction_count; ++index)
+    for (uint32_t index = 0; block->instructions && index < block->instruction_count; ++index)
         free_instruction(&block->instructions[index]);
     xr_free(block->instructions);
     xr_free(block->arguments);
@@ -213,17 +218,19 @@ static void free_block(XrCoreIrBlock *block) {
 static void free_function(XrCoreIrFunction *function) {
     if (!function)
         return;
-    for (uint32_t index = 0; index < function->block_count; ++index)
+    for (uint32_t index = 0; function->blocks && index < function->block_count; ++index)
         free_block(&function->blocks[index]);
     xr_free(function->blocks);
     xr_free(function->parameter_types);
     xr_free(function->parameter_modes);
     xr_free(function->result_borrow_origins);
-    for (uint32_t index = 0; index < function->value_root_set_count; ++index)
+    for (uint32_t index = 0; function->value_root_sets && index < function->value_root_set_count;
+         ++index)
         xr_free(function->value_root_sets[index].roots);
     xr_free(function->value_root_sets);
     xr_free(function->roots);
-    for (uint32_t index = 0; index < function->coroutine_safepoint_count; ++index)
+    for (uint32_t index = 0;
+         function->coroutine_safepoints && index < function->coroutine_safepoint_count; ++index)
         xr_free(function->coroutine_safepoints[index].live_values);
     xr_free(function->coroutine_safepoints);
     xr_free(function->coroutine_states);
@@ -236,21 +243,31 @@ void xr_core_ir_program_free(XrCoreIrProgram *program) {
     for (uint32_t module_index = 0; program->modules && module_index < program->module_count;
          ++module_index) {
         XrCoreIrModule *module = &program->modules[module_index];
-        for (uint32_t function_index = 0; function_index < module->function_count; ++function_index)
+        for (uint32_t function_index = 0;
+             module->functions && function_index < module->function_count; ++function_index)
             free_function(&module->functions[function_index]);
         xr_free(module->functions);
+        for (uint32_t constant = 0; module->constants && constant < module->constant_count;
+             ++constant) {
+            if (module->constants[constant].kind == XR_CORE_IR_CONSTANT_STRING)
+                xr_free((void *) module->constants[constant].value.string.bytes);
+        }
         xr_free(module->constants);
+        xr_free(module->dependencies);
     }
     for (uint32_t type = 0; program->types && type < program->type_count; ++type)
         free_type(&program->types[type]);
     for (uint32_t interface_index = 0;
          program->interfaces && interface_index < program->interface_count; ++interface_index) {
-        for (uint32_t slot = 0; slot < program->interfaces[interface_index].slot_count; ++slot)
-            free_signature(&program->interfaces[interface_index].slots[slot]);
-        xr_free(program->interfaces[interface_index].slots);
+        XrCoreIrInterface *interface = &program->interfaces[interface_index];
+        for (uint32_t slot = 0; interface->slots && slot < interface->slot_count; ++slot)
+            free_signature(&interface->slots[slot]);
+        xr_free(interface->slots);
     }
-    for (uint32_t provider = 0; provider < program->provider_requirement_count; ++provider)
-        xr_free(program->provider_requirements[provider].operation_ids);
+    for (uint32_t provider = 0;
+         program->provider_requirements && provider < program->provider_requirement_count;
+         ++provider)
+        xr_free(program->provider_requirements[provider].operations);
     xr_free(program->provider_requirements);
     for (uint32_t conformance = 0;
          program->conformances && conformance < program->conformance_count; ++conformance)
@@ -275,7 +292,7 @@ static XrProgramBuildStatus copy_provider_requirements(const XrCoreIrProgramInpu
     for (uint32_t provider = 0; provider < input->provider_requirement_count; ++provider) {
         const XrCoreIrProviderRequirementInput *requirement =
             &input->provider_requirements[provider];
-        if (stable_id_is_zero(requirement->contract_id) || !requirement->operation_ids ||
+        if (stable_id_is_zero(requirement->contract_id) || !requirement->operations ||
             requirement->operation_count == 0u ||
             requirement->operation_count > XR_PROGRAM_LIMIT_PROVIDER_OPERATIONS_PER_CONTRACT ||
             requirement->operation_count > SIZE_MAX - pair_count)
@@ -292,13 +309,16 @@ static XrProgramBuildStatus copy_provider_requirements(const XrCoreIrProgramInpu
         const XrCoreIrProviderRequirementInput *requirement =
             &input->provider_requirements[provider];
         for (uint32_t operation = 0; operation < requirement->operation_count; ++operation) {
-            if (stable_id_is_zero(requirement->operation_ids[operation])) {
+            if (stable_id_is_zero(requirement->operations[operation].operation_id) ||
+                !xr_provider_logical_contract_verify(
+                    &requirement->operations[operation].logical_contract)) {
                 xr_free(pairs);
                 return XR_PROGRAM_BUILD_INVALID_INPUT;
             }
             pairs[cursor++] = (ProviderOperationRef) {
                 .contract_id = requirement->contract_id,
-                .operation_id = requirement->operation_ids[operation],
+                .operation_id = requirement->operations[operation].operation_id,
+                .logical_contract = requirement->operations[operation].logical_contract,
             };
         }
     }
@@ -306,8 +326,18 @@ static XrProgramBuildStatus copy_provider_requirements(const XrCoreIrProgramInpu
     size_t unique_count = 0u;
     for (size_t index = 0; index < pair_count; ++index) {
         if (unique_count != 0u &&
-            provider_operation_ref_compare(&pairs[unique_count - 1u], &pairs[index]) == 0)
+            provider_operation_ref_compare(&pairs[unique_count - 1u], &pairs[index]) == 0) {
+            XrFingerprint previous, current;
+            if (!xr_provider_logical_contract_fingerprint(
+                    &pairs[unique_count - 1u].logical_contract, &previous) ||
+                !xr_provider_logical_contract_fingerprint(&pairs[index].logical_contract,
+                                                          &current) ||
+                memcmp(previous.bytes, current.bytes, sizeof(previous.bytes)) != 0) {
+                xr_free(pairs);
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
             continue;
+        }
         pairs[unique_count++] = pairs[index];
     }
     uint32_t provider_count = 0u;
@@ -342,13 +372,17 @@ static XrProgramBuildStatus copy_provider_requirements(const XrCoreIrProgramInpu
         XrCoreIrProviderRequirement *destination = &program->provider_requirements[provider++];
         destination->contract_id = pairs[begin].contract_id;
         destination->operation_count = (uint32_t) operation_count;
-        destination->operation_ids = xr_malloc(operation_count * sizeof(XrStableId));
-        if (!destination->operation_ids) {
+        destination->operations =
+            xr_malloc(operation_count * sizeof(XrProgramProviderOperationRequirement));
+        if (!destination->operations) {
             xr_free(pairs);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
         for (size_t operation = 0; operation < operation_count; ++operation)
-            destination->operation_ids[operation] = pairs[begin + operation].operation_id;
+            destination->operations[operation] = (XrProgramProviderOperationRequirement) {
+                .operation_id = pairs[begin + operation].operation_id,
+                .logical_contract = pairs[begin + operation].logical_contract,
+            };
         begin = end;
     }
     xr_free(pairs);
@@ -376,19 +410,16 @@ static XrProgramBuildStatus copy_signature(const XrCoreIrCallableSignatureInput 
     if (input->parameter_count != 0u) {
         output->parameter_modes = xr_calloc(input->parameter_count, sizeof(XrParamMode));
         if (!output->parameter_modes) {
-            free_signature(output);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
         for (uint32_t parameter = 0; parameter < input->parameter_count; ++parameter)
             output->parameter_modes[parameter] =
                 input->parameter_modes ? input->parameter_modes[parameter] : XR_PARAM_READ;
     } else if (input->parameter_modes) {
-        free_signature(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     if (!copy_bytes((void **) &output->result_borrow_origins, input->result_borrow_origins,
                     input->result_borrow_origin_count, sizeof(XrViewOrigin))) {
-        free_signature(output);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     if (output->result_borrow_origin_count != 0u) {
@@ -473,7 +504,6 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
                     sizeof(XrCoreIrKey)) ||
         !copy_bytes((void **) &output->successors, input->successors, input->successor_count,
                     sizeof(XrCoreIrKey))) {
-        free_instruction(output);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     return XR_PROGRAM_BUILD_OK;
@@ -492,18 +522,15 @@ static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIr
         if (!input->instructions) {
             xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                       "CoreIR block has an instruction count without storage");
-            free_block(output);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
         output->instructions = xr_calloc(input->instruction_count, sizeof(XrCoreIrInstruction));
         if (!output->instructions) {
-            free_block(output);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
     } else if (input->instructions) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR block has instruction storage with a zero count");
-        free_block(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     for (uint32_t index = 0; index < input->instruction_count; ++index) {
@@ -513,7 +540,6 @@ static XrProgramBuildStatus copy_block(const XrCoreIrBlockInput *input, XrCoreIr
             xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                       "CoreIR instruction %u copy failed: %s", index,
                                       xr_program_build_status_name(status));
-            free_block(output);
             return status;
         }
     }
@@ -548,7 +574,6 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     if (input->parameter_count != 0u) {
         output->parameter_modes = xr_calloc(input->parameter_count, sizeof(XrParamMode));
         if (!output->parameter_modes) {
-            free_function(output);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
         for (uint32_t parameter = 0; parameter < input->parameter_count; ++parameter) {
@@ -558,12 +583,10 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     } else if (input->parameter_modes) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR function has parameter modes with a zero count");
-        free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     if (!copy_bytes((void **) &output->result_borrow_origins, input->result_borrow_origins,
                     input->result_borrow_origin_count, sizeof(XrViewOrigin))) {
-        free_function(output);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     if (output->result_borrow_origin_count != 0u) {
@@ -579,20 +602,17 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     }
     if (!copy_bytes((void **) &output->roots, input->roots, input->root_count,
                     sizeof(XrCoreIrRoot))) {
-        free_function(output);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     if (input->value_root_set_count != 0u) {
         if (!input->value_root_sets) {
             xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                       "CoreIR function has value-root count without storage");
-            free_function(output);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
         output->value_root_sets =
             xr_calloc(input->value_root_set_count, sizeof(XrCoreIrValueRootSet));
         if (!output->value_root_sets) {
-            free_function(output);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
         for (uint32_t index = 0; index < input->value_root_set_count; ++index) {
@@ -602,32 +622,27 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
             target->root_count = source->root_count;
             if (!copy_bytes((void **) &target->roots, source->roots, source->root_count,
                             sizeof(XrCoreIrKey))) {
-                free_function(output);
                 return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
             }
         }
     } else if (input->value_root_sets) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR function has value-root storage with a zero count");
-        free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     if (!copy_bytes((void **) &output->coroutine_states, input->coroutine_states,
                     input->coroutine_state_count, sizeof(XrCoreIrCoroutineState))) {
-        free_function(output);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     if (input->coroutine_safepoint_count != 0u) {
         if (!input->coroutine_safepoints) {
             xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                       "CoreIR function has safepoint count without storage");
-            free_function(output);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
         output->coroutine_safepoints =
             xr_calloc(input->coroutine_safepoint_count, sizeof(XrCoreIrCoroutineSafepoint));
         if (!output->coroutine_safepoints) {
-            free_function(output);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
         for (uint32_t index = 0; index < input->coroutine_safepoint_count; ++index) {
@@ -638,25 +653,21 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
             target->live_value_count = source->live_value_count;
             if (!copy_bytes((void **) &target->live_values, source->live_values,
                             source->live_value_count, sizeof(XrCoreIrKey))) {
-                free_function(output);
                 return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
             }
         }
     } else if (input->coroutine_safepoints) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR function has safepoint storage with a zero count");
-        free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     if (input->block_count == 0 || !input->blocks) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR function has no encoded blocks");
-        free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     output->blocks = xr_calloc(input->block_count, sizeof(XrCoreIrBlock));
     if (!output->blocks) {
-        free_function(output);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
     for (uint32_t index = 0; index < input->block_count; ++index) {
@@ -667,7 +678,6 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
                 xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                           "CoreIR block %u copy failed: %s", index,
                                           xr_program_build_status_name(status));
-            free_function(output);
             return status;
         }
     }
@@ -681,9 +691,60 @@ static XrProgramBuildStatus copy_module(const XrCoreIrModuleInput *input, XrCore
     output->key = input->key;
     output->constant_count = input->constant_count;
     output->function_count = input->function_count;
-    if (!copy_bytes((void **) &output->constants, input->constants, input->constant_count,
-                    sizeof(XrCoreIrConstantInput)))
-        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    output->initializer = input->initializer;
+    output->dependency_count = input->dependency_count;
+    if ((input->dependency_count == 0u) != (input->dependencies == NULL) ||
+        (input->dependency_count != 0u && xr_core_ir_key_is_zero(input->initializer))) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR module dependencies require an initializer and storage");
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (input->dependency_count > XR_PROGRAM_LIMIT_FUNCTIONS)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    if (input->dependency_count != 0u) {
+        output->dependencies = xr_calloc(input->dependency_count, sizeof(*output->dependencies));
+        if (!output->dependencies)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        memcpy(output->dependencies, input->dependencies,
+               input->dependency_count * sizeof(*output->dependencies));
+        qsort(output->dependencies, output->dependency_count, sizeof(*output->dependencies),
+              module_dependency_compare);
+    }
+    if ((input->constant_count == 0u) != (input->constants == NULL)) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR module constant count and storage disagree");
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (input->constant_count > XR_PROGRAM_LIMIT_CONSTANTS ||
+        input->function_count > XR_PROGRAM_LIMIT_FUNCTIONS)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    if (input->constant_count != 0u) {
+        output->constants = xr_calloc(input->constant_count, sizeof(*output->constants));
+        if (!output->constants)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    /* Unvisited string rows must stay empty: a failed clone may unwind before
+     * the next producer-owned string has been copied. */
+    for (uint32_t index = 0; index < output->constant_count; ++index) {
+        XrCoreIrConstantInput *constant = &output->constants[index];
+        *constant = input->constants[index];
+        if (constant->kind != XR_CORE_IR_CONSTANT_STRING)
+            continue;
+        const uint8_t *source = constant->value.string.bytes;
+        uint32_t size = constant->value.string.size;
+        constant->value.string.bytes = NULL;
+        if (!source && size != 0u) {
+            xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                      "CoreIR string constant %u has a size without bytes", index);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        uint8_t *owned = xr_malloc(size != 0u ? size : 1u);
+        if (!owned)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        if (size != 0u)
+            memcpy(owned, source, size);
+        constant->value.string.bytes = owned;
+    }
     if (input->function_count != 0) {
         if (!input->functions) {
             xr_program_set_diagnostic(diagnostic, diagnostic_size,
@@ -732,16 +793,13 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     if (input->variant_count != 0u) {
         if (!input->variants) {
-            free_type(output);
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         }
         output->variants = xr_calloc(input->variant_count, sizeof(XrCoreIrVariant));
         if (!output->variants) {
-            free_type(output);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
     } else if (input->variants) {
-        free_type(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     for (uint32_t variant = 0; variant < input->variant_count; ++variant) {
@@ -749,7 +807,6 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
         if (!copy_bytes((void **) &output->variants[variant].payload_types,
                         input->variants[variant].payload_types,
                         input->variants[variant].payload_count, sizeof(uint16_t))) {
-            free_type(output);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
     }
@@ -757,11 +814,9 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
         XrProgramBuildStatus status =
             copy_signature(input->callable_signature, &output->callable_signature);
         if (status != XR_PROGRAM_BUILD_OK) {
-            free_type(output);
             return status;
         }
     } else if (input->callable_signature) {
-        free_type(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     return XR_PROGRAM_BUILD_OK;
@@ -801,7 +856,7 @@ static XrProgramBuildStatus copy_conformance(const XrCoreIrConformanceInput *inp
 
 static bool remap_type_id(const XrCoreIrType *types, uint32_t count, uint16_t old_id,
                           uint16_t *new_id) {
-    if (type_id_is_builtin(old_id)) {
+    if (xr_program_builtin_type_row(old_id)) {
         *new_id = old_id;
         return true;
     }
@@ -1326,10 +1381,12 @@ static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uin
     return true;
 }
 
-static bool validate_types(const XrCoreIrProgram *program) {
-    uint8_t *state = xr_calloc(program->type_count ? program->type_count : 1u, sizeof(uint8_t));
+static XrProgramBuildStatus validate_types(const XrCoreIrProgram *program) {
+    if (program->type_count == 0u)
+        return XR_PROGRAM_BUILD_OK;
+    uint8_t *state = xr_calloc(program->type_count, sizeof(uint8_t));
     if (!state)
-        return false;
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     bool valid = true;
     for (uint32_t index = 0; valid && index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
@@ -1431,14 +1488,18 @@ static bool validate_types(const XrCoreIrProgram *program) {
         }
     }
     XrCoreIrTypeOwnership *derived_ownership =
-        valid ? xr_calloc(program->type_count ? program->type_count : 1u,
-                          sizeof(*derived_ownership))
-              : NULL;
+        valid
+            ? xr_calloc(program->type_count ? program->type_count : 1u, sizeof(*derived_ownership))
+            : NULL;
     XrCoreIrCopyContract *derived_copy =
         valid ? xr_calloc(program->type_count ? program->type_count : 1u, sizeof(*derived_copy))
               : NULL;
-    if (valid && (!derived_ownership || !derived_copy))
-        valid = false;
+    if (valid && (!derived_ownership || !derived_copy)) {
+        xr_free(derived_copy);
+        xr_free(derived_ownership);
+        xr_free(state);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
     for (uint32_t index = 0; valid && index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
         derived_ownership[index] = type->ownership;
@@ -1536,7 +1597,7 @@ static bool validate_types(const XrCoreIrProgram *program) {
     xr_free(derived_copy);
     xr_free(derived_ownership);
     xr_free(state);
-    return valid;
+    return valid ? XR_PROGRAM_BUILD_OK : XR_PROGRAM_BUILD_INVALID_INPUT;
 }
 
 static bool validate_program_tables(const XrCoreIrProgram *program) {
@@ -1605,6 +1666,47 @@ static bool validate_program_tables(const XrCoreIrProgram *program) {
     return true;
 }
 
+static const XrCoreIrModule *find_module(const XrCoreIrProgram *program, XrCoreIrKey key) {
+    uint32_t begin = 0u;
+    uint32_t end = program->module_count;
+    while (begin < end) {
+        uint32_t middle = begin + (end - begin) / 2u;
+        int order = key_compare_value(program->modules[middle].key, key);
+        if (order == 0)
+            return &program->modules[middle];
+        if (order < 0)
+            begin = middle + 1u;
+        else
+            end = middle;
+    }
+    return NULL;
+}
+
+static bool validate_module_initialization(const XrCoreIrProgram *program) {
+    for (uint32_t index = 0u; index < program->module_count; ++index) {
+        const XrCoreIrModule *module = &program->modules[index];
+        if (xr_core_ir_key_is_zero(module->initializer))
+            continue;
+        const XrCoreIrFunction *initializer = NULL;
+        for (uint32_t function = 0u; function < module->function_count; ++function)
+            if (xr_core_ir_key_equal(module->functions[function].key, module->initializer))
+                initializer = &module->functions[function];
+        if (!initializer || initializer->parameter_count != 0u || initializer->has_receiver)
+            return false;
+        for (uint32_t dependency = 0u; dependency < module->dependency_count; ++dependency) {
+            XrCoreIrKey key = module->dependencies[dependency];
+            if (dependency != 0u &&
+                xr_core_ir_key_equal(key, module->dependencies[dependency - 1u]))
+                return false;
+            const XrCoreIrModule *required = find_module(program, key);
+            if (!required || xr_core_ir_key_is_zero(required->initializer) ||
+                required->initialization_order >= module->initialization_order)
+                return false;
+        }
+    }
+    return true;
+}
+
 static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, char *diagnostic,
                                              size_t diagnostic_size) {
     uint64_t constant_count = 0;
@@ -1629,10 +1731,13 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                                   "walking skeleton requires core.base");
         return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
     }
-    if (!validate_types(program)) {
+    XrProgramBuildStatus type_status = validate_types(program);
+    if (type_status != XR_PROGRAM_BUILD_OK) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
-                                  "dynamic type graph is malformed or recursive by value");
-        return XR_PROGRAM_BUILD_INVALID_INPUT;
+                                  type_status == XR_PROGRAM_BUILD_OUT_OF_MEMORY
+                                      ? "dynamic type validation allocation failed"
+                                      : "dynamic type graph is malformed or recursive by value");
+        return type_status;
     }
     if (!validate_program_tables(program)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
@@ -1652,12 +1757,7 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
         for (uint32_t index = 0; index < module->constant_count; ++index) {
             const XrCoreIrConstantInput *constant = &module->constants[index];
             if (xr_core_ir_key_is_zero(constant->key) ||
-                (constant->kind == XR_CORE_IR_CONSTANT_I64 &&
-                 constant->type_id != XR_CORE_TYPE_I64) ||
-                (constant->kind == XR_CORE_IR_CONSTANT_BOOL &&
-                 constant->type_id != XR_CORE_TYPE_BOOL) ||
-                (constant->kind != XR_CORE_IR_CONSTANT_I64 &&
-                 constant->kind != XR_CORE_IR_CONSTANT_BOOL)) {
+                !xr_program_constant_is_canonical(constant)) {
                 xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                           "constant %u is not a canonical typed constant", index);
                 return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -1932,7 +2032,8 @@ static bool provider_operation_flat_index(const XrCoreIrProgram *program, XrStab
         const XrCoreIrProviderRequirement *requirement = &program->provider_requirements[provider];
         for (uint32_t operation = 0; operation < requirement->operation_count; ++operation) {
             if (stable_id_compare(requirement->contract_id, contract_id) == 0 &&
-                stable_id_compare(requirement->operation_ids[operation], operation_id) == 0) {
+                stable_id_compare(requirement->operations[operation].operation_id, operation_id) ==
+                    0) {
                 if (index_out)
                     *index_out = flat_index;
                 return true;
@@ -1945,7 +2046,7 @@ static bool provider_operation_flat_index(const XrCoreIrProgram *program, XrStab
 
 static bool operation_is_provider_backed(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_PROVIDER_CALL ||
-           operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP_I64;
+           operation_id == XR_CORE_OP_CORE_OUTPUT_GROUP;
 }
 
 static XrProgramBuildStatus validate_provider_operation_requirements(const XrCoreIrProgram *program,
@@ -2137,6 +2238,7 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         xr_core_ir_program_free(program);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
+    uint32_t initialization_order = 0u;
     for (uint32_t index = 0; index < input->module_count; ++index) {
         XrProgramBuildStatus status = copy_module(&input->modules[index], &program->modules[index],
                                                   diagnostic, diagnostic_size);
@@ -2148,8 +2250,16 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
             xr_core_ir_program_free(program);
             return status;
         }
+        if (!xr_core_ir_key_is_zero(program->modules[index].initializer))
+            program->modules[index].initialization_order = initialization_order++;
     }
     qsort(program->modules, program->module_count, sizeof(XrCoreIrModule), module_compare);
+    if (!validate_module_initialization(program)) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR module initializer ownership or dependency order is invalid");
+        xr_core_ir_program_free(program);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
     if (!remap_program_types(program)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR references an unresolved dynamic type label");

@@ -1656,8 +1656,8 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     memset(evidence, 0, sizeof(*evidence));
 }
 
-static bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEvidence *src) {
-    if (!out || !src)
+bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEvidence *src) {
+    if (!out || !src || out == src)
         return false;
     memset(out, 0, sizeof(*out));
     out->key = src->key;

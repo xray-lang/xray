@@ -1,8 +1,8 @@
 {
-  "schema": "xray-canonical-program-operation-capability/1",
+  "schema": "xray-canonical-program-operation-capability/2",
   "architecture_task": 293,
   "freeze_task": 294,
-  "completion_rule": "An operation becomes COMPLETE only when its CoreSpec law, program encoding, bounded verification, reference evaluation, VM, AOT, source producer, differential evidence, and deletion of every legacy semantic dependency from the canonical pipeline are complete in one vertical slice.",
+  "completion_rule": "An operation becomes COMPLETE only after its CoreSpec law, bounded Program admission, independent expected observations, source producer, VM and real native AOT behavior, and removal of replaced canonical dependencies are verified. Reference models are optional; existing useful model tests remain until equivalent observation checks take over.",
   "precut_route_policy": {
     "state_during_w7": "each migrated product route is canonical-only and fail-closed; uncovered capabilities remain explicitly incomplete",
     "canonical_dependency_on_precut_route": "forbidden",
@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "All 62 operation laws and normative KATs are frozen, and every operation has complete Program, Reference, VM, AOT, and source-producer coverage."
+    "note": "The CoreSpec registry and normative KATs own operation laws. Generated per-consumer coverage records implementation; source and product qualification are separate."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -33,7 +33,7 @@
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
     "incomplete_operations": [],
-    "note": "All 62 operations have bounded semantic verification and independent reference evaluation. Class-reference allocation, sharing, field access, and atomic exchange use private reference cells and lifecycle events without exposing backend layout."
+    "note": "Active operations have bounded semantic verification. Independent KAT expectations and hostile Program mutations determine correctness; Reference coverage is not a language admission requirement."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -47,7 +47,7 @@
       "fixed-instruction-rows"
     ],
     "incomplete_operations": [],
-    "note": "All 62 operations execute from XrValidatedProgram in both private VM views. Class references use backend-private handles with exact owner, identity, field-place, exchange, and finalization behavior."
+    "note": "The current VM still executes both private views. Their retirement requires shared execution and lifecycle checks, including text ownership; source product qualification remains separate."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -58,14 +58,13 @@
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
     "incomplete_operations": [],
-    "note": "All 62 operations have verified BackendIR and portable C11 lowering. Class-reference behavior is checked in BackendIR and by compiling and running the generated strict-C11 program."
+    "note": "Active operations have BackendIR and portable C11 lowering. Real source native tests check behavior; complete product-entry qualification remains separate."
   },
   "operations": [
     {
       "id": "core.constant.i64",
       "core_spec_contract": "exact signed 64-bit bit-pattern constant; no host-width interpretation",
       "program_encoding": "typed result value plus canonical signed LEB128 payload",
-      "decoder_verifier_evaluator": "bounded LEB128 decode, result-type check, direct constant evaluation",
       "vm_implementation": "typed i64 slot or private specialization derived from the verified operation",
       "aot_lowering": "XrBackendIR i64 constant, then exact-width generated C literal",
       "source_producer": "integer literal and canonical constant folding",
@@ -74,13 +73,13 @@
       "evidence": [
         "xisa/program/xi-source-projection.json",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded LEB128 decode, result-type check, direct constant evaluation"
     },
     {
       "id": "core.constant.bool",
       "core_spec_contract": "one canonical false or true value; no integer truthiness",
       "program_encoding": "typed bool result plus canonical one-byte payload",
-      "decoder_verifier_evaluator": "payload range and result-type checks with direct bool evaluation",
       "vm_implementation": "typed bool slot derived from the verified operation",
       "aot_lowering": "BackendIR canonical bool constant and portable C bool materialization",
       "source_producer": "typed bool literals and canonical constant folding",
@@ -89,13 +88,13 @@
       "evidence": [
         "xisa/program/xi-source-projection.json",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "payload range and result-type checks with direct bool evaluation"
     },
     {
       "id": "core.constant.target_enum",
       "core_spec_contract": "construct one compiler-owned Target enum member from its generated nonzero logical value",
       "program_encoding": "exact Target TypeId result plus one bounded u16-domain immediate",
-      "decoder_verifier_evaluator": "canonical Target TypeId and generated per-enum member-domain checks with direct logical value evaluation",
       "vm_implementation": "typed target-enum slot carrying the frozen generated logical value",
       "aot_lowering": "BackendIR target-enum u16 constant and exact-width portable C literal",
       "source_producer": "canonical builtin TargetOs, TargetArch, TargetAbi, or TargetEndian member selection",
@@ -107,13 +106,13 @@
         "src/ir/xi_lower_expr.c",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "canonical Target TypeId and generated per-enum member-domain checks with direct logical value evaluation"
     },
     {
       "id": "core.add.i64",
       "core_spec_contract": "two i64 operands, explicit overflow mode, deterministic i64 result or named trap",
       "program_encoding": "operation id, two SSA value ids, result id, overflow-mode enum",
-      "decoder_verifier_evaluator": "operand dominance/type checks and mathematical reference result/trap",
       "vm_implementation": "typed i64 add handler generated from the operation registry",
       "aot_lowering": "BackendIR add plus overflow/trap recipe selected from the same mode",
       "source_producer": "typed binary plus and compound lowering",
@@ -122,13 +121,13 @@
       "evidence": [
         "src/program/xr_program_xi_projection_gen.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "operand dominance/type checks and mathematical reference result/trap"
     },
     {
       "id": "core.sub.i64",
       "core_spec_contract": "two i64 operands, explicit overflow mode, deterministic i64 result or named trap",
       "program_encoding": "operation id, two SSA value ids, result id, overflow-mode enum",
-      "decoder_verifier_evaluator": "operand dominance/type checks and mathematical reference result/trap",
       "vm_implementation": "typed i64 subtract handler generated from the operation registry",
       "aot_lowering": "BackendIR subtract plus overflow/trap recipe selected from the same mode",
       "source_producer": "typed binary minus and compound lowering",
@@ -137,13 +136,13 @@
       "evidence": [
         "src/program/xr_program_xi_projection_gen.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "operand dominance/type checks and mathematical reference result/trap"
     },
     {
       "id": "core.mul.i64",
       "core_spec_contract": "two i64 operands, explicit overflow mode, deterministic i64 result or named trap",
       "program_encoding": "operation id, two SSA value ids, result id, overflow-mode enum",
-      "decoder_verifier_evaluator": "operand dominance/type checks and mathematical reference result/trap",
       "vm_implementation": "typed i64 multiply handler generated from the operation registry",
       "aot_lowering": "BackendIR multiply plus overflow/trap recipe selected from the same mode",
       "source_producer": "typed binary multiply and compound lowering",
@@ -152,13 +151,13 @@
       "evidence": [
         "src/program/xr_program_xi_projection_gen.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "operand dominance/type checks and mathematical reference result/trap"
     },
     {
       "id": "core.div.i64",
       "core_spec_contract": "two i64 operands, truncation toward zero, and named zero or minimum-over-minus-one traps",
       "program_encoding": "operation id, two SSA value ids, result id, and frozen division-mode enum",
-      "decoder_verifier_evaluator": "operand dominance/type and mode checks with exact quotient or named trap",
       "vm_implementation": "typed i64 division handler with explicit exceptional cases",
       "aot_lowering": "BackendIR guarded division that never delegates undefined behavior to C",
       "source_producer": "typed integer division expressions",
@@ -167,13 +166,13 @@
       "evidence": [
         "src/program/xr_program_xi_projection_gen.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "operand dominance/type and mode checks with exact quotient or named trap"
     },
     {
       "id": "core.logical.not",
       "core_spec_contract": "one canonical bool operand yields its logical complement",
       "program_encoding": "typed bool operand and result with no immediate",
-      "decoder_verifier_evaluator": "exact unary bool shape and direct truth-table evaluation",
       "vm_implementation": "typed bool negation in both private decode policies",
       "aot_lowering": "BackendIR logical negation with portable C bool materialization",
       "source_producer": "typed xi.not after speculation-safe short-circuit normalization",
@@ -183,13 +182,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/program/test_xr_program_source_build.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact unary bool shape and direct truth-table evaluation"
     },
     {
       "id": "core.logical.and",
       "core_spec_contract": "two already-evaluated canonical bool operands yield their conjunction",
       "program_encoding": "two typed bool operands and one bool result with no immediate",
-      "decoder_verifier_evaluator": "exact binary bool shape and complete truth-table evaluation",
       "vm_implementation": "typed bool conjunction in both private decode policies",
       "aot_lowering": "BackendIR logical conjunction over already-materialized operands",
       "source_producer": "speculation-safe xi.band; effectful or trapping source RHS remains explicit CFG",
@@ -199,13 +198,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/program/test_xr_program_source_build.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact binary bool shape and complete truth-table evaluation"
     },
     {
       "id": "core.logical.or",
       "core_spec_contract": "two already-evaluated canonical bool operands yield their disjunction",
       "program_encoding": "two typed bool operands and one bool result with no immediate",
-      "decoder_verifier_evaluator": "exact binary bool shape and complete truth-table evaluation",
       "vm_implementation": "typed bool disjunction in both private decode policies",
       "aot_lowering": "BackendIR logical disjunction over already-materialized operands",
       "source_producer": "speculation-safe xi.bor; effectful or trapping source RHS remains explicit CFG",
@@ -215,13 +214,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/program/test_xr_program_source_build.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact binary bool shape and complete truth-table evaluation"
     },
     {
       "id": "core.compare.i64",
       "core_spec_contract": "explicit signed predicate over two i64 values yields canonical bool",
       "program_encoding": "operation id, predicate enum, two operand ids, bool result id",
-      "decoder_verifier_evaluator": "predicate range and operand/result type checks with direct evaluation",
       "vm_implementation": "typed compare handler keyed by the frozen predicate",
       "aot_lowering": "BackendIR signed compare with canonical bool materialization",
       "source_producer": "typed equality and ordering expressions",
@@ -230,13 +229,13 @@
       "evidence": [
         "src/program/xr_program_xi_projection_gen.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "predicate range and operand/result type checks with direct evaluation"
     },
     {
       "id": "core.compare.target_enum",
       "core_spec_contract": "equality or inequality over two values of the same compiler-owned Target enum yields canonical bool",
       "program_encoding": "two same-Target-TypeId operands, bool result, and frozen eq/ne predicate",
-      "decoder_verifier_evaluator": "exact operand nominal identity, predicate range, and direct equality evaluation",
       "vm_implementation": "typed target-enum equality handler over generated logical values",
       "aot_lowering": "BackendIR exact-width target-enum equality with canonical bool materialization",
       "source_producer": "typed equality and inequality between target queries and canonical Target enum members",
@@ -250,13 +249,13 @@
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact operand nominal identity, predicate range, and direct equality evaluation"
     },
     {
       "id": "core.block.argument",
       "core_spec_contract": "block parameter has one type and receives exactly one matching value from every predecessor",
       "program_encoding": "block-local parameter table with stable value ids and types",
-      "decoder_verifier_evaluator": "bounded table checks, unique ids, predecessor arity/type equality, SSA dominance",
       "vm_implementation": "verified predecessor transfer into typed frame locations",
       "aot_lowering": "BackendIR block parameters or validated phi-equivalent edge assignments",
       "source_producer": "structured-control and SSA construction",
@@ -265,13 +264,13 @@
       "evidence": [
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded table checks, unique ids, predecessor arity/type equality, SSA dominance"
     },
     {
       "id": "core.branch",
       "core_spec_contract": "unconditional transfer to an in-function block with exact block arguments",
       "program_encoding": "target block id followed by bounded argument value-id vector",
-      "decoder_verifier_evaluator": "target range, argument arity/type, ownership edge, and terminator checks",
       "vm_implementation": "set destination block and transfer verified arguments",
       "aot_lowering": "BackendIR branch with validated edge assignments",
       "source_producer": "structured-control and canonical CFG lowering",
@@ -280,13 +279,13 @@
       "evidence": [
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "target range, argument arity/type, ownership edge, and terminator checks"
     },
     {
       "id": "core.conditional_branch",
       "core_spec_contract": "canonical bool selects one of two in-function targets, each with exact arguments",
       "program_encoding": "bool condition id plus true/false block ids and bounded argument vectors",
-      "decoder_verifier_evaluator": "condition type, both target/argument edges, ownership, and terminator checks",
       "vm_implementation": "read canonical bool and perform one verified edge transfer",
       "aot_lowering": "BackendIR conditional branch with validated edge assignments",
       "source_producer": "if, loop, match, and short-circuit canonical CFG lowering",
@@ -295,13 +294,13 @@
       "evidence": [
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "condition type, both target/argument edges, ownership, and terminator checks"
     },
     {
       "id": "core.return",
       "core_spec_contract": "function exits once with zero or one value matching the declared result and ownership mode",
       "program_encoding": "optional result value id and explicit ownership disposition",
-      "decoder_verifier_evaluator": "terminator placement, result type, ownership, and cleanup-postdomination checks",
       "vm_implementation": "transfer the verified result and unwind the typed frame",
       "aot_lowering": "BackendIR return plus profile-selected ABI projection",
       "source_producer": "explicit and implicit return canonicalization",
@@ -310,13 +309,13 @@
       "evidence": [
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "terminator placement, result type, ownership, and cleanup-postdomination checks"
     },
     {
       "id": "core.call.sealed_direct",
       "core_spec_contract": "closed-world function identity, exact parameter/result types, effects, ownership transfer, and evaluation order",
       "program_encoding": "stable callee function id, ordered argument ids, optional result id, effect and transfer records",
-      "decoder_verifier_evaluator": "callee range/signature, call-edge effects, argument modes, ownership, and recursion-budget checks",
       "vm_implementation": "create typed frame from verified signature or private direct-call specialization",
       "aot_lowering": "BackendIR direct call and BoundaryABI projection without source or TargetPlan inference",
       "source_producer": "resolved direct calls after whole-program linking",
@@ -326,13 +325,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "callee range/signature, call-edge effects, argument modes, ownership, and recursion-budget checks"
     },
     {
       "id": "core.call.sealed_invoke",
       "core_spec_contract": "closed-world function identity with exact parameters and mutually exclusive normal, optional typed-error, optional typed-panic, and at most one final provider-failed trap continuation",
       "program_encoding": "stable callee id, ordered call operands, dynamic normal/error/panic targets, implicit typed channel block arguments, explicit pass-through operands, and an optional final trap edge carrying the exact live-value set",
-      "decoder_verifier_evaluator": "callee signature and orthogonal error/panic channels, all continuation prefixes/suffixes, handled effects, path-complete ownership, and an optional trap-7 target that preserves every live owner exactly once",
       "vm_implementation": "private typed frame call followed by one verified normal, error, panic, or provider-failed trap edge without ambient pending state",
       "aot_lowering": "typed result/error/panic out parameters and direct C control transfer generated only from validated BackendIR, including independent validation of the optional final trap-7 edge",
       "source_producer": "resolved fallible Xi call plus xi.err.check maps error CFG; a call inside an exact static cleanup scope may append the sole provider-failed trap continuation; panicful calls without explicit panic CFG fail closed",
@@ -345,13 +344,13 @@
         "tests/unit/program/xr_program_invoke_fixture.h",
         "tests/unit/program/test_xr_program_source_build.c",
         "tests/unit/aot/test_xr_program_aot.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "callee signature and orthogonal error/panic channels, all continuation prefixes/suffixes, handled effects, path-complete ownership, and an optional trap-7 target that preserves every live owner exactly once"
     },
     {
       "id": "core.call.indirect_direct",
       "core_spec_contract": "call one typed callable value whose canonical SignatureId has no error or panic channel",
       "program_encoding": "callable operand followed by ordered visible arguments and an optional typed result; no selector, symbol name, erased argument pack or runtime signature",
-      "decoder_verifier_evaluator": "the callable TypeId owns the visible SignatureId; every closed target matches its structural contract or differs only by one private typed capture receiver; implementation effects and capabilities are verified as subsets of visible upper bounds",
       "vm_implementation": "a private callable carrier selects one validated FunctionId and invokes a typed frame, prepending its optional capture without exposing a universal call ABI",
       "aot_lowering": "a closed FunctionId switch emits exact typed direct calls and prepends a typed boxed capture only for captured targets",
       "source_producer": "function values, captureless and captured closures, control-flow joins, explicit copies and whole-program imported target unions lower to one typed callable plus exact indirect direct call",
@@ -368,13 +367,13 @@
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/ir/test_xr_program_imported_callable.c",
         "tests/unit/program/xr_program_callable_fixture.h"
-      ]
+      ],
+      "decoder_verifier_oracle": "the callable TypeId owns the visible SignatureId; every closed target matches its structural contract or differs only by one private typed capture receiver; implementation effects and capabilities are verified as subsets of visible upper bounds"
     },
     {
       "id": "core.call.indirect_invoke",
       "core_spec_contract": "call one typed callable value and transfer exactly once to normal, typed-error or typed-panic continuations; provider trap 7 either escapes or transfers through one optional final trap continuation",
       "program_encoding": "callable operand, ordered visible call and channel-edge operands, explicit normal/error/panic successors, and an optional final trap successor followed by its exact live values",
-      "decoder_verifier_evaluator": "the callable SignatureId owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; the verifier also proves the optional trap target and exact live-owner set, and private target identity cannot override those facts",
       "vm_implementation": "a private callable carrier invokes one typed frame and transfers through the verified normal, error, panic or provider-trap edge without ambient pending state",
       "aot_lowering": "the same closed typed FunctionId switch feeds explicit result/error/panic locals and direct C control transfer, including the verified provider-trap continuation",
       "source_producer": "fallible function values and closures lower to one typed callable plus exact indirect invoke and explicit normal/error/trap continuations; split Xi call/check blocks and conservative open-call coroutine reservations are resolved from the closed Xglobal target contract",
@@ -392,13 +391,13 @@
         "tests/unit/program/xr_program_callable_fixture.h",
         "tests/unit/program/test_xr_program_source_build.c",
         "tests/unit/aot/test_xr_program_aot.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "the callable SignatureId owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; the verifier also proves the optional trap target and exact live-owner set, and private target identity cannot override those facts"
     },
     {
       "id": "core.call.witness_direct",
       "core_spec_contract": "dispatch one existential receiver through one explicit object-safe interface slot whose signature has no error or panic channel; provider-call-failed may transfer to one explicit trap continuation that receives every declared live value",
       "program_encoding": "existential receiver plus ordered arguments, canonical interface-slot ordinal immediate, optional typed result, and at most one provider-call-failed trap successor with typed edge values; no selector, name, table offset or carrier layout",
-      "decoder_verifier_evaluator": "exact existential InterfaceId, slot range and SignatureId authority; receiver-only nominal substitution, exact structural argument/ownership/borrow-origin matching, closed translated witness-target effect/capability union, independent exact ConformanceId slot dispatch, and whole-owner trap-edge preservation",
       "vm_implementation": "private carrier validates concrete TypeId and ConformanceId, unwraps the typed payload and calls the conformance slot FunctionId; provider failure either escapes or transfers to the verified trap continuation",
       "aot_lowering": "closed ConformanceId switch whose cases validate concrete TypeId, unwrap the exact native receiver type and directly call the typed implementation; provider failure branches to the same Program trap continuation",
       "source_producer": "class, struct and enum conformances lower declaration-ordered object-safe slots to exact nominal witness direct calls, with cleanup-region provider failure materialized as the sole trap continuation",
@@ -415,13 +414,13 @@
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h",
         "tests/unit/program/test_xr_program_source_build.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact existential InterfaceId, slot range and SignatureId authority; receiver-only nominal substitution, exact structural argument/ownership/borrow-origin matching, closed translated witness-target effect/capability union, independent exact ConformanceId slot dispatch, and whole-owner trap-edge preservation"
     },
     {
       "id": "core.call.witness_invoke",
       "core_spec_contract": "dispatch one existential receiver through one explicit object-safe interface slot and transfer exactly once to normal, typed-error or typed-panic continuations, or to one optional provider-failed trap continuation",
       "program_encoding": "existential receiver, ordered call and edge operands, canonical interface-slot ordinal, explicit typed-channel successor blocks and at most one final provider-failed trap edge carrying the exact live-value set",
-      "decoder_verifier_evaluator": "the witness slot signature owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; exact ConformanceId selects the slot FunctionId independently; an optional final trap edge must target trap 7 and preserve every live owner exactly once",
       "vm_implementation": "private typed frame dispatch followed by one verified normal, error, panic or provider-failed trap edge without selector lookup or ambient pending state",
       "aot_lowering": "the same closed typed ConformanceId switch feeds explicit result/error/panic locals and direct C control transfer, including an independently verified provider-failed trap edge",
       "source_producer": "fallible class, struct and enum witness calls lower to exact nominal slots plus explicit normal/error/panic edges; a call inside a cleanup scope may gain the sole explicit provider-failed trap continuation",
@@ -439,25 +438,25 @@
         "tests/unit/program/xr_program_existential_fixture.h",
         "tests/unit/program/test_xr_program_source_build.c",
         "tests/unit/aot/test_xr_program_aot.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "the witness slot signature owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; exact ConformanceId selects the slot FunctionId independently; an optional final trap edge must target trap 7 and preserve every live owner exactly once"
     },
     {
       "id": "core.trap",
       "core_spec_contract": "one explicit deterministic terminal trap with no normal successor",
       "program_encoding": "terminal operation plus stable trap id",
-      "decoder_verifier_evaluator": "trap-id, terminator placement, effect, and unreachable-successor checks",
       "vm_implementation": "publish the exact typed VM trap outcome",
       "aot_lowering": "BackendIR trap terminal and portable native trap outcome",
       "source_producer": "compiler-internal explicit trap insertion after typed semantic lowering",
       "old_owner_deletion": "delete VM panic opcode and CGen terminal-shape inference in W7-error",
       "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "evidence": [],
+      "decoder_verifier_oracle": "trap-id, terminator placement, effect, and unreachable-successor checks"
     },
     {
       "id": "core.error.publish",
       "core_spec_contract": "transfer one typed error payload to the function error successor and terminate the current path",
       "program_encoding": "typed error operand and terminal operation id",
-      "decoder_verifier_evaluator": "error type, ownership transfer, effect, and terminal placement checks",
       "vm_implementation": "publish one typed error outcome without backend return-code inference",
       "aot_lowering": "BackendIR typed error terminal projected through the selected private ABI",
       "source_producer": "typed error propagation after cleanup lowering",
@@ -468,13 +467,13 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_invoke_fixture.h"
-      ]
+      ],
+      "decoder_verifier_oracle": "error type, ownership transfer, effect, and terminal placement checks"
     },
     {
       "id": "core.panic.publish",
       "core_spec_contract": "consume exactly one affine panic-info payload and terminate through the typed panic channel, never the business-error channel",
       "program_encoding": "panic-info operand, panic effect, function PanicTypeId, and terminal operation id",
-      "decoder_verifier_evaluator": "panic-info type, forbidden copy, owner transfer, panic effect, terminal placement, and normal/error/panic continuation indexing",
       "vm_implementation": "publish a distinct typed panic outcome and transfer through the verified panic continuation",
       "aot_lowering": "distinct typed out_panic ABI value and panic outcome kind with generated direct C control transfer",
       "source_producer": "uncaught xi.throw(PanicInfo) after explicit cleanup CFG; implicit XI_TRY/CATCH/END_TRY and panicful calls without explicit panic continuations fail closed",
@@ -487,13 +486,13 @@
         "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "panic-info type, forbidden copy, owner transfer, panic effect, terminal placement, and normal/error/panic continuation indexing"
     },
     {
       "id": "core.cancel.publish",
       "core_spec_contract": "terminate one suspended coroutine through its selected cancellation continuation without manufacturing an error or panic payload",
       "program_encoding": "zero-payload terminal operation reached only by the explicit cancel successor of a coroutine suspension terminator",
-      "decoder_verifier_evaluator": "bounded terminal shape and exact two-successor suspension closure; resumable reference sessions expose a distinct cancelled outcome and recursively cancel an active sealed child",
       "vm_implementation": "private sessions remember the verified cancel block only while suspended, release the exact generation lease after cancellation, and expose no compatibility fallback",
       "aot_lowering": "generated frames accept an explicit private cancel poll, recursively cancel an active child frame, take the canonical cancel edge, and publish a distinct native cancelled outcome",
       "source_producer": "the Xi logical coroutine plan's terminal cancel edge is projected into one synthetic canonical cancellation block; this slice deliberately rejects owner-carrying safepoints until their cleanup operands are projected",
@@ -511,13 +510,13 @@
         "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded terminal shape and exact two-successor suspension closure; resumable reference sessions expose a distinct cancelled outcome and recursively cancel an active sealed child"
     },
     {
       "id": "core.target.pointer_width",
       "core_spec_contract": "read the immutable bound profile pointer width as exact u16 or publish profile-unavailable",
       "program_encoding": "u16 result plus profile.pointer-width capability requirement",
-      "decoder_verifier_evaluator": "result type, declared effect/capability, and bound-profile availability checks",
       "vm_implementation": "read the pointer-width field from the verified execution binding",
       "aot_lowering": "freeze the same profile value into BackendIR without host sizeof probes",
       "source_producer": "compiler-owned target query inserted only for a typed profile-dependent language operation",
@@ -535,13 +534,13 @@
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "result type, declared effect/capability, and bound-profile availability checks"
     },
     {
       "id": "core.target.operating_system",
       "core_spec_contract": "read the immutable bound profile operating system as one generated TargetOs logical value or publish profile-unavailable",
       "program_encoding": "TargetOs result plus profile.operating-system capability requirement",
-      "decoder_verifier_evaluator": "exact TargetOs type, effect/capability, generated value domain, and bound-profile availability checks",
       "vm_implementation": "read operating_system from the copied verified execution binding",
       "aot_lowering": "freeze the same TargetOs logical value into BackendIR without host preprocessor probes",
       "source_producer": "compiler-owned target.os query with unshadowable target identity",
@@ -552,13 +551,13 @@
         "src/frontend/analyzer/xa_target_query.h",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact TargetOs type, effect/capability, generated value domain, and bound-profile availability checks"
     },
     {
       "id": "core.target.architecture",
       "core_spec_contract": "read the immutable bound profile architecture as one generated TargetArch logical value or publish profile-unavailable",
       "program_encoding": "TargetArch result plus profile.architecture capability requirement",
-      "decoder_verifier_evaluator": "exact TargetArch type, effect/capability, generated value domain, and bound-profile availability checks",
       "vm_implementation": "read architecture from the copied verified execution binding",
       "aot_lowering": "freeze the same TargetArch logical value into BackendIR without compiler-host probes",
       "source_producer": "compiler-owned target.arch query with unshadowable target identity",
@@ -569,13 +568,13 @@
         "src/frontend/analyzer/xa_target_query.h",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact TargetArch type, effect/capability, generated value domain, and bound-profile availability checks"
     },
     {
       "id": "core.target.native_abi",
       "core_spec_contract": "read the immutable bound profile native ABI as one generated TargetAbi logical value or publish profile-unavailable",
       "program_encoding": "TargetAbi result plus profile.native-abi capability requirement",
-      "decoder_verifier_evaluator": "exact TargetAbi type, effect/capability, generated value domain, and bound-profile availability checks",
       "vm_implementation": "read native_abi from the copied verified execution binding",
       "aot_lowering": "freeze the same TargetAbi logical value into BackendIR without compiler-host ABI inference",
       "source_producer": "compiler-owned target.abi query with unshadowable target identity",
@@ -586,13 +585,13 @@
         "src/frontend/analyzer/xa_target_query.h",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact TargetAbi type, effect/capability, generated value domain, and bound-profile availability checks"
     },
     {
       "id": "core.target.endianness",
       "core_spec_contract": "read the immutable bound profile endianness as one generated TargetEndian logical value or publish profile-unavailable",
       "program_encoding": "TargetEndian result plus profile.endianness capability requirement",
-      "decoder_verifier_evaluator": "exact TargetEndian type, effect/capability, generated value domain, and bound-profile availability checks",
       "vm_implementation": "read endianness from the copied verified execution binding",
       "aot_lowering": "freeze the same TargetEndian logical value into BackendIR without compiler-host byte-order probes",
       "source_producer": "compiler-owned target.endian query with unshadowable target identity",
@@ -603,13 +602,13 @@
         "src/frontend/analyzer/xa_target_query.h",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact TargetEndian type, effect/capability, generated value domain, and bound-profile availability checks"
     },
     {
       "id": "core.provider.call",
       "core_spec_contract": "invoke one exact typed provider operation admitted by the bound profile and generation-scoped instance or publish provider-call-failed",
       "program_encoding": "logical operands and result types plus dense ProviderRequirementIndex and OperationIndex; no provider key, ABI address, context, trampoline kind, or generation is serialized",
-      "decoder_verifier_evaluator": "bounded exact requirement/operation reference, declared effect/capability checks, one structurally admitted logical call shape per required operation, independent callback evaluation, and exact provider-call-failed refusal normalization",
       "vm_implementation": "select an execution-private typed trampoline from validated XrProgram types and the exact target ABI while the in-flight ticket pin keeps the instance binding alive; refusal becomes the canonical provider-call-failed trap",
       "aot_lowering": "emit a portable typed provider callback selected from validated XrProgram types; real-source embedded refusal issues one event and normalizes to trap 7, while standalone hosted operations bind backend-private host adapters",
       "source_producer": "the source-owned stdlib registry publishes canonical contract and operation keys; exact analyzer/Xglobal-resolved builtin calls flow through Xi into XrProgram requirements. Current evidence covers time.now plus sys.Pipe.open/close, and unregistered or unsupported shapes fail closed",
@@ -630,18 +629,18 @@
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot.c",
         "tests/unit/program/test_xr_program_source_build.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded exact requirement/operation reference, declared effect/capability checks, one structurally admitted logical call shape per required operation, independent callback evaluation, and exact provider-call-failed refusal normalization"
     },
     {
-      "id": "core.output.group.i64",
-      "core_spec_contract": "render one i64 as its canonical signed decimal representation followed by exactly one LF byte and issue one atomic output-write provider event; refusal becomes trap 7",
-      "program_encoding": "i64 operand, void result, and dense ProviderRequirementIndex and OperationIndex for the target-neutral io/output-write identity",
-      "decoder_verifier_evaluator": "exact i64/void shape, complete requirement use, deterministic byte formatting including INT64_MIN, and normalized provider refusal",
-      "vm_implementation": "both private VM decode policies format independently and enter only the lease-pinned output-write trampoline",
+      "id": "core.output.group",
+      "core_spec_contract": "Render a typed group of i64, bool, rune and string values as one atomic UTF-8 provider write, using explicit literal separators and suffix; refusal is trap 7.",
+      "program_encoding": "Typed operands, void result, literal group fragments and exact provider requirement indices.",
+      "vm_implementation": "Shared text kernel formats the complete group before one lease-pinned provider write.",
       "aot_lowering": "embedded generated C accepts only the typed byte-output callback; hosted standalone C binds binary stdout directly, while freestanding standalone output without an embedder is rejected",
-      "source_producer": "the exact analyzer XrPrintPlan for one atomic i64 line projects from XI_PRINT into this CoreSpec operation",
+      "source_producer": "The analyzer print plan projects typed values and literal fragments into one output group.",
       "old_owner_deletion": "the canonical source run route reaches output only through XrProgram and the exact provider requirement; no TargetPlan or legacy VM output executor is retained on that route",
-      "status": "COMPLETE_CANONICAL_SOURCE_RUN_OUTPUT_SLICE",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/xi-source-projection.json",
@@ -655,14 +654,17 @@
         "tests/cli/run_canonical_source_route_tests.py",
         "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot.c"
-      ]
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/xr_program_text_fixture.h",
+        "tests/unit/program/xr_program_source_cases.json",
+        "src/runtime/core/xr_text_kernel.h"
+      ],
+      "decoder_verifier_oracle": "Validate UTF-8, scalar validity, operand types and provider identity; compare exact independent stdout bytes, including empty strings, non-ASCII runes, booleans and signed integers."
     },
     {
       "id": "core.aggregate.construct",
       "core_spec_contract": "construct one logical value aggregate from declaration-ordered operands matching the aggregate type row",
       "program_encoding": "dynamic aggregate TypeId, ordered operand ids, and no layout or target immediate",
-      "decoder_verifier_evaluator": "type-row, arity, operand-type, acyclic-value-shape, and resource checks with independent value construction",
       "vm_implementation": "private arena-backed aggregate carrier derived from the verified logical type",
       "aot_lowering": "private portable-C11 struct construction with executor-owned field spelling",
       "source_producer": "typed tuple construction projected by the generated Xi-to-CoreSpec table",
@@ -672,13 +674,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "type-row, arity, operand-type, acyclic-value-shape, and resource checks with independent value construction"
     },
     {
       "id": "core.aggregate.project",
       "core_spec_contract": "project one declaration-order field by explicit ordinal from a logical aggregate",
       "program_encoding": "aggregate operand, field ordinal immediate, and exact field result TypeId",
-      "decoder_verifier_evaluator": "aggregate kind, ordinal range, field type, SSA use, and independent projection checks",
       "vm_implementation": "private carrier field read after verifier-proven shape",
       "aot_lowering": "direct native struct field read without dynamic lookup or boxing",
       "source_producer": "typed tuple field projection projected by the generated Xi-to-CoreSpec table",
@@ -688,13 +690,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "aggregate kind, ordinal range, field type, SSA use, and independent projection checks"
     },
     {
       "id": "core.aggregate.update",
       "core_spec_contract": "produce a fresh logical aggregate equal to the input except for one explicitly replaced field",
       "program_encoding": "source aggregate, replacement value, field ordinal, and unchanged aggregate TypeId",
-      "decoder_verifier_evaluator": "aggregate kind, ordinal, replacement field type, and pure copy-update checks",
       "vm_implementation": "private carrier copy followed by one field replacement",
       "aot_lowering": "native struct copy followed by one direct field assignment",
       "source_producer": "dedicated pure xi.agg.update consumes the prior named value aggregate plus one typed replacement and projects the analyzer-resolved declaration ordinal; nested paths rebuild leaf-to-root before an explicit SSA binding write",
@@ -704,13 +706,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "aggregate kind, ordinal, replacement field type, and pure copy-update checks"
     },
     {
       "id": "core.variant.construct",
       "core_spec_contract": "construct one logical tagged variant from an explicit variant ordinal and declaration-ordered payload",
       "program_encoding": "variant TypeId, variant ordinal, and exact payload operand vector",
-      "decoder_verifier_evaluator": "variant kind, ordinal, payload arity/type, and resource checks with independent construction",
       "vm_implementation": "private tagged carrier with logical payload values",
       "aot_lowering": "private C11 tag plus union case construction",
       "source_producer": "dedicated named record constructor AST and immutable analyzer slot plan lower directly to xi.variant.construct and the generated Xi-to-CoreSpec projection",
@@ -721,13 +723,13 @@
         "src/ir/xi_lower_misc.c",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "variant kind, ordinal, payload arity/type, and resource checks with independent construction"
     },
     {
       "id": "core.variant.test",
       "core_spec_contract": "compare one logical variant tag against an explicit variant ordinal and return canonical bool",
       "program_encoding": "variant operand and variant ordinal immediate",
-      "decoder_verifier_evaluator": "variant kind and ordinal checks with independent tag comparison",
       "vm_implementation": "private carrier tag comparison",
       "aot_lowering": "direct native tag comparison",
       "source_producer": "dedicated named selective-pattern AST and immutable analyzer slot plan lower directly to xi.variant.test",
@@ -738,13 +740,13 @@
         "src/ir/xi_lower_misc.c",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "variant kind and ordinal checks with independent tag comparison"
     },
     {
       "id": "core.variant.project",
       "core_spec_contract": "project one payload field only when the logical tag matches, otherwise publish variant-tag-mismatch",
       "program_encoding": "variant operand plus explicit variant and payload-field ordinals",
-      "decoder_verifier_evaluator": "variant/field range, result type, and deterministic mismatched-tag trap checks",
       "vm_implementation": "private carrier tag guard followed by payload projection",
       "aot_lowering": "native tag guard followed by direct union-case field read",
       "source_producer": "selected named fields resolve once to canonical declaration slots and lower directly to xi.variant.project",
@@ -755,13 +757,13 @@
         "src/ir/xi_lower_misc.c",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "variant/field range, result type, and deterministic mismatched-tag trap checks"
     },
     {
       "id": "core.existential.pack",
       "core_spec_contract": "form one existential value from one concrete nominal value and the unique exact conformance for the result InterfaceId",
       "program_encoding": "concrete typed operand and existential result TypeId; conformance identity is derived from canonical conformance rows and no carrier layout is encoded",
-      "decoder_verifier_evaluator": "nominal implementor, runtime existential use kind, exact conformance, ownership transfer and bounded private-carrier construction checks",
       "vm_implementation": "private carrier stores concrete TypeId, conformance identity and typed payload without exposing a public object layout",
       "aot_lowering": "private portable-C11 execution arena boxes READ/MOVE/OWNED payload snapshots while REF preserves a typed place pointer, so internal-call returns remain valid without a shared object ABI",
       "source_producer": "class, struct and enum values lower through exact nominal conformance identity to READ, REF, MOVE or OWNED_STORAGE existential formation",
@@ -777,13 +779,13 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
-      ]
+      ],
+      "decoder_verifier_oracle": "nominal implementor, runtime existential use kind, exact conformance, ownership transfer and bounded private-carrier construction checks"
     },
     {
       "id": "core.existential.reborrow_read",
       "core_spec_contract": "form one scoped nonowning READ existential view over the same payload and conformance as a live MOVE or OWNED_STORAGE existential of the exact same InterfaceId, without consuming or cloning the owner",
       "program_encoding": "one owned existential operand and one READ existential result; owner/view pairing is explicit in SSA dataflow and no hidden root, lifetime token or backend carrier field is encoded",
-      "decoder_verifier_evaluator": "exact interface and use-kind checks plus path-complete owner/view pairing across block arguments; every cycle requires an explicit reborrow anchor, the owner must remain live through each view use, and view escape or use after owner drop is rejected",
       "vm_implementation": "copy one executor-private existential carrier as a nonowner READ view sharing the source payload and conformance",
       "aot_lowering": "copy one backend-private C carrier as a nonowner READ view; generated C carries no public existential ABI or auxiliary owner table",
       "source_producer": "passing a stored owning existential to an exact same-interface READ formal emits one explicit Xi reborrow and one canonical operation backed by the exact Xglobal object-use fact",
@@ -800,13 +802,13 @@
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
         "tests/unit/program/xr_program_reborrow_fixture.h"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact interface and use-kind checks plus path-complete owner/view pairing across block arguments; every cycle requires an explicit reborrow anchor, the owner must remain live through each view use, and view escape or use after owner drop is rejected"
     },
     {
       "id": "core.existential.test",
       "core_spec_contract": "compare one existential carrier's exact nominal implementor TypeId with an explicit canonical TypeId",
       "program_encoding": "existential operand, bool result and exact TypeId immediate with no target tag representation",
-      "decoder_verifier_evaluator": "runtime existential kind, nominal test target and independent exact-identity comparison",
       "vm_implementation": "compare the private carrier concrete TypeId",
       "aot_lowering": "compare the private C11 carrier concrete_type_id field",
       "source_producer": "typed exact-nominal narrowing lowers to one existential test over the canonical implementor TypeId",
@@ -822,13 +824,13 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
-      ]
+      ],
+      "decoder_verifier_oracle": "runtime existential kind, nominal test target and independent exact-identity comparison"
     },
     {
       "id": "core.existential.project",
       "core_spec_contract": "recover one exact concrete value only where a successful exact nominal test dominates every incoming path",
       "program_encoding": "existential operand, concrete result TypeId and matching exact TypeId immediate",
-      "decoder_verifier_evaluator": "must-dataflow intersects predecessor facts; only the true edge of the matching test grants projection and false/unguarded paths are rejected",
       "vm_implementation": "read the typed payload from the private carrier after verifier-owned proof",
       "aot_lowering": "cast and read the exact typed arena payload or place pointer after the same verifier-owned proof",
       "source_producer": "typed cast-narrowing CFG lowers the dominated success path to one exact existential projection",
@@ -844,13 +846,13 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_existential_fixture.h"
-      ]
+      ],
+      "decoder_verifier_oracle": "must-dataflow intersects predecessor facts; only the true edge of the matching test grants projection and false/unguarded paths are rejected"
     },
     {
       "id": "core.callable.pack",
       "core_spec_contract": "form one typed callable value from a closed FunctionId target and zero or one typed capture aggregate",
       "program_encoding": "FunctionId immediate, optional capture operand and callable-typed result whose TypeId owns the visible SignatureId",
-      "decoder_verifier_evaluator": "captureless targets match the visible structural signature; captured targets add exactly one READ receiver of the capture aggregate type; implementation effects and capabilities are subsets of visible upper bounds; captures are affine explicit-copy owners and borrowed receiver results are rejected",
       "vm_implementation": "allocate one private callable carrier and recursively clone its typed capture only through explicit owner.copy",
       "aot_lowering": "materialize a private function identity plus arena-owned typed capture box; carrier representation is absent from canonical bytes and BoundaryABI",
       "source_producer": "function values and closure expressions lower to one closed FunctionId plus zero or one exact typed capture aggregate",
@@ -867,13 +869,13 @@
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/ir/test_xr_program_imported_callable.c",
         "tests/unit/program/xr_program_callable_fixture.h"
-      ]
+      ],
+      "decoder_verifier_oracle": "captureless targets match the visible structural signature; captured targets add exactly one READ receiver of the capture aggregate type; implementation effects and capabilities are subsets of visible upper bounds; captures are affine explicit-copy owners and borrowed receiver results are rejected"
     },
     {
       "id": "core.owner.copy",
       "core_spec_contract": "borrow one VALUE and produce one independent logical value plus ownership domain exactly when the TypeId copy contract permits it",
       "program_encoding": "type rows carry TRIVIAL/AFFINE ownership and TRIVIAL/EXPLICIT/FORBIDDEN copy contracts; every SSA definition carries NON_OWNER/OWNER disposition",
-      "decoder_verifier_evaluator": "bounded metadata decode, exact copy capability, call-bound READ borrow coercion, affine exactly-once consume or per-edge transfer, and independent aggregate clone",
       "vm_implementation": "private aggregate carriers clone recursively while scalar copies remain direct values; ownership legality is verifier-owned",
       "aot_lowering": "direct typed native value copy from the same validated operation with no runtime ownership inference",
       "source_producer": "source copy(value) lowers to xi.call.builtin aux=copy and projects exactly to core.owner.copy; unrelated builtins fail closed",
@@ -888,13 +890,13 @@
         "src/aot/program/xr_backend_ir_emit_c.c",
         "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded metadata decode, exact copy capability, call-bound READ borrow coercion, affine exactly-once consume or per-edge transfer, and independent aggregate clone"
     },
     {
       "id": "core.owner.move",
       "core_spec_contract": "transfer one VALUE owner identity to a fresh VALUE and reject every later use of the consumed input",
       "program_encoding": "same pointee-free TypeId on operand/result, VALUE categories, and no physical retain/release spelling",
-      "decoder_verifier_evaluator": "exact unary shape, category/type equality, and same-block consumed-value rejection",
       "vm_implementation": "private value transfer with the verifier owning linear-use legality",
       "aot_lowering": "direct typed native assignment with no runtime ownership inference",
       "source_producer": "xi.source.move and xi.owner.forward project explicitly through the generated table",
@@ -904,13 +906,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/program/test_xr_program_verify.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact unary shape, category/type equality, and same-block consumed-value rejection"
     },
     {
       "id": "core.owner.drop",
       "core_spec_contract": "end one VALUE owner lifetime exactly once and reject every later use",
       "program_encoding": "typed VALUE operand, void result, and no physical release spelling",
-      "decoder_verifier_evaluator": "exact unary shape, VALUE category, and consumed-value rejection",
       "vm_implementation": "logical owner end; physical reclamation remains executor-private",
       "aot_lowering": "typed lifetime end with physical destruction selected only by the private representation domain",
       "source_producer": "explicit canonical cleanup atoms are accepted now; full source cleanup CFG is owned by the sealed-invoke slice",
@@ -920,13 +922,13 @@
         "xisa/core/registry.json",
         "src/program/xr_program_verify.c",
         "tests/unit/program/test_xr_program_verify.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact unary shape, VALUE category, and consumed-value rejection"
     },
     {
       "id": "core.place.local",
       "core_spec_contract": "create one call-frame-confined PLACE initialized from a consumed VALUE, including an affine owner",
       "program_encoding": "pointee TypeId plus PLACE result category; PLACE is not a TypeId",
-      "decoder_verifier_evaluator": "exact VALUE-to-PLACE shape, pointee equality, dominance, and consumed initializer",
       "vm_implementation": "private frame cell referenced across nested direct calls",
       "aot_lowering": "typed C local plus pointer with no tagged runtime value",
       "source_producer": "plain xi.local.addr projects through the generated table; exact entry-reachable nominal REF receivers use the same place atom",
@@ -936,13 +938,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact VALUE-to-PLACE shape, pointee equality, dominance, and consumed initializer"
     },
     {
       "id": "core.place.project",
       "core_spec_contract": "derive one non-escaping field PLACE from an exact live aggregate PLACE and declaration ordinal",
       "program_encoding": "aggregate PLACE operand, field pointee TypeId, PLACE result category, and bounded field immediate",
-      "decoder_verifier_evaluator": "exact aggregate/field/category checks and parent-place lifetime confinement",
       "vm_implementation": "private alias to the selected aggregate carrier field",
       "aot_lowering": "typed address of the selected generated C aggregate field",
       "source_producer": "exact Xglobal class-field identity plus Xi load/store field access on a REF receiver",
@@ -953,13 +955,13 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/program/test_xr_program_source_build.c",
         "tests/unit/program/test_xr_program_verify.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact aggregate/field/category checks and parent-place lifetime confinement"
     },
     {
       "id": "core.place.load",
       "core_spec_contract": "snapshot the current non-owner contents of one typed PLACE as a VALUE",
       "program_encoding": "PLACE operand and same-TypeId VALUE result",
-      "decoder_verifier_evaluator": "category/type equality and verifier-confined place use",
       "vm_implementation": "read the private frame cell",
       "aot_lowering": "one typed pointer dereference",
       "source_producer": "xi.place.load projects through the generated table",
@@ -969,13 +971,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "category/type equality and verifier-confined place use"
     },
     {
       "id": "core.place.store",
       "core_spec_contract": "replace one typed PLACE contents with one consumed VALUE",
       "program_encoding": "PLACE and VALUE operands with equal TypeIds and void result",
-      "decoder_verifier_evaluator": "mixed-category shape, pointee/value equality, and consumed stored value",
       "vm_implementation": "write the private frame cell observed by the caller after return",
       "aot_lowering": "one typed pointer store across the direct-local REF ABI",
       "source_producer": "xi.place.store projects through the generated table",
@@ -985,13 +987,13 @@
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "mixed-category shape, pointee/value equality, and consumed stored value"
     },
     {
       "id": "core.place.take",
       "core_spec_contract": "consume one initialized owning local affine PLACE, invalidate that local and every derived field place, and return its contents as the unique VALUE owner",
       "program_encoding": "same-TypeId PLACE operand and affine OWNER result with no immediate",
-      "decoder_verifier_evaluator": "exact affine type/category/ownership/local-origin checks plus root-relative derived-place invalidation and use-after-take rejection",
       "vm_implementation": "move the private aggregate carrier out of its place and invalidate the cell",
       "aot_lowering": "typed dereference move followed by nulling the private place pointer",
       "source_producer": "affine XI_PLACE_LOAD writeback after an entry-reachable canonical REF call",
@@ -1002,13 +1004,13 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/program/test_xr_program_source_build.c",
         "tests/unit/vm/test_xr_program_vm.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact affine type/category/ownership/local-origin checks plus root-relative derived-place invalidation and use-after-take rejection"
     },
     {
       "id": "core.assert.condition",
       "core_spec_contract": "observe one canonical bool and publish the frozen condition-false PanicInfo code when it is false",
       "program_encoding": "bool operand, condition-false immediate, void result, and either direct panic publication or one explicit panic cleanup successor",
-      "decoder_verifier_evaluator": "exact condition and PanicInfo types, total live-owner transfer to one cleanup edge, and independent true/false evaluation",
       "vm_implementation": "typed bool branch that either falls through or transfers the owned PanicInfo payload and live owners to private cleanup execution",
       "aot_lowering": "portable C11 conditional branch with the same typed panic payload and explicit cleanup edge",
       "source_producer": "exact Xi condition assertion under static defer cleanup, including cross-function panic propagation through sealed direct calls",
@@ -1027,13 +1029,13 @@
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot.c",
         "tests/unit/CMakeLists.txt"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact condition and PanicInfo types, total live-owner transfer to one cleanup edge, and independent true/false evaluation"
     },
     {
       "id": "core.coroutine.yield",
       "core_spec_contract": "suspend once at an exact function-local safepoint and resume only at its declared logical state while preserving the named live values",
       "program_encoding": "coroutine state and safepoint tables plus a suspend-successor terminator whose operands are exactly the live-across values",
-      "decoder_verifier_evaluator": "bounded decode, exact state/safepoint/successor/live-value closure, and explicit resumable reference execution",
       "vm_implementation": "one-shot execution rejects coroutine programs; an explicit session retains the validated code and exact generation lease across suspend/resume",
       "aot_lowering": "generated native frame and step function are exposed only through an exact-ExecutionId descriptor that owns initialize/step/drop lifecycle",
       "source_producer": "an exact module-initializer Coro.yield fact is serialized through Xglobal, joined to the current Xi coroutine plan, and projected into canonical Program state, safepoint, branch, and yield records; cross-function suspension, multiple states, and other suspension kinds remain open",
@@ -1054,13 +1056,13 @@
         "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded decode, exact state/safepoint/successor/live-value closure, and explicit resumable reference execution"
     },
     {
       "id": "core.coroutine.call.sealed",
       "core_spec_contract": "poll one sealed child coroutine; suspend the parent at one caller-local safepoint whenever the child suspends, then transfer the child result and preserved live values to the normal successor, publish cancellation through the private cancel successor, or propagate a proven child trap through the exact trap successor",
       "program_encoding": "combined (FunctionId,SafepointId) immediate, exact child READ value or REF place operands followed by distinct caller live values and the exact live-owner cancel suffix, with separate typed normal and cancellation successors plus an exact trap successor whenever the child effect can fail",
-      "decoder_verifier_evaluator": "bounded combined-immediate decode; exact sealed child, coroutine shape, typed READ/reborrow or frame-stable non-owner REF boundary, caller state, safepoint, live-set, effect, and capability closure; related field places must resolve to a unique live storage root and instruction-defined places cannot be serialized as raw live pointers; reference execution owns a private child session",
       "vm_implementation": "the parent VM session retains one private child session, keeps ref places backed by execution-owned storage, and exposes only caller-local suspend/return outcomes",
       "aot_lowering": "the parent native coroutine frame embeds the sealed child frame and active bit; each distinct REF storage root is saved and restored once and each local or field reference is rebound into that parent-frame root before child polling; independent scalar snapshots remain distinct live values, so resume and cancellation never retain an automatic C address or merge a snapshot into mutable storage; generated C contains no VM or compiler runtime dependency",
       "source_producer": "current Xi direct-call suspension points and exact sealed cooperative-yield child plans project atomically into canonical coroutine-call terminators; existing dense states, affine results, scoped READ existential reborrows, and static cleanup retain their focused proofs; local places and two one-level aggregate-field REF arguments sharing one cleanup-captured root are reconstructed from distinct caller live values while independent field snapshots remain live; call-bound REF parameters stay non-owner places in the child; normal resume, child provider trap, and parent cancellation all observe the same field mutations and reason-specific deferred cleanup; escaped views, arbitrary nested projections, indirect suspension, and other incomplete-evidence forms remain open",
@@ -1081,13 +1083,13 @@
         "tests/unit/program/test_xr_program_source_build.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/CMakeLists.txt"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded combined-immediate decode; exact sealed child, coroutine shape, typed READ/reborrow or frame-stable non-owner REF boundary, caller state, safepoint, live-set, effect, and capability closure; related field places must resolve to a unique live storage root and instruction-defined places cannot be serialized as raw live pointers; reference execution owns a private child session"
     },
     {
       "id": "core.coroutine.suspend",
       "core_spec_contract": "publish one typed readiness request at an exact function-local safepoint, then resume through the declared logical state or take the distinct cancellation continuation while preserving the named live values",
       "program_encoding": "one closed request-kind immediate and exact request arity followed by separate resume-live and cancellation-live operand suffixes; timer-after-ms owns one normalized i64 request value",
-      "decoder_verifier_evaluator": "bounded decode plus exact request-kind, arity, type, capability, safepoint, state, successor, and live-value closure; the independent reference evaluator publishes the normalized request without performing the wait",
       "vm_implementation": "private sessions publish the same normalized request and retain only verified frame state until the product readiness driver resumes or cancels them",
       "aot_lowering": "generated native frames publish the same typed request through their private step ABI; standalone generated-C entrypoints drive monotonic timer readiness without depending on the VM",
       "source_producer": "an exact native-call suspension fact derived from authoritative stdlib metadata projects time.__sleep into one timer-after-ms request; child coroutine calls propagate the child request while preserving the caller-local state and safepoint",
@@ -1110,13 +1112,13 @@
         "tests/unit/aot/test_xr_program_aot.c",
         "tests/fixtures/canonical_run/time_sleep.xr",
         "tests/cli/run_canonical_source_route_tests.py"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded decode plus exact request-kind, arity, type, capability, safepoint, state, successor, and live-value closure; the independent reference evaluator publishes the normalized request without performing the wait"
     },
     {
       "id": "core.coroutine.call.indirect",
       "core_spec_contract": "invoke a callable through its exact closed target set, propagate suspension through a caller-owned continuation state, and keep normal resume and cancellation as distinct successors",
       "program_encoding": "one frame-stable callable carrier, exact scalar arguments, separate resume and cancellation operand suffixes, and a signature whose effects include suspend and cancel with coroutine capability",
-      "decoder_verifier_evaluator": "bounded decode plus exact callable signature, target set, carrier stability, state, safepoint, successor, effect, capability, and live-value closure; the independent evaluator dispatches the selected target through a private child session",
       "vm_implementation": "the VM resolves the callable target from Program data, owns a private child session, forwards its typed request, and resumes or cancels through the caller-local state without a TargetPlan or shared frame layout",
       "aot_lowering": "BackendIR independently revalidates carrier stability and lowers each exact target to a private child-frame alternative; generated C dispatches on the callable target and contains no VM, compiler, or TargetPlan dependency",
       "source_producer": "Xglobal closes the target union and projects the union of target effects and capabilities onto a function-parameter callsite; the source owner emits this operation only for an exact suspending callable signature and a captureless or otherwise frame-stable carrier",
@@ -1138,13 +1140,13 @@
         "tests/unit/analysis/test_xglobal_summary.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded decode plus exact callable signature, target set, carrier stability, state, safepoint, successor, effect, capability, and live-value closure; the independent evaluator dispatches the selected target through a private child session"
     },
     {
       "id": "core.class.construct",
       "core_spec_contract": "construct one affine class-reference identity from exact declaration-ordered field values",
       "program_encoding": "one CLASS_REFERENCE result TypeId and exact field operands; representation and allocation remain private to each backend",
-      "decoder_verifier_evaluator": "bounded class-reference decode, exact field verification, affine owner validation, and private reference-cell evaluation",
       "vm_implementation": "private refcounted class handle constructed from exact declaration-ordered Program fields in both VM views",
       "aot_lowering": "verified BackendIR class construction lowered to a private aligned heap object with exact transferred fields",
       "source_producer": "two-stage closed nominal registration resolves recursive field TypeIds before cycle-safe copy-contract fixed-point analysis and class construction",
@@ -1164,13 +1166,13 @@
         "src/aot/program/xr_backend_ir_emit_class.inc.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_class.inc.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "bounded class-reference decode, exact field verification, affine owner validation, and private reference-cell evaluation"
     },
     {
       "id": "core.class.share",
       "core_spec_contract": "create an independent affine owner for the same class-reference identity without consuming the source owner",
       "program_encoding": "one CLASS_REFERENCE operand and result with the same exact TypeId",
-      "decoder_verifier_evaluator": "exact class TypeId and affine-owner verification with identity-preserving logical share evaluation",
       "vm_implementation": "private class-handle share increments one exact referent owner count without consuming the source",
       "aot_lowering": "BackendIR preserves the exact class TypeId and generated C increments the private object owner count before alias publication",
       "source_producer": "source alias escape and borrowed-RHS ownership promotion produce one logical share; explicit deep copy remains core.owner.copy and move remains an identity transfer",
@@ -1190,13 +1192,13 @@
         "src/aot/program/xr_backend_ir_emit_class.inc.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_class.inc.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "exact class TypeId and affine-owner verification with identity-preserving logical share evaluation"
     },
     {
       "id": "core.class.field_load",
       "core_spec_contract": "load one declared class field as an independent scalar snapshot or an owner-rooted affine borrow",
       "program_encoding": "one CLASS_REFERENCE owner operand plus one declaration-order field ordinal",
-      "decoder_verifier_evaluator": "declaration-ordinal field validation and scalar snapshot or owner-rooted affine borrow evaluation",
       "vm_implementation": "exact declaration-ordinal load returns a scalar snapshot or an owner-rooted affine carrier from the private handle",
       "aot_lowering": "BackendIR verifies the receiver and ordinal, then generated C reads the exact private object field",
       "source_producer": "source field reads preserve the exact class owner root and produce the field contract selected by declaration ordinal",
@@ -1216,13 +1218,13 @@
         "src/aot/program/xr_backend_ir_emit_class.inc.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_class.inc.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "declaration-ordinal field validation and scalar snapshot or owner-rooted affine borrow evaluation"
     },
     {
       "id": "core.class.field_place",
       "core_spec_contract": "derive one mutable field place rooted in a live exact class-reference owner",
       "program_encoding": "one CLASS_REFERENCE owner place plus one declaration-order field ordinal",
-      "decoder_verifier_evaluator": "mutable-root, exact class TypeId, and declaration-ordinal field-place verification with confined private place evaluation",
       "vm_implementation": "private place carrier retains the exact live class root and declaration ordinal without exposing an address",
       "aot_lowering": "BackendIR confines the place to the function and generated C represents it as a private owner-plus-field selector",
       "source_producer": "owned field assignment derives a declaration-ordinal mutable place rooted in the live class owner",
@@ -1242,13 +1244,13 @@
         "src/aot/program/xr_backend_ir_emit_class.inc.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_class.inc.c"
-      ]
+      ],
+      "decoder_verifier_oracle": "mutable-root, exact class TypeId, and declaration-ordinal field-place verification with confined private place evaluation"
     },
     {
       "id": "core.place.exchange",
       "core_spec_contract": "atomically replace one owned place value and return the displaced owner without an observable empty state",
       "program_encoding": "one exact typed place, one exact typed replacement owner, and one exact typed displaced result",
-      "decoder_verifier_evaluator": "exact typed place/replacement validation and transactional exchange evaluation that returns the displaced complete value",
       "vm_implementation": "typed private-place exchange installs the replacement and returns the complete displaced value in one handler",
       "aot_lowering": "verified BackendIR exchange lowers to a typed temporary followed by one private field replacement with exact ownership transfer",
       "source_producer": "source owned-field replacement evaluates and owns the RHS before atomic exchange, then immediately drops the displaced owner",
@@ -1268,6 +1270,115 @@
         "src/aot/program/xr_backend_ir_emit_class.inc.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot_class.inc.c"
+      ],
+      "decoder_verifier_oracle": "exact typed place/replacement validation and transactional exchange evaluation that returns the displaced complete value"
+    },
+    {
+      "id": "core.constant.string",
+      "core_spec_contract": "Canonical UTF-8 bytes with explicit length and no observable identity.",
+      "program_encoding": "Constant string pool index and affine string result.",
+      "decoder_verifier_oracle": "Reject invalid UTF-8, embedded malformed encodings and incorrect owner disposition; compare exact bytes.",
+      "vm_implementation": "Typed Program operation with the shared pure text kernel; value ownership remains executor-private.",
+      "aot_lowering": "Portable C11 typed lowering and the same embedded pure text kernel; native behavior is checked against independent expected output.",
+      "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
+      "old_owner_deletion": "Canonical source execution has no per-function legacy string opcode or fallback; the former i64-only output handler is replaced by typed group output.",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/runtime/core/xr_text_kernel.h",
+        "tests/unit/program/xr_program_text_fixture.h",
+        "tests/unit/program/xr_program_source_cases.json",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ]
+    },
+    {
+      "id": "core.constant.rune",
+      "core_spec_contract": "One Unicode scalar value, excluding surrogates.",
+      "program_encoding": "Canonical scalar immediate and trivial rune result.",
+      "decoder_verifier_oracle": "Reject values above U+10FFFF and surrogate code points; preserve non-ASCII scalars.",
+      "vm_implementation": "Typed Program operation with the shared pure text kernel; value ownership remains executor-private.",
+      "aot_lowering": "Portable C11 typed lowering and the same embedded pure text kernel; native behavior is checked against independent expected output.",
+      "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
+      "old_owner_deletion": "Canonical source execution has no per-function legacy string opcode or fallback; the former i64-only output handler is replaced by typed group output.",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/runtime/core/xr_text_kernel.h",
+        "tests/unit/program/xr_program_text_fixture.h",
+        "tests/unit/program/xr_program_source_cases.json",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ]
+    },
+    {
+      "id": "core.string.concat",
+      "core_spec_contract": "Concatenate the exact byte sequences of immutable strings.",
+      "program_encoding": "Two borrowed string operands and one owned string result.",
+      "decoder_verifier_oracle": "Check type and ownership; compare the independent concatenated byte sequence and bounded allocation failures.",
+      "vm_implementation": "Typed Program operation with the shared pure text kernel; value ownership remains executor-private.",
+      "aot_lowering": "Portable C11 typed lowering and the same embedded pure text kernel; native behavior is checked against independent expected output.",
+      "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
+      "old_owner_deletion": "Canonical source execution has no per-function legacy string opcode or fallback; the former i64-only output handler is replaced by typed group output.",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/runtime/core/xr_text_kernel.h",
+        "tests/unit/program/xr_program_text_fixture.h",
+        "tests/unit/program/xr_program_source_cases.json",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ]
+    },
+    {
+      "id": "core.string.from_i64",
+      "core_spec_contract": "Canonical base-10 signed integer text.",
+      "program_encoding": "One i64 operand and one owned string result.",
+      "decoder_verifier_oracle": "Compare decimal expectations including zero, negative values and INT64_MIN; no host overflow.",
+      "vm_implementation": "Typed Program operation with the shared pure text kernel; value ownership remains executor-private.",
+      "aot_lowering": "Portable C11 typed lowering and the same embedded pure text kernel; native behavior is checked against independent expected output.",
+      "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
+      "old_owner_deletion": "Canonical source execution has no per-function legacy string opcode or fallback; the former i64-only output handler is replaced by typed group output.",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/runtime/core/xr_text_kernel.h",
+        "tests/unit/program/xr_program_text_fixture.h",
+        "tests/unit/program/xr_program_source_cases.json",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ]
+    },
+    {
+      "id": "core.compare.string",
+      "core_spec_contract": "Content comparison of immutable UTF-8 strings.",
+      "program_encoding": "Two borrowed strings, comparison predicate and bool result.",
+      "decoder_verifier_oracle": "Compare independent content-order and equality observations, including differing lengths.",
+      "vm_implementation": "Typed Program operation with the shared pure text kernel; value ownership remains executor-private.",
+      "aot_lowering": "Portable C11 typed lowering and the same embedded pure text kernel; native behavior is checked against independent expected output.",
+      "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
+      "old_owner_deletion": "Canonical source execution has no per-function legacy string opcode or fallback; the former i64-only output handler is replaced by typed group output.",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/runtime/core/xr_text_kernel.h",
+        "tests/unit/program/xr_program_text_fixture.h",
+        "tests/unit/program/xr_program_source_cases.json",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ]
+    },
+    {
+      "id": "core.compare.rune",
+      "core_spec_contract": "Compare Unicode scalar values by their numeric value.",
+      "program_encoding": "Two rune operands, comparison predicate and bool result.",
+      "decoder_verifier_oracle": "Compare independently expected scalar ordering and equality.",
+      "vm_implementation": "Typed Program operation with the shared pure text kernel; value ownership remains executor-private.",
+      "aot_lowering": "Portable C11 typed lowering and the same embedded pure text kernel; native behavior is checked against independent expected output.",
+      "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
+      "old_owner_deletion": "Canonical source execution has no per-function legacy string opcode or fallback; the former i64-only output handler is replaced by typed group output.",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/runtime/core/xr_text_kernel.h",
+        "tests/unit/program/xr_program_text_fixture.h",
+        "tests/unit/program/xr_program_source_cases.json",
+        "tests/unit/program/test_xr_program_source_build.c"
       ]
     }
   ],
@@ -1364,7 +1475,7 @@
       "planned_operations": [
         "capability.require",
         "provider.call",
-        "output.group.i64",
+        "output.group",
         "provider.refuse"
       ],
       "status": "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE"

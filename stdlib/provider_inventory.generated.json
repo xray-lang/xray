@@ -1,0 +1,3156 @@
+{
+  "schema": 1,
+  "evidence_scope": "generated-provider-path; binding and tests require build-bound evidence",
+  "leaf_count": 153,
+  "leaves": [
+    {
+      "symbol": "crypto.__fillRandomBytes",
+      "signature": "(bytes: ref Array<u8>): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "crypto.__timingSafeEqualBytes",
+      "signature": "(a: Array<u8>, b: Array<u8>): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__chdir",
+      "signature": "(path: Path): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__chmod",
+      "signature": "(path: Path, mode: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__dirClose",
+      "signature": "(handle: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__dirNext",
+      "signature": "(handle: i64): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__dirOpen",
+      "signature": "(path: Path): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileClose",
+      "signature": "(handle: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileFlush",
+      "signature": "(handle: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileOpen",
+      "signature": "(path: Path): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileOpenWrite",
+      "signature": "(path: Path, append: bool): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileRead",
+      "signature": "(handle: i64, maxBytes: i64): Array<u8>?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileWrite",
+      "signature": "(handle: i64, data: Array<u8>, offset: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileWriteStr",
+      "signature": "(handle: i64, data: string, offset: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__makeTempDir",
+      "signature": "(root: string): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__makeTempFile",
+      "signature": "(root: string): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__mkdir",
+      "signature": "(path: Path): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__readlink",
+      "signature": "(path: Path): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__realpath",
+      "signature": "(path: Path): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__remove",
+      "signature": "(path: Path): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__rename",
+      "signature": "(old: Path, new: Path): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__rmdir",
+      "signature": "(path: Path): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__stat",
+      "signature": "(path: Path): __FileStat?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__symlink",
+      "signature": "(source: Path, link: Path): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__utimeNow",
+      "signature": "(path: Path): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__abs",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__acos",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__asin",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__atan",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__atan2",
+      "signature": "(y: f64, x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__cbrt",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__ceil",
+      "signature": "(x: f64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__cos",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__cosh",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__exp",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__expm1",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__floor",
+      "signature": "(x: f64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__fmod",
+      "signature": "(x: f64, y: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__hypot",
+      "signature": "(x: f64, y: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__log",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__log10",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__log1p",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__log2",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__pow",
+      "signature": "(base: f64, exp: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__random",
+      "signature": "(): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__randomInt",
+      "signature": "(min: i64, max: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__round",
+      "signature": "(x: f64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__sin",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__sinh",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__sqrt",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__tan",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__tanh",
+      "signature": "(x: f64): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "math.__trunc",
+      "signature": "(x: f64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__alloc",
+      "signature": "(n: i64): __BufferStorage",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__allocAligned",
+      "signature": "(n: i64, align: i64): __BufferStorage",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__allocZeroed",
+      "signature": "(n: i64): __BufferStorage",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__bufferAsBytes",
+      "signature": "(storage: __BufferStorage): const Slice<u8>",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__bufferBorrowPtr",
+      "signature": "(storage: __BufferStorage): MutPtr<u8>",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__bufferLength",
+      "signature": "(storage: __BufferStorage): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__bufferResize",
+      "signature": "(storage: __BufferStorage, n: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__cacheFlush",
+      "signature": "(ptr: Ptr<u8>, n: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__cacheLineSize",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__fence",
+      "signature": "(ordering: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__move",
+      "signature": "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__nontemporalStore",
+      "signature": "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__pageAlloc",
+      "signature": "(bytes: i64, prot: i64): MutPtr<u8>",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__pageFree",
+      "signature": "(ptr: MutPtr<u8>, bytes: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__pageProtect",
+      "signature": "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__prefetch",
+      "signature": "(ptr: Ptr<u8>, rw: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__volatileLoad",
+      "signature": "(ptr: Ptr<u8>, size: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__volatileStore",
+      "signature": "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__accept",
+      "signature": "(listener: NetListener): __NetConnStorage?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__closeConn",
+      "signature": "(conn: NetConn): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__closeListener",
+      "signature": "(listener: NetListener): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__connFd",
+      "signature": "(conn: NetConn): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__connIsTLS",
+      "signature": "(conn: NetConn): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__connLastCode",
+      "signature": "(conn: NetConn): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__connLastErrno",
+      "signature": "(conn: NetConn): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__connectFd",
+      "signature": "(addr: string, port: i64, deadlineMs: i64): __NetConnStorage?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__hasTLS",
+      "signature": "(): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__lastConnectCode",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__listenFd",
+      "signature": "(port: i64, backlog: i64, forceV4: bool): __NetListenerStorage?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__listenerFd",
+      "signature": "(listener: NetListener): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__listenerLastCode",
+      "signature": "(listener: NetListener): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__listenerLastErrno",
+      "signature": "(listener: NetListener): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__listenerPort",
+      "signature": "(listener: NetListener): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__newTlsClientContext",
+      "signature": "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool, alpnWire: Array<u8>): __TlsContextStorage?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__newTlsServerContext",
+      "signature": "(certFile: string, keyFile: string, caFile: string, requireClientCertificate: bool, alpnWire: Array<u8>): __TlsContextStorage?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__readInto",
+      "signature": "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__resolveAll",
+      "signature": "(host: string): Array<string>",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__setAcceptDeadline",
+      "signature": "(listener: NetListener, deadline: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__setDeadlineDirection",
+      "signature": "(conn: NetConn, deadline: i64, direction: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__shutdownDirection",
+      "signature": "(conn: NetConn, direction: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__tlsClientHandshakeWithContext",
+      "signature": "(context: __TlsContextStorage, conn: NetConn, hostname: string, deadlineMs: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__tlsHandshake",
+      "signature": "(conn: NetConn, hostname: string, deadlineMs: i64, alpnWire: Array<u8>): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__tlsNegotiatedProtocol",
+      "signature": "(conn: NetConn): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__tlsServerHandshakeWithContext",
+      "signature": "(context: __TlsContextStorage, conn: NetConn, deadlineMs: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__udpBind",
+      "signature": "(port: i64, addr: string): __NetConnStorage?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__udpFromHost",
+      "signature": "(conn: NetConn): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__udpFromPort",
+      "signature": "(conn: NetConn): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__udpMulticastBind",
+      "signature": "(group: string, port: i64, ttl: i64, loopback: bool): __NetConnStorage?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__udpRecvInto",
+      "signature": "(conn: NetConn, buffer: Array<u8>, deadlineMs: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__udpSendTo",
+      "signature": "(conn: NetConn, data: Array<u8>, addr: string, port: i64, deadlineMs: i64): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "net.__writeBytes",
+      "signature": "(conn: NetConn, data: Array<u8>): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__arch",
+      "signature": "(): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__cpuCount",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__environBlock",
+      "signature": "(): Array<string>",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__exit",
+      "signature": "(code: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__freeMemory",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__getcwd",
+      "signature": "(): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__getenv",
+      "signature": "(name: string): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__getpid",
+      "signature": "(): i64",
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/process",
+        "operation": "xray.runtime.provider-operation.v1/process/getpid",
+        "logical": {
+          "parameters": [],
+          "result_type": "i64",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "reads-process"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "i64-nullary-i64",
+          "header": "shared/xr_os_core.h",
+          "symbol": "xr_os_core_getpid"
+        }
+      },
+      "logical_declaration_sha256": "61eded1bcd53e7fce8888493b9c8c0d3202e5fd5f2289f0f05361ad6c57e6229",
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__gid",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__hostname",
+      "signature": "(): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__kill",
+      "signature": "(pid: i64, signal: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__loadavg",
+      "signature": "(): Array<f64>",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__platform",
+      "signature": "(): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__ppid",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__setenv",
+      "signature": "(name: string, value: string): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__systemHomedir",
+      "signature": "(): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__systemUsername",
+      "signature": "(): string?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__totalMemory",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__uid",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__unsetenv",
+      "signature": "(name: string): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "os.__uptime",
+      "signature": "(): f64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "regex.__unicodeHasProp",
+      "signature": "(cp: i64, propId: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "regex.__unicodePropId",
+      "signature": "(name: string): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "runtime.__finalizerCount",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "runtime.__liveBytes",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "runtime.__liveObjects",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "runtime.__sharedLiveBytes",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "runtime.__staticAllocBytes",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__dylibClose",
+      "signature": "(handle: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__dylibLastError",
+      "signature": "(): string",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__dylibOpen",
+      "signature": "(path: Path): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__dylibSymbol",
+      "signature": "(handle: i64, name: string): Ptr<u8>?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__onSignal",
+      "signature": "(signal: i64, handler: fn(): ()): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__pinToCpu",
+      "signature": "(cpu: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__pipeClose",
+      "signature": "(handle: i64): bool",
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/io",
+        "operation": "xray.runtime.provider-operation.v1/io/pipe-close",
+        "logical": {
+          "parameters": [
+            {
+              "type": "i64",
+              "mode": "in",
+              "owner": "trivial"
+            }
+          ],
+          "result_type": "bool",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [
+            {
+              "resource": "xray.runtime.resource.v1/pipe-endpoint",
+              "value": "parameter.0",
+              "action": "consume",
+              "when": "call-enter"
+            }
+          ],
+          "effects": [
+            "io"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "bool-i64-pipe-close",
+          "header": "os/os_pipe.h",
+          "symbol": "xr_pipe_close"
+        }
+      },
+      "logical_declaration_sha256": "a9396fa6d3f17dd1635edbcc6fdc06d349531d30d46725d260eb2c51f1911b69",
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__pipeOpen",
+      "signature": "(): (i64, i64)?",
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/io",
+        "operation": "xray.runtime.provider-operation.v1/io/pipe-open",
+        "logical": {
+          "parameters": [],
+          "result_type": "(i64, i64)?",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [
+            {
+              "resource": "xray.runtime.resource.v1/pipe-endpoint",
+              "value": "result.some.0",
+              "action": "acquire",
+              "when": "result-present"
+            },
+            {
+              "resource": "xray.runtime.resource.v1/pipe-endpoint",
+              "value": "result.some.1",
+              "action": "acquire",
+              "when": "result-present"
+            }
+          ],
+          "effects": [
+            "io"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "optional-i64-pair-pipe-create",
+          "header": "os/os_pipe.h",
+          "symbol": "xr_pipe_create"
+        }
+      },
+      "logical_declaration_sha256": "ee1b2d917d6bfde3fe320dc1df655019ca4b1beca767fa117ab53a18b56b08ab",
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__pipeRead",
+      "signature": "(handle: i64, maxBytes: i64): Array<u8>?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__pipeWrite",
+      "signature": "(handle: i64, data: Array<u8>): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__processKill",
+      "signature": "(id: i64, signal: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__processSpawn",
+      "signature": "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__processTryWait",
+      "signature": "(id: i64): i64?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__threadLocalAlive",
+      "signature": "(id: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__threadLocalId",
+      "signature": "(): i64",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "sys.__threadYield",
+      "signature": "(): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "time.__cpuNanos",
+      "signature": "(): i64",
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/clock",
+        "operation": "xray.runtime.provider-operation.v1/clock/process-cpu-nanos",
+        "logical": {
+          "parameters": [],
+          "result_type": "i64",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "reads-clock"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "i64-nullary-u64",
+          "header": "os/os_time.h",
+          "symbol": "xr_time_process_cpu_ns"
+        }
+      },
+      "logical_declaration_sha256": "d2205b871c805c0240c1d01663ff006f28c92f053bd86e0cf804c91938a38312",
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "time.__monotonicNanos",
+      "signature": "(): i64",
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/clock",
+        "operation": "xray.runtime.provider-operation.v1/clock/monotonic-nanos",
+        "logical": {
+          "parameters": [],
+          "result_type": "i64",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "reads-clock"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "i64-nullary-u64",
+          "header": "os/os_time.h",
+          "symbol": "xr_time_monotonic_ns"
+        }
+      },
+      "logical_declaration_sha256": "d2205b871c805c0240c1d01663ff006f28c92f053bd86e0cf804c91938a38312",
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "time.__realtimeNanos",
+      "signature": "(): i64",
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/clock",
+        "operation": "xray.runtime.provider-operation.v1/clock/realtime-nanos",
+        "logical": {
+          "parameters": [],
+          "result_type": "i64",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "reads-clock"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "i64-nullary-u64",
+          "header": "os/os_time.h",
+          "symbol": "xr_time_realtime_ns"
+        }
+      },
+      "logical_declaration_sha256": "d2205b871c805c0240c1d01663ff006f28c92f053bd86e0cf804c91938a38312",
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "time.__sleep",
+      "signature": "(ms: i64): ()",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "time.__utcOffsetAt",
+      "signature": "(seconds: i64): i64",
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/clock",
+        "operation": "xray.runtime.provider-operation.v1/clock/utc-offset-minutes-at",
+        "logical": {
+          "parameters": [
+            {
+              "type": "i64",
+              "mode": "in",
+              "owner": "trivial"
+            }
+          ],
+          "result_type": "i64",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "reads-environment"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "i64-unary-status-out",
+          "header": "shared/xr_time_offset.h",
+          "symbol": "xr_time_utc_offset_at"
+        }
+      },
+      "logical_declaration_sha256": "156ad6c1bb27407cb39e2fc744ca709c1794bad8f58cfed8eb748836bc61ad34",
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    }
+  ]
+}

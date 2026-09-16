@@ -29,6 +29,8 @@ typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_CLASS_REFERENCE,
     XR_REFERENCE_VALUE_EXISTENTIAL,
     XR_REFERENCE_VALUE_CALLABLE,
+    XR_REFERENCE_VALUE_STRING,
+    XR_REFERENCE_VALUE_RUNE,
 } XrReferenceValueKind;
 
 typedef struct XrReferenceValue {
@@ -45,8 +47,17 @@ typedef struct XrReferenceValue {
         const void *class_reference;
         const void *existential;
         const void *callable;
+        const void *string;
+        uint32_t rune;
     } as;
 } XrReferenceValue;
+
+/* Borrowed view of a string value: the bytes stay owned by the evaluator
+ * arena or by a detached outcome until that owner is disposed. */
+typedef struct XrReferenceStringView {
+    const uint8_t *bytes;
+    uint32_t size;
+} XrReferenceStringView;
 
 typedef struct XrReferenceProfile {
     uint16_t pointer_width;
@@ -182,6 +193,8 @@ XR_FUNC XrReferenceOutcome xr_reference_evaluate_bound(
  * lifecycle event trace. */
 XR_FUNC bool xr_reference_value_aggregate_view(const XrReferenceValue *value,
                                                XrReferenceAggregateView *view_out);
+XR_FUNC bool xr_reference_value_string_view(const XrReferenceValue *value,
+                                            XrReferenceStringView *view_out);
 XR_FUNC void xr_reference_outcome_dispose(XrReferenceOutcome *outcome);
 XR_FUNC bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
                                            const XrReferenceValue *arguments,

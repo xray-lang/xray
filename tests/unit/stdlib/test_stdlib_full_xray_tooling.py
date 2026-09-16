@@ -655,11 +655,24 @@ class NativeLeafAllowlistTest(unittest.TestCase):
         self.assertTrue(any("effect token" in item for item in defects))
         self.assertFalse(records[("os", "__getpid")].valid)
 
-    def test_nothrow_cannot_be_combined(self) -> None:
-        _records, defects = self.load(
+    def test_nothrow_can_suspend_without_raising_a_typed_error(self) -> None:
+        records, defects = self.load(
             GOOD_LEAF_RECORD.replace('effect = "nothrow"', 'effect = "nothrow, suspends"')
         )
-        self.assertTrue(any("exclusive" in item for item in defects))
+        self.assertEqual([], defects)
+        leaf_class, _reason, defects = inventory.classify_leaf(
+            "os", "__getpid", def_entry(effect="nothrow", vm_binding="yieldable"), records
+        )
+        self.assertEqual("host_abi_leaf", leaf_class)
+        self.assertEqual([], defects)
+
+    def test_nothrow_still_rejects_throwing_effects(self) -> None:
+        for effect in ("nothrow,may_throw", "nothrow,NetError.Io"):
+            with self.subTest(effect=effect):
+                _records, defects = self.load(
+                    GOOD_LEAF_RECORD.replace('effect = "nothrow"', f'effect = "{effect}"')
+                )
+                self.assertTrue(any("contradicts a throwing effect" in item for item in defects))
 
     def test_every_repository_leaf_is_approved(self) -> None:
         _modules, rows, _defects = inventory.build_rows(ROOT)

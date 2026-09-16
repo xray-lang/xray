@@ -25,6 +25,7 @@
 #include "xr_program_coroutine_trap_fixture.h"
 #include "xr_program_cleanup_graph_fixture.h"
 #include "xr_program_output_fixture.h"
+#include "xr_program_text_fixture.h"
 #include "xr_program_trap_fixture.h"
 #include "xr_program_construct_fixture.h"
 
@@ -40,7 +41,13 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_REBORROW_READ == 90,
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PROVIDER_CALL == 136, "provider call stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP_I64 == 137, "output group stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_OUTPUT_GROUP == 148, "output group stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CONSTANT_STRING == 4, "string constant stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CONSTANT_RUNE == 5, "rune constant stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COMPARE_RUNE == 26, "rune compare stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_COMPARE_STRING == 27, "string compare stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_FROM_I64 == 150, "string from i64 stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_CONCAT == 151, "string concat stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_SUSPEND == 140, "coroutine suspension stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call stable id drifted");
@@ -57,7 +64,9 @@ _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted
 _Static_assert(XR_CORE_TYPE_TARGET_ABI == 9, "TargetAbi stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ENDIAN == 10, "TargetEndian stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TYPE_VARIABLE == 11, "type-variable stable type id drifted");
-_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 11u, "runtime builtin row count drifted");
+_Static_assert(XR_CORE_TYPE_STRING == 12, "string stable type id drifted");
+_Static_assert(XR_CORE_TYPE_RUNE == 13, "rune stable type id drifted");
+_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 13u, "runtime builtin row count drifted");
 
 static int failures = 0;
 
@@ -426,7 +435,8 @@ static bool builtin_kind_offset(const XrProgramArtifact *artifact, uint16_t want
     uint64_t count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
     if (count < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT)
         return false;
-    for (uint16_t type_id = 0u; type_id < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++type_id) {
+    for (uint32_t row = 0u; row < XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; ++row) {
+        uint16_t type_id = xr_program_builtin_type_row_at(row)->type_id;
         if (test_take_uvar(artifact->bytes, artifact->size, &cursor) != type_id)
             return false;
         size_t kind_offset = cursor;
@@ -6196,7 +6206,7 @@ static void test_existential_owned_read_reborrow(void) {
 }
 
 typedef struct ReferenceOutputCapture {
-    uint8_t bytes[32];
+    uint8_t bytes[128];
     size_t size;
     uint32_t calls;
     bool fail;
@@ -6246,11 +6256,81 @@ static void test_provider_output_semantics(void) {
         xr_validated_program_free(program);
     }
     xr_program_artifact_free(&artifact);
+}
 
+/* The typed text family: the valid fixture renders the exact byte stream on
+ * the reference evaluator, the bool operand mutation of the i64 fixture is
+ * now a legal typed output, and every text mutation is rejected by the rule
+ * it breaks. */
+static void test_text_semantics(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_text_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        ReferenceOutputCapture capture = {0};
+        XrReferenceProviderBinding binding = {
+            .context = &capture,
+            .output_write = capture_reference_output,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL, &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 0);
+        CHECK(capture.calls == 3u);
+        CHECK(capture.size == sizeof(XR_PROGRAM_TEXT_FIXTURE_STDOUT) - 1u);
+        CHECK(memcmp(capture.bytes, XR_PROGRAM_TEXT_FIXTURE_STDOUT, capture.size) == 0);
+
+        capture = (ReferenceOutputCapture) {.fail = true};
+        result = xr_reference_evaluate_bound(program, xr_validated_program_entry_function(program),
+                                             NULL, 0u, NULL, NULL, &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_TRAP);
+        CHECK(result.trap == XR_REFERENCE_TRAP_PROVIDER_CALL_FAILED);
+        CHECK(capture.calls == 1u);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    static const struct {
+        XrProgramTextFixtureMutation mutation;
+        XrProgramDiagnosticKind expected;
+    } rejections[] = {
+        {XR_PROGRAM_TEXT_FIXTURE_CONCAT_I64_OPERAND, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PROGRAM_TEXT_FIXTURE_CONSTANT_KIND_MISMATCH, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE},
+        {XR_PROGRAM_TEXT_FIXTURE_RUNE_COMPARE_STRING_OPERAND, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PROGRAM_TEXT_FIXTURE_DOUBLE_DROP, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        /* an affine value defined as a non-owner has no root contract */
+        {XR_PROGRAM_TEXT_FIXTURE_CONCAT_NON_OWNER, XR_PROGRAM_DIAGNOSTIC_ROOT},
+    };
+    for (size_t index = 0u; index < sizeof(rejections) / sizeof(rejections[0]); ++index) {
+        CHECK(xr_program_text_fixture_write_mutated(rejections[index].mutation, &artifact,
+                                                    diagnostic,
+                                                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, rejections[index].expected);
+        xr_program_artifact_free(&artifact);
+    }
+
+    /* A bool operand is a canonical display type now; the old i64-only
+     * rejection is gone and the group renders `true`. */
     CHECK(xr_program_output_fixture_write_mutated(1, XR_PROGRAM_OUTPUT_FIXTURE_BOOL_OPERAND,
                                                   &artifact, diagnostic,
                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
-    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+    program = validate_ok(&artifact);
+    if (program) {
+        ReferenceOutputCapture capture = {0};
+        XrReferenceProviderBinding binding = {
+            .context = &capture,
+            .output_write = capture_reference_output,
+        };
+        XrReferenceOutcome result = xr_reference_evaluate_bound(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL, &binding);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(capture.size == 5u);
+        CHECK(memcmp(capture.bytes, "true\n", 5u) == 0);
+        xr_validated_program_free(program);
+    }
     xr_program_artifact_free(&artifact);
 }
 
@@ -6410,6 +6490,7 @@ int main(void) {
     test_cleanup_reason_graph_rejects_foreign_and_unknown_targets_before_walk();
     test_cleanup_reason_graph_cannot_suspend();
     test_provider_output_semantics();
+    test_text_semantics();
     test_provider_trap_continuation_semantics();
     test_inactive_operation_fails_closed_before_semantics();
     if (failures != 0) {

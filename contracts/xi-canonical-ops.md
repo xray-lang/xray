@@ -169,9 +169,36 @@ compatibility opcode, reserved hole, or second bounds owner.
     `regex.Regex(pattern, flags)`. A regex-specific opcode, backend rewrite, or
     native constructor is not a compatible form.
 
+23. `xi.sum.inject` retains the closed optional's ordinal and consuming payload
+    edge through backend preparation. The canonical Program maps it to variant
+    construction. The retained bytecode and C consumers project the same
+    contract into their own storage: None is a null tag or null pointer, while
+    Some transfers the exact payload. Scalar zero remains distinct from None.
+    C support is declared by its generated driver in `lowering.def`; backend
+    verification is not relaxed and no replacement semantic operation is
+    synthesized by C emission.
+
+24. Module declaration metadata has one owner on `XiFunc.module_slots`.
+    The declaration name, kind, source coordinates, exact type, const flag and
+    export flag are published together during lowering. Optimization may remove
+    uses but cannot change a declaration's identity or type. Exports project
+    that record, and semantic detachment copies its types into the same owned
+    snapshot as instruction and capture types. Module state cannot be inferred
+    from a surviving load, store or optimizer literal table. The former
+    parallel name, const and export-name arrays are retired.
+    A data declaration marks its first shared-slot store explicitly; subsequent
+    assignments and REPL replacement publication do not carry that fact. The
+    verifier confines it to data slots in the module initializer, metadata
+    cloning preserves it, and value/memory fingerprints detect changes. Constant
+    folding learns a declaration value only from this initialization witness,
+    never from an arbitrary store.
+
 ## Verification
 
 verification-test: test_xi_cleanup
 verification-test: test_xi_cleanup_lower
 verification-test: test_xi_cleanup_clone
 verification-test: test_xi_cleanup_integration
+verification-test: test_xi_pipeline
+verification-test: test_xi_opt
+verification-test: test_module_graph

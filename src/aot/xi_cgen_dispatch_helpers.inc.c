@@ -408,8 +408,8 @@ static const XiConstLiteral *xicgen_owned_scalar_const_slot_literal(XiCgenCtx *c
                                                                     int64_t slot) {
     const XiModule *module = cg_module_for_func(ctx, f);
     const XiFunc *init = module ? module->init : NULL;
-    if (!init || slot < 0 || slot >= init->nshared || !init->slot_owned_consts ||
-        !init->slot_owned_consts[slot])
+    if (!init || slot < 0 || slot >= init->nshared || !init->module_slots ||
+        !init->module_slots[slot].is_const)
         return NULL;
     const XiConstLiteral *lit = cg_module_const_literal(module, slot);
     return xicgen_const_literal_is_freestanding_scalar(lit) &&
@@ -699,6 +699,18 @@ static void xicgen_variant_test(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     }
     const char *suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    if (v->args[0]->type && v->args[0]->type->is_nullable) {
+        if (v->aux_int > 1) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+        } else {
+            fprintf(out, "%sXR_IS_NULL(", v->aux_int == 1 ? "!" : "");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
     fprintf(out, "(XR_TO_INT(xrt_enum_field_get(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", INT64_C(0))) == INT64_C(%" PRId64 "))", v->aux_int);
@@ -717,6 +729,20 @@ static void xicgen_variant_project(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         return;
     }
     const char *suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
+    if (v->args[0]->type && v->args[0]->type->is_nullable) {
+        XrType payload = *v->args[0]->type;
+        payload.is_nullable = false;
+        if (variant != 1u || field != 0u || !v->type || !xr_type_equals(&payload, v->type)) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+        } else {
+            fprintf(out, "xrt_optional_payload_get(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
     fprintf(out, "xrt_enum_variant_field_get(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", UINT32_C(%u), UINT32_C(%u))", (unsigned) variant, (unsigned) field);
@@ -731,10 +757,18 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     (void) prefix;
     uint16_t param_idx = (uint16_t) v->aux_int;
     XrRep from_rep = cg_func_param_decl_storage_rep(ctx, f, param_idx);
-    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
-    if (cg_func_param_abi_is_tagged(ctx, f, param_idx) && value_plan &&
-        cg_value_rep_is_span_aggregate(value_plan->rep)) {
-        fprintf(out, "xrt_span_from_value_ref(p%u)", (unsigned) v->aux_int);
+    if (cg_value_plan_is_span_aggregate(ctx, v)) {
+        /* A view is a two-word value, not a raw pointer. Its published ABI
+         * determines whether the parameter already carries those words or
+         * needs the borrowed tagged wrapper removed. */
+        if (cg_func_param_abi_is_tagged(ctx, f, param_idx))
+            fprintf(out, "xrt_span_from_value_ref(p%u)", (unsigned) v->aux_int);
+        else if (from_rep == XR_REP_PTR)
+            fprintf(out, "p%u", (unsigned) v->aux_int);
+        else {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+        }
         return;
     }
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
@@ -4071,16 +4105,6 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fputs("XR_NULL_VAL", out);
             return;
         }
-        if (provenance->program_family ==
-            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL) {
-            if (cg_program_source_namespace_import_is_exact(ctx, f, v)) {
-                fputs("XR_NULL_VAL", out);
-                return;
-            }
-            ctx->error = true;
-            fputs("XR_NULL_VAL", out);
-            return;
-        }
         if (provenance->program_family !=
             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) {
             ctx->error = true;
@@ -4406,7 +4430,7 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
          * lowered directly to an exception value (see xicgen_emit_panicinfo_constructor). */
         fprintf(out, "XR_NULL_VAL /* builtin native class token: %s */",
                 v->aux ? (const char *) v->aux : "?");
-    } else if (ctx && ctx->freestanding_profile && cg_prelude_enum_data((int) v->aux_int) != NULL) {
+    } else if (ctx && ctx->freestanding_profile && xr_builtin_enum_registry_row((int) v->aux_int) != NULL) {
         fprintf(out, "XR_NULL_VAL /* freestanding prelude enum namespace: %s */",
                 v->aux ? (const char *) v->aux : "?");
     } else if (emit_prelude_enum_type_expr(ctx, out, (int) v->aux_int)) {
@@ -4450,6 +4474,41 @@ static bool xicgen_resolve_direct_class_ctor(const XiFunc *f, const XiValue *cal
     if (callee->op == XI_BOX && callee->nargs >= 1)
         return xicgen_resolve_direct_class_ctor(f, callee->args[0], target);
     return false;
+}
+
+static void xicgen_emit_runtime_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            const XiValue *v) {
+    XrCValueEmissionView emission = {0};
+    const XiValue *argument = v->op == XI_CALL && v->nargs == 2 ? v->args[1] : NULL;
+    uint32_t argument_id = UINT32_MAX;
+    bool argument_exact = argument && cg_value_semantic_id(ctx, f, argument, &argument_id);
+    bool found = cg_value_emission_view(ctx, f, v, &emission) == CG_VALUE_EMISSION_FOUND &&
+                 emission.rep == XR_C_VALUE_REP_TAGGED &&
+                 emission.materialization == XR_C_VALUE_MATERIALIZATION_RUNTIME_CONSTRUCTOR &&
+                 emission.recipe_symbol && emission.recipe_argument_value == UINT32_MAX;
+    bool nullary = found && strcmp(emission.recipe_symbol, "xrt_strbuf_new") == 0 &&
+                   v->op == XI_CALL_BUILTIN && v->nargs == 0 &&
+                   emission.recipe_operand_value == UINT32_MAX;
+    bool atomic_i64 = found && strcmp(emission.recipe_symbol, "xr_aot_atomic_new_i64") == 0;
+    bool atomic_f64 = found && strcmp(emission.recipe_symbol, "xr_aot_atomic_new_f64") == 0;
+    bool atomic_bool = found && strcmp(emission.recipe_symbol, "xr_aot_atomic_new_bool") == 0;
+    if (!found || (!nullary && (!(atomic_i64 || atomic_f64 || atomic_bool) || !argument_exact ||
+                                emission.recipe_operand_value != argument_id))) {
+        fprintf(stderr, "[xi_cgen] ERROR: immutable runtime constructor recipe is missing\n");
+        emit_codegen_abort_expr(out);
+        cg_ctx_set_error(ctx);
+        return;
+    }
+    fprintf(out, "%s(", emission.recipe_symbol);
+    if (!nullary) {
+        fprintf(out, "%s, ", xicgen_aot_context_expr(ctx, f));
+        if (atomic_bool)
+            fprintf(out, "(");
+        emit_value_as_rep_ctx(ctx, out, argument, atomic_f64 ? XR_REP_F64 : XR_REP_I64);
+        if (atomic_bool)
+            fprintf(out, ") != 0");
+    }
+    fprintf(out, ")");
 }
 
 static bool xicgen_call_is_atomic_constructor(const XiValue *callee) {
@@ -5575,128 +5634,6 @@ static bool xicgen_emit_program_direct_i64_call(XiCgenCtx *ctx, FILE *out, const
     return true;
 }
 
-typedef enum CgNativeTargetLeafStatus {
-    CG_NATIVE_TARGET_LEAF_UNCOVERED = 0,
-    CG_NATIVE_TARGET_LEAF_EXACT,
-    CG_NATIVE_TARGET_LEAF_INVALID,
-} CgNativeTargetLeafStatus;
-
-/* Consume the backend-neutral numeric leaf selected by the verified
- * TargetPlan.  No import/module/member spelling participates in this
- * projection: the only C-specific choice is the final numeric leaf-to-symbol
- * mapping. */
-static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(XiCgenCtx *ctx,
-                                                               const XiFunc *function,
-                                                               const XiValue *value,
-                                                               const char **out_symbol) {
-    if (out_symbol)
-        *out_symbol = NULL;
-    if (!ctx || !function || !value || !out_symbol || value->op != XI_CALL || value->nargs != 1 ||
-        !value->args || !value->args[0])
-        return CG_NATIVE_TARGET_LEAF_UNCOVERED;
-    const XrTargetPlan *target = cg_function_target_plan(ctx, function);
-    uint32_t partition = UINT32_MAX;
-    const XrSemanticPlan *semantic =
-        ctx && ctx->aot_bundle
-            ? xaot_bundle_program_semantic_for_func(ctx->aot_bundle, function, &partition)
-            : NULL;
-    uint32_t target_function = UINT32_MAX;
-    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-    if (!target || !semantic ||
-        !xr_target_plan_find_function(target, semantic, function->semantic_plan_function_index,
-                                      &target_function) ||
-        !cg_value_semantic_id(ctx, function, value, &semantic_value))
-        return CG_NATIVE_TARGET_LEAF_UNCOVERED;
-    uint32_t call_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
-    const XrTargetCallRecord *match = NULL;
-    for (uint32_t i = 0; i < call_count; i++) {
-        const XrTargetCallRecord *candidate = &calls[i];
-        if (candidate->caller_function != target_function ||
-            candidate->result_value != semantic_value ||
-            candidate->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
-            candidate->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
-            continue;
-        if (match)
-            return CG_NATIVE_TARGET_LEAF_INVALID;
-        match = candidate;
-    }
-    if (!match)
-        return CG_NATIVE_TARGET_LEAF_UNCOVERED;
-    const XrTargetValueRepRecord *result =
-        xr_target_plan_value_rep_for_module(target, partition, semantic_value);
-    const XrTargetMachineRepRecord *register_rep =
-        result ? xr_target_plan_machine_rep(target, result->register_rep) : NULL;
-    const XrTargetMachineRepRecord *memory_rep =
-        result ? xr_target_plan_machine_rep(target, result->memory_rep) : NULL;
-    uint32_t instruction_count = 0;
-    const XrTargetInstructionRecord *instructions =
-        xr_target_plan_function_instructions(target, target_function, &instruction_count);
-    uint32_t matching_instructions = 0;
-    for (uint32_t i = 0; i < instruction_count; i++)
-        if (instructions[i].opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64 &&
-            instructions[i].immediate_bits == match->id)
-            matching_instructions++;
-    XrCValueEmissionView emission = {0};
-    bool exact =
-        match->id < call_count && match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
-        match->callee_function == XR_SEMANTIC_INDEX_NONE &&
-        match->source_dependency == XR_SEMANTIC_INDEX_NONE &&
-        match->source_export == XR_SEMANTIC_INDEX_NONE && match->argument_count == 0 &&
-        match->adapter_count == 0 && match->flags == 0 &&
-        match->result_mode == XR_TARGET_CALL_VALUE &&
-        match->result_ownership == XR_TARGET_CALL_NONE && result && register_rep && memory_rep &&
-        register_rep->kind == XR_MACHINE_REP_I64 && memory_rep->kind == XR_MACHINE_REP_I64 &&
-        matching_instructions == 1 &&
-        cg_value_emission_view(ctx, function, value, &emission) == CG_VALUE_EMISSION_FOUND &&
-        emission.rep == XR_C_VALUE_REP_I64 && emission.c_type &&
-        strcmp(emission.c_type, "int64_t") == 0;
-    if (!exact)
-        return CG_NATIVE_TARGET_LEAF_INVALID;
-    switch (match->native_leaf) {
-        case XR_STDLIB_TARGET_LEAF_I64_GETPID:
-            *out_symbol = "xr_os_core_getpid";
-            return CG_NATIVE_TARGET_LEAF_EXACT;
-        default:
-            return CG_NATIVE_TARGET_LEAF_INVALID;
-    }
-}
-
-static bool cg_native_target_leaf_import_is_exact_callee(XiCgenCtx *ctx, const XiFunc *function,
-                                                         const XiValue *import) {
-    if (!ctx || !function || !import || import->op != XI_IMPORT_REF)
-        return false;
-    bool seen = false;
-    for (uint32_t bi = 0; bi < function->nblocks; bi++) {
-        const XiBlock *block = function->blocks[bi];
-        if (!block)
-            continue;
-        if (block->control == import)
-            return false;
-        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
-            for (uint16_t i = 0; i < phi->value.nargs; i++)
-                if (phi->value.args[i] == import)
-                    return false;
-        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
-            const XiValue *user = block->values[vi];
-            if (!user || user == import)
-                continue;
-            for (uint16_t i = 0; i < user->nargs; i++) {
-                if (user->args[i] != import)
-                    continue;
-                const char *symbol = NULL;
-                if (i != 0 ||
-                    cg_native_target_leaf_i64_call(ctx, function, user, &symbol) !=
-                        CG_NATIVE_TARGET_LEAF_EXACT ||
-                    !symbol)
-                    return false;
-                seen = true;
-            }
-        }
-    }
-    return seen;
-}
-
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
@@ -5713,20 +5650,6 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     XaotDirectI64TargetStatus direct_i64_status = cg_direct_i64_call_view(ctx, f, v, &direct_i64);
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
         emit_codegen_abort_expr(out);
-        return;
-    }
-    const char *native_leaf_symbol = NULL;
-    CgNativeTargetLeafStatus native_leaf_status =
-        cg_native_target_leaf_i64_call(ctx, f, v, &native_leaf_symbol);
-    if (native_leaf_status == CG_NATIVE_TARGET_LEAF_INVALID) {
-        ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: XR_TARGET_1001: native target leaf C binding is incomplete\n");
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    if (native_leaf_status == CG_NATIVE_TARGET_LEAF_EXACT) {
-        fprintf(out, "%s()", native_leaf_symbol);
         return;
     }
     if (!ctx->program_direct_i64_required && leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED &&
@@ -5776,28 +5699,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                          xicgen_resolve_direct_class_ctor(f, callee, &target);
 
     if (xicgen_call_is_atomic_constructor(callee)) {
-        const XiValue *initial = v->nargs >= 2 ? v->args[1] : NULL;
-        CgAtomicKind kind =
-            xicgen_atomic_kind_from_type(initial ? initial->type : (v->type ? v->type : NULL));
-        if (kind == CG_ATOMIC_UNKNOWN)
-            kind = CG_ATOMIC_INT;
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xr_aot_atomic_new_%s(%s, ", xicgen_atomic_suffix(kind),
-                xicgen_aot_context_expr(ctx, f));
-        if (!initial) {
-            fprintf(out, kind == CG_ATOMIC_FLOAT ? "0.0" : "0");
-        } else if (kind == CG_ATOMIC_FLOAT) {
-            emit_value_as_rep_ctx(ctx, out, initial, XR_REP_F64);
-        } else if (kind == CG_ATOMIC_BOOL) {
-            fprintf(out, "(");
-            emit_value_as_rep_ctx(ctx, out, initial, XR_REP_I64);
-            fprintf(out, ") != 0");
-        } else {
-            emit_value_as_rep_ctx(ctx, out, initial, XR_REP_I64);
-        }
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
+        xicgen_emit_runtime_constructor(ctx, out, f, v);
         return;
     }
 
@@ -7644,19 +7546,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (strcmp(bn, "StringBuilder") == 0) {
-        XrCValueEmissionView emission = {0};
-        if (cg_value_emission_view(ctx, f, v, &emission) != CG_VALUE_EMISSION_FOUND ||
-            emission.rep != XR_C_VALUE_REP_TAGGED ||
-            emission.materialization != XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_NEW ||
-            !emission.recipe_symbol || emission.recipe_operand_value != UINT32_MAX ||
-            v->nargs != 0) {
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: immutable StringBuilder materialization recipe is missing\n");
-            emit_codegen_abort_expr(out);
-            cg_ctx_set_error(ctx);
-            return;
-        }
-        fprintf(out, "%s()", emission.recipe_symbol);
+        xicgen_emit_runtime_constructor(ctx, out, f, v);
     } else if (strcmp(bn, "map_new") == 0) {
         xicgen_map_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "set_new") == 0) {
@@ -18429,6 +18319,8 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     }
     fprintf(out, "    }\n");
 }
+
+#include "xi_cgen_optional.inc.c"
 
 static bool xi_to_c_emit_generated(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {

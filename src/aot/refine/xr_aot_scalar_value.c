@@ -9,6 +9,7 @@
  */
 
 #include "xr_aot_scalar_value.h"
+#include "../../ir/xi_analysis.h"
 #include "../../plan/semantic/xr_semantic_enum_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
@@ -351,16 +352,38 @@ static bool adapter_source_rep_is_exact(const XrTargetPlan *target_plan,
     }
 }
 
+/* Representation conversion may occur at any dominated use, including the
+ * resume block of a suspending call. In one block the definition must precede
+ * the conversion; PHI definitions are available at block entry. */
+static bool adapter_source_is_available(const XiFunc *function, const XiValue *adapter) {
+    const XiValue *source = adapter->args[0];
+    if (source->block == adapter->block) {
+        for (const XiPhi *phi = source->block->phis; phi; phi = phi->next)
+            if (&phi->value == source)
+                return true;
+        for (uint32_t index = 0; index < source->block->nvalues; index++) {
+            const XiValue *candidate = source->block->values[index];
+            if (candidate == adapter)
+                return false;
+            if (candidate == source)
+                return true;
+        }
+        return false;
+    }
+    xi_ensure_dominators((XiFunc *) function);
+    return xi_dominates(source->block, adapter->block);
+}
+
 XR_FUNC bool xr_aot_rep_adapter_value_is_exact(const XrTargetPlan *target_plan,
                                                const XiFunc *function, const XiValue *value,
                                                char *error, size_t error_size) {
     if (!target_plan || !function || !value || !adapter_origin_matches(value) ||
         value->nargs != 1 || !value->args || !value->args[0] ||
         value->args[0]->backend_origin != XI_BACKEND_VALUE_NONE || value->args[0]->block == NULL ||
-        value->args[0]->block->func != function || value->block != value->args[0]->block ||
-        value->id >= function->next_value_id || value->type != value->args[0]->type ||
-        !block_belongs_to_function(function, value->block) ||
-        !value_belongs_to_block(value->block, value))
+        value->args[0]->block->func != function || value->id >= function->next_value_id ||
+        value->type != value->args[0]->type || !block_belongs_to_function(function, value->block) ||
+        !value_belongs_to_block(value->block, value) ||
+        !adapter_source_is_available(function, value))
         return fail(error, error_size, "backend representation adapter provenance is invalid");
 
     const XrSemanticPlan *semantic_plan = function->semantic_plan;

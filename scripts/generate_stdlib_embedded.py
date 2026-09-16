@@ -78,6 +78,7 @@ def collect_entries(root: Path, sources: list[Path]) -> list[tuple[str, Path, by
 def derive_binder_modules(root: Path) -> set[str]:
     """Ask stdlibgen which modules it emits a native-entry binder for."""
     generator_path = root / "tools" / "stdlibgen" / "stdlibgen.py"
+    sys.path.insert(0, str(generator_path.parent))
     spec = importlib.util.spec_from_file_location("xray_stdlibgen_for_embedding", generator_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load stdlib metadata generator: {generator_path}")

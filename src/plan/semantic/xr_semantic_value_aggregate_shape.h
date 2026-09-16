@@ -12,6 +12,7 @@
 #define XR_SEMANTIC_VALUE_AGGREGATE_SHAPE_H
 
 #include "xr_semantic_class_shape.h"
+#include "xr_semantic_array_type_shape.h"
 #include "xr_semantic_enum_shape.h"
 #include "xr_semantic_string_shape.h"
 #include "xr_semantic_local_call_target_shape.h"
@@ -42,7 +43,9 @@ static inline bool xr_semantic_source_structural_shape_is_exact(const XrSemantic
     if (!plan || !type || type->kind != XR_KIND_STRUCT_OBJECT ||
         type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count == 0 ||
         type->aggregate_extent != type->child_count ||
-        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_BORROW_VIEW |
+        (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
                         XR_SEM_TYPE_AGGREGATE_EXACT)) != 0)
         return false;
     uint32_t type_entity = XR_SEMANTIC_INDEX_NONE;
@@ -88,19 +91,22 @@ static inline bool xr_semantic_source_structural_shape_is_exact(const XrSemantic
  * target layout, clone, drop, or ABI. Those decisions require the program-wide
  * lifecycle owner that does not yet exist.
  *
- * The only managed leaves admitted here are the two tagged carriers whose
- * target-neutral identities are already complete: String and a payload-bearing
- * source enum. A class, container, nullable value, view, or unknown field stays
- * outside this precursor. Scalar and nested aggregate fields are structural
- * dependencies, not managed leaves. */
-static inline bool xr_semantic_managed_aggregate_field_graph(
-    const XrSemanticPlan *plan, uint32_t semantic_type, uint32_t *stack, uint32_t depth,
-    uint32_t *field_count, uint32_t *managed_field_count) {
+ * String, payload-bearing source enums and Array references have complete
+ * tagged carriers. Array qualifiers and element types do not alter the field's
+ * carrier: the referenced allocation owns its element layout and lifecycle.
+ * Other managed types require their own exact representation authority.
+ * Scalars and nested aggregates remain structural dependencies. */
+static inline bool xr_semantic_managed_aggregate_field_graph(const XrSemanticPlan *plan,
+                                                             uint32_t semantic_type,
+                                                             uint32_t *stack, uint32_t depth,
+                                                             uint32_t *field_count,
+                                                             uint32_t *managed_field_count) {
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
     if (!plan || !type || !stack || !field_count || !managed_field_count || depth >= 64u)
         return false;
-    if (xr_semantic_tagged_string_type_is_exact(type) ||
-        xr_semantic_adt_enum_type_is_exact(type)) {
+    if (xr_semantic_tagged_string_type_is_exact(type) || xr_semantic_adt_enum_type_is_exact(type) ||
+        xr_semantic_array_type_row_is_exact(type) ||
+        xr_semantic_source_structural_shape_is_exact(plan, semantic_type)) {
         if (*managed_field_count == UINT32_MAX)
             return false;
         (*managed_field_count)++;
@@ -118,8 +124,7 @@ static inline bool xr_semantic_managed_aggregate_field_graph(
         default:
             break;
     }
-    if (xr_semantic_aggregate_type_kind(type) != 1 &&
-        !xr_semantic_source_structural_shape_is_exact(plan, semantic_type))
+    if (xr_semantic_aggregate_type_kind(type) != 1)
         return false;
     for (uint32_t i = 0; i < depth; i++)
         if (stack[i] == semantic_type)
@@ -128,9 +133,8 @@ static inline bool xr_semantic_managed_aggregate_field_graph(
     const uint32_t *children = xr_semantic_plan_type_children(plan, &child_table_count);
     if (!children || type->child_begin > child_table_count ||
         type->child_count > child_table_count - type->child_begin ||
-        (type->kind == XR_KIND_FIXED_ARRAY
-             ? (type->child_count != 1 || type->aggregate_extent == 0)
-             : type->aggregate_extent != type->child_count))
+        (type->kind == XR_KIND_FIXED_ARRAY ? (type->child_count != 1 || type->aggregate_extent == 0)
+                                           : type->aggregate_extent != type->child_count))
         return false;
     stack[depth] = semantic_type;
     uint32_t repetitions = type->kind == XR_KIND_FIXED_ARRAY ? type->aggregate_extent : 1u;
@@ -141,9 +145,9 @@ static inline bool xr_semantic_managed_aggregate_field_graph(
     *field_count += repetitions * type->child_count;
     for (uint32_t repetition = 0; repetition < repetitions; repetition++)
         for (uint32_t i = 0; i < dependencies; i++)
-            if (!xr_semantic_managed_aggregate_field_graph(
-                    plan, children[type->child_begin + i], stack, depth + 1u, field_count,
-                    managed_field_count))
+            if (!xr_semantic_managed_aggregate_field_graph(plan, children[type->child_begin + i],
+                                                           stack, depth + 1u, field_count,
+                                                           managed_field_count))
                 return false;
     return true;
 }
@@ -168,8 +172,7 @@ static inline bool xr_semantic_direct_local_managed_aggregate_argument_is_exact(
         return false;
     uint32_t parameter_index = callee->parameter_begin + ordinal;
     uint32_t operand_index = operation->operand_begin + ordinal + 1u;
-    const XrSemanticParameterRecord *parameter =
-        xr_semantic_plan_parameter(plan, parameter_index);
+    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     const XrSemanticOperandRecord *operand =
@@ -181,10 +184,9 @@ static inline bool xr_semantic_direct_local_managed_aggregate_argument_is_exact(
             break;
         }
     if (!parameter || !operand || callee_index == XR_SEMANTIC_INDEX_NONE ||
-        parameter->function != callee_index ||
-        parameter->ordinal != ordinal || parameter->type != operand->type ||
-        parameter->mode != XR_PARAM_READ || parameter->ownership != XI_OWN_BORROWED ||
-        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        parameter->function != callee_index || parameter->ordinal != ordinal ||
+        parameter->type != operand->type || parameter->mode != XR_PARAM_READ ||
+        parameter->ownership != XI_OWN_BORROWED || parameter->transfer_mode != XR_TRANSFER_SHARE ||
         (parameter->flags & (uint8_t) ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
         parameter->reserved != 0 || operand->role != XR_SEM_OPERAND_ARGUMENT ||
         operand->parameter != (int16_t) ordinal || operand->parameter_mode != XR_PARAM_READ ||
@@ -197,10 +199,8 @@ static inline bool xr_semantic_direct_local_managed_aggregate_argument_is_exact(
     uint32_t stack[64] = {0};
     uint32_t field_count = 0;
     uint32_t managed_field_count = 0;
-    const XrSemanticTypeRecord *parameter_type =
-        xr_semantic_plan_type(plan, parameter->type);
-    if ((xr_semantic_aggregate_type_kind(parameter_type) != 1 &&
-         !xr_semantic_source_structural_shape_is_exact(plan, parameter->type)) ||
+    const XrSemanticTypeRecord *parameter_type = xr_semantic_plan_type(plan, parameter->type);
+    if (xr_semantic_aggregate_type_kind(parameter_type) != 1 ||
         !xr_semantic_managed_aggregate_field_graph(plan, parameter->type, stack, 0, &field_count,
                                                    &managed_field_count) ||
         managed_field_count == 0)

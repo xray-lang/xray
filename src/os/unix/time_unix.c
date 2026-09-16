@@ -26,13 +26,15 @@ uint64_t xr_time_monotonic_ns(void) {
     struct timespec ts;
     // CLOCK_MONOTONIC: never goes backwards, frozen across suspend
     // on most kernels. Adequate for all our timing needs.
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        return 0;
     return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 }
 
 uint64_t xr_time_realtime_ns(void) {
     struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
+    if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
+        return 0;
     return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 }
 
@@ -47,6 +49,8 @@ uint64_t xr_time_process_cpu_ns(void) {
     /* Fallback: clock() has poor resolution and wraps on 32-bit, but
      * is universally available. */
     t = clock();
+    if (t == (clock_t) -1)
+        return 0;
     return (uint64_t) t * (1000000000ULL / CLOCKS_PER_SEC);
 }
 

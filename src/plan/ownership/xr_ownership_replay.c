@@ -137,25 +137,46 @@ static bool map_certificate_owners(XrOwnershipReplay *replay) {
     return true;
 }
 
+/* The certificate checker has already proved strict owner/block/successor
+ * order. Search that immutable table directly; replay needs no duplicate
+ * index and must not rescan unrelated owners for every block and operand. */
+static uint32_t edge_lower_bound(const XrOwnershipReplay *replay, uint32_t owner, uint32_t block,
+                                 uint32_t successor) {
+    uint32_t low = 0;
+    uint32_t high = replay->certificate->edge_state_count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[middle];
+        bool before =
+            edge->owner < owner ||
+            (edge->owner == owner &&
+             (edge->block < block || (edge->block == block && edge->successor < successor)));
+        if (before)
+            low = middle + 1u;
+        else
+            high = middle;
+    }
+    return low;
+}
+
 static const XrOwnershipEdgeStateRecord *find_block_entry(const XrOwnershipReplay *replay,
                                                           uint32_t owner, uint32_t block) {
-    for (uint32_t i = 0; i < replay->certificate->edge_state_count; i++) {
-        const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[i];
-        if (edge->owner == owner && edge->block == block)
-            return edge;
-    }
-    return NULL;
+    uint32_t index = edge_lower_bound(replay, owner, block, 0u);
+    if (index == replay->certificate->edge_state_count)
+        return NULL;
+    const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[index];
+    return edge->owner == owner && edge->block == block ? edge : NULL;
 }
 
 static const XrOwnershipEdgeStateRecord *find_edge_state(const XrOwnershipReplay *replay,
                                                          uint32_t owner, uint32_t block,
                                                          uint32_t successor) {
-    for (uint32_t i = 0; i < replay->certificate->edge_state_count; i++) {
-        const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[i];
-        if (edge->owner == owner && edge->block == block && edge->successor == successor)
-            return edge;
-    }
-    return NULL;
+    uint32_t index = edge_lower_bound(replay, owner, block, successor);
+    if (index == replay->certificate->edge_state_count)
+        return NULL;
+    const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[index];
+    return edge->owner == owner && edge->block == block && edge->successor == successor ? edge
+                                                                                        : NULL;
 }
 
 static bool state_can_be_used(uint8_t state) {
@@ -335,10 +356,12 @@ static bool replay_owner_block(XrOwnershipReplay *replay, uint32_t owner_index,
     if (!apply_events_at_point(replay, owner_index, XR_SEMANTIC_INDEX_NONE, block_index,
                                XR_OWN_POINT_BLOCK_EXIT, &balance, &state))
         return false;
-    for (uint32_t i = 0; i < replay->certificate->edge_state_count; i++) {
+    uint32_t first_edge = (uint32_t) (entry - replay->certificate->edge_states);
+    for (uint32_t i = first_edge; i < replay->certificate->edge_state_count; i++) {
         const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[i];
-        if (edge->owner == owner_index && edge->block == block_index &&
-            !verify_edge_exit(replay, owner_index, edge, balance))
+        if (edge->owner != owner_index || edge->block != block_index)
+            break;
+        if (!verify_edge_exit(replay, owner_index, edge, balance))
             return false;
     }
     return true;
@@ -350,9 +373,12 @@ static bool replay_ordered_liveness(XrOwnershipReplay *replay) {
         if (function >= replay->plan->function_count)
             return fail(replay, "XR_OWN_3002", "owner function is outside the plan");
         const XrSemanticFunctionRecord *record = &replay->plan->functions[function];
-        for (uint32_t e = 0; e < replay->certificate->edge_state_count; e++) {
+        uint32_t first_edge = edge_lower_bound(replay, owner, 0u, 0u);
+        for (uint32_t e = first_edge; e < replay->certificate->edge_state_count; e++) {
             const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[e];
-            if (edge->owner != owner || edge->flags != XR_OWN_EDGE_OWNER_FRONTIER)
+            if (edge->owner != owner)
+                break;
+            if (edge->flags != XR_OWN_EDGE_OWNER_FRONTIER)
                 continue;
             const XrOwnershipEdgeStateRecord *entry =
                 find_block_entry(replay, owner, edge->successor);

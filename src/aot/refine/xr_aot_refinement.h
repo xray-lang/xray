@@ -317,6 +317,18 @@ XR_FUNC bool xr_aot_refinement_try_representation_adapter(
  * Non-program rows whose binding cannot be proved are recorded as refusals
  * with a stable diagnostic. PROGRAM_DIRECT is already a static program-graph
  * commitment, so it must produce one APPLIED global binding or fail closed. */
+/* A synchronous batch shares one full TargetPlan admission. Inputs are
+ * borrowed for the call; returned plans are independently owned. Failure frees
+ * all partial plans and leaves every output NULL. No validation ticket escapes. */
+XR_FUNC bool xr_aot_refinement_direct_call_authority_build_modules(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *const *semantics,
+    uint32_t module_count, uint32_t pass_id, XrAotRefinementPlan **out_plans,
+    uint32_t *failed_module, XrAotRefinementDiagnostic *diag);
+XR_FUNC bool xr_aot_refinement_verify_modules(
+    const XrTargetPlan *target_plan, const XrSemanticPlan *const *semantics,
+    const XrAotRefinementPlanView *views, uint32_t module_count, uint32_t *failed_module,
+    XrAotRefinementDiagnostic *diag);
+
 XR_FUNC bool xr_aot_refinement_direct_call_authority_build(
     const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan, uint32_t pass_id,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);

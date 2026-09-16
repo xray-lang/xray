@@ -5,7 +5,7 @@
   "execution_authority": "not-an-AOT-compiler-input",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@1",
-  "operation_count": 62,
+  "operation_count": 68,
   "operations": [
     {
       "stable_id": 1,
@@ -26,6 +26,22 @@
     {
       "stable_id": 3,
       "spelling": "core.constant.target_enum",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 4,
+      "spelling": "core.constant.string",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 5,
+      "spelling": "core.constant.rune",
       "aot": "COMPLETE",
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",
@@ -98,6 +114,22 @@
     {
       "stable_id": 25,
       "spelling": "core.compare.target_enum",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 26,
+      "spelling": "core.compare.rune",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 27,
+      "spelling": "core.compare.string",
       "aot": "COMPLETE",
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",
@@ -432,14 +464,6 @@
       "translation_validation": "STRUCTURAL_EXACT"
     },
     {
-      "stable_id": 137,
-      "spelling": "core.output.group.i64",
-      "aot": "COMPLETE",
-      "backend_ir": "COMPLETE",
-      "portable_c11": "COMPLETE",
-      "translation_validation": "STRUCTURAL_EXACT"
-    },
-    {
       "stable_id": 138,
       "spelling": "core.coroutine.call.sealed",
       "aot": "COMPLETE",
@@ -498,6 +522,30 @@
     {
       "stable_id": 146,
       "spelling": "core.place.exchange",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 148,
+      "spelling": "core.output.group",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 150,
+      "spelling": "core.string.from_i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 151,
+      "spelling": "core.string.concat",
       "aot": "COMPLETE",
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",

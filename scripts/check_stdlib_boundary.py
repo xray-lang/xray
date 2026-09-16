@@ -516,6 +516,8 @@ def check_error_model_policy(root: Path) -> list[str]:
 
     high_risk_sources = (
         root / "src/base/xglobal_indices.h",
+        root / "src/base/xbuiltin_enum.h",
+        root / "stdlib/prelude/builtin_symbols.def",
         root / "src/module/xprelude_runtime.c",
         root / "src/frontend/analyzer/xanalyzer.c",
         root / "src/api/xisolate_runtime.c",
@@ -531,6 +533,7 @@ def check_error_model_policy(root: Path) -> list[str]:
         macro = "XR_GLOBAL_VAR_" + re.sub(r"[^A-Za-z0-9]", "_", symbol).upper()
         patterns = (
             re.compile(rf"\b{re.escape(macro)}\b"),
+            re.compile(rf'\bXR_BUILTIN_ENUM\s*\(\s*"{re.escape(symbol)}"'),
             re.compile(rf"\b(?:register|make)_prelude_enum(?:_full)?\s*\([^;]*\"{re.escape(symbol)}\"", re.S),
             re.compile(rf"\bPRELUDE_ENUMS\b[^;]*\(\s*\"{re.escape(symbol)}\"", re.S),
         )

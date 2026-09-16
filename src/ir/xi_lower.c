@@ -1500,6 +1500,12 @@ XR_FUNC void xi_lower_bind_object_access_id(XiLower *l, XiValue *access, const c
     if (!l || !access || !l->func ||
         (access->op != XI_OBJECT_GET_F && access->op != XI_OBJECT_SET_F))
         return;
+    /* An exact structural selection keeps its typed ordinal even when no
+     * source access row exists, as with lowering-generated reads and writes.
+     * Both forms still undergo the frozen shape and AOT operand checks. */
+    if (access->nargs != 0 && access->args[0] &&
+        xr_type_is_exact_struct_object(access->args[0]->type))
+        access->lowering_flags |= XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
     if (!l->global_evidence || l->func->xg_body_func_id == XG_NO_ID)
         return;
     field_name_id = field_name ? xg_name_id(field_name) : 0;
@@ -1521,6 +1527,7 @@ XR_FUNC void xi_lower_bind_object_access_id(XiLower *l, XiValue *access, const c
     }
     if (match) {
         access->xg_object_access_id = match->object_access_id;
+        access->lowering_flags &= ~XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
         /* The verified Object shape table owns the physical field order.
          * Analyzer selection indices are source-type ordinals and can differ
          * from canonical structural descriptor ordinals. Keep the Xi hot path
@@ -2107,17 +2114,21 @@ static bool prescan_is_user_owned_decl(AstNode *s) {
     return s && s->line > 0;
 }
 
+typedef struct PrescanSlot {
+    XiModuleSlot declaration;
+    XiConstLiteral const_literal;
+    XiConstLiteral shared_initializer;
+} PrescanSlot;
+
 typedef struct PrescanSlotMeta {
-    const char **export_names;
-    const char **owned_names;
-    uint8_t *owned_consts;
-    XiConstLiteral *const_literals;
-    XiConstLiteral *shared_initializers;
+    PrescanSlot *slots;
     uint16_t cap;
 } PrescanSlotMeta;
 
 static bool prescan_slot_meta_reserve(PrescanSlotMeta *m, uint16_t need) {
-    if (!m || need <= m->cap)
+    if (!m)
+        return false;
+    if (need <= m->cap)
         return true;
     uint16_t nc = m->cap ? m->cap : 16;
     while (nc < need) {
@@ -2127,30 +2138,11 @@ static bool prescan_slot_meta_reserve(PrescanSlotMeta *m, uint16_t need) {
         }
         nc = (uint16_t) (nc * 2u);
     }
-
-    const char **exports =
-        (const char **) xr_realloc(m->export_names, (size_t) nc * sizeof(const char *));
-    const char **owned =
-        (const char **) xr_realloc(m->owned_names, (size_t) nc * sizeof(const char *));
-    uint8_t *consts = (uint8_t *) xr_realloc(m->owned_consts, (size_t) nc * sizeof(uint8_t));
-    XiConstLiteral *lits =
-        (XiConstLiteral *) xr_realloc(m->const_literals, (size_t) nc * sizeof(XiConstLiteral));
-    XiConstLiteral *shared_inits =
-        (XiConstLiteral *) xr_realloc(m->shared_initializers, (size_t) nc * sizeof(XiConstLiteral));
-    if (!exports || !owned || !consts || !lits || !shared_inits)
+    PrescanSlot *slots = (PrescanSlot *) xr_realloc(m->slots, (size_t) nc * sizeof(*slots));
+    if (!slots)
         return false;
-
-    uint16_t old = m->cap;
-    m->export_names = exports;
-    m->owned_names = owned;
-    m->owned_consts = consts;
-    m->const_literals = lits;
-    m->shared_initializers = shared_inits;
-    memset(&m->export_names[old], 0, (size_t) (nc - old) * sizeof(const char *));
-    memset(&m->owned_names[old], 0, (size_t) (nc - old) * sizeof(const char *));
-    memset(&m->owned_consts[old], 0, (size_t) (nc - old) * sizeof(uint8_t));
-    memset(&m->const_literals[old], 0, (size_t) (nc - old) * sizeof(XiConstLiteral));
-    memset(&m->shared_initializers[old], 0, (size_t) (nc - old) * sizeof(XiConstLiteral));
+    memset(slots + m->cap, 0, (size_t) (nc - m->cap) * sizeof(*slots));
+    m->slots = slots;
     m->cap = nc;
     return true;
 }
@@ -2158,12 +2150,57 @@ static bool prescan_slot_meta_reserve(PrescanSlotMeta *m, uint16_t need) {
 static void prescan_slot_meta_free(PrescanSlotMeta *m) {
     if (!m)
         return;
-    xr_free(m->export_names);
-    xr_free(m->owned_names);
-    xr_free(m->owned_consts);
-    xr_free(m->const_literals);
-    xr_free(m->shared_initializers);
+    xr_free(m->slots);
     memset(m, 0, sizeof(*m));
+}
+
+static XiModuleSlotKind prescan_slot_kind(const AstNode *node) {
+    switch (node->type) {
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            return XI_MODULE_SLOT_VALUE;
+        case AST_FUNCTION_DECL:
+            return XI_MODULE_SLOT_FUNCTION;
+        case AST_IMPORT_STMT:
+            return XI_MODULE_SLOT_IMPORT;
+        default:
+            return XI_MODULE_SLOT_TYPE;
+    }
+}
+
+static bool prescan_publish_slot_metadata(XiFunc *func, const PrescanSlotMeta *meta) {
+    uint16_t count = func->nshared;
+    if (count == 0)
+        return true;
+    XiModuleSlot *slots = xi_func_arena_alloc(func, (uint32_t) count * sizeof(*slots));
+    XiConstLiteral *literals = xi_func_arena_alloc(func, (uint32_t) count * sizeof(*literals));
+    XiConstLiteral *initializers =
+        xi_func_arena_alloc(func, (uint32_t) count * sizeof(*initializers));
+    XiFunc **functions = xi_func_arena_alloc(func, (uint32_t) count * sizeof(*functions));
+    if (!slots || !literals || !initializers || !functions)
+        return false;
+    memset(slots, 0, (size_t) count * sizeof(*slots));
+    memset(literals, 0, (size_t) count * sizeof(*literals));
+    memset(initializers, 0, (size_t) count * sizeof(*initializers));
+    memset(functions, 0, (size_t) count * sizeof(*functions));
+    for (uint16_t i = 0; i < count && i < meta->cap; i++) {
+        slots[i] = meta->slots[i].declaration;
+        if (slots[i].name) {
+            slots[i].name = arena_strdup(func, slots[i].name);
+            if (!slots[i].name)
+                return false;
+        }
+        literals[i] = meta->slots[i].const_literal;
+        initializers[i] = meta->slots[i].shared_initializer;
+    }
+    func->module_slots = slots;
+    func->shared_const_literals = literals;
+    func->shared_const_literal_count = count;
+    func->shared_init_literals = initializers;
+    func->shared_init_literal_count = count;
+    func->shared_slot_funcs = functions;
+    func->shared_slot_func_count = count;
+    return true;
 }
 
 static bool const_literal_from_ast(XiLower *l, AstNode *expr, struct XrType *type,
@@ -2595,8 +2632,7 @@ static XiImportRef *prescan_import_ref(XiLower *l, const AstNode *node, const ch
  * uniformly.
  *
  * Populates: l->shared_map[var_id], l->func->nshared,
- *            l->func->slot_owned_names, l->func->slot_owned_consts,
- *            l->func->export_names.
+ *            l->func->module_slots.
  */
 static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                                        uint16_t start_shared) {
@@ -2605,8 +2641,10 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
 
     PrescanSlotMeta slot_meta;
     memset(&slot_meta, 0, sizeof(slot_meta));
-    if (!prescan_slot_meta_reserve(&slot_meta, start_shared > 0 ? start_shared : 16))
+    if (!prescan_slot_meta_reserve(&slot_meta, start_shared > 0 ? start_shared : 16)) {
+        l->had_error = true;
         return;
+    }
 
     for (int i = 0; i < count; i++) {
         AstNode *s = stmts[i];
@@ -2639,7 +2677,8 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                      * frozen argument built from it carries that type. A
                      * class or function export binds untyped: the plan names
                      * the callee through the import itself, not a type. */
-                    XrType *import_type = xi_lower_declared_symbol_type(l, m->symbol_id);
+                    XrType *declared_type = xi_lower_declared_symbol_type(l, m->symbol_id);
+                    XrType *import_type = declared_type;
                     if (import_type && (import_type->kind == XR_KIND_CLASS ||
                                         import_type->kind == XR_KIND_FUNCTION))
                         import_type = NULL;
@@ -2650,12 +2689,21 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     l->shared_map[vid] = (int16_t) next_shared;
                     XiImportRef *ref =
                         prescan_import_ref(l, s, s->as.import_stmt.module_name, m->name, m);
-                    if (!ref || next_shared >= (uint16_t) l->var_cap) {
+                    if (!ref || next_shared >= (uint16_t) l->var_cap ||
+                        !prescan_slot_meta_reserve(&slot_meta, next_shared + 1u)) {
                         l->had_error = true;
                         prescan_slot_meta_free(&slot_meta);
                         return;
                     }
                     l->shared_slot_imports[next_shared] = ref;
+                    slot_meta.slots[next_shared].declaration = (XiModuleSlot) {
+                        .name = mname,
+                        .type = declared_type,
+                        .kind = XI_MODULE_SLOT_IMPORT,
+                        .source_line = (uint32_t) s->line,
+                        .source_column = (uint32_t) s->column,
+                        .is_const = true,
+                    };
                     next_shared++;
                 }
                 continue;
@@ -2678,12 +2726,20 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
             l->shared_slot_imports[next_shared] = ref;
         }
         if (!prescan_slot_meta_reserve(&slot_meta, next_shared + 1u)) {
+            l->had_error = true;
             prescan_slot_meta_free(&slot_meta);
             return;
         }
-        if (prescan_is_user_owned_decl(s)) {
-            slot_meta.owned_names[next_shared] = name;
-            slot_meta.owned_consts[next_shared] = is_const ? 1u : 0u;
+        if (prescan_is_user_owned_decl(s) || is_exported) {
+            slot_meta.slots[next_shared].declaration = (XiModuleSlot) {
+                .name = name,
+                .type = type,
+                .kind = prescan_slot_kind(s),
+                .source_line = (uint32_t) s->line,
+                .source_column = (uint32_t) s->column,
+                .is_const = is_const,
+                .is_exported = is_exported,
+            };
         }
         if (is_const && s && s->type == AST_CONST_DECL && s->as.var_decl.initializer) {
             XiConstLiteral lit;
@@ -2692,27 +2748,27 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                                 : NULL;
             XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
             if (const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit)) {
-                slot_meta.const_literals[next_shared] = lit;
+                slot_meta.slots[next_shared].const_literal = lit;
             } else if (links && links->has_ct_value &&
                        const_literal_from_ct_value(l, &links->ct_value, type, &lit)) {
-                slot_meta.const_literals[next_shared] = lit;
+                slot_meta.slots[next_shared].const_literal = lit;
             }
-            prescan_apply_link_symbol_plan(l, name, &slot_meta.const_literals[next_shared]);
+            prescan_apply_link_symbol_plan(l, name, &slot_meta.slots[next_shared].const_literal);
         } else if (s && s->type == AST_VAR_DECL && s->as.var_decl.initializer) {
             XiConstLiteral lit;
             if (module_static_initializer_from_decl(l, s, type, &lit))
-                slot_meta.shared_initializers[next_shared] = lit;
-            prescan_apply_link_symbol_plan(l, name, &slot_meta.shared_initializers[next_shared]);
+                slot_meta.slots[next_shared].shared_initializer = lit;
+            prescan_apply_link_symbol_plan(l, name,
+                                           &slot_meta.slots[next_shared].shared_initializer);
         } else if (s && s->type == AST_VAR_DECL && !s->as.var_decl.initializer) {
             XiConstLiteral lit;
             if (shared_default_initializer_from_type(type, &lit)) {
                 lit.data_mutable = true;
-                slot_meta.shared_initializers[next_shared] = lit;
+                slot_meta.slots[next_shared].shared_initializer = lit;
             }
-            prescan_apply_link_symbol_plan(l, name, &slot_meta.shared_initializers[next_shared]);
+            prescan_apply_link_symbol_plan(l, name,
+                                           &slot_meta.slots[next_shared].shared_initializer);
         }
-        if (is_exported)
-            slot_meta.export_names[next_shared] = name;
         next_shared++;
 
         if (s && s->type == AST_ENUM_DECL)
@@ -2721,78 +2777,8 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
 
     l->func->nshared = next_shared;
 
-    /* Populate export_names, slot_owned_names, and optimization-time
-     * shared-slot metadata on XiFunc. */
-    if (next_shared > 0) {
-        const char **names = (const char **) xi_func_arena_alloc(
-            l->func, (uint32_t) (next_shared * sizeof(const char *)));
-        const char **owned = (const char **) xi_func_arena_alloc(
-            l->func, (uint32_t) (next_shared * sizeof(const char *)));
-        uint8_t *consts =
-            (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(uint8_t)));
-        XiConstLiteral *literals = (XiConstLiteral *) xi_func_arena_alloc(
-            l->func, (uint32_t) (next_shared * sizeof(XiConstLiteral)));
-        XiConstLiteral *shared_inits = (XiConstLiteral *) xi_func_arena_alloc(
-            l->func, (uint32_t) (next_shared * sizeof(XiConstLiteral)));
-        XiFunc **slot_funcs =
-            (XiFunc **) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(XiFunc *)));
-        l->func->shared_slot_funcs = slot_funcs;
-        l->func->shared_slot_func_count = next_shared;
-        l->func->shared_const_literals = literals;
-        l->func->shared_const_literal_count = literals ? next_shared : 0;
-        l->func->shared_init_literals = shared_inits;
-        l->func->shared_init_literal_count = shared_inits ? next_shared : 0;
-        for (uint16_t si = 0; si < next_shared; si++) {
-            if (names) {
-                const char *src = (si < slot_meta.cap) ? slot_meta.export_names[si] : NULL;
-                if (src) {
-                    uint32_t slen = (uint32_t) strlen(src);
-                    char *copy = (char *) xi_func_arena_alloc(l->func, slen + 1);
-                    if (copy)
-                        memcpy(copy, src, slen + 1);
-                    names[si] = copy;
-                } else {
-                    names[si] = NULL;
-                }
-            }
-            if (owned) {
-                const char *src = (si < slot_meta.cap) ? slot_meta.owned_names[si] : NULL;
-                if (src) {
-                    uint32_t slen = (uint32_t) strlen(src);
-                    char *copy = (char *) xi_func_arena_alloc(l->func, slen + 1);
-                    if (copy)
-                        memcpy(copy, src, slen + 1);
-                    owned[si] = copy;
-                } else {
-                    owned[si] = NULL;
-                }
-            }
-            if (slot_funcs)
-                slot_funcs[si] = NULL;
-            if (literals) {
-                if (si < slot_meta.cap)
-                    literals[si] = slot_meta.const_literals[si];
-                else
-                    memset(&literals[si], 0, sizeof(XiConstLiteral));
-            }
-            if (shared_inits) {
-                if (si < slot_meta.cap)
-                    shared_inits[si] = slot_meta.shared_initializers[si];
-                else
-                    memset(&shared_inits[si], 0, sizeof(XiConstLiteral));
-            }
-        }
-        if (consts) {
-            for (uint16_t si = 0; si < next_shared; si++)
-                consts[si] = (si < slot_meta.cap) ? slot_meta.owned_consts[si] : 0u;
-        }
-        if (names)
-            l->func->export_names = names;
-        if (owned)
-            l->func->slot_owned_names = owned;
-        if (consts)
-            l->func->slot_owned_consts = consts;
-    }
+    if (!prescan_publish_slot_metadata(l->func, &slot_meta))
+        l->had_error = true;
     prescan_slot_meta_free(&slot_meta);
 }
 
@@ -2830,7 +2816,7 @@ static void finalize_capture_metadata(XiFunc *f) {
 
 /*
  * Build XiModule metadata directly from lowerer tracking data.
- * Constructs the exports table from export_names + shared_slot metadata
+ * Constructs the exports table from declaration and shared-slot metadata
  * without scanning IR instructions.  Also collects class data into
  * module->classes for AOT codegen.
  */
@@ -2860,11 +2846,20 @@ static void build_module_metadata(XiLower *l) {
 
     uint16_t nshared = f->nshared;
 
-    /* Build exports from export_names + tracked function/class pointers */
-    if (f->export_names && nshared > 0) {
+    /* Lowering can refine a declaration's type while publishing its body.
+     * Capture that fact once, before exports or downstream consumers read it. */
+    for (int vi = 0; vi < l->var_count; vi++) {
+        int slot = l->shared_map[vi];
+        if (slot >= 0 && slot < nshared && f->module_slots &&
+            f->module_slots[slot].kind == XI_MODULE_SLOT_TYPE)
+            f->module_slots[slot].type = l->vars[vi].type;
+    }
+
+    /* Export identity and type come from the same declaration record. */
+    if (f->module_slots && nshared > 0) {
         uint16_t nexports = 0;
         for (uint16_t s = 0; s < nshared; s++) {
-            if (f->export_names[s])
+            if (f->module_slots[s].is_exported)
                 nexports++;
         }
         if (nexports > 0) {
@@ -2872,20 +2867,14 @@ static void build_module_metadata(XiLower *l) {
             if (exps) {
                 uint16_t ei = 0;
                 for (uint16_t s = 0; s < nshared && ei < nexports; s++) {
-                    if (!f->export_names[s])
+                    if (!f->module_slots[s].is_exported)
                         continue;
-                    exps[ei].name = f->export_names[s];
+                    exps[ei].name = f->module_slots[s].name;
                     exps[ei].shared_slot = s;
                     exps[ei].cell_index = -1;
                     exps[ei].function = l->shared_slot_funcs[s];
                     exps[ei].class_data = l->shared_slot_classes[s];
-                    /* Type info from the var entry that maps to this slot */
-                    for (int vi = 0; vi < l->var_count; vi++) {
-                        if (l->shared_map[vi] == (int16_t) s) {
-                            exps[ei].value_type = l->vars[vi].type;
-                            break;
-                        }
-                    }
+                    exps[ei].value_type = f->module_slots[s].type;
                     exps[ei].is_live_binding = false;
                     ei++;
                 }
@@ -3050,6 +3039,11 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
         count = program_node->as.program.count;
     }
     prescan_top_level_bindings(&l, stmts, count, next_shared_start);
+    if (l.had_error) {
+        xi_func_free(l.func);
+        xi_lower_cleanup(&l);
+        return NULL;
+    }
 
     xi_lower_cleanup_scope_push(&l);
 
@@ -3111,7 +3105,7 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
         result = l.func;
         xi_lower_assert_var_ids(&l, result);
     }
-    if (!result && program_semantics)
+    if (!result)
         xi_func_free(l.func);
     xi_lower_cleanup(&l);
     return result;

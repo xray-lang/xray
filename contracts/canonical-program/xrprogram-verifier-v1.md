@@ -4,6 +4,24 @@
 canonical bytes and can only be constructed by `xr_program_validate` after structural and semantic
 validation succeed. A digest or successful structural decode is not an execution capability.
 
+The Xi writer returns both distributable bytes and its owned validated program. The source owner
+transfers that reference under the same default admission policy, without immediately decoding and
+validating the identical bytes again. The two outputs own separate byte storage and survive release
+of the compiler session and graph. Source request limits may only tighten the default budget;
+over-budget or session-commit failure releases both outputs. External bytes, modified artifacts and
+consumers with a different admission policy still require full structural and semantic validation.
+The source-owner lifetime test also checks a tight byte limit, artifact mutation and rejection under
+a stricter verifier work budget; the hostile-input verifier suite remains independent of the writer.
+
+Construction failure transfers no ownership to the caller and releases each acquired allocation
+exactly once. CoreIR child constructors publish only owned memory into a zero-initialized tree;
+the program owner performs the single failure unwind. Unvisited string constants never retain
+producer-owned pointers. Independent verification likewise permits destruction of every partial
+table without dereferencing unallocated rows. Allocation exhaustion remains distinguishable from
+invalid type semantics. The existing Program test compiles the real constructors with test-only
+allocator substitution and injects failure at every allocation in provider, text, nested aggregate
+and coroutine fixtures, checking empty rejected outputs and balanced physical allocation/free counts.
+
 The CoreSpec semantic fingerprint excludes consumer coverage, KAT routing, editorial descriptions
 and tombstone prose. Advancing a verifier/VM/AOT implementation therefore cannot invalidate a
 program whose language meaning did not change; changing a normative type, operation, effect,

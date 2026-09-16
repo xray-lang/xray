@@ -4,6 +4,7 @@
 #include "core/xr_core_spec_gen.h"
 #include "plan/semantic/xr_semantic_ids.h"
 #include "program/xr_program.h"
+#include "xr_program_provider_fixture.h"
 #include "runtime/abi/xr_builtin_provider_contract.h"
 
 #include <string.h>
@@ -92,9 +93,13 @@ static XrProgramBuildStatus xr_program_pipe_fixture_write(
         .functions = &function,
         .function_count = 1u,
     };
+    XrProgramProviderOperationRequirement operation_requirement = {
+        .operation_id = operation_id,
+        .logical_contract = xr_program_fixture_pipe_contract(),
+    };
     XrCoreIrProviderRequirementInput requirement = {
         .contract_id = contract_id,
-        .operation_ids = &operation_id,
+        .operations = &operation_requirement,
         .operation_count = 1u,
     };
     XrCoreIrKey semantic = xr_program_pipe_fixture_key("pipe:semantic");

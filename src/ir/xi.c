@@ -764,6 +764,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->mem_group = 0;
     v->lowering_flags = 0;
     v->param_mode = XR_PARAM_READ;
+    v->initializes_module_slot = false;
     v->type = type;
     v->aux_int = 0;
     v->aux = NULL;

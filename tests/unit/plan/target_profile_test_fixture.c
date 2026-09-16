@@ -207,6 +207,11 @@ XrTargetProfile *xr_test_target_profile_build_with_scalar_clock(
     };
     providers[2].operations[0] =
         make_operation(21u, scalar_abi, 0u, 0u, 0u);
+    providers[2].operations[0].logical_contract = xr_program_fixture_scalar_contract(false);
+    providers[2].operations[0].logical_contract.runtime_profiles =
+        runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+            ? XR_PROVIDER_LOGICAL_PROFILE_FREESTANDING
+            : XR_PROVIDER_LOGICAL_PROFILE_HOSTED;
     qsort(providers, 3u, sizeof(providers[0]), compare_provider_ids);
     fixture.input.providers = providers;
     fixture.input.provider_count = 3u;
@@ -252,6 +257,11 @@ XrTargetProfile *xr_test_target_profile_build_with_nullary_clock(
         .provider_role = XR_TARGET_PROVIDER_ROLE_OPERATIONS,
     };
     providers[2].operations[0] = make_operation(22u, scalar_abi, 0u, 0u, 0u);
+    providers[2].operations[0].logical_contract = xr_program_fixture_scalar_contract(true);
+    providers[2].operations[0].logical_contract.runtime_profiles =
+        runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+            ? XR_PROVIDER_LOGICAL_PROFILE_FREESTANDING
+            : XR_PROVIDER_LOGICAL_PROFILE_HOSTED;
     qsort(providers, 3u, sizeof(providers[0]), compare_provider_ids);
     fixture.input.providers = providers;
     fixture.input.provider_count = 3u;
@@ -308,6 +318,7 @@ XrTargetProfile *xr_test_target_profile_build_with_output(bool ilp32,
         0u, call_abi, XR_TARGET_PROVIDER_EFFECT_IO,
         XR_TARGET_PROVIDER_LIFETIME_BORROWS,
         XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS);
+    providers[2].operations[0].logical_contract = xr_builtin_provider_byte_sink_logical_contract();
     XrFingerprint key_digest;
     if (!xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY,
                                &providers[2].contract_id, &key_digest) ||
@@ -367,6 +378,7 @@ XrTargetProfile *xr_test_target_profile_build_with_pipe(bool ilp32,
         0u, call_abi, XR_TARGET_PROVIDER_EFFECT_IO,
         XR_TARGET_PROVIDER_LIFETIME_BORROWS,
         XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS);
+    providers[2].operations[0].logical_contract = xr_program_fixture_pipe_contract();
     XrFingerprint key_digest;
     if (!xr_stable_id_from_key(XR_PROVIDER_IO_CONTRACT_KEY,
                                &providers[2].contract_id, &key_digest) ||

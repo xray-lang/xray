@@ -4378,42 +4378,6 @@
       }
     },
     {
-      "id": "output-group-i64-valid",
-      "operation": "core.output.group.i64",
-      "kind": "contract",
-      "actual": {
-        "operand_type": "i64",
-        "result_type": "void",
-        "operand_category": "value",
-        "operand_ownership": "non-owner",
-        "provider_requirement": true,
-        "atomic_group": true,
-        "separator": "space",
-        "terminator": "line-feed"
-      },
-      "expect": {
-        "valid": true
-      }
-    },
-    {
-      "id": "output-group-i64-rejects-non-atomic-write",
-      "operation": "core.output.group.i64",
-      "kind": "contract",
-      "actual": {
-        "operand_type": "i64",
-        "result_type": "void",
-        "operand_category": "value",
-        "operand_ownership": "non-owner",
-        "provider_requirement": true,
-        "atomic_group": false,
-        "separator": "space",
-        "terminator": "line-feed"
-      },
-      "expect": {
-        "valid": false
-      }
-    },
-    {
       "id": "coroutine-call-valid",
       "operation": "core.coroutine.call.sealed",
       "kind": "contract",
@@ -7120,6 +7084,905 @@
         "replacement_consumed": true,
         "atomic": true,
         "may_transfer_control": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "constant-string-empty",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": ""
+      },
+      "expect": {
+        "value": "",
+        "byte_length": 0
+      }
+    },
+    {
+      "id": "constant-string-ascii",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": "hello"
+      },
+      "expect": {
+        "value": "hello",
+        "byte_length": 5
+      }
+    },
+    {
+      "id": "constant-string-multibyte",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": "héllo 世界🌍"
+      },
+      "expect": {
+        "value": "héllo 世界🌍",
+        "byte_length": 17
+      }
+    },
+    {
+      "id": "constant-string-embedded-nul",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": "a\u0000b"
+      },
+      "expect": {
+        "value": "a\u0000b",
+        "byte_length": 3
+      }
+    },
+    {
+      "id": "constant-string-rejects-invalid-utf8",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": {
+          "bytes_hex": "ff"
+        }
+      },
+      "expect": {
+        "rejected": "invalid-utf8"
+      }
+    },
+    {
+      "id": "constant-string-rejects-overlong",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": {
+          "bytes_hex": "c080"
+        }
+      },
+      "expect": {
+        "rejected": "invalid-utf8"
+      }
+    },
+    {
+      "id": "constant-string-rejects-surrogate",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": {
+          "bytes_hex": "eda080"
+        }
+      },
+      "expect": {
+        "rejected": "invalid-utf8"
+      }
+    },
+    {
+      "id": "constant-string-rejects-truncated",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": {
+          "bytes_hex": "e4b8"
+        }
+      },
+      "expect": {
+        "rejected": "invalid-utf8"
+      }
+    },
+    {
+      "id": "constant-string-rejects-beyond-max",
+      "operation": "core.constant.string",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": {
+          "bytes_hex": "f4908080"
+        }
+      },
+      "expect": {
+        "rejected": "invalid-utf8"
+      }
+    },
+    {
+      "id": "constant-rune-ascii",
+      "operation": "core.constant.rune",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": 65
+      },
+      "expect": {
+        "value": 65
+      }
+    },
+    {
+      "id": "constant-rune-zero",
+      "operation": "core.constant.rune",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": 0
+      },
+      "expect": {
+        "value": 0
+      }
+    },
+    {
+      "id": "constant-rune-max",
+      "operation": "core.constant.rune",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": 1114111
+      },
+      "expect": {
+        "value": 1114111
+      }
+    },
+    {
+      "id": "constant-rune-rejects-surrogate-low",
+      "operation": "core.constant.rune",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": 55296
+      },
+      "expect": {
+        "rejected": "not-a-unicode-scalar-value"
+      }
+    },
+    {
+      "id": "constant-rune-rejects-surrogate-high",
+      "operation": "core.constant.rune",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": 57343
+      },
+      "expect": {
+        "rejected": "not-a-unicode-scalar-value"
+      }
+    },
+    {
+      "id": "constant-rune-rejects-beyond-max",
+      "operation": "core.constant.rune",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": 1114112
+      },
+      "expect": {
+        "rejected": "not-a-unicode-scalar-value"
+      }
+    },
+    {
+      "id": "constant-rune-rejects-negative",
+      "operation": "core.constant.rune",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": -1
+      },
+      "expect": {
+        "rejected": "not-a-unicode-scalar-value"
+      }
+    },
+    {
+      "id": "string-from-i64-zero",
+      "operation": "core.string.from_i64",
+      "kind": "scalar",
+      "arguments": [
+        "0"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "0",
+        "byte_length": 1
+      }
+    },
+    {
+      "id": "string-from-i64-negative",
+      "operation": "core.string.from_i64",
+      "kind": "scalar",
+      "arguments": [
+        "-17"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "-17",
+        "byte_length": 3
+      }
+    },
+    {
+      "id": "string-from-i64-min",
+      "operation": "core.string.from_i64",
+      "kind": "scalar",
+      "arguments": [
+        "-9223372036854775808"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "-9223372036854775808",
+        "byte_length": 20
+      }
+    },
+    {
+      "id": "string-from-i64-max",
+      "operation": "core.string.from_i64",
+      "kind": "scalar",
+      "arguments": [
+        "9223372036854775807"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "9223372036854775807",
+        "byte_length": 19
+      }
+    },
+    {
+      "id": "string-concat-order",
+      "operation": "core.string.concat",
+      "kind": "scalar",
+      "arguments": [
+        "ab",
+        "cd"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "abcd",
+        "byte_length": 4
+      }
+    },
+    {
+      "id": "string-concat-empty-left",
+      "operation": "core.string.concat",
+      "kind": "scalar",
+      "arguments": [
+        "",
+        "a"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "a",
+        "byte_length": 1
+      }
+    },
+    {
+      "id": "string-concat-empty-right",
+      "operation": "core.string.concat",
+      "kind": "scalar",
+      "arguments": [
+        "a",
+        ""
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "a",
+        "byte_length": 1
+      }
+    },
+    {
+      "id": "string-concat-multibyte",
+      "operation": "core.string.concat",
+      "kind": "scalar",
+      "arguments": [
+        "世",
+        "界"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "世界",
+        "byte_length": 6
+      }
+    },
+    {
+      "id": "string-concat-both-empty",
+      "operation": "core.string.concat",
+      "kind": "scalar",
+      "arguments": [
+        "",
+        ""
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "",
+        "byte_length": 0
+      }
+    },
+    {
+      "id": "compare-string-eq-equal",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "a",
+        "a"
+      ],
+      "immediates": {
+        "predicate": "eq"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-string-eq-different",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "a",
+        "b"
+      ],
+      "immediates": {
+        "predicate": "eq"
+      },
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "compare-string-ne",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "a",
+        "b"
+      ],
+      "immediates": {
+        "predicate": "ne"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-string-prefix-lt",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "ab",
+        "abc"
+      ],
+      "immediates": {
+        "predicate": "lt"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-string-empty-lt",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "",
+        "a"
+      ],
+      "immediates": {
+        "predicate": "lt"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-string-byte-order-matches-scalar-order",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "é",
+        "z"
+      ],
+      "immediates": {
+        "predicate": "gt"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-string-le-equal",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "x",
+        "x"
+      ],
+      "immediates": {
+        "predicate": "le"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-string-ge",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "b",
+        "a"
+      ],
+      "immediates": {
+        "predicate": "ge"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-string-gt-false-equal",
+      "operation": "core.compare.string",
+      "kind": "scalar",
+      "arguments": [
+        "b",
+        "b"
+      ],
+      "immediates": {
+        "predicate": "gt"
+      },
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "compare-rune-eq",
+      "operation": "core.compare.rune",
+      "kind": "scalar",
+      "arguments": [
+        65,
+        65
+      ],
+      "immediates": {
+        "predicate": "eq"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-rune-ne",
+      "operation": "core.compare.rune",
+      "kind": "scalar",
+      "arguments": [
+        65,
+        66
+      ],
+      "immediates": {
+        "predicate": "ne"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-rune-lt",
+      "operation": "core.compare.rune",
+      "kind": "scalar",
+      "arguments": [
+        65,
+        128512
+      ],
+      "immediates": {
+        "predicate": "lt"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-rune-ge-false",
+      "operation": "core.compare.rune",
+      "kind": "scalar",
+      "arguments": [
+        65,
+        66
+      ],
+      "immediates": {
+        "predicate": "ge"
+      },
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "output-group-i64-line",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "i64",
+            "value": "-5"
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "2d350a"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-i64-min-line",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "i64",
+            "value": "-9223372036854775808"
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "2d393232333337323033363835343737353830380a"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-string-line",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "string",
+            "value": "héllo"
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "68c3a96c6c6f0a"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-rune-line",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "rune",
+            "value": 128512
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "f09f98800a"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-bool-line",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "bool",
+            "value": false
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "66616c73650a"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-mixed-line",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "i64",
+            "value": "42"
+          },
+          {
+            "type": "bool",
+            "value": true
+          },
+          {
+            "type": "string",
+            "value": "x y"
+          },
+          {
+            "type": "rune",
+            "value": 65
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value",
+          "value",
+          "value",
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner",
+          "non-owner",
+          "non-owner",
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "343220747275652078207920410a"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-empty-line",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [],
+        "result_type": "void",
+        "operand_categories": [],
+        "operand_ownerships": [],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "0a"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "output-group-rejects-non-atomic-write",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "i64",
+            "value": "1"
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": false,
+        "separator": "space",
+        "terminator": "line-feed"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "output-group-rejects-owner-operand",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "string",
+            "value": "a"
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "output-group-rejects-undisplayable-type",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "error",
+            "value": 1
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "output-group-rejects-invalid-utf8-string",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "string",
+            "value": {
+              "bytes_hex": "ff"
+            }
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "output-group-rejects-wrong-rendering",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "i64",
+            "value": "1"
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "space",
+        "terminator": "line-feed",
+        "rendered_hex": "30310a"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "output-group-rejects-tab-separator",
+      "operation": "core.output.group",
+      "kind": "contract",
+      "actual": {
+        "operands": [
+          {
+            "type": "i64",
+            "value": "1"
+          },
+          {
+            "type": "i64",
+            "value": "2"
+          }
+        ],
+        "result_type": "void",
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operand_ownerships": [
+          "non-owner",
+          "non-owner"
+        ],
+        "provider_requirement": true,
+        "atomic_group": true,
+        "separator": "tab",
+        "terminator": "line-feed"
       },
       "expect": {
         "valid": false

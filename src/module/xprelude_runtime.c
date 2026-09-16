@@ -98,121 +98,6 @@ static void bind_class_global(XrVMRuntime *X, int global_index, void *cls) {
     bind_builtin_value(X, global_index, xr_value_from_class((struct XrClass *) cls));
 }
 
-/* Build one canonical prelude enum and bind it into a VM builtin slot so
- * every compilation unit (entry file and imported modules) resolves the
- * same XrEnumType — giving cross-module `Result` / `Ordering` values a
- * single type identity.  Replaces the former per-module AST injection,
- * which created a distinct enum type per module and broke cross-module
- * pattern matching. Members are copied into the symbol table by
- * xr_enum_type_new, so the input array is freed here. */
-static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const char **member_names,
-                                     int count, const int *payload_counts, bool is_adt) {
-    char **names = (char **) xr_malloc(sizeof(char *) * (size_t) count);
-    if (!names) {
-        xr_free(names);
-        return NULL;
-    }
-    for (int i = 0; i < count; i++) {
-        size_t len = strlen(member_names[i]) + 1;
-        names[i] = (char *) xr_malloc(len);
-        if (names[i])
-            memcpy(names[i], member_names[i], len);
-    }
-
-    XrEnumType *et = xr_enum_type_new(X, "prelude", name, names, count);
-
-    if (et && is_adt && payload_counts)
-        (void) xr_enum_type_set_adt_payloads(et, payload_counts, count);
-
-    for (int i = 0; i < count; i++)
-        xr_free(names[i]);
-    xr_free(names);
-    return et;
-}
-
-/* Canonical prelude enums, built from builtin_symbols.def so the runtime's
- * XrEnumType and the analyzer's XrType describe the same variants. `Ordering`
- * ordinals must match XrAtomicOrdering — the def declares them in that order. */
-#define XR_PRELUDE_ENUM_MAX_VARIANTS 8
-/* -1 marks an enum the runtime does not bind into a VM builtin slot. */
-#define XR_GLOBAL_VAR_NONE (-1)
-
-typedef struct {
-    const char *name;
-    bool has_payload;
-} XrPreludeEnumVariantRow;
-
-typedef struct {
-    const char *name;
-    int slot;
-    int variant_count;
-} XrPreludeEnumRow;
-
-/* All variants of all prelude enums, flattened in declaration order; each
- * enum's slice starts where the previous one ended. */
-static const XrPreludeEnumVariantRow g_prelude_enum_variants[] = {
-#define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants) evariants
-#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XR_PRELUDE_PAYLOAD_IS_SET_##payload},
-#define XR_PRELUDE_PAYLOAD_IS_SET_NONE false
-#define XR_PRELUDE_PAYLOAD_IS_SET_TYPE_PARAM_0 true
-#define XR_PRELUDE_PAYLOAD_IS_SET_ERROR true
-#include "../../stdlib/prelude/builtin_symbols.def"
-};
-
-/* Registration exists only to bind canonical enum types into VM builtin slots,
- * so slotless enums (the stdlib error enums, whose values never cross a module
- * boundary) are skipped rather than built and dropped. */
-
-static const XrPreludeEnumRow g_prelude_enum_rows[] = {
-#define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants)                                        \
-    {(ename), XR_GLOBAL_VAR_##evm_slot,                                                            \
-     (int) (sizeof((const XrPreludeEnumVariantRow[]) {evariants}) /                                \
-            sizeof(XrPreludeEnumVariantRow))},
-#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XR_PRELUDE_PAYLOAD_IS_SET_##payload},
-#include "../../stdlib/prelude/builtin_symbols.def"
-};
-
-#undef XR_PRELUDE_PAYLOAD_IS_SET_NONE
-#undef XR_PRELUDE_PAYLOAD_IS_SET_TYPE_PARAM_0
-#undef XR_PRELUDE_PAYLOAD_IS_SET_ERROR
-
-static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
-    if (!X)
-        return;
-
-    int variant_base = 0;
-    for (size_t e = 0; e < sizeof(g_prelude_enum_rows) / sizeof(g_prelude_enum_rows[0]); e++) {
-        const XrPreludeEnumRow *row = &g_prelude_enum_rows[e];
-        const XrPreludeEnumVariantRow *variants = &g_prelude_enum_variants[variant_base];
-        variant_base += row->variant_count;
-
-        if (row->slot < 0)
-            continue;
-
-        XR_DCHECK(row->variant_count <= XR_PRELUDE_ENUM_MAX_VARIANTS,
-                  "prelude enum exceeds XR_PRELUDE_ENUM_MAX_VARIANTS");
-        if (row->variant_count > XR_PRELUDE_ENUM_MAX_VARIANTS)
-            continue;
-
-        const char *members[XR_PRELUDE_ENUM_MAX_VARIANTS];
-        int payload_counts[XR_PRELUDE_ENUM_MAX_VARIANTS];
-        bool is_adt = false;
-        for (int v = 0; v < row->variant_count; v++) {
-            members[v] = variants[v].name;
-            payload_counts[v] = variants[v].has_payload ? 1 : 0;
-            is_adt = is_adt || variants[v].has_payload;
-        }
-
-        XrEnumType *et = make_prelude_enum(X, row->name, members, row->variant_count,
-                                           is_adt ? payload_counts : NULL, is_adt);
-        if (et)
-            bind_builtin_value(X, row->slot, XR_FROM_PTR(et));
-    }
-
-    if (X->vm.builtin_count < XR_USER_GLOBALS_START)
-        X->vm.builtin_count = XR_USER_GLOBALS_START;
-}
-
 void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     if (!isolate)
         return;
@@ -249,22 +134,23 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
  * than something a module load has to trigger. There is no loadable `prelude`
  * module or compatibility import.
  */
-void xr_prelude_install(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_prelude_install: NULL isolate");
+bool xr_prelude_install(XrVMRuntime *isolate) {
+    if (!isolate)
+        return false;
 
-    /* Wire isolate to the (process-wide const) symbol table. Idempotent
-     * because the right-hand side is constant and the field is just a
-     * pointer cache for downstream consumers. */
-    isolate->prelude_symbols = (void *) &g_prelude_symbols;
+    if (isolate->prelude_symbols == &g_prelude_symbols)
+        return true;
 
     /* Eagerly register every native XrClass that prelude entries refer
      * to. Pure-Xray stdlib modules provide their own exported classes; native
      * classes here are only for remaining runtime-owned prelude types. */
     xr_prelude_register_all_native_types(isolate);
 
-    /* Bind canonical Ordering enum type into VM builtin slot so
-     * every module shares one identity (replaces per-module AST injection). */
-    xr_prelude_register_builtin_enums(isolate);
+    /* Publish one enum identity per isolate before loading any module. */
+    if (!xr_isolate_register_runtime_prelude_enums(isolate))
+        return false;
+    isolate->prelude_symbols = (void *) &g_prelude_symbols;
+    return true;
 }
 
 /* ========== Public accessors (consumed by frontend / tests) ========== */

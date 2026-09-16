@@ -32,11 +32,25 @@ Provider-backed operations lower an exact program requirement/operation index to
 callback slot in the private runtime `XrAotContext` and normalize refusal to the canonical trap.
 The admitted logical shapes are nullary/unary i64, `bool(i64)`, nullary optional-i64-pair, and the
 dedicated byte sink; no erased provider-call ABI exists. `core.output.group.i64` formats the exact
-signed decimal line and performs one output-write call. The Pipe source slice emits target-native
-anonymous-pipe open and endpoint-close helpers only for the exact stable operations named by its
-profile, while retaining no live provider instance or lease in the compiler. Embedded AOT receives
-typed callbacks from its host; hosted standalone AOT binds the generated entry directly to its
-closed native helper set, while freestanding standalone emission without an embedder fails closed.
+signed decimal line and performs one output-write call. Hosted standalone provider bindings
+come from the same explicit declarations and typed adapter-body generator as VM bindings.
+Selection matches complete contract/operation IDs and canonical logical facts. The emitter supplies
+only dense Program indexes and private boolean-carrier conversion; no clock, UTC, pipe, process,
+or other host service is reimplemented inside generated-C spelling. Unsupported standalone
+requirements fail before C publication; embedded AOT retains its explicit typed host callbacks.
+
+Generated native adapters include their declared host headers, check exact C function prototypes,
+and call the shared typed host implementation. The standalone build links the narrow
+`xray_native_provider_runtime` archive when needed; this archive contains only OS time/pipe
+implementation objects, with no compiler, VM, Program loader, or tagged-value runtime. Header-only
+host helpers share the same implementation with VM adapters. These host dependencies belong to
+the native toolchain/runtime-object identity, never to target-neutral Program semantics.
+Freestanding standalone emission without an embedder remains unsupported.
+Source-built clock, Pipe and process fixtures execute generated native bindings
+through Reference and both VM decode policies, then execute strict standalone C.
+The process fixture checks that repeated getpid queries return the same positive
+process identity. Existing controlled provider fixtures retain their independent
+failure and resource-event checks; real host execution does not replace them.
 A strict native fixture built from real-source `time.now()` proves that one callback refusal becomes
 trap 7 and follows explicit Program continuations through two deferred Pipe closes in the callee and
 then two deferred Pipe closes in the caller. The same validated edge contract covers direct,
@@ -49,7 +63,7 @@ provider version, target triple, codegen options, sysroot, runtime objects, and 
 fingerprints; every partition is checked exactly and mismatches fail closed.
 
 The pure-AOT walking-skeleton executable contains no VM, compiler, program-loader, TargetPlan, or
-AOT-toolchain symbol and executes without program bytes. All fifty-six current CoreSpec operations
+AOT-toolchain symbol and executes without program bytes. All current CoreSpec operations
 have private BackendIR/C lowering. `core.logical.not`, `core.logical.and`, and `core.logical.or`
 accept only canonical `bool` values and emit portable C logical expressions over already evaluated
 SSA operands. Source expressions with a trapping or effectful right-hand side are projected into
@@ -237,6 +251,18 @@ fixture's exit byte is the dedicated driver's success oracle, not the ordinary
 program result modulo 256. Both generated C emissions must agree byte-for-byte.
 The reusable checks remain test-private and are part of the governed fixture source.
 
+Canonical `string` values lower to a private owning `XrAotString` heap handle and `rune` values to
+a `uint32_t` scalar. Generated C embeds the shared typed text kernel verbatim from
+`src/runtime/core/xr_text_kernel.h` through the build-time embedding step, so string constant
+admission, display, comparison, concatenation, and output-group assembly are the same text that the
+reference evaluator and the VM compile; the emitter contributes only allocation, constant tables,
+and the single byte-sink call per group. String constants are emitted as byte tables and
+materialized per use into fresh owners, a string drop frees the handle without a lifecycle event,
+owner copy deep-copies the bytes, and aggregate copy helpers over string fields fail closed.
+`core.output.group` measures the exact line through the kernel, renders it into one allocation, and
+performs one output-write callback. The registered real-source text fixture compiles to native C
+and checks both the exit status and the exact stdout bytes against independent literal expectations.
+The shared text kernel has its own executor-independent boundary and overflow tests.
 
 ## Verification
 
@@ -247,3 +273,6 @@ verification-test: test_xr_program_source_aot_native
 verification-test: test_xr_program_child_coroutine_trap_cleanup_aot_native
 verification-test: test_xr_program_branching_cleanup_aot_native
 verification-test: test_xr_program_nested_cleanup_aot_native
+verification-test: test_text_kernel
+verification-test: test_xr_program_aot_text_output
+verification-test: test_xr_program_text_program_aot_native

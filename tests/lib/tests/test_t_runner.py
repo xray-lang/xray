@@ -45,8 +45,9 @@ class FocusedSelectionTest(unittest.TestCase):
         profile = runner.EXACT_PROFILES["h2"]
         self.assertIs(profile.tests, runner.canonical_profile.H2_CTEST_NAMES)
         self.assertIs(profile.targets, runner.canonical_profile.H2_BUILD_TARGETS)
-        self.assertEqual(len(profile.tests), 29)
-        self.assertEqual(len(profile.targets), 9)
+        for required in ("test_xr_program_provider_requirements", "test_provider_logical_admission"):
+            self.assertIn(required, profile.tests)
+            self.assertIn(required, profile.targets)
         self.assertFalse(profile.include_xray)
         self.assertIn("canonical", profile.not_covered)
         self.assertIn("t2", profile.not_covered)

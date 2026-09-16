@@ -69,14 +69,15 @@ typedef struct XrPreludeSymbols {
 
 /*
  * Install the prelude into an isolate. Idempotent: calling it twice on the
- * same isolate is harmless because the registry is process-wide constant and
- * only the isolate->prelude_symbols pointer is rewired (to the same value).
+ * same isolate preserves its existing type objects. The immutable declaration
+ * table is process-wide; enum objects belong to the isolate. Returns false
+ * without publishing the table if enum creation or ABI validation fails.
  *
  * Called from xisolate_full.c::isolate_init_full() before the module system
  * starts, because what it installs is isolate state that every module load
  * already assumes is in place.
  */
-XR_FUNC void xr_prelude_install(XrVMRuntime *isolate);
+XR_FUNC bool xr_prelude_install(XrVMRuntime *isolate);
 
 /*
  * Accessor used by the frontend (parser type-context branch) to retrieve

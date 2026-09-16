@@ -12,7 +12,17 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <unistd.h>
+
+/* A pointer-width resource token must not alias an unrelated descriptor when
+ * narrowed to the host's int-sized descriptor namespace. */
+static bool pipe_handle_valid(XrPipeHandle handle) {
+    if (handle >= 0 && handle <= INT_MAX)
+        return true;
+    errno = EBADF;
+    return false;
+}
 
 static int set_inheritable(int fd, bool inheritable) {
     int flags = fcntl(fd, F_GETFD);
@@ -78,11 +88,13 @@ int xr_pipe_close(XrPipeHandle handle) {
     if (handle == XR_PIPE_INVALID) {
         return 0;
     }
+    if (!pipe_handle_valid(handle))
+        return -1;
     return close((int) handle) == 0 ? 0 : -1;
 }
 
 int64_t xr_pipe_read(XrPipeHandle handle, void *buf, size_t len) {
-    if (handle == XR_PIPE_INVALID || (!buf && len > 0)) {
+    if (!pipe_handle_valid(handle) || (!buf && len > 0)) {
         return -1;
     }
     ssize_t n;
@@ -96,7 +108,7 @@ XrPipeIoStatus xr_pipe_try_read(XrPipeHandle handle, void *buf, size_t len, int6
     if (out_n) {
         *out_n = -1;
     }
-    if (handle == XR_PIPE_INVALID || (!buf && len > 0) || !out_n) {
+    if (!pipe_handle_valid(handle) || (!buf && len > 0) || !out_n) {
         return XR_PIPE_IO_ERROR;
     }
     int fd = (int) handle;
@@ -127,7 +139,7 @@ XrPipeIoStatus xr_pipe_try_write(XrPipeHandle handle, const void *buf, size_t le
     if (out_n) {
         *out_n = -1;
     }
-    if (handle == XR_PIPE_INVALID || (!buf && len > 0) || !out_n) {
+    if (!pipe_handle_valid(handle) || (!buf && len > 0) || !out_n) {
         return XR_PIPE_IO_ERROR;
     }
     int fd = (int) handle;
@@ -155,7 +167,7 @@ XrPipeIoStatus xr_pipe_try_write(XrPipeHandle handle, const void *buf, size_t le
 }
 
 int64_t xr_pipe_write(XrPipeHandle handle, const void *buf, size_t len) {
-    if (handle == XR_PIPE_INVALID || (!buf && len > 0)) {
+    if (!pipe_handle_valid(handle) || (!buf && len > 0)) {
         return -1;
     }
     ssize_t n;

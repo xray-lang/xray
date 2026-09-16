@@ -181,8 +181,11 @@ failure leaves the output unchanged.
 
 Each pointer-free provider contract contains the runtime profile, special
 runtime role, stable contract ID, ABI schema, flags, and a stable-ID-sorted
-operation table. Operations carry their complete call ABI and explicit
-physical effect/lifetime/failure facts. Allocator and panic roles additionally
+operation table. Ordinary operations carry a complete validated logical
+contract, their complete call ABI and explicit physical effect/lifetime/failure
+facts. The logical contract must permit the selected runtime profile. Allocator
+and panic operations require all logical-contract members to be zero because
+their foundation policies are owned separately. Allocator and panic roles additionally
 validate their allocation and panic policy facts. Ordinary operation sets
 carry neither special role's policy fields.
 
@@ -217,6 +220,58 @@ fingerprints. Until canonical header/value/provider registries and matching
 runtime materialization exist, a production TargetPlan is incomplete and must
 fail closed rather than choose an alias, compatibility path, or scalar
 fallback.
+
+
+## Explicit logical provider declarations
+
+The standard-library declaration is the only source of a leaf's logical
+signature, parameter modes and ownership, result ownership, error, panic,
+suspension, refusal, resource transitions, thread/reentrancy/callback rules,
+and platform/profile applicability. An explicit host header, symbol and typed
+adapter identify its implementation projection without contributing logical
+semantics. Every private function leaf remains in the generated inventory;
+unimplemented declarations retain their facts and specific admission blockers.
+Generation alone proves neither a compiled binding nor an executed program.
+
+The pointer-free logical descriptor encodes a bounded prefix type sequence,
+parameter modes/owners and sorted resource transitions. Structural validation,
+encoding, decoding and SHA-256 fingerprinting are independent C operations.
+The fingerprint domain is `xray-provider-logical-contract-v1` followed by a
+zero byte and the canonical wire. No host symbol, ABI layout, process address
+or discovery order enters this fingerprint. Structural validity is distinct
+from execution admission; future representable types and effects are not
+implicitly executable. The current generated adapters admit trivial scalar
+queries, optional pairs of resource tokens, and consumed pipe-token close.
+
+Refusal produces no normal result and enters the provider-failed trap edge.
+Resource transitions independently define consumption at call entry and
+acquisition on a present result. Refusal does not guarantee that the host has
+not run. A normal false close still consumes its logical input token; it does
+not promise that the OS released a physical endpoint or authorize a retry.
+
+The native target authority iterates the generated descriptor registry and
+projects the selected adapter using explicit target machine layout facts.
+Unavailable platforms/profiles are distinct from malformed projections.
+Caller-authored descriptor copies cannot select an implementation. Logical
+fingerprints and target call-ABI fingerprints cover different facts. Target
+operation fingerprints bind the logical schema marker and, for ordinary
+operations, the length and complete canonical logical wire before the physical
+call ABI. No in-memory struct representation participates. Absent or invalid
+logical contracts never compare equal for execution admission.
+
+Logical platform bits distinguish Linux, macOS, Windows, WASI and freestanding
+targets. The built-in byte sink explicitly supports those logical targets;
+the generated native adapters currently cover only their declared hosted
+Linux/macOS/Windows applicability. A representable platform bit is not a
+compiled-adapter or platform-qualification claim.
+
+Shared raw clock queries return zero when the host query fails; failed system
+output is never read or published. Windows counter state belongs to each call,
+so concurrent first calls do not initialize an unsynchronized global. Counter
+fraction scaling uses bounded integer arithmetic, including extreme positive
+frequencies. Finite sleep rounding cannot wrap and never passes the infinite
+Windows wait sentinel as a finite chunk. API-injected checks execute the real
+implementation bodies, but do not establish native Windows platform qualification.
 
 ## Verification
 

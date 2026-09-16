@@ -36,6 +36,20 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         XR_PROGRAM_XI_PROJECTION_CONSTANT,
     },
     {
+        XI_CONST,
+        XR_CORE_TYPE_STRING,
+        XR_CORE_OP_CORE_CONSTANT_STRING,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_CONSTANT,
+    },
+    {
+        XI_CONST,
+        XR_CORE_TYPE_RUNE,
+        XR_CORE_OP_CORE_CONSTANT_RUNE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_CONSTANT,
+    },
+    {
         XI_ADD,
         XR_CORE_TYPE_I64,
         XR_CORE_OP_CORE_ADD_I64,
@@ -311,9 +325,23 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
     {
         XI_PRINT,
         XR_CORE_TYPE_VOID,
-        XR_CORE_OP_CORE_OUTPUT_GROUP_I64,
+        XR_CORE_OP_CORE_OUTPUT_GROUP,
         UINT32_C(0),
-        XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP_I64,
+        XR_PROGRAM_XI_PROJECTION_OUTPUT_GROUP,
+    },
+    {
+        XI_STR_CONCAT,
+        XR_CORE_TYPE_STRING,
+        XR_CORE_OP_CORE_STRING_CONCAT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_STRING_CONCAT,
+    },
+    {
+        XI_CONVERT,
+        XR_CORE_TYPE_STRING,
+        XR_CORE_OP_CORE_STRING_FROM_I64,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_STRING_FROM_I64,
     },
 };
 

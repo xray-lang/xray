@@ -19,6 +19,10 @@ static bool needs_copy_helper(const XrValidatedType *type) {
 static bool emit_copy_field(CBuffer *buffer, const XrBackendIR *ir, uint16_t type_id,
                             const char *field) {
     const XrValidatedType *type = xr_validated_program_type(ir->program, type_id);
+    /* A string field is an owner of its own; copying it by pointer would alias
+     * two owners.  Text-carrying aggregates are not admitted yet. */
+    if (type_id == XR_CORE_TYPE_STRING)
+        return false;
     if (!needs_copy_helper(type))
         return true;
     return append_format(buffer,
@@ -198,6 +202,13 @@ static bool emit_owner_copy(CBuffer *buffer, const XrBackendIR *ir,
                             const XrBackendInstruction *instruction) {
     const XrValidatedType *type =
         xr_validated_program_type(ir->program, instruction->result_type_id);
+    if (instruction->result_type_id == XR_CORE_TYPE_STRING)
+        return append_format(buffer,
+                             "        v%u = xr_aot_string_from_bytes(xr_ctx, v%u->bytes, "
+                             "v%u->size);\n"
+                             "        if (!v%u) return xr_aot_make(4, 0, 0);\n",
+                             instruction->result_id, instruction->operands[0],
+                             instruction->operands[0], instruction->result_id);
     if (!needs_copy_helper(type))
         return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
                              instruction->operands[0]);

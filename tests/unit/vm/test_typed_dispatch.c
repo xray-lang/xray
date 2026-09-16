@@ -187,9 +187,9 @@ static void test_generated_instruction_contract(void) {
     REQUIRE(XR_TARGET_INSTRUCTION_AGGREGATE_MAKE_I64X2 == 35);
     REQUIRE(XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE == 36);
     REQUIRE(XR_TARGET_INSTRUCTION_RETURN_AGGREGATE == 37);
-    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 44u);
-    REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
-            XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
+    REQUIRE(XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE == 43);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 43u);
+    REQUIRE(XR_TEST_VM_DISPATCH_COUNT == XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
     static const XrTypedDispatchProvider providers[] = {
         XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
         XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
@@ -229,14 +229,19 @@ static void test_generated_instruction_contract(void) {
         }
         semantic_bindings += contract->semantic_name != NULL;
         for (uint32_t other = 1; other < opcode; other++)
-            REQUIRE(strcmp(contract->name,
-                           xr_target_instruction_opcode_name(other)) != 0);
+            REQUIRE(strcmp(contract->name, xr_target_instruction_opcode_name(other)) != 0);
     }
-    REQUIRE(semantic_bindings == 34u);
-    REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
-            NULL);
-    REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
-            NULL);
+    REQUIRE(semantic_bindings == 33u);
+    /* The retired process-query instruction has no numeric dispatch route. */
+    REQUIRE(xr_target_instruction_contract(44u) == NULL);
+    REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH, 44u,
+        xr_target_instruction_contract(XR_TARGET_INSTRUCTION_CONST_I64)));
+    REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE, 44u,
+        xr_target_instruction_contract(XR_TARGET_INSTRUCTION_CONST_I64)));
+    REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) == NULL);
+    REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) == NULL);
     const XrTargetInstructionContract *first =
         xr_target_instruction_contract(XR_TARGET_INSTRUCTION_CONST_I64);
     REQUIRE(!xr_typed_dispatch_provider_contract_is_exact(

@@ -15,7 +15,10 @@
 #include "../shared/xr_crypto_core.h"
 #include "xrt_value.h"
 
-static inline XrValue xrt_crypto_fill_random_bytes(XrValue bytes_value) {
+static inline XrValue xrt_crypto_fill_random_bytes(XrValue *bytes_slot) {
+    if (!bytes_slot)
+        return XR_NULL_VAL;
+    XrValue bytes_value = *bytes_slot;
     if (!XR_IS_ARRAY(bytes_value) || !bytes_value.ptr)
         return XR_NULL_VAL;
     xrt_array_t *bytes = (xrt_array_t *) bytes_value.ptr;

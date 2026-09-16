@@ -315,6 +315,16 @@ static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
     ref->resolved_shared_slot = -1;
     ref->resolved_export_slot = -1;
     ref->psc_dependency_index = XI_PSC_ROW_NONE;
+    ref->exact_target_spec_index = -1;
+    /* Resolved exports carry a canonical module identity, not the source's
+     * relative or package spelling. Preserve that resolver join explicitly. */
+    if (member_name && l->analyzer && l->analyzer->graph) {
+        int target = xr_module_graph_find((XrModuleGraph *) l->analyzer->graph, module_name);
+        if (target >= 0) {
+            ref->has_exact_target = true;
+            ref->exact_target_spec_index = target;
+        }
+    }
 
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
     if (!v)
@@ -2425,8 +2435,7 @@ static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const X
     if (sel->kind == XA_SEL_ENUM_MEMBER && sel->target_symbol &&
         sel->target_symbol->kind == XA_SYM_ENUM && ma->name) {
         const char *enum_name = sel->target_symbol->name;
-        const XrTargetQueryEnumDesc *target_enum =
-            xr_target_query_enum_by_type_name(enum_name);
+        const XrTargetQueryEnumDesc *target_enum = xr_target_query_enum_by_type_name(enum_name);
         const XrTargetQueryEnumMemberDesc *target_member =
             xr_target_query_enum_member(target_enum, ma->name);
         if (target_enum && target_member && sel->target_symbol->is_builtin) {
@@ -2636,16 +2645,15 @@ static XiValue *lower_target_query(XiLower *l, AstNode *node, bool *out_recogniz
     if (l->global_evidence && l->func && l->func->xg_body_func_id != XG_NO_ID) {
         source_node_id = xi_lower_source_node_id(l, node);
         if (has_fact) {
-            row = xg_global_evidence_find_target_query_at(
-                l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
-                query_kind);
+            row = xg_global_evidence_find_target_query_at(l->global_evidence,
+                                                          (XgFuncId) l->func->xg_body_func_id,
+                                                          source_node_id, query_kind);
         } else {
             for (uint8_t candidate = XG_TARGET_QUERY_POINTER_BITS;
                  candidate <= XG_TARGET_QUERY_ENDIANNESS; ++candidate) {
-                const XgTargetQuerySummary *candidate_row =
-                    xg_global_evidence_find_target_query_at(
-                        l->global_evidence, (XgFuncId) l->func->xg_body_func_id,
-                        source_node_id, candidate);
+                const XgTargetQuerySummary *candidate_row = xg_global_evidence_find_target_query_at(
+                    l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
+                    candidate);
                 if (candidate_row) {
                     if (row) {
                         l->had_error = true;
@@ -2690,19 +2698,19 @@ static XiValue *lower_target_query(XiLower *l, AstNode *node, bool *out_recogniz
         default:
             break;
     }
-    bool result_type_matches =
-        expected_enum ? (result_type && result_type->kind == XR_KIND_ENUM &&
-                         result_type->enum_type.enum_name &&
-                         strcmp(result_type->enum_type.enum_name, expected_enum) == 0)
-                      : (result_type && result_type->kind == XR_KIND_INT &&
-                         result_type->scalar_rep == XR_NATIVE_U16);
+    bool result_type_matches = expected_enum
+                                   ? (result_type && result_type->kind == XR_KIND_ENUM &&
+                                      result_type->enum_type.enum_name &&
+                                      strcmp(result_type->enum_type.enum_name, expected_enum) == 0)
+                                   : (result_type && result_type->kind == XR_KIND_INT &&
+                                      result_type->scalar_rep == XR_NATIVE_U16);
     if (!row || source_node_id == 0 ||
         xg_global_evidence_find_target_query(l->global_evidence, row->use_id) != row ||
-        fact.namespace_id != XA_TARGET_NAMESPACE_TARGET ||
-        fact.query_id != query_kind || fact.result_native_type != XR_NATIVE_U16 ||
-        fact.complete != 1 || operation == XI_OP_COUNT ||
-        row->namespace_id != XG_TARGET_NAMESPACE_TARGET || row->query_kind != query_kind ||
-        row->result_native_type != XR_NATIVE_U16 || row->contract_complete != 1 ||
+        fact.namespace_id != XA_TARGET_NAMESPACE_TARGET || fact.query_id != query_kind ||
+        fact.result_native_type != XR_NATIVE_U16 || fact.complete != 1 ||
+        operation == XI_OP_COUNT || row->namespace_id != XG_TARGET_NAMESPACE_TARGET ||
+        row->query_kind != query_kind || row->result_native_type != XR_NATIVE_U16 ||
+        row->contract_complete != 1 ||
         row->result_type_key != xg_target_query_result_type_key(query_kind) ||
         !result_type_matches || result_type->is_nullable) {
         l->had_error = true;
@@ -2747,6 +2755,21 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     XiValue *enum_member = NULL;
     if (lower_selected_enum_member_access(l, node, sel, &enum_member))
         return enum_member;
+
+    /* A qualified class names the same immutable export as a named import.
+     * Preserve its resolved declaration identity instead of turning the
+     * namespace into a dynamic object and looking the class up as a field. */
+    if (sel && sel->kind == XA_SEL_MODULE_EXPORT && sel->target_symbol &&
+        sel->target_symbol->kind == XA_SYM_CLASS) {
+        const char *module_path =
+            xi_lower_export_module_for_symbol(l, sel->target_symbol, ma->name);
+        XrType *type = sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
+        if (!module_path || !type) {
+            l->had_error = true;
+            return NULL;
+        }
+        return xi_lower_emit_import_ref(l, module_path, ma->name, type, (int) node->line);
+    }
 
     XiValue *type_member = lower_type_namespace_member(l, ma);
     if (type_member)
@@ -2826,8 +2849,6 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
             v->lowering_flags |= XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
         xi_lower_bind_object_access_id(l, v, ma->name, (uint32_t) node->line,
                                        XG_OBJECT_ACCESS_FIELD_GET);
-        if (v->xg_object_access_id == 0 && xr_type_is_exact_struct_object(obj->type))
-            v->lowering_flags |= XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
         return v;
     }
 
@@ -3444,8 +3465,6 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
         v->line = (uint32_t) node->line;
         xi_lower_bind_object_access_id(l, v, static_key, (uint32_t) node->line,
                                        XG_OBJECT_ACCESS_FIELD_GET);
-        if (v->xg_object_access_id == 0 && xr_type_is_exact_struct_object(obj->type))
-            v->lowering_flags |= XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
         return v;
     }
     if (l->had_error)
@@ -5526,8 +5545,7 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
             place->args[0] = source;
             place->line = (uint32_t) line;
             arg_plan->origin = var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL
-                               : mode == XR_PARAM_READ &&
-                                       xi_value_is_fresh_direct_storage(source)
+                               : mode == XR_PARAM_READ && xi_value_is_fresh_direct_storage(source)
                                    ? XI_PLACE_ORIGIN_DIRECT_VALUE
                                    : XI_PLACE_ORIGIN_PROJECTION_TEMP;
             if (var_id >= 0)
@@ -5844,8 +5862,8 @@ static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *ca
     return links ? links->module_name : NULL;
 }
 
-static XiValue *lower_module_export_class_constructor(XiLower *l, AstNode *node,
-                                                      CallExprNode *call, bool *matched) {
+static XiValue *lower_module_export_class_constructor(XiLower *l, AstNode *node, CallExprNode *call,
+                                                      bool *matched) {
     if (matched)
         *matched = false;
     if (!l || !l->analyzer || !node || !call || !call->callee ||
@@ -5858,8 +5876,7 @@ static XiValue *lower_module_export_class_constructor(XiLower *l, AstNode *node,
         return NULL;
     if (matched)
         *matched = true;
-    XaSymbolLinks *class_links =
-        xa_analyzer_get_links(l->analyzer, class_symbol);
+    XaSymbolLinks *class_links = xa_analyzer_get_links(l->analyzer, class_symbol);
     XrType *result_type = xi_lower_node_type(l, node);
     const char *module_name = lower_call_namespace_module_name(l, call);
     const char *class_name = call->callee->as.member_access.name;
@@ -7467,45 +7484,6 @@ static bool lower_scalar_bool_type_is_exact(const XrType *type) {
            (type->scalar_rep == XR_SCALAR_REP_NONE || type->scalar_rep == XR_NATIVE_BOOL);
 }
 
-static bool lower_stable_id_is_zero(XrStableId id) {
-    static const XrStableId zero = {{0}};
-    return memcmp(id.bytes, zero.bytes, sizeof(id.bytes)) == 0;
-}
-
-/* Whole-module source syntax (`module.member()`) normally lowers the callee as a
- * namespace field.  A PSC-bound cross-module call instead needs the same named
- * import value used by the module-graph resolver so the frozen source-export row
- * can be joined to an exact resolved function.  The analyzer selection, import
- * declaration locator, PSC call locator and later module resolver all corroborate
- * this projection; the member spelling alone is never target authority. */
-static XiValue *lower_private_leaf_source_import_callee(XiLower *l, CallExprNode *call,
-                                                        XiValue *namespace_member) {
-    const MemberAccessNode *member = call && call->callee && call->callee->type == AST_MEMBER_ACCESS
-                                         ? &call->callee->as.member_access
-                                         : NULL;
-    const XaSelection *selection = l && l->analyzer && call && call->callee
-                                       ? xa_analyzer_get_selection(l->analyzer, call->callee)
-                                       : NULL;
-    const XiImportRef *namespace_ref =
-        namespace_member && namespace_member->op == XI_LOAD_FIELD && namespace_member->nargs == 1
-            ? lower_import_ref_from_value(l, namespace_member->args[0])
-            : NULL;
-    XrType *callee_type = call && call->callee ? xi_lower_node_type(l, call->callee) : NULL;
-    if (!member || !member->name || !selection || selection->kind != XA_SEL_MODULE_EXPORT ||
-        !selection->target_symbol || !selection->target_symbol->name ||
-        strcmp(selection->target_symbol->name, member->name) != 0 || !namespace_ref ||
-        !namespace_ref->module_path || namespace_ref->member_name || !callee_type ||
-        callee_type->kind != XR_KIND_FUNCTION)
-        return NULL;
-    XiValue *callee = xi_lower_emit_import_ref(l, namespace_ref->module_path, member->name,
-                                               callee_type, call->callee->line);
-    XiImportRef *named_ref = callee ? (XiImportRef *) callee->aux : NULL;
-    if (!named_ref)
-        return NULL;
-    named_ref->psc_import_locator = namespace_ref->psc_import_locator;
-    return callee;
-}
-
 /* A published program capability is a closed lowering lane. The source call is
  * joined to PSC
  * before any generic/name/member resolver can observe it; every mismatch therefore hard-fails
@@ -7528,15 +7506,11 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
     bool overflow = l && l->program_semantics &&
                     xr_program_semantic_closure_family(l->program_semantics->closure) ==
                         XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
-    bool private_leaf = l && l->program_semantics &&
-                        xr_program_semantic_closure_family(l->program_semantics->closure) ==
-                            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     if (!l || !l->program_semantics || !node || !call || !call->callee ||
         call->default_arg_count != 0 || call->type_arg_count != 0 ||
-        ((product || private_leaf)
-             ? (call->arg_count != 0)
-             : (!call->arguments || call->arg_count != 1 ||
-                (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))) ||
+        (product ? (call->arg_count != 0)
+                 : (!call->arguments || call->arg_count != 1 ||
+                    (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))) ||
         !xi_program_semantic_find_call(l->func, l->program_semantics, locator, &call_index, NULL,
                                        0)) {
         if (l)
@@ -7576,50 +7550,31 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
         value->psc_call_index = call_index;
         return value;
     }
-    const XrProgramSemanticCallRecord *program_call =
-        xr_program_semantic_closure_call(l->program_semantics->closure, call_index);
-    bool source_private_leaf_call =
-        private_leaf && program_call && !lower_stable_id_is_zero(program_call->resolver_binding);
-    bool native_private_leaf_call =
-        private_leaf && program_call && lower_stable_id_is_zero(program_call->resolver_binding);
     XiValue *callee = xi_lower_expr(l, call->callee);
-    if (source_private_leaf_call && callee && !lower_import_ref_from_value(l, callee))
-        callee = lower_private_leaf_source_import_callee(l, call, callee);
-    XiValue *argument =
-        !product && !private_leaf && callee ? xi_lower_expr(l, call->arguments[0]) : NULL;
+    XiValue *argument = !product && callee ? xi_lower_expr(l, call->arguments[0]) : NULL;
     XiImportRef *import_ref = callee ? lower_import_ref_from_value(l, callee) : NULL;
     XrType *result_type = xi_lower_node_type(l, node);
     if (!callee ||
-        (!product && !private_leaf &&
-         (!argument || !argument->type || XR_TYPE_IS_UNKNOWN(argument->type) ||
-          XR_TYPE_IS_ERROR(argument->type))) ||
+        (!product && (!argument || !argument->type || XR_TYPE_IS_UNKNOWN(argument->type) ||
+                      XR_TYPE_IS_ERROR(argument->type))) ||
         !result_type || XR_TYPE_IS_UNKNOWN(result_type) || XR_TYPE_IS_ERROR(result_type) ||
-        (!product && !private_leaf && l->program_semantics->decision &&
+        (!product && l->program_semantics->decision &&
          (!lower_scalar_i64_type_is_exact(argument->type) ||
           !lower_scalar_i64_type_is_exact(result_type))) ||
         (xr_program_semantic_closure_family(l->program_semantics->closure) ==
              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
          (!import_ref || !xi_program_semantic_bind_import(import_ref, l->program_semantics,
-                                                          call_index, NULL, 0))) ||
-        (private_leaf &&
-         (!program_call || !import_ref || !lower_scalar_i64_type_is_exact(result_type) ||
-          (source_private_leaf_call &&
-           !xi_program_semantic_bind_import(import_ref, l->program_semantics, call_index, NULL,
-                                            0)) ||
-          (native_private_leaf_call &&
-           (import_ref->psc_dependency_index != XI_PSC_ROW_NONE ||
-            !lower_stable_id_is_zero(import_ref->psc_resolver_binding)))))) {
+                                                          call_index, NULL, 0)))) {
         l->had_error = true;
         return NULL;
     }
-    XiValue *value = xi_value_new(l->func, l->cur_block, XI_CALL, result_type,
-                                  (product || private_leaf) ? 1 : 2);
+    XiValue *value = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, product ? 1 : 2);
     if (!value) {
         l->had_error = true;
         return NULL;
     }
     value->args[0] = callee;
-    if (!product && !private_leaf)
+    if (!product)
         value->args[1] = argument;
     value->line = (uint32_t) node->line;
     value->source_kind = locator.kind;
@@ -7643,10 +7598,7 @@ static void lower_mark_array_intrinsic(XiValue *v, uint8_t kind, struct XrType *
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
-    if (l && l->program_semantics &&
-        (l->func->psc_function_index != XI_PSC_ROW_NONE ||
-         xr_program_semantic_closure_family(l->program_semantics->closure) !=
-             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL))
+    if (l && l->program_semantics)
         return lower_program_semantic_call(l, node, call);
 
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
@@ -10305,10 +10257,9 @@ generic_constructor:;
             (int) (sizeof(stack_constructor_modes) / sizeof(stack_constructor_modes[0])),
             &constructor_pcount);
     }
-    bool has_user_class_info =
-        (class_links && class_links->class_info != NULL) ||
-        (result_type && result_type->kind == XR_KIND_INSTANCE &&
-         result_type->instance.class_ref != NULL);
+    bool has_user_class_info = (class_links && class_links->class_info != NULL) ||
+                               (result_type && result_type->kind == XR_KIND_INSTANCE &&
+                                result_type->instance.class_ref != NULL);
     {
         uint32_t symbol_id = class_sym ? class_sym->id : 0u;
         int var_id = xi_lower_var_find(l, symbol_id, cname);

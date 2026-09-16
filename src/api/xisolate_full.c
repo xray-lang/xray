@@ -51,8 +51,6 @@
 #include <stdio.h>
 #include <string.h>
 
-void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate);
-
 static bool isolate_config_is_valid(const XrVMConfig *params) {
     if (!params)
         return false;
@@ -176,7 +174,8 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // state that every module load already assumes is in place. Built-in type
     // names (Array, Map, Json, BigInt, ...) resolve from here, so user code
     // never imports it. `prelude` is deliberately absent from the module graph.
-    xr_prelude_install(isolate);
+    if (!xr_prelude_install(isolate))
+        return -1;
 
     // Module system
     xr_module_system_init(isolate);
@@ -213,7 +212,6 @@ static int isolate_init_full(XrVMRuntime *isolate) {
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
-    xr_isolate_register_runtime_prelude_enums(isolate);
 
 #if XR_DEBUG
     // Verify C-registered methods match .xr declarations

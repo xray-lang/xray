@@ -12,13 +12,15 @@
  *   code. Provider traces and cancellation outcomes are independent oracles.
  */
 
-static void branching_cleanup_check_vm(XrInstance *instance, uint32_t entry,
-                                       BranchingCleanupProbe *probe, XrVmDecodePolicy policy) {
+static void branching_cleanup_check_vm(const XrValidatedProgram *program,
+                                       const XrTargetProfile *profile, XrInstance *instance,
+                                       uint32_t entry, BranchingCleanupProbe *probe,
+                                       XrVmDecodePolicy policy) {
     XrVmCodeOptions options = xr_vm_code_default_options();
     options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
     for (uint32_t scenario = 0u;
          scenario < sizeof(branching_cleanup_scenarios) / sizeof(branching_cleanup_scenarios[0]);
          ++scenario) {
@@ -50,13 +52,15 @@ static void branching_cleanup_check_vm(XrInstance *instance, uint32_t entry,
     xr_vm_code_free(code);
 }
 
-static void nested_cleanup_check_vm(XrInstance *instance, uint32_t entry,
-                                    BranchingCleanupProbe *probe, XrVmDecodePolicy policy) {
+static void nested_cleanup_check_vm(const XrValidatedProgram *program,
+                                    const XrTargetProfile *profile, XrInstance *instance,
+                                    uint32_t entry, BranchingCleanupProbe *probe,
+                                    XrVmDecodePolicy policy) {
     XrVmCodeOptions options = xr_vm_code_default_options();
     options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
     for (uint32_t scenario = 0u;
          scenario < sizeof(nested_cleanup_scenarios) / sizeof(nested_cleanup_scenarios[0]);
          ++scenario) {
@@ -107,13 +111,15 @@ static void child_cleanup_assert_vm(XrVmOutcome suspended, XrVmOutcome outcome,
     child_cleanup_assert_trace(probe);
 }
 
-static void child_cleanup_check_vm(XrInstance *instance, uint32_t entry, ChildCleanupProbe *probe,
+static void child_cleanup_check_vm(const XrValidatedProgram *program,
+                                   const XrTargetProfile *profile, XrInstance *instance,
+                                   uint32_t entry, ChildCleanupProbe *probe,
                                    XrVmDecodePolicy policy) {
     XrVmCodeOptions options = xr_vm_code_default_options();
     options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
     for (uint32_t index = 0u; index < sizeof(child_cleanup_modes) / sizeof(child_cleanup_modes[0]);
          ++index) {
         const ChildCleanupMode *mode = &child_cleanup_modes[index];
@@ -132,13 +138,15 @@ static void child_cleanup_check_vm(XrInstance *instance, uint32_t entry, ChildCl
     xr_vm_code_free(code);
 }
 
-static void field_ref_cleanup_check_vm(XrInstance *instance, uint32_t entry,
-                                       FieldRefCleanupProbe *probe, XrVmDecodePolicy policy) {
+static void field_ref_cleanup_check_vm(const XrValidatedProgram *program,
+                                       const XrTargetProfile *profile, XrInstance *instance,
+                                       uint32_t entry, FieldRefCleanupProbe *probe,
+                                       XrVmDecodePolicy policy) {
     XrVmCodeOptions options = xr_vm_code_default_options();
     options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
-    ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+    ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
     for (uint32_t index = 0u;
          index < sizeof(field_ref_cleanup_modes) / sizeof(field_ref_cleanup_modes[0]); ++index) {
         const FieldRefCleanupMode *mode = &field_ref_cleanup_modes[index];
@@ -256,7 +264,9 @@ static void assert_affine_vm_executions(const XrVmCode *code, XrInstance *instan
     }
 }
 
-static void assert_uncaught_vm_error(XrInstance *instance, uint32_t entry, uint16_t error_type_id,
+static void assert_uncaught_vm_error(const XrValidatedProgram *program,
+                                     const XrTargetProfile *profile, XrInstance *instance,
+                                     uint32_t entry, uint16_t error_type_id,
                                      PipeProviderProbe *probe) {
     const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
     for (uint32_t policy = 0u; policy < 2u; ++policy) {
@@ -265,7 +275,8 @@ static void assert_uncaught_vm_error(XrInstance *instance, uint32_t entry, uint1
         options.decode_policy = policies[policy];
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic diagnostic;
-        ASSERT_EQ_INT(xr_vm_code_build(instance, &options, &code, &diagnostic), XR_VM_CODE_OK);
+        ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic),
+                      XR_VM_CODE_OK);
         XrVmOutcome outcome = xr_vm_code_execute(code, instance, entry, NULL, 0u);
         ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_ERROR);
         XrVmAggregateView error = {0};

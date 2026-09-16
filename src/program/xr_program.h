@@ -13,6 +13,7 @@
 
 #include "../base/xdefs.h"
 #include "../base/xstable_id.h"
+#include "../runtime/abi/xr_provider_logical_contract.h"
 #include "../shared/xr_param_mode.h"
 #include "../shared/xr_view_origin.h"
 
@@ -23,7 +24,9 @@
 #define XR_PROGRAM_DIGEST_SIZE 32u
 #define XR_CORE_IR_KEY_SIZE 32u
 #define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
-#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 11u
+/* Builtin rows are the CoreSpec runtime types below the dynamic base; the
+ * registry meta type (11) is never a program type. */
+#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 13u
 #define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(16)
 
 typedef enum XrProgramTypeKind {
@@ -38,6 +41,8 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_TARGET_ARCH = 8,
     XR_PROGRAM_TYPE_KIND_TARGET_ABI = 9,
     XR_PROGRAM_TYPE_KIND_TARGET_ENDIAN = 10,
+    XR_PROGRAM_TYPE_KIND_STRING = 12,
+    XR_PROGRAM_TYPE_KIND_RUNE = 13,
     XR_PROGRAM_TYPE_KIND_AGGREGATE = 16,
     XR_PROGRAM_TYPE_KIND_VARIANT = 17,
     XR_PROGRAM_TYPE_KIND_VIEW = 18,
@@ -124,7 +129,25 @@ typedef struct XrCoreIrTypeInput {
 typedef enum XrCoreIrConstantKind {
     XR_CORE_IR_CONSTANT_I64 = 1,
     XR_CORE_IR_CONSTANT_BOOL = 2,
+    XR_CORE_IR_CONSTANT_STRING = 3,
+    XR_CORE_IR_CONSTANT_RUNE = 4,
 } XrCoreIrConstantKind;
+
+/* One fixed builtin type row: logical ownership and copy contract of a
+ * CoreSpec runtime type.  Encoder, decoder, verifier, producer and executors
+ * all read this single table. */
+typedef struct XrProgramBuiltinTypeRow {
+    uint16_t type_id;
+    XrCoreIrTypeOwnership ownership;
+    XrCoreIrCopyContract copy_contract;
+} XrProgramBuiltinTypeRow;
+
+XR_FUNC const XrProgramBuiltinTypeRow *xr_program_builtin_type_row(uint16_t type_id);
+XR_FUNC const XrProgramBuiltinTypeRow *xr_program_builtin_type_row_at(uint32_t index);
+
+/* Largest string constant payload; bounded below the artifact ceiling so one
+ * row can never claim the whole section. */
+#define XR_PROGRAM_CONSTANT_STRING_MAX_BYTES UINT32_C(16777216)
 
 typedef enum XrSuspensionRequestKind {
     XR_SUSPENSION_REQUEST_NONE = 0,
@@ -147,6 +170,8 @@ static inline int64_t xr_suspension_timer_normalize_ms(int64_t milliseconds) {
     return milliseconds > INT64_C(86400000) ? INT64_C(86400000) : milliseconds;
 }
 
+/* String constants borrow their UTF-8 bytes from the producer for the
+ * lifetime of the CoreIR input; the writer copies them into the artifact. */
 typedef struct XrCoreIrConstantInput {
     XrCoreIrKey key;
     uint16_t type_id;
@@ -154,8 +179,18 @@ typedef struct XrCoreIrConstantInput {
     union {
         int64_t i64;
         bool boolean;
+        struct {
+            const uint8_t *bytes;
+            uint32_t size;
+        } string;
+        uint32_t rune;
     } value;
 } XrCoreIrConstantInput;
+
+XR_FUNC bool xr_program_constant_is_canonical(const XrCoreIrConstantInput *constant);
+XR_FUNC bool xr_program_constant_payload_is_canonical(uint16_t type_id, XrCoreIrConstantKind kind,
+                                                      const uint8_t *string_bytes,
+                                                      uint32_t string_size, uint32_t rune);
 
 typedef enum XrCoreIrImmediateKind {
     XR_CORE_IR_IMMEDIATE_NONE = 0,
@@ -343,6 +378,11 @@ typedef struct XrCoreIrModuleInput {
     uint32_t constant_count;
     const XrCoreIrFunctionInput *functions;
     uint32_t function_count;
+    /* Zero denotes a function-only compilation unit. Runtime modules name
+     * their initializer and dependencies; input order is initialization order. */
+    XrCoreIrKey initializer;
+    const XrCoreIrKey *dependencies;
+    uint32_t dependency_count;
 } XrCoreIrModuleInput;
 
 typedef struct XrCoreIrInterfaceInput {
@@ -360,12 +400,19 @@ typedef struct XrCoreIrConformanceInput {
     uint32_t slot_count;
 } XrCoreIrConformanceInput;
 
+/* A stable operation identity and its complete target-neutral semantics are
+ * inseparable. Host symbols and physical call layouts belong to other owners. */
+typedef struct XrProgramProviderOperationRequirement {
+    XrStableId operation_id;
+    XrProviderLogicalContract logical_contract;
+} XrProgramProviderOperationRequirement;
+
 /* Program imports name semantic provider contracts and the exact operation
  * subset they require.  Target ABI fingerprints remain profile-owned and are
  * checked only when an execution instance binds this target-neutral table. */
 typedef struct XrCoreIrProviderRequirementInput {
     XrStableId contract_id;
-    const XrStableId *operation_ids;
+    const XrProgramProviderOperationRequirement *operations;
     uint32_t operation_count;
 } XrCoreIrProviderRequirementInput;
 
