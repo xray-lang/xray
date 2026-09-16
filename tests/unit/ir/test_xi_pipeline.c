@@ -981,6 +981,27 @@ TEST(e2e_multi_func) {
     xr_instruction_unit_free(p);
 }
 
+TEST(e2e_open_template_keeps_declaration_without_runtime_publication) {
+    XrProto *proto = compile_source("fn before() -> i64 { return 40 }\n"
+                                   "class Cell<T> {\n"
+                                   "  value: T\n"
+                                   "  constructor(value: T) { this.value = value }\n"
+                                   "}\n"
+                                   "fn after() -> i64 { return before() + 2 }\n"
+                                   "print(after())\n", NULL);
+    PIPELINE_TEST_REQUIRE(proto != NULL && proto->xi_func != NULL);
+    XiFunc *root = (XiFunc *) proto->xi_func;
+    PIPELINE_TEST_REQUIRE(PROTO_PROTO_COUNT(proto) == 2 && root->nchildren == 3);
+    PIPELINE_TEST_REQUIRE(!root->children[0] && root->children[1] && !root->children[2]);
+    PIPELINE_TEST_REQUIRE(root->children[1]->is_generic_template);
+    PIPELINE_TEST_REQUIRE(!has_opcode(proto, OP_CLASS_CREATE_FROM_DESCRIPTOR));
+    const XiFunc *before = (XiFunc *) PROTO_PROTO(proto, 0)->xi_func;
+    const XiFunc *after = (XiFunc *) PROTO_PROTO(proto, 1)->xi_func;
+    PIPELINE_TEST_REQUIRE(before && after && strcmp(before->name, "before") == 0 &&
+                          strcmp(after->name, "after") == 0);
+    xr_instruction_unit_free(proto);
+}
+
 /* ========== String Concatenation ========== */
 
 TEST(e2e_string_concat) {
@@ -5179,6 +5200,7 @@ int main(int argc, char **argv) {
 
     /* Multiple functions */
     run_e2e_multi_func();
+    run_e2e_open_template_keeps_declaration_without_runtime_publication();
 
     /* String concatenation */
     run_e2e_string_concat();

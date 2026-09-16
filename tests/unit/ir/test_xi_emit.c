@@ -1720,6 +1720,61 @@ TEST(emit_closure_new) {
     xi_func_free(f);
 }
 
+TEST(attach_ir_uses_emitted_child_identity_and_retains_templates) {
+    XiFunc *parent = make_func("parent", &stub_int);
+    parent->children = (XiFunc **) xr_calloc(3, sizeof(*parent->children));
+    TEST_REQUIRE(parent->children != NULL);
+    parent->children_cap = parent->nchildren = 3;
+    parent->stage = XI_STAGE_REPPED;
+    XiFunc *children[3];
+    for (uint16_t i = 0; i < 3; i++) {
+        children[i] = make_func("child", &stub_int);
+        children[i]->stage = XI_STAGE_REPPED;
+        xi_block_set_return(children[i]->entry,
+                            xi_const_int(children[i], children[i]->entry, 40 + i, &stub_int));
+        parent->children[i] = children[i];
+    }
+    children[1]->is_generic_template = true;
+    const uint16_t order[] = {2, 0};
+    for (uint16_t i = 0; i < 2; i++) {
+        XiValue *closure = xi_value_new(parent, parent->entry, XI_CLOSURE_NEW, &stub_int, 0);
+        TEST_REQUIRE(closure != NULL);
+        closure->aux = children[order[i]];
+    }
+    xi_block_set_return(parent->entry, xi_const_int(parent, parent->entry, 42, &stub_int));
+    XrProto *proto = NULL;
+    TEST_REQUIRE(xi_emit(parent, NULL, &proto) == XI_EMIT_OK && proto != NULL);
+    TEST_REQUIRE(PROTO_PROTO_COUNT(proto) == 2);
+    XrProto *first = PROTO_PROTO(proto, 0);
+    XrProto *second = PROTO_PROTO(proto, 1);
+    TEST_REQUIRE(first->xi_parent_child == 3 && second->xi_parent_child == 1);
+
+    const uint32_t invalid[] = {0, 4, 1, 2};
+    for (uint32_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+        first->xi_parent_child = invalid[i];
+        TEST_REQUIRE(!xi_emit_attach_ir(proto, parent));
+        TEST_REQUIRE(!proto->xi_func && !first->xi_func && !second->xi_func);
+        for (uint16_t child = 0; child < 3; child++)
+            TEST_REQUIRE(parent->children[child] == children[child]);
+    }
+    first->xi_parent_child = 3;
+    children[1]->is_generic_template = false;
+    TEST_REQUIRE(!xi_emit_attach_ir(proto, parent));
+    children[1]->is_generic_template = true;
+    children[1]->stage = XI_STAGE_RAW;
+    TEST_REQUIRE(!xi_emit_attach_ir(proto, parent));
+    children[1]->stage = XI_STAGE_REPPED;
+
+    TEST_REQUIRE(xi_emit_attach_ir(proto, parent));
+    TEST_REQUIRE(proto->xi_func == parent && first->xi_func == children[2] &&
+                 second->xi_func == children[0]);
+    TEST_REQUIRE(!parent->children[0] && parent->children[1] == children[1] &&
+                 !parent->children[2]);
+    TEST_REQUIRE(!first->xi_parent_child && !second->xi_parent_child);
+    xr_instruction_unit_set_ir_free_fn((XrProtoOpaqueFreeFn) xi_func_free);
+    xr_instruction_unit_free(proto);
+}
+
 TEST(emit_set_new) {
     /* SET_NEW -> OP_NEWSET */
     XiFunc *f = make_func("mkset", &stub_int);
@@ -2176,6 +2231,7 @@ int main(void) {
     run_emit_str_concat();
     run_emit_str_concat_uint64_formats_before_range_concat();
     run_emit_closure_new();
+    run_attach_ir_uses_emitted_child_identity_and_retains_templates();
     run_emit_set_new();
     run_emit_is_check();
     run_emit_identity_as_establishes_owned_result();

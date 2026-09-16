@@ -836,6 +836,8 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, XaSymbol 
 XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     ClassDeclNode *cd = &node->as.class_decl;
     bool owner_is_value_aggregate = node->type == AST_STRUCT_DECL || node->type == AST_UNION_DECL;
+    bool generic_template =
+        !cd->is_monomorphized && (cd->type_param_count > 0 || cd->is_generic_skeleton);
     XR_DCHECK(cd->name != NULL, "class name must not be NULL");
 
     /* Count instance / static methods (skip static constructors) */
@@ -935,7 +937,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     /* Resolve super class from scope chain so the VM uses the
      * locally-defined class, not a same-named builtin. */
     XiValue *super_val = NULL;
-    if (cd->super_name && !cd->super_module) {
+    if (!generic_template && cd->super_name && !cd->super_module) {
         int svar = xi_lower_var_find(l, 0, cd->super_name);
         if (svar >= 0) {
             if (l->is_program && l->shared_map[svar] >= 0) {
@@ -954,15 +956,6 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 super_val = xi_lower_emit_top_load(l, tb, l->type_any);
         }
     }
-
-    /* Create XI_CLASS_CREATE value with XiClassData metadata.
-     * args[0] = resolved super class (NULL if none or unresolved). */
-    uint16_t nclass_args = super_val ? 1 : 0;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CLASS_CREATE, l->type_any, nclass_args);
-    if (!v)
-        return;
-    if (super_val)
-        v->args[0] = super_val;
 
     /* Lower static constructor (<clinit>) if present */
     int clinit_idx = -1;
@@ -1016,7 +1009,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->instance_field_defaults = NULL;
     data->instance_field_count = 0;
     data->source_provider_field_index = -1;
-    data->is_generic_skeleton = cd->type_param_count > 0 || cd->is_generic_skeleton;
+    data->is_generic_skeleton = generic_template;
     data->is_monomorphized = cd->is_monomorphized;
     data->needs_runtime_type = !owner_is_value_aggregate;
     /* Copy concrete type arg display names (arena-duplicated) */
@@ -1237,24 +1230,37 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             }
         }
     }
+    int var_id = xi_lower_var_create(l, cd->symbol_id, cd->name, l->type_any);
+    int slot = l->is_program && var_id < l->var_count ? l->shared_map[var_id] : -1;
+    if (slot >= 0 && slot < l->var_cap)
+        l->shared_slot_classes[slot] = data;
+    /* Open templates retain declaration and method identities, but only a
+     * concrete specialization has a runtime class object to initialize. */
+    if (generic_template)
+        return;
+
+    /* args[0] is the resolved superclass when the declaration has one. */
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CLASS_CREATE, l->type_any,
+                              super_val ? 1 : 0);
+    if (!v) {
+        l->had_error = true;
+        return;
+    }
+    if (super_val)
+        v->args[0] = super_val;
     v->aux = data;
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
 
-    /* Bind class to its name in SSA */
-    int var_id = xi_lower_var_create(l, cd->symbol_id, cd->name, l->type_any);
+    /* Bind the concrete class to its name in SSA. */
     xi_lower_braun_write(l, var_id, l->cur_block, v);
 
     /* Top-level classes: also store into backing store for cross-scope access */
-    if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
-        int slot = l->shared_map[var_id];
+    if (slot >= 0) {
         XiTopBinding b;
         b.slot = slot;
         b.name = l->vars[var_id].name;
         b.type = l->vars[var_id].type;
         xi_lower_emit_top_store(l, b, v);
-        /* Track class → shared slot for module export metadata */
-        if (slot >= 0 && slot < l->var_cap)
-            l->shared_slot_classes[slot] = data;
     }
 }

@@ -1927,6 +1927,42 @@ TEST(json_codec_binding_does_not_fallback_to_source_span) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(generic_class_declaration_has_no_runtime_publication) {
+    XiFunc *root = lower_source("export class Cell<T> {\n"
+                                "    value: T\n"
+                                "    constructor(value: T) { this.value = value }\n"
+                                "}\n"
+                                "export fn answer() -> i64 { return 42 }\n");
+    TEST_REQUIRE(root && root->module && root->module->nclasses == 1,
+                 "generic declaration metadata survives lowering");
+    XiModule *module = root->module;
+    XiClassData *declaration = module->classes[0];
+    TEST_REQUIRE(declaration && declaration->is_generic_skeleton &&
+                     !declaration->is_monomorphized && declaration->nmethod == 1 &&
+                     declaration->instance_field_count == 1,
+                 "template field and method identities remain available");
+    uint32_t slot = UINT32_MAX;
+    for (uint32_t i = 0; i < module->nslots; i++)
+        if (module->slot_classes[i] == declaration) {
+            TEST_REQUIRE(slot == UINT32_MAX, "template has one declaration slot");
+            slot = i;
+        }
+    TEST_REQUIRE(slot != UINT32_MAX && root->module_slots &&
+                     root->module_slots[slot].kind == XI_MODULE_SLOT_TYPE &&
+                     module->nexports == 2,
+                 "template export keeps its declaration without a runtime instance");
+    for (uint32_t b = 0; b < root->nblocks; b++) {
+        XiBlock *block = root->blocks[b];
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            TEST_REQUIRE(value->op != XI_CLASS_CREATE &&
+                             !(value->op == XI_SET_SHARED && value->aux_int == (int64_t) slot),
+                         "open generic class has no runtime creation or publication");
+        }
+    }
+    xi_func_free(root);
+}
+
 #undef TEST_REQUIRE
 
 TEST(map_key_access_lowers_with_global_evidence_id) {
@@ -4488,6 +4524,7 @@ int main(void) {
     run_enum_record_syntax_lowers_to_exact_variant_operations();
     run_import_export_skip();
     run_class_decl_skip();
+    run_generic_class_declaration_has_no_runtime_publication();
     run_yield_stmt();
     run_canonical_effect_sidecars_reach_xi();
 

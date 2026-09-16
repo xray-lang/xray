@@ -192,6 +192,14 @@ compatibility opcode, reserved hole, or second bounds owner.
     cloning preserves it, and value/memory fingerprints detect changes. Constant
     folding learns a declaration value only from this initialization witness,
     never from an arbitrary store.
+    An open generic class retains its declaration, fields, method identities
+    and exports without a runtime class creation or publication. Concrete
+    specializations retain their ordinary initialization. An emitted bytecode
+    child records its exact parent Xi child ordinal until atomic IR attachment;
+    emission order does not imply declaration identity. Unemitted template
+    bodies remain owned by the Xi parent. Missing ordinary bodies, duplicate or
+    invalid child bindings, and graphs below the Repped stage fail attachment
+    before any ownership transfer.
 
 ## Verification
 
@@ -200,5 +208,6 @@ verification-test: test_xi_cleanup_lower
 verification-test: test_xi_cleanup_clone
 verification-test: test_xi_cleanup_integration
 verification-test: test_xi_pipeline
+verification-test: test_xi_emit
 verification-test: test_xi_opt
 verification-test: test_module_graph

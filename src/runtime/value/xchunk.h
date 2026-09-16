@@ -331,6 +331,8 @@ typedef struct XrProto {
     // Retained Xi SSA IR from compilation (XiFunc*), consumed by AOT/REPL
     // lowering. Freed in xr_instruction_unit_free(). NULL if the Xi pipeline was not used.
     void *xi_func;  // opaque XiFunc* (owned, freed via xi_func_free)
+    // Compiler-only origin in the parent's Xi child array, plus one; zero is unbound.
+    uint32_t xi_parent_child;
 } XrProto;
 
 // Convenience macros

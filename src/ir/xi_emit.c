@@ -1020,23 +1020,43 @@ cleanup:;
 
 static bool xi_emit_ir_tree_can_attach(const XrProto *proto, const XiFunc *ir) {
     if (!proto || !ir || proto->xi_func || ir->stage < XI_STAGE_REPPED ||
-        PROTO_PROTO_COUNT(proto) != ir->nchildren)
+        PROTO_PROTO_COUNT(proto) > ir->nchildren)
         return false;
-    for (uint16_t i = 0; i < ir->nchildren; i++) {
+    for (int i = 0; i < PROTO_PROTO_COUNT(proto); i++) {
         XrProto *child_proto = PROTO_PROTO(proto, i);
-        XiFunc *child_ir = ir->children[i];
+        if (!child_proto || !child_proto->xi_parent_child ||
+            child_proto->xi_parent_child > ir->nchildren)
+            return false;
+        for (int prior = 0; prior < i; prior++)
+            if (PROTO_PROTO(proto, prior)->xi_parent_child == child_proto->xi_parent_child)
+                return false;
+        XiFunc *child_ir = ir->children[child_proto->xi_parent_child - 1u];
         if (!xi_emit_ir_tree_can_attach(child_proto, child_ir))
+            return false;
+    }
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        const XiFunc *child = ir->children[i];
+        if (!child || child->stage < XI_STAGE_REPPED)
+            return false;
+        bool emitted = false;
+        for (int p = 0; p < PROTO_PROTO_COUNT(proto); p++)
+            emitted |= PROTO_PROTO(proto, p)->xi_parent_child == (uint32_t) i + 1u;
+        if (!emitted && !child->is_generic_template)
             return false;
     }
     return true;
 }
 
 static void xi_emit_ir_tree_commit(XrProto *proto, XiFunc *ir) {
-    for (uint16_t i = 0; i < ir->nchildren; i++) {
+    /* Emission order is independent of declaration order. Template methods
+     * without runtime publication stay owned by their original Xi parent. */
+    for (int i = 0; i < PROTO_PROTO_COUNT(proto); i++) {
         XrProto *child_proto = PROTO_PROTO(proto, i);
-        XiFunc *child_ir = ir->children[i];
+        uint32_t child_index = child_proto->xi_parent_child - 1u;
+        XiFunc *child_ir = ir->children[child_index];
         xi_emit_ir_tree_commit(child_proto, child_ir);
-        ir->children[i] = NULL;
+        ir->children[child_index] = NULL;
+        child_proto->xi_parent_child = 0;
     }
     proto->xi_func = ir;
 }

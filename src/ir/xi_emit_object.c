@@ -1247,12 +1247,21 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiFunc *child_func = (XiFunc *) v->aux;
     XR_DCHECK(child_func != NULL, "closure child func must not be NULL");
 
+    uint32_t child_index = 0;
+    while (child_index < ctx->func->nchildren && ctx->func->children[child_index] != child_func)
+        child_index++;
+    if (child_index == ctx->func->nchildren) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
     XrProto *child_proto = NULL;
     XiEmitStatus child_st = xi_emit(child_func, ctx->isolate, &child_proto);
     if (child_st != XI_EMIT_OK || !child_proto) {
         emit_error(ctx, child_st != XI_EMIT_OK ? child_st : XI_EMIT_ERR_INTERNAL);
         return;
     }
+    child_proto->xi_parent_child = child_index + 1u;
     /* Propagate shared_offset to child and all its descendants */
     propagate_shared_offset(child_proto, ctx->proto->shared_offset);
 
@@ -1682,6 +1691,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
     XiEmitStatus cst = xi_emit(child, ctx->isolate, &child_proto);
     if (cst != XI_EMIT_OK || !child_proto)
         return -1;
+    child_proto->xi_parent_child = (uint32_t) child_func_idx + 1u;
     /* Propagate shared_offset to child and all its descendants */
     propagate_shared_offset(child_proto, ctx->proto->shared_offset);
 
