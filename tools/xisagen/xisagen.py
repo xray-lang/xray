@@ -2527,17 +2527,9 @@ def _xi_c_translation_phase_1_2(text: str) -> str:
         '??=': '#', '??/': '\\', "??'": '^', '??(': '[', '??)': ']',
         '??!': '|', '??<': '{', '??>': '}', '??-': '~',
     }
-    translated = []
-    index = 0
-    while index < len(text):
-        spelling = text[index:index + 3]
-        if spelling in trigraphs:
-            translated.append(trigraphs[spelling])
-            index += 3
-        else:
-            translated.append(text[index])
-            index += 1
-    return re.sub(r'\\(?:\r\n|\n|\r)', '', ''.join(translated))
+    translated = (re.sub(r"\?\?[=/'()!<>-]", lambda match: trigraphs[match.group()], text)
+                  if '??' in text else text)
+    return re.sub(r'\\(?:\r\n|\n|\r)', '', translated)
 
 
 @functools.lru_cache(maxsize=16384)
@@ -2545,11 +2537,12 @@ def _xi_c_source_without_literals(text: str, *, blank_preprocessor: bool = True)
     """Normalize translation phases, then blank C comments and literals."""
     text = _xi_c_translation_phase_1_2(text)
     chars = list(text)
+    size = len(chars)
     i = 0
     state = 'normal'
-    while i < len(chars):
+    while i < size:
         current = chars[i]
-        following = chars[i + 1] if i + 1 < len(chars) else ''
+        following = chars[i + 1] if i + 1 < size else ''
         if state == 'normal':
             if current == '/' and following == '/':
                 chars[i] = chars[i + 1] = ' '
@@ -2775,7 +2768,8 @@ def _xi_exact_guard_call_count(body: str, symbol: str,
     )
 
 
-def _xi_brace_depths(text: str) -> list[int]:
+@functools.lru_cache(maxsize=128)
+def _xi_short_brace_depths(text: str) -> tuple[int, ...]:
     brace_depth = 0
     depths = [0] * (len(text) + 1)
     for index, char in enumerate(text):
@@ -2784,7 +2778,15 @@ def _xi_brace_depths(text: str) -> list[int]:
             brace_depth += 1
         elif char == '}':
             brace_depth = max(0, brace_depth - 1)
-    return depths
+    return tuple(depths)
+
+
+def _xi_brace_depths(text: str) -> tuple[int, ...]:
+    # Cache only immutable lexical content. Large inputs use the same scanner
+    # without retaining another full-source index; no filesystem fact is cached.
+    if len(text) > 65536:
+        return _xi_short_brace_depths.__wrapped__(text)
+    return _xi_short_brace_depths(text)
 
 
 def _xi_top_level_match_positions(text: str, pattern: str) -> list[int]:
@@ -4009,11 +4011,12 @@ def _xi_preprocessor_logical_content(source: str) -> tuple[str, str]:
     """Cache immutable lexical content or its error, never a caller's context."""
     source = _xi_c_translation_phase_1_2(source)
     output = []
+    size = len(source)
     index = 0
     state = 'normal'
-    while index < len(source):
+    while index < size:
         current = source[index]
-        following = source[index + 1] if index + 1 < len(source) else ''
+        following = source[index + 1] if index + 1 < size else ''
         if state == 'normal':
             if current == '/' and following == '/':
                 output.append(' ')
@@ -9557,6 +9560,7 @@ def cmd_test(args: list[str]):
             _test_xi_ops_parser,
             _test_xi_semantic_ops_parser,
             _test_xi_preprocessor_content_cache,
+            _test_xi_lexical_projections,
             _test_xi_lowering_parser,
             _test_xi_lowering_build_artifacts,
             _test_xi_lowering_ninja_failed_edge,
@@ -9594,6 +9598,7 @@ def cmd_test_fast(args: list[str]):
         _test_xi_ops_parser,
         _test_xi_semantic_ops_parser,
         _test_xi_preprocessor_content_cache,
+        _test_xi_lexical_projections,
         lambda: _test_xi_lowering_parser(XI_FAST_NEGATIVE_CASES),
         _test_xi_lowering_build_artifacts,
         _test_xi_verifier_parser,
@@ -10143,6 +10148,51 @@ def _test_xi_semantic_ops_parser():
         assert False, "non-canonical observable contract path should be rejected"
     except SystemExit:
         pass
+    print(" PASS", file=sys.stderr)
+
+
+def _test_xi_lexical_projections() -> None:
+    print("  test_xi_lexical_projections...", end='', file=sys.stderr)
+    for source, expected in (
+            ("??= ??/ ??' ??( ??) ??! ??< ??> ??-", "# \\ ^ [ ] | { } ~"),
+            ('????=', '??#'),
+            ('???/\r\nname', '?name'),
+            ('?\\\n?=', '??='),
+            ('??/\n??=', '#'),
+            ('plain\r\ntext', 'plain\r\ntext'),
+            ('\\\r\n\\\n\\\r', '')):
+        assert _xi_c_translation_phase_1_2(source) == expected
+    # Literal/comment tokens may contain governed names and unmatched braces.
+    # Neither C projection may turn them into live code or a fake include.
+    source = 'int f(){/* { XI_GO */return "}\\\"XI_GO";} // XI_GO\n'
+    stripped = _xi_c_source_without_literals(source)
+    assert len(stripped) == len(source)
+    assert stripped.count('{') == 1 and stripped.count('}') == 1
+    assert 'XI_GO' not in stripped and stripped.endswith('\n')
+    assert _xi_literal_c_includes(
+        '/* #include "fake.h" */\n??=inc??/\nlude "real.h"\n', 'lexical test') == [
+            ('quoted', 'real.h')]
+    cache = _xi_short_brace_depths
+    cache.cache_clear()
+    try:
+        first = _xi_brace_depths('a{b{c}d}e')
+        assert first == (0, 0, 1, 1, 2, 2, 1, 1, 0, 0)
+        assert isinstance(first, tuple)
+        assert _xi_brace_depths('a{b{c}d}e') is first
+        assert (cache.cache_info().hits, cache.cache_info().misses) == (1, 1)
+        assert _xi_brace_depths('a}b{c}d}e') != first
+        before = cache.cache_info()
+        large = '{' + 'x' * 65536 + '}'
+        depths = _xi_brace_depths(large)
+        assert depths[0] == 0 and depths[1] == 1 and depths[-2] == 1
+        assert cache.cache_info() == before
+        limit = cache.cache_parameters()['maxsize']
+        assert limit == 128
+        for ordinal in range(limit + 1):
+            _xi_brace_depths(f'{ordinal}' + '{}')
+        assert cache.cache_info().currsize == limit
+    finally:
+        cache.cache_clear()
     print(" PASS", file=sys.stderr)
 
 
