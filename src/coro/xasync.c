@@ -69,13 +69,16 @@ static void *async_thread_main(void *arg) {
         atomic_fetch_sub_explicit(&pool->in_flight, 1, memory_order_relaxed);
 
         // Put in Worker's completion queue
-        if (job->worker_id >= 0 && job->worker_id < XR_MAX_WORKERS) {
-            ready_queue_push(&pool->ready_queues[job->worker_id], job);
+        int worker_id = job->worker_id;
+        if (worker_id >= 0 && worker_id < XR_MAX_WORKERS) {
+            /* Publication transfers the job to the consumer, which can free
+             * it immediately. Keep all subsequent routing data locally. */
+            ready_queue_push(&pool->ready_queues[worker_id], job);
             atomic_fetch_add_explicit(&pool->complete_count, 1, memory_order_relaxed);
 
             // Wake Worker (if sleeping)
-            if (pool->runtime && job->worker_id < pool->runtime->worker_count) {
-                xr_runtime_wake_worker(pool->runtime, job->worker_id);
+            if (pool->runtime && worker_id < pool->runtime->worker_count) {
+                xr_runtime_wake_worker(pool->runtime, worker_id);
             }
         } else {
             // Invalid worker_id, free directly
@@ -92,13 +95,25 @@ static void *async_thread_main(void *arg) {
 // Enqueue task. Returns false if the queue is closed or at capacity.
 static bool async_queue_try_push(XrAsyncPool *pool, XrAsyncJob *job) {
     job->next = NULL;
+    XrCoroExt *ext = job->coro ? xr_coro_ensure_ext(job->coro) : NULL;
+    if (job->coro && !ext)
+        return false;
 
     xr_mutex_lock(&pool->queue_mutex);
 
     int depth = atomic_load_explicit(&pool->queue_depth, memory_order_relaxed);
-    if (!pool->running || depth >= pool->queue_limit) {
+    if (!pool->running || depth >= pool->queue_limit ||
+        (ext && atomic_load_explicit(&ext->async_pool, memory_order_acquire))) {
         xr_mutex_unlock(&pool->queue_mutex);
         return false;
+    }
+
+    job->pool = pool;
+    if (ext) {
+        ext->async_job = job;
+        atomic_store_explicit(&ext->async_pool, pool, memory_order_release);
+        /* Mark before publishing so completion cannot precede the block. */
+        (void) xr_coro_begin_reversible_block(job->coro);
     }
 
     if (pool->queue_tail) {
@@ -332,24 +347,35 @@ bool xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job) {
         return false;
     }
 
-    XrCoroBlockSnapshot block_snapshot = {0};
-
-    // Mark before enqueue so a very fast completion cannot race ahead
-    // of the blocked state and leave the coroutine asleep.
-    if (job->coro) {
-        block_snapshot = xr_coro_begin_reversible_block(job->coro);
-    }
-
     if (!async_queue_try_push(pool, job)) {
-        if (job->coro) {
-            xr_coro_rollback_reversible_block(job->coro, block_snapshot);
-        }
         atomic_fetch_add_explicit(&pool->reject_count, 1, memory_order_relaxed);
         return false;
     }
 
     atomic_fetch_add_explicit(&pool->submit_count, 1, memory_order_relaxed);
     return true;
+}
+
+/* The mutex protects both directions of the link until the last shell access.
+ * Cancellation may finish and recycle the shell while invoke still runs. */
+static void async_job_detach_locked(XrAsyncJob *job) {
+    XrCoroExt *ext = job->coro ? xr_coro_ext(job->coro) : NULL;
+    if (ext && ext->async_job == job) {
+        ext->async_job = NULL;
+        atomic_store_explicit(&ext->async_pool, NULL, memory_order_release);
+    }
+    job->coro = NULL;
+}
+
+void xr_async_detach_coro(XrCoroutine *coro) {
+    XrCoroExt *ext = coro ? xr_coro_ext(coro) : NULL;
+    XrAsyncPool *pool = ext ? atomic_load_explicit(&ext->async_pool, memory_order_acquire) : NULL;
+    if (!pool)
+        return;
+    xr_mutex_lock(&pool->queue_mutex);
+    if (ext->async_job)
+        async_job_detach_locked(ext->async_job);
+    xr_mutex_unlock(&pool->queue_mutex);
 }
 
 // Check completion queue, wake coroutines
@@ -374,20 +400,25 @@ int xr_async_check_ready(XrAsyncPool *pool, int worker_id) {
         job->next = NULL;
         count++;
 
-        // Wake coroutine
-        if (job->coro) {
+        /* Keep the registered pool until the last shell access. A destination
+         * worker recycling immediately after wake must take this mutex. */
+        xr_mutex_lock(&pool->queue_mutex);
+        XrCoroutine *coro = job->coro;
+        if (coro) {
             // Put in coroutine's target Worker inbox (no global queue).
             // Respects Coro.lockThread(): locked coros return to their locked worker.
             XrRuntime *runtime = pool->runtime;
             if (runtime && runtime->workers && runtime->worker_count > 0 &&
-                xr_coro_claim_wake(job->coro)) {
-                int target_id = xr_coro_wake_target_id(job->coro);
+                xr_coro_claim_wake(coro)) {
+                int target_id = xr_coro_wake_target_id(coro);
                 if (target_id < 0 || target_id >= runtime->worker_count) {
                     target_id = 0;  // Fallback: Worker 0
                 }
-                xr_worker_inbox_enqueue(runtime, target_id, job->coro);
+                xr_worker_inbox_enqueue(runtime, target_id, coro);
             }
         }
+        async_job_detach_locked(job);
+        xr_mutex_unlock(&pool->queue_mutex);
 
         // Free task
         xr_async_job_free(job);
@@ -417,6 +448,11 @@ XrAsyncJob *xr_async_job_create(struct XrCoroutine *coro, int worker_id, void (*
 // Free async task
 void xr_async_job_free(XrAsyncJob *job) {
     if (job) {
+        if (job->pool) {
+            xr_mutex_lock(&job->pool->queue_mutex);
+            async_job_detach_locked(job);
+            xr_mutex_unlock(&job->pool->queue_mutex);
+        }
         if (job->destroy_data && job->data) {
             job->destroy_data(job->data);
             job->data = NULL;

@@ -768,6 +768,59 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_integer_conversion_core.h",
+      "id": "integer-conversion",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/shared/xr_int_arith_core.h",
+        "src/shared/xr_integer_division_core.h",
+        "src/shared/xr_numeric_conversion_core.h",
+        "src/vm/xr_program_vm_dispatch.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_integer_convert_bits",
+        "xr_integer_signed_from_bits"
+      ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_integer_division_core.h",
+      "id": "integer-division",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/shared/xr_int_arith_core.h",
+        "src/vm/xr_program_vm.c",
+        "src/vm/xr_program_vm_dispatch.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_integer_divmod_eval",
+        "xr_integer_divmod_nonzero_bits"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_io_core.h",
       "id": "io",
       "owner": "shared-kernel",
@@ -1081,7 +1134,6 @@
       "status": "production",
       "test_callers": [
         "tests/unit/execution/test_stdlib_provider_binding.c",
-        "tests/unit/ir/test_xi_cgen.c",
         "tests/unit/program/test_xr_program_process_provider.inc.c",
         "tests/unit/stdlib/test_os_core.c"
       ]
@@ -1536,13 +1588,20 @@
       "id": "synchronization",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/aot/program/xr_backend_ir_emit_class.inc.c",
+        "src/aot/program/xr_backend_ir_emit_copy.inc.c",
         "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_mem.h",
         "src/ir/xi_emit_call.c",
+        "src/runtime/object/xatomic.c",
         "src/runtime/object/xatomic.h",
+        "src/runtime/object/xatomic_core.c",
         "src/shared/xr_semantic_owner_ids_gen.h",
+        "src/vm/xr_program_vm.c",
+        "src/vm/xr_program_vm_dispatch.inc.c",
         "stdlib/mem/mem.c"
       ],
       "profiles": [
@@ -1553,9 +1612,20 @@
       ],
       "representation": "native",
       "signatures": [
+        "xr_atomic_f64_fetch_update_core",
+        "xr_atomic_i64_compare_exchange_core",
+        "xr_atomic_i64_exchange_core",
+        "xr_atomic_i64_fetch_add_core",
+        "xr_atomic_i64_fetch_sub_core",
+        "xr_atomic_i64_fetch_xor_core",
+        "xr_atomic_i64_load_core",
+        "xr_atomic_i64_store_core",
         "xr_atomic_load_plan_c11_order_core",
         "xr_atomic_load_plan_core",
         "xr_atomic_load_plan_is_exact_core",
+        "xr_atomic_storage_init_core",
+        "xr_atomic_storage_release_core",
+        "xr_atomic_storage_retain_core",
         "xr_atomic_store_plan_c11_order_core",
         "xr_atomic_store_plan_core",
         "xr_atomic_store_plan_is_exact_core",
@@ -1712,7 +1782,12 @@
       "header": "src/shared/xr_value_format_core.h",
       "id": "value-format",
       "owner": "shared-kernel",
-      "production_callers": [],
+      "production_callers": [
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/app/cli/xcli_program_vm.c",
+        "src/app/cli/xcmd_run.c",
+        "src/vm/xr_program_vm.h"
+      ],
       "profiles": [
         "vm",
         "aot",
@@ -1721,11 +1796,17 @@
       "representation": "native",
       "signatures": [
         "xr_value_format_depth_exceeded",
+        "xr_value_format_file_write",
         "xr_value_format_limit_count",
         "xr_value_format_more_suffix",
-        "xr_value_format_remaining_count"
+        "xr_value_format_panic",
+        "xr_value_format_remaining_count",
+        "xr_value_format_text",
+        "xr_value_format_uncaught",
+        "xr_value_format_value",
+        "xr_value_format_write"
       ],
-      "status": "test-only",
+      "status": "production",
       "test_callers": [
         "tests/unit/base/test_value_format_core.c"
       ]

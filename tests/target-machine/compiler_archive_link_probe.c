@@ -31,7 +31,7 @@ int main(void) {
                                  sizeof(error)) ||
         emission)
         return 4;
-    if (xr_c_leaf_aggregate_projection(NULL, 0, NULL))
+    if (xr_c_leaf_aggregate_projection(NULL, NULL, 0, NULL))
         return 5;
     return 0;
 }

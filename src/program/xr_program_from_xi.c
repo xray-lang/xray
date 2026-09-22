@@ -15,11 +15,13 @@
 #include "../ir/xi_op_name.h"
 
 #include "../base/xmalloc.h"
+#include "../base/xglobal_indices.h"
 #include "../analysis/xglobal_summary.h"
 #include "../core/xr_core_spec_gen.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi.h"
+#include "../ir/xi_op_name.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_cleanup.h"
 #include "../ir/xi_coro_analyze.h"
@@ -27,6 +29,8 @@
 #include "../ir/xi_core_api.h"
 #include "../ir/xi_module.h"
 #include "../ir/xi_own.h"
+#include "../ir/xi_semantic_intrinsic.h"
+#include "../module/xmodule_graph.h"
 #include "../plan/semantic/xr_semantic_ids.h"
 #include "../runtime/abi/xr_builtin_provider_contract.h"
 #include "../runtime/abi/xr_stdlib_provider_contract.h"
@@ -35,6 +39,7 @@
 #include "../runtime/value/xenum_layout.h"
 #include "../runtime/value/xtype.h"
 #include "../shared/xr_target_query_registry_gen.h"
+#include "../shared/xobject_shape.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include "xr_program_verify.h"
 
@@ -101,12 +106,12 @@ typedef struct XrXiCleanupProjectionStorage {
     uint32_t trap_instruction_count;
 } XrXiCleanupProjectionStorage;
 
-typedef struct XrXiImplicitTrapCleanupStorage {
+typedef struct XrXiImplicitExitCleanupStorage {
     XrCoreIrValueInput *arguments;
     uint32_t argument_count;
     XrCoreIrInstructionInput *instructions;
     uint32_t instruction_count;
-} XrXiImplicitTrapCleanupStorage;
+} XrXiImplicitExitCleanupStorage;
 
 typedef struct XrXiCleanupChainNode {
     const XiCleanupBoundary *boundary;
@@ -206,9 +211,9 @@ typedef struct XrXiFunctionStorage {
     XrXiCleanupProjectionStorage *cleanup_projections;
     uint32_t cleanup_projection_count;
     uint32_t cleanup_projection_capacity;
-    XrXiImplicitTrapCleanupStorage *implicit_trap_cleanups;
-    uint32_t implicit_trap_cleanup_count;
-    uint32_t implicit_trap_cleanup_capacity;
+    XrXiImplicitExitCleanupStorage *implicit_exit_cleanups;
+    uint32_t implicit_exit_cleanup_count;
+    uint32_t implicit_exit_cleanup_capacity;
     XrXiCleanupChainNode *cleanup_chain_nodes;
     uint32_t cleanup_chain_node_count;
     XrXiCleanupHandlerChainNode *cleanup_handler_chain_nodes;
@@ -235,6 +240,9 @@ typedef struct XrXiModuleStorage {
     XrCoreIrConstantInput *constants;
     uint32_t constant_count;
     uint32_t constant_capacity;
+    XrCoreIrKey *dependencies;
+    XrCoreIrModuleSlotInput *slots;
+    uint32_t slot_count;
     XrCoreIrFunctionInput *functions;
     XrXiFunctionStorage *function_storage;
 } XrXiModuleStorage;
@@ -282,6 +290,7 @@ typedef struct XrXiBuildContext {
     XrCoreIrTypeInput *types;
     uint32_t type_count;
     uint32_t type_capacity;
+    bool type_allocation_failed;
     uint32_t class_resolution_cursor;
     XrCoreIrInterfaceInput *interfaces;
     XrXiInterfaceStorage *interface_storage;
@@ -330,6 +339,13 @@ static bool canonical_block_is_panic_cleanup(const XrXiBuildContext *context,
 static bool canonical_block_is_cancel_cleanup(const XrXiBuildContext *context,
                                               const XiFunc *function, const XiBlock *block);
 static bool cleanup_trap_capable_operation(uint16_t operation_id);
+static const XrXiFunctionStorage *find_xi_function(const XrXiBuildContext *context,
+                                                 const XiFunc *xi, uint32_t *module_index,
+                                                 uint32_t *function_index);
+static const XgCallsiteSummary *resolved_callsite(const XrXiBuildContext *context,
+                                                const XiFunc *caller, const XiValue *call);
+static const XgCallsiteSummary *resolved_witness_callsite(const XrXiBuildContext *context,
+                                                        const XiFunc *caller, const XiValue *call);
 static const XrXiPanicEdge *find_panic_edge(const XrXiBuildContext *context, const XiFunc *function,
                                             const XiValue *point);
 static const XrXiCancelEdge *find_cancel_edge(const XrXiBuildContext *context,
@@ -343,6 +359,10 @@ static bool coroutine_function_has_proven_suspend(const XrXiBuildContext *contex
                                                   const XiFunc *function, const XiFunc **stack,
                                                   uint32_t depth);
 static bool exact_condition_assertion(const XiValue *value);
+static bool exact_array_index(XrXiBuildContext *context, const XiFunc *function,
+                              const XiValue *value, uint16_t *element_type);
+static bool exact_integer_divmod(XrXiBuildContext *context, const XiFunc *function,
+                                  const XiValue *value);
 static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *function,
                                    const XiValue *value, uint16_t *type_id);
 static uint32_t canonical_block_successor_count(const XrXiBuildContext *context,
@@ -517,11 +537,23 @@ static XrCoreIrKey constant_key(XrStableId module_id, uint16_t type_id, int64_t 
     return xr_core_ir_key(material, sizeof(material));
 }
 
+static XrCoreIrKey module_slot_key(XrStableId module_id, const XiModuleSlot *slot) {
+    uint8_t material[1u + XR_STABLE_ID_BYTES + 8u + XR_PROGRAM_DIGEST_SIZE];
+    XrCoreIrKey name = xr_core_ir_key(slot->name, strlen(slot->name));
+    material[0] = UINT8_C(0x73);
+    memcpy(material + 1u, module_id.bytes, sizeof(module_id.bytes));
+    put_u32_be(material + 1u + XR_STABLE_ID_BYTES, slot->source_line);
+    put_u32_be(material + 5u + XR_STABLE_ID_BYTES, slot->source_column);
+    memcpy(material + 9u + XR_STABLE_ID_BYTES, name.bytes, sizeof(name.bytes));
+    return xr_core_ir_key(material, sizeof(material));
+}
+
 static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value);
 static XrCoreIrKey key_from_key_and_u32(uint8_t domain, XrCoreIrKey key, uint32_t value);
 
 /* A string constant is identified by its exact bytes, never by a pointer. */
-static XrCoreIrKey string_constant_key(XrStableId module_id, const uint8_t *bytes, uint32_t size) {
+static bool string_constant_key(XrStableId module_id, const uint8_t *bytes, uint32_t size,
+                                XrCoreIrKey *key_out) {
     uint8_t material[1u + XR_STABLE_ID_BYTES + 2u + 4u];
     material[0] = UINT8_C(0x68);
     memcpy(material + 1u, module_id.bytes, sizeof(module_id.bytes));
@@ -531,13 +563,14 @@ static XrCoreIrKey string_constant_key(XrStableId module_id, const uint8_t *byte
     XrCoreIrKey prefix = xr_core_ir_key(material, sizeof(material));
     uint8_t *joined = xr_malloc((size_t) XR_CORE_IR_KEY_SIZE + size);
     if (!joined)
-        return prefix;
+        return false;
     memcpy(joined, prefix.bytes, XR_CORE_IR_KEY_SIZE);
     if (size != 0u)
         memcpy(joined + XR_CORE_IR_KEY_SIZE, bytes, size);
     XrCoreIrKey key = xr_core_ir_key(joined, (size_t) XR_CORE_IR_KEY_SIZE + size);
     xr_free(joined);
-    return key;
+    *key_out = key;
+    return true;
 }
 
 /* Instructions synthesized while expanding one variadic Xi text operation. */
@@ -622,19 +655,18 @@ static XrCoreIrKey cleanup_trap_result_key(const XrXiFunctionStorage *function,
                                 instruction);
 }
 
-static XrCoreIrKey implicit_trap_cleanup_block_key(const XrXiFunctionStorage *function,
-                                                   const XiBlock *source,
-                                                   uint32_t instruction) {
+static XrCoreIrKey implicit_exit_cleanup_block_key(const XrXiFunctionStorage *function,
+                                                   const XiBlock *source, uint32_t instruction) {
     XrCoreIrKey source_key = key_from_key_and_u32(
         UINT8_C(0x65), function->key, source ? source->id : UINT32_MAX);
     return key_from_key_and_u32(UINT8_C(0x66), source_key, instruction);
 }
 
-static XrCoreIrKey implicit_trap_cleanup_argument_key(const XrXiFunctionStorage *function,
-                                                      const XiBlock *source,
-                                                      uint32_t instruction, uint32_t argument) {
+static XrCoreIrKey implicit_exit_cleanup_argument_key(const XrXiFunctionStorage *function,
+                                                      const XiBlock *source, uint32_t instruction,
+                                                      uint32_t argument) {
     return key_from_key_and_u32(
-        UINT8_C(0x67), implicit_trap_cleanup_block_key(function, source, instruction), argument);
+        UINT8_C(0x67), implicit_exit_cleanup_block_key(function, source, instruction), argument);
 }
 
 static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value) {
@@ -685,7 +717,32 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
         case XR_KIND_BOOL:
             *type_id = XR_CORE_TYPE_BOOL;
             return true;
+        case XR_KIND_FLOAT:
+            if (type->scalar_rep != XR_NATIVE_F64)
+                return false;
+            *type_id = XR_CORE_TYPE_F64;
+            return true;
         case XR_KIND_INT:
+            if (type->scalar_rep == XR_NATIVE_I8) {
+                *type_id = XR_CORE_TYPE_I8;
+                return true;
+            }
+            if (type->scalar_rep == XR_NATIVE_U8) {
+                *type_id = XR_CORE_TYPE_U8;
+                return true;
+            }
+            if (type->scalar_rep == XR_NATIVE_I16) {
+                *type_id = XR_CORE_TYPE_I16;
+                return true;
+            }
+            if (type->scalar_rep == XR_NATIVE_I32) {
+                *type_id = XR_CORE_TYPE_I32;
+                return true;
+            }
+            if (type->scalar_rep == XR_NATIVE_U64) {
+                *type_id = XR_CORE_TYPE_U64;
+                return true;
+            }
             if (type->scalar_rep == XR_NATIVE_I64) {
                 *type_id = XR_CORE_TYPE_I64;
                 return true;
@@ -995,6 +1052,22 @@ static void put_dynamic_type_reference(const XrXiBuildContext *context,
     }
 }
 
+/* Boolean type matching also performs allocation. Preserve resource failures
+ * independently of a semantic mismatch until the producer admission boundary. */
+static void *type_mapping_calloc(XrXiBuildContext *context, size_t count, size_t size) {
+    void *result = xr_calloc(count, size);
+    if (!result)
+        context->type_allocation_failed = true;
+    return result;
+}
+
+static void *type_mapping_realloc(XrXiBuildContext *context, void *previous, size_t size) {
+    void *result = xr_realloc(previous, size);
+    if (!result)
+        context->type_allocation_failed = true;
+    return result;
+}
+
 static XrXiTypeStorage *append_type_storage(XrXiBuildContext *context) {
     if (!context || context->type_count >= UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u)
         return NULL;
@@ -1004,7 +1077,7 @@ static XrXiTypeStorage *append_type_storage(XrXiBuildContext *context) {
             (size_t) capacity > SIZE_MAX / sizeof(*context->type_storage))
             return NULL;
         XrXiTypeStorage *grown =
-            xr_realloc(context->type_storage, (size_t) capacity * sizeof(*context->type_storage));
+            type_mapping_realloc(context, context->type_storage, (size_t) capacity * sizeof(*context->type_storage));
         if (!grown)
             return NULL;
         context->type_storage = grown;
@@ -1027,8 +1100,8 @@ static bool map_optional_type_recursive(XrXiBuildContext *context, const XrType 
         return false;
 
     const XrType *nested_stack[64];
-    if (depth != 0u)
-        memcpy(nested_stack, stack, depth * sizeof(*nested_stack));
+    for (uint32_t index = 0u; index < depth; ++index)
+        nested_stack[index] = stack[index];
     nested_stack[depth] = type;
     XrType payload_type = *type;
     payload_type.is_nullable = false;
@@ -1061,14 +1134,14 @@ static bool map_optional_type_recursive(XrXiBuildContext *context, const XrType 
         return true;
     }
 
-    XrCoreIrVariantInput *variants = xr_calloc(2u, sizeof(*variants));
-    uint16_t **payload_storage = xr_calloc(2u, sizeof(*payload_storage));
+    XrCoreIrVariantInput *variants = type_mapping_calloc(context, 2u, sizeof(*variants));
+    uint16_t **payload_storage = type_mapping_calloc(context, 2u, sizeof(*payload_storage));
     if (!variants || !payload_storage) {
         xr_free(payload_storage);
         xr_free(variants);
         return false;
     }
-    payload_storage[1] = xr_calloc(1u, sizeof(*payload_storage[1]));
+    payload_storage[1] = type_mapping_calloc(context, 1u, sizeof(*payload_storage[1]));
     if (!payload_storage[1]) {
         xr_free(payload_storage);
         xr_free(variants);
@@ -1108,7 +1181,7 @@ static bool map_capture_type(XrXiBuildContext *context, const XiFunc *function, 
         function->ncaptures > XI_MAX_CAPTURES)
         return false;
     uint32_t field_count = function->ncaptures;
-    uint16_t *field_types = xr_calloc(field_count, sizeof(*field_types));
+    uint16_t *field_types = type_mapping_calloc(context, field_count, sizeof(*field_types));
     if (!field_types)
         return false;
     for (uint32_t field = 0; field < field_count; ++field) {
@@ -1129,7 +1202,7 @@ static bool map_capture_type(XrXiBuildContext *context, const XiFunc *function, 
         return false;
     }
     size_t material_size = 5u + (size_t) field_count * reference_size;
-    uint8_t *material = xr_calloc(material_size, 1u);
+    uint8_t *material = type_mapping_calloc(context, material_size, 1u);
     if (!material) {
         xr_free(field_types);
         return false;
@@ -1193,9 +1266,9 @@ static bool map_callable_type_contract_recursive(XrXiBuildContext *context, cons
 
     uint32_t parameter_count = (uint32_t) type->function.param_count;
     uint16_t *parameter_types =
-        parameter_count ? xr_calloc(parameter_count, sizeof(*parameter_types)) : NULL;
+        parameter_count ? type_mapping_calloc(context, parameter_count, sizeof(*parameter_types)) : NULL;
     XrParamMode *parameter_modes =
-        parameter_count ? xr_calloc(parameter_count, sizeof(*parameter_modes)) : NULL;
+        parameter_count ? type_mapping_calloc(context, parameter_count, sizeof(*parameter_modes)) : NULL;
     if (parameter_count && (!parameter_types || !parameter_modes)) {
         xr_free(parameter_types);
         xr_free(parameter_modes);
@@ -1203,8 +1276,8 @@ static bool map_callable_type_contract_recursive(XrXiBuildContext *context, cons
     }
 
     const XrType *nested_stack[64];
-    if (depth != 0u)
-        memcpy(nested_stack, stack, depth * sizeof(*nested_stack));
+    for (uint32_t index = 0u; index < depth; ++index)
+        nested_stack[index] = stack[index];
     nested_stack[depth] = type;
     bool valid = true;
     for (uint32_t parameter = 0; parameter < parameter_count; ++parameter) {
@@ -1235,7 +1308,7 @@ static bool map_callable_type_contract_recursive(XrXiBuildContext *context, cons
     }
     size_t material_size =
         5u + (size_t) parameter_count * (type_reference_size + 1u) + 3u * type_reference_size + 9u;
-    uint8_t *material = xr_calloc(material_size, 1u);
+    uint8_t *material = type_mapping_calloc(context, material_size, 1u);
     if (!material) {
         xr_free(parameter_types);
         xr_free(parameter_modes);
@@ -1284,7 +1357,7 @@ static bool map_callable_type_contract_recursive(XrXiBuildContext *context, cons
         xr_free(parameter_modes);
         return false;
     }
-    storage->callable_signature = xr_calloc(1u, sizeof(*storage->callable_signature));
+    storage->callable_signature = type_mapping_calloc(context, 1u, sizeof(*storage->callable_signature));
     if (!storage->callable_signature) {
         xr_free(parameter_types);
         xr_free(parameter_modes);
@@ -1348,16 +1421,16 @@ static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *
         decl_kind != XG_DECL_ENUM || nominal_kind != XR_CORE_IR_NOMINAL_ENUM)
         return false;
 
-    XrCoreIrVariantInput *variants = xr_calloc(schema->member_count, sizeof(*variants));
-    uint16_t **payload_storage = xr_calloc(schema->member_count, sizeof(*payload_storage));
+    XrCoreIrVariantInput *variants = type_mapping_calloc(context, schema->member_count, sizeof(*variants));
+    uint16_t **payload_storage = type_mapping_calloc(context, schema->member_count, sizeof(*payload_storage));
     if (!variants || !payload_storage) {
         xr_free(variants);
         xr_free(payload_storage);
         return false;
     }
     const XrType *nested_stack[64];
-    if (depth != 0u)
-        memcpy(nested_stack, stack, depth * sizeof(*nested_stack));
+    for (uint32_t index = 0u; index < depth; ++index)
+        nested_stack[index] = stack[index];
     nested_stack[depth] = type;
     uint64_t payload_total = 0u;
     bool valid = true;
@@ -1372,6 +1445,7 @@ static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *
             break;
         }
         variants[variant].payload_count = (uint32_t) member->payload_count;
+        variants[variant].display_name = member->name;
         payload_total += variants[variant].payload_count;
         if (payload_total > UINT32_MAX) {
             valid = false;
@@ -1380,7 +1454,7 @@ static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *
         if (member->payload_count == 0)
             continue;
         payload_storage[variant] =
-            xr_calloc((size_t) member->payload_count, sizeof(*payload_storage[variant]));
+            type_mapping_calloc(context, (size_t) member->payload_count, sizeof(*payload_storage[variant]));
         if (!payload_storage[variant]) {
             valid = false;
             break;
@@ -1445,7 +1519,7 @@ static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *
             goto fail;
         material_size += row_size;
     }
-    uint8_t *material = xr_calloc(material_size, 1u);
+    uint8_t *material = type_mapping_calloc(context, material_size, 1u);
     if (!material)
         goto fail;
     size_t cursor = 0u;
@@ -1508,6 +1582,7 @@ static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *
     storage->input.copy_contract = copy_contract;
     storage->input.variants = variants;
     storage->input.variant_count = schema->member_count;
+    storage->input.display_name = name;
     storage->nominal_decl_id = nominal_info->xg_decl_id;
     storage->nominal_key = nominal_key;
     storage->nominal_decl_kind = decl_kind;
@@ -1588,7 +1663,7 @@ static bool map_aggregate_type_recursive(XrXiBuildContext *context, const XrType
         }
 
         uint16_t *field_types =
-            field_count != 0u ? xr_calloc(field_count, sizeof(*field_types)) : NULL;
+            field_count != 0u ? type_mapping_calloc(context, field_count, sizeof(*field_types)) : NULL;
         if (field_count != 0u && !field_types)
             return false;
         XrXiTypeStorage *storage = append_type_storage(context);
@@ -1618,12 +1693,12 @@ static bool map_aggregate_type_recursive(XrXiBuildContext *context, const XrType
     if (depth >= 64u || type_stack_contains(stack, depth, type))
         return false;
 
-    uint16_t *field_types = field_count != 0u ? xr_calloc(field_count, sizeof(*field_types)) : NULL;
+    uint16_t *field_types = field_count != 0u ? type_mapping_calloc(context, field_count, sizeof(*field_types)) : NULL;
     if (field_count != 0u && !field_types)
         return false;
     const XrType *nested_stack[64];
-    if (depth != 0u)
-        memcpy(nested_stack, stack, depth * sizeof(*nested_stack));
+    for (uint32_t index = 0u; index < depth; ++index)
+        nested_stack[index] = stack[index];
     nested_stack[depth] = type;
     for (uint32_t field = 0; field < field_count; ++field) {
         const char *field_name = schema->instance_field_names[field];
@@ -1664,7 +1739,7 @@ static bool map_aggregate_type_recursive(XrXiBuildContext *context, const XrType
         }
         material_size += 4u + field_name_length + type_reference_size;
     }
-    uint8_t *material = xr_calloc(material_size, 1u);
+    uint8_t *material = type_mapping_calloc(context, material_size, 1u);
     if (!material) {
         xr_free(field_types);
         return false;
@@ -1785,12 +1860,208 @@ static bool map_type_for_mode(XrXiBuildContext *context, const XrType *type, XrP
     return map_existential_type(context, type, use_kind, type_id);
 }
 
+static bool map_array_type_recursive(XrXiBuildContext *context, const XrType *type,
+                                      uint16_t *type_id, const XrType *const *stack, uint32_t depth) {
+    if (!type->container.element_type || depth >= 64u || type_stack_contains(stack, depth, type))
+        return false;
+    const XrType *nested[64];
+    for (uint32_t index = 0u; index < depth; ++index)
+        nested[index] = stack[index];
+    nested[depth] = type;
+    uint16_t element = XR_CORE_TYPE_VOID;
+    if (!map_type_recursive(context, type->container.element_type, &element, nested, depth + 1u) ||
+        element == XR_CORE_TYPE_VOID)
+        return false;
+    uint8_t material[2u + XR_CORE_IR_KEY_SIZE] = {0xa7};
+    put_dynamic_type_reference(context, material + 1u, element);
+    XrCoreIrKey key = xr_core_ir_key(material, sizeof(material));
+    for (uint32_t i = 0u; i < context->type_count; ++i) {
+        if (xr_core_ir_key_equal(context->type_storage[i].input.key, key)) {
+            *type_id = context->type_storage[i].input.local_id;
+            return true;
+        }
+    }
+    XrXiTypeStorage *storage = append_type_storage(context);
+    if (!storage)
+        return false;
+    storage->input.key = key;
+    storage->input.kind = XR_CORE_IR_TYPE_ARRAY;
+    storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    storage->input.copy_contract = logical_copy_contract_for_type(context, element) == XR_CORE_IR_COPY_FORBIDDEN
+                                      ? XR_CORE_IR_COPY_FORBIDDEN : XR_CORE_IR_COPY_EXPLICIT;
+    storage->input.array_element_type = element;
+    *type_id = storage->input.local_id;
+    ++context->type_count;
+    return true;
+}
+
+static bool map_record_type_recursive(XrXiBuildContext *context, const XrType *type,
+                                      uint16_t *type_id, const XrType *const *stack, uint32_t depth) {
+    if (type->object.field_count < 0 || type->object.field_count > UINT16_MAX || depth >= 64u ||
+        type_stack_contains(stack, depth, type) ||
+        (type->object.field_count && (!type->object.field_names || !type->object.field_types)))
+        return false;
+    uint32_t count = (uint32_t) type->object.field_count;
+    uint16_t *fields = count ? type_mapping_calloc(context, count, sizeof(*fields)) : NULL;
+    uint32_t *source_fields = count ? type_mapping_calloc(context, count, sizeof(*source_fields)) : NULL;
+    if (count && (!fields || !source_fields)) {
+        xr_free(fields);
+        xr_free(source_fields);
+        return false;
+    }
+    for (uint32_t field = 0u; field < count; ++field)
+        source_fields[field] = UINT32_MAX;
+    const XrType *nested[64];
+    for (uint32_t index = 0u; index < depth; ++index)
+        nested[index] = stack[index];
+    nested[depth] = type;
+    const size_t reference_size = 1u + XR_CORE_IR_KEY_SIZE;
+    size_t size = 5u;
+    XrCoreIrCopyContract copy_contract = XR_CORE_IR_COPY_EXPLICIT;
+    bool valid = true;
+    for (uint32_t field = 0u; valid && field < count; ++field) {
+        const char *name = type->object.field_names[field];
+        int64_t ordinal = xr_object_shape_canonical_ordinal(
+            (const char *const *) type->object.field_names, count, name);
+        size_t length = name ? strlen(name) : 0u;
+        if (!name || ordinal < 0 || (uint64_t) ordinal >= count ||
+            source_fields[ordinal] != UINT32_MAX || length > UINT32_MAX ||
+            length > SIZE_MAX - 5u - reference_size || size > SIZE_MAX - 5u - reference_size - length ||
+            !map_type_recursive(context, type->object.field_types[field], &fields[ordinal],
+                                nested, depth + 1u) || fields[ordinal] == XR_CORE_TYPE_VOID) {
+            valid = false;
+            break;
+        }
+        source_fields[ordinal] = field;
+        size += 5u + length + reference_size;
+        if (logical_copy_contract_for_type(context, fields[ordinal]) == XR_CORE_IR_COPY_FORBIDDEN)
+            copy_contract = XR_CORE_IR_COPY_FORBIDDEN;
+    }
+    uint8_t *material = valid ? type_mapping_calloc(context, size, 1u) : NULL;
+    if (!material) {
+        xr_free(fields);
+        xr_free(source_fields);
+        return false;
+    }
+    material[0] = UINT8_C(0xa9);
+    put_u32_be(material + 1u, count);
+    size_t cursor = 5u;
+    for (uint32_t field = 0u; field < count; ++field) {
+        uint32_t source = source_fields[field];
+        const char *name = type->object.field_names[source];
+        size_t length = strlen(name);
+        put_u32_be(material + cursor, (uint32_t) length);
+        cursor += 4u;
+        memcpy(material + cursor, name, length);
+        cursor += length;
+        material[cursor++] = type->object.field_readonly && type->object.field_readonly[source] ? 1u : 0u;
+        put_dynamic_type_reference(context, material + cursor, fields[field]);
+        cursor += reference_size;
+    }
+    XrCoreIrKey key = xr_core_ir_key(material, size);
+    xr_free(material);
+    xr_free(source_fields);
+    for (uint32_t index = 0u; index < context->type_count; ++index) {
+        if (xr_core_ir_key_equal(context->type_storage[index].input.key, key)) {
+            *type_id = context->type_storage[index].input.local_id;
+            xr_free(fields);
+            return true;
+        }
+    }
+    XrXiTypeStorage *storage = append_type_storage(context);
+    if (!storage) {
+        xr_free(fields);
+        return false;
+    }
+    storage->field_types = fields;
+    storage->input.key = key;
+    storage->input.kind = XR_CORE_IR_TYPE_RECORD_REFERENCE;
+    storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    storage->input.copy_contract = copy_contract;
+    storage->input.field_types = fields;
+    storage->input.field_count = count;
+    *type_id = storage->input.local_id;
+    ++context->type_count;
+    return true;
+}
+
+static bool map_resource_type(XrXiBuildContext *context, const XrType *type, uint16_t *type_id) {
+    if (type->instance.class_ref || type->instance.type_arg_count != 0)
+        return false;
+    uint8_t material[1u + XR_STABLE_ID_BYTES] = {0xaa};
+    memcpy(material + 1u, type->instance.resource_id.bytes, XR_STABLE_ID_BYTES);
+    XrCoreIrKey key = xr_core_ir_key(material, sizeof(material));
+    for (uint32_t index = 0u; index < context->type_count; ++index) {
+        const XrCoreIrTypeInput *candidate = &context->type_storage[index].input;
+        if (!xr_core_ir_key_equal(candidate->key, key))
+            continue;
+        if (candidate->kind != XR_CORE_IR_TYPE_PROVIDER_RESOURCE ||
+            memcmp(candidate->resource_id.bytes, type->instance.resource_id.bytes,
+                   XR_STABLE_ID_BYTES) != 0)
+            return false;
+        *type_id = candidate->local_id;
+        return true;
+    }
+    XrXiTypeStorage *storage = append_type_storage(context);
+    if (!storage)
+        return false;
+    storage->input.key = key;
+    storage->input.kind = XR_CORE_IR_TYPE_PROVIDER_RESOURCE;
+    storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    storage->input.copy_contract = XR_CORE_IR_COPY_FORBIDDEN;
+    storage->input.resource_id = type->instance.resource_id;
+    *type_id = storage->input.local_id;
+    ++context->type_count;
+    return true;
+}
+
+static bool map_atomic_type(XrXiBuildContext *context, const XrType *type, uint16_t *type_id) {
+    uint16_t element = XR_CORE_TYPE_VOID;
+    if (type->instance.type_arg_count != 1 || !type->instance.type_args ||
+        !map_builtin_type(type->instance.type_args[0], &element) ||
+        (element != XR_CORE_TYPE_I64 && element != XR_CORE_TYPE_BOOL && element != XR_CORE_TYPE_F64))
+        return false;
+    uint8_t material[2u + XR_CORE_IR_KEY_SIZE] = {0xa8};
+    put_dynamic_type_reference(context, material + 1u, element);
+    XrCoreIrKey key = xr_core_ir_key(material, sizeof(material));
+    for (uint32_t index = 0u; index < context->type_count; ++index) {
+        if (xr_core_ir_key_equal(context->type_storage[index].input.key, key)) {
+            *type_id = context->type_storage[index].input.local_id;
+            return true;
+        }
+    }
+    XrXiTypeStorage *storage = append_type_storage(context);
+    if (!storage)
+        return false;
+    storage->input.key = key;
+    storage->input.kind = XR_CORE_IR_TYPE_ATOMIC;
+    storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    storage->input.copy_contract = XR_CORE_IR_COPY_EXPLICIT;
+    storage->input.atomic_element_type = element;
+    *type_id = storage->input.local_id;
+    ++context->type_count;
+    return true;
+}
+
 static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, uint16_t *type_id,
                                const XrType *const *stack, uint32_t depth) {
     if (context && type && type_id && type->is_nullable)
         return map_optional_type_recursive(context, type, type_id, stack, depth);
     if (map_builtin_type(type, type_id))
         return true;
+    if (context && type && type_id &&
+        (type->kind == XR_KIND_INSTANCE || type->kind == XR_KIND_CLASS)) {
+        const uint8_t zero[XR_STABLE_ID_BYTES] = {0};
+        if (memcmp(type->instance.resource_id.bytes, zero, sizeof(zero)) != 0)
+            return map_resource_type(context, type, type_id);
+    }
+    if (context && type && type_id && type->kind == XR_KIND_INSTANCE &&
+        xr_type_is_builtin_named_class(type, "Atomic"))
+        return map_atomic_type(context, type, type_id);
+    if (context && type && type_id && type->kind == XR_KIND_STRUCT_OBJECT)
+        return map_record_type_recursive(context, type, type_id, stack, depth);
+    if (context && type && type_id && type->kind == XR_KIND_ARRAY)
+        return map_array_type_recursive(context, type, type_id, stack, depth);
     if (context && type && type_id && type->kind == XR_KIND_FUNCTION)
         return map_callable_type_recursive(context, type, type_id, stack, depth);
     if (context && type && type_id && type->kind == XR_KIND_INTERFACE)
@@ -1808,12 +2079,12 @@ static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, ui
     uint32_t field_count = (uint32_t) type->tuple.element_count;
     if (field_count > UINT16_MAX)
         return false;
-    uint16_t *field_types = xr_calloc(field_count, sizeof(*field_types));
+    uint16_t *field_types = type_mapping_calloc(context, field_count, sizeof(*field_types));
     if (!field_types)
         return false;
     const XrType *nested_stack[64];
-    if (depth != 0u)
-        memcpy(nested_stack, stack, depth * sizeof(*nested_stack));
+    for (uint32_t index = 0u; index < depth; ++index)
+        nested_stack[index] = stack[index];
     nested_stack[depth] = type;
     for (uint32_t field = 0; field < field_count; ++field) {
         if (!map_type_recursive(context, type->tuple.element_types[field], &field_types[field],
@@ -1843,7 +2114,7 @@ static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, ui
         return false;
     }
     size_t material_size = 5u + (size_t) field_count * row_size;
-    uint8_t *material = xr_calloc(material_size, 1u);
+    uint8_t *material = type_mapping_calloc(context, material_size, 1u);
     if (!material) {
         xr_free(field_types);
         return false;
@@ -1922,6 +2193,8 @@ static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *ty
 
 static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, const XiFunc *caller,
                                             const XiValue *call);
+static const XiFunc *resolved_protocol_method_callee(const XrXiBuildContext *context,
+                                                     const XiFunc *caller, const XiValue *call);
 static const XrStdlibDefEntry *resolved_provider_native_call(const XrXiBuildContext *context,
                                                              const XiFunc *caller,
                                                              const XiValue *call);
@@ -1957,7 +2230,6 @@ static bool exact_static_cleanup_end(const XiFunc *function, const XiValue *valu
 
 typedef enum XrXiCleanupReason {
     XR_XI_CLEANUP_REASON_TRAP = 1,
-    XR_XI_CLEANUP_REASON_PANIC = 2,
     XR_XI_CLEANUP_REASON_CANCEL = 3,
 } XrXiCleanupReason;
 
@@ -1972,24 +2244,14 @@ static bool exact_cleanup_boundary_marker(const XiValue *value) {
            (value->flags & XI_FLAG_SIDE_EFFECT) != 0u;
 }
 
-static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *context,
-                                                        const XiFunc *function,
-                                                        const XiFunc **stack, uint32_t depth,
-                                                        uint32_t capacity, bool *has_panic,
-                                                        char *diagnostic, size_t diagnostic_size) {
-    if (!context || !function || !stack || !has_panic || depth >= capacity)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi panic call graph is not finitely representable");
-    for (uint32_t index = 0u; index < depth; ++index) {
-        if (stack[index] == function) {
-            *has_panic = false;
-            return XR_PROGRAM_BUILD_OK;
-        }
-    }
-    stack[depth] = function;
-    bool found = false;
+static XrProgramBuildStatus validate_function_panic_routes(XrXiBuildContext *context,
+                                                          const XiFunc *function,
+                                                          char *diagnostic,
+                                                          size_t diagnostic_size) {
+    if (!context || !function)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
     bool has_static_cleanup = false;
-    bool has_unrouted_panic = false;
+    const XiValue *unrouted_panic = NULL;
     for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
         const XiBlock *block = function->blocks[block_index];
         if (!canonical_block_is_reachable(context, function, block))
@@ -2033,45 +2295,55 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                     payload_type != XR_CORE_TYPE_PANIC_INFO)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi throw v%u does not publish typed PanicInfo", value->id);
-                found = true;
-                has_unrouted_panic |= !canonical_block_is_panic_cleanup(context, function, block);
+                if (!unrouted_panic)
+                    unrouted_panic = value;
             }
             if (value->op == XI_ASSERTION) {
-                const XrAssertionPlan *plan = xi_assertion_plan(value);
                 uint16_t condition_type = XR_CORE_TYPE_VOID;
-                if (!plan || !xr_assertion_plan_validate(plan) ||
-                    plan->kind != XR_ASSERTION_KIND_CONDITION || plan->arity != 1u ||
-                    plan->message_operand != XR_ASSERTION_OPERAND_NONE || value->nargs != 1u ||
-                    !value->args || !value->args[0] ||
+                if (!exact_condition_assertion(value) ||
                     !map_logical_value_type(context, function, value->args[0], &condition_type) ||
                     condition_type != XR_CORE_TYPE_BOOL)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                 "Xi assertion v%u is not an exact condition assertion", value->id);
-                found = true;
-                has_unrouted_panic |= find_panic_edge(context, function, value) == NULL;
+                if (!unrouted_panic && !find_panic_edge(context, function, value))
+                    unrouted_panic = value;
+            }
+            if (exact_integer_divmod(context, function, value) ||
+                exact_array_index(context, function, value, NULL)) {
+                if (!unrouted_panic && !find_panic_edge(context, function, value))
+                    unrouted_panic = value;
             }
             if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
                 value->op == XI_CALL_METHOD_DIRECT) {
                 const XiFunc *callee = resolved_sealed_callee(context, function, value);
-                if (!callee)
+                if (!callee) {
+                    const XgCallsiteSummary *callsite =
+                        value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT ||
+                                value->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE
+                            ? resolved_witness_callsite(context, function, value)
+                            : resolved_callsite(context, function, value);
+                    bool callee_panic = callsite && (callsite->flags & XG_CALL_MAY_PANIC) != 0u;
+                    if (!unrouted_panic && callee_panic && !find_panic_edge(context, function, value))
+                        unrouted_panic = value;
                     continue;
-                bool callee_panic = false;
-                XrProgramBuildStatus status =
-                    function_has_uncaught_panic(context, callee, stack, depth + 1u, capacity,
-                                                &callee_panic, diagnostic, diagnostic_size);
-                if (status != XR_PROGRAM_BUILD_OK)
-                    return status;
-                found = found || callee_panic;
-                has_unrouted_panic |=
-                    callee_panic && find_panic_edge(context, function, value) == NULL;
+                }
+                const XrXiFunctionStorage *callee_storage =
+                    find_xi_function(context, callee, NULL, NULL);
+                if (!callee_storage || !callee_storage->closed_contract_ready)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi panic routing requires a closed callee contract");
+                bool callee_panic =
+                    (callee_storage->closed_effect_mask & XR_CORE_EFFECT_PANIC) != 0u;
+                if (!unrouted_panic && callee_panic && !find_panic_edge(context, function, value))
+                    unrouted_panic = value;
             }
         }
     }
-    if (found && has_static_cleanup && has_unrouted_panic)
+    if (has_static_cleanup && unrouted_panic)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi function %s lacks an explicit panic continuation for static cleanup",
-                    function->name ? function->name : "<anonymous>");
-    *has_panic = found;
+                    "Xi function %s v%u op%u b%u lacks an explicit panic continuation for static cleanup",
+                    function->name ? function->name : "<anonymous>", unrouted_panic->id,
+                    (unsigned) unrouted_panic->op, unrouted_panic->block->id);
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -2080,19 +2352,12 @@ static XrProgramBuildStatus map_function_panic_type(XrXiBuildContext *context,
                                                     char *diagnostic, size_t diagnostic_size) {
     if (!context || !function || !panic_type_id)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
-    uint32_t capacity = 1u;
-    for (uint32_t module = 0u; module < context->source->module_count; ++module)
-        capacity += context->storage[module].function_count;
-    const XiFunc **stack = xr_calloc(capacity, sizeof(*stack));
-    if (!stack)
-        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    bool has_panic = false;
-    XrProgramBuildStatus status = function_has_uncaught_panic(
-        context, function, stack, 0u, capacity, &has_panic, diagnostic, diagnostic_size);
-    xr_free(stack);
-    if (status != XR_PROGRAM_BUILD_OK)
-        return status;
-    *panic_type_id = has_panic ? XR_CORE_TYPE_PANIC_INFO : XR_CORE_TYPE_VOID;
+    const XrXiFunctionStorage *storage = find_xi_function(context, function, NULL, NULL);
+    if (!storage || !storage->closed_contract_ready)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi panic signature requires a closed function contract");
+    *panic_type_id = (storage->closed_effect_mask & XR_CORE_EFFECT_PANIC) != 0u
+                         ? XR_CORE_TYPE_PANIC_INFO : XR_CORE_TYPE_VOID;
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -2102,6 +2367,18 @@ static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
     if (!context || !function || !error_type_id)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     *error_type_id = XR_CORE_TYPE_VOID;
+    /* A closed body can refine an existing source contract, but cannot
+     * replace missing source authority at a callable boundary. */
+    if (function->analyzer &&
+        (function->analyzer_effect_id == XA_EFFECT_NONE ||
+         !xa_effect_db_get(function->analyzer->effect_db, function->analyzer_effect_id)))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi function %s has no source error contract",
+                    function->name ? function->name : "<anonymous>");
+    const XrXiFunctionStorage *closed = find_xi_function(context, function, NULL, NULL);
+    if (closed && closed->closed_contract_ready &&
+        (closed->closed_effect_mask & XR_CORE_EFFECT_ERROR) == 0u)
+        return XR_PROGRAM_BUILD_OK;
     if (function->module && function->module->init == function) {
         bool publishes_error = false;
         for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
@@ -2167,27 +2444,6 @@ static XrCoreIrCopyContract logical_copy_contract_for_type(const XrXiBuildContex
         return builtin->copy_contract;
     const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
     return type ? type->input.copy_contract : XR_CORE_IR_COPY_TRIVIAL;
-}
-
-static bool logical_type_is_optional_i64_pair(const XrXiBuildContext *context, uint16_t type_id) {
-    const XrXiTypeStorage *optional = find_dynamic_type_by_id(context, type_id);
-    if (!optional || optional->input.kind != XR_CORE_IR_TYPE_VARIANT ||
-        optional->input.nominal_kind != XR_CORE_IR_NOMINAL_NONE ||
-        optional->input.ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
-        optional->input.copy_contract != XR_CORE_IR_COPY_TRIVIAL ||
-        optional->input.variant_count != 2u || !optional->input.variants ||
-        optional->input.variants[0].payload_count != 0u ||
-        optional->input.variants[1].payload_count != 1u ||
-        !optional->input.variants[1].payload_types)
-        return false;
-    const XrXiTypeStorage *pair =
-        find_dynamic_type_by_id(context, optional->input.variants[1].payload_types[0]);
-    return pair && pair->input.kind == XR_CORE_IR_TYPE_AGGREGATE &&
-           pair->input.nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
-           pair->input.ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
-           pair->input.copy_contract == XR_CORE_IR_COPY_TRIVIAL && pair->input.field_count == 2u &&
-           pair->input.field_types && pair->input.field_types[0] == XR_CORE_TYPE_I64 &&
-           pair->input.field_types[1] == XR_CORE_TYPE_I64;
 }
 
 static const XrXiFunctionStorage *find_xi_function(const XrXiBuildContext *context,
@@ -2282,6 +2538,92 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
                                                     const XiFunc *caller, const XiValue *load,
                                                     uint32_t *variant_ordinal);
 
+/* A sealed prelude constructor is identified by its builtin slot, never by
+ * the spelling of a user callable. The scalar and result element must agree. */
+static bool resolved_atomic_construction(const XiValue *call) {
+    if (!call || call->op != XI_CALL || call->nargs != 2u || !call->args ||
+        !call->args[0] || !call->args[1] || !xi_value_is_constructor_call(call) ||
+        !call->type || call->type->is_nullable || call->type->kind != XR_KIND_INSTANCE ||
+        !xr_type_is_builtin_named_class(call->type, "Atomic") ||
+        call->type->instance.type_arg_count != 1 || !call->type->instance.type_args)
+        return false;
+    const XiValue *callee = logical_value_identity(call->args[0]);
+    uint16_t element = XR_CORE_TYPE_VOID;
+    uint16_t argument = XR_CORE_TYPE_VOID;
+    return callee && callee->op == XI_GET_BUILTIN &&
+           callee->aux_int == XR_GLOBAL_VAR_ATOMIC &&
+           map_builtin_type(call->type->instance.type_args[0], &element) &&
+           map_builtin_type(call->args[1]->type, &argument) && element == argument &&
+           (element == XR_CORE_TYPE_I64 || element == XR_CORE_TYPE_BOOL || element == XR_CORE_TYPE_F64);
+}
+
+/* The optimized intrinsic carries folded Ordering members as scalar constants.
+ * Dynamic values require an execution operand and cannot become an immediate. */
+static bool atomic_ordering_literal(const XiValue *value, uint32_t *ordering) {
+    value = logical_value_identity(value);
+    if (!value || value->op != XI_CONST || value->nargs || !value->type ||
+        value->type->is_nullable || value->type->kind != XR_KIND_INT ||
+        value->aux_int < 0 || value->aux_int > 4)
+        return false;
+    if (ordering)
+        *ordering = (uint32_t) value->aux_int;
+    return true;
+}
+
+static uint16_t atomic_data_operand_count(const XiValue *value) {
+    return value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_LOAD ||
+           value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_TOGGLE ? 1u :
+           value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE ? 3u : 2u;
+}
+
+static uint16_t exact_atomic_scalar_operation(const XiValue *value) {
+    if (!value || !value->args || !value->nargs || !value->args[0])
+        return 0u;
+    bool load = value->op == XI_ATOMIC_LOAD && value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_LOAD;
+    bool store = value->op == XI_ATOMIC_STORE && value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_STORE;
+    bool exchange = value->op == XI_ATOMIC_RMW && value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_SWAP;
+    bool toggle = value->op == XI_ATOMIC_RMW && value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_TOGGLE;
+    bool void_update = value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_ADD ||
+                       value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_SUB;
+    bool update = value->op == XI_ATOMIC_RMW &&
+        (value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_ADD ||
+         value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_SUB || void_update || toggle);
+    bool compare = value->op == XI_ATOMIC_RMW && value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE;
+    uint16_t operands = atomic_data_operand_count(value);
+    if ((!load && !store && !exchange && !compare && !update) ||
+        (value->nargs != operands &&
+         (value->nargs != operands + 1u || !atomic_ordering_literal(value->args[operands], NULL))) ||
+        !xi_semantic_intrinsic_verify_value(value, XI_STAGE_OPTIMIZED, NULL, 0u))
+        return 0u;
+    const XrType *receiver = value->args[0]->type;
+    const XrType *result_type = value->type;
+    uint16_t element = XR_CORE_TYPE_VOID, result = XR_CORE_TYPE_VOID;
+    if (compare) {
+        uint16_t flag = XR_CORE_TYPE_VOID;
+        if (!result_type || result_type->is_nullable || result_type->kind != XR_KIND_TUPLE ||
+            result_type->tuple.element_count != 2 || !result_type->tuple.element_types ||
+            !map_builtin_type(result_type->tuple.element_types[1], &flag) || flag != XR_CORE_TYPE_BOOL)
+            return 0u;
+        result_type = result_type->tuple.element_types[0];
+    }
+    if (!receiver || receiver->is_nullable || receiver->kind != XR_KIND_INSTANCE ||
+        !xr_type_is_builtin_named_class(receiver, "Atomic") ||
+        receiver->instance.type_arg_count != 1 || !receiver->instance.type_args ||
+        !map_builtin_type(receiver->instance.type_args[0], &element) ||
+        (element != XR_CORE_TYPE_I64 && element != XR_CORE_TYPE_BOOL && element != XR_CORE_TYPE_F64) ||
+        (update && (toggle ? element != XR_CORE_TYPE_BOOL :
+                   element != XR_CORE_TYPE_I64 && element != XR_CORE_TYPE_F64)) ||
+        !map_builtin_type(result_type, &result) || result != (store || void_update ? XR_CORE_TYPE_VOID : element))
+        return 0u;
+    for (uint16_t index = 1u; index < operands; ++index) {
+        uint16_t operand = XR_CORE_TYPE_VOID;
+        if (!value->args[index] || !map_builtin_type(value->args[index]->type, &operand) || operand != element)
+            return 0u;
+    }
+    return update ? XR_CORE_OP_CORE_ATOMIC_UPDATE : load ? XR_CORE_OP_CORE_ATOMIC_LOAD : compare ? XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE
+                                                       : XR_CORE_OP_CORE_ATOMIC_EXCHANGE;
+}
+
 static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *context,
                                                    const XiFunc *function, const XiValue *value,
                                                    uint32_t depth) {
@@ -2304,11 +2646,19 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                 if (consumer->args[argument] != value)
                     continue;
                 bool elided = false;
-                if (argument == 0u &&
+                const XiFunc *callee = resolved_sealed_callee(context, function, consumer);
+                // A sealed target replaces a callee token, never its runtime receiver.
+                bool sealed_token = callee && !callee->has_receiver;
+                if (exact_atomic_scalar_operation(consumer) &&
+                    argument == atomic_data_operand_count(consumer)) {
+                    elided = true;
+                    found = true;
+                } else if (argument == 0u &&
                     (consumer->op == XI_VARIANT_CONSTRUCT ||
+                     resolved_atomic_construction(consumer) ||
                      (((consumer->op == XI_CALL || consumer->op == XI_CALL_METHOD ||
                         consumer->op == XI_CALL_METHOD_DIRECT) &&
-                       (resolved_sealed_callee(context, function, consumer) ||
+                       (sealed_token ||
                         resolved_provider_native_call(context, function, consumer) ||
                         resolved_suspension_native_call(context, function, consumer))) ||
                       resolved_canonical_class_construction(context, function, consumer, NULL,
@@ -2385,7 +2735,7 @@ static const XrStdlibDefEntry *resolved_provider_native_call(const XrXiBuildCont
         reference->module_path, reference->member_name, row->arg_count);
     if (!entry || !entry->provider_contract_key || !entry->provider_contract_key[0] ||
         !entry->provider_operation_key || !entry->provider_operation_key[0] ||
-        entry->runtime_capabilities != 0u || entry->return_ownership[0] != '\0' || entry->argc > 1u)
+        entry->runtime_capabilities != 0u)
         return NULL;
     return entry;
 }
@@ -2445,7 +2795,7 @@ static const XgCallsiteSummary *resolved_witness_callsite(const XrXiBuildContext
                                                     row->method_id, &slot) ||
         slot != call->xg_interface_dispatch_slot)
         return NULL;
-    bool fallible = (row->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) != 0u;
+    bool fallible = (row->flags & XG_CALL_MAY_ERROR) != 0u;
     if ((call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE) != fallible ||
         (call->xg_existential_kind != XI_EXISTENTIAL_WITNESS_DIRECT &&
          call->xg_existential_kind != XI_EXISTENTIAL_WITNESS_INVOKE))
@@ -2815,6 +3165,139 @@ static const XiFunc *resolved_instance_method_callee(const XrXiBuildContext *con
                                              false);
 }
 
+/* Compiler-known protocol calls such as len(instance) are lowered directly to the
+ * stable operator symbol. They intentionally have no Xglobal callsite row because
+ * the analyzer already proved the receiver's nominal declaration. Reconstruct the
+ * same declaration/body join locally so these calls remain sealed without turning
+ * them into dynamic method dispatch. */
+static const XiFunc *resolved_protocol_method_callee(const XrXiBuildContext *context,
+                                                     const XiFunc *caller, const XiValue *call) {
+    if (!context || !caller || !call ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs == 0u ||
+        !call->args || !call->args[0] || !call->aux || call->xg_method_id != 0u)
+        return NULL;
+    const char *name = (const char *) call->aux;
+    if (strcmp(name, "__operator_len") != 0)
+        return NULL;
+    const XiValue *receiver = logical_value_identity(call->args[0]);
+    if (!receiver || !receiver->type || receiver->type->kind != XR_KIND_INSTANCE ||
+        receiver->type->is_nullable || !nominal_contract(context, receiver->type, NULL, NULL, NULL))
+        return NULL;
+    const XiModule *owner_module = NULL;
+    const XiClassData *class_data = find_aggregate_schema(context, receiver->type, &owner_module);
+    uint32_t module_index = UINT32_MAX;
+    for (uint32_t index = 0u; owner_module && index < context->source->module_count; ++index) {
+        const XiFunc *root = context->source->module_roots[index];
+        if (!root || root->module != owner_module)
+            continue;
+        if (module_index != UINT32_MAX)
+            return NULL;
+        module_index = index;
+    }
+    const XiFunc *found = NULL;
+    const XiFunc *root = module_index < context->source->module_count
+                             ? context->source->module_roots[module_index]
+                             : NULL;
+    for (uint16_t index = 0u; class_data && class_data->methods && class_data->child_idx && root &&
+                              index < class_data->nmethod;
+         ++index) {
+        const XiClassMethod *xi_method = &class_data->methods[index];
+        if (xi_method->is_static || xi_method->is_constructor || !xi_method->name ||
+            strcmp(xi_method->name, name) != 0)
+            continue;
+        uint16_t child = class_data->child_idx[index];
+        if (child >= root->nchildren || !root->children[child] || found)
+            return NULL;
+        const XiFunc *candidate = root->children[child];
+        if (!candidate->has_receiver || candidate->nparams != call->nargs || !candidate->params ||
+            !candidate->params[0] || !candidate->params[0]->type || !call->type ||
+            !nominal_instance_identity_equal(context, candidate->params[0]->type, receiver->type) ||
+            !xr_type_equals(candidate->return_type, call->type))
+            return NULL;
+        found = candidate;
+    }
+    return found;
+}
+
+/* Constructors execute their body on the freshly allocated receiver carrier and
+ * return that receiver. They are direct sealed calls, not aggregate folds and
+ * not closures: retain a separate proof because their Xi ABI has no receiver
+ * parameter while the source call still carries the class carrier at arg zero. */
+static const XiFunc *resolved_constructor_callee(const XrXiBuildContext *context,
+                                                 const XiFunc *caller, const XiValue *call) {
+    if (!context || !caller || !call ||
+        (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        (call->op == XI_CALL && !xi_value_is_constructor_call(call)) ||
+        call->nargs == 0u || !call->args)
+        return NULL;
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    if (!row || row->kind != XG_CALL_METHOD || row->receiver_static_class_id == XG_NO_ID ||
+        row->method_id == XG_NO_ID || call->xg_method_id != row->method_id ||
+        (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u || row->arg_count == UINT16_MAX ||
+        call->nargs != (uint16_t)(row->arg_count + 1u))
+        return NULL;
+    uint32_t module_index = UINT32_MAX;
+    const XiClassData *class_data = resolved_class_carrier(
+        context, caller, call->args[0], row->receiver_static_class_id, &module_index);
+    const XgGlobalEvidence *evidence = context->source->global_evidence;
+    const XgClassSummary *class_row =
+        class_data ? find_xg_class_by_id(evidence, row->receiver_static_class_id) : NULL;
+    const XgMethodSummary *method = NULL;
+    for (uint32_t index = 0u; evidence && index < evidence->nmethods; ++index) {
+        const XgMethodSummary *candidate = &evidence->methods[index];
+        if (candidate->method_id != row->method_id)
+            continue;
+        if (method)
+            return NULL;
+        method = candidate;
+    }
+    if (!class_row || !method || class_data->xg_class_id != class_row->class_id ||
+        class_row->module_id != (XgModuleId)(module_index + 1u) ||
+        method->owner_class_id != class_row->class_id ||
+        (method->flags & XG_METHOD_CONSTRUCTOR) == 0u ||
+        (method->flags & (XG_METHOD_STATIC | XG_METHOD_NATIVE | XG_METHOD_GENERIC_TEMPLATE |
+                          XG_METHOD_OVERRIDDEN)) != 0u)
+        return NULL;
+    const XgBodySummary *body = NULL;
+    for (uint32_t index = 0u; evidence && index < evidence->nbodies; ++index) {
+        const XgBodySummary *candidate = &evidence->bodies[index];
+        if (candidate->kind != XG_BODY_METHOD || candidate->owner_method_id != method->method_id)
+            continue;
+        if (body)
+            return NULL;
+        body = candidate;
+    }
+    if (!body || body->func_id == XG_NO_ID || body->module_id != class_row->module_id ||
+        body->module_id != (XgModuleId)(module_index + 1u) ||
+        body->owner_decl_id != class_row->decl_id || body->owner_class_id != class_row->class_id ||
+        body->source_node_id != method->source_node_id || body->name_id != method->name_id ||
+        body->signature_key == 0u || body->signature_key != method->signature_key ||
+        (body->flags & XG_BODY_GENERIC_TEMPLATE) != 0u)
+        return NULL;
+    const XiFunc *callee = find_xi_function_by_xg_id(context, body->func_id);
+    const XiFunc *root = module_index < context->source->module_count
+                             ? context->source->module_roots[module_index]
+                             : NULL;
+    uint32_t matches = 0u;
+    for (uint16_t index = 0u; class_data && class_data->methods && class_data->child_idx && root &&
+                              index < class_data->nmethod;
+         ++index) {
+        uint16_t child = class_data->child_idx[index];
+        const XiClassMethod *xi_method = &class_data->methods[index];
+        if (child >= root->nchildren || root->children[child] != callee)
+            continue;
+        if (!xi_method->is_constructor || xi_method->is_static ||
+            xi_method->is_static_constructor)
+            return NULL;
+        ++matches;
+    }
+    if (!callee || matches != 1u || callee->has_receiver ||
+        callee->nparams != call->nargs || !callee->params || !callee->return_type ||
+        !call->type || !xr_type_equals(callee->return_type, call->type))
+        return NULL;
+    return callee;
+}
+
 /* A qualified source call such as `time.now()` is represented in Xi as a
  * method-shaped call on a
  * phase-only module namespace carrier.  Xglobal owns
@@ -2846,10 +3329,16 @@ static const XiFunc *resolved_sealed_callee(const XrXiBuildContext *context, con
                                             const XiValue *call) {
     if (!call || call->nargs == 0u)
         return NULL;
+    if (call->op == XI_CALL && xi_value_is_constructor_call(call))
+        return resolved_constructor_callee(context, caller, call);
     if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) {
         const XiFunc *callee = resolved_static_method_callee(context, caller, call);
         if (!callee)
             callee = resolved_instance_method_callee(context, caller, call);
+        if (!callee)
+            callee = resolved_protocol_method_callee(context, caller, call);
+        if (!callee)
+            callee = resolved_constructor_callee(context, caller, call);
         return callee ? callee : resolved_module_function_callee(context, caller, call);
     }
     if (call->op != XI_CALL)
@@ -3205,6 +3694,199 @@ static const XiClassData *resolved_canonical_class_construction(const XrXiBuildC
     return class_data;
 }
 
+/* Collapse only a complete typed initialization prefix. No partially filled
+ * array is observable, and all elements already dominate the allocation. */
+static bool resolved_array_construction(const XiFunc *caller, const XiValue *allocation,
+                                         XiValue **elements, uint32_t *count_out,
+                                         const XiValue **last_initializer) {
+    if (!caller || !allocation || allocation->op != XI_ARRAY_NEW || allocation->nargs != 1u ||
+        !allocation->args || !allocation->args[0] || allocation->args[0]->op != XI_CONST ||
+        !allocation->args[0]->type || allocation->args[0]->type->kind != XR_KIND_INT ||
+        allocation->args[0]->aux_int < 0 || !allocation->type || allocation->type->kind != XR_KIND_ARRAY ||
+        allocation->type->is_nullable || !allocation->block || allocation->block->func != caller ||
+        (uint64_t)allocation->args[0]->aux_int > allocation->block->nvalues)
+        return false;
+    uint32_t count = (uint32_t)allocation->args[0]->aux_int;
+    if (count_out) *count_out = count;
+    if (last_initializer) *last_initializer = NULL;
+    if (!count)
+        return true;
+    const XiBlock *block = allocation->block;
+    uint32_t position = 0u;
+    while (position < block->nvalues && block->values[position] != allocation)
+        ++position;
+    uint32_t initialized = 0u;
+    for (uint32_t i = position + 1u; i < block->nvalues; ++i) {
+        const XiValue *store = block->values[i];
+        bool initializer = store && store->op == XI_INDEX_SET && store->nargs == 3u && store->args &&
+                           logical_value_identity(store->args[0]) == allocation;
+        if (!initializer) {
+            if (store && (store->flags & XI_FLAG_SIDE_EFFECT) != 0u &&
+                store->op != XI_RETAIN && store->op != XI_RELEASE)
+                return false;
+            for (uint16_t argument = 0u; store && argument < store->nargs; ++argument)
+                if (logical_value_identity(store->args[argument]) == allocation)
+                    return false;
+            continue;
+        }
+        const XiValue *index = store->args[1];
+        XiValue *element = store->args[2];
+        if (!index || index->op != XI_CONST || !index->type || index->type->kind != XR_KIND_INT ||
+            index->aux_int != initialized || !element ||
+            !xr_type_equals(element->type, allocation->type->container.element_type))
+            return false;
+        const XiValue *definition = logical_value_identity(element);
+        bool before = definition && definition->block != block;
+        for (uint32_t prior = 0u; !before && prior < position; ++prior)
+            before = block->values[prior] == definition;
+        if (!before)
+            return false;
+        if (elements) elements[initialized] = element;
+        if (++initialized == count) {
+            if (last_initializer) *last_initializer = store;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Field initializers may follow source order rather than canonical field order.
+ * Fold only a complete prefix whose values already dominate allocation. */
+static bool resolved_record_construction(const XiFunc *caller, const XiValue *allocation,
+                                         XiValue **fields, uint32_t *count_out,
+                                         const XiValue **last_initializer) {
+    const XrType *type = allocation ? allocation->type : NULL;
+    if (!caller || !allocation || allocation->op != XI_OBJECT_NEW || allocation->nargs != 0u ||
+        !type || type->kind != XR_KIND_STRUCT_OBJECT || type->is_nullable ||
+        type->object.field_count < 0 || type->object.field_count > UINT16_MAX ||
+        allocation->aux_int != type->object.field_count || !allocation->block ||
+        allocation->block->func != caller ||
+        (type->object.field_count && (!type->object.field_names || !type->object.field_types || !allocation->aux)))
+        return false;
+    uint32_t count = (uint32_t) type->object.field_count;
+    if (count_out) *count_out = count;
+    if (last_initializer) *last_initializer = NULL;
+    const char *const *names = allocation->aux;
+    for (uint32_t field = 0u; field < count; ++field) {
+        if (!names[field] || xr_object_shape_canonical_ordinal(
+                (const char *const *) type->object.field_names, count, names[field]) != field)
+            return false;
+    }
+    const XiBlock *block = allocation->block;
+    uint32_t position = 0u;
+    while (position < block->nvalues && block->values[position] != allocation)
+        ++position;
+    if (position == block->nvalues) return false;
+    if (!count) return true;
+    uint32_t initialized = 0u;
+    for (uint32_t index = position + 1u; index < block->nvalues; ++index) {
+        const XiValue *store = block->values[index];
+        bool initializer = store && store->op == XI_OBJECT_INIT_F && store->nargs == 2u && store->args &&
+                           logical_value_identity(store->args[0]) == allocation;
+        if (!initializer) {
+            if (store && (store->flags & XI_FLAG_SIDE_EFFECT) && store->op != XI_RETAIN && store->op != XI_RELEASE)
+                return false;
+            for (uint16_t arg = 0u; store && arg < store->nargs; ++arg)
+                if (logical_value_identity(store->args[arg]) == allocation) return false;
+            continue;
+        }
+        if (store->aux_int < 0 || (uint64_t) store->aux_int >= count || !store->args[1]) return false;
+        uint32_t ordinal = (uint32_t) store->aux_int;
+        for (uint32_t prior = position + 1u; prior < index; ++prior) {
+            const XiValue *earlier = block->values[prior];
+            if (earlier && earlier->op == XI_OBJECT_INIT_F && earlier->nargs == 2u && earlier->args &&
+                logical_value_identity(earlier->args[0]) == allocation && earlier->aux_int == ordinal)
+                return false;
+        }
+        XrType *expected = NULL;
+        for (uint32_t source = 0u; source < count; ++source)
+            if (type->object.field_names[source] && strcmp(type->object.field_names[source], names[ordinal]) == 0)
+                expected = type->object.field_types[source];
+        XiValue *value = store->args[1];
+        if (!expected || !xr_type_equals(expected, value->type)) return false;
+        const XiValue *definition = logical_value_identity(value);
+        bool before = definition && definition->block != block;
+        for (uint32_t prior = 0u; !before && prior < position; ++prior)
+            before = block->values[prior] == definition;
+        if (!before) return false;
+        if (fields) fields[ordinal] = value;
+        if (++initialized == count) {
+            if (last_initializer) *last_initializer = store;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool resolved_storage_construction(const XiFunc *caller, const XiValue *allocation,
+                                          XiValue **values, uint32_t *count,
+                                          const XiValue **last_initializer) {
+    return resolved_array_construction(caller, allocation, values, count, last_initializer) ||
+           resolved_record_construction(caller, allocation, values, count, last_initializer);
+}
+
+static bool record_initializer_is_exact(const XiFunc *caller, const XiValue *store) {
+    if (!store || store->op != XI_OBJECT_INIT_F || store->nargs != 2u || !store->args) return false;
+    const XiValue *allocation = logical_value_identity(store->args[0]);
+    const XiValue *last = NULL;
+    if (!resolved_record_construction(caller, allocation, NULL, NULL, &last) || !last ||
+        store->block != allocation->block) return false;
+    for (uint32_t index = 0u; index < store->block->nvalues; ++index) {
+        if (store->block->values[index] == store) return true;
+        if (store->block->values[index] == last) return false;
+    }
+    return false;
+}
+
+static bool array_initializer_is_exact(const XiFunc *caller, const XiValue *store) {
+    if (!store || store->op != XI_INDEX_SET || store->nargs != 3u || !store->args)
+        return false;
+    const XiValue *allocation = logical_value_identity(store->args[0]);
+    const XiValue *last = NULL;
+    if (!resolved_array_construction(caller, allocation, NULL, NULL, &last) || !last ||
+        store->block != allocation->block)
+        return false;
+    for (uint32_t i = 0u; i < store->block->nvalues; ++i) {
+        if (store->block->values[i] == store)
+            return true;
+        if (store->block->values[i] == last)
+            return false;
+    }
+    return false;
+}
+
+static bool exact_array_index_shape(const XiFunc *function, const XiValue *value) {
+    bool store = value && value->op == XI_INDEX_SET;
+    if (!value || (value->op != XI_INDEX_GET && !store) ||
+        value->nargs != (store ? 3u : 2u) || !value->args || !value->args[0] || !value->args[1] ||
+        (store && (!value->args[2] || array_initializer_is_exact(function, value))))
+        return false;
+    const XrType *array = value->args[0]->type;
+    XrType *element = store ? value->args[2]->type : value->type;
+    uint16_t index = XR_CORE_TYPE_VOID;
+    return array && array->kind == XR_KIND_ARRAY && !array->is_nullable &&
+           array->container.element_type && element &&
+           xr_type_equals(array->container.element_type, element) &&
+           map_builtin_type(value->args[1]->type, &index) && index == XR_CORE_TYPE_I64;
+}
+
+static bool exact_array_index(XrXiBuildContext *context, const XiFunc *function,
+                              const XiValue *value, uint16_t *element_type) {
+    if (!exact_array_index_shape(function, value))
+        return false;
+    bool store = value->op == XI_INDEX_SET;
+    uint16_t container = XR_CORE_TYPE_VOID, index = XR_CORE_TYPE_VOID, element = XR_CORE_TYPE_VOID;
+    if (!map_type(context, value->args[0]->type, &container) ||
+        !map_type(context, value->args[1]->type, &index) || index != XR_CORE_TYPE_I64 ||
+        !map_type(context, store ? value->args[2]->type : value->type, &element))
+        return false;
+    const XrXiTypeStorage *type = find_dynamic_type_by_id(context, container);
+    if (!type || type->input.kind != XR_CORE_IR_TYPE_ARRAY || type->input.array_element_type != element)
+        return false;
+    if (element_type) *element_type = element;
+    return true;
+}
+
 /* A value-struct literal is physical Xi allocation followed by one AGG_SET per
  * field. Canonical
  * Program has no uninitialized aggregate state: collapse that
@@ -3441,10 +4123,65 @@ static bool resolved_aggregate_field_access(const XrXiBuildContext *context, con
     return true;
 }
 
+static bool source_reference_record_type(const XrType *type) {
+    const XrClassInfo *info = type ? nominal_info_for_type(type) : NULL;
+    return type && (type->kind == XR_KIND_STRUCT_OBJECT ||
+                    (info && info->nominal_kind == XA_NOMINAL_CLASS));
+}
+
+static bool resolved_record_field_access(const XrXiBuildContext *context, const XiValue *access,
+                                         bool store, uint32_t *ordinal_out) {
+    if (!context || !context->source || !context->source->global_evidence || !access ||
+        access->op != (store ? XI_OBJECT_SET_F : XI_OBJECT_GET_F) ||
+        access->nargs != (store ? 2u : 1u) || !access->args || !access->args[0] ||
+        (store && !access->args[1]) || !access->block || !access->block->func)
+        return false;
+    const XrType *type = access->args[0]->type;
+    if (!type || type->kind != XR_KIND_STRUCT_OBJECT || type->is_nullable ||
+        access->aux_int < 0 || access->aux_int >= type->object.field_count ||
+        !type->object.field_names || !type->object.field_types)
+        return false;
+    const char *name = NULL;
+    XrType *field_type = NULL;
+    for (int field = 0; field < type->object.field_count; ++field) {
+        if (xr_object_shape_canonical_ordinal((const char *const *) type->object.field_names,
+                type->object.field_count, type->object.field_names[field]) != access->aux_int) continue;
+        if (name || (store && type->object.field_readonly && type->object.field_readonly[field])) return false;
+        name = type->object.field_names[field];
+        field_type = type->object.field_types[field];
+    }
+    if (!name || !field_type || !xr_type_equals(field_type, store ? access->args[1]->type : access->type))
+        return false;
+    const XgGlobalEvidence *evidence = context->source->global_evidence;
+    const XgObjectAccessSummary *row = NULL;
+    for (uint32_t index = 0u; index < evidence->nobject_accesses; ++index) {
+        const XgObjectAccessSummary *candidate = &evidence->object_accesses[index];
+        if (candidate->object_access_id != access->xg_object_access_id) continue;
+        if (row) return false;
+        row = candidate;
+    }
+    /* Exact typed accesses synthesized by lowering have no source access row.
+     * Their field identity is checked above and again against the mapped Program
+     * shape. A supplied evidence identity must still resolve and agree. */
+    if (!row && access->xg_object_access_id == 0u &&
+        (access->lowering_flags & XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS) != 0u) {
+        if (ordinal_out) *ordinal_out = (uint32_t) access->aux_int;
+        return true;
+    }
+    if (!row || row->domain != XG_OBJECT_DOMAIN_STRUCT ||
+        row->access_kind != (store ? XG_OBJECT_ACCESS_FIELD_SET : XG_OBJECT_ACCESS_FIELD_GET) ||
+        row->field_ordinal != access->aux_int || row->field_name_id != xg_name_id(name) ||
+        row->owner_func_id != access->block->func->xg_body_func_id)
+        return false;
+    if (ordinal_out) *ordinal_out = (uint32_t) access->aux_int;
+    return true;
+}
+
 static bool resolved_aggregate_field_projection(const XrXiBuildContext *context,
                                                 const XiValue *access,
                                                 uint32_t *field_ordinal_out) {
-    return resolved_aggregate_field_access(context, access, XI_LOAD_FIELD, field_ordinal_out);
+    return resolved_record_field_access(context, access, false, field_ordinal_out) ||
+           resolved_aggregate_field_access(context, access, XI_LOAD_FIELD, field_ordinal_out);
 }
 
 static bool logical_value_is_place(const XiFunc *function, const XiValue *value) {
@@ -3568,6 +4305,8 @@ static const XiValue *aggregate_field_store_place(const XiFunc *function, const 
 
 static bool resolved_aggregate_field_store(const XrXiBuildContext *context, const XiFunc *function,
                                            const XiValue *access, uint32_t *field_ordinal_out) {
+    if (resolved_record_field_access(context, access, true, field_ordinal_out))
+        return true;
     if (!resolved_aggregate_field_access(context, access, XI_STORE_FIELD, field_ordinal_out))
         return false;
     const XrClassInfo *receiver_info =
@@ -3702,7 +4441,7 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
 
 /* Xi still carries the generic pending-error scaffold emitted before resolver
  * evidence
- * classifies a constructor-shaped call.  Exact nominal construction
+ * classifies a constructor-shaped call. Exact nominal or sealed Atomic construction
  * has no typed-error outcome,
  * so its exclusive mechanical error continuation
  * is unreachable even when that continuation
@@ -3710,7 +4449,7 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
  * owners.  Preserve the closed catch/rethrow shell: an aliased or
  * non-terminal
  * error block is not constructor-private evidence. */
-static const XiValue *exact_infallible_class_construction_in_block(const XrXiBuildContext *context,
+static const XiValue *exact_infallible_construction_in_block(const XrXiBuildContext *context,
                                                                    const XiFunc *function,
                                                                    const XiBlock *block) {
     if (!context || !function || !block || block->kind != XI_BLOCK_IF || !block->control ||
@@ -3719,7 +4458,8 @@ static const XiValue *exact_infallible_class_construction_in_block(const XrXiBui
         return NULL;
 
     const XiValue *call = xi_err_check_producer(function, block->control);
-    if (!call || !resolved_canonical_class_construction(context, function, call, NULL, NULL))
+    if (!call || (!resolved_atomic_construction(call) &&
+                  !resolved_canonical_class_construction(context, function, call, NULL, NULL)))
         return NULL;
 
     const XiBlock *error = block->succs[0];
@@ -3757,7 +4497,7 @@ static bool block_is_elided_class_construction_error_continuation(const XrXiBuil
         const XiBlock *predecessor = function->blocks[index];
         if (predecessor && canonical_block_is_reachable(context, function, predecessor) &&
             predecessor->succs[0] == block &&
-            exact_infallible_class_construction_in_block(context, function, predecessor))
+            exact_infallible_construction_in_block(context, function, predecessor))
             return true;
     }
     return false;
@@ -4183,8 +4923,10 @@ static XrProgramBuildStatus build_interface_slot_signature(
         contract_mismatch = "Xi error type key disagrees with Xglobal";
         goto invalid;
     }
-    if (method->panic_type_key != 0u || panic_type != XR_CORE_TYPE_VOID) {
-        contract_mismatch = "panic channel is not the required canonical void contract";
+    uint32_t panic_type_key = panic_type == XR_CORE_TYPE_PANIC_INFO
+                                  ? xg_synthetic_named_type_key("PanicInfo") : 0u;
+    if (method->panic_type_key != panic_type_key) {
+        contract_mismatch = "Xi panic type key disagrees with Xglobal";
         goto invalid;
     }
     if (!interface_result_ownership_is_exact(target, &method->result_ownership)) {
@@ -4722,10 +5464,21 @@ static bool resolved_callable_call_targets(const XrXiBuildContext *context, cons
 
 static const XiValue *block_typed_invoke_call(const XrXiBuildContext *context,
                                               const XiFunc *function, const XiBlock *block) {
-    if (!function || !block || block->kind != XI_BLOCK_IF || !block->control ||
-        block->control->op != XI_ERR_CHECK || !block->succs[0] || !block->succs[1])
+    if (!function || !block)
         return NULL;
-    const XiValue *producer = xi_err_check_producer(function, block->control);
+    const XiValue *producer = NULL;
+    if (block->kind == XI_BLOCK_IF && block->control && block->control->op == XI_ERR_CHECK &&
+        block->succs[0] && block->succs[1])
+        producer = xi_err_check_producer(function, block->control);
+    else if (block->kind == XI_BLOCK_PLAIN && block->nvalues == 1u && block->succs[0] &&
+             !block->succs[1] && xi_value_has_panic_continuation(function, block->values[0])) {
+        producer = block->values[0];
+        /* A suspended fallible call keeps its ERR_CHECK in the resume block.
+         * That declared error continuation remains the invoke owner. */
+        for (uint32_t b = 0u; b < function->nblocks; ++b)
+            if (xi_err_check_producer(function, function->blocks[b]->control) == producer)
+                return NULL;
+    }
     if (!producer || !canonical_block_is_reachable(context, function, producer->block))
         return NULL;
     if (producer->op == XI_CALL)
@@ -4737,7 +5490,8 @@ static const XiValue *block_typed_invoke_call(const XrXiBuildContext *context,
         resolved_sealed_callee(context, function, producer))
         return producer;
     if ((producer->op == XI_CALL_METHOD || producer->op == XI_CALL_METHOD_DIRECT) &&
-        producer->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE)
+        (producer->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE ||
+         producer->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT))
         return resolved_witness_callsite(context, function, producer) ? producer : NULL;
     return NULL;
 }
@@ -4754,6 +5508,46 @@ static const XiBlock *typed_invoke_check_block_for_call(const XrXiBuildContext *
             return block;
     }
     return NULL;
+}
+
+static const XiCoroSuspendPoint *suspended_invoke_point(const XrXiBuildContext *context,
+                                                      const XiFunc *function,
+                                                      const XiValue *call) {
+    const XrXiFunctionStorage *storage = find_xi_function(context, function, NULL, NULL);
+    const XiFunc *suspend_stack[64] = {0};
+    if (!storage || ((storage->closed_effect_mask & XR_CORE_EFFECT_SUSPEND) == 0u &&
+                     !coroutine_function_has_proven_suspend(context, function, suspend_stack, 0u)))
+        return NULL;
+    const XiCoroPlan *plan = function ? function->coro_plan : NULL;
+    for (uint32_t i = 0u; plan && i < plan->nstates; ++i) {
+        const XiCoroSuspendPoint *point = &plan->points[i];
+        if (point->kind == XI_CORO_SUSP_CALL && point->op == call && point->resume_block &&
+            xi_err_check_producer(function, point->resume_block->control) == call &&
+            block_typed_invoke_call(context, function, point->resume_block) == call)
+            return point;
+    }
+    return NULL;
+}
+
+static const XiBlock *invoke_source_block(const XrXiBuildContext *context,
+                                        const XiFunc *function, const XiValue *call) {
+    const XiCoroSuspendPoint *point = suspended_invoke_point(context, function, call);
+    return point ? point->suspend_block : typed_invoke_check_block_for_call(context, function, call);
+}
+
+/* A suspended call publishes all outcomes at its suspension point. Its error
+ * check is consumed there; the resume block only forwards the normal result. */
+static const XiValue *block_completion_call(const XrXiBuildContext *context,
+                                           const XiFunc *function, const XiBlock *block) {
+    const XiValue *call = block_typed_invoke_call(context, function, block);
+    if (call && suspended_invoke_point(context, function, call))
+        return NULL;
+    const XiCoroPlan *plan = function ? function->coro_plan : NULL;
+    for (uint32_t i = 0u; plan && i < plan->nstates; ++i)
+        if (plan->points[i].suspend_block == block &&
+            suspended_invoke_point(context, function, plan->points[i].op))
+            return plan->points[i].op;
+    return call;
 }
 
 static const XiValue *block_error_catch(const XiBlock *block) {
@@ -4785,7 +5579,7 @@ static bool value_is_invoke_scaffold(const XrXiBuildContext *context, const XiFu
     if (value == call || value == value->block->control)
         return call != NULL ||
                (value == value->block->control &&
-                exact_infallible_class_construction_in_block(context, function, value->block));
+                exact_infallible_construction_in_block(context, function, value->block));
     if (value->op == XI_ERR_CATCH)
         return block_error_catch(value->block) == value;
     return false;
@@ -4863,12 +5657,7 @@ static const XiValue *logical_value_identity(const XiValue *value) {
         value = value->args[0];
     while (
         value && value->nargs == 1u && value->args && value->args[0] && value->type &&
-        ((value->op == XI_RETAIN && xi_type_has_logical_value_identity(value->type)) ||
-         (xi_copy_is_value_clone(value) &&
-          (value->type->kind == XR_KIND_TUPLE ||
-           (((value->type->kind == XR_KIND_INSTANCE || value->type->kind == XR_KIND_CLASS) &&
-             value->type->instance.class_ref && value->type->instance.class_ref->struct_layout &&
-             value->type->instance.class_ref->nominal_kind == XA_NOMINAL_STRUCT)))))) {
+        value->op == XI_RETAIN && xi_type_has_logical_value_identity(value->type)) {
         value = value->args[0];
         while (xi_copy_is_identity_alias(value) && value->nargs == 1u && value->args &&
                value->args[0])
@@ -4911,9 +5700,8 @@ static bool resolved_callable_call_targets(const XrXiBuildContext *context, cons
     return true;
 }
 
-static bool callable_target_matches_visible_type(XrXiBuildContext *context, const XrType *visible,
-                                                 const XiFunc *target, uint16_t error_type_id,
-                                                 uint16_t panic_type_id) {
+static bool callable_target_matches_visible_shape(XrXiBuildContext *context, const XrType *visible,
+                                                  const XiFunc *target) {
     if (!context || !visible || visible->kind != XR_KIND_FUNCTION || !target ||
         target->has_receiver || visible->function.param_count < 0 ||
         (uint32_t) visible->function.param_count != target->nparams)
@@ -4934,6 +5722,14 @@ static bool callable_target_matches_visible_type(XrXiBuildContext *context, cons
             visible_type != target_type || visible_parameter->mode != target_parameter->param_mode)
             return false;
     }
+    return true;
+}
+
+static bool callable_target_matches_visible_type(XrXiBuildContext *context, const XrType *visible,
+                                                 const XiFunc *target, uint16_t error_type_id,
+                                                 uint16_t panic_type_id) {
+    if (!callable_target_matches_visible_shape(context, visible, target))
+        return false;
     uint16_t target_error = XR_CORE_TYPE_VOID;
     uint16_t target_panic = XR_CORE_TYPE_VOID;
     return map_function_error_type(context, target, &target_error, NULL, 0u) ==
@@ -5523,10 +6319,15 @@ static const char *imported_callable_checktype_proof_failure(const XrXiBuildCont
         return "CHECKTYPE target-set capability closure omits a target body capability";
     if ((target_effects & control_effects) != 0u)
         return "CHECKTYPE target-set is not proven error-free and panic-free";
-    if (!callable_target_matches_visible_type((XrXiBuildContext *) context, check->type, target,
-                                              XR_CORE_TYPE_VOID, XR_CORE_TYPE_VOID))
-        return "CHECKTYPE target Xi signature or error/panic channels disagree with the visible "
-               "type";
+    if (!callable_target_matches_visible_shape((XrXiBuildContext *) context, check->type, target) ||
+        !target->error_effect_nothrow)
+        return "CHECKTYPE target Xi signature or error channel disagrees with the visible type";
+    // Shape and frozen source effects are available before CoreSpec effect closure.
+    // Recheck the closed channel when emission consumes this same erasure proof.
+    const XrXiFunctionStorage *storage = find_xi_function(context, target, NULL, NULL);
+    if (!storage || (storage->closed_contract_ready &&
+                     (storage->closed_effect_mask & (XR_CORE_EFFECT_ERROR | XR_CORE_EFFECT_PANIC))))
+        return "CHECKTYPE target closed error/panic channels disagree with the visible type";
     return NULL;
 }
 
@@ -5591,8 +6392,12 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
                     continue;
                 const XiFunc *callee = resolved_sealed_callee(context, function, call);
                 const XiCallPlan *plan = xi_call_plan(call);
-                bool method_argument = callee && callee->has_receiver && argument != 0u;
-                bool free_argument = callee && !callee->has_receiver && argument != 0u;
+                bool constructor_call = callee && xi_value_is_constructor_call(call) &&
+                                        call->op == XI_CALL;
+                bool method_argument = callee && (callee->has_receiver || constructor_call) &&
+                                       argument != 0u;
+                bool free_argument = callee && !callee->has_receiver && !constructor_call &&
+                                     argument != 0u;
                 uint16_t parameter =
                     method_argument ? argument
                                     : (free_argument ? (uint16_t) (argument - 1u) : UINT16_MAX);
@@ -5611,7 +6416,7 @@ static bool read_value_call_place_is_exact(const XrXiBuildContext *context, cons
                                    call->op == XI_CALL_METHOD_DIRECT;
                 bool exact_call_shape =
                     callee && plan &&
-                    (callee->has_receiver
+                    (callee->has_receiver || constructor_call
                          ? (plan->has_receiver && plan->nargs + 1u == callee->nparams &&
                             call->nargs == callee->nparams)
                          : (!plan->has_receiver && plan->nargs == callee->nparams &&
@@ -5974,6 +6779,8 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                     const XiValue *call = block->values[value_index];
                     if (!call || call->op != XI_CALL ||
                         resolved_sealed_callee(context, function, call) ||
+                        resolved_constructor_callee(context, function, call) ||
+                        resolved_atomic_construction(call) ||
                         resolved_canonical_class_construction(context, function, call, NULL,
                                                               NULL) ||
                         resolved_provider_native_call(context, function, call) ||
@@ -6219,10 +7026,10 @@ static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *func
     }
     if (value && value->op == XI_GET_SHARED) {
         uint64_t signature_key = 0u;
-        const XrType *visible_type = NULL;
+        const XrType *shared_type = NULL;
         if (resolved_shared_callable_target(context, function, value, &signature_key,
-                                            &visible_type))
-            return map_callable_signature_contract(context, visible_type, signature_key, type_id,
+                                            &shared_type))
+            return map_callable_signature_contract(context, shared_type, signature_key, type_id,
                                                    NULL);
     }
     /* Ownership forwarding can introduce the first typed carrier around an
@@ -6283,9 +7090,14 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
     if (!map_logical_value_type(context, function, value, &type_id) ||
         logical_ownership_for_type(context, type_id) != XR_CORE_IR_OWNER)
         return false;
+    if (value->op == XI_CATCH)
+        return value->nargs == 0u && type_id == XR_CORE_TYPE_PANIC_INFO;
     if (value->op == XI_VARIANT_PROJECT)
         return value->nargs == 1u && value->args && value->args[0] &&
                logical_value_produces_owner(context, function, value->args[0], depth + 1u);
+    if (value->xg_existential_kind == XI_EXISTENTIAL_PROJECT)
+        return value->xg_interface_use_kind == XI_INTERFACE_USE_MOVE ||
+               value->xg_interface_use_kind == XI_INTERFACE_USE_OWNED_STORAGE;
     /* Every string producer yields a fresh owner: literals, concatenation
      * chains and the i64 renderings folded into them. */
     if (type_id == XR_CORE_TYPE_STRING &&
@@ -6293,12 +7105,13 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
         return true;
     return (value->op == XI_CLOSURE_NEW && value->nargs != 0u) ||
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
-           value->xg_existential_kind == XI_EXISTENTIAL_PROJECT || value->op == XI_SUM_INJECT ||
+           value->op == XI_SUM_INJECT || value->op == XI_AGG_UPDATE ||
            xi_copy_is_value_clone(value) || value->op == XI_SOURCE_MOVE ||
            value->op == XI_OWNER_FORWARD || value->op == XI_CALL ||
            ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
             resolved_sealed_callee(context, function, value)) ||
            resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
+           resolved_storage_construction(function, value, NULL, NULL, NULL) ||
            resolved_value_aggregate_construction(context, function, value, NULL, NULL) ||
            (value->op == XI_CALL_BUILTIN && value->aux && value->aux_kind == XI_AUX_KIND_NONE &&
             strcmp((const char *) value->aux, "copy") == 0);
@@ -6367,9 +7180,7 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
             source_type_id != XR_CORE_TYPE_VOID;
     bool erased_error_catch =
         source->op == XI_ERR_CATCH && source->type && source->type->kind == XR_KIND_UNKNOWN;
-    bool erased_panic_catch =
-        implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC && source->op == XI_CATCH;
-    if (type_id != XR_CORE_TYPE_VOID && !erased_panic_catch &&
+    if (type_id != XR_CORE_TYPE_VOID &&
         ((source_type_mapped && source_type_id != type_id) ||
          (!source_type_mapped && !erased_error_catch)))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -6382,6 +7193,13 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
         bool callable_signature = source->type && source->type->kind == XR_KIND_FUNCTION &&
                                   callable_signature_key_for_value(context, function->xi, source,
                                                                    0u, &callable_signature_key);
+        fprintf(stderr, "DEBUG live-in fn=%s op=%s/%u type=%u block=%u\\n",
+                function && function->xi && function->xi->name ? function->xi->name : "<none>",
+                xi_op_name(source->op), source->op,
+                source->type ? (unsigned) source->type->kind : UINT32_MAX,
+                block && block->xi ? block->xi->id : UINT32_MAX);
+        if (function && function->xi)
+            xi_func_dump(function->xi, stderr);
         return fail(
             diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
             "Xi live-in v%u op%u type=%u nargs=%u source=%u/%u in b%u has no active "
@@ -6409,10 +7227,14 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
         source = storage_owner;
     }
     XrCoreIrValueCategory category = logical_value_category(function ? function->xi : NULL, source);
+    /* An error continuation transfers its channel value through cleanup into
+     * the lexical catch. The early erased Xi type does not turn that owner
+     * into a borrow once the exact channel type has been resolved. */
     XrCoreIrOwnershipDisposition ownership =
         implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT ||
                 implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_ERROR ||
-                implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC
+                implicit_invoke_kind == XR_XI_INVOKE_ARGUMENT_PANIC ||
+                (source->op == XI_ERR_CATCH && source->nargs == 0u)
             ? logical_ownership_for_type(context, type_id)
         : logical_value_produces_owner(context, function->xi, source, 0u)
             ? logical_ownership_for_type(context, type_id)
@@ -6552,14 +7374,23 @@ static XrProgramBuildStatus add_reconstructed_place(XrXiBuildContext *context,
     return XR_PROGRAM_BUILD_OK;
 }
 
+static const XrCoreIrModuleSlotInput *resolved_module_data_slot(const XrXiBuildContext *context,
+                                                                const XiFunc *function,
+                                                                const XiValue *value,
+                                                                XrCoreIrKey *module_key);
+
 static bool value_has_canonical_materialization(const XrXiBuildContext *context,
                                                 const XiFunc *function, const XiValue *value) {
     if (!value)
         return false;
     if (xr_program_xi_value_is_materialized(value->op) ||
+        resolved_atomic_construction(value) || exact_atomic_scalar_operation(value) ||
+        (value->op == XI_GET_SHARED && resolved_module_data_slot(context, function, value, NULL)) ||
         shared_callable_value_is_exact(context, function, value) ||
         static_typed_catch_contract_is_exact(context, value) ||
         resolved_canonical_class_construction(context, function, value, NULL, NULL) ||
+        resolved_storage_construction(function, value, NULL, NULL, NULL) ||
+        exact_array_index_shape(function, value) ||
         resolved_value_aggregate_construction(context, function, value, NULL, NULL) ||
         resolved_empty_struct_literal(context, function, value) ||
         resolved_unit_enum_literal(context, function, value, NULL) ||
@@ -6650,12 +7481,17 @@ static bool edge_value_operand_key(const XrXiBuildContext *context,
     return value_operand_key(context, function, block, value, key_out);
 }
 
+static bool type_storage_has_identity(const XrXiTypeStorage *type) {
+    return type && (xr_program_type_kind_is_reference_record(type->input.kind) ||
+                    type->input.kind == XR_CORE_IR_TYPE_ARRAY);
+}
+
 /* XI_OWNER_FORWARD is a semantic owner transfer.  It is a move when the
- * source lifetime ends at the forward, but a class alias acquisition when the
+ * source lifetime ends at the forward, but a reference alias acquisition when the
  * source still has a semantic use or leaves the block independently.  Infer
  * that distinction from Xi dataflow; XI_RETAIN/XI_RELEASE remain executor-
  * private RC mechanics and are deliberately ignored. */
-static bool class_owner_forward_requires_share(const XrXiBuildContext *context,
+static bool identity_owner_forward_requires_alias(XrXiBuildContext *context,
                                                const XrXiFunctionStorage *function,
                                                const XrXiBlockStorage *block,
                                                const XiValue *forward) {
@@ -6664,6 +7500,8 @@ static bool class_owner_forward_requires_share(const XrXiBuildContext *context,
         !forward->args[0])
         return false;
     const XiValue *source = exact_logical_value_identity(context, function->xi, forward->args[0]);
+    if (source && !logical_value_produces_owner(context, function->xi, source, 0u))
+        return true;
     uint32_t forward_index = UINT32_MAX;
     for (uint32_t index = 0u; index < block->xi->nvalues; ++index)
         if (block->xi->values[index] == forward) {
@@ -6711,10 +7549,15 @@ static XrProgramBuildStatus add_constant(XrXiBuildContext *context, XrXiModuleSt
                                          char *diagnostic, size_t diagnostic_size) {
     uint16_t type_id = XR_CORE_TYPE_VOID;
     if (!map_type(context, value->type, &type_id) ||
-        (type_id != XR_CORE_TYPE_I64 && type_id != XR_CORE_TYPE_BOOL &&
-         type_id != XR_CORE_TYPE_STRING && type_id != XR_CORE_TYPE_RUNE))
+        (!xr_core_spec_integer_type(type_id) && type_id != XR_CORE_TYPE_BOOL &&
+         type_id != XR_CORE_TYPE_STRING && type_id != XR_CORE_TYPE_RUNE &&
+         type_id != XR_CORE_TYPE_F64))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi constant v%u has no active CoreSpec type", value->id);
+    /* The pool stores the exact 64 payload bits. A typed conversion restores
+     * the source width and signedness at the defining instruction. */
+    if (xr_core_spec_integer_type(type_id))
+        type_id = XR_CORE_TYPE_I64;
     /* Xi keeps string literals as NUL-terminated arena text; the byte length
      * is the canonical constant payload and must already be strict UTF-8. */
     const uint8_t *string_bytes = NULL;
@@ -6733,11 +7576,15 @@ static XrProgramBuildStatus add_constant(XrXiBuildContext *context, XrXiModuleSt
          !xr_text_rune_is_scalar((uint32_t) value->aux_int)))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi rune constant v%u is not a Unicode scalar value", value->id);
-    XrCoreIrKey key =
-        type_id == XR_CORE_TYPE_STRING
-            ? string_constant_key(module->source_authority->module_identity, string_bytes,
-                                  (uint32_t) string_size)
-            : constant_key(module->source_authority->module_identity, type_id, value->aux_int);
+    XrCoreIrKey key;
+    if (type_id == XR_CORE_TYPE_STRING) {
+        if (!string_constant_key(module->source_authority->module_identity, string_bytes,
+                                 (uint32_t) string_size, &key))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_OUT_OF_MEMORY,
+                        "Xi string constant identity allocation failed");
+    } else {
+        key = constant_key(module->source_authority->module_identity, type_id, value->aux_int);
+    }
     for (uint32_t index = 0; index < module->constant_count; ++index) {
         if (xr_core_ir_key_equal(module->constants[index].key, key)) {
             *constant_key_out = key;
@@ -6761,6 +7608,10 @@ static XrProgramBuildStatus add_constant(XrXiBuildContext *context, XrXiModuleSt
     constant->key = key;
     constant->type_id = type_id;
     switch (type_id) {
+        case XR_CORE_TYPE_F64:
+            constant->kind = XR_CORE_IR_CONSTANT_F64;
+            constant->value.f64_bits = (uint64_t) value->aux_int;
+            break;
         case XR_CORE_TYPE_I64:
             constant->kind = XR_CORE_IR_CONSTANT_I64;
             constant->value.i64 = value->aux_int;
@@ -6842,10 +7693,10 @@ static void free_context(XrXiBuildContext *context) {
                 xr_free(cleanup->trap_argument_sources);
             }
             xr_free(function->cleanup_projections);
-            for (uint32_t cleanup_index = 0u;
-                 cleanup_index < function->implicit_trap_cleanup_count; ++cleanup_index) {
-                XrXiImplicitTrapCleanupStorage *cleanup =
-                    &function->implicit_trap_cleanups[cleanup_index];
+            for (uint32_t cleanup_index = 0u; cleanup_index < function->implicit_exit_cleanup_count;
+                 ++cleanup_index) {
+                XrXiImplicitExitCleanupStorage *cleanup =
+                    &function->implicit_exit_cleanups[cleanup_index];
                 for (uint32_t instruction = 0u;
                      cleanup->instructions && instruction < cleanup->instruction_count;
                      ++instruction)
@@ -6853,7 +7704,7 @@ static void free_context(XrXiBuildContext *context) {
                 xr_free(cleanup->instructions);
                 xr_free(cleanup->arguments);
             }
-            xr_free(function->implicit_trap_cleanups);
+            xr_free(function->implicit_exit_cleanups);
             xr_free(function->cleanup_points);
             xr_free(function->cleanup_chain_nodes);
             xr_free(function->cleanup_handler_chain_nodes);
@@ -6876,6 +7727,8 @@ static void free_context(XrXiBuildContext *context) {
         xr_free(module->function_reachable);
         xr_free(module->xi_functions);
         xr_free(module->constants);
+        xr_free(module->dependencies);
+        xr_free(module->slots);
     }
     xr_free(context->storage);
     xr_free(context->modules);
@@ -6997,22 +7850,20 @@ set_trap_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput
 static XrProgramBuildStatus
 set_panic_edge_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
                         const XrXiFunctionStorage *function, const XrXiBlockStorage *source,
-                        const XiValue *point, const XiValue *condition,
+                        const XiValue *point, const XrCoreIrKey *prefix_values, uint32_t prefix,
                         const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
-    if (!handler || handler->argument_count == 0u ||
+    if (!prefix_values || prefix == 0u || !handler || handler->argument_count == 0u ||
         handler->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_PANIC)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi panic continuation lacks its implicit PanicInfo payload");
-    uint32_t count = handler->argument_count;
+    if (handler->argument_count - 1u > UINT32_MAX - prefix)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    uint32_t count = prefix + handler->argument_count - 1u;
     XrCoreIrKey *operands = xr_calloc(count, sizeof(*operands));
     if (!operands)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    if (!value_operand_key(context, function, source, condition, &operands[0])) {
-        xr_free(operands);
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi assertion condition is unavailable");
-    }
-    uint32_t cursor = 1u;
+    memcpy(operands, prefix_values, prefix * sizeof(*operands));
+    uint32_t cursor = prefix;
     for (uint32_t argument = 1u; argument < handler->argument_count; ++argument) {
         const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
         if (edge_argument->phi ||
@@ -7095,21 +7946,12 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
     if (provider_entry) {
         uint16_t result_type = XR_CORE_TYPE_VOID;
         if (!map_type(context, value->type, &result_type) ||
-            value->nargs != (uint16_t) (provider_entry->argc + 1u) ||
-            !((result_type == XR_CORE_TYPE_I64 && provider_entry->argc <= 1u) ||
-              (result_type == XR_CORE_TYPE_BOOL && provider_entry->argc == 1u) ||
-              (provider_entry->argc == 0u &&
-               logical_type_is_optional_i64_pair(context, result_type))))
+            value->nargs != (uint16_t) (provider_entry->argc + 1u))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi provider call v%u has no admitted logical call shape", value->id);
-        for (uint16_t argument = 0u; argument < provider_entry->argc; ++argument) {
-            uint16_t argument_type = XR_CORE_TYPE_VOID;
-            if (!map_logical_value_type(context, function->xi, value->args[argument + 1u],
-                                        &argument_type) ||
-                argument_type != XR_CORE_TYPE_I64)
-                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                            "Xi provider call v%u argument %u is not i64", value->id, argument);
-        }
+                        "Xi provider call v%u has no logical result type", value->id);
+        /* The required logical signature is validated once by Program admission,
+         * including every recursive parameter/result type and owner. Source
+         * projection must not maintain another list of host ABI shapes. */
         XrStableId contract_id = {{0}};
         XrStableId operation_id = {{0}};
         XrProgramBuildStatus requirement_status = require_provider_operation(
@@ -7174,7 +8016,8 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi method call v%u has no exact class/method/body join", value->id);
     if (!callee) {
-        if ((callsite->flags & XG_CALL_MAY_ERROR) != 0u)
+        if ((callsite->flags & XG_CALL_MAY_ERROR) != 0u &&
+            !suspended_invoke_point(context, function->xi, value))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi indirect call v%u requires an explicit error continuation", value->id);
         const XiValue *callee_value = value->nargs ? logical_value_identity(value->args[0]) : NULL;
@@ -7186,8 +8029,8 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         const XrXiTypeStorage *callable = find_dynamic_type_by_id(context, callable_type_id);
         if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
             !callable->callable_signature ||
-            callable->callable_signature->error_type_id != XR_CORE_TYPE_VOID ||
-            callable->callable_signature->panic_type_id != XR_CORE_TYPE_VOID)
+            (callable->callable_signature->error_type_id != XR_CORE_TYPE_VOID &&
+             !suspended_invoke_point(context, function->xi, value)))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi call v%u requires an unsupported callable continuation", value->id);
         uint16_t result_type = XR_CORE_TYPE_VOID;
@@ -7217,7 +8060,7 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         map_function_error_type(context, callee, &error_type, diagnostic, diagnostic_size);
     if (error_status != XR_PROGRAM_BUILD_OK)
         return error_status;
-    if (error_type != XR_CORE_TYPE_VOID)
+    if (error_type != XR_CORE_TYPE_VOID && !suspended_invoke_point(context, function->xi, value))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "fallible Xi call v%u lacks an explicit invoke continuation", value->id);
     uint16_t panic_type = XR_CORE_TYPE_VOID;
@@ -7241,7 +8084,12 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
         instruction->result = value_key(function, value);
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
     instruction->immediate.key = callee_storage->key;
-    uint16_t first_operand = callee->has_receiver ? 0u : 1u;
+    /* A source class constructor is lowered as XI_CALL with the allocated class
+     * carrier in operand zero.  It has no Xi receiver flag, but that carrier is
+     * still the first declared constructor parameter and must reach the body.
+     * Only ordinary sealed free calls erase their phase-only operand. */
+    bool constructor_call = xi_value_is_constructor_call(value) && value->op == XI_CALL;
+    uint16_t first_operand = constructor_call || callee->has_receiver ? 0u : 1u;
     const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
     if (!trap_edge)
         return set_operands(context, instruction, function, block, value->args + first_operand,
@@ -7510,7 +8358,7 @@ static XrProgramBuildStatus translate_existential_value(XrXiBuildContext *contex
     XiInterfaceUseKind receiver_use =
         slot ? interface_use_for_receiver(slot->receiver_mode) : XI_INTERFACE_USE_NONE;
     if (!callsite || !slot || projection.kind != XR_PROGRAM_XI_SEMANTIC_WITNESS_DIRECT ||
-        slot->error_type_id != XR_CORE_TYPE_VOID || slot->panic_type_id != XR_CORE_TYPE_VOID ||
+        slot->error_type_id != XR_CORE_TYPE_VOID ||
         !interface_use_allows_receiver((XiInterfaceUseKind) value->xg_interface_use_kind,
                                        receiver_use) ||
         value->nargs != slot->parameter_count)
@@ -7585,7 +8433,7 @@ translate_existential_owner_acquire(XrXiBuildContext *context, XrXiFunctionStora
         logical_value_produces_owner(context, function->xi, pack->args[0], 0u))
         return XR_PROGRAM_BUILD_OK;
     const XrXiTypeStorage *concrete = find_dynamic_type_by_id(context, source_type);
-    bool class_reference = concrete && concrete->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+    bool class_reference = type_storage_has_identity(concrete);
     if (!class_reference &&
         logical_copy_contract_for_type(context, source_type) != XR_CORE_IR_COPY_EXPLICIT)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -7595,7 +8443,7 @@ translate_existential_owner_acquire(XrXiBuildContext *context, XrXiFunctionStora
     /* Owned interface storage retains class identity. Value aggregates need
      * an independent copy, but acquiring a class borrow is an alias operation
      * even when that class forbids explicit deep copies. */
-    instruction->operation_id = class_reference ? XR_CORE_OP_CORE_CLASS_SHARE
+    instruction->operation_id = class_reference ? XR_CORE_OP_CORE_OWNER_ALIAS
                                                : XR_CORE_OP_CORE_OWNER_COPY;
     instruction->result = existential_owner_acquire_key(function, pack);
     instruction->result_type_id = source_type;
@@ -7675,11 +8523,11 @@ translate_reconstructed_place(XrXiBuildContext *context, XrXiFunctionStorage *fu
         const XrXiTypeStorage *aggregate = find_dynamic_type_by_id(context, aggregate_type);
         if (!aggregate ||
             (aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE &&
-             aggregate->input.kind != XR_CORE_IR_TYPE_CLASS_REFERENCE) ||
+             !xr_program_type_kind_is_reference_record(aggregate->input.kind)) ||
             place->field_ordinal >= aggregate->input.field_count ||
             aggregate->input.field_types[place->field_ordinal] != place->type_id)
             return XR_PROGRAM_BUILD_INVALID_INPUT;
-        if (aggregate->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+        if (xr_program_type_kind_is_reference_record(aggregate->input.kind)) {
             const XiValue *receiver = place->receiver;
             uint16_t receiver_type = XR_CORE_TYPE_VOID;
             if (!receiver ||
@@ -7773,6 +8621,149 @@ translate_reconstructed_place(XrXiBuildContext *context, XrXiFunctionStorage *fu
     return XR_PROGRAM_BUILD_OK;
 }
 
+static const XrCoreIrModuleSlotInput *resolved_module_data_slot(const XrXiBuildContext *context,
+                                                                const XiFunc *function,
+                                                                const XiValue *value,
+                                                                XrCoreIrKey *module_key) {
+    if (!context || !function || !value ||
+        (value->op != XI_GET_SHARED && value->op != XI_SET_SHARED) || value->aux_int < 0)
+        return NULL;
+    uint32_t source_module = UINT32_MAX;
+    if (!find_xi_function(context, function, &source_module, NULL))
+        return NULL;
+    const XiModule *owner = context->storage[source_module].root->module;
+    uint32_t source_slot = (uint32_t) value->aux_int;
+    for (uint32_t depth = 0u; depth <= context->source->module_count; ++depth) {
+        if (!owner || !owner->init || source_slot >= owner->init->nshared ||
+            !owner->init->module_slots)
+            return NULL;
+        const XiModuleSlot *declaration = &owner->init->module_slots[source_slot];
+        if (declaration->kind == XI_MODULE_SLOT_IMPORT && value->op == XI_GET_SHARED) {
+            const XiImportRef *reference =
+                owner->slot_imports ? owner->slot_imports[source_slot] : NULL;
+            if (!reference || !reference->resolution_attempted ||
+                reference->resolved_shared_slot < 0)
+                return NULL;
+            owner = reference->resolved_module;
+            source_slot = (uint32_t) reference->resolved_shared_slot;
+            continue;
+        }
+        if (declaration->kind != XI_MODULE_SLOT_VALUE)
+            return NULL;
+        uint32_t ordinal = 0u;
+        for (uint32_t slot = 0u; slot < source_slot; ++slot)
+            ordinal += owner->init->module_slots[slot].kind == XI_MODULE_SLOT_VALUE;
+        for (uint32_t module = 0u; module < context->source->module_count; ++module) {
+            const XrXiModuleStorage *storage = &context->storage[module];
+            if (storage->root->module != owner)
+                continue;
+            if (ordinal >= storage->slot_count)
+                return NULL;
+            if (module_key)
+                *module_key = context->modules[module].key;
+            return &storage->slots[ordinal];
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+static uint16_t module_access_operation_id(const XrXiBuildContext *context, const XiValue *value,
+                                           uint16_t type_id) {
+    if (value->op == XI_GET_SHARED)
+        return XR_CORE_OP_CORE_PLACE_LOAD;
+    if (value->initializes_module_slot)
+        return XR_CORE_OP_CORE_PLACE_INITIALIZE;
+    return logical_ownership_for_type(context, type_id) == XR_CORE_IR_OWNER
+               ? XR_CORE_OP_CORE_PLACE_EXCHANGE
+               : XR_CORE_OP_CORE_PLACE_STORE;
+}
+
+static XrProgramBuildStatus
+translate_module_access(XrXiBuildContext *context, XrXiFunctionStorage *function,
+                        const XiValue *value, const XrXiBlockStorage *block,
+                        XrCoreIrInstructionInput *instructions, uint32_t capacity, uint32_t *count,
+                        char *diagnostic, size_t diagnostic_size) {
+    *count = 0u;
+    XrCoreIrKey module_key;
+    const XrCoreIrModuleSlotInput *slot =
+        resolved_module_data_slot(context, function->xi, value, &module_key);
+    bool store = value->op == XI_SET_SHARED;
+    uint16_t actual_type = XR_CORE_TYPE_VOID;
+    if (!slot || (store && (value->nargs != 1u || !value->args || !value->args[0])) ||
+        !map_logical_value_type(context, function->xi, store ? value->args[0] : value,
+                                &actual_type) ||
+        actual_type != slot->type_id)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi module access has no exact declaration type");
+    bool affine = logical_ownership_for_type(context, slot->type_id) == XR_CORE_IR_OWNER;
+    bool acquire =
+        store && affine && !logical_value_produces_owner(context, function->xi, value->args[0], 0u);
+    bool exchange = store && affine && !value->initializes_module_slot;
+    if (capacity < 2u + (uint32_t) acquire + (uint32_t) exchange)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    XrCoreIrKey replacement = {{0}};
+    if (store && !value_operand_key(context, function, block, value->args[0], &replacement))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (acquire) {
+        XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+        if (!operand)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *operand = replacement;
+        const XrXiTypeStorage *type = find_dynamic_type_by_id(context, slot->type_id);
+        bool share = type_storage_has_identity(type);
+        XrCoreIrInstructionInput *copy = &instructions[(*count)++];
+        *copy = (XrCoreIrInstructionInput) {
+            .operation_id = share ? XR_CORE_OP_CORE_OWNER_ALIAS : XR_CORE_OP_CORE_OWNER_COPY,
+            .result = aggregate_field_replacement_owner_key(function, value),
+            .result_type_id = slot->type_id,
+            .result_ownership = XR_CORE_IR_OWNER,
+            .operands = operand,
+            .operand_count = 1u,
+        };
+        replacement = copy->result;
+    }
+    XrCoreIrInstructionInput *place = &instructions[(*count)++];
+    *place = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_PLACE_MODULE,
+        .result = aggregate_field_place_key(function, value),
+        .result_type_id = slot->type_id,
+        .result_category = XR_CORE_IR_PLACE,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_MODULE_SLOT,
+        .immediate.module_slot = {module_key, slot->key},
+    };
+    XrCoreIrKey *operands = xr_calloc(store ? 2u : 1u, sizeof(*operands));
+    if (!operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    operands[0] = place->result;
+    if (store)
+        operands[1] = replacement;
+    XrCoreIrInstructionInput *access = &instructions[(*count)++];
+    *access = (XrCoreIrInstructionInput) {
+        .operation_id = module_access_operation_id(context, value, slot->type_id),
+        .operands = operands,
+        .operand_count = store ? 2u : 1u,
+    };
+    if (!store || exchange) {
+        access->result =
+            exchange ? aggregate_field_old_value_key(function, value) : value_key(function, value);
+        access->result_type_id = slot->type_id;
+        access->result_ownership = exchange ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER;
+    }
+    if (exchange) {
+        XrCoreIrKey *old = xr_calloc(1u, sizeof(*old));
+        if (!old)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *old = access->result;
+        instructions[(*count)++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+            .operands = old,
+            .operand_count = 1u,
+        };
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus
 translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage *function,
                                  const XiValue *value, const XrXiBlockStorage *block,
@@ -7802,25 +8793,43 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi field access v%u has an invalid declaration ordinal or type", value->id);
 
-    if (aggregate->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
-        const XiValue *class_receiver = receiver;
-        if (logical_value_category(function->xi, class_receiver) == XR_CORE_IR_PLACE)
-            class_receiver =
-                local_place_storage_root(context, function->xi, class_receiver);
-        if (!store || !class_receiver ||
-            logical_value_category(function->xi, class_receiver) != XR_CORE_IR_VALUE)
+    bool class_reference = xr_program_type_kind_is_reference_record(aggregate->input.kind);
+    const XiValue *place_source = load ? logical_value_identity(value->args[0])
+                                       : aggregate_field_store_place(function->xi, value);
+    if (!class_reference) {
+        if (aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE || !place_source ||
+            logical_value_category(function->xi, place_source) != XR_CORE_IR_PLACE)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi field access v%u is not an exact aggregate place access", value->id);
+        place_source = exact_logical_value_identity(context, function->xi, place_source);
+        const XrXiReconstructedPlaceStorage *reconstructed =
+            find_reconstructed_place((XrXiBlockStorage *) block, place_source);
+        if (reconstructed && reconstructed->type_id != aggregate_type_id)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi field access v%u reconstructed place type %u disagrees with aggregate "
+                        "type %u", value->id, reconstructed->type_id, aggregate_type_id);
+    }
+    XrCoreIrOwnershipDisposition field_ownership =
+        logical_ownership_for_type(context, field_type_id);
+    if (class_reference || (store && field_ownership == XR_CORE_IR_OWNER)) {
+        const XiValue *field_receiver = class_reference ? receiver : place_source;
+        if (class_reference &&
+            logical_value_category(function->xi, field_receiver) == XR_CORE_IR_PLACE)
+            field_receiver = local_place_storage_root(context, function->xi, field_receiver);
+        if (!store || !field_receiver ||
+            (class_reference &&
+             logical_value_category(function->xi, field_receiver) != XR_CORE_IR_VALUE))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi class field access v%u requires one rooted value receiver", value->id);
-        XrCoreIrOwnershipDisposition field_ownership =
-            logical_ownership_for_type(context, field_type_id);
         const XrXiTypeStorage *field_storage = find_dynamic_type_by_id(context, field_type_id);
-        bool share_replacement =
-            field_ownership == XR_CORE_IR_OWNER && field_storage &&
-            field_storage->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE &&
-            !logical_value_produces_owner(context, function->xi, value->args[1], 0u);
+        bool shared_identity =
+            type_storage_has_identity(field_storage);
+        bool acquire_replacement = field_ownership == XR_CORE_IR_OWNER &&
+            (!shared_identity ||
+             !logical_value_produces_owner(context, function->xi, value->args[1], 0u));
         uint32_t required_instruction_count =
             2u + (field_ownership == XR_CORE_IR_OWNER ? 1u : 0u) +
-            (share_replacement ? 1u : 0u);
+            (acquire_replacement ? 1u : 0u);
         if (instruction_capacity < required_instruction_count)
             return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
         memset(instructions, 0, required_instruction_count * sizeof(*instructions));
@@ -7829,13 +8838,14 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
         if (!value_operand_key(context, function, block, value->args[1], &replacement_key))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi class field store v%u replacement has no canonical value", value->id);
-        if (share_replacement) {
+        if (acquire_replacement) {
             if (logical_value_category(function->xi, value->args[1]) != XR_CORE_IR_VALUE)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi class field store v%u borrowed replacement is not a rooted value",
                             value->id);
             XrCoreIrInstructionInput *share = &instructions[cursor++];
-            share->operation_id = XR_CORE_OP_CORE_CLASS_SHARE;
+            share->operation_id = shared_identity ? XR_CORE_OP_CORE_OWNER_ALIAS
+                                                  : XR_CORE_OP_CORE_OWNER_COPY;
             share->result = aggregate_field_replacement_owner_key(function, value);
             share->result_type_id = field_type_id;
             share->result_category = XR_CORE_IR_VALUE;
@@ -7850,13 +8860,14 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
             replacement_key = share->result;
         }
         XrCoreIrInstructionInput *project = &instructions[cursor++];
-        project->operation_id = XR_CORE_OP_CORE_CLASS_FIELD_PLACE;
+        project->operation_id = class_reference ? XR_CORE_OP_CORE_CLASS_FIELD_PLACE
+                                                : XR_CORE_OP_CORE_PLACE_PROJECT;
         project->result = aggregate_field_place_key(function, value);
         project->result_type_id = field_type_id;
         project->result_category = XR_CORE_IR_PLACE;
         project->immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD;
         project->immediate.field_ordinal = field_ordinal;
-        XiValue *receiver_operand = (XiValue *) class_receiver;
+        XiValue *receiver_operand = (XiValue *) field_receiver;
         XrProgramBuildStatus status = set_operands(
             context, project, function, block, &receiver_operand, 1u, diagnostic, diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK)
@@ -7898,22 +8909,6 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
         return XR_PROGRAM_BUILD_OK;
     }
 
-    const XiValue *place_source = load ? logical_value_identity(value->args[0])
-                                       : aggregate_field_store_place(function->xi, value);
-    if (aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE || !place_source ||
-        logical_value_category(function->xi, place_source) != XR_CORE_IR_PLACE)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi field access v%u is not an exact aggregate place access", value->id);
-
-    place_source = exact_logical_value_identity(context, function->xi, place_source);
-    const XrXiReconstructedPlaceStorage *reconstructed =
-        find_reconstructed_place((XrXiBlockStorage *) block, place_source);
-    if (reconstructed && reconstructed->type_id != aggregate_type_id)
-        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi field access v%u reconstructed place type %u disagrees with aggregate "
-                    "type %u",
-                    value->id, reconstructed->type_id, aggregate_type_id);
-
     memset(instructions, 0, 2u * sizeof(*instructions));
     XrCoreIrInstructionInput *project = &instructions[0];
     project->operation_id = XR_CORE_OP_CORE_PLACE_PROJECT;
@@ -7953,7 +8948,7 @@ translate_aggregate_place_access(XrXiBuildContext *context, XrXiFunctionStorage 
 /* Interpolation and `+` chains reach Xi as one variadic XI_STR_CONCAT whose
  * pieces are strings or i64 values already evaluated in source order.  The
  * canonical program has no variadic text operation: every i64 piece becomes
- * core.string.from_i64, the pieces fold left to right through binary
+ * core.string.from_scalar, the pieces fold left to right through binary
  * core.string.concat, and each intermediate owner is dropped right after the
  * concatenation that borrowed it, so the block never carries hidden text
  * temporaries past their last use. */
@@ -7985,22 +8980,23 @@ translate_string_concat(XrXiBuildContext *context, XrXiFunctionStorage *function
         bool piece_is_temporary = false;
         if (!value->args[piece] ||
             !map_logical_value_type(context, function->xi, value->args[piece], &piece_type) ||
-            (piece_type != XR_CORE_TYPE_STRING && piece_type != XR_CORE_TYPE_I64))
+            (piece_type != XR_CORE_TYPE_STRING && (piece_type >= 32u ||
+             ((XR_CORE_OPERAND_DOMAIN_CORE_STRING_FROM_SCALAR >> piece_type) & 1u) == 0u)))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi string concatenation v%u piece %u is neither string nor i64", value->id,
+                        "Xi string concatenation v%u piece %u has no string or scalar display contract", value->id,
                         piece);
         if (!value_operand_key(context, function, block, value->args[piece], &piece_key))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi string concatenation v%u piece %u has no canonical value", value->id,
                         piece);
-        if (piece_type == XR_CORE_TYPE_I64) {
+        if (piece_type != XR_CORE_TYPE_STRING) {
             XrCoreIrInstructionInput *convert = &instructions[cursor++];
             XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
             if (!operand)
                 return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
             *operand = piece_key;
             memset(convert, 0, sizeof(*convert));
-            convert->operation_id = XR_CORE_OP_CORE_STRING_FROM_I64;
+            convert->operation_id = XR_CORE_OP_CORE_STRING_FROM_SCALAR;
             convert->result = text_expansion_key(function, value, ordinal++);
             convert->result_type_id = XR_CORE_TYPE_STRING;
             convert->result_ownership = XR_CORE_IR_OWNER;
@@ -8073,6 +9069,199 @@ translate_string_concat(XrXiBuildContext *context, XrXiFunctionStorage *function
     return XR_PROGRAM_BUILD_OK;
 }
 
+static bool exact_integer_divmod(XrXiBuildContext *context, const XiFunc *function,
+                                  const XiValue *value) {
+    uint16_t type = XR_CORE_TYPE_VOID;
+    XrProgramXiProjection projection;
+    /* Cleanup discovery precedes dynamic signature materialization. Filter
+     * by the integer operation family before resolving any value type. */
+    return value && xr_program_xi_projection(value->op, XR_CORE_TYPE_I64, &projection) &&
+           projection.kind == XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD &&
+           map_logical_value_type(context, function, value, &type) &&
+           xr_core_spec_integer_type(type) &&
+           xr_program_xi_projection(value->op, type, &projection) &&
+           projection.kind == XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD;
+}
+
+static bool integer_composition_projection(XrXiBuildContext *context, const XiFunc *function,
+                                            const XiValue *value, XrProgramXiProjection *projection,
+                                            uint16_t *result_type) {
+    if (!map_logical_value_type(context, function, value, result_type) ||
+        !xr_program_xi_projection(value->op, *result_type, projection))
+        return false;
+    if (projection->kind == XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING ||
+        projection->kind == XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD)
+        return xr_core_spec_integer_type(*result_type) != NULL;
+    uint16_t operand_type = XR_CORE_TYPE_VOID;
+    return projection->kind == XR_PROGRAM_XI_PROJECTION_COMPARE &&
+           value->nargs == 2u && value->args &&
+           map_logical_value_type(context, function, value->args[0], &operand_type) &&
+           xr_core_spec_integer_type(operand_type);
+}
+
+static bool resolve_integer_comparison_bias(XrXiBuildContext *context, const XiFunc *function,
+                                              const XiValue *value,
+                                              const XrCoreOperationSpec **operation_out) {
+    *operation_out = NULL;
+    XrProgramXiProjection projection;
+    uint16_t result_type = XR_CORE_TYPE_VOID;
+    if (!integer_composition_projection(context, function, value, &projection, &result_type) ||
+        projection.kind != XR_PROGRAM_XI_PROJECTION_COMPARE || projection.immediate_u32 < 2u)
+        return true;
+    bool wide_unsigned = false;
+    for (uint32_t index = 0u; index < 2u; ++index) {
+        uint16_t type = XR_CORE_TYPE_VOID;
+        if (!map_logical_value_type(context, function, value->args[index], &type))
+            return false;
+        const XrCoreIntegerType *integer = xr_core_spec_integer_type(type);
+        if (!integer || integer->is_signed)
+            return true;
+        wide_unsigned |= integer->width == 64u;
+    }
+    if (!wide_unsigned)
+        return true;
+    if (!xr_program_xi_projection(XI_ADD, XR_CORE_TYPE_I64, &projection) ||
+        projection.kind != XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING ||
+        projection.immediate_u32 != 1u)
+        return false;
+    *operation_out = xr_core_spec_operation_by_id(projection.core_operation_id);
+    return *operation_out != NULL;
+}
+
+static XrProgramBuildStatus
+translate_integer_composition(XrXiBuildContext *context, XrXiModuleStorage *module,
+                                XrXiFunctionStorage *function, const XiValue *value,
+                                const XrXiBlockStorage *block,
+                                const XrProgramXiProjection *projection, uint16_t result_type,
+                                XrCoreIrInstructionInput *instructions, uint32_t capacity,
+                                uint32_t *count, char *diagnostic, size_t diagnostic_size) {
+    *count = 0u;
+    bool comparison = projection->kind == XR_PROGRAM_XI_PROJECTION_COMPARE;
+    bool division = projection->kind == XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD;
+    const XrCoreIntegerType *target = xr_core_spec_integer_type(result_type);
+    if (value->nargs != 2u || !value->args || capacity < (comparison ? 6u : 4u) ||
+        (comparison ? result_type != XR_CORE_TYPE_BOOL || projection->immediate_u32 > 5u
+                    : !target || (division ? projection->immediate_u32 > 1u
+                                          : projection->immediate_u32 != 1u)))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi integer operation v%u has no exact binary contract", value->id);
+    const XrCoreIntegerType *sources[2];
+    uint16_t source_types[2];
+    XrCoreIrKey operands[2];
+    for (uint32_t index = 0u; index < 2u; ++index) {
+        if (!map_logical_value_type(context, function->xi, value->args[index], &source_types[index]) ||
+            !value_operand_key(context, function, block, value->args[index], &operands[index]))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi integer operation v%u operand %u lacks its exact type or value identity",
+                        value->id, index);
+        sources[index] = xr_core_spec_integer_type(source_types[index]);
+        if (!sources[index] ||
+            (index != 0u && sources[index]->is_signed != sources[0]->is_signed) ||
+            (!comparison && (sources[index]->is_signed != target->is_signed ||
+                             sources[index]->width > target->width)))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi integer operation v%u operand %u is not losslessly promotable",
+                        value->id, index);
+    }
+    uint16_t operand_type = division ? result_type : XR_CORE_TYPE_I64;
+    for (uint32_t index = 0u; index < 2u; ++index) {
+        if (source_types[index] == operand_type)
+            continue;
+        XrCoreIrKey *operand = xr_malloc(sizeof(*operand));
+        if (!operand)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *operand = operands[index];
+        operands[index] = key_from_key_and_u32(UINT8_C(0x6c), value_key(function, value), index);
+        instructions[(*count)++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_INTEGER_CONVERT,
+            .result = operands[index], .result_type_id = operand_type,
+            .operands = operand, .operand_count = 1u,
+        };
+    }
+    const XrCoreOperationSpec *bias_operation = NULL;
+    if (!resolve_integer_comparison_bias(context, function->xi, value, &bias_operation))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi integer comparison v%u has no wrapping order transform", value->id);
+    if (bias_operation) {
+        /* Flipping the high bit is an order isomorphism from u64 to i64.
+         * Wrapping addition of INT64_MIN expresses that flip using the same
+         * verified primitive as ordinary integer arithmetic. */
+        XrType literal_type = {.kind = XR_KIND_INT, .scalar_rep = XR_NATIVE_I64};
+        XiValue literal = {.type = &literal_type, .aux_int = INT64_MIN};
+        XrCoreIrKey pool_key;
+        XrProgramBuildStatus status =
+            add_constant(context, module, &literal, &pool_key, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+        XrCoreIrKey bias = key_from_key_and_u32(UINT8_C(0x6c), value_key(function, value), 3u);
+        instructions[(*count)++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+            .result = bias, .result_type_id = XR_CORE_TYPE_I64,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT, .immediate.key = pool_key,
+        };
+        for (uint32_t index = 0u; index < 2u; ++index) {
+            XrCoreIrKey *inputs = xr_malloc(2u * sizeof(*inputs));
+            if (!inputs)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            inputs[0] = operands[index];
+            inputs[1] = bias;
+            operands[index] =
+                key_from_key_and_u32(UINT8_C(0x6c), value_key(function, value), 4u + index);
+            instructions[(*count)++] = (XrCoreIrInstructionInput) {
+                .operation_id = bias_operation->stable_id,
+                .result = operands[index], .result_type_id = XR_CORE_TYPE_I64,
+                .operands = inputs, .operand_count = 2u,
+                .immediate_kind = XR_CORE_IR_IMMEDIATE_U32, .immediate.u32 = 1u,
+            };
+        }
+    }
+    XrCoreIrKey *inputs = xr_malloc(sizeof(operands));
+    if (!inputs)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    memcpy(inputs, operands, sizeof(operands));
+    XrCoreIrKey result = value_key(function, value);
+    bool convert_result = !comparison && !division && result_type != XR_CORE_TYPE_I64;
+    XrCoreIrKey arithmetic_result = convert_result
+                                       ? key_from_key_and_u32(UINT8_C(0x6c), result, 2u)
+                                       : result;
+    instructions[(*count)++] = (XrCoreIrInstructionInput) {
+        .operation_id = projection->core_operation_id,
+        .result = arithmetic_result,
+        .result_type_id = comparison ? XR_CORE_TYPE_BOOL : operand_type,
+        .operands = inputs, .operand_count = 2u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+        .immediate.u32 = projection->immediate_u32,
+    };
+    const XrXiPanicEdge *panic_edge =
+        division ? find_panic_edge(context, function->xi, value) : NULL;
+    if (panic_edge) {
+        XrCoreIrInstructionInput *operation = &instructions[*count - 1u];
+        xr_free((void *) operation->operands);
+        operation->operands = NULL;
+        operation->operand_count = 0u;
+        XrProgramBuildStatus status = set_panic_edge_operands(
+            context, operation, function, block, value, operands, 2u,
+            find_block_storage(function, panic_edge->handler), diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    /* Addition, subtraction and multiplication commute with reduction modulo
+     * 2^N. The existing wrapping i64 primitives therefore cover every integer
+     * width, including all u64 bit patterns, without backend-specific rules. */
+    if (convert_result) {
+        XrCoreIrKey *operand = xr_malloc(sizeof(*operand));
+        if (!operand)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *operand = arithmetic_result;
+        instructions[(*count)++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_INTEGER_CONVERT,
+            .result = result, .result_type_id = result_type,
+            .operands = operand, .operand_count = 1u,
+        };
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModuleStorage *module,
                                             XrXiFunctionStorage *function, const XiValue *value,
                                             const XrXiBlockStorage *block,
@@ -8101,14 +9290,19 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->operation_id = XR_CORE_OP_CORE_ASSERT_CONDITION;
         instruction->result_type_id = XR_CORE_TYPE_VOID;
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
-        instruction->immediate.u32 = XR_ASSERTION_FAILURE_CONDITION_FALSE;
+        instruction->immediate.u32 = (uint32_t) XR_ASSERTION_FAILURE_CONDITION_FALSE |
+            (value->nargs == 2u ? XR_CORE_ASSERT_MESSAGE_PRESENT : 0u);
         const XrXiPanicEdge *edge = find_panic_edge(context, function->xi, value);
         if (!edge)
-            return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
-                                diagnostic_size);
+            return set_operands(context, instruction, function, block, value->args, value->nargs,
+                                diagnostic, diagnostic_size);
         const XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
-        return set_panic_edge_operands(context, instruction, function, block, value, value->args[0],
-                                       handler, diagnostic, diagnostic_size);
+        XrCoreIrKey operands[2];
+        for (uint32_t index = 0u; index < value->nargs; ++index)
+            if (!value_operand_key(context, function, block, value->args[index], &operands[index]))
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+        return set_panic_edge_operands(context, instruction, function, block, value, operands,
+                                       value->nargs, handler, diagnostic, diagnostic_size);
     }
     if (value_is_static_typed_catch_test(value)) {
         if (!static_typed_catch_contract_is_exact(context, value))
@@ -8182,6 +9376,56 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
         return XR_PROGRAM_BUILD_OK;
     }
+    uint16_t atomic_operation = exact_atomic_scalar_operation(value);
+    if (atomic_operation) {
+        instruction->operation_id = atomic_operation;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        if (result_type == XR_CORE_TYPE_VOID &&
+            !map_builtin_type(value->args[1]->type, &instruction->result_type_id))
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+        uint16_t operands = atomic_data_operand_count(value);
+        uint32_t ordering = 4u;
+        if (value->nargs != operands && !atomic_ordering_literal(value->args[operands], &ordering))
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        /* Store has no read result. Its Acquire component is absent even when
+         * implemented by a discarded exchange. */
+        if (value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_STORE)
+            ordering = ordering == 1u ? 0u : ordering == 3u ? 2u : ordering;
+        uint32_t mode = value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_TOGGLE ? 2u :
+            (value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_SUB ||
+             value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_SUB) ? 1u : 0u;
+        instruction->immediate.u32 = mode * 8u + ordering;
+        return set_operands(context, instruction, function, block, value->args,
+                            operands, diagnostic, diagnostic_size);
+    }
+    if (resolved_atomic_construction(value)) {
+        instruction->operation_id = XR_CORE_OP_CORE_ATOMIC_CONSTRUCT;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = XR_CORE_IR_OWNER;
+        return set_operands(context, instruction, function, block, value->args + 1u,
+                            1u, diagnostic, diagnostic_size);
+    }
+    uint32_t array_count = 0u;
+    if (resolved_storage_construction(function->xi, value, NULL, &array_count, NULL)) {
+        XiValue **elements = array_count ? xr_calloc(array_count, sizeof(*elements)) : NULL;
+        if (array_count && !elements)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        if (!resolved_storage_construction(function->xi, value, elements, NULL, NULL)) {
+            xr_free(elements);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        instruction->operation_id = value->op == XI_OBJECT_NEW ? XR_CORE_OP_CORE_CLASS_CONSTRUCT : XR_CORE_OP_CORE_ARRAY_CONSTRUCT;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = XR_CORE_IR_OWNER;
+        XrProgramBuildStatus status = set_operands(context, instruction, function, block, elements,
+                                                   array_count, diagnostic, diagnostic_size);
+        xr_free(elements);
+        return status;
+    }
     XiValue *aggregate_fields[XR_MAX_AGG_FIELDS];
     uint32_t aggregate_field_count = 0u;
     if (resolved_value_aggregate_construction(context, function->xi, value, aggregate_fields,
@@ -8209,12 +9453,12 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         const XrXiTypeStorage *aggregate = find_dynamic_type_by_id(context, aggregate_type_id);
         if (!aggregate ||
             (aggregate->input.kind != XR_CORE_IR_TYPE_AGGREGATE &&
-             aggregate->input.kind != XR_CORE_IR_TYPE_CLASS_REFERENCE) ||
+             !xr_program_type_kind_is_reference_record(aggregate->input.kind)) ||
             aggregate_field_ordinal >= aggregate->input.field_count ||
             aggregate->input.field_types[aggregate_field_ordinal] != result_type)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi field load v%u has an invalid declaration ordinal or type", value->id);
-        instruction->operation_id = aggregate->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE
+        instruction->operation_id = xr_program_type_kind_is_reference_record(aggregate->input.kind)
                                         ? XR_CORE_OP_CORE_CLASS_FIELD_LOAD
                                         : XR_CORE_OP_CORE_AGGREGATE_PROJECT;
         instruction->result = value_key(function, value);
@@ -8222,7 +9466,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->result_ownership = XR_CORE_IR_NON_OWNER;
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD;
         instruction->immediate.field_ordinal = aggregate_field_ordinal;
-        if (aggregate->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+        if (xr_program_type_kind_is_reference_record(aggregate->input.kind)) {
             const XiValue *class_receiver = logical_value_identity(value->args[0]);
             if (logical_value_category(function->xi, class_receiver) == XR_CORE_IR_PLACE)
                 class_receiver =
@@ -8241,13 +9485,12 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
     if (value->op == XI_OWNER_FORWARD) {
         uint16_t operand_type = XR_CORE_TYPE_VOID;
         const XrXiTypeStorage *class_reference = find_dynamic_type_by_id(context, result_type);
-        bool class_forward =
+        bool identity_forward =
             value->nargs == 1u && value->args && value->args[0] &&
             map_logical_value_type(context, function->xi, value->args[0], &operand_type) &&
-            operand_type == result_type && class_reference &&
-            class_reference->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
-        if (class_forward && class_owner_forward_requires_share(context, function, block, value)) {
-            instruction->operation_id = XR_CORE_OP_CORE_CLASS_SHARE;
+            operand_type == result_type && type_storage_has_identity(class_reference);
+        if (identity_forward && identity_owner_forward_requires_alias(context, function, block, value)) {
+            instruction->operation_id = XR_CORE_OP_CORE_OWNER_ALIAS;
             instruction->result = value_key(function, value);
             instruction->result_type_id = result_type;
             instruction->result_ownership = XR_CORE_IR_OWNER;
@@ -8255,10 +9498,10 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
                                 diagnostic_size);
         }
-        if (class_reference && class_reference->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE &&
-            !class_forward)
+        if (type_storage_has_identity(class_reference) &&
+            !identity_forward)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi class owner-forward v%u has no exact transfer contract",
+                        "Xi reference owner-forward v%u has no exact transfer contract",
                         value->id);
     }
     XrProgramXiProjection projection;
@@ -8331,7 +9574,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             bool target_enum_compare =
                 left_type >= XR_CORE_TYPE_TARGET_OS && left_type <= XR_CORE_TYPE_TARGET_ENDIAN;
             bool text_compare = left_type == XR_CORE_TYPE_STRING || left_type == XR_CORE_TYPE_RUNE;
-            if ((!target_enum_compare && !text_compare && left_type != XR_CORE_TYPE_I64) ||
+            if ((!target_enum_compare && !text_compare && left_type != XR_CORE_TYPE_F64) ||
                 (target_enum_compare && projection.immediate_u32 > 1u))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi comparison v%u is outside the active exact comparison domain",
@@ -8340,6 +9583,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                 target_enum_compare                ? XR_CORE_OP_CORE_COMPARE_TARGET_ENUM
                 : left_type == XR_CORE_TYPE_STRING ? XR_CORE_OP_CORE_COMPARE_STRING
                 : left_type == XR_CORE_TYPE_RUNE   ? XR_CORE_OP_CORE_COMPARE_RUNE
+                : left_type == XR_CORE_TYPE_F64    ? XR_CORE_OP_CORE_COMPARE_F64
                                                    : projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = XR_CORE_TYPE_BOOL;
@@ -8438,7 +9682,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             uint16_t operand_offset = sum_inject ? 0u : 1u;
             if (!type || type->input.kind != XR_CORE_IR_TYPE_VARIANT ||
                 (!sum_inject && value->nargs < 1u) || variant >= type->input.variant_count ||
-                value->nargs - operand_offset != type->input.variants[variant].payload_count)
+                (uint32_t) value->nargs - operand_offset != type->input.variants[variant].payload_count)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi variant construction v%u has no exact logical variant shape",
                             value->id);
@@ -8749,8 +9993,13 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
             instruction->immediate.provider_operation.contract_id = contract_id;
             instruction->immediate.provider_operation.operation_id = operation_id;
-            return set_operands(context, instruction, function, block, value->args, value->nargs,
-                                diagnostic, diagnostic_size);
+            const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
+            if (!trap_edge)
+                return set_operands(context, instruction, function, block, value->args,
+                                    value->nargs, diagnostic, diagnostic_size);
+            const XrXiBlockStorage *handler = find_block_storage(function, trap_edge->handler);
+            return set_trap_edge_operands(context, instruction, function, block, value, value->args,
+                                          value->nargs, handler, diagnostic, diagnostic_size);
         }
         case XR_PROGRAM_XI_PROJECTION_STRING_CONCAT:
             /* Variadic concatenation is expanded into a binary chain by the
@@ -8758,15 +10007,47 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
              * emitter did not claim the value. */
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi string concatenation v%u was not expanded", value->id);
-        case XR_PROGRAM_XI_PROJECTION_STRING_FROM_I64: {
+        case XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT: {
+            uint16_t operand_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 1u || !xr_core_spec_integer_type(result_type) ||
+                !map_logical_value_type(context, function->xi, value->args[0], &operand_type) ||
+                !xr_core_spec_integer_type(operand_type))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi conversion v%u requires exact integer source and target types",
+                            value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = result_type;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_SEQUENCE_LENGTH: {
+            uint16_t operand_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 1u || result_type != XR_CORE_TYPE_I64 ||
+                !map_logical_value_type(context, function->xi, value->args[0], &operand_type) ||
+                (operand_type != XR_CORE_TYPE_STRING &&
+                 (!find_dynamic_type_by_id(context, operand_type) ||
+                  find_dynamic_type_by_id(context, operand_type)->input.kind != XR_CORE_IR_TYPE_ARRAY)))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi length v%u has no admitted sequence type", value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = XR_CORE_TYPE_I64;
+            instruction->result_ownership = XR_CORE_IR_NON_OWNER;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(context, instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_STRING_FROM_SCALAR: {
             /* `string(n)` renders exactly the display form typed output and
-             * interpolation use; only the i64 source is canonical here. */
+             * interpolation use; all admitted scalar sources share one conversion. */
             uint16_t operand_type = XR_CORE_TYPE_VOID;
             if (value->nargs != 1u || result_type != XR_CORE_TYPE_STRING ||
                 !map_logical_value_type(context, function->xi, value->args[0], &operand_type) ||
-                operand_type != XR_CORE_TYPE_I64)
+                (operand_type >= 32u || ((XR_CORE_OPERAND_DOMAIN_CORE_STRING_FROM_SCALAR >> operand_type) & 1u) == 0u))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                            "Xi conversion v%u is not an exact i64-to-string rendering", value->id);
+                            "Xi conversion v%u is not an exact scalar-to-string rendering", value->id);
             instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = XR_CORE_TYPE_STRING;
@@ -8867,62 +10148,84 @@ static bool static_import_publication_is_exact(const XrXiBuildContext *context,
            resolved_import_reference_is_exact(context, value);
 }
 
-/* A nominal declaration publishes an Xi class carrier through module shared storage. Canonical
- * Program represents runtime identity with an exact nominal TypeId, so the carrier and its store
- * are phase-only when one initializer, one slot, one Xi descriptor and one Xglobal declaration
- * agree. Any later first-class use still fails closed because every carrier load must also be
- * proven to be an elided nominal operand. */
-static const XiClassData *static_nominal_publication_source(const XrXiBuildContext *context,
-                                                            const XiFunc *function,
-                                                            const XiValue *source,
-                                                            uint32_t *slot_out) {
+/* A nominal declaration publishes an Xi class or enum carrier through module shared storage.
+ * Canonical Program represents runtime identity with an exact nominal TypeId, so the carrier and
+ * its store are phase-only when one initializer, one slot, one Xi descriptor and one Xglobal
+ * declaration agree. Any later first-class use still fails closed because every carrier load must
+ * also be proven to be an elided nominal operand. */
+static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *context,
+                                                       const XiFunc *function,
+                                                       const XiValue *source, uint32_t *slot_out) {
     if (slot_out)
         *slot_out = UINT32_MAX;
     source = logical_value_identity(source);
     const XiClassData *class_data =
         source && source->op == XI_CLASS_CREATE ? (const XiClassData *) source->aux : NULL;
+    const XiEnumData *enum_data =
+        source && source->op == XI_CONST && source->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE
+            ? (const XiEnumData *) source->aux
+            : NULL;
     const XiModule *module = function ? function->module : NULL;
     if (!context || !context->source || !context->source->global_evidence || !function || !module ||
         module->init != function || !source || source->block == NULL ||
-        source->block->func != function || source->nargs != 0u || !class_data ||
-        class_data->xg_class_id == XG_NO_ID)
-        return NULL;
+        source->block->func != function || source->nargs != 0u || (!class_data && !enum_data) ||
+        (class_data && class_data->xg_class_id == XG_NO_ID))
+        return false;
     uint32_t module_index = UINT32_MAX;
     if (!find_collected_xi_function_module(context, function, &module_index) ||
         module_index >= context->source->module_count ||
         context->source->module_roots[module_index] != function)
-        return NULL;
-    const XgClassSummary *class_row =
-        find_xg_class_by_id(context->source->global_evidence, class_data->xg_class_id);
-    const XgDeclSummary *decl_row =
-        class_row ? find_xg_decl_by_id(context->source->global_evidence, class_row->decl_id) : NULL;
-    bool skeleton = (class_row && (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u);
-    bool monomorphized = (class_row && (class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u);
-    bool value_struct = class_row && decl_row && class_row->decl_kind == XG_DECL_STRUCT &&
-                        decl_row->kind == XG_DECL_STRUCT && !class_data->needs_runtime_type;
-    bool heap_class = class_row && decl_row && class_row->decl_kind == XG_DECL_CLASS &&
-                      decl_row->kind == XG_DECL_CLASS && class_data->needs_runtime_type;
-    if (!class_row || !decl_row || class_row->module_id != (XgModuleId) (module_index + 1u) ||
-        decl_row->module_id != class_row->module_id || (!value_struct && !heap_class) ||
-        class_row->parent_class_id != XG_NO_ID || class_row->class_id != class_data->xg_class_id ||
-        skeleton != class_data->is_generic_skeleton ||
-        monomorphized != class_data->is_monomorphized || (skeleton && monomorphized) ||
-        (value_struct && !skeleton && !class_data->struct_layout) ||
-        (value_struct && class_data->struct_layout &&
-         class_data->struct_layout->kind != XR_AGG_LAYOUT_STRUCT &&
-         class_data->struct_layout->kind != XR_AGG_LAYOUT_PACKED_STRUCT))
-        return NULL;
+        return false;
+    if (enum_data) {
+        if (!enum_data->name || !enum_data->members || enum_data->member_count == 0u)
+            return false;
+        const XgGlobalEvidence *evidence = context->source->global_evidence;
+        uint32_t declarations = 0u;
+        for (uint32_t index = 0u; index < evidence->ndecls; ++index) {
+            const XgDeclSummary *decl = &evidence->decls[index];
+            if (decl->module_id == (XgModuleId) (module_index + 1u) && decl->kind == XG_DECL_ENUM &&
+                decl->name_id == xg_name_id(enum_data->name) && decl->type_key != 0u &&
+                decl->nominal_key != 0u)
+                ++declarations;
+        }
+        if (declarations != 1u)
+            return false;
+    } else {
+        const XgClassSummary *class_row =
+            find_xg_class_by_id(context->source->global_evidence, class_data->xg_class_id);
+        const XgDeclSummary *decl_row =
+            class_row ? find_xg_decl_by_id(context->source->global_evidence, class_row->decl_id)
+                      : NULL;
+        bool skeleton = (class_row && (class_row->flags & XG_CLASS_GENERIC_SKELETON) != 0u);
+        bool monomorphized = (class_row && (class_row->flags & XG_CLASS_MONOMORPHIZED) != 0u);
+        bool value_struct = class_row && decl_row && class_row->decl_kind == XG_DECL_STRUCT &&
+                            decl_row->kind == XG_DECL_STRUCT && !class_data->needs_runtime_type;
+        bool heap_class = class_row && decl_row && class_row->decl_kind == XG_DECL_CLASS &&
+                          decl_row->kind == XG_DECL_CLASS && class_data->needs_runtime_type;
+        if (!class_row || !decl_row || class_row->module_id != (XgModuleId) (module_index + 1u) ||
+            decl_row->module_id != class_row->module_id || (!value_struct && !heap_class) ||
+            class_row->parent_class_id != XG_NO_ID ||
+            class_row->class_id != class_data->xg_class_id ||
+            skeleton != class_data->is_generic_skeleton ||
+            monomorphized != class_data->is_monomorphized || (skeleton && monomorphized) ||
+            (value_struct && !skeleton && class_data->instance_field_count != 0u &&
+             !class_data->struct_layout) ||
+            (value_struct && class_data->struct_layout &&
+             class_data->struct_layout->kind != XR_AGG_LAYOUT_STRUCT &&
+             class_data->struct_layout->kind != XR_AGG_LAYOUT_PACKED_STRUCT))
+            return false;
+    }
 
     uint32_t publication_slot = UINT32_MAX;
     uint32_t publications = 0u;
     for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
         const XiBlock *block = function->blocks[block_index];
         if (block && block->control == source)
-            return NULL;
+            return false;
         for (const XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next)
             for (uint16_t argument = 0u; argument < phi->value.nargs; ++argument)
                 if (phi->value.args && logical_value_identity(phi->value.args[argument]) == source)
-                    return NULL;
+                    return false;
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             const XiValue *user = block->values[value_index];
             for (uint16_t argument = 0u; user && argument < user->nargs; ++argument) {
@@ -8931,31 +10234,39 @@ static const XiClassData *static_nominal_publication_source(const XrXiBuildConte
                 if (user->op == XI_RETAIN || user->op == XI_RELEASE)
                     continue;
                 if (user->op != XI_SET_SHARED || argument != 0u || user->aux_int < 0 ||
-                    (uint64_t) user->aux_int >= module->nslots || !module->slot_classes ||
-                    module->slot_classes[user->aux_int] != class_data || publications != 0u)
-                    return NULL;
+                    (uint64_t) user->aux_int >= module->nslots || publications != 0u ||
+                    (class_data && (!module->slot_classes ||
+                                    module->slot_classes[user->aux_int] != class_data)) ||
+                    (enum_data &&
+                     (!module->slot_enums || module->slot_enums[user->aux_int] != enum_data ||
+                      !function->module_slots || (uint64_t) user->aux_int >= function->nshared ||
+                      function->module_slots[user->aux_int].kind != XI_MODULE_SLOT_TYPE ||
+                      !function->module_slots[user->aux_int].name ||
+                      strcmp(function->module_slots[user->aux_int].name, enum_data->name) != 0)))
+                    return false;
                 publication_slot = (uint32_t) user->aux_int;
                 ++publications;
             }
         }
     }
     if (publications != 1u)
-        return NULL;
+        return false;
     if (slot_out)
         *slot_out = publication_slot;
-    return class_data;
+    return true;
 }
 
 static bool static_nominal_publication_is_exact(const XrXiBuildContext *context,
                                                 const XiFunc *function, const XiValue *value) {
     if (!value)
         return false;
-    if (value->op == XI_CLASS_CREATE)
-        return static_nominal_publication_source(context, function, value, NULL) != NULL;
+    if (value->op == XI_CLASS_CREATE ||
+        (value->op == XI_CONST && value->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE))
+        return static_nominal_publication_source_is_exact(context, function, value, NULL);
     if (value->op != XI_SET_SHARED || value->nargs != 1u || !value->args || value->aux_int < 0)
         return false;
     uint32_t slot = UINT32_MAX;
-    return static_nominal_publication_source(context, function, value->args[0], &slot) != NULL &&
+    return static_nominal_publication_source_is_exact(context, function, value->args[0], &slot) &&
            slot == (uint32_t) value->aux_int;
 }
 
@@ -8993,6 +10304,10 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         return true;
     if (static_nominal_publication_is_exact(context, function, value))
         return true;
+    if (record_initializer_is_exact(function, value))
+        return true;
+    if (array_initializer_is_exact(function, value))
+        return true;
     if (value_aggregate_initializer_is_exact(context, function, value))
         return true;
     if (projected_native_import_reference_is_exact(context, function, value))
@@ -9014,6 +10329,8 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
      * retain/release counts. */
     if (value->op == XI_RETAIN || value->op == XI_RELEASE)
         return true;
+    if (atomic_ordering_literal(value, NULL))
+        return value_is_only_elided_operand(context, function, value);
     if (resolved_module_namespace_carrier(context, function, value))
         return value_is_only_elided_operand(context, function, value);
     if (shared_callable_value_is_exact(context, function, value))
@@ -9397,6 +10714,33 @@ static XrProgramBuildStatus verify_cleanup_control_flow(XrXiFunctionStorage *fun
                 function->cleanup_state_before_value[value->id] = state.cleanup;
                 function->cleanup_handler_state_before_value[value->id] = state.handler;
                 has_throw |= value->op == XI_THROW;
+                if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
+                    value->op == XI_CALL_METHOD_DIRECT || value->op == XI_ASSERTION ||
+                    value->op == XI_DIV || value->op == XI_MOD ||
+                    value->op == XI_INDEX_GET || value->op == XI_INDEX_SET) {
+                    for (uint32_t b = 0u; b < xi->nblocks && status == XR_PROGRAM_BUILD_OK; ++b) {
+                        const XiBlock *handler = xi->blocks[b];
+                        for (uint32_t i = 0u; i < handler->nvalues; ++i) {
+                            const XiValue *caught = handler->values[i];
+                            if (caught->op != XI_CATCH ||
+                                caught->aux_int != XI_CATCH_AUX_POINT_PANIC || caught->aux != value)
+                                continue;
+                            if (state.handler != 0u &&
+                                handler->exit_reason != XI_EXIT_REASON_PANIC) {
+                                status = fail(diagnostic, diagnostic_size,
+                                              XR_PROGRAM_BUILD_INVALID_INPUT,
+                                              "Xi call panic exit bypasses an active handler");
+                                break;
+                            }
+                            status = merge_cleanup_flow_state(xi, states, queue, &tail, handler,
+                                                              state, diagnostic, diagnostic_size);
+                            if (status != XR_PROGRAM_BUILD_OK)
+                                break;
+                        }
+                    }
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        break;
+                }
                 if (value->op == XI_CLEANUP_ENTER) {
                     if (cleanup_node_count >= function->cleanup_point_count) {
                         status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -9473,6 +10817,10 @@ static XrProgramBuildStatus verify_cleanup_control_flow(XrXiFunctionStorage *fun
                 }
             }
             bool has_normal_successor = block->succs[0] || block->succs[1];
+            if (status == XR_PROGRAM_BUILD_OK && !has_normal_successor &&
+                block->exit_reason == XI_EXIT_REASON_PANIC && state.handler != 0u)
+                status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                              "Xi normalized panic exit retains an active lexical handler");
             uint8_t active_cleanup_kind =
                 state.cleanup == 0u
                     ? 0u
@@ -9655,6 +11003,8 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
     const XiValue *frame_owner = value->block == block->xi
                                      ? deferred_cleanup_place_owner(context, function->xi, value)
                                      : cleanup_place_storage_owner(context, function->xi, value);
+    if (!frame_owner && (value->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) == 0u)
+        frame_owner = local_frame_owner;
     if (frame_owner) {
         uint16_t type_id = XR_CORE_TYPE_VOID;
         if (!map_logical_value_type(context, function->xi, typed_value, &type_id) ||
@@ -9715,6 +11065,16 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
     }
     if (value->block == block->xi)
         return XR_PROGRAM_BUILD_OK;
+    if (value->op == XI_INDEX_GET && value->nargs == 2u && value->args &&
+        value->args[0] && value->type && value->type->kind == XR_KIND_ARRAY) {
+        /* Carry the container owner beside the borrowed element. The verifier
+         * proves the pair from incoming SSA edges; the borrow itself never
+         * becomes an independent owner. */
+        XrProgramBuildStatus owner_status = require_value_available(
+            context, function, block, value->args[0], changed, diagnostic, diagnostic_size);
+        if (owner_status != XR_PROGRAM_BUILD_OK)
+            return owner_status;
+    }
     if (value->xg_existential_kind == XI_EXISTENTIAL_REBORROW_READ) {
         if (value->nargs != 1u || !value->args || !value->args[0])
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -9781,6 +11141,19 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
         if (status != XR_PROGRAM_BUILD_OK)
             return status;
     }
+    uint32_t array_count = 0u;
+    if (resolved_storage_construction(function->xi, value, NULL, &array_count, NULL)) {
+        XiValue **elements = array_count ? xr_calloc(array_count, sizeof(*elements)) : NULL;
+        if (array_count && !elements)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        XrProgramBuildStatus status = resolved_storage_construction(function->xi, value, elements, NULL, NULL)
+                                         ? XR_PROGRAM_BUILD_OK : XR_PROGRAM_BUILD_INVALID_INPUT;
+        for (uint32_t element = 0u; status == XR_PROGRAM_BUILD_OK && element < array_count; ++element)
+            status = require_value_available(context, function, block, elements[element], changed,
+                                             diagnostic, diagnostic_size);
+        xr_free(elements);
+        return status;
+    }
     XiValue *aggregate_fields[XR_MAX_AGG_FIELDS];
     uint32_t aggregate_field_count = 0u;
     if (resolved_value_aggregate_construction(context, function->xi, value, aggregate_fields,
@@ -9799,10 +11172,11 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
             ? resolved_sealed_callee(context, function->xi, value)
             : NULL;
     bool erased_first_operand =
-        value->op == XI_VARIANT_CONSTRUCT ||
+        value->op == XI_VARIANT_CONSTRUCT || resolved_atomic_construction(value) ||
         resolved_provider_native_call(context, function->xi, value) ||
         resolved_suspension_native_call(context, function->xi, value) ||
-        (sealed_callee && !sealed_callee->has_receiver) ||
+        (sealed_callee && !sealed_callee->has_receiver &&
+         !(xi_value_is_constructor_call(value) && value->op == XI_CALL)) ||
         resolved_canonical_class_construction(context, function->xi, value, NULL, NULL) ||
         resolved_empty_struct_literal(context, function->xi, value) ||
         resolved_unit_enum_literal(context, function->xi, value, NULL);
@@ -9826,6 +11200,10 @@ static int block_argument_compare(const void *left, const void *right) {
             return -1;
         return a->implicit_invoke_kind < b->implicit_invoke_kind ? -1 : 1;
     }
+    /* Forwarded owners must retain acquisition order across control-flow joins.
+     * Their semantic keys identify values but do not order their lifetimes. */
+    if (a->source && b->source && a->source->id != b->source->id)
+        return a->source->id < b->source->id ? -1 : 1;
     return memcmp(a->key.bytes, b->key.bytes, sizeof(a->key.bytes));
 }
 
@@ -9871,6 +11249,49 @@ record_static_typed_catch_outcome(XrXiBuildContext *context, XrXiBlockStorage *c
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus prepare_invoke_error_arguments(
+    XrXiBuildContext *context, XrXiFunctionStorage *function, const XiBlock *source,
+    uint16_t error_type, char *diagnostic, size_t diagnostic_size) {
+    XrXiBlockStorage *error = find_block_storage(function, source->succs[0]);
+    const XiBlock *catch_block_xi = NULL;
+    const XiValue *caught = routed_error_catch(function, source->succs[0], &catch_block_xi);
+    XrXiBlockStorage *catch_block = find_block_storage(function, catch_block_xi);
+    if (!error || !caught || !catch_block)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi invoke b%u does not expose exact typed normal/error continuations",
+                    source->id);
+    const XiErrorRegion *error_region = source->control->error_region;
+    const XiErrorRegion *lexical_region = NULL;
+    XrProgramBuildStatus status = nearest_error_region(function->xi, source->control, &lexical_region, diagnostic,
+                                  diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    if (error_region != lexical_region || caught->error_region != lexical_region ||
+        (lexical_region &&
+         (!error_region_contract_is_exact(function->xi, lexical_region, caught) ||
+          lexical_region->catch_block != catch_block_xi ||
+          lexical_region->catch_value != caught)))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi invoke b%u disagrees with its nearest lexical error region",
+                    source->id);
+    status = add_block_argument(context, function, error, caught, NULL, error_type,
+                                XR_XI_INVOKE_ARGUMENT_ERROR, NULL, diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    if (catch_block != error) {
+        status =
+            add_block_argument(context, function, catch_block, caught, NULL, error_type,
+                               XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    status = record_static_typed_catch_outcome(context, catch_block, caught, error_type,
+                                               diagnostic, diagnostic_size);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
                                                      XrXiFunctionStorage *function,
                                                      char *diagnostic, size_t diagnostic_size) {
@@ -9882,20 +11303,88 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
         const XiValue *call = block_typed_invoke_call(context, function->xi, source);
         if (!call)
             continue;
+        const XiCoroSuspendPoint *suspension = suspended_invoke_point(context, function->xi, call);
+        if (suspension) {
+            predecessor->static_branch_outcome = XR_XI_STATIC_BRANCH_FALSE;
+            predecessor = find_block_storage(function, suspension->suspend_block);
+            if (!predecessor)
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
         XrProgramBuildStatus operand_status = collect_value_live_ins(
             context, function, predecessor, call, NULL, diagnostic, diagnostic_size);
         if (operand_status != XR_PROGRAM_BUILD_OK)
             return operand_status;
         const XiFunc *callee = resolved_sealed_callee(context, function->xi, call);
-        bool witness = call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE;
+        bool witness = call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE ||
+                       call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT;
+        /* The block shape only describes the lowered continuation layout.  It
+         * does not declare that the invoked callee can escape an error.  Use
+         * verified callsite evidence or the sealed callee's closed contract
+         * below; inferring an error channel from XI_BLOCK_IF makes a normal
+         * call whose body happens to branch look fallible. */
+        bool has_error = false;
         bool indirect = callee == NULL && !witness;
         const XgCallsiteSummary *callsite =
             witness ? resolved_witness_callsite(context, function->xi, call)
                     : resolved_callsite(context, function->xi, call);
-        if (!callsite || (callsite->flags & (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR)) !=
-                             (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR))
+        if (callsite && (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u)
+            has_error = (callsite->flags & XG_CALL_MAY_ERROR) != 0u;
+        else if (callee) {
+            const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
+            if (callee_storage && callee_storage->closed_contract_ready)
+                has_error = (callee_storage->closed_effect_mask & XR_CORE_EFFECT_ERROR) != 0u;
+        }
+        bool facts_error = callsite && (callsite->flags & XG_CALL_MAY_ERROR) != 0u;
+        bool facts_panic = callsite && (callsite->flags & XG_CALL_MAY_PANIC) != 0u;
+        if (callee) {
+            const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
+            if (callee_storage && callee_storage->closed_contract_ready) {
+                /* A verified callsite is flow-sensitive: its surrounding
+                 * catch may consume the callee's error channel.  Keep that
+                 * fact for error validation and use the closed callee only
+                 * to fill in channels the callsite did not publish. */
+                if (!callsite ||
+                    (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
+                    facts_error = (callee_storage->closed_effect_mask & XR_CORE_EFFECT_ERROR) != 0u;
+                if (!callsite ||
+                    (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
+                    facts_panic = (callee_storage->closed_effect_mask & XR_CORE_EFFECT_PANIC) != 0u;
+            }
+        }
+        bool protocol_no_failure = false;
+        if (!callsite && callee && call->xg_method_id == 0u) {
+            const XrXiFunctionStorage *protocol_storage =
+                find_xi_function(context, callee, NULL, NULL);
+            uint32_t protocol_effects = protocol_storage ? protocol_storage->closed_effect_mask
+                                                          : UINT32_MAX;
+            fprintf(stderr, "DEBUG protocol invoke v%u callee=%s storage=%p effects=%u has_error=%d\\n",
+                    call->id, callee->name ? callee->name : "<none>", (void *)protocol_storage,
+                    protocol_effects, has_error);
+            protocol_no_failure = protocol_storage &&
+                                  (protocol_effects &
+                                   (has_error ? XR_CORE_EFFECT_ERROR : XR_CORE_EFFECT_PANIC)) == 0u;
+        }
+        if ((!callsite && !protocol_no_failure) ||
+            (callsite && ((callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u ||
+                          facts_error != has_error || (!has_error && !facts_panic))) ||
+            (protocol_no_failure && has_error)) {
+            fprintf(stderr, "DEBUG invoke mismatch fn=%s b%u v%u op=%s/%u callee=%s callsite=%p flags=%u facts_error=%d facts_panic=%d has_error=%d proto=%d\\n",
+                    function->xi->name ? function->xi->name : "<none>", source->id, call->id,
+                    xi_op_name(call->op), call->op, callee && callee->name ? callee->name : "<none>",
+                    (void *)callsite, callsite ? callsite->flags : 0u, facts_error, facts_panic, has_error,
+                    protocol_no_failure);
+            xi_func_dump(function->xi, stderr);
+            if (callee) {
+                const XrXiFunctionStorage *dbg_storage = find_xi_function(context, callee, NULL, NULL);
+                fprintf(stderr, "DEBUG invoke callee effects=%u storage=%p\\n",
+                        dbg_storage ? dbg_storage->closed_effect_mask : UINT32_MAX,
+                        (void *)dbg_storage);
+            }
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi invoke b%u lacks an exact fallible call target set", source->id);
+                        "Xi invoke %s:b%u v%u has mismatched failure facts (flags=%u error=%u)",
+                        function->xi->name, source->id, call->id,
+                        callsite ? callsite->flags : 0u, has_error ? 1u : 0u);
+        }
         uint16_t error_type = XR_CORE_TYPE_VOID;
         uint16_t panic_type = XR_CORE_TYPE_VOID;
         uint16_t callable_type = XR_CORE_TYPE_VOID;
@@ -9934,36 +11423,45 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         }
-        if (error_type == XR_CORE_TYPE_VOID)
+        if ((error_type != XR_CORE_TYPE_VOID) != has_error ||
+            (!has_error && panic_type == XR_CORE_TYPE_VOID)) {
+            fprintf(stderr, "DEBUG invoke channels fn=%s b%u v%u flags=%u has_error=%d error_type=%u panic_type=%u callee=%s\\n",
+                    function->xi->name ? function->xi->name : "<none>", source->id, call->id,
+                    callsite ? callsite->flags : 0u, has_error, error_type, panic_type,
+                    callee && callee->name ? callee->name : "<none>");
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi error check in b%u guards an infallible call", source->id);
-        if (panic_type != XR_CORE_TYPE_VOID)
+                        "Xi invoke b%u disagrees with its declared failure channels", source->id);
+        }
+        bool function_has_static_cleanup = false;
+        for (uint32_t cleanup_block = 0u; cleanup_block < function->xi->nblocks &&
+                                         !function_has_static_cleanup;
+             ++cleanup_block) {
+            const XiBlock *cleanup_row = function->xi->blocks[cleanup_block];
+            for (uint32_t cleanup_value = 0u;
+                 cleanup_row && cleanup_value < cleanup_row->nvalues; ++cleanup_value) {
+                if (exact_static_cleanup_try(function->xi, cleanup_row->values[cleanup_value])) {
+                    function_has_static_cleanup = true;
+                    break;
+                }
+            }
+        }
+        if (panic_type != XR_CORE_TYPE_VOID &&
+            (panic_type != XR_CORE_TYPE_PANIC_INFO ||
+             (!find_panic_edge(context, function->xi, call) && function_has_static_cleanup))) {
+            fprintf(stderr, "DEBUG no panic edge fn=%s b%u v%u panic_type=%u\\n",
+                    function->xi->name ? function->xi->name : "<none>", source->id, call->id,
+                    panic_type);
+            xi_func_dump(function->xi, stderr);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi invoke b%u has no explicit panic continuation", source->id);
-        XrXiBlockStorage *normal = find_block_storage(function, source->succs[1]);
-        XrXiBlockStorage *error = find_block_storage(function, source->succs[0]);
-        const XiBlock *catch_block_xi = NULL;
-        const XiValue *caught = routed_error_catch(function, source->succs[0], &catch_block_xi);
-        XrXiBlockStorage *catch_block = find_block_storage(function, catch_block_xi);
-        if (!predecessor || !normal || !error || !caught || !catch_block)
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi invoke b%u does not expose exact typed normal/error continuations",
-                        source->id);
-        const XiErrorRegion *error_region = source->control->error_region;
-        const XiErrorRegion *lexical_region = NULL;
-        status = nearest_error_region(function->xi, source->control, &lexical_region, diagnostic,
-                                      diagnostic_size);
-        if (status != XR_PROGRAM_BUILD_OK)
-            return status;
-        if (error_region != lexical_region || caught->error_region != lexical_region ||
-            (lexical_region &&
-             (!error_region_contract_is_exact(function->xi, lexical_region, caught) ||
-              lexical_region->catch_block != catch_block_xi ||
-              lexical_region->catch_value != caught)))
+                        "Xi invoke %s:b%u call v%u from b%u has no explicit panic continuation",
+                        function->xi->name, source->id, call->id, call->block->id);
+        }
+        XrXiBlockStorage *normal = find_block_storage(
+            function, suspension ? suspension->resume_block : source->succs[has_error ? 1u : 0u]);
+        XrXiBlockStorage *error = has_error ? find_block_storage(function, source->succs[0]) : NULL;
+        if (!normal || (has_error && !error))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi invoke b%u disagrees with its nearest lexical error region",
-                        source->id);
-        uint16_t caught_type = error_type;
+                        "Xi invoke b%u lacks its declared continuation", source->id);
         uint16_t result_type = XR_CORE_TYPE_VOID;
         if (!map_logical_value_type(context, function->xi, call, &result_type))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -9983,22 +11481,16 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         }
-        status = add_block_argument(context, function, error, caught, NULL, caught_type,
-                                    XR_XI_INVOKE_ARGUMENT_ERROR, NULL, diagnostic, diagnostic_size);
-        if (status != XR_PROGRAM_BUILD_OK)
-            return status;
-        if (catch_block != error) {
-            status =
-                add_block_argument(context, function, catch_block, caught, NULL, caught_type,
-                                   XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
+        if (has_error) {
+            status = prepare_invoke_error_arguments(context, function, source, error_type,
+                                                       diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         }
-        status = record_static_typed_catch_outcome(context, catch_block, caught, caught_type,
-                                                   diagnostic, diagnostic_size);
-        if (status != XR_PROGRAM_BUILD_OK)
-            return status;
-        uint16_t first_operand = indirect || witness || (callee && callee->has_receiver) ? 0u : 1u;
+        bool constructor_call = callee && xi_value_is_constructor_call(call) &&
+                                call->op == XI_CALL;
+        uint16_t first_operand =
+            indirect || witness || (callee && (callee->has_receiver || constructor_call)) ? 0u : 1u;
         for (uint16_t operand = first_operand; operand < call->nargs; ++operand) {
             status = require_value_available(context, function, predecessor, call->args[operand],
                                              NULL, diagnostic, diagnostic_size);
@@ -10017,25 +11509,30 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
                                             diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
-                status = add_block_argument(context, function, error, owner, NULL, owner_type,
-                                            XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic,
-                                            diagnostic_size);
-                if (status != XR_PROGRAM_BUILD_OK)
-                    return status;
+                if (error) {
+                    status = add_block_argument(context, function, error, owner, NULL, owner_type,
+                                                XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic,
+                                                diagnostic_size);
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        return status;
+                }
             }
         }
     }
     return XR_PROGRAM_BUILD_OK;
 }
 
-static uint32_t canonical_block_successor_count(const XrXiBuildContext *context,
+static uint32_t canonical_block_normal_successor_count(const XrXiBuildContext *context,
                                                 const XiFunc *function, const XiBlock *block) {
     if (!block)
         return 0u;
-    if (exact_infallible_class_construction_in_block(context, function, block))
+    if (exact_infallible_construction_in_block(context, function, block))
         return 1u;
-    if (block->kind == XI_BLOCK_PLAIN)
-        return block->succs[0] ? 1u : 0u;
+    if (block->kind == XI_BLOCK_PLAIN) {
+        const XiValue *call = block_completion_call(context, function, block);
+        const XiCoroSuspendPoint *point = suspended_invoke_point(context, function, call);
+        return block->succs[0] ? (point ? 2u : 1u) : 0u;
+    }
     if (block->kind == XI_BLOCK_IF) {
         const XrXiFunctionStorage *function_storage =
             find_xi_function(context, function, NULL, NULL);
@@ -10048,10 +11545,21 @@ static uint32_t canonical_block_successor_count(const XrXiBuildContext *context,
     return 0u;
 }
 
+static uint32_t canonical_block_successor_count(const XrXiBuildContext *context,
+                                                const XiFunc *function, const XiBlock *block) {
+    uint32_t count = canonical_block_normal_successor_count(context, function, block);
+    const XiValue *call = block_completion_call(context, function, block);
+    if (call) {
+        count += find_panic_edge(context, function, call) != NULL;
+        count += find_trap_edge(context, function, call) != NULL;
+    }
+    return count;
+}
+
 static const XiBlock *canonical_block_successor(const XrXiBuildContext *context,
                                                 const XiFunc *function, const XiBlock *block,
                                                 uint32_t index) {
-    if (exact_infallible_class_construction_in_block(context, function, block))
+    if (exact_infallible_construction_in_block(context, function, block))
         return index == 0u ? block->succs[1] : NULL;
     const XrXiFunctionStorage *function_storage = find_xi_function(context, function, NULL, NULL);
     const XrXiBlockStorage *block_storage =
@@ -10060,9 +11568,19 @@ static const XiBlock *canonical_block_successor(const XrXiBuildContext *context,
         block_storage->static_branch_outcome != XR_XI_STATIC_BRANCH_UNKNOWN)
         return block_storage->static_branch_outcome == XR_XI_STATIC_BRANCH_TRUE ? block->succs[0]
                                                                                 : block->succs[1];
-    return block && index < canonical_block_successor_count(context, function, block)
-               ? block->succs[index]
-               : NULL;
+    uint32_t normal_count = canonical_block_normal_successor_count(context, function, block);
+    const XiValue *call = block_completion_call(context, function, block);
+    const XiCoroSuspendPoint *point = suspended_invoke_point(context, function, call);
+    if (point && index == 1u)
+        return point->resume_block->succs[0];
+    if (index < normal_count)
+        return block->succs[index];
+    index -= normal_count;
+    const XrXiPanicEdge *panic = call ? find_panic_edge(context, function, call) : NULL;
+    if (panic && index-- == 0u)
+        return panic->handler;
+    const XrXiTrapEdge *trap = call ? find_trap_edge(context, function, call) : NULL;
+    return trap && index == 0u ? trap->handler : NULL;
 }
 
 /* An affine owner cannot be transferred on only one side of a branch.  When
@@ -10113,6 +11631,29 @@ static XrProgramBuildStatus balance_owner_successor_arguments(XrXiBuildContext *
                     if (!target_successor)
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                     "Xi CFG successor is absent");
+                    uint32_t target_occurrence = 0u;
+                    for (uint32_t prior = 0u; prior < target_edge; ++prior)
+                        target_occurrence +=
+                            canonical_block_successor(context, function->xi, predecessor, prior) ==
+                            target_successor->xi;
+                    bool already_transferred = false;
+                    for (uint32_t target_argument = 0u;
+                         target_argument < target_successor->argument_count; ++target_argument) {
+                        const XrXiBlockArgumentStorage *target =
+                            &target_successor->argument_storage[target_argument];
+                        if (target->ownership != XR_CORE_IR_OWNER ||
+                            target->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
+                            continue;
+                        const XiValue *target_incoming = edge_argument_value(
+                            target, predecessor, target_successor->xi, target_occurrence);
+                        already_transferred |=
+                            exact_logical_value_identity(context, function->xi, target_incoming) ==
+                            exact_logical_value_identity(context, function->xi, incoming);
+                    }
+                    /* A phi already transfers its incoming owner on this edge.
+                     * Adding that incoming value again would duplicate ownership. */
+                    if (already_transferred)
+                        continue;
                     XrProgramBuildStatus status = add_block_argument(
                         context, function, target_successor, incoming, NULL, argument.type_id,
                         XR_XI_INVOKE_ARGUMENT_NONE, changed, diagnostic, diagnostic_size);
@@ -10381,7 +11922,7 @@ claim_static_cleanup_handler_graph(XrXiFunctionStorage *function, const XiValue 
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi static cleanup graph has inconsistent reason ownership");
     }
-    if (has_panic && reason != XR_XI_CLEANUP_REASON_PANIC) {
+    if (has_panic) {
         xr_free(completes);
         xr_free(stack);
         xr_free(members);
@@ -10390,8 +11931,7 @@ claim_static_cleanup_handler_graph(XrXiFunctionStorage *function, const XiValue 
     }
     if (reason == XR_XI_CLEANUP_REASON_CANCEL && (has_trap || has_cancel)) {
         *private_projection = true;
-    } else if ((reason == XR_XI_CLEANUP_REASON_TRAP && (has_panic || has_cancel)) ||
-               (reason == XR_XI_CLEANUP_REASON_PANIC && (has_trap || has_cancel))) {
+    } else if (reason == XR_XI_CLEANUP_REASON_TRAP && has_cancel) {
         xr_free(completes);
         xr_free(stack);
         xr_free(members);
@@ -10410,7 +11950,6 @@ claim_static_cleanup_handler_graph(XrXiFunctionStorage *function, const XiValue 
                 continue;
             XrXiBlockStorage *block = &function->block_storage[block_index];
             block->trap_cleanup = reason == XR_XI_CLEANUP_REASON_TRAP;
-            block->panic_cleanup = reason == XR_XI_CLEANUP_REASON_PANIC;
             block->cancel_cleanup = reason == XR_XI_CLEANUP_REASON_CANCEL;
         }
     }
@@ -10442,7 +11981,8 @@ static XrProgramBuildStatus append_trap_edge(XrXiBuildContext *context, const Xi
 }
 
 static XrProgramBuildStatus append_panic_edge(XrXiBuildContext *context, const XiFunc *function,
-                                              const XiValue *point, const XiValue *registration) {
+                                              const XiValue *point, const XiValue *registration,
+                                              const XiBlock *handler) {
     if (context->panic_edge_count == context->panic_edge_capacity) {
         uint32_t capacity = context->panic_edge_capacity ? context->panic_edge_capacity * 2u : 4u;
         if (capacity < context->panic_edge_capacity)
@@ -10457,17 +11997,21 @@ static XrProgramBuildStatus append_panic_edge(XrXiBuildContext *context, const X
         .function = function,
         .point = point,
         .registration = registration,
-        .handler = (const XiBlock *) registration->aux,
+        .handler = handler,
     };
     return XR_PROGRAM_BUILD_OK;
 }
 
 static bool exact_condition_assertion(const XiValue *value) {
     const XrAssertionPlan *plan = xi_assertion_plan(value);
-    return value && value->op == XI_ASSERTION && value->nargs == 1u && value->args &&
-           value->args[0] && plan && xr_assertion_plan_validate(plan) &&
-           plan->kind == XR_ASSERTION_KIND_CONDITION && plan->arity == 1u &&
-           plan->message_operand == XR_ASSERTION_OPERAND_NONE;
+    if (!value || value->op != XI_ASSERTION || !value->args || !value->args[0] ||
+        !plan || !xr_assertion_plan_validate(plan) || plan->kind != XR_ASSERTION_KIND_CONDITION ||
+        value->nargs != plan->arity)
+        return false;
+    return (plan->arity == 1u && plan->message_operand == XR_ASSERTION_OPERAND_NONE) ||
+           (plan->arity == 2u && plan->message_operand == 1u && value->args[1] &&
+            value->args[1]->type && value->args[1]->type->kind == XR_KIND_STRING &&
+            !value->args[1]->type->is_nullable);
 }
 
 static bool exact_indirect_direct_call(XrXiBuildContext *context, const XiFunc *function,
@@ -10498,8 +12042,8 @@ static bool exact_indirect_invoke_call(XrXiBuildContext *context, const XiFunc *
     const XgCallsiteSummary *callsite = resolved_callsite(context, function, call);
     return callsite &&
            (callsite->kind == XG_CALL_DIRECT_FUNC || callsite->kind == XG_CALL_CLOSURE) &&
-           (callsite->flags & (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR)) ==
-               (XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_ERROR) &&
+           (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u &&
+           (callsite->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) != 0u &&
            resolved_callable_call_targets(context, function, call, NULL);
 }
 
@@ -10514,7 +12058,8 @@ static bool exact_witness_invoke_call(const XrXiBuildContext *context, const XiF
                                       const XiValue *call) {
     return call && call->block &&
            (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
-           call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE &&
+           (call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE ||
+            call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT) &&
            typed_invoke_check_block_for_call(context, function, call) &&
            resolved_witness_callsite(context, function, call) != NULL;
 }
@@ -10534,7 +12079,8 @@ static XrProgramBuildStatus prepare_trap_continuations(XrXiBuildContext *context
                     continue;
                 for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
                     const XiValue *call = block->values[value_index];
-                    bool provider_call = resolved_provider_native_call(context, function, call);
+                    bool provider_call = call->op == XI_PRINT ||
+                                         resolved_provider_native_call(context, function, call);
                     bool witness_invoke =
                         provider_call ? false : exact_witness_invoke_call(context, function, call);
                     bool witness_call = provider_call
@@ -10620,49 +12166,39 @@ static XrProgramBuildStatus prepare_panic_continuations(XrXiBuildContext *contex
              ++function_index) {
             XrXiFunctionStorage *storage = &module->function_storage[function_index];
             const XiFunc *function = storage->xi;
-            for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
-                const XiBlock *block = function->blocks[block_index];
-                if (!storage->block_storage[block_index].reachable &&
-                    !storage->block_storage[block_index].cleanup_entry_ready)
-                    continue;
-                for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
-                    const XiValue *point = block->values[value_index];
-                    if (!exact_condition_assertion(point))
+            for (uint32_t b = 0u; b < function->nblocks; ++b) {
+                const XiBlock *handler = function->blocks[b];
+                for (uint32_t i = 0u; i < handler->nvalues; ++i) {
+                    const XiValue *caught = handler->values[i];
+                    if (caught->op != XI_CATCH || caught->aux_int != XI_CATCH_AUX_POINT_PANIC)
                         continue;
-                    const XrXiCleanupRegistrationStorage *active_context = NULL;
-                    if (!active_cleanup_registration_at_program_point(storage, point,
-                                                                      &active_context))
+                    const XrXiBlockStorage *source = handler->npreds == 1u
+                        ? find_block_storage(storage, handler->preds[0]) : NULL;
+                    const XiValue *call = NULL;
+                    for (uint32_t v = 0u; source && v < source->xi->nvalues; ++v)
+                        if (source->xi->values[v] == caught->aux)
+                            call = source->xi->values[v];
+                    if (!call || call->block != source->xi || caught->aux != call ||
+                        (!typed_invoke_check_block_for_call(context, function, call) &&
+                         !exact_condition_assertion(call) &&
+                         !exact_integer_divmod(context, function, call) &&
+                         !exact_array_index(context, function, call, NULL)) ||
+                        caught->nargs != 0u || find_panic_edge(context, function, call))
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                    "Xi assertion v%u has no exact cleanup program point",
-                                    point->id);
-                    if (!active_context)
+                                    "Xi function %s panic continuation b%u has no unique local producer "
+                                    "(v%u op%u b%u)", function->name, handler->id,
+                                    call ? call->id : UINT32_MAX, call ? (uint32_t) call->op : 0u,
+                                    source ? source->xi->id : UINT32_MAX);
+                    if (!source->reachable)
                         continue;
-                    if (active_context->outer_handler_state != 0u)
-                        return fail(
-                            diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                            "Xi assertion v%u has nested static cleanup regions", point->id);
-                    const XiValue *active = active_context->registration;
-                    const XiBlock *handler = (const XiBlock *) active->aux;
-                    XrXiBlockStorage *handler_storage = find_block_storage(storage, handler);
-                    if (!handler_storage)
-                        return fail(diagnostic, diagnostic_size,
-                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                    "Xi assertion v%u has no exact panic cleanup", point->id);
-                    bool private_projection = false;
-                    XrProgramBuildStatus status = claim_static_cleanup_handler_graph(
-                        storage, active, XR_XI_CLEANUP_REASON_PANIC, &private_projection,
-                        diagnostic, diagnostic_size);
+                    XrProgramBuildStatus status =
+                        append_panic_edge(context, function, call, call, handler);
                     if (status != XR_PROGRAM_BUILD_OK)
                         return status;
-                    if (private_projection)
-                        return fail(diagnostic, diagnostic_size,
-                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                                    "Xi assertion v%u has no exact panic cleanup", point->id);
-                    status = append_panic_edge(context, function, point, active);
-                    if (status != XR_PROGRAM_BUILD_OK)
-                        return status;
+                    storage->block_storage[b].panic_cleanup = true;
                 }
             }
+
         }
     }
     for (uint32_t module_index = 0u; module_index < context->source->module_count; ++module_index) {
@@ -10788,6 +12324,8 @@ static XrProgramBuildStatus initialize_canonical_reachability(XrXiBuildContext *
                                     function_index);
                 entry_count += block == function->entry;
                 storage->block_storage[block_index].xi = block;
+                storage->block_storage[block_index].panic_cleanup =
+                    block->exit_reason == XI_EXIT_REASON_PANIC;
             }
             if (entry_count != 1u)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -10936,8 +12474,7 @@ static bool trap_call_contract(XrXiBuildContext *context, const XrXiFunctionStor
     if (witness_invoke || exact_witness_direct_call(context, function->xi, call)) {
         const XrCoreIrCallableSignatureInput *slot = interface_slot_contract(
             context, call->xg_interface_id, call->xg_interface_dispatch_slot);
-        if (!slot || (!witness_invoke && (slot->error_type_id != XR_CORE_TYPE_VOID ||
-                                          slot->panic_type_id != XR_CORE_TYPE_VOID)))
+        if (!slot || (!witness_invoke && slot->error_type_id != XR_CORE_TYPE_VOID))
             return false;
         contract->parameter_modes = slot->parameter_modes;
         contract->parameter_count = slot->parameter_count;
@@ -10948,7 +12485,11 @@ static bool trap_call_contract(XrXiBuildContext *context, const XrXiFunctionStor
                 find_xi_function(context, callee, NULL, NULL);
             if (!callee_storage)
                 return false;
-            contract->first_operand = callee->has_receiver ? 0u : 1u;
+            contract->first_operand =
+                (callee->has_receiver ||
+                 (xi_value_is_constructor_call(call) && call->op == XI_CALL))
+                    ? 0u
+                    : 1u;
             contract->parameter_modes = callee_storage->parameter_modes;
             contract->parameter_count =
                 callee->nparams + (callee_storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
@@ -11265,7 +12806,7 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             if (edge->function != function->xi)
                 continue;
             const XiBlock *invoke_block =
-                typed_invoke_check_block_for_call(context, function->xi, edge->call);
+                invoke_source_block(context, function->xi, edge->call);
             XrXiBlockStorage *source =
                 find_block_storage(function, invoke_block ? invoke_block : edge->call->block);
             XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
@@ -11303,7 +12844,10 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             const XrXiPanicEdge *edge = &context->panic_edges[edge_index];
             if (edge->function != function->xi)
                 continue;
-            XrXiBlockStorage *source = find_block_storage(function, edge->point->block);
+            const XiBlock *invoke_block =
+                invoke_source_block(context, function->xi, edge->point);
+            XrXiBlockStorage *source =
+                find_block_storage(function, invoke_block ? invoke_block : edge->point->block);
             XrXiBlockStorage *handler = find_block_storage(function, edge->handler);
             if (!source || !handler)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -11312,7 +12856,8 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             for (uint32_t argument = 0u; argument < source_argument_count; ++argument) {
                 XrXiBlockArgumentStorage owner = source->argument_storage[argument];
                 if (owner.ownership != XR_CORE_IR_OWNER ||
-                    owner.implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
+                    owner.implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
+                    trap_call_consumes_source(context, function, edge->point, owner.source))
                     continue;
                 XrProgramBuildStatus status = add_block_argument(
                     context, function, handler, owner.source, NULL, owner.type_id,
@@ -11517,15 +13062,16 @@ set_invoke_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *i
                     const XrXiBlockStorage *error, uint32_t first_operand, char *diagnostic,
                     size_t diagnostic_size) {
     uint32_t normal_implicit = call->type && call->type->kind != XR_KIND_UNIT ? 1u : 0u;
-    if (normal->argument_count < normal_implicit || error->argument_count == 0u ||
+    if (normal->argument_count < normal_implicit || (error && error->argument_count == 0u) ||
         (normal_implicit != 0u &&
          normal->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT) ||
-        error->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_ERROR)
+        (error && error->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_ERROR))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi invoke continuations lack ordered implicit result/error arguments");
     uint32_t parameter_count = call->nargs - first_operand;
     uint32_t count =
-        parameter_count + normal->argument_count - normal_implicit + error->argument_count - 1u;
+        parameter_count + normal->argument_count - normal_implicit +
+        (error ? error->argument_count - 1u : 0u);
     XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
     if (count && !operands)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -11540,7 +13086,7 @@ set_invoke_operands(const XrXiBuildContext *context, XrCoreIrInstructionInput *i
     }
     const XrXiBlockStorage *successors[2] = {normal, error};
     const uint32_t starts[2] = {normal_implicit, 1u};
-    for (uint32_t edge = 0u; edge < 2u; ++edge) {
+    for (uint32_t edge = 0u; edge < (error ? 2u : 1u); ++edge) {
         const XrXiBlockStorage *successor = successors[edge];
         uint32_t predecessor_occurrence =
             edge == 1u && successors[0]->xi == successor->xi ? 1u : 0u;
@@ -11571,15 +13117,20 @@ unavailable:
                                                               : UINT32_MAX);
 }
 
-static XrProgramBuildStatus append_invoke_trap_edge_operands(
+static XrProgramBuildStatus append_invoke_failure_edge_operands(
     const XrXiBuildContext *context, XrCoreIrInstructionInput *instruction,
     const XrXiFunctionStorage *function, const XrXiBlockStorage *source, const XiValue *call,
-    const XrXiBlockStorage *handler, char *diagnostic, size_t diagnostic_size) {
+    const XrXiBlockStorage *handler, uint8_t payload_kind, char *diagnostic, size_t diagnostic_size) {
+    uint32_t implicit = payload_kind != XR_XI_INVOKE_ARGUMENT_NONE ? 1u : 0u;
+    if (handler && (handler->argument_count < implicit ||
+                    (implicit && handler->argument_storage[0].implicit_invoke_kind != payload_kind)))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi invoke failure continuation has no exact typed payload");
     if (!instruction || !handler ||
         instruction->operand_count > UINT32_MAX - handler->argument_count ||
         instruction->successor_count == UINT32_MAX)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-    uint32_t operand_count = instruction->operand_count + handler->argument_count;
+    uint32_t operand_count = instruction->operand_count + handler->argument_count - implicit;
     XrCoreIrKey *operands = operand_count ? xr_calloc(operand_count, sizeof(*operands)) : NULL;
     if (operand_count && !operands)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -11587,7 +13138,7 @@ static XrProgramBuildStatus append_invoke_trap_edge_operands(
         memcpy(operands, instruction->operands,
                (size_t) instruction->operand_count * sizeof(*operands));
     uint32_t cursor = instruction->operand_count;
-    for (uint32_t argument = 0u; argument < handler->argument_count; ++argument) {
+    for (uint32_t argument = implicit; argument < handler->argument_count; ++argument) {
         const XrXiBlockArgumentStorage *edge_argument = &handler->argument_storage[argument];
         if (edge_argument->phi ||
             edge_argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ||
@@ -11595,7 +13146,7 @@ static XrProgramBuildStatus append_invoke_trap_edge_operands(
                                     &operands[cursor++])) {
             xr_free(operands);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi invoke trap continuation argument %u is unavailable", argument);
+                        "Xi invoke failure continuation argument %u is unavailable", argument);
         }
     }
     uint32_t successor_count = instruction->successor_count + 1u;
@@ -11882,12 +13433,18 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
                          coroutine_function_has_proven_suspend(context, callee, callee_stack, 0u);
         }
         if (!exact_suspend && !exact_call && point->kind == XI_CORO_SUSP_CALL &&
-            point->op->op == XI_CALL && !point->resolved_callee) {
+            point->op->op == XI_CALL) {
             XrXiCallableTargetSet target_set = {0};
             const XiCoroEdge *child = xi_coro_point_find_edge(point, XI_CORO_EDGE_CHILD);
             exact_indirect_call =
-                child && !child->terminal && child->indirect_child && !child->callee &&
+                child && !child->terminal &&
                 resolved_callable_call_targets(context, xi, point->op, &target_set) &&
+                (point->resolved_callee
+                     ? !child->indirect_child && child->callee == point->resolved_callee &&
+                           target_set.target_count == 1u &&
+                           find_xi_function_by_xg_id(context,
+                               target_set.targets[0].target_func_id) == point->resolved_callee
+                     : child->indirect_child && !child->callee) &&
                 (target_set.callsite->flags & XG_CALL_MAY_SUSPEND) != 0u &&
                 (target_set.callsite->callable_effect_union & XG_BODY_MAY_SUSPEND) != 0u &&
                 (target_set.callsite->callable_capability_union & XG_CAP_COROUTINE) != 0u;
@@ -11926,8 +13483,13 @@ static XrProgramBuildStatus prepare_coroutine_shape(XrXiBuildContext *context,
         if (!exact_yield && !exact_suspend && !exact_call && !exact_indirect_call)
             return fail(
                 diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                "Xi function %s suspension %u is outside the active canonical Program slice",
-                xi->name ? xi->name : "<anonymous>", point_index);
+                "Xi function %s suspension %u has no exact child contract "
+                "(kind=%u op=%u resolved=%s sealed=%s)",
+                xi->name ? xi->name : "<anonymous>", point_index, (unsigned) point->kind,
+                (unsigned) point->op->op,
+                point->resolved_callee ? point->resolved_callee->name : "<none>",
+                resolved_sealed_callee(context, xi, point->op)
+                    ? resolved_sealed_callee(context, xi, point->op)->name : "<none>");
 
         XrXiBlockStorage *resume_block = find_block_storage(function, point->resume_block);
         if (!resume_block || !resume_block->reachable ||
@@ -12061,7 +13623,8 @@ static bool coroutine_live_contract(const XrXiBuildContext *context,
     if (!map_logical_value_type((XrXiBuildContext *) context, function->xi, logical, type_id) ||
         *type_id == XR_CORE_TYPE_VOID)
         return false;
-    *ownership = logical_ownership_for_type(context, *type_id);
+    *ownership = logical_value_produces_owner((XrXiBuildContext *) context, function->xi, logical, 0u)
+                     ? logical_ownership_for_type(context, *type_id) : XR_CORE_IR_NON_OWNER;
     return true;
 }
 
@@ -12910,8 +14473,9 @@ static const char *coroutine_call_live_set_mismatch(XrXiBuildContext *context,
             return "resume value has no matching canonical type";
         XrCoreIrValueCategory category = logical_value_category(function->xi, logical);
         if (category > XR_CORE_IR_PLACE || argument->category != category ||
-            argument->ownership != ownership)
+            argument->ownership != ownership) {
             return "resume value category or ownership disagrees";
+        }
         if (canonical_coroutine_live_occurrences(context, function, point, logical) != 1u ||
             argument->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
             return "resume value does not name an exact live operand";
@@ -12921,41 +14485,6 @@ static const char *coroutine_call_live_set_mismatch(XrXiBuildContext *context,
                 return "resume values repeat one canonical identity";
     }
     return NULL;
-}
-
-static XrProgramBuildStatus append_coroutine_trap_operands(XrCoreIrInstructionInput *instruction,
-                                                           const XrCoreIrInstructionInput *call,
-                                                           uint32_t parameter_count,
-                                                           uint32_t live_count, char *diagnostic,
-                                                           size_t diagnostic_size) {
-    if (call->successor_count == 0u)
-        return XR_PROGRAM_BUILD_OK;
-    uint32_t trap_count = call->operand_count - parameter_count;
-    if (trap_count > UINT32_MAX - instruction->operand_count)
-        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-    for (uint32_t argument = 0u; argument < trap_count; ++argument) {
-        uint32_t occurrences = 0u;
-        for (uint32_t live = 0u; live < live_count; ++live)
-            occurrences += xr_core_ir_key_equal(call->operands[parameter_count + argument],
-                                                instruction->operands[parameter_count + live]);
-        if (occurrences != 1u)
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi coroutine trap argument %u has no unique safepoint carrier", argument);
-    }
-    uint32_t count = instruction->operand_count + trap_count;
-    XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
-    if (count && !operands)
-        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    if (instruction->operand_count != 0u)
-        memcpy(operands, instruction->operands,
-               (size_t) instruction->operand_count * sizeof(*operands));
-    if (trap_count != 0u)
-        memcpy(operands + instruction->operand_count, call->operands + parameter_count,
-               (size_t) trap_count * sizeof(*operands));
-    xr_free((void *) instruction->operands);
-    instruction->operands = operands;
-    instruction->operand_count = count;
-    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus translate_coroutine_call_terminator(
@@ -12991,8 +14520,6 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
                                               &callable_type_id, NULL))
             callable_type = find_dynamic_type_by_id(context, callable_type_id);
         if (!callable_type || !callable_type->callable_signature ||
-            callable_type->callable_signature->error_type_id != XR_CORE_TYPE_VOID ||
-            callable_type->callable_signature->panic_type_id != XR_CORE_TYPE_VOID ||
             (callable_type->callable_signature->effect_mask &
              (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND)) !=
                 (XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND) ||
@@ -13003,7 +14530,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
             xr_free((void *) call.operands);
             xr_free((void *) call.successors);
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi coroutine callable has no exact infallible signature");
+                        "Xi coroutine callable has no exact suspension signature");
         }
         parameter_count = callable_type->callable_signature->parameter_count + 1u;
     }
@@ -13084,7 +14611,7 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
                         "Xi coroutine call live value is unavailable");
         }
     }
-    uint32_t successor_count = trap_edge ? 3u : 2u;
+    uint32_t successor_count = 2u;
     XrCoreIrKey *successors = xr_calloc(successor_count, sizeof(*successors));
     XrCoreIrKey *live_values = live_count ? xr_calloc(live_count, sizeof(*live_values)) : NULL;
     if (!successors || (live_count && !live_values)) {
@@ -13101,8 +14628,6 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
     successors[1] = cancel_edge && !cancel_edge->private_projection
                         ? block_key(function, cancel_edge->handler)
                         : cancel_block_key(function, safepoint_id);
-    if (trap_edge)
-        successors[2] = call.successors[0];
     instruction->operation_id =
         indirect ? XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT : XR_CORE_OP_CORE_COROUTINE_CALL_SEALED;
     instruction->result_type_id = XR_CORE_TYPE_VOID;
@@ -13136,9 +14661,22 @@ static XrProgramBuildStatus translate_coroutine_call_terminator(
             status = append_cancel_drop_operands(context, instruction, function, block, point,
                                                  diagnostic, diagnostic_size);
     }
-    if (status == XR_PROGRAM_BUILD_OK)
-        status = append_coroutine_trap_operands(instruction, &call, parameter_count, live_count,
-                                                diagnostic, diagnostic_size);
+    const XiCoroSuspendPoint *invoke_point = suspended_invoke_point(context, function->xi, point->op);
+    if (status == XR_PROGRAM_BUILD_OK && invoke_point)
+        status = append_invoke_failure_edge_operands(
+            context, instruction, function, block, point->op,
+            find_block_storage(function, invoke_point->resume_block->succs[0]),
+            XR_XI_INVOKE_ARGUMENT_ERROR, diagnostic, diagnostic_size);
+    const XrXiPanicEdge *panic_edge = find_panic_edge(context, function->xi, point->op);
+    if (status == XR_PROGRAM_BUILD_OK && panic_edge)
+        status = append_invoke_failure_edge_operands(
+            context, instruction, function, block, point->op,
+            find_block_storage(function, panic_edge->handler), XR_XI_INVOKE_ARGUMENT_PANIC,
+            diagnostic, diagnostic_size);
+    if (status == XR_PROGRAM_BUILD_OK && trap_edge)
+        status = append_invoke_failure_edge_operands(context, instruction, function, block, point->op,
+                                                      trap_handler, XR_XI_INVOKE_ARGUMENT_NONE,
+                                                      diagnostic, diagnostic_size);
     xr_free((void *) call.operands);
     xr_free((void *) call.successors);
     return status;
@@ -13190,11 +14728,13 @@ static bool input_operation_consumes_operand(const XrXiBuildContext *context,
          instruction->operation_id == XR_CORE_OP_CORE_PLACE_TAKE) &&
         operand_index == 0u)
         return true;
-    if ((instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
+    if ((instruction->operation_id == XR_CORE_OP_CORE_PLACE_INITIALIZE ||
+         instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
          instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE) &&
         operand_index == 1u)
         return true;
-    if (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
+    if (instruction->operation_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT ||
+        instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT) {
         uint16_t operand_type = XR_CORE_TYPE_VOID;
@@ -13279,7 +14819,7 @@ static uint32_t owner_edge_occurrences(const XrXiBuildContext *context,
             edge_argument_value(&target->argument_storage[argument], predecessor->xi, successor,
                                 predecessor_occurrence);
         XrCoreIrKey key = {{0}};
-        const XiValue *edge_point = block_typed_invoke_call(context, function->xi, predecessor->xi);
+        const XiValue *edge_point = block_completion_call(context, function->xi, predecessor->xi);
         const XiCoroSuspendPoint *suspend_point =
             edge_point ? NULL : coroutine_point_for_block(function, predecessor->xi);
         if (!edge_point && suspend_point)
@@ -13292,6 +14832,17 @@ static uint32_t owner_edge_occurrences(const XrXiBuildContext *context,
     return occurrences;
 }
 
+typedef struct XrXiOwnerLifetime {
+    XrCoreIrKey key;
+    uint32_t source_id;
+} XrXiOwnerLifetime;
+
+static int owner_lifetime_compare(const void *left, const void *right) {
+    const XrXiOwnerLifetime *a = left;
+    const XrXiOwnerLifetime *b = right;
+    return a->source_id < b->source_id ? -1 : a->source_id > b->source_id;
+}
+
 static XrProgramBuildStatus
 close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctionStorage *function,
                               XrXiBlockStorage *block, uint32_t instruction_count,
@@ -13300,23 +14851,28 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
     if (!context || !function || !block || instruction_count == 0u || !closed_instruction_count)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     uint32_t owner_capacity = block->argument_count + instruction_count;
-    XrCoreIrKey *owners = owner_capacity ? xr_calloc(owner_capacity, sizeof(*owners)) : NULL;
+    XrXiOwnerLifetime *owners = owner_capacity ? xr_calloc(owner_capacity, sizeof(*owners)) : NULL;
     if (owner_capacity && !owners)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     uint32_t owner_count = 0u;
     for (uint32_t argument = 0u; argument < block->argument_count; ++argument) {
-        if (block->argument_storage[argument].ownership == XR_CORE_IR_OWNER)
-            owners[owner_count++] = block->argument_storage[argument].key;
+        const XrXiBlockArgumentStorage *input = &block->argument_storage[argument];
+        if (input->ownership == XR_CORE_IR_OWNER)
+            owners[owner_count++] = (XrXiOwnerLifetime) {input->key, input->source->id};
     }
+    /* Canonical argument keys are identities, not lifetime order. Forwarded
+     * owners retain source order; locally produced owners follow instruction order. */
+    if (owner_count > 1u)
+        qsort(owners, owner_count, sizeof(*owners), owner_lifetime_compare);
     for (uint32_t index = 0u; index < instruction_count; ++index) {
         const XrCoreIrInstructionInput *instruction = &block->instructions[index];
         if (instruction->result_type_id != XR_CORE_TYPE_VOID &&
             instruction->result_ownership == XR_CORE_IR_OWNER) {
             bool duplicate = false;
             for (uint32_t owner = 0u; owner < owner_count; ++owner)
-                duplicate = duplicate || xr_core_ir_key_equal(owners[owner], instruction->result);
+                duplicate = duplicate || xr_core_ir_key_equal(owners[owner].key, instruction->result);
             if (!duplicate)
-                owners[owner_count++] = instruction->result;
+                owners[owner_count++] = (XrXiOwnerLifetime) {instruction->result, UINT32_MAX};
         }
     }
 
@@ -13332,7 +14888,7 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
         for (uint32_t index = 0u; index < instruction_count; ++index) {
             const XrCoreIrInstructionInput *instruction = &block->instructions[index];
             for (uint32_t operand = 0u; operand < instruction->operand_count; ++operand) {
-                if (xr_core_ir_key_equal(instruction->operands[operand], owners[owner]) &&
+                if (xr_core_ir_key_equal(instruction->operands[operand], owners[owner].key) &&
                     input_operation_consumes_operand(context, block, instruction_count, instruction,
                                                      operand))
                     ++consuming_uses;
@@ -13348,7 +14904,7 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
                 predecessor_occurrence +=
                     canonical_block_successor(context, function->xi, block->xi, prior) ==
                     successor_block;
-            uint32_t occurrences = owner_edge_occurrences(context, function, block, owners[owner],
+            uint32_t occurrences = owner_edge_occurrences(context, function, block, owners[owner].key,
                                                           successor_block, predecessor_occurrence);
             transferred = transferred && occurrences == 1u;
             absent = absent && occurrences == 0u;
@@ -13391,7 +14947,7 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
             xr_free(owners);
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
-        *drop_operands[prepared_drop++] = owners[owner];
+        *drop_operands[prepared_drop++] = owners[owner].key;
     }
 
     /* All allocations complete before the terminator is moved.  A failed
@@ -13408,7 +14964,7 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
         instruction->operation_id = XR_CORE_OP_CORE_OWNER_DROP;
         instruction->result_type_id = XR_CORE_TYPE_VOID;
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-        instruction->operands = drop_operands[drop_index++];
+        instruction->operands = drop_operands[drop_count - 1u - drop_index++];
         instruction->operand_count = 1u;
     }
     block->instructions[cursor++] = terminator;
@@ -13429,50 +14985,13 @@ typedef struct XrXiCleanupProjectionValueInfo {
 
 static bool cleanup_trap_capable_operation(uint16_t operation_id) {
     const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(operation_id);
-    return operation && (operation->successor_mask & XR_CORE_SUCCESSOR_TRAP) != 0u;
+    /* A possible terminal trap does not grant an explicit refusal successor.
+     * Only the declared edge operand segment can carry cleanup ownership. */
+    return operation && operation->has_trap_continuation;
 }
 
-static bool cleanup_place_has_local_storage(const XrCoreIrBlockInput *block, XrCoreIrKey place) {
-    /* Only a proved local or class-field root excludes module initialization
-     * traps. Unknown origins, including incoming place arguments, stay fallible. */
-    uint32_t before = block ? block->instruction_count : 0u;
-    while (before != 0u) {
-        const XrCoreIrInstructionInput *definition = NULL;
-        for (uint32_t index = before; index != 0u; --index) {
-            const XrCoreIrInstructionInput *candidate = &block->instructions[index - 1u];
-            if (candidate->result_category == XR_CORE_IR_PLACE &&
-                xr_core_ir_key_equal(candidate->result, place)) {
-                definition = candidate;
-                before = index - 1u;
-                break;
-            }
-        }
-        if (!definition || definition->operand_count != 1u || !definition->operands)
-            return false;
-        if (definition->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
-            definition->operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE)
-            return true;
-        if (definition->operation_id != XR_CORE_OP_CORE_PLACE_PROJECT)
-            return false;
-        place = definition->operands[0];
-    }
-    return false;
-}
-
-static bool cleanup_trap_capable_instruction(const XrCoreIrBlockInput *block,
-                                             const XrCoreIrInstructionInput *instruction) {
-    if (!instruction || !cleanup_trap_capable_operation(instruction->operation_id))
-        return false;
-    switch (instruction->operation_id) {
-    case XR_CORE_OP_CORE_PLACE_LOAD:
-    case XR_CORE_OP_CORE_PLACE_STORE:
-    case XR_CORE_OP_CORE_PLACE_PROJECT:
-    case XR_CORE_OP_CORE_PLACE_EXCHANGE:
-        return instruction->operand_count == 0u || !instruction->operands ||
-               !cleanup_place_has_local_storage(block, instruction->operands[0]);
-    default:
-        return true;
-    }
+static bool cleanup_trap_capable_instruction(const XrCoreIrInstructionInput *instruction) {
+    return instruction && cleanup_trap_capable_operation(instruction->operation_id);
 }
 
 static bool cleanup_call_has_exact_active_handler_edge(const XrXiBuildContext *context,
@@ -13646,7 +15165,7 @@ static XrProgramBuildStatus mark_cleanup_trap_projection_graph(
     projection->end_gap = end_limit;
     projection->ends_in_trap = false;
     for (uint32_t instruction = begin_gap; instruction < end_limit; ++instruction) {
-        if (!cleanup_trap_capable_instruction(source, &source->instructions[instruction]))
+        if (!cleanup_trap_capable_instruction(&source->instructions[instruction]))
             continue;
         projection->end_gap = instruction + 1u;
         projection->ends_in_trap = true;
@@ -13891,8 +15410,7 @@ static XrProgramBuildStatus prepare_cleanup_trap_projection_arguments(
 
     uint32_t owner_definition_limit = projection->begin_gap;
     if (owner_definition_limit > begin_limit &&
-        cleanup_trap_capable_instruction(
-            source, &source->instructions[owner_definition_limit - 1u]))
+        cleanup_trap_capable_instruction(&source->instructions[owner_definition_limit - 1u]))
         --owner_definition_limit;
     uint64_t owner_capacity_wide = (uint64_t) source->argument_count + owner_definition_limit;
     if (owner_capacity_wide > UINT32_MAX || owner_capacity_wide > SIZE_MAX / sizeof(XrCoreIrKey))
@@ -14350,7 +15868,7 @@ materialize_cleanup_trap_projection(const XrXiBuildContext *context, XrXiFunctio
         uint32_t source_instruction = projection->begin_gap + instruction;
         XrCoreIrInstructionInput *candidate =
             &projection->trap_instructions[target_instruction - body_count + instruction];
-        if (!cleanup_trap_capable_instruction(source, &source->instructions[source_instruction]))
+        if (!cleanup_trap_capable_instruction(&source->instructions[source_instruction]))
             continue;
         if (!next || !projection->ends_in_trap || source_instruction + 1u != projection->end_gap) {
             xr_free(target_keys);
@@ -14568,9 +16086,7 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
             uint32_t trap_instruction_count = 0u;
             for (uint32_t instruction = span->begin; instruction < span->end; ++instruction) {
                 XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
-                if (!cleanup_trap_capable_instruction(
-                        find_input_block(function, original_block_count,
-                                         block_key(function, block->xi)), candidate))
+                if (!cleanup_trap_capable_instruction(candidate))
                     continue;
                 if (++trap_instruction_count != 1u)
                     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -14648,9 +16164,7 @@ materialize_cleanup_trap_projections(const XrXiBuildContext *context, XrXiFuncti
             const XrXiEmissionSpan *span = &block->emission_spans[value_index];
             for (uint32_t instruction = span->begin; instruction < span->end; ++instruction) {
                 XrCoreIrInstructionInput *candidate = &block->instructions[instruction];
-                if (!cleanup_trap_capable_instruction(
-                        find_input_block(function, original_block_count,
-                                         block_key(function, block->xi)), candidate))
+                if (!cleanup_trap_capable_instruction(candidate))
                     continue;
                 uint32_t handler_state = function->cleanup_handler_state_before_value[value->id];
                 if (handler_state != 0u) {
@@ -14684,7 +16198,7 @@ typedef struct XrXiLiveOwner {
     bool live;
 } XrXiLiveOwner;
 
-static XrProgramBuildStatus implicit_trap_add_owner(XrXiLiveOwner *owners, uint32_t capacity,
+static XrProgramBuildStatus implicit_exit_add_owner(XrXiLiveOwner *owners, uint32_t capacity,
                                                     uint32_t *owner_count, XrCoreIrKey key,
                                                     uint16_t type_id,
                                                     XrCoreIrValueCategory category,
@@ -14694,10 +16208,10 @@ static XrProgramBuildStatus implicit_trap_add_owner(XrXiLiveOwner *owners, uint3
     for (uint32_t owner = 0u; owner < *owner_count; ++owner)
         if (xr_core_ir_key_equal(owners[owner].key, key))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "implicit trap cleanup owner has multiple definitions");
+                        "implicit exit cleanup owner has multiple definitions");
     if (type_id == XR_CORE_TYPE_VOID || category != XR_CORE_IR_VALUE)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "implicit trap cleanup owner has no exact value contract");
+                    "implicit exit cleanup owner has no exact value contract");
     owners[(*owner_count)++] = (XrXiLiveOwner) {
         .key = key,
         .type_id = type_id,
@@ -14707,7 +16221,7 @@ static XrProgramBuildStatus implicit_trap_add_owner(XrXiLiveOwner *owners, uint3
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus implicit_trap_consume_owners(
+static XrProgramBuildStatus implicit_exit_consume_owners(
     const XrXiBuildContext *context, const XrXiBlockStorage *source_storage,
     const XrCoreIrBlockInput *source, const XrCoreIrInstructionInput *instruction,
     uint32_t instruction_index, XrXiLiveOwner *owners, uint32_t owner_count, char *diagnostic,
@@ -14721,7 +16235,7 @@ static XrProgramBuildStatus implicit_trap_consume_owners(
                 continue;
             if (!owners[owner].live)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "implicit trap cleanup owner is consumed more than once before i%u",
+                            "implicit exit cleanup owner is consumed more than once before i%u",
                             instruction_index);
             owners[owner].live = false;
             break;
@@ -14730,7 +16244,7 @@ static XrProgramBuildStatus implicit_trap_consume_owners(
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus collect_implicit_trap_live_owners(
+static XrProgramBuildStatus collect_implicit_exit_live_owners(
     const XrXiBuildContext *context, const XrXiBlockStorage *source_storage,
     const XrCoreIrBlockInput *source, uint32_t instruction_index, XrXiLiveOwner **owners_out,
     uint32_t *owner_count_out, char *diagnostic, size_t diagnostic_size) {
@@ -14754,7 +16268,7 @@ static XrProgramBuildStatus collect_implicit_trap_live_owners(
         const XrCoreIrValueInput *candidate = &source->arguments[argument];
         if (candidate->ownership != XR_CORE_IR_OWNER)
             continue;
-        status = implicit_trap_add_owner(owners, capacity, &owner_count, candidate->key,
+        status = implicit_exit_add_owner(owners, capacity, &owner_count, candidate->key,
                                          candidate->type_id, candidate->category, diagnostic,
                                          diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK)
@@ -14763,16 +16277,15 @@ static XrProgramBuildStatus collect_implicit_trap_live_owners(
     for (uint32_t index = 0u; index < instruction_index && status == XR_PROGRAM_BUILD_OK;
          ++index) {
         const XrCoreIrInstructionInput *candidate = &source->instructions[index];
-        status = implicit_trap_consume_owners(context, source_storage, source, candidate, index,
+        status = implicit_exit_consume_owners(context, source_storage, source, candidate, index,
                                               owners, owner_count, diagnostic, diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK)
             break;
         if (candidate->result_type_id != XR_CORE_TYPE_VOID &&
             candidate->result_ownership == XR_CORE_IR_OWNER)
-            status = implicit_trap_add_owner(owners, capacity, &owner_count, candidate->result,
-                                             candidate->result_type_id,
-                                             candidate->result_category, diagnostic,
-                                             diagnostic_size);
+            status = implicit_exit_add_owner(owners, capacity, &owner_count, candidate->result,
+                                             candidate->result_type_id, candidate->result_category,
+                                             diagnostic, diagnostic_size);
     }
     if (status != XR_PROGRAM_BUILD_OK) {
         xr_free(owners);
@@ -14790,51 +16303,64 @@ static XrProgramBuildStatus collect_implicit_trap_live_owners(
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus materialize_implicit_owner_trap_cleanup(
-    XrXiFunctionStorage *function, XrXiBlockStorage *source_storage,
-    XrCoreIrBlockInput *source, uint32_t instruction_index, XrXiLiveOwner *owners,
-    uint32_t owner_count, XrCoreIrBlockInput *output, char *diagnostic,
-    size_t diagnostic_size) {
+static XrProgramBuildStatus materialize_implicit_owner_exit_cleanup(
+    XrXiFunctionStorage *function, XrXiBlockStorage *source_storage, XrCoreIrBlockInput *source,
+    uint32_t instruction_index, XrXiLiveOwner *owners, uint32_t owner_count,
+    XrCoreIrBlockInput *output, char *diagnostic, size_t diagnostic_size) {
     if (!function || !source_storage || !source_storage->xi || !source || !owners || !output ||
         instruction_index >= source->instruction_count ||
-        function->implicit_trap_cleanup_count >= function->implicit_trap_cleanup_capacity)
+        function->implicit_exit_cleanup_count >= function->implicit_exit_cleanup_capacity)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
-    XrCoreIrInstructionInput *provider = &source_storage->instructions[instruction_index];
-    if (provider->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL || provider->successor_count != 0u)
+    XrCoreIrInstructionInput *operation = &source_storage->instructions[instruction_index];
+    bool panic = xr_core_spec_panic_operand_prefix(operation->operation_id) != 0u;
+    if ((!panic && operation->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL &&
+         operation->operation_id != XR_CORE_OP_CORE_OUTPUT_GROUP) ||
+        operation->successor_count != 0u)
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     uint32_t live_count = 0u;
     for (uint32_t owner = 0u; owner < owner_count; ++owner)
         live_count += owners[owner].live ? 1u : 0u;
     if (live_count == 0u || live_count > UINT32_MAX - 2u ||
-        provider->operand_count > UINT32_MAX - live_count)
+        operation->operand_count > UINT32_MAX - live_count)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
 
-    XrXiImplicitTrapCleanupStorage *cleanup =
-        &function->implicit_trap_cleanups[function->implicit_trap_cleanup_count++];
-    cleanup->argument_count = live_count;
+    XrXiImplicitExitCleanupStorage *cleanup =
+        &function->implicit_exit_cleanups[function->implicit_exit_cleanup_count++];
+    uint32_t implicit_count = panic ? 1u : 0u;
+    cleanup->argument_count = live_count + implicit_count;
     cleanup->instruction_count = live_count + 2u;
-    cleanup->arguments = xr_calloc(live_count, sizeof(*cleanup->arguments));
+    cleanup->arguments = xr_calloc(cleanup->argument_count, sizeof(*cleanup->arguments));
     cleanup->instructions = xr_calloc(cleanup->instruction_count, sizeof(*cleanup->instructions));
     if (!cleanup->arguments || !cleanup->instructions)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
 
     XrCoreIrKey block =
-        implicit_trap_cleanup_block_key(function, source_storage->xi, instruction_index);
-    XrCoreIrKey *block_arguments = xr_calloc(live_count, sizeof(*block_arguments));
+        implicit_exit_cleanup_block_key(function, source_storage->xi, instruction_index);
+    XrCoreIrKey *block_arguments = xr_calloc(cleanup->argument_count, sizeof(*block_arguments));
     if (!block_arguments)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     cleanup->instructions[0] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
         .result_type_id = XR_CORE_TYPE_VOID,
         .operands = block_arguments,
-        .operand_count = live_count,
+        .operand_count = cleanup->argument_count,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
-    uint32_t target_argument = 0u;
+    if (panic) {
+        block_arguments[0] =
+            implicit_exit_cleanup_argument_key(function, source_storage->xi, instruction_index, 0u);
+        cleanup->arguments[0] = (XrCoreIrValueInput) {
+            .key = block_arguments[0],
+            .type_id = XR_CORE_TYPE_PANIC_INFO,
+            .category = XR_CORE_IR_VALUE,
+            .ownership = XR_CORE_IR_OWNER,
+        };
+    }
+    uint32_t target_argument = implicit_count;
     for (uint32_t owner = 0u; owner < owner_count; ++owner) {
         if (!owners[owner].live)
             continue;
-        XrCoreIrKey argument = implicit_trap_cleanup_argument_key(
+        XrCoreIrKey argument = implicit_exit_cleanup_argument_key(
             function, source_storage->xi, instruction_index, target_argument);
         cleanup->arguments[target_argument] = (XrCoreIrValueInput) {
             .key = argument,
@@ -14847,43 +16373,59 @@ static XrProgramBuildStatus materialize_implicit_owner_trap_cleanup(
         if (!drop_operand)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         *drop_operand = argument;
-        cleanup->instructions[target_argument + 1u] = (XrCoreIrInstructionInput) {
-            .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+        cleanup->instructions[live_count - (target_argument - implicit_count)] =
+            (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+                .result_type_id = XR_CORE_TYPE_VOID,
+                .operands = drop_operand,
+                .operand_count = 1u,
+                .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+            };
+        ++target_argument;
+    }
+    XrCoreIrInstructionInput *terminal = &cleanup->instructions[live_count + 1u];
+    if (panic) {
+        XrCoreIrKey *panic_operand = xr_calloc(1u, sizeof(*panic_operand));
+        if (!panic_operand)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *panic_operand = block_arguments[0];
+        *terminal = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_PANIC_PUBLISH,
             .result_type_id = XR_CORE_TYPE_VOID,
-            .operands = drop_operand,
+            .operands = panic_operand,
             .operand_count = 1u,
             .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
         };
-        ++target_argument;
+    } else {
+        *terminal = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_TRAP,
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+            .immediate.u32 = 7u,
+        };
     }
-    cleanup->instructions[live_count + 1u] = (XrCoreIrInstructionInput) {
-        .operation_id = XR_CORE_OP_CORE_TRAP,
-        .result_type_id = XR_CORE_TYPE_VOID,
-        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
-        .immediate.u32 = 7u,
-    };
 
-    uint32_t provider_operand_count = provider->operand_count + live_count;
-    XrCoreIrKey *provider_operands = xr_calloc(provider_operand_count, sizeof(*provider_operands));
-    XrCoreIrKey *provider_successors = xr_calloc(1u, sizeof(*provider_successors));
-    if (!provider_operands || !provider_successors) {
-        xr_free(provider_successors);
-        xr_free(provider_operands);
+    uint32_t operand_count = operation->operand_count + live_count;
+    XrCoreIrKey *operands = xr_calloc(operand_count, sizeof(*operands));
+    XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+    if (!operands || !successors) {
+        xr_free(successors);
+        xr_free(operands);
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     }
-    if (provider->operand_count)
-        memcpy(provider_operands, provider->operands,
-               (size_t) provider->operand_count * sizeof(*provider_operands));
+    if (operation->operand_count)
+        memcpy(operands, operation->operands,
+               (size_t) operation->operand_count * sizeof(*operands));
     target_argument = 0u;
     for (uint32_t owner = 0u; owner < owner_count; ++owner)
         if (owners[owner].live)
-            provider_operands[provider->operand_count + target_argument++] = owners[owner].key;
-    *provider_successors = block;
-    xr_free((void *) provider->operands);
-    provider->operands = provider_operands;
-    provider->operand_count = provider_operand_count;
-    provider->successors = provider_successors;
-    provider->successor_count = 1u;
+            operands[operation->operand_count + target_argument++] = owners[owner].key;
+    *successors = block;
+    xr_free((void *) operation->operands);
+    operation->operands = operands;
+    operation->operand_count = operand_count;
+    operation->successors = successors;
+    operation->successor_count = 1u;
 
     output->key = block;
     output->arguments = cleanup->arguments;
@@ -14895,7 +16437,7 @@ static XrProgramBuildStatus materialize_implicit_owner_trap_cleanup(
     return XR_PROGRAM_BUILD_OK;
 }
 
-static XrProgramBuildStatus materialize_implicit_owner_trap_cleanups(
+static XrProgramBuildStatus materialize_implicit_owner_exit_cleanups(
     const XrXiBuildContext *context, XrXiFunctionStorage *function, uint32_t original_block_count,
     uint32_t block_capacity, uint32_t *output_block_index, uint32_t *cleanup_count,
     char *diagnostic, size_t diagnostic_size) {
@@ -14911,12 +16453,14 @@ static XrProgramBuildStatus materialize_implicit_owner_trap_cleanups(
             return XR_PROGRAM_BUILD_INVALID_INPUT;
         for (uint32_t instruction = 0u; instruction < source->instruction_count; ++instruction) {
             XrCoreIrInstructionInput *candidate = &source_storage->instructions[instruction];
-            if (candidate->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL ||
+            if ((candidate->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL &&
+                 candidate->operation_id != XR_CORE_OP_CORE_OUTPUT_GROUP &&
+                 xr_core_spec_panic_operand_prefix(candidate->operation_id) == 0u) ||
                 candidate->successor_count != 0u)
                 continue;
             XrXiLiveOwner *owners = NULL;
             uint32_t owner_count = 0u;
-            XrProgramBuildStatus status = collect_implicit_trap_live_owners(
+            XrProgramBuildStatus status = collect_implicit_exit_live_owners(
                 context, source_storage, source, instruction, &owners, &owner_count, diagnostic,
                 diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
@@ -14927,7 +16471,7 @@ static XrProgramBuildStatus materialize_implicit_owner_trap_cleanups(
                 xr_free(owners);
                 return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
             }
-            status = materialize_implicit_owner_trap_cleanup(
+            status = materialize_implicit_owner_exit_cleanup(
                 function, source_storage, source, instruction, owners, owner_count,
                 &function->blocks[(*output_block_index)++], diagnostic, diagnostic_size);
             xr_free(owners);
@@ -14943,13 +16487,14 @@ static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildCont
                                                              const XiFunc *function,
                                                              const XiBlock *block) {
     const XiValue *invoke = block_typed_invoke_call(context, function, block);
-    if (invoke && invoke->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE)
+    if (invoke && (invoke->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE ||
+                   invoke->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT))
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE);
     if (invoke)
         return xr_core_spec_operation_by_id(resolved_sealed_callee(context, function, invoke)
                                                 ? XR_CORE_OP_CORE_CALL_SEALED_INVOKE
                                                 : XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE);
-    if (exact_infallible_class_construction_in_block(context, function, block))
+    if (exact_infallible_construction_in_block(context, function, block))
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BRANCH);
     if (block->kind == XI_BLOCK_UNREACHABLE &&
         canonical_block_is_trap_cleanup(context, function, block))
@@ -14987,6 +16532,15 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
              ++function_index) {
             XrXiFunctionStorage *storage = &module->function_storage[function_index];
             const XiFunc *function = storage->xi;
+            const XrType *receiver = function && function->has_receiver && function->nparams &&
+                                             function->params && function->params[0]
+                                         ? function->params[0]->type
+                                         : NULL;
+            if (receiver && (receiver->kind == XR_KIND_INSTANCE || receiver->kind == XR_KIND_CLASS ||
+                             receiver->kind == XR_KIND_ENUM) &&
+                !nominal_contract(context, receiver, NULL, NULL, NULL))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi method signature has no exact receiver nominal identity");
             uint32_t effects = 0u;
             uint32_t capabilities = 0u;
             for (uint32_t block_index = 0; function && block_index < function->nblocks;
@@ -15008,7 +16562,10 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALLABLE_PACK)
                             : NULL;
                     const XrCoreOperationSpec *class_construction =
-                        resolved_canonical_class_construction(context, function, value, NULL, NULL)
+                        resolved_atomic_construction(value)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ATOMIC_CONSTRUCT)
+                            : (resolved_record_construction(function, value, NULL, NULL, NULL) ||
+                               resolved_canonical_class_construction(context, function, value, NULL, NULL))
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CLASS_CONSTRUCT)
                             : NULL;
                     const XrCoreOperationSpec *value_aggregate_construction =
@@ -15026,20 +16583,14 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                     const XrCoreOperationSpec *aggregate_field_projection =
                         resolved_aggregate_field_projection(context, value, NULL)
                             ? xr_core_spec_operation_by_id(
-                                  nominal_info_for_type(value->args[0]->type)->nominal_kind ==
-                                          XA_NOMINAL_CLASS
+                                  source_reference_record_type(value->args[0]->type)
                                       ? XR_CORE_OP_CORE_CLASS_FIELD_LOAD
                                       : XR_CORE_OP_CORE_AGGREGATE_PROJECT)
                             : NULL;
                     bool aggregate_field_store_is_exact =
                         resolved_aggregate_field_store(context, function, value, NULL);
-                    const XrClassInfo *field_store_receiver =
-                        aggregate_field_store_is_exact && value->args && value->args[0]
-                            ? nominal_info_for_type(value->args[0]->type)
-                            : NULL;
-                    bool class_field_store =
-                        field_store_receiver &&
-                        field_store_receiver->nominal_kind == XA_NOMINAL_CLASS;
+                    bool class_field_store = aggregate_field_store_is_exact &&
+                        source_reference_record_type(value->args[0]->type);
                     const XrCoreOperationSpec *aggregate_field_store =
                         aggregate_field_store_is_exact
                             ? xr_core_spec_operation_by_id(
@@ -15060,7 +16611,15 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_SUSPEND)
                             : NULL;
                     bool has_contract = false;
-                    if (value->xg_existential_kind != XI_EXISTENTIAL_NONE) {
+                    const XrCoreIrModuleSlotInput *module_slot =
+                        resolved_module_data_slot(context, function, value, NULL);
+                    if (module_slot) {
+                        const XrCoreOperationSpec *access = xr_core_spec_operation_by_id(
+                            module_access_operation_id(context, value, module_slot->type_id));
+                        has_contract = access != NULL;
+                        value_effects = XR_CORE_EFFECT_TRAP | (access ? access->effect_mask : 0u);
+                        value_capabilities = access ? access->capability_mask : 0u;
+                    } else if (value->xg_existential_kind != XI_EXISTENTIAL_NONE) {
                         has_contract = xr_program_xi_semantic_operation_contract(
                             value->op, value->xg_existential_kind, &value_effects,
                             &value_capabilities);
@@ -15079,10 +16638,24 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = true;
                         value_effects = shared_callable->effect_mask;
                         value_capabilities = shared_callable->capability_mask;
+                    } else if (exact_atomic_scalar_operation(value)) {
+                        const XrCoreOperationSpec *atomic = xr_core_spec_operation_by_id(
+                            exact_atomic_scalar_operation(value));
+                        has_contract = atomic != NULL;
+                        value_effects = atomic ? atomic->effect_mask : 0u;
+                        value_capabilities = atomic ? atomic->capability_mask : 0u;
                     } else if (class_construction) {
                         has_contract = true;
                         value_effects = class_construction->effect_mask;
                         value_capabilities = class_construction->capability_mask;
+                    } else if (exact_array_index(context, function, value, NULL)) {
+                        const XrCoreOperationSpec *place =
+                            xr_core_spec_operation_by_id(XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE);
+                        has_contract = place != NULL;
+                        value_effects = place ? place->effect_mask : 0u;
+                        value_capabilities = place ? place->capability_mask : 0u;
+                    } else if (resolved_storage_construction(function, value, NULL, NULL, NULL)) {
+                        has_contract = true;
                     } else if (value_aggregate_construction) {
                         has_contract = true;
                         value_effects = value_aggregate_construction->effect_mask;
@@ -15125,6 +16698,13 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                     } else {
                         has_contract = xr_program_xi_operation_contract(value->op, &value_effects,
                                                                         &value_capabilities);
+                        const XrCoreOperationSpec *bias_operation = NULL;
+                        has_contract = has_contract && resolve_integer_comparison_bias(
+                                                           context, function, value, &bias_operation);
+                        if (has_contract && bias_operation) {
+                            value_effects |= bias_operation->effect_mask;
+                            value_capabilities |= bias_operation->capability_mask;
+                        }
                     }
                     if (!has_contract) {
                         if (value->op == XI_CHECKTYPE) {
@@ -15159,10 +16739,20 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         return fail(diagnostic, diagnostic_size,
                                     XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                                     "Xi function %s operation %s (%u) at v%u has no unique "
-                                    "CoreSpec contract (aux=%lld nargs=%u first-use=%s:%u)",
+                                    "CoreSpec contract (aux=%lld nargs=%u slot=%s first-arg=%s "
+                                    "first-use=%s:%u)",
                                     function->name ? function->name : "<anonymous>",
                                     xi_op_name(value->op), value->op, value->id,
                                     (long long) value->aux_int, (unsigned) value->nargs,
+                                    value->op == XI_SET_SHARED && value->aux_int >= 0 &&
+                                            (uint64_t) value->aux_int < function->nshared &&
+                                            function->module_slots &&
+                                            function->module_slots[value->aux_int].name
+                                        ? function->module_slots[value->aux_int].name
+                                        : "none",
+                                    value->nargs && value->args && value->args[0]
+                                        ? xi_op_name(logical_value_identity(value->args[0])->op)
+                                        : "none",
                                     first_user ? xi_op_name(first_user->op) : "none",
                                     (unsigned) first_argument);
                     }
@@ -15212,7 +16802,8 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (!value || (value->op != XI_CALL && !witness && !sealed_method))
                             continue;
-                        if (resolved_canonical_class_construction(context, storage->xi, value, NULL,
+                        if (resolved_atomic_construction(value) ||
+                            resolved_canonical_class_construction(context, storage->xi, value, NULL,
                                                                   NULL) ||
                             resolved_empty_struct_literal(context, storage->xi, value) ||
                             resolved_provider_native_call(context, storage->xi, value) ||
@@ -15240,10 +16831,15 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         if (callee) {
                             const XrXiFunctionStorage *callee_storage =
                                 find_xi_function(context, callee, NULL, NULL);
-                            if (!callee_storage)
+                            if (!callee_storage) {
+                                fprintf(stderr, "DEBUG unresolved direct %s v%u callee=%p name=%s module=%p\\n",
+                                        storage->xi && storage->xi->name ? storage->xi->name : "<anonymous>",
+                                        value->id, (void *)callee,
+                                        callee->name ? callee->name : "<none>", (void *)callee->module);
                                 return fail(diagnostic, diagnostic_size,
                                             XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
                                             "Xi function contract has an unresolved direct target");
+                            }
                             uint32_t callee_effects = callee_storage->closed_effect_mask;
                             if (invoke)
                                 callee_effects &= ~XR_CORE_EFFECT_ERROR;
@@ -15251,13 +16847,31 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             capabilities |= callee_storage->closed_capability_mask;
                             continue;
                         }
-                        if (sealed_method)
+                        if (sealed_method) {
+                            fprintf(stderr, "DEBUG unresolved method %s v%u op=%s/%u flags=0x%x aux=%lld xgmethod=%u nargs=%u ctor=%d resolved=%p exported=%p callsite=%p kind=%u recv=%u method=%u arg_count=%u arg0=%p type0=%p\\n",
+                                    storage->xi && storage->xi->name ? storage->xi->name : "<anonymous>",
+                                    value->id, xi_op_name(value->op), (unsigned)value->op, value->flags, (long long)value->aux_int, value->xg_method_id,
+                                    value->nargs, xi_value_is_constructor_call(value),
+                                    (void *)resolved_sealed_callee(context, storage->xi, value),
+                                    (void *)xi_value_resolve_method_callee(storage->xi, value),
+                                    (void *)resolved_callsite(context, storage->xi, value),
+                                    resolved_callsite(context, storage->xi, value)
+                                        ? resolved_callsite(context, storage->xi, value)->kind : 0u,
+                                    resolved_callsite(context, storage->xi, value)
+                                        ? resolved_callsite(context, storage->xi, value)->receiver_static_class_id : 0u,
+                                    resolved_callsite(context, storage->xi, value)
+                                        ? resolved_callsite(context, storage->xi, value)->method_id : 0u,
+                                    resolved_callsite(context, storage->xi, value)
+                                        ? resolved_callsite(context, storage->xi, value)->arg_count : 0u,
+                                    (void *)(value->nargs ? value->args[0] : NULL),
+                                    (void *)(value->nargs && value->args[0] ? value->args[0]->type : NULL));
                             return fail(diagnostic, diagnostic_size,
                                         XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
                                         "Xi function %s call v%u has an unresolved method target",
                                         storage->xi && storage->xi->name ? storage->xi->name
                                                                          : "<anonymous>",
                                         value->id);
+                        }
                         XrXiCallableTargetSet target_set = {0};
                         if (!resolved_callable_call_targets(context, storage->xi, value,
                                                             &target_set))
@@ -15353,6 +16967,10 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
         !xi->entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi function %u is not an Optimized program input", function_index);
+    XrProgramBuildStatus routing_status =
+        validate_function_panic_routes(context, xi, diagnostic, diagnostic_size);
+    if (routing_status != XR_PROGRAM_BUILD_OK)
+        return routing_status;
     if (xi->ncaptures != 0u) {
         if (xi->has_receiver || !map_capture_type(context, xi, &storage->capture_type_id))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -15457,6 +17075,240 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus expand_atomic_compare_result(
+    XrCoreIrInstructionInput *instructions, uint32_t capacity, uint16_t scalar, uint32_t *count) {
+    bool boolean = scalar == XR_CORE_TYPE_BOOL;
+    XrProgramXiProjection equality = {0};
+    if (!boolean && (!xr_program_xi_projection(XI_EQ, XR_CORE_TYPE_BOOL, &equality) ||
+                     equality.kind != XR_PROGRAM_XI_PROJECTION_COMPARE))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    bool floating = scalar == XR_CORE_TYPE_F64;
+    uint32_t total = boolean ? 7u : floating ? 5u : 3u;
+    if (capacity < total || instructions[0].operand_count != 3u)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    XrCoreIrKey tuple = instructions[0].result;
+    uint16_t tuple_type = instructions[0].result_type_id;
+    XrCoreIrKey expected = instructions[0].operands[1];
+    XrCoreIrKey keys[6];
+    for (uint32_t index = 0u; index < 6u; ++index)
+        keys[index] = key_from_key_and_u32(UINT8_C(0xad), tuple, index);
+    instructions[0].result = keys[0];
+    instructions[0].result_type_id = scalar;
+    for (uint32_t index = 1u; index < total; ++index) {
+        XrCoreIrKey *operands = xr_calloc(2u, sizeof(*operands));
+        if (!operands)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        instructions[index] = (XrCoreIrInstructionInput) {
+            .operands = operands, .operand_count = 2u,
+            .result = index + 1u == total ? tuple : keys[index],
+            .result_type_id = index + 1u == total ? tuple_type : XR_CORE_TYPE_BOOL,
+        };
+    }
+    if (boolean) {
+        const uint16_t operations[5] = {XR_CORE_OP_CORE_LOGICAL_AND, XR_CORE_OP_CORE_LOGICAL_NOT,
+            XR_CORE_OP_CORE_LOGICAL_NOT, XR_CORE_OP_CORE_LOGICAL_AND, XR_CORE_OP_CORE_LOGICAL_OR};
+        XrCoreIrKey left[5] = {keys[0], keys[0], expected, keys[2], keys[1]};
+        XrCoreIrKey right[5] = {expected, keys[0], expected, keys[3], keys[4]};
+        for (uint32_t index = 0u; index < 5u; ++index) {
+            XrCoreIrInstructionInput *instruction = &instructions[index + 1u];
+            instruction->operation_id = operations[index];
+            instruction->operand_count = index == 1u || index == 2u ? 1u : 2u;
+            ((XrCoreIrKey *)instruction->operands)[0] = left[index];
+            ((XrCoreIrKey *)instruction->operands)[1] = right[index];
+        }
+    } else {
+        uint32_t comparison = floating ? 3u : 1u;
+        if (floating) {
+            for (uint32_t index = 1u; index <= 2u; ++index) {
+                instructions[index].operation_id = XR_CORE_OP_CORE_SCALAR_BITCAST64;
+                instructions[index].operand_count = 1u;
+                instructions[index].result_type_id = XR_CORE_TYPE_I64;
+                ((XrCoreIrKey *)instructions[index].operands)[0] = index == 1u ? keys[0] : expected;
+            }
+        }
+        instructions[comparison].operation_id = equality.core_operation_id;
+        instructions[comparison].immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+        instructions[comparison].immediate.u32 = equality.immediate_u32;
+        ((XrCoreIrKey *)instructions[comparison].operands)[0] = floating ? keys[1] : keys[0];
+        ((XrCoreIrKey *)instructions[comparison].operands)[1] = floating ? keys[2] : expected;
+    }
+    instructions[total - 1u].operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT;
+    ((XrCoreIrKey *)instructions[total - 1u].operands)[0] = keys[0];
+    ((XrCoreIrKey *)instructions[total - 1u].operands)[1] = keys[total - 2u];
+    *count = total;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus expand_affine_place_store(
+    XrXiBuildContext *context, XrCoreIrInstructionInput *instructions,
+    uint32_t capacity, uint16_t type_id, XrCoreIrKey key) {
+    if (capacity < 3u || instructions[0].operand_count != 2u)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    XrCoreIrKey *copy_source = xr_calloc(1u, sizeof(*copy_source));
+    XrCoreIrKey *old_owner = xr_calloc(1u, sizeof(*old_owner));
+    if (!copy_source || !old_owner) {
+        xr_free(copy_source);
+        xr_free(old_owner);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    XrCoreIrInstructionInput exchange = instructions[0];
+    XrCoreIrKey *operands = (XrCoreIrKey *) exchange.operands;
+    *copy_source = operands[1];
+    operands[1] = key_from_key_and_u32(UINT8_C(0xc7), key, 0u);
+    *old_owner = key_from_key_and_u32(UINT8_C(0xc7), key, 1u);
+    const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
+    bool shared_identity = type_storage_has_identity(type);
+    instructions[0] = (XrCoreIrInstructionInput) {
+        .operation_id = shared_identity ? XR_CORE_OP_CORE_OWNER_ALIAS : XR_CORE_OP_CORE_OWNER_COPY,
+        .result = operands[1], .result_type_id = type_id, .result_ownership = XR_CORE_IR_OWNER,
+        .operands = copy_source, .operand_count = 1u,
+    };
+    exchange.operation_id = XR_CORE_OP_CORE_PLACE_EXCHANGE;
+    exchange.result = *old_owner;
+    exchange.result_type_id = type_id;
+    exchange.result_ownership = XR_CORE_IR_OWNER;
+    instructions[1] = exchange;
+    instructions[2] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = old_owner, .operand_count = 1u,
+    };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+/* Bounds produce one typed place; accesses reuse the ordinary ownership operations. */
+static XrProgramBuildStatus translate_array_index(
+    XrXiBuildContext *context, XrXiFunctionStorage *function, const XiValue *value,
+    const XrXiBlockStorage *block, XrCoreIrInstructionInput *instructions,
+    uint32_t capacity, uint32_t *count, char *diagnostic, size_t diagnostic_size) {
+    uint16_t element = XR_CORE_TYPE_VOID;
+    if (!exact_array_index(context, function->xi, value, &element) || capacity < 2u)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *count = 0u;
+    XrCoreIrKey operands[2];
+    if (!value_operand_key(context, function, block, value->args[0], &operands[0]) ||
+        !value_operand_key(context, function, block, value->args[1], &operands[1]))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi index v%u lacks a canonical receiver or index", value->id);
+    XrCoreIrKey place = key_from_key_and_u32(UINT8_C(0xc8), value_key(function, value), 0u);
+    instructions[0] = (XrCoreIrInstructionInput){
+        .operation_id = XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE, .result = place,
+        .result_type_id = element, .result_category = XR_CORE_IR_PLACE};
+    const XrXiPanicEdge *edge = find_panic_edge(context, function->xi, value);
+    if (edge) {
+        XrProgramBuildStatus status = set_panic_edge_operands(context, &instructions[0], function,
+            block, value, operands, 2u, find_block_storage(function, edge->handler),
+            diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK) return status;
+    } else {
+        XrCoreIrKey *inputs = xr_malloc(sizeof(operands));
+        if (!inputs) return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        memcpy(inputs, operands, sizeof(operands));
+        instructions[0].operands = inputs;
+        instructions[0].operand_count = 2u;
+    }
+    bool store = value->op == XI_INDEX_SET;
+    XrCoreIrKey *access = xr_calloc(store ? 2u : 1u, sizeof(*access));
+    if (!access) return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    access[0] = place;
+    instructions[1] = (XrCoreIrInstructionInput){
+        .operation_id = store ? XR_CORE_OP_CORE_PLACE_STORE : XR_CORE_OP_CORE_PLACE_LOAD,
+        .operands = access, .operand_count = store ? 2u : 1u};
+    if (!store) {
+        instructions[1].result = value_key(function, value);
+        instructions[1].result_type_id = element;
+    } else if (!value_operand_key(context, function, block, value->args[2], &access[1])) {
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    *count = 2u;
+    if (store && logical_ownership_for_type(context, element) == XR_CORE_IR_OWNER) {
+        XrProgramBuildStatus status = expand_affine_place_store(
+            context, &instructions[1], capacity - 1u, element, value_key(function, value));
+        if (status != XR_PROGRAM_BUILD_OK) return status;
+        *count = 4u;
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus expand_affine_aggregate_value(
+    XrXiBuildContext *context, XrCoreIrInstructionInput *instructions,
+    uint32_t capacity, uint32_t *count) {
+    XrCoreIrInstructionInput original = instructions[0];
+    const XrXiTypeStorage *type = find_dynamic_type_by_id(context, original.result_type_id);
+    bool update = original.operation_id == XR_CORE_OP_CORE_AGGREGATE_UPDATE;
+    bool array = original.operation_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT;
+    bool record = original.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT;
+    if (!type || type->input.kind != (array ? XR_CORE_IR_TYPE_ARRAY : record ? XR_CORE_IR_TYPE_RECORD_REFERENCE : XR_CORE_IR_TYPE_AGGREGATE) ||
+        (update ? original.operand_count != 2u ||
+                      original.immediate.field_ordinal >= type->input.field_count
+                : !array && ((!record && original.operation_id != XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT) ||
+                              original.operand_count != type->input.field_count)) ||
+        (!array && !record && type->input.copy_contract != XR_CORE_IR_COPY_EXPLICIT))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t fields = array ? original.operand_count : type->input.field_count;
+    if ((uint64_t) fields * 2u + 1u > capacity)
+        return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+    XrCoreIrKey *arguments = fields ? xr_calloc(fields, sizeof(*arguments)) : NULL;
+    if (fields && !arguments)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    /* Source value construction and update borrow their inputs. Copy each
+     * owning field before the consuming CoreIR constructor; normal owner
+     * closure handles the source values and all partial construction exits. */
+    memset(instructions, 0, (size_t) (fields * 2u + 1u) * sizeof(*instructions));
+    uint32_t cursor = 0u;
+    XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
+    for (uint32_t field = 0u; field < fields; ++field) {
+        uint16_t field_type = array ? type->input.array_element_type : type->input.field_types[field];
+        XrCoreIrKey field_value = original.operands[update ? 1u : field];
+        if (update && field != original.immediate.field_ordinal) {
+            XrCoreIrInstructionInput *project = &instructions[cursor++];
+            XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+            if (!operand) {
+                status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                break;
+            }
+            operand[0] = original.operands[0];
+            *project = (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+                .result = key_from_key_and_u32(UINT8_C(0xc6), original.result, field),
+                .result_type_id = field_type, .operands = operand, .operand_count = 1u,
+                .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+                .immediate.field_ordinal = field,
+            };
+            field_value = project->result;
+        }
+        if (logical_ownership_for_type(context, field_type) == XR_CORE_IR_OWNER) {
+            const XrXiTypeStorage *element = find_dynamic_type_by_id(context, field_type);
+            bool share = (array || record) && type_storage_has_identity(element);
+            XrCoreIrInstructionInput *copy = &instructions[cursor++];
+            XrCoreIrKey *operand = xr_calloc(1u, sizeof(*operand));
+            if (!operand) {
+                status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                break;
+            }
+            operand[0] = field_value;
+            *copy = (XrCoreIrInstructionInput) {
+                .operation_id = share ? XR_CORE_OP_CORE_OWNER_ALIAS : XR_CORE_OP_CORE_OWNER_COPY,
+                .result = key_from_key_and_u32(UINT8_C(0xc7), original.result, field),
+                .result_type_id = field_type, .result_ownership = XR_CORE_IR_OWNER,
+                .operands = operand, .operand_count = 1u,
+            };
+            field_value = copy->result;
+        }
+        arguments[field] = field_value;
+    }
+    xr_free((void *) original.operands);
+    if (status != XR_PROGRAM_BUILD_OK) {
+        xr_free(arguments);
+        return status;
+    }
+    instructions[cursor++] = (XrCoreIrInstructionInput) {
+        .operation_id = record ? XR_CORE_OP_CORE_CLASS_CONSTRUCT : array ? XR_CORE_OP_CORE_ARRAY_CONSTRUCT : XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+        .result = original.result, .result_type_id = original.result_type_id,
+        .result_ownership = XR_CORE_IR_OWNER, .operands = arguments, .operand_count = fields,
+    };
+    *count = cursor;
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                                                 XrXiModuleStorage *module, uint32_t function_index,
                                                 char *diagnostic, size_t diagnostic_size) {
@@ -15498,7 +17350,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         }
     }
     uint32_t cleanup_projection_upper_bound = storage->cleanup_point_count;
-    uint32_t implicit_trap_cleanup_upper_bound = 0u;
+    uint32_t implicit_exit_cleanup_upper_bound = 0u;
     for (uint32_t block = 0u; block < xi->nblocks; ++block) {
         const XiBlock *source_block = xi->blocks[block];
         const XrXiBlockStorage *source_storage = find_block_storage(storage, source_block);
@@ -15511,10 +17363,14 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                                                           &boundary))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "reachable Xi value has no cleanup projection bound");
-            if (resolved_provider_native_call(context, xi, source_block->values[value])) {
-                if (implicit_trap_cleanup_upper_bound == UINT32_MAX)
+            if (resolved_provider_native_call(context, xi, source_block->values[value]) ||
+                source_block->values[value]->op == XI_ASSERTION ||
+                exact_integer_divmod(context, xi, source_block->values[value]) ||
+                exact_array_index(context, xi, source_block->values[value], NULL) ||
+                source_block->values[value]->op == XI_PRINT) {
+                if (implicit_exit_cleanup_upper_bound == UINT32_MAX)
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-                ++implicit_trap_cleanup_upper_bound;
+                ++implicit_exit_cleanup_upper_bound;
             }
             if (!boundary)
                 continue;
@@ -15525,22 +17381,20 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
     }
     if (synthetic_cancel_count > UINT32_MAX - xi->nblocks ||
         cleanup_projection_upper_bound > UINT32_MAX - xi->nblocks - synthetic_cancel_count ||
-        implicit_trap_cleanup_upper_bound >
+        implicit_exit_cleanup_upper_bound >
             UINT32_MAX - xi->nblocks - synthetic_cancel_count - cleanup_projection_upper_bound)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
     uint32_t block_capacity = xi->nblocks + synthetic_cancel_count +
-                              cleanup_projection_upper_bound +
-                              implicit_trap_cleanup_upper_bound;
+                              cleanup_projection_upper_bound + implicit_exit_cleanup_upper_bound;
     storage->blocks = xr_calloc(block_capacity, sizeof(*storage->blocks));
     if (!storage->blocks)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    storage->implicit_trap_cleanup_capacity = implicit_trap_cleanup_upper_bound;
-    storage->implicit_trap_cleanups =
-        implicit_trap_cleanup_upper_bound
-            ? xr_calloc(implicit_trap_cleanup_upper_bound,
-                        sizeof(*storage->implicit_trap_cleanups))
+    storage->implicit_exit_cleanup_capacity = implicit_exit_cleanup_upper_bound;
+    storage->implicit_exit_cleanups =
+        implicit_exit_cleanup_upper_bound
+            ? xr_calloc(implicit_exit_cleanup_upper_bound, sizeof(*storage->implicit_exit_cleanups))
             : NULL;
-    if (implicit_trap_cleanup_upper_bound && !storage->implicit_trap_cleanups)
+    if (implicit_exit_cleanup_upper_bound && !storage->implicit_exit_cleanups)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     output->blocks = storage->blocks;
 
@@ -15584,8 +17438,57 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 continue;
             if (suspend_point && value == suspend_point->op)
                 continue;
+            if (exact_atomic_scalar_operation(value) == XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE) {
+                if (construction_literal_count > UINT32_MAX - 6u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += 6u;
+            }
+            XrProgramXiProjection integer_projection;
+            uint16_t integer_type = XR_CORE_TYPE_VOID;
+            XrProgramXiProjection value_projection;
+            uint16_t update_type = XR_CORE_TYPE_VOID;
+            if (value->op == XI_INDEX_SET && exact_array_index(context, xi, value, &update_type) &&
+                logical_ownership_for_type(context, update_type) == XR_CORE_IR_OWNER) {
+                if (construction_literal_count > UINT32_MAX - 2u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += 2u;
+            }
+            if (value->op == XI_PLACE_STORE && value->nargs == 2u &&
+                map_type(context, value->args[1]->type, &update_type) &&
+                logical_ownership_for_type(context, update_type) == XR_CORE_IR_OWNER) {
+                if (construction_literal_count > UINT32_MAX - 4u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += 4u;
+            }
+            if (((xr_program_xi_projection(value->op, XR_CORE_TYPE_I64, &value_projection) &&
+                  value_projection.kind == XR_PROGRAM_XI_PROJECTION_AGGREGATE_UPDATE) ||
+                 resolved_storage_construction(xi, value, NULL, NULL, NULL) ||
+                 resolved_value_aggregate_construction(context, xi, value, NULL, NULL)) &&
+                map_type(context, value->type, &update_type) &&
+                logical_ownership_for_type(context, update_type) == XR_CORE_IR_OWNER) {
+                const XrXiTypeStorage *type = find_dynamic_type_by_id(context, update_type);
+                uint32_t array_count = 0u;
+                bool array = resolved_storage_construction(xi, value, NULL, &array_count, NULL);
+                uint64_t extra = type ? (uint64_t)(array ? array_count : type->input.field_count) * 2u : UINT64_MAX;
+                if (extra > UINT32_MAX - construction_literal_count)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += (uint32_t) extra;
+            }
+            if (integer_composition_projection(context, xi, value, &integer_projection,
+                                             &integer_type)) {
+                uint32_t extra =
+                    integer_projection.kind == XR_PROGRAM_XI_PROJECTION_COMPARE ? 4u : 2u;
+                if (construction_literal_count > UINT32_MAX - extra)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += extra;
+            }
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u)
                 ++emitted;
+            if (resolved_module_data_slot(context, xi, value, NULL)) {
+                if (construction_literal_count > UINT32_MAX - 2u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += 2u;
+            }
             if (value->op == XI_CALL) {
                 /* A folded constructor body may store literals; each one is
                  * its own constant instruction ahead of the construction. */
@@ -15610,7 +17513,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     ? nominal_info_for_type(value->args[0]->type)
                     : NULL;
             uint16_t field_type_id = XR_CORE_TYPE_VOID;
-            if (field_receiver && field_receiver->nominal_kind == XA_NOMINAL_CLASS &&
+            if (((field_receiver && field_receiver->nominal_kind == XA_NOMINAL_CLASS) ||
+                 (value->args && value->nargs && value->args[0] && source_reference_record_type(value->args[0]->type))) &&
                 resolved_aggregate_field_store(context, xi, value, NULL) && value->nargs == 2u &&
                 value->args[1] && map_type(context, value->args[1]->type, &field_type_id) &&
                 logical_ownership_for_type(context, field_type_id) == XR_CORE_IR_OWNER) {
@@ -15619,7 +17523,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 ++affine_exchange_drop_count;
                 const XrXiTypeStorage *field_type =
                     find_dynamic_type_by_id(context, field_type_id);
-                if (field_type && field_type->input.kind == XR_CORE_IR_TYPE_CLASS_REFERENCE &&
+                if (!type_storage_has_identity(field_type) ||
                     !logical_value_produces_owner(context, xi, value->args[1], 0u)) {
                     if (affine_exchange_share_count == UINT32_MAX)
                         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
@@ -15693,7 +17597,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             if (status != XR_PROGRAM_BUILD_OK)
                 return fail(diagnostic, diagnostic_size, status,
                             "Xi frame place cannot be reconstructed in b%u", xi_block->id);
-            for (uint32_t emitted = 0u; emitted < count; ++emitted) {
+            for (uint32_t place_op = 0u; place_op < count; ++place_op) {
                 const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
                     block_storage->instructions[instruction_index++].operation_id);
                 if (!operation)
@@ -15753,27 +17657,37 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             }
             bool aggregate_field_projection =
                 resolved_aggregate_field_projection(context, value, NULL);
-            const XrClassInfo *field_receiver_info =
-                aggregate_field_projection && value->args && value->args[0]
-                    ? nominal_info_for_type(value->args[0]->type)
-                    : NULL;
-            bool class_field_projection =
-                field_receiver_info && field_receiver_info->nominal_kind == XA_NOMINAL_CLASS;
+            bool class_field_projection = aggregate_field_projection &&
+                source_reference_record_type(value->args[0]->type);
             bool aggregate_place_access =
                 resolved_aggregate_field_store(context, xi, value, NULL) ||
                 (aggregate_field_projection && !class_field_projection && value->args &&
                  logical_value_category(xi, value->args[0]) == XR_CORE_IR_PLACE);
-            if (aggregate_place_access) {
+            bool module_access = resolved_module_data_slot(context, xi, value, NULL) != NULL;
+            bool array_access = exact_array_index(context, xi, value, NULL);
+            if (aggregate_place_access || module_access || array_access) {
+                /* Module storage can be uninitialized even when the reused
+                 * scalar load/store operation has no intrinsic trap effect. */
+                if (module_access)
+                    storage->local_effect_mask |= XR_CORE_EFFECT_TRAP;
                 if (instruction_index > instruction_capacity ||
                     instruction_capacity - instruction_index < 2u)
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
                 XrCoreIrInstructionInput *instructions =
                     &block_storage->instructions[instruction_index];
                 uint32_t translated_instruction_count = 0u;
-                status = translate_aggregate_place_access(
+                status = array_access ? translate_array_index(
                     context, storage, value, block_storage, instructions,
-                    instruction_capacity - instruction_index,
-                    &translated_instruction_count, diagnostic, diagnostic_size);
+                    instruction_capacity - instruction_index, &translated_instruction_count,
+                    diagnostic, diagnostic_size) : module_access
+                             ? translate_module_access(
+                                   context, storage, value, block_storage, instructions,
+                                   instruction_capacity - instruction_index,
+                                   &translated_instruction_count, diagnostic, diagnostic_size)
+                             : translate_aggregate_place_access(
+                                   context, storage, value, block_storage, instructions,
+                                   instruction_capacity - instruction_index,
+                                   &translated_instruction_count, diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
                 if (translated_instruction_count < 2u || translated_instruction_count > 4u)
@@ -15848,9 +17762,11 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                             return status;
                         XrCoreIrInstructionInput *literal =
                             &block_storage->instructions[instruction_index++];
-                        literal->operation_id = literal_type == XR_CORE_TYPE_BOOL
-                                                    ? XR_CORE_OP_CORE_CONSTANT_BOOL
-                                                    : XR_CORE_OP_CORE_CONSTANT_I64;
+                        XrProgramXiProjection literal_projection;
+                        if (!xr_program_xi_projection(XI_CONST, literal_type, &literal_projection) ||
+                            literal_projection.kind != XR_PROGRAM_XI_PROJECTION_CONSTANT)
+                            return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
+                        literal->operation_id = literal_projection.core_operation_id;
                         literal->result = construction_literal_key(construction, field);
                         literal->result_type_id = literal_type;
                         literal->immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT;
@@ -15862,16 +17778,25 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     }
                 }
             }
-            if (value_is_variadic_string_concat(value)) {
+            XrProgramXiProjection integer_projection;
+            uint16_t integer_type = XR_CORE_TYPE_VOID;
+            bool integer_composition = integer_composition_projection(
+                context, xi, value, &integer_projection, &integer_type);
+            if (value_is_variadic_string_concat(value) || integer_composition) {
                 XrCoreIrInstructionInput *instructions =
                     &block_storage->instructions[instruction_index];
                 uint32_t translated_instruction_count = 0u;
                 if (instruction_index > instruction_capacity)
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-                status = translate_string_concat(
-                    context, storage, value, block_storage, instructions,
-                    instruction_capacity - instruction_index, &translated_instruction_count,
-                    diagnostic, diagnostic_size);
+                status = integer_composition
+                             ? translate_integer_composition(
+                                   context, module, storage, value, block_storage, &integer_projection,
+                                   integer_type, instructions, instruction_capacity - instruction_index,
+                                   &translated_instruction_count, diagnostic, diagnostic_size)
+                             : translate_string_concat(
+                                   context, storage, value, block_storage, instructions,
+                                   instruction_capacity - instruction_index, &translated_instruction_count,
+                                   diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
                 for (uint32_t emitted_instruction = 0u;
@@ -15880,7 +17805,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                         instructions[emitted_instruction].operation_id);
                     if (!operation)
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                    "translated Xi string concatenation v%u has no CoreSpec "
+                                    "translated Xi expansion v%u has no CoreSpec "
                                     "operation",
                                     value->id);
                     storage->local_effect_mask |= operation->effect_mask;
@@ -15896,6 +17821,126 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                                      diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
+            if (instruction->operation_id == XR_CORE_OP_CORE_ATOMIC_UPDATE &&
+                value->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_TOGGLE) {
+                if (instruction_index >= instruction_capacity || instruction->operand_count != 1u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                XiValue literal = *value;
+                literal.op = XI_CONST;
+                literal.aux_int = 1;
+                literal.aux = NULL;
+                literal.args = NULL;
+                literal.nargs = 0u;
+                XrCoreIrKey constant;
+                status = add_constant(context, module, &literal, &constant, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                XrCoreIrKey *operands = xr_calloc(2u, sizeof(*operands));
+                if (!operands)
+                    return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                operands[0] = instruction->operands[0];
+                operands[1] = key_from_key_and_u32(UINT8_C(0xae), instruction->result, 0u);
+                XrCoreIrInstructionInput update = *instruction;
+                xr_free((void *)update.operands);
+                update.operands = operands;
+                update.operand_count = 2u;
+                instruction[1] = update;
+                instruction[0] = (XrCoreIrInstructionInput) {
+                    .operation_id = XR_CORE_OP_CORE_CONSTANT_BOOL,
+                    .result = operands[1], .result_type_id = XR_CORE_TYPE_BOOL,
+                    .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT, .immediate.key = constant,
+                };
+                ++instruction_index;
+                span->end = instruction_index;
+                continue;
+            }
+            if (instruction->operation_id == XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE) {
+                uint16_t scalar = XR_CORE_TYPE_VOID;
+                uint32_t count = 0u;
+                if (!map_builtin_type(value->args[1]->type, &scalar))
+                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                status = expand_atomic_compare_result(instruction,
+                    instruction_capacity - (instruction_index - 1u), scalar, &count);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                for (uint32_t index = 0u; index < count; ++index) {
+                    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(instruction[index].operation_id);
+                    storage->local_effect_mask |= operation->effect_mask;
+                    storage->local_capability_mask |= operation->capability_mask;
+                }
+                instruction_index += count - 1u;
+                span->end = instruction_index;
+                continue;
+            }
+            if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE) {
+                uint16_t type_id = XR_CORE_TYPE_VOID;
+                if (!map_type(context, value->args[1]->type, &type_id))
+                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                if (logical_ownership_for_type(context, type_id) == XR_CORE_IR_OWNER) {
+                    status = expand_affine_place_store(
+                        context, instruction, instruction_capacity - (instruction_index - 1u),
+                        type_id, value_key(storage, value));
+                    if (status != XR_PROGRAM_BUILD_OK)
+                        return status;
+                    for (uint32_t expanded = 0u; expanded < 3u; ++expanded) {
+                        const XrCoreOperationSpec *operation =
+                            xr_core_spec_operation_by_id(instruction[expanded].operation_id);
+                        storage->local_effect_mask |= operation->effect_mask;
+                        storage->local_capability_mask |= operation->capability_mask;
+                    }
+                    instruction_index += 2u;
+                    span->end = instruction_index;
+                    continue;
+                }
+            }
+            if (((instruction->operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT &&
+                  resolved_record_construction(xi, value, NULL, NULL, NULL)) ||
+                 instruction->operation_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT ||
+                 instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_UPDATE ||
+                 (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT &&
+                  resolved_value_aggregate_construction(context, xi, value, NULL, NULL))) &&
+                logical_ownership_for_type(context, instruction->result_type_id) == XR_CORE_IR_OWNER) {
+                uint32_t count = 0u;
+                status = expand_affine_aggregate_value(
+                    context, instruction, instruction_capacity - (instruction_index - 1u), &count);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                for (uint32_t expanded = 0u; expanded < count; ++expanded) {
+                    const XrCoreOperationSpec *operation =
+                        xr_core_spec_operation_by_id(instruction[expanded].operation_id);
+                    storage->local_effect_mask |= operation->effect_mask;
+                    storage->local_capability_mask |= operation->capability_mask;
+                }
+                instruction_index += count - 1u;
+                span->end = instruction_index;
+                continue;
+            }
+            if (instruction->operation_id == XR_CORE_OP_CORE_CONSTANT_I64 &&
+                instruction->result_type_id != XR_CORE_TYPE_I64) {
+                uint16_t exact_type = instruction->result_type_id;
+                if (!xr_core_spec_integer_type(exact_type) ||
+                    instruction_index >= instruction_capacity)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi integer constant v%u has no exact conversion capacity",
+                                value->id);
+                XrCoreIrKey exact_result = instruction->result;
+                XrCoreIrKey bits_result =
+                    key_from_key_and_u32(UINT8_C(0x6b), exact_result, 0u);
+                instruction->result = bits_result;
+                instruction->result_type_id = XR_CORE_TYPE_I64;
+                instruction = &block_storage->instructions[instruction_index++];
+                XrCoreIrKey *operand = xr_malloc(sizeof(*operand));
+                if (!operand)
+                    return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                *operand = bits_result;
+                *instruction = (XrCoreIrInstructionInput) {
+                    .operation_id = XR_CORE_OP_CORE_INTEGER_CONVERT,
+                    .result = exact_result,
+                    .result_type_id = exact_type,
+                    .operands = operand,
+                    .operand_count = 1u,
+                };
+            }
             const XrCoreOperationSpec *operation =
                 xr_core_spec_operation_by_id(instruction->operation_id);
             if (!operation)
@@ -15955,18 +18000,20 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
-        } else if (invoke_call) {
+        } else if (invoke_call && !suspended_invoke_point(context, xi, invoke_call)) {
             const XiFunc *callee = resolved_sealed_callee(context, xi, invoke_call);
-            bool witness = invoke_call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE;
+            bool witness = invoke_call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE ||
+                           invoke_call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_DIRECT;
+            bool has_error = xi_block->kind == XI_BLOCK_IF;
             bool indirect = callee == NULL && !witness;
             const XrXiFunctionStorage *callee_storage =
                 find_xi_function(context, callee, NULL, NULL);
-            XrXiBlockStorage *normal = find_block_storage(storage, xi_block->succs[1]);
-            XrXiBlockStorage *error = find_block_storage(storage, xi_block->succs[0]);
+            XrXiBlockStorage *normal = find_block_storage(storage, xi_block->succs[has_error ? 1u : 0u]);
+            XrXiBlockStorage *error = has_error ? find_block_storage(storage, xi_block->succs[0]) : NULL;
             if ((!indirect && !witness && !callee_storage) ||
                 (indirect && !resolved_callable_call_targets(context, xi, invoke_call, NULL)) ||
                 (witness && !resolved_witness_callsite(context, xi, invoke_call)) || !normal ||
-                !error)
+                (has_error && !error))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi invoke block b%u has an unresolved continuation", xi_block->id);
             terminator->operation_id = witness    ? XR_CORE_OP_CORE_CALL_WITNESS_INVOKE
@@ -15979,29 +18026,45 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
                 terminator->immediate.key = callee_storage->key;
             }
-            XrCoreIrKey *successors = xr_calloc(2u, sizeof(*successors));
+            XrCoreIrKey *successors = xr_calloc(has_error ? 2u : 1u, sizeof(*successors));
             if (!successors)
                 return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
             successors[0] = block_key(storage, normal->xi);
-            successors[1] = block_key(storage, error->xi);
+            if (error)
+                successors[1] = block_key(storage, error->xi);
             terminator->successors = successors;
-            terminator->successor_count = 2u;
+            terminator->successor_count = has_error ? 2u : 1u;
+            bool constructor_call = callee && xi_value_is_constructor_call(invoke_call) &&
+                                    invoke_call->op == XI_CALL;
             uint32_t first_operand =
-                indirect || witness || (callee && callee->has_receiver) ? 0u : 1u;
+                indirect || witness || (callee && (callee->has_receiver || constructor_call))
+                    ? 0u
+                    : 1u;
             status = set_invoke_operands(context, terminator, storage, block_storage, invoke_call,
                                          normal, error, first_operand, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
-            const XrXiTrapEdge *trap_edge = find_trap_edge(context, xi, invoke_call);
-            if (trap_edge) {
-                const XrXiBlockStorage *handler = find_block_storage(storage, trap_edge->handler);
-                status = append_invoke_trap_edge_operands(context, terminator, storage,
-                                                          block_storage, invoke_call, handler,
-                                                          diagnostic, diagnostic_size);
+            const XrXiPanicEdge *panic_edge = find_panic_edge(context, xi, invoke_call);
+            if (panic_edge) {
+                const XrXiBlockStorage *handler = find_block_storage(storage, panic_edge->handler);
+                status = append_invoke_failure_edge_operands(context, terminator, storage,
+                                                              block_storage, invoke_call, handler,
+                                                               XR_XI_INVOKE_ARGUMENT_PANIC,
+                                                               diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
             }
-        } else if (exact_infallible_class_construction_in_block(context, xi, xi_block)) {
+            const XrXiTrapEdge *trap_edge = find_trap_edge(context, xi, invoke_call);
+            if (trap_edge) {
+                const XrXiBlockStorage *handler = find_block_storage(storage, trap_edge->handler);
+                status = append_invoke_failure_edge_operands(context, terminator, storage,
+                                                          block_storage, invoke_call, handler,
+                                                           XR_XI_INVOKE_ARGUMENT_NONE,
+                                                           diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
+        } else if (exact_infallible_construction_in_block(context, xi, xi_block)) {
             XrXiBlockStorage *successor = find_block_storage(storage, xi_block->succs[1]);
             if (!successor)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -16173,15 +18236,15 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
     if (cleanup_trap_projection_count > UINT32_MAX - output->block_count)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
     output->block_count += cleanup_trap_projection_count;
-    uint32_t implicit_trap_cleanup_count = 0u;
-    status = materialize_implicit_owner_trap_cleanups(
+    uint32_t implicit_exit_cleanup_count = 0u;
+    status = materialize_implicit_owner_exit_cleanups(
         context, storage, original_block_count, block_capacity, &output_block_index,
-        &implicit_trap_cleanup_count, diagnostic, diagnostic_size);
+        &implicit_exit_cleanup_count, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK)
         return status;
-    if (implicit_trap_cleanup_count > UINT32_MAX - output->block_count)
+    if (implicit_exit_cleanup_count > UINT32_MAX - output->block_count)
         return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
-    output->block_count += implicit_trap_cleanup_count;
+    output->block_count += implicit_exit_cleanup_count;
     if (output->coroutine_safepoint_count != 0u) {
         for (uint32_t safepoint = 0u; safepoint < output->coroutine_safepoint_count; ++safepoint) {
             const XiCoroSuspendPoint *point = coroutine_point_for_safepoint(storage, safepoint);
@@ -16273,7 +18336,8 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (value->op != XI_CALL && !witness && !sealed_method)
                             continue;
-                        if (resolved_canonical_class_construction(context, function->xi, value,
+                        if (resolved_atomic_construction(value) ||
+                            resolved_canonical_class_construction(context, function->xi, value,
                                                                   NULL, NULL) ||
                             resolved_empty_struct_literal(context, function->xi, value) ||
                             resolved_provider_native_call(context, function->xi, value) ||
@@ -16375,7 +18439,14 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                         module->functions[function_index].capability_mask !=
                             storage->closed_capability_mask)
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                    "Xi precomputed and emitted function contracts disagree");
+                                    "Xi function %s precomputed and emitted contracts disagree "
+                                    "(effects=%u/%u capabilities=%u/%u)",
+                                    storage->xi && storage->xi->name ? storage->xi->name
+                                                                     : "<anonymous>",
+                                    storage->closed_effect_mask,
+                                    module->functions[function_index].effect_mask,
+                                    storage->closed_capability_mask,
+                                    module->functions[function_index].capability_mask);
                 }
             }
             return XR_PROGRAM_BUILD_OK;
@@ -16471,6 +18542,9 @@ static XrProgramBuildStatus finalize_type_inputs(XrXiBuildContext *context) {
                 return XR_PROGRAM_BUILD_INVALID_INPUT;
             input->ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
             input->copy_contract = XR_CORE_IR_COPY_EXPLICIT;
+        } else if (input->kind == XR_CORE_IR_TYPE_RECORD_REFERENCE) {
+            input->ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+            input->copy_contract = XR_CORE_IR_COPY_EXPLICIT;
         } else if ((input->kind == XR_CORE_IR_TYPE_AGGREGATE &&
                     !(input->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
                       input->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
@@ -16485,8 +18559,9 @@ static XrProgramBuildStatus finalize_type_inputs(XrXiBuildContext *context) {
         changed = false;
         for (uint32_t type = 0u; type < context->type_count; ++type) {
             XrCoreIrTypeInput *input = &context->type_storage[type].input;
-            if (input->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE &&
+            if (!xr_program_type_kind_is_reference_record(input->kind) &&
                 input->kind != XR_CORE_IR_TYPE_AGGREGATE &&
+                input->kind != XR_CORE_IR_TYPE_ARRAY &&
                 input->kind != XR_CORE_IR_TYPE_VARIANT)
                 continue;
             bool anonymous_owner_aggregate =
@@ -16495,14 +18570,19 @@ static XrProgramBuildStatus finalize_type_inputs(XrXiBuildContext *context) {
                 input->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
                 input->copy_contract == XR_CORE_IR_COPY_EXPLICIT;
             XrCoreIrTypeOwnership ownership =
-                input->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE || anonymous_owner_aggregate
+                xr_program_type_kind_is_reference_record(input->kind) || anonymous_owner_aggregate
                     ? XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
                     : XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
             XrCoreIrCopyContract copy_contract =
-                input->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE || anonymous_owner_aggregate
+                xr_program_type_kind_is_reference_record(input->kind) || anonymous_owner_aggregate
                     ? XR_CORE_IR_COPY_EXPLICIT
                     : XR_CORE_IR_COPY_TRIVIAL;
-            if (input->kind == XR_CORE_IR_TYPE_VARIANT) {
+            if (input->kind == XR_CORE_IR_TYPE_ARRAY) {
+                ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+                copy_contract = logical_copy_contract_for_type(context, input->array_element_type) ==
+                                        XR_CORE_IR_COPY_FORBIDDEN
+                                    ? XR_CORE_IR_COPY_FORBIDDEN : XR_CORE_IR_COPY_EXPLICIT;
+            } else if (input->kind == XR_CORE_IR_TYPE_VARIANT) {
                 for (uint32_t variant = 0u; variant < input->variant_count; ++variant) {
                     const XrCoreIrVariantInput *row = &input->variants[variant];
                     for (uint32_t field = 0u; field < row->payload_count; ++field) {
@@ -16541,14 +18621,6 @@ static XrProgramBuildStatus finalize_type_inputs(XrXiBuildContext *context) {
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     for (uint32_t type = 0u; type < context->type_count; ++type) {
         const XrXiTypeStorage *storage = &context->type_storage[type];
-        if (storage->input.kind == XR_CORE_IR_TYPE_AGGREGATE &&
-            storage->input.nominal_kind == XR_CORE_IR_NOMINAL_STRUCT) {
-            for (uint32_t field = 0u; field < storage->input.field_count; ++field) {
-                if (logical_ownership_for_type(context, storage->input.field_types[field]) ==
-                    XR_CORE_IR_OWNER)
-                    return XR_PROGRAM_BUILD_INVALID_INPUT;
-            }
-        }
         if (storage->nominal_contract_deferred &&
             !nominal_type_contract_is_exact(
                 context, storage->nominal_decl_id, storage->nominal_key,
@@ -16592,51 +18664,25 @@ static bool append_nested_functions(const XiFunc *function, const XiFunc **funct
     return true;
 }
 
-static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage,
-                                                     bool include_initializer, char *diagnostic,
+static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage, char *diagnostic,
                                                      size_t diagnostic_size) {
     const XiModule *module = storage && storage->root ? storage->root->module : NULL;
     if (!module || module->init != storage->root || (module->nfuncs != 0u && !module->functions))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi module has no exact initializer function tree");
-    uint32_t count = include_initializer ? 1u : module->nfuncs;
-    if (include_initializer) {
-        if (!count_nested_functions(storage->root, &count))
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi module function tree is malformed or too large");
-    } else {
-        for (uint16_t function = 0u; function < module->nfuncs; ++function)
-            if (!module->functions[function] ||
-                !count_nested_functions(module->functions[function], &count))
-                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "Xi module function tree is malformed or too large");
-    }
+    uint32_t count = 1u;
+    if (!count_nested_functions(storage->root, &count))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi module function tree is malformed or too large");
     const XiFunc **functions = xr_calloc(count, sizeof(*functions));
     if (!functions)
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    uint32_t cursor = 0u;
-    if (include_initializer) {
-        functions[cursor++] = storage->root;
-        if (!append_nested_functions(storage->root, functions, count, &cursor)) {
-            xr_free(functions);
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi module function tree cannot be flattened");
-        }
-    } else {
-        for (uint16_t function = 0u; function < module->nfuncs; ++function)
-            functions[cursor++] = module->functions[function];
-        for (uint16_t function = 0u; function < module->nfuncs; ++function) {
-            if (!append_nested_functions(module->functions[function], functions, count, &cursor)) {
-                xr_free(functions);
-                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                            "Xi module function tree cannot be flattened");
-            }
-        }
-    }
-    if (cursor != count) {
+    uint32_t cursor = 1u;
+    functions[0] = storage->root;
+    if (!append_nested_functions(storage->root, functions, count, &cursor) || cursor != count) {
         xr_free(functions);
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                    "Xi module function count is inconsistent");
+                    "Xi module function tree cannot be flattened");
     }
     storage->xi_functions = functions;
     storage->function_count = count;
@@ -16814,6 +18860,12 @@ static void mark_program_value_targets(XrXiBuildContext *context, const XiFunc *
     }
     if (value->xg_conformance_id != XG_NO_ID)
         mark_program_conformance_targets(context, value->xg_conformance_id, changed);
+    if ((value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
+        value->xg_method_id == 0u) {
+        const XiFunc *protocol_target = resolved_protocol_method_callee(context, function, value);
+        if (protocol_target)
+            (void) mark_program_function(context, protocol_target, changed);
+    }
 }
 
 static XrProgramBuildStatus retain_program_function_closure(XrXiBuildContext *context,
@@ -16835,6 +18887,18 @@ static XrProgramBuildStatus retain_program_function_closure(XrXiBuildContext *co
     if (!mark_program_function(context, context->source->entry_function, &changed))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "canonical-program entry is not a source function in the input graph");
+    for (uint32_t index = 0u; index < context->source->retained_function_count; ++index) {
+        const XiFunc *function = context->source->retained_functions[index];
+        if (!mark_program_function(context, function, &changed))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "retained function %u is not in the authoritative Xi graph", index);
+    }
+    for (uint32_t module = 0u; module < context->source->module_count; ++module) {
+        if (!mark_program_function(context, context->storage[module].root, &changed))
+            return fail(
+                diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                "canonical-program initializer is not a source function in the input graph");
+    }
     for (uint32_t iteration = 0u; changed && iteration <= total; ++iteration) {
         changed = false;
         for (uint32_t module = 0u; module < context->source->module_count; ++module) {
@@ -16846,8 +18910,11 @@ static XrProgramBuildStatus retain_program_function_closure(XrXiBuildContext *co
                     continue;
                 for (uint32_t block = 0u; block < function->nblocks; ++block) {
                     const XiBlock *row = function->blocks[block];
-                    for (uint32_t value = 0u; row && value < row->nvalues; ++value)
+                    for (uint32_t value = 0u; row && value < row->nvalues; ++value) {
+                        if (static_function_publication_is_exact(function, row->values[value]))
+                            continue;
                         mark_program_value_targets(context, function, row->values[value], &changed);
+                    }
                 }
             }
         }
@@ -16878,6 +18945,97 @@ static XrProgramBuildStatus retain_program_function_closure(XrXiBuildContext *co
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus publish_module_slots(XrXiBuildContext *context, uint32_t module,
+                                                 char *diagnostic, size_t diagnostic_size) {
+    XrXiModuleStorage *storage = &context->storage[module];
+    const XiFunc *root = storage->root;
+    if (root->nshared != 0u && !root->module_slots)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi module has no declaration-owned slot descriptions");
+    uint32_t count = 0u;
+    for (uint32_t slot = 0u; slot < root->nshared; ++slot)
+        count += root->module_slots[slot].kind == XI_MODULE_SLOT_VALUE;
+    if (count == 0u)
+        return XR_PROGRAM_BUILD_OK;
+    storage->slots = xr_calloc(count, sizeof(*storage->slots));
+    if (!storage->slots)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    for (uint32_t slot = 0u; slot < root->nshared; ++slot) {
+        const XiModuleSlot *source = &root->module_slots[slot];
+        if (source->kind != XI_MODULE_SLOT_VALUE)
+            continue;
+        XrCoreIrModuleSlotInput *output = &storage->slots[storage->slot_count];
+        if (!source->name || !source->name[0] || source->source_line == 0u || !source->type ||
+            !map_type(context, source->type, &output->type_id) ||
+            output->type_id == XR_CORE_TYPE_VOID)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi module '%s' data slot %u ('%s', line %u) has no exact runtime "
+                        "declaration type",
+                        root->module && root->module->identity ? root->module->identity : "",
+                        slot, source->name ? source->name : "", source->source_line);
+        output->key = module_slot_key(storage->source_authority->module_identity, source);
+        output->flags = source->is_const ? XR_PROGRAM_MODULE_SLOT_CONST : 0u;
+        ++storage->slot_count;
+    }
+    context->modules[module].slots = storage->slots;
+    context->modules[module].slot_count = storage->slot_count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus publish_module_initializers(XrXiBuildContext *context, char *diagnostic,
+                                                        size_t diagnostic_size) {
+    const XrModuleGraph *graph = context->source->module_graph;
+    uint32_t count = context->source->module_count;
+    if ((!graph && count != 1u) ||
+        (graph && (!graph->topo_order || graph->topo_count < 0 ||
+                   (uint32_t) graph->topo_count != count || graph->has_cycle)))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi program has no complete dependency-ordered source graph");
+    for (uint32_t module = 0u; module < count; ++module) {
+        XrXiModuleStorage *storage = &context->storage[module];
+        XrCoreIrModuleInput *output = &context->modules[module];
+        bool found = false;
+        for (uint32_t function = 0u; function < storage->function_count; ++function) {
+            if (storage->xi_functions[function] != storage->root)
+                continue;
+            if (found)
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            output->initializer = storage->function_storage[function].key;
+            found = true;
+        }
+        if (!found)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        if (!graph)
+            continue;
+        int spec_index = graph->topo_order[module];
+        if (spec_index < 0 || spec_index >= graph->spec_count)
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        const XrModuleSpec *spec = &graph->specs[spec_index];
+        if (!spec->canonical || !storage->root->module->identity ||
+            strcmp(spec->canonical, storage->root->module->identity) != 0 || spec->dep_count < 0 ||
+            (spec->dep_count != 0 && !spec->dep_indices))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi module identity does not match its source graph position");
+        if (spec->dep_count == 0)
+            continue;
+        storage->dependencies = xr_calloc((size_t) spec->dep_count, sizeof(*storage->dependencies));
+        if (!storage->dependencies)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        for (int dependency = 0; dependency < spec->dep_count; ++dependency) {
+            int target = spec->dep_indices[dependency];
+            if (target < 0 || target >= graph->spec_count || graph->specs[target].topo_index < 0 ||
+                (uint32_t) graph->specs[target].topo_index >= module)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi module dependency does not precede its initializer");
+            storage->dependencies[dependency] =
+                context->modules[graph->specs[target].topo_index].key;
+        }
+        output->dependencies = storage->dependencies;
+        output->dependency_count = (uint32_t) spec->dep_count;
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagnostic,
                                           size_t diagnostic_size) {
     context->modules = xr_calloc(context->source->module_count, sizeof(*context->modules));
@@ -16899,8 +19057,8 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi module %u is not verified canonical-program input", module_index);
         storage->source_authority = &root->module->source_semantic_module;
-        XrProgramBuildStatus collect_status = collect_module_functions(
-            storage, root == context->source->entry_function, diagnostic, diagnostic_size);
+        XrProgramBuildStatus collect_status =
+            collect_module_functions(storage, diagnostic, diagnostic_size);
         if (collect_status != XR_PROGRAM_BUILD_OK)
             return collect_status;
         output->key = key_from_stable_id(UINT8_C(0x4d), storage->source_authority->module_identity);
@@ -16933,6 +19091,16 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
             storage->function_storage[function].key =
                 function_key(storage->source_authority->module_identity, function);
         }
+    }
+    XrProgramBuildStatus initializer_status =
+        publish_module_initializers(context, diagnostic, diagnostic_size);
+    if (initializer_status != XR_PROGRAM_BUILD_OK)
+        return initializer_status;
+    for (uint32_t module = 0u; module < context->source->module_count; ++module) {
+        XrProgramBuildStatus status =
+            publish_module_slots(context, module, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
     }
 
     XrProgramBuildStatus reachability_status =
@@ -17014,8 +19182,13 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
         for (uint32_t function = 0; function < storage->function_count; ++function) {
             XrProgramBuildStatus status =
                 build_function_body(context, storage, function, diagnostic, diagnostic_size);
-            if (status != XR_PROGRAM_BUILD_OK)
+            if (status != XR_PROGRAM_BUILD_OK) {
+                if (diagnostic && diagnostic_size && !diagnostic[0])
+                    fail(diagnostic, diagnostic_size, status, "Xi body '%s' failed: %s",
+                         storage->xi_functions[function]->name,
+                         xr_program_build_status_name(status));
                 return status;
+            }
         }
         output->constants = storage->constants;
         output->constant_count = storage->constant_count;
@@ -17036,7 +19209,8 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
 
 XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                                               XrProgramArtifact *artifact_out,
-                                              XrValidatedProgram **program_out, char *diagnostic,
+                                              XrValidatedProgram **program_out,
+                                              uint32_t *retained_function_ids, char *diagnostic,
                                               size_t diagnostic_size) {
     if (artifact_out)
         memset(artifact_out, 0, sizeof(*artifact_out));
@@ -17044,13 +19218,26 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
         *program_out = NULL;
     if (diagnostic && diagnostic_size != 0)
         diagnostic[0] = '\0';
+    if (input && retained_function_ids &&
+        input->retained_function_count <= XR_PROGRAM_LIMIT_FUNCTIONS)
+        for (uint32_t index = 0u; index < input->retained_function_count; ++index)
+            retained_function_ids[index] = UINT32_MAX;
     if (!input || !artifact_out || !program_out || !input->module_roots ||
         input->module_count == 0u || !input->entry_function || !input->global_evidence ||
         !input->semantic_profile_fingerprint)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi program producer input is incomplete");
+    if (input->retained_function_count > XR_PROGRAM_LIMIT_FUNCTIONS ||
+        (input->retained_function_count &&
+         (!input->retained_functions || !retained_function_ids)) ||
+        (!input->retained_function_count && input->retained_functions))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi retained function request is incomplete");
     XrXiBuildContext context = {.source = input};
     XrProgramBuildStatus status = build_context(&context, diagnostic, diagnostic_size);
+    if (context.type_allocation_failed)
+        status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_OUT_OF_MEMORY,
+                      "Xi canonical type mapping allocation failed");
     if (status != XR_PROGRAM_BUILD_OK && (!diagnostic || diagnostic_size == 0u || !diagnostic[0]))
         (void) fail(diagnostic, diagnostic_size, status,
                     "Xi canonical context construction failed: %s",
@@ -17172,6 +19359,7 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                 diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                 "Xi-produced XrProgram failed semantic verification: %s/%s "
                 "at function=%u(%s) block=%u instruction=%u value=%u operation=%u "
+                "operands=%u successors=%u "
                 "result_type=%u category=%u ownership=%u result_zero=%u "
                 "operand0_type=%u category=%u ownership=%u "
                 "function_effects=%u function_capabilities=%u states=%u safepoints=%u",
@@ -17181,6 +19369,8 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                 verify_diagnostic.location.block_id,
                 verify_diagnostic.location.instruction_id, verify_diagnostic.location.value_id,
                 failed_instruction ? failed_instruction->operation_id : 0u,
+                failed_instruction ? failed_instruction->operand_count : 0u,
+                failed_instruction ? failed_instruction->successor_count : 0u,
                 failed_value_type, failed_value_category, failed_value_ownership,
                 failed_instruction ? (unsigned) xr_core_ir_key_is_zero(failed_instruction->result)
                                    : 1u,
@@ -17191,6 +19381,31 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                 failed_function ? failed_function->coroutine_safepoint_count : 0u);
         } else {
             *program_out = validated;
+        }
+    }
+    if (status == XR_PROGRAM_BUILD_OK && input->retained_function_count) {
+        XrCoreIrKey *keys = xr_calloc(input->retained_function_count, sizeof(*keys));
+        if (!keys)
+            status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        for (uint32_t index = 0u; keys && index < input->retained_function_count; ++index) {
+            const XrXiFunctionStorage *function =
+                find_xi_function(&context, input->retained_functions[index], NULL, NULL);
+            if (!function) {
+                status = XR_PROGRAM_BUILD_INVALID_INPUT;
+                break;
+            }
+            keys[index] = function->key;
+        }
+        if (status == XR_PROGRAM_BUILD_OK)
+            status = xr_program_function_ids_from_keys(
+                program, keys, input->retained_function_count, retained_function_ids);
+        xr_free(keys);
+        if (status != XR_PROGRAM_BUILD_OK) {
+            xr_validated_program_free(*program_out);
+            *program_out = NULL;
+            xr_program_artifact_free(artifact_out);
+            (void) fail(diagnostic, diagnostic_size, status,
+                        "retained function identity publication failed");
         }
     }
     xr_core_ir_program_free(program);

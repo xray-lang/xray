@@ -48,6 +48,21 @@ static inline bool xr_semantic_tagged_string_type_is_exact(const XrSemanticTypeR
            (type->flags & required) == required;
 }
 
+/* Nullable String uses the same tagged carrier and conditional release rule;
+ * the nullable bit changes only the inhabitant set. */
+static inline bool xr_semantic_nullable_tagged_string_type_is_exact(
+    const XrSemanticTypeRecord *type) {
+    uint8_t forbidden = XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
+                        XR_SEM_TYPE_AGGREGATE_EXACT;
+    uint8_t required = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE |
+                       XR_SEM_TYPE_OWNERSHIP_ROOT;
+    return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE && (type->flags & forbidden) == 0 &&
+           (type->flags & required) == required;
+}
+
 /* A String parameter handed over by value.
  *
  * A String is immutable and shared, so both sides of the boundary hold the same

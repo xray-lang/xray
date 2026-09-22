@@ -75,14 +75,13 @@ static void test_coroutine_child_string_storage(void) {
     build_provider_bindings(profile, &bindings);
     for (uint32_t allocation = 0u; allocation < 2u; ++allocation) {
         XrValidatedProgram *program = child_string_program(allocation != 0u);
-        for (uint32_t policy = 0u; policy < 2u; ++policy) {
+        {
             for (uint32_t budget = 5u; budget <= 6u; ++budget) {
                 XrVmCodeOptions options = xr_vm_code_default_options();
-                options.decode_policy = policy ? XR_VM_DECODE_FIXED_ROWS : XR_VM_DECODE_BASELINE_VIEW;
                 options.max_value_cells = budget;
                 XrVmCode *code = NULL;
                 REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
-                XrInstance *instance = create_instance(program, profile, &bindings, policy + 1u);
+                XrInstance *instance = create_instance(program, profile, &bindings, 0u + 1u);
                 for (uint32_t finish = 0u; finish < 3u; ++finish)
                     test_child_string_execution(code, instance,
                                                 xr_validated_program_entry_function(program),

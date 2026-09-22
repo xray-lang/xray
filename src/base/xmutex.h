@@ -85,11 +85,11 @@ static inline void xr_futex_wake(XrAdaptiveMutex *m) {
 #elif defined(XR_OS_WINDOWS)
 
 static inline void xr_futex_wait(XrAdaptiveMutex *m, int expected) {
-    WaitOnAddress(&m->state, &expected, sizeof(int), INFINITE);
+    WaitOnAddress((volatile void *) &m->state, &expected, sizeof(int), INFINITE);
 }
 
 static inline void xr_futex_wake(XrAdaptiveMutex *m) {
-    WakeByAddressSingle(&m->state);
+    WakeByAddressSingle((void *) &m->state);
 }
 
 #elif defined(XR_OS_MACOS)

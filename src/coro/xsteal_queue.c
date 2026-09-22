@@ -55,7 +55,7 @@ bool xr_steal_queue_init(XrStealQueue *q, int capacity) {
     }
 
     // Allocate buffer
-    q->buffer = xr_calloc(capacity, sizeof(_Atomic(struct XrCoroutine *)));
+    q->buffer = xr_calloc(capacity, sizeof(*q->buffer));
     if (!q->buffer) {
         return false;
     }
@@ -85,7 +85,7 @@ void xr_steal_queue_destroy(XrStealQueue *q) {
 
 // ========== Local Operations ==========
 
-bool xr_steal_queue_push(XrStealQueue *q, struct XrCoroutine *coro) {
+bool xr_steal_queue_push(XrStealQueue *q, struct XrCoroutine *coro, int64_t submit_time) {
     if (!q || !q->buffer || !coro)
         return false;
 
@@ -98,7 +98,8 @@ bool xr_steal_queue_push(XrStealQueue *q, struct XrCoroutine *coro) {
     }
 
     // Write data
-    atomic_store_explicit(&q->buffer[b & q->mask], coro, memory_order_relaxed);
+    atomic_store_explicit(&q->buffer[b & q->mask].coro, coro, memory_order_relaxed);
+    atomic_store_explicit(&q->buffer[b & q->mask].submit_time, submit_time, memory_order_relaxed);
 
     // Release store publishes the buffer write (and every owner-thread write
     // to the coroutine itself) to stealers that acquire-load bottom. A
@@ -126,7 +127,7 @@ struct XrCoroutine *xr_steal_queue_pop(XrStealQueue *q) {
 
     if (t <= b) {
         // Queue not empty
-        coro = atomic_load_explicit(&q->buffer[b & q->mask], memory_order_relaxed);
+        coro = atomic_load_explicit(&q->buffer[b & q->mask].coro, memory_order_relaxed);
 
         if (t == b) {
             // Only one element left, possible stealer contention
@@ -167,7 +168,8 @@ XrStealQueueStatus xr_steal_queue_steal_status(XrStealQueue *q, struct XrCorouti
     }
 
     // Read data
-    struct XrCoroutine *coro = atomic_load_explicit(&q->buffer[t & q->mask], memory_order_relaxed);
+    struct XrCoroutine *coro =
+        atomic_load_explicit(&q->buffer[t & q->mask].coro, memory_order_relaxed);
 
     // CAS attempt to steal
     if (!atomic_compare_exchange_strong_explicit(&q->top, &t, t + 1, memory_order_seq_cst,
@@ -209,7 +211,8 @@ int xr_steal_queue_snapshot(XrStealQueue *q, struct XrCoroutine **out_buf, int m
     int count = 0;
 
     for (int64_t i = t; i < b && count < max_out; i++) {
-        struct XrCoroutine *c = atomic_load_explicit(&q->buffer[i & q->mask], memory_order_relaxed);
+        struct XrCoroutine *c =
+            atomic_load_explicit(&q->buffer[i & q->mask].coro, memory_order_relaxed);
         if (c) {
             out_buf[count++] = c;
         }

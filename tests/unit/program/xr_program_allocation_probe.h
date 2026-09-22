@@ -8,8 +8,9 @@
  * xr_program_allocation_probe.h - Allocation failure injection for Program tests
  *
  * KEY CONCEPT:
- *   Only the test executable substitutes construction, encoding and verifier allocators.
- *   Production code retains the ordinary allocator and has no test-mode branch.
+ *   Only test executables substitute construction, encoding, verifier or native frame allocators.
+
+ * *   Production code retains the ordinary allocator and has no test-mode branch.
  */
 
 #ifndef XR_PROGRAM_ALLOCATION_PROBE_H

@@ -25,6 +25,7 @@
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../ir/xi_import_resolve.h"
+#include "../ir/xi_cleanup.h"
 #include "../ir/xi_pipeline.h"
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
@@ -35,6 +36,15 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+typedef struct XrProgramSourceSelection {
+    uint32_t module_index;
+    const AstNode *syntax;
+    XgFuncId body_id;
+    const XiFunc *function;
+    XrProgramSourceTestKind test_kind;
+    uint32_t timeout_seconds;
+} XrProgramSourceSelection;
 
 typedef struct XrProgramSourceBuildContext {
     const XrProgramSourceBuildInput *input;
@@ -47,9 +57,11 @@ typedef struct XrProgramSourceBuildContext {
     const XiFunc **module_roots;
     uint32_t module_count;
     uint32_t entry_topological_index;
-    const AstNode *entry_syntax;
-    uint8_t *reachable_bodies;
-    uint32_t reachable_body_count;
+    XrProgramSourceSelection *selections;
+    uint32_t selection_count;
+    uint32_t *export_selections;
+    uint32_t export_count;
+    uint32_t test_count;
 } XrProgramSourceBuildContext;
 
 XrProgramSourceBuildBudget xr_program_source_build_default_budget(void) {
@@ -140,7 +152,8 @@ static void build_context_free(XrProgramSourceBuildContext *context) {
     xr_free(context->modules);
     xr_free(context->pipelines);
     xr_free(context->ast_roots);
-    xr_free(context->reachable_bodies);
+    xr_free(context->selections);
+    xr_free(context->export_selections);
     xg_global_evidence_free(&context->evidence);
     if (context->analyzer) {
         xa_analyzer_set_graph(context->analyzer, NULL);
@@ -215,54 +228,222 @@ static XrProgramSourceBuildStatus build_module_graph(XrProgramSourceBuildContext
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
+static const XrProgramSourceEntryIdentity *
+source_entry_identity(const XrProgramSourceBuildContext *context, uint32_t index) {
+    return index == 0u ? &context->input->entry : &context->input->retained_entries[index - 1u];
+}
+
 static XrProgramSourceBuildStatus validate_entry_identity(XrProgramSourceBuildContext *context,
                                                           XrProgramSourceDiagnostic *diagnostic) {
-    const XrProgramSourceEntryIdentity *entry = &context->input->entry;
-    const XrModuleSpec *spec = &context->graph->specs[context->graph->entry_index];
-    if (!spec->canonical || strcmp(spec->canonical, entry->module_identity) != 0)
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
-                      0u, "entry module identity does not match the authoritative graph");
-    if (memcmp(spec->source_content_fingerprint.bytes, entry->source_content_fingerprint.bytes,
-               sizeof(entry->source_content_fingerprint.bytes)) != 0)
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
-                      0u, "entry source fingerprint does not match the authoritative graph");
-    if (!spec->ast || spec->ast->type != AST_PROGRAM)
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
-                      0u, "entry module has no exact source program");
-    if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER) {
-        context->entry_syntax = spec->ast;
-        return XR_PROGRAM_SOURCE_BUILD_OK;
-    }
-    uint32_t matches = 0u;
-    uint32_t source_line = 0u;
-    for (int index = 0; index < spec->ast->as.program.count; ++index) {
-        const AstNode *node = spec->ast->as.program.statements[index];
-        if (!node || node->type != AST_FUNCTION_DECL || !node->as.function_decl.name ||
-            strcmp(node->as.function_decl.name, entry->function_name) != 0)
+    context->selection_count = context->input->retained_entry_count + 1u;
+    context->selections = xr_calloc(context->selection_count, sizeof(*context->selections));
+    if (!context->selections)
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, UINT32_MAX, 0u, 0u,
+                      "source entry selection allocation failed");
+    for (uint32_t index = 0u; index < context->selection_count; ++index) {
+        const XrProgramSourceEntryIdentity *entry = source_entry_identity(context, index);
+        XrProgramSourceSelection *selection = &context->selections[index];
+        const XrModuleSpec *spec = NULL;
+        selection->module_index = UINT32_MAX;
+        for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
+            const XrModuleSpec *candidate =
+                &context->graph->specs[context->graph->topo_order[topo]];
+            if (candidate->canonical && strcmp(candidate->canonical, entry->module_identity) == 0) {
+                spec = candidate;
+                selection->module_index = topo;
+                break;
+            }
+        }
+        if (!spec || (index == 0u && selection->module_index != context->entry_topological_index))
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, selection->module_index, 0u,
+                          index, "entry module identity does not match the authoritative graph");
+        if (memcmp(spec->source_content_fingerprint.bytes, entry->source_content_fingerprint.bytes,
+                   sizeof(entry->source_content_fingerprint.bytes)) != 0)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, selection->module_index, 0u,
+                          index, "entry source fingerprint does not match the authoritative graph");
+        if (!spec->ast || spec->ast->type != AST_PROGRAM)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, selection->module_index, 0u,
+                          index, "entry module has no exact source program");
+        if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER) {
+            selection->syntax = spec->ast;
             continue;
-        matches++;
-        source_line = node->line > 0 ? (uint32_t) node->line : 0u;
-        context->entry_syntax = node;
+        }
+        uint32_t matches = 0u;
+        for (int statement = 0; statement < spec->ast->as.program.count; ++statement) {
+            const AstNode *node = spec->ast->as.program.statements[statement];
+            if (!node || node->type != AST_FUNCTION_DECL || !node->as.function_decl.name ||
+                strcmp(node->as.function_decl.name, entry->function_name) != 0)
+                continue;
+            matches++;
+            selection->syntax = node;
+        }
+        if (matches != 1u)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, selection->module_index, 0u,
+                          matches, "entry function '%s' has %u exact source declarations",
+                          entry->function_name, matches);
+        for (uint32_t prior = 0u; prior < index; ++prior)
+            if (context->selections[prior].syntax == selection->syntax)
+                return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                              XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, selection->module_index, 0u,
+                              index, "source entry request contains a duplicate declaration");
     }
-    if (matches != 1u)
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index,
-                      source_line, matches, "entry function '%s' has %u exact source declarations",
-                      entry->function_name, matches);
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
-static const XgBodySummary *entry_body_summary(const XrProgramSourceBuildContext *context) {
-    if (!context || !context->entry_syntax || !context->input || !context->evidence.bodies ||
-        context->evidence.nbodies == 0u)
+static XrProgramSourceBuildStatus discover_export_entries(XrProgramSourceBuildContext *context,
+                                                         XrProgramSourceDiagnostic *diagnostic) {
+    if (!context->input->discover_exports)
+        return XR_PROGRAM_SOURCE_BUILD_OK;
+    const XrNativePackagePlan *plan =
+        xr_compiler_session_native_package_plan(context->input->session);
+    if (!plan)
+        return XR_PROGRAM_SOURCE_BUILD_OK;
+    uint32_t module = context->entry_topological_index;
+    if (!plan->valid || (plan->export_count && !plan->exports))
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, 0u, 0u,
+                      "C export manifest is invalid");
+    if (plan->export_count > XR_PROGRAM_LIMIT_FUNCTIONS)
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT,
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, 0u, 0u,
+                      "C export count exceeds the function limit");
+    context->export_count = plan->export_count;
+    context->export_selections = plan->export_count
+        ? xr_calloc(plan->export_count, sizeof(*context->export_selections)) : NULL;
+    if (plan->export_count && !context->export_selections)
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, 0u, 0u,
+                      "C export selection allocation failed");
+    const AstNode *root = context->ast_roots[module];
+    for (uint32_t index = 0u; index < plan->export_count; ++index) {
+        const XrCExportPlan *entry = &plan->exports[index];
+        const AstNode *selected = NULL;
+        uint32_t matches = 0u;
+        if (!entry->xray_name || !entry->symbol)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, 0u, index,
+                          "C export declaration is incomplete");
+        for (int statement = 0; statement < root->as.program.count; ++statement) {
+            const AstNode *node = root->as.program.statements[statement];
+            if (node && node->type == AST_FUNCTION_DECL && node->as.function_decl.name &&
+                strcmp(node->as.function_decl.name, entry->xray_name) == 0) {
+                selected = node;
+                matches++;
+            }
+        }
+        if (matches != 1u || !selected->as.function_decl.body ||
+            selected->as.function_decl.type_param_count != 0)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, 0u, index,
+                          "C export '%s' requires one concrete entry-module declaration",
+                          entry->xray_name);
+        uint32_t selection = 0u;
+        while (selection < context->selection_count &&
+               context->selections[selection].syntax != selected)
+            selection++;
+        if (selection == context->selection_count) {
+            if (selection == XR_PROGRAM_LIMIT_FUNCTIONS)
+                return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT,
+                              XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, selected->line,
+                              index, "C export roots exceed the function limit");
+            XrProgramSourceSelection *grown = xr_realloc(
+                context->selections, (selection + 1u) * sizeof(*grown));
+            if (!grown)
+                return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                              XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, selected->line,
+                              index, "C export root allocation failed");
+            context->selections = grown;
+            grown[context->selection_count++] = (XrProgramSourceSelection) {
+                .module_index = module, .syntax = selected,
+            };
+        }
+        context->export_selections[index] = selection;
+    }
+    return XR_PROGRAM_SOURCE_BUILD_OK;
+}
+
+static XrProgramSourceTestKind test_attribute_kind(AttributeKind kind) {
+    switch (kind) {
+        case ATTR_TEST:
+        case ATTR_TEST_TIMEOUT: return XR_PROGRAM_TEST_CASE;
+        case ATTR_TEST_SKIP: return XR_PROGRAM_TEST_SKIP;
+        case ATTR_BEFORE_EACH: return XR_PROGRAM_TEST_BEFORE_EACH;
+        case ATTR_AFTER_EACH: return XR_PROGRAM_TEST_AFTER_EACH;
+        case ATTR_BEFORE_ALL: return XR_PROGRAM_TEST_BEFORE_ALL;
+        case ATTR_AFTER_ALL: return XR_PROGRAM_TEST_AFTER_ALL;
+        default: return XR_PROGRAM_TEST_NONE;
+    }
+}
+
+static XrProgramSourceBuildStatus discover_test_entries(XrProgramSourceBuildContext *context,
+                                                       XrProgramSourceDiagnostic *diagnostic) {
+    if (!context->input->discover_tests)
+        return XR_PROGRAM_SOURCE_BUILD_OK;
+    uint32_t module = context->entry_topological_index;
+    const AstNode *root = context->ast_roots[module];
+    for (int statement = 0; statement < root->as.program.count; ++statement) {
+        const AstNode *node = root->as.program.statements[statement];
+        if (!node || node->type != AST_FUNCTION_DECL)
+            continue;
+        const FunctionDeclNode *function = &node->as.function_decl;
+        XrProgramSourceTestKind kind = XR_PROGRAM_TEST_NONE;
+        uint32_t timeout = 0u;
+        for (int index = 0; index < function->attr_count; ++index) {
+            const XrAttribute *attribute = function->attributes[index];
+            XrProgramSourceTestKind candidate = test_attribute_kind(attribute->kind);
+            if (candidate == XR_PROGRAM_TEST_NONE)
+                continue;
+            if (kind != XR_PROGRAM_TEST_NONE || attribute->timeout < 0)
+                return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                              XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, node->line, 0u,
+                              "test declaration has conflicting attributes or invalid timeout");
+            kind = candidate;
+            timeout = (uint32_t) attribute->timeout;
+        }
+        if (kind == XR_PROGRAM_TEST_NONE)
+            continue;
+        if (!function->name || function->param_count != 0 || function->type_param_count != 0 ||
+            function->is_generator || !function->body)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, node->line, 0u,
+                          "test and hook declarations require a concrete zero-argument body");
+        for (uint32_t prior = 0u; prior < context->selection_count; ++prior)
+            if (context->selections[prior].syntax == node)
+                return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                              XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, node->line, 0u,
+                              "test entry duplicates an explicit retained declaration");
+        if (context->selection_count == XR_PROGRAM_LIMIT_FUNCTIONS)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, node->line, 0u,
+                          "test entry count exceeds the function limit");
+        XrProgramSourceSelection *grown = xr_realloc(
+            context->selections, (context->selection_count + 1u) * sizeof(*grown));
+        if (!grown)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, module, node->line, 0u,
+                          "test entry selection allocation failed");
+        context->selections = grown;
+        grown[context->selection_count++] = (XrProgramSourceSelection) {
+            .module_index = module, .syntax = node, .test_kind = kind,
+            .timeout_seconds = timeout,
+        };
+    }
+    return XR_PROGRAM_SOURCE_BUILD_OK;
+}
+
+static const XgBodySummary *entry_body_summary(const XrProgramSourceBuildContext *context,
+                                               uint32_t index) {
+    const XrProgramSourceSelection *selection = &context->selections[index];
+    if (!selection->syntax || !context->evidence.bodies || context->evidence.nbodies == 0u)
         return NULL;
-    const XrProgramSourceEntryIdentity *entry = &context->input->entry;
-    XgModuleId module_id = (XgModuleId) (context->entry_topological_index + 1u);
+    XgModuleId module_id = (XgModuleId) (selection->module_index + 1u);
     const XgBodySummary *match = NULL;
-    if (entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER) {
+    if (selection->syntax->type == AST_PROGRAM) {
         for (uint32_t body = 0u; body < context->evidence.nbodies; ++body) {
             const XgBodySummary *candidate = &context->evidence.bodies[body];
             if (candidate->module_id != module_id || candidate->kind != XG_BODY_MODULE_INIT)
@@ -274,9 +455,8 @@ static const XgBodySummary *entry_body_summary(const XrProgramSourceBuildContext
         return match;
     }
 
-    uint32_t name_id = xg_name_id(entry->function_name);
-    uint32_t source_span_id =
-        context->entry_syntax->line > 0 ? (uint32_t) context->entry_syntax->line : 0u;
+    uint32_t name_id = xg_name_id(selection->syntax->as.function_decl.name);
+    uint32_t source_span_id = selection->syntax->line > 0 ? (uint32_t) selection->syntax->line : 0u;
     const XgDeclSummary *declaration = NULL;
     for (uint32_t decl = 0u; decl < context->evidence.ndecls; ++decl) {
         const XgDeclSummary *candidate = &context->evidence.decls[decl];
@@ -301,27 +481,21 @@ static const XgBodySummary *entry_body_summary(const XrProgramSourceBuildContext
     return match;
 }
 
+/* Bind stable source entry identities here. The Program writer closes the
+ * executable Xi graph, retains every initializer and validates each call's
+ * exact target/effect contract before publishing a validated Program. */
 static XrProgramSourceBuildStatus
-prepare_entry_reachability(XrProgramSourceBuildContext *context,
-                           XrProgramSourceDiagnostic *diagnostic) {
-    const XgBodySummary *entry = entry_body_summary(context);
-    if (!entry || entry->func_id == XG_NO_ID)
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE,
-                      context ? context->entry_topological_index : UINT32_MAX, 0u, 0u,
-                      "entry function has no unique global-evidence body");
-    context->reachable_body_count = context->evidence.nbodies;
-    context->reachable_bodies = xr_calloc(context->reachable_body_count, sizeof(uint8_t));
-    if (!context->reachable_bodies)
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
-                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, context->entry_topological_index, 0u,
-                      0u, "entry reachability allocation failed");
-    if (!xg_body_reachability_mark_closed_world_calls(&context->evidence, entry->func_id,
-                                                      context->reachable_bodies,
-                                                      context->reachable_body_count))
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, context->entry_topological_index, 0u,
-                      entry->func_id, "entry call graph is not closed in global evidence");
+prepare_entry_identities(XrProgramSourceBuildContext *context,
+                          XrProgramSourceDiagnostic *diagnostic) {
+    for (uint32_t index = 0u; index < context->selection_count; ++index) {
+        const XgBodySummary *entry = entry_body_summary(context, index);
+        if (!entry || entry->func_id == XG_NO_ID)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE,
+                          context->selections[index].module_index, 0u, index,
+                          "entry function has no unique global-evidence body");
+        context->selections[index].body_id = entry->func_id;
+    }
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
@@ -408,7 +582,7 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
                     : XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED;
             const char *message =
                 analysis->message ? analysis->message : "graph monomorphization failed";
-            XrProgramSourceBuildStatus status =
+            XrProgramSourceBuildStatus failure_status =
                 code > 0u
                     ? reject(diagnostic, failure, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION,
                              module_index,
@@ -420,7 +594,7 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
                              0u, "%s", message);
             set_source_location(diagnostic, &analysis->location);
             xa_analyzer_clear_diagnostics(context->analyzer);
-            return status;
+            return failure_status;
         }
         xa_analyzer_clear_diagnostics(context->analyzer);
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED,
@@ -454,7 +628,7 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
                       XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE, UINT32_MAX, 0u, 0u,
                       "global evidence construction failed");
-    return prepare_entry_reachability(context, diagnostic);
+    return prepare_entry_identities(context, diagnostic);
 }
 
 static XrProgramSourceBuildStatus compile_xi_modules(XrProgramSourceBuildContext *context,
@@ -490,49 +664,82 @@ static XrProgramSourceBuildStatus compile_xi_modules(XrProgramSourceBuildContext
                            context->graph->specs[spec_index].source_path, context->modules,
                            (int) context->module_count);
     }
+    for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
+        char error[256] = {0};
+        if (!xi_normalize_panic_exits(context->pipelines[topo].ir, &context->evidence, isolate,
+                                      error, sizeof(error)))
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_PIPELINE_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_XI_PIPELINE, topo, 0u, 0u, "%s", error);
+    }
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
 static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *context,
                                                 XrProgramSourceProduct *product,
                                                 XrProgramSourceDiagnostic *diagnostic) {
-    XiFunc *initializer = context->pipelines[context->entry_topological_index].ir;
-    XiModule *module = initializer ? initializer->module : NULL;
-    XiFunc *entry = context->input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER
-                        ? initializer
-                        : NULL;
-    uint32_t matches = 0u;
-    if (entry)
-        matches = module && module->init == initializer ? 1u : 0u;
-    else if (module && module->init == initializer) {
-        for (uint16_t index = 0u; index < module->nfuncs; ++index) {
-            XiFunc *candidate = module->functions[index];
-            if (!candidate || candidate->parent_func != initializer || !candidate->name ||
-                strcmp(candidate->name, context->input->entry.function_name) != 0)
-                continue;
-            entry = candidate;
+    for (uint32_t index = 0u; index < context->selection_count; ++index) {
+        XrProgramSourceSelection *selection = &context->selections[index];
+        XiFunc *initializer = context->pipelines[selection->module_index].ir;
+        XiModule *module = initializer ? initializer->module : NULL;
+        uint32_t matches = 0u;
+        if (initializer && initializer->xg_body_func_id == selection->body_id) {
+            selection->function = initializer;
             matches++;
         }
+        for (uint16_t function = 0u; module && function < module->nfuncs; ++function) {
+            XiFunc *candidate = module->functions[function];
+            if (!candidate || candidate == initializer ||
+                candidate->xg_body_func_id != selection->body_id)
+                continue;
+            selection->function = candidate;
+            matches++;
+        }
+        if (matches != 1u)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, selection->module_index, 0u,
+                          matches, "entry body identity resolved to %u Xi functions", matches);
+        if (selection->test_kind != XR_PROGRAM_TEST_NONE &&
+            (!selection->function->return_type ||
+             (selection->function->return_type->kind != XR_KIND_UNIT &&
+              selection->function->return_type->kind != XR_KIND_NEVER)))
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+                          XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, selection->module_index,
+                          selection->syntax->line, 0u, "test and hook declarations cannot return a value");
     }
-    if (matches != 1u)
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION, context->entry_topological_index, 0u,
-                      0u, "entry identity resolved to %u Xi functions", matches);
+    uint32_t retained_count = context->selection_count - 1u;
+    const XiFunc **retained = retained_count ? xr_calloc(retained_count, sizeof(*retained)) : NULL;
+    product->retained_function_ids =
+        retained_count ? xr_calloc(retained_count, sizeof(*product->retained_function_ids)) : NULL;
+    if (retained_count && (!retained || !product->retained_function_ids)) {
+        xr_free(retained);
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, UINT32_MAX, 0u, 0u,
+                      "retained function output allocation failed");
+    }
+    product->retained_function_count = context->input->retained_entry_count;
+    for (uint32_t index = 0u; index < retained_count; ++index)
+        retained[index] = context->selections[index + 1u].function;
     XrProgramFromXiInput writer_input = {
         .module_roots = context->module_roots,
         .module_count = context->module_count,
-        .entry_function = entry,
+        .entry_function = context->selections[0].function,
+        .retained_functions = retained,
+        .retained_function_count = retained_count,
         .global_evidence = &context->evidence,
+        .module_graph = context->graph,
         .semantic_profile_fingerprint = context->input->semantic_profile_fingerprint.bytes,
     };
     char writer_diagnostic[XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE] = {0};
-    XrProgramBuildStatus writer =
-        xr_program_write_from_xi(&writer_input, &product->artifact, &product->program,
-                                 writer_diagnostic, sizeof(writer_diagnostic));
+    XrProgramBuildStatus writer = xr_program_write_from_xi(
+        &writer_input, &product->artifact, &product->program, product->retained_function_ids,
+        writer_diagnostic, sizeof(writer_diagnostic));
+    xr_free(retained);
     if (writer != XR_PROGRAM_BUILD_OK) {
         if (diagnostic)
             diagnostic->writer_status = writer;
-        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED,
+        return reject(diagnostic, writer == XR_PROGRAM_BUILD_OUT_OF_MEMORY
+                                      ? XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY
+                                      : XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED,
                       XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, context->entry_topological_index, 0u,
                       (uint32_t) writer, "%s",
                       writer_diagnostic[0] ? writer_diagnostic
@@ -544,13 +751,75 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
                       (uint32_t) product->artifact.size,
                       "canonical Program size %zu exceeds request limit %u bytes",
                       product->artifact.size, context->input->budget.max_program_bytes);
+    uint32_t test_count = context->test_count;
+    product->tests = test_count ? xr_calloc(test_count, sizeof(*product->tests)) : NULL;
+    if (test_count && !product->tests)
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, UINT32_MAX, 0u, 0u,
+                      "test entry metadata allocation failed");
+    product->test_entry_count = test_count;
+    for (uint32_t index = 0u; index < test_count; ++index) {
+        uint32_t retained_index = context->input->retained_entry_count + index;
+        const XrProgramSourceSelection *selection = &context->selections[retained_index + 1u];
+        XrProgramSourceTestEntry *test = &product->tests[index];
+        test->name = xr_strdup(selection->syntax->as.function_decl.name);
+        if (!test->name)
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                          XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, selection->module_index, 0u, 0u,
+                          "test entry name allocation failed");
+        test->function_id = product->retained_function_ids[retained_index];
+        test->kind = selection->test_kind;
+        test->timeout_seconds = selection->timeout_seconds;
+    }
+    const XrNativePackagePlan *native_plan =
+        xr_compiler_session_native_package_plan(context->input->session);
+    product->exports = context->export_count
+        ? xr_calloc(context->export_count, sizeof(*product->exports)) : NULL;
+    product->export_function_ids = context->export_count
+        ? xr_calloc(context->export_count, sizeof(*product->export_function_ids)) : NULL;
+    if (context->export_count && (!product->exports || !product->export_function_ids))
+        return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                      XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, UINT32_MAX, 0u, 0u,
+                      "C export output allocation failed");
+    product->export_count = context->export_count;
+    for (uint32_t index = 0u; index < context->export_count; ++index) {
+        const XrCExportPlan *source = &native_plan->exports[index];
+        XrCExportPlan *copy = &product->exports[index];
+        copy->xray_name = xr_strdup(source->xray_name);
+        copy->symbol = xr_strdup(source->symbol);
+        copy->visibility = source->visibility ? xr_strdup(source->visibility) : NULL;
+        copy->abi = source->abi ? xr_strdup(source->abi) : NULL;
+        copy->header = source->header;
+        if (!copy->xray_name || !copy->symbol || (source->visibility && !copy->visibility) ||
+            (source->abi && !copy->abi))
+            return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+                          XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE, UINT32_MAX, 0u, index,
+                          "C export declaration copy failed");
+        uint32_t selection = context->export_selections[index];
+        product->export_function_ids[index] = selection == 0u
+            ? xr_validated_program_entry_function(product->program)
+            : product->retained_function_ids[selection - 1u];
+    }
+    if (!product->retained_function_count) {
+        xr_free(product->retained_function_ids);
+        product->retained_function_ids = NULL;
+    }
     return XR_PROGRAM_SOURCE_BUILD_OK;
 }
 
+static bool entry_identity_valid(const XrProgramSourceEntryIdentity *entry,
+                                 bool allow_initializer) {
+    bool function = entry->kind == XR_PROGRAM_SOURCE_ENTRY_FUNCTION;
+    bool initializer =
+        allow_initializer && entry->kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER;
+    return (function || initializer) && entry->reserved8[0] == 0u && entry->reserved8[1] == 0u &&
+           entry->reserved8[2] == 0u && entry->module_identity &&
+           xr_module_identity_valid(entry->module_identity, NULL) &&
+           fingerprint_present(entry->source_content_fingerprint) &&
+           (function ? entry->function_name && entry->function_name[0] : !entry->function_name);
+}
+
 static bool input_valid(const XrProgramSourceBuildInput *input) {
-    bool function_entry = input && input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_FUNCTION;
-    bool initializer_entry =
-        input && input->entry.kind == XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER;
     XaMonoBudget mono_budget = {
         .max_depth = input ? input->budget.max_monomorphization_depth : 0u,
         .max_instances = input ? input->budget.max_monomorphization_instances : 0u,
@@ -561,19 +830,19 @@ static bool input_valid(const XrProgramSourceBuildInput *input) {
         !xa_mono_budget_valid(&mono_budget) || input->budget.max_program_bytes == 0u ||
         input->budget.max_program_bytes > XR_PROGRAM_LIMIT_ARTIFACT_BYTES || !input->session ||
         !input->resolver || !input->entry_source_path || !input->entry_authority ||
-        (!function_entry && !initializer_entry) || input->entry.reserved8[0] != 0u ||
-        input->entry.reserved8[1] != 0u || input->entry.reserved8[2] != 0u ||
-        !input->entry.module_identity ||
-        (function_entry &&
-         (!input->entry.function_name || input->entry.function_name[0] == '\0')) ||
-        (initializer_entry && input->entry.function_name != NULL) ||
-        !xr_module_identity_valid(input->entry.module_identity, NULL) ||
-        !fingerprint_present(input->entry.source_content_fingerprint) ||
+        !entry_identity_valid(&input->entry, true) ||
+        input->retained_entry_count >= XR_PROGRAM_LIMIT_FUNCTIONS ||
+        (input->retained_entry_count && !input->retained_entries) ||
+        (!input->retained_entry_count && input->retained_entries) ||
+        input->discover_tests > 1u || input->discover_exports > 1u ||
         !source_profile_valid(input->source_profile) ||
         !fingerprint_present(input->semantic_profile_fingerprint) ||
         !xr_module_identity_authority_valid(input->entry_authority) ||
         !xr_compiler_session_vm_host(input->session))
         return false;
+    for (uint32_t index = 0u; index < input->retained_entry_count; ++index)
+        if (!entry_identity_valid(&input->retained_entries[index], false))
+            return false;
     for (size_t index = 0u; index < sizeof(input->reserved8); ++index)
         if (input->reserved8[index] != 0u)
             return false;
@@ -603,6 +872,12 @@ XrProgramSourceBuildStatus xr_program_source_build(const XrProgramSourceBuildInp
     XrProgramSourceBuildStatus status = build_module_graph(&context, diagnostic_out);
     if (status == XR_PROGRAM_SOURCE_BUILD_OK)
         status = validate_entry_identity(&context, diagnostic_out);
+    if (status == XR_PROGRAM_SOURCE_BUILD_OK)
+        status = discover_test_entries(&context, diagnostic_out);
+    if (status == XR_PROGRAM_SOURCE_BUILD_OK) {
+        context.test_count = context.selection_count - input->retained_entry_count - 1u;
+        status = discover_export_entries(&context, diagnostic_out);
+    }
     if (status == XR_PROGRAM_SOURCE_BUILD_OK)
         status = prepare_semantic_graph(&context, diagnostic_out);
     if (status == XR_PROGRAM_SOURCE_BUILD_OK)
@@ -634,6 +909,18 @@ void xr_program_source_product_free(XrProgramSourceProduct *product) {
         return;
     xr_validated_program_free(product->program);
     xr_program_artifact_free(&product->artifact);
+    xr_free(product->retained_function_ids);
+    for (uint32_t index = 0u; index < product->test_entry_count; ++index)
+        xr_free(product->tests[index].name);
+    xr_free(product->tests);
+    for (uint32_t index = 0u; index < product->export_count; ++index) {
+        xr_free(product->exports[index].xray_name);
+        xr_free(product->exports[index].symbol);
+        xr_free(product->exports[index].visibility);
+        xr_free(product->exports[index].abi);
+    }
+    xr_free(product->exports);
+    xr_free(product->export_function_ids);
     memset(product, 0, sizeof(*product));
 }
 

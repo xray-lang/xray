@@ -810,13 +810,11 @@ TEST(work_stealing_moves_batch_and_returns_direct_item) {
         TOTAL = 16
     };
     XrCoroutine coros[TOTAL];
+    f.workers[0].p.sched_time_cache = xr_monotonic_ticks() - XR_STEAL_TIME_RESOLUTION_MS - 1;
+    f.workers[0].p.sched_time_budget = TOTAL;
     for (int i = 0; i < TOTAL; i++) {
         init_ready_coro(&coros[i], 400 + i, &f.isolate_storage);
         xr_worker_push(&f.workers[0], &coros[i]);
-    }
-    int64_t old_submit_time = xr_monotonic_ticks() - XR_STEAL_TIME_RESOLUTION_MS - 1;
-    for (int i = 0; i < TOTAL; i++) {
-        coros[i].submit_time = old_submit_time;
     }
 
     int64_t delay = 0;
@@ -830,6 +828,49 @@ TEST(work_stealing_moves_batch_and_returns_direct_item) {
     ASSERT_TRUE((int) f.workers[1].p.stats.stolen_count > 0);
     ASSERT_TRUE(xr_proc_local_runq_len(&f.workers[0].p) < TOTAL);
 
+    steal_fixture_cleanup(&f);
+}
+
+TEST(work_stealing_freshness_uses_enqueue_snapshot) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    XrCoroutine coro;
+    init_ready_coro(&coro, 489, &f.isolate_storage);
+    f.workers[0].p.sched_time_cache = xr_monotonic_ticks() - XR_STEAL_TIME_RESOLUTION_MS - 1;
+    f.workers[0].p.sched_time_budget = 1;
+    xr_worker_push(&f.workers[0], &coro);
+
+    /* A queued pointer does not keep the shell alive for a speculative scan.
+     * Changing its
+     * timestamp models the state a reader can see after reuse. */
+    atomic_store_explicit(&coro.submit_time, INT64_MAX, memory_order_relaxed);
+    int64_t delay = 0;
+    bool should_exit = false;
+    XrCoroutine *stolen = xr_worker_try_steal_once(&f.workers[1], &f.runtime, &f.runtime.running,
+                                                   &delay, &should_exit);
+    ASSERT_EQ_PTR(stolen, &coro);
+    ASSERT_FALSE(should_exit);
+    ASSERT_EQ_INT(delay, 0);
+    steal_fixture_cleanup(&f);
+}
+
+TEST(work_stealing_freshness_preserves_delay) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    XrCoroutine coro;
+    init_ready_coro(&coro, 488, &f.isolate_storage);
+    f.workers[0].p.sched_time_cache = xr_monotonic_ticks() + 10000;
+    f.workers[0].p.sched_time_budget = 1;
+    xr_worker_push(&f.workers[0], &coro);
+    atomic_store_explicit(&coro.submit_time, 0, memory_order_relaxed);
+    int64_t delay = 0;
+    bool should_exit = false;
+    ASSERT_NULL(xr_worker_try_steal_once(&f.workers[1], &f.runtime, &f.runtime.running, &delay,
+                                         &should_exit));
+    ASSERT_FALSE(should_exit);
+    ASSERT_TRUE(delay > 0);
+    ASSERT_TRUE(f.workers[1].p.stats.steal_fresh_reject_count > 0);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.workers[0]), &coro);
     steal_fixture_cleanup(&f);
 }
 
@@ -1032,6 +1073,8 @@ RUN_TEST(deterministic_runtime_forces_single_worker_and_virtual_clock);
 RUN_TEST(worker_env_overrides_single_worker_entry_default);
 RUN_TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);
+RUN_TEST(work_stealing_freshness_uses_enqueue_snapshot);
+RUN_TEST(work_stealing_freshness_preserves_delay);
 RUN_TEST(targeted_runtime_yield_hands_off_to_descriptor_owner);
 RUN_TEST(spawn_burst_shares_same_parent_fanout);
 RUN_TEST(spawn_burst_resets_after_yield);

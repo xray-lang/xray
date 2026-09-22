@@ -222,6 +222,7 @@ XiEditFingerprint xi_edit_fingerprint(const XiFunc *func) {
             continue;
         result.cfg = hash_u64(result.cfg, block->id);
         result.cfg = hash_u64(result.cfg, block->kind);
+        result.cfg = hash_u64(result.cfg, block->exit_reason);
         result.cfg = hash_u64(result.cfg, block->succs[0] ? block->succs[0]->id : UINT32_MAX);
         result.cfg = hash_u64(result.cfg, block->succs[1] ? block->succs[1]->id : UINT32_MAX);
         result.cfg = hash_u64(result.cfg, block->npreds);

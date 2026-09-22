@@ -86,6 +86,31 @@ static bool count_records(Reader *reader, uint64_t count) {
     return true;
 }
 
+static bool take_display_name(Reader *reader) {
+    uint64_t size = take_uvar(reader);
+    if (reader->status != XR_PROGRAM_DECODE_OK)
+        return false;
+    if (size > XR_PROGRAM_LIMIT_DIAGNOSTIC_NAME_BYTES || !count_records(reader, size)) {
+        reader->status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+        return false;
+    }
+    size_t start = reader->offset;
+    if (!take_bytes(reader, NULL, (size_t) size))
+        return false;
+    const uint8_t *bytes = reader->bytes + start;
+    if (!xr_text_utf8_is_valid(bytes, (size_t) size)) {
+        reader->status = XR_PROGRAM_DECODE_NONCANONICAL;
+        return false;
+    }
+    for (size_t index = 0u; index < size; ++index) {
+        if (bytes[index] < 32u || bytes[index] == 127u) {
+            reader->status = XR_PROGRAM_DECODE_NONCANONICAL;
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool count_operations(Reader *reader, uint64_t count) {
     if (reader->status != XR_PROGRAM_DECODE_OK)
         return false;
@@ -173,7 +198,11 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT &&
              kind != XR_PROGRAM_TYPE_KIND_VIEW && kind != XR_PROGRAM_TYPE_KIND_CALLABLE &&
              kind != XR_PROGRAM_TYPE_KIND_EXISTENTIAL &&
-             kind != XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE) ||
+             kind != XR_PROGRAM_TYPE_KIND_ATOMIC &&
+             kind != XR_PROGRAM_TYPE_KIND_ARRAY &&
+             kind != XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE &&
+             kind != XR_PROGRAM_TYPE_KIND_RECORD_REFERENCE &&
+             kind != XR_PROGRAM_TYPE_KIND_PROVIDER_RESOURCE) ||
             ownership > XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
             copy_contract > XR_CORE_IR_COPY_FORBIDDEN ||
             ((ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL) !=
@@ -183,7 +212,32 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             break;
         }
         memcpy(previous_key, key, sizeof(key));
-        if (kind == XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE) {
+        uint64_t display_variant_count = 0u;
+        if (kind == XR_PROGRAM_TYPE_KIND_PROVIDER_RESOURCE) {
+            uint8_t resource[XR_STABLE_ID_BYTES] = {0};
+            const uint8_t zero[XR_STABLE_ID_BYTES] = {0};
+            if (shape_head != XR_STABLE_ID_BYTES || ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                copy_contract != XR_CORE_IR_COPY_FORBIDDEN) {
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                break;
+            }
+            take_bytes(&section, resource, sizeof(resource));
+            if (memcmp(resource, zero, sizeof(resource)) == 0)
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+        } else if (kind == XR_PROGRAM_TYPE_KIND_ATOMIC) {
+            if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                copy_contract != XR_CORE_IR_COPY_EXPLICIT ||
+                (shape_head != XR_CORE_TYPE_I64 && shape_head != XR_CORE_TYPE_BOOL &&
+                 shape_head != XR_CORE_TYPE_F64))
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+        } else if (kind == XR_PROGRAM_TYPE_KIND_ARRAY) {
+            if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                copy_contract == XR_CORE_IR_COPY_TRIVIAL ||
+                !encoded_type_id_is_valid(shape_head, dynamic_count) ||
+                shape_head == XR_CORE_TYPE_VOID)
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+        } else if ((kind == XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE ||
+                    kind == XR_PROGRAM_TYPE_KIND_RECORD_REFERENCE)) {
             if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
                 copy_contract == XR_CORE_IR_COPY_TRIVIAL ||
                 shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
@@ -217,6 +271,7 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             }
         } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
             uint64_t variant_count = take_uvar(&section);
+            display_variant_count = variant_count;
             if (shape_head > XR_CORE_IR_NOMINAL_ENUM ||
                 shape_head == XR_CORE_IR_NOMINAL_CLASS || variant_count == 0u ||
                 variant_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
@@ -271,6 +326,11 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             else if (shape_head + 1u > interface_reference_count)
                 interface_reference_count = shape_head + 1u;
         }
+        if (!take_display_name(&section))
+            break;
+        for (uint64_t variant = 0u; variant < display_variant_count; ++variant)
+            if (!take_display_name(&section))
+                break;
     }
     *dynamic_count_out = dynamic_count;
     *signature_reference_count_out = signature_reference_count;
@@ -285,6 +345,7 @@ static bool decode_constants(Reader *artifact, const XrProgramSectionView *view,
     uint64_t previous_type = 0;
     uint64_t previous_kind = 0;
     int64_t previous_i64 = 0;
+    uint64_t previous_bits = 0u;
     bool previous_bool = false;
     bool have_previous = false;
     if (count > XR_PROGRAM_LIMIT_CONSTANTS || !count_records(&section, count)) {
@@ -323,11 +384,13 @@ static bool decode_constants(Reader *artifact, const XrProgramSectionView *view,
         if (section.status != XR_PROGRAM_DECODE_OK)
             break;
         if (encoded_id != id || (kind == XR_CORE_IR_CONSTANT_I64 && type_id != XR_CORE_TYPE_I64) ||
+            (kind == XR_CORE_IR_CONSTANT_F64 && type_id != XR_CORE_TYPE_F64) ||
             (kind == XR_CORE_IR_CONSTANT_BOOL && type_id != XR_CORE_TYPE_BOOL) ||
             (kind == XR_CORE_IR_CONSTANT_STRING && type_id != XR_CORE_TYPE_STRING) ||
             (kind == XR_CORE_IR_CONSTANT_RUNE && type_id != XR_CORE_TYPE_RUNE) ||
             (kind != XR_CORE_IR_CONSTANT_I64 && kind != XR_CORE_IR_CONSTANT_BOOL &&
-             kind != XR_CORE_IR_CONSTANT_STRING && kind != XR_CORE_IR_CONSTANT_RUNE) ||
+             kind != XR_CORE_IR_CONSTANT_STRING && kind != XR_CORE_IR_CONSTANT_RUNE &&
+             kind != XR_CORE_IR_CONSTANT_F64) ||
             (kind == XR_CORE_IR_CONSTANT_BOOL && raw_value > 1u) ||
             (kind == XR_CORE_IR_CONSTANT_RUNE &&
              (raw_value > XR_TEXT_RUNE_MAX || !xr_text_rune_is_scalar((uint32_t) raw_value))))
@@ -339,6 +402,9 @@ static bool decode_constants(Reader *artifact, const XrProgramSectionView *view,
                 switch (kind) {
                     case XR_CORE_IR_CONSTANT_I64:
                         ordered = i64_value > previous_i64;
+                        break;
+                    case XR_CORE_IR_CONSTANT_F64:
+                        ordered = raw_value > previous_bits;
                         break;
                     case XR_CORE_IR_CONSTANT_BOOL:
                         ordered = bool_value && !previous_bool;
@@ -361,6 +427,7 @@ static bool decode_constants(Reader *artifact, const XrProgramSectionView *view,
         previous_type = type_id;
         previous_kind = kind;
         previous_i64 = kind == XR_CORE_IR_CONSTANT_RUNE ? (int64_t) raw_value : i64_value;
+        previous_bits = raw_value;
         previous_bool = bool_value;
         previous_bytes = string_bytes;
         previous_size = string_size;

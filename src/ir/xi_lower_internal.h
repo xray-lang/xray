@@ -159,10 +159,9 @@ XR_FUNC void xi_lower_cleanup(XiLower *l);
 XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent);
 XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, struct XaAnalyzer *analyzer,
                                               struct XaSymbol *symbol);
-XR_FUNC bool xi_lower_publish_function_expr_effect_sidecars(XiFunc *func,
-                                                            struct XaAnalyzer *analyzer,
-                                                            const struct XaTypedProgram *program,
-                                                            const struct AstNode *node);
+XR_FUNC bool xi_lower_publish_body_effect_sidecars(XiFunc *func, struct XaAnalyzer *analyzer,
+                                                   const struct XaTypedProgram *program,
+                                                   const struct AstNode *node);
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
                                         int line);
 XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, const char *context,

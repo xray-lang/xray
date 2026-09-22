@@ -698,10 +698,14 @@ XiBlock *xi_block_new(XiFunc *f) {
     /* Initial values capacity */
     blk->values_cap = 16;
     blk->values = (XiValue **) arena_alloc(f, blk->values_cap * sizeof(XiValue *));
+    if (!blk->values)
+        return NULL;
 
     /* Initial preds capacity */
     blk->preds_cap = 4;
     blk->preds = (XiBlock **) arena_alloc(f, blk->preds_cap * sizeof(XiBlock *));
+    if (!blk->preds)
+        return NULL;
 
     /* Register in function */
     if (f->nblocks >= f->blocks_cap) {
@@ -721,23 +725,27 @@ XiBlock *xi_block_new(XiFunc *f) {
     return blk;
 }
 
-void xi_block_add_pred(XiBlock *blk, XiBlock *pred) {
+bool xi_block_add_pred(XiBlock *blk, XiBlock *pred) {
     XR_DCHECK(blk != NULL, "xi_block_add_pred: blk is NULL");
     XR_DCHECK(pred != NULL, "xi_block_add_pred: pred is NULL");
 
+    if (blk->npreds == UINT16_MAX)
+        return false;
     if (blk->npreds >= blk->preds_cap) {
         /* Arena-allocated arrays cannot be resized in place.
          * Allocate a new larger array and copy. Old memory is wasted
          * but reclaimed when the arena is freed. */
-        uint16_t new_cap = blk->preds_cap * 2;
+        uint16_t new_cap = blk->preds_cap > UINT16_MAX / 2u ? UINT16_MAX
+                              : blk->preds_cap ? (uint16_t) (blk->preds_cap * 2u) : 4u;
         XiBlock **new_preds = (XiBlock **) arena_alloc(blk->func, new_cap * sizeof(XiBlock *));
         if (!new_preds)
-            return;
+            return false;
         memcpy(new_preds, blk->preds, blk->npreds * sizeof(XiBlock *));
         blk->preds = new_preds;
         blk->preds_cap = new_cap;
     }
     blk->preds[blk->npreds++] = pred;
+    return true;
 }
 
 /* ========== Value Construction ========== */
@@ -845,18 +853,11 @@ static XiValue *value_alloc(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType 
 
     if (nargs > 0) {
         v->args = (XiValue **) arena_alloc(f, nargs * sizeof(XiValue *));
+        if (!v->args)
+            return NULL;
     }
 
     return v;
-}
-
-static void block_append_value(XiBlock *blk, XiValue *v) {
-    XR_DCHECK(blk != NULL, "block_append_value: blk is NULL");
-    XR_DCHECK(v != NULL, "block_append_value: v is NULL");
-
-    if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
-        return;
-    blk->values[blk->nvalues++] = v;
 }
 
 XR_FUNC bool xi_value_is_null_constant(const XiValue *v) {
@@ -868,10 +869,12 @@ XR_FUNC bool xi_value_is_null_constant(const XiValue *v) {
 }
 
 XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, uint16_t nargs) {
+    if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1u))
+        return NULL;
     XiValue *v = value_alloc(f, blk, op, type, nargs);
     if (!v)
         return NULL;
-    block_append_value(blk, v);
+    blk->values[blk->nvalues++] = v;
     return v;
 }
 

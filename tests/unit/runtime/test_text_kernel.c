@@ -154,6 +154,47 @@ static void test_i64_display(void) {
     REQUIRE(xr_text_display_bool(42, out) == 4u && memcmp(out, "true", 4u) == 0);
 }
 
+static void test_cached_scalar_count(void) {
+    static const struct { const char *bytes; size_t size; size_t count; } cases[] = {
+        {"", 0u, 0u}, {"abc", 3u, 3u}, {"a\0b", 3u, 3u},
+        {"\xC3\xA9", 2u, 1u}, {"\xE4\xB8\x96", 3u, 1u},
+        {"\xF0\x9F\x98\x80", 4u, 1u}, {"e\xCC\x81", 3u, 2u},
+    };
+    REQUIRE(xr_text_scalar_count(NULL, 0u) == 0u);
+    for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        const uint8_t *bytes = (const uint8_t *)cases[index].bytes;
+        REQUIRE(xr_text_utf8_is_valid(bytes, cases[index].size));
+        REQUIRE(xr_text_scalar_count(bytes, cases[index].size) == cases[index].count);
+    }
+}
+
+static void test_u64_display(void) {
+    static const struct { uint64_t value; const char *text; } cases[] = {
+        {0u, "0"}, {9u, "9"}, {10u, "10"}, {UINT32_MAX, "4294967295"},
+        {UINT64_C(9223372036854775808), "9223372036854775808"},
+        {UINT64_MAX, "18446744073709551615"},
+    };
+    for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        uint8_t out[XR_TEXT_U64_DISPLAY_MAX + 2u];
+        size_t expected = strlen(cases[index].text);
+        memset(out, 0xAA, sizeof(out));
+        REQUIRE(xr_text_display_u64(cases[index].value, NULL) == expected);
+        REQUIRE(xr_text_display_u64(cases[index].value, out + 1u) == expected);
+        REQUIRE(memcmp(out + 1u, cases[index].text, expected) == 0);
+        REQUIRE(out[0] == 0xAA && out[expected + 1u] == 0xAA);
+    }
+    XrTextDisplayOperand operands[2] = {
+        {.kind = XR_TEXT_DISPLAY_I64, .i64 = INT64_MIN},
+        {.kind = XR_TEXT_DISPLAY_U64, .u64 = UINT64_MAX},
+    };
+    static const char expected[] = "-9223372036854775808 18446744073709551615\n";
+    uint8_t line[sizeof(expected)] = {0};
+    int ok = 0;
+    REQUIRE(xr_text_group_size(operands, 2u, &ok) == sizeof(expected) - 1u && ok);
+    REQUIRE(xr_text_group_render(operands, 2u, line) == sizeof(expected) - 1u);
+    REQUIRE(memcmp(line, expected, sizeof(expected)) == 0);
+}
+
 static void test_compare_and_predicates(void) {
     static const uint8_t a[] = {'a'};
     static const uint8_t ab[] = {'a', 'b'};
@@ -266,13 +307,52 @@ static void test_output_group(void) {
     REQUIRE(xr_text_group_size(huge, 1u, &ok) == 0u && ok == 0);
 }
 
+static void test_f64_display(void) {
+    static const struct { double value; const char *expected; } cases[] = {
+        {0.0, "0.0"}, {-0.0, "-0.0"}, {1.0, "1.0"}, {1.5, "1.5"},
+        {1e-7, "1e-07"}, {1e20, "1e+20"},
+        {1.2345678901234567, "1.23456789012346"},
+    };
+    for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        XrTextDisplayOperand operand = {0};
+        operand.kind = XR_TEXT_DISPLAY_F64;
+        operand.f64 = cases[index].value;
+        uint8_t output[34];
+        memset(output, 0xa5, sizeof(output));
+        size_t expected = strlen(cases[index].expected);
+        REQUIRE(xr_format_float(NULL, 0u, cases[index].value) == (int)expected);
+        for (size_t capacity = 0u; capacity <= expected + 2u; ++capacity) {
+            unsigned char bounded[34];
+            memset(bounded, 0xa5, sizeof(bounded));
+            REQUIRE(xr_format_float((char *)bounded + 1u, capacity, cases[index].value) == (int)expected);
+            REQUIRE(bounded[0] == 0xa5 && bounded[capacity + 1u] == 0xa5);
+            if (capacity) {
+                size_t copied = expected < capacity - 1u ? expected : capacity - 1u;
+                REQUIRE(memcmp(bounded + 1u, cases[index].expected, copied) == 0);
+                REQUIRE(bounded[copied + 1u] == 0);
+            } else REQUIRE(bounded[1] == 0xa5);
+        }
+        REQUIRE(xr_text_display_operand(&operand, NULL) == expected);
+        REQUIRE(xr_text_display_operand(&operand, output + 1u) == expected);
+        REQUIRE(memcmp(output + 1u, cases[index].expected, expected) == 0);
+        REQUIRE(output[0] == 0xa5 && output[expected + 1u] == 0xa5);
+        int ok = 0;
+        REQUIRE(xr_text_group_size(&operand, 1u, &ok) == expected + 1u && ok);
+        REQUIRE(xr_text_group_render(&operand, 1u, output) == expected + 1u);
+        REQUIRE(output[expected] == '\n');
+    }
+}
+
 int main(void) {
     test_utf8_admission();
     test_rune_admission_and_encoding();
     test_i64_display();
+    test_u64_display();
+    test_cached_scalar_count();
     test_compare_and_predicates();
     test_concat();
     test_output_group();
+    test_f64_display();
     puts("text kernel: PASS");
     return 0;
 }

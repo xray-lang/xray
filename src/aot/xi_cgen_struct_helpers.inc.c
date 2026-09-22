@@ -527,7 +527,7 @@ static bool emit_leaf_aggregate_native_typedef(XiCgenCtx *ctx, FILE *out, const 
     const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(target, &layout_count);
     const XrTargetFieldRecord *fields = xr_target_plan_fields(target, &field_count);
     if (!aggregate ||
-        !xr_c_leaf_aggregate_projection(target, aggregate->semantic_type, &projection) ||
+        !xr_c_leaf_aggregate_projection(target, semantic, aggregate->semantic_type, &projection) ||
         projection.layout >= layout_count || !layouts || !fields) {
         cg_ctx_set_error(ctx);
         return true;

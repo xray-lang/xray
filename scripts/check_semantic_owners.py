@@ -24,7 +24,8 @@ from xisagen import parse_xi_ops_def, parse_xi_semantic_owners  # noqa: E402
 SOURCE_SUFFIXES = (".c", ".h")
 SIGNATURE_RE = re.compile(
     r"\b(?:(?:static\s+)?inline|XR_BYTE_SLICE_SCALAR_INLINE|XR_BYTE_ARRAY_COPY_INLINE|"
-    r"XR_NULL_TEST_INLINE|XR_ASSERT_CONDITION_INLINE)\s+[^;{}]*?"
+    r"XR_NULL_TEST_INLINE|XR_ASSERT_CONDITION_INLINE|XR_VALUE_FORMAT_FUNCTION|"
+    r"XR_SYNC_CORE_FUNCTION|XR_SEMANTIC_OWNER_FUNCTION)\s+[^;{}]*?"
     r"\b(xr_[A-Za-z0-9_]+)\s*\(")
 SORT_OLD_SYMBOLS = (
     "xr_array_hybrid_sort",
@@ -626,7 +627,7 @@ def build_inventory(root: Path, manifest: dict) -> list[dict]:
                 "signatures": symbols,
                 "production_callers": production,
                 "test_callers": tests,
-                "contains_tagged_value": "XrValue" in text,
+                "contains_tagged_value": re.search(r"\bXrValue\b", text) is not None,
             }
         )
     return rows
@@ -3951,8 +3952,12 @@ def verify(root: Path, write: bool) -> list[str]:
     # and where its digits start. The digits travel as text from the front end
     # to the runtime because no fixed-width slot holds them, and the semantic
     # plan and the runtime parser both had to answer this on the way.
-    if len(actual) != 49:
-        errors.append(f"shared-core inventory must contain exactly 49 headers, found {len(actual)}")
+    # 50: integer-conversion extracts the existing exact bit conversion rule
+    # so canonical VM and generated native C share it without runtime headers.
+    # 51: integer-division generalizes the existing int-arith quotient/remainder
+    # rule to every exact width; int-arith delegates rather than duplicating it.
+    if len(actual) != 51:
+        errors.append(f"shared-core inventory must contain exactly 51 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -4029,7 +4034,13 @@ def self_test() -> int:
                      "rewrite_to_const_int(v, ~unary_i);")
     assert not re.search(r"rewrite_to_const_int\s*\(\s*v\s*,\s*~",
                          "rewrite_to_const_int(v, xr_bits_not_i64(unary_i));")
+    assert re.search(r"\bXrValue\b", "XrValue *payload;") is not None
+    assert re.search(r"\bXrValue\b", "typedef XrValue Hidden;") is not None
+    assert re.search(r"\bXrValue\b", "XrValueFormatNode payload;") is None
     assert SIGNATURE_RE.findall("static inline int xr_demo_core(int x) {") == ["xr_demo_core"]
+    assert SIGNATURE_RE.findall("XR_SYNC_CORE_FUNCTION int xr_sync_demo(int x) {") == ["xr_sync_demo"]
+    assert SIGNATURE_RE.findall(
+        "XR_VALUE_FORMAT_FUNCTION int xr_format_node(int x) {") == ["xr_format_node"]
     assert SIGNATURE_RE.findall(
         "XR_BYTE_SLICE_SCALAR_INLINE int xr_demo_c90_core(int x) {") == ["xr_demo_c90_core"]
     assert "xrt_introsort_foo".startswith(SORT_OLD_SYMBOLS[3])

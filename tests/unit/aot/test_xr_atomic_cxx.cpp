@@ -45,6 +45,28 @@ int main() {
     if (atomic_flag_test_and_set_explicit(&flag, memory_order_acquire))
         return 8;
 
+    _Atomic(int64_t) floating_bits = INT64_C(0x3ff8000000000000);
+    if (xr_atomic_f64_fetch_update_core(&floating_bits, 2.5, 0, 3) != 1.5)
+        return 9;
+    if (atomic_load(&floating_bits) != INT64_C(0x4010000000000000))
+        return 10;
+    if (xr_atomic_f64_fetch_update_core(&floating_bits, 2.5, 1, 3) != 4.0)
+        return 11;
+    if (atomic_load(&floating_bits) != INT64_C(0x3ff8000000000000))
+        return 12;
+    XrAtomicStorageCore storage;
+    xr_atomic_storage_init_core(&storage, INT64_MAX);
+    if (!xr_atomic_storage_retain_core(&storage))
+        return 13;
+    if (xr_atomic_i64_fetch_add_core(&storage.value, 1, 4) != INT64_MAX ||
+        xr_atomic_i64_load_core(&storage.value, 4) != INT64_MIN)
+        return 14;
+    int64_t compare = 0;
+    if (xr_atomic_i64_compare_exchange_core(&storage.value, &compare, 7, 4) || compare != INT64_MIN)
+        return 15;
+    if (xr_atomic_storage_release_core(&storage) != XR_ATOMIC_STORAGE_RELEASE_RETAINED ||
+        xr_atomic_storage_release_core(&storage) != XR_ATOMIC_STORAGE_RELEASE_LAST)
+        return 16;
     xr_sync_core_fence(4);
     return 0;
 }

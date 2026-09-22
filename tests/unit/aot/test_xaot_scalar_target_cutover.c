@@ -9,11 +9,13 @@
  */
 
 #include "../../../src/aot/xaot_boundary.h"
+#include "../../../src/aot/xaot_callable.h"
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_op_name.h"
+#include "../../../src/module/xnative_package.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
@@ -522,6 +524,51 @@ static void test_single_program_prepare_has_no_scalar_legacy_rows(void) {
     cutover_bundle_free(&fixture);
 }
 
+static void test_callable_reachability_cannot_hide_live_body(void) {
+    CutoverBundle fixture;
+    cutover_bundle_create(&fixture);
+    cutover_bundle_bind_all(&fixture);
+    REQUIRE(xaot_prepare_bundle(&fixture.bundle, NULL));
+    REQUIRE(fixture.bundle.has_callable_reachability);
+    REQUIRE(fixture.bundle.nfunc_plans == 1);
+    REQUIRE(fixture.bundle.nlink_dependency_plans == 0);
+    REQUIRE(fixture.bundle.func_plans[0].reachable);
+    char error[512] = {0};
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    fixture.bundle.func_plans[0].reachable = false;
+    REQUIRE(!xaot_callable_plans_verify(&fixture.bundle, error, sizeof(error)));
+    REQUIRE(strstr(error, "rederivation") != NULL);
+    REQUIRE(xaot_bundle_dump_plan(&fixture.bundle) == NULL);
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    fixture.bundle.func_plans[0].reachable = true;
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    cutover_bundle_free(&fixture);
+}
+
+static void test_external_entry_contract_cannot_change_after_freeze(void) {
+    CutoverBundle fixture;
+    cutover_bundle_create(&fixture);
+    cutover_bundle_bind_all(&fixture);
+    REQUIRE(xaot_prepare_bundle(&fixture.bundle, NULL));
+    char error[512] = {0};
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    XrLinkSymbolPlan linked = {.xray_name = "late_entry", .used = true};
+    fixture.modules[0].function->link_plan = &linked;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    REQUIRE(strstr(error, "external entry") != NULL);
+    fixture.modules[0].function->link_plan = NULL;
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    cutover_bundle_free(&fixture);
+
+    cutover_bundle_create(&fixture);
+    cutover_bundle_bind_all(&fixture);
+    fixture.modules[0].function->link_plan = &linked;
+    REQUIRE(!xaot_prepare_bundle(&fixture.bundle, NULL));
+    REQUIRE(fixture.bundle.error_msg && strstr(fixture.bundle.error_msg, "external entry"));
+    fixture.modules[0].function->link_plan = NULL;
+    cutover_bundle_free(&fixture);
+}
+
 static void test_plan_dump_records_exact_value_authority(void) {
     CutoverBundle fixture;
     cutover_bundle_create(&fixture);
@@ -814,15 +861,35 @@ static void test_direct_i64_target_view_is_bound_and_fail_closed(void) {
             view.call != NULL && view.argument != NULL && view.call_instruction != NULL);
     REQUIRE(xaot_boundary_resolve_direct_call_target(&bundle, root, call, NULL) == NULL);
 
+    XaotBoundaryCallTargets targets[16];
+    REQUIRE(root->next_value_id <= XR_COUNTOF(targets));
+    REQUIRE(xaot_boundary_resolve_function_calls(&bundle, root, targets, XR_COUNTOF(targets)));
+    REQUIRE(targets[call->id].direct == child && targets[call->id].parameter_target == NULL);
+
     target->fingerprint.bytes[0] ^= 1u;
     memset(&view, 0, sizeof(view));
     REQUIRE(xaot_boundary_direct_i64_call_view(&bundle, root, call, &view, error,
                                                sizeof(error)) ==
             XAOT_DIRECT_I64_TARGET_INVALID);
     REQUIRE(xaot_boundary_resolve_direct_call_target(&bundle, root, call, NULL) == NULL);
+    REQUIRE(!xaot_boundary_resolve_function_calls(&bundle, root, targets, XR_COUNTOF(targets)));
+    REQUIRE(targets[call->id].direct == NULL && targets[call->id].parameter_target == NULL);
     REQUIRE(!xaot_prepare_bundle(&bundle, NULL));
     REQUIRE(bundle.nfunc_plans == 0 && bundle.nvalue_plans == 0);
     target->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(xaot_boundary_resolve_function_calls(&bundle, root, targets, XR_COUNTOF(targets)));
+    REQUIRE(targets[call->id].direct == child);
+
+    REQUIRE(target->calls_count == 1);
+    uint8_t saved_result_ownership = target->calls[0].result_ownership;
+    target->calls[0].result_ownership = XR_TARGET_CALL_RETURN_OWNED;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    REQUIRE(!xaot_boundary_resolve_function_calls(&bundle, root, targets, XR_COUNTOF(targets)));
+    REQUIRE(targets[call->id].direct == NULL && targets[call->id].parameter_target == NULL);
+    target->calls[0].result_ownership = saved_result_ownership;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    REQUIRE(xaot_boundary_resolve_function_calls(&bundle, root, targets, XR_COUNTOF(targets)));
+    REQUIRE(targets[call->id].direct == child);
 
     xaot_bundle_free(&bundle);
     xr_target_plan_free(target);
@@ -1076,9 +1143,36 @@ static void test_transfer_value_authority_is_exact_and_independent(void) {
     transfer_authority_fixture_free(&fixture);
 }
 
+static void test_slice_box_and_view_have_distinct_carriers(void) {
+    XrType slice = {.kind = XR_KIND_SLICE, .frozen = true};
+    XiValue view = {.op = XI_PARAM, .type = &slice, .rep = XR_REP_PTR};
+    XiValue box = {.op = XI_BOX,
+                   .type = &slice,
+                   .rep = XR_REP_TAGGED,
+                   .backend_origin = XI_BACKEND_VALUE_REP_BOX};
+    XiValue unbox = {.op = XI_UNBOX,
+                     .type = &slice,
+                     .rep = XR_REP_PTR,
+                     .backend_origin = XI_BACKEND_VALUE_REP_UNBOX};
+    XaotValueRep native = xaot_value_rep_for_value(&view);
+    XaotValueRep tagged = xaot_value_rep_for_value(&box);
+    XaotValueRep restored = xaot_value_rep_for_value(&unbox);
+    REQUIRE(native.kind == XAOT_VALUE_AGGREGATE && native.rep == XAOT_REP_SLICE);
+    REQUIRE(strcmp(native.c_type, "xr_span_t") == 0);
+    REQUIRE(tagged.kind == XAOT_VALUE_TAGGED && tagged.rep == XAOT_REP_TAGGED);
+    REQUIRE(strcmp(tagged.c_type, "XrValue") == 0 && tagged.flags == 0u);
+    REQUIRE(xaot_value_reps_equal(native, restored));
+    xaot_value_rep_dispose(&native);
+    xaot_value_rep_dispose(&tagged);
+    xaot_value_rep_dispose(&restored);
+}
+
 int main(void) {
+    test_slice_box_and_view_have_distinct_carriers();
     test_missing_and_partial_module_plans_fail_before_prepare();
     test_single_program_prepare_has_no_scalar_legacy_rows();
+    test_callable_reachability_cannot_hide_live_body();
+    test_external_entry_contract_cannot_change_after_freeze();
     test_plan_dump_records_exact_value_authority();
     test_plan_dump_rejects_missing_duplicate_and_residue_authority();
     test_plan_dump_accepts_eliminated_target_values_only();

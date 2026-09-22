@@ -190,8 +190,8 @@ TEST(function_expr_effect_snapshot_is_distinct_and_immutable) {
     ASSERT_NOT_NULL(function_expr);
     ASSERT_EQ_INT(function_expr->type, AST_FUNCTION_EXPR);
 
-    XaFunctionExprEffectFact analyzed = {0};
-    ASSERT_TRUE(xa_analyzer_get_function_expr_effect(analyzer, function_expr, &analyzed));
+    XaBodyEffectFact analyzed = {0};
+    ASSERT_TRUE(xa_analyzer_get_body_effect(analyzer, function_expr, &analyzed));
     ASSERT_TRUE(analyzed.effect_id != XA_EFFECT_NONE);
     ASSERT_EQ_INT(analyzed.throw_effect, XR_FN_EFFECT_NO_THROW);
     ASSERT_EQ_INT(analyzed.completeness, XA_EFFECT_COMPLETE);
@@ -207,17 +207,16 @@ TEST(function_expr_effect_snapshot_is_distinct_and_immutable) {
     XaTypedProgramPublishResult result = xa_typed_program_publish(analyzer, program, NULL, 0);
     ASSERT_NOT_NULL(result.program);
 
-    XaFunctionExprEffectFact replacement = {
+    XaBodyEffectFact replacement = {
         .effect_id = analyzed.effect_id,
         .throw_effect = XR_FN_EFFECT_MAY_THROW,
         .completeness = XA_EFFECT_INCOMPLETE,
         .unknown_reasons = XA_UNKNOWN_DYNAMIC_CALL_TARGET,
     };
-    ASSERT_TRUE(xa_analyzer_set_function_expr_effect(analyzer, function_expr, &replacement));
+    ASSERT_TRUE(xa_analyzer_set_body_effect(analyzer, function_expr, &replacement));
 
-    XaFunctionExprEffectFact published = {0};
-    ASSERT_TRUE(
-        xa_typed_program_function_expr_effect(result.program, function_expr, &published));
+    XaBodyEffectFact published = {0};
+    ASSERT_TRUE(xa_typed_program_body_effect(result.program, function_expr, &published));
     ASSERT_EQ_UINT(published.effect_id, analyzed.effect_id);
     ASSERT_EQ_INT(published.throw_effect, XR_FN_EFFECT_NO_THROW);
     ASSERT_EQ_INT(published.completeness, XA_EFFECT_COMPLETE);
@@ -341,6 +340,44 @@ TEST(top_level_call_publishes_flow_sensitive_error_effect) {
     xr_program_destroy(program);
 }
 
+TEST(module_body_effect_snapshot_preserves_exact_escaping_errors) {
+    XrCompileUnitIdentity identity = {
+        .kind = XR_COMPILE_UNIT_MEMORY,
+        .module_identity = "memory-module-v1:id=18:initializer-effect",
+    };
+    ASSERT_TRUE(xr_compiler_session_set_compile_unit_identity(g_session, &identity));
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    AstNode *program =
+        parse_and_analyze(analyzer, "initializer-effect.xr",
+                          "enum InitFailure { Rejected { code: i64 } }\n"
+                          "fn fail() -> i64 { throw InitFailure.Rejected { code: 7 } }\n"
+                          "fail()\n");
+    ASSERT_NOT_NULL(program);
+    xa_analyzer_print_errors(analyzer, "initializer-effect.xr");
+    ASSERT_EQ_UINT(analyzer->diagnostic_count, 0u);
+    XaBodyEffectFact analyzed = {0};
+    ASSERT_TRUE(xa_analyzer_get_body_effect(analyzer, program, &analyzed));
+    ASSERT_EQ_INT(analyzed.throw_effect, XR_FN_EFFECT_MAY_THROW);
+    const XaEffectSummary *effect = xa_effect_db_get(analyzer->effect_db, analyzed.effect_id);
+    ASSERT_NOT_NULL(effect);
+    ASSERT_EQ_INT(effect->error_set_completeness, XA_EFFECT_COMPLETE);
+    ASSERT_EQ_UINT(effect->error_unknown_reasons, XA_UNKNOWN_NONE);
+    ASSERT_EQ_UINT(effect->escaping.count, 1u);
+    XaTypedProgramPublishResult published = xa_typed_program_publish(analyzer, program, NULL, 0);
+    ASSERT_NOT_NULL(published.program);
+    XaBodyEffectFact changed = analyzed;
+    changed.throw_effect = XR_FN_EFFECT_NO_THROW;
+    ASSERT_TRUE(xa_analyzer_set_body_effect(analyzer, program, &changed));
+    XaBodyEffectFact snapshot = {0};
+    ASSERT_TRUE(xa_typed_program_body_effect(published.program, program, &snapshot));
+    ASSERT_EQ_UINT(snapshot.effect_id, analyzed.effect_id);
+    ASSERT_EQ_INT(snapshot.throw_effect, XR_FN_EFFECT_MAY_THROW);
+    xa_typed_program_free(published.program);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+    ASSERT_TRUE(xr_compiler_session_set_compile_unit_identity(g_session, NULL));
+}
+
 TEST(error_diagnostic_blocks_publication) {
     XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     AstNode *program = parse_and_analyze(analyzer, "error.xr", "var value = 42\n");
@@ -372,6 +409,7 @@ RUN_TEST(target_query_snapshot_preserves_compiler_owned_identity);
 RUN_TEST(target_namespace_is_unshadowable_at_every_source_binding_gate);
 RUN_TEST(target_enum_member_and_query_share_one_canonical_type);
 RUN_TEST(top_level_call_publishes_flow_sensitive_error_effect);
+RUN_TEST(module_body_effect_snapshot_preserves_exact_escaping_errors);
 RUN_TEST(error_diagnostic_blocks_publication);
 teardown();
 TEST_MAIN_END()

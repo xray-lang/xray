@@ -137,7 +137,16 @@ static void test_runtime_owner_publishes_validated_structures(void) {
     XrFingerprint second;
     uint64_t provider_capabilities = 0;
     CHECK(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
-    CHECK(authority.provider_count == 4);
+    static const char *const expected_providers[] = {
+        "xray.runtime.provider.v1/hosted/allocator",
+        "xray.runtime.provider.v1/hosted/panic",
+        XR_PROVIDER_IO_CONTRACT_KEY,
+        XR_PROVIDER_CLOCK_CONTRACT_KEY,
+        XR_PROVIDER_PROCESS_CONTRACT_KEY,
+    };
+    CHECK(authority.provider_count == sizeof(expected_providers) / sizeof(expected_providers[0]));
+    for (size_t i = 0u; i < sizeof(expected_providers) / sizeof(expected_providers[0]); ++i)
+        CHECK(find_provider(&authority, expected_providers[i]) != NULL);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &first) == XR_RUNTIME_ABI_OK);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &second) ==
           XR_RUNTIME_ABI_OK);
@@ -161,6 +170,16 @@ static void test_runtime_owner_publishes_validated_structures(void) {
         find_operation(clock, XR_PROVIDER_CLOCK_PROCESS_CPU_NANOS_OPERATION_KEY), 0);
     check_signed_i64_operation(
         find_operation(clock, XR_PROVIDER_CLOCK_UTC_OFFSET_MINUTES_AT_OPERATION_KEY), 1);
+    const XrTargetProviderContract *process =
+        find_provider(&authority, XR_PROVIDER_PROCESS_CONTRACT_KEY);
+    CHECK(process && process->operation_count == 1u);
+    check_signed_i64_operation(find_operation(process, XR_PROVIDER_PROCESS_GETPID_OPERATION_KEY),
+                               0);
+    const XrTargetProviderContract *io = find_provider(&authority, XR_PROVIDER_IO_CONTRACT_KEY);
+    CHECK(io && io->operation_count == 3u);
+    CHECK(find_operation(io, XR_PROVIDER_IO_OUTPUT_WRITE_OPERATION_KEY) != NULL);
+    CHECK(find_operation(io, XR_PROVIDER_IO_PIPE_OPEN_OPERATION_KEY) != NULL);
+    CHECK(find_operation(io, XR_PROVIDER_IO_PIPE_CLOSE_OPERATION_KEY) != NULL);
     CHECK(xr_runtime_string_object_contract_verify(&authority.string_contract) ==
           XR_RUNTIME_ABI_OK);
     CHECK(xr_runtime_string_literal_materialization_contract_verify(

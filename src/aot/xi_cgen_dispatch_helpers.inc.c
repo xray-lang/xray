@@ -11519,9 +11519,16 @@ static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out
                 ? cd->instance_field_types[field_index - cd->inherited_field_count]
                 : NULL;
         const XiModule *provider_module = cg_class_native_module_for_data(ctx, cd);
-        const XaBuiltinClass *provider =
-            provider_module && provider_module->name
-                ? xa_builtin_find_source_provider_bridge(provider_module->name, cd->class_name)
+        const char *provider_namespace = NULL;
+        size_t provider_namespace_length = 0;
+        const XrStdlibNativeClassDefEntry *provider =
+            provider_module && cd->class_name &&
+                    xr_module_identity_stdlib_namespace(provider_module->identity,
+                                                         &provider_namespace,
+                                                         &provider_namespace_length)
+                ? xr_stdlib_metadata_unique_source_provider_span(
+                      provider_namespace, provider_namespace_length, cd->class_name,
+                      strlen(cd->class_name))
                 : NULL;
         if (!provider || !field || field->native_type != XR_NATIVE_VALUE || !field_name ||
             strcmp(field_name, provider->source_storage_field) != 0 || !field_type ||
@@ -12442,7 +12449,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
     if (!layout || !fields || layout->field_count != 2 || ordinal >= layout->field_count ||
         layout->field_begin > field_count ||
         layout->field_count > field_count - layout->field_begin ||
-        !xr_c_leaf_aggregate_projection(target, layout->semantic_type, &projection) ||
+        !xr_c_leaf_aggregate_projection(target, semantic, layout->semantic_type, &projection) ||
         projection.layout != receiver_machine->detail) {
         (void) cg_value_emission_fail(ctx, "leaf-aggregate field layout authority is inexact");
         return false;
@@ -12886,6 +12893,11 @@ static void xicgen_numeric_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_codegen_abort_expr(out);
         return;
     }
+    uint8_t scalar_rep = XR_SCALAR_REP_NONE;
+    if (cg_value_narrow_local_scalar_rep(ctx, v, 0, &scalar_rep)) {
+        /* The shared kernel has already normalized the value to this width. */
+        fprintf(out, "(%s)", cg_native_int_ctype(scalar_rep));
+    }
     fprintf(out, "%s(%s, ", adapter, kernel);
     emit_value_as_rep_ctx(ctx, out, v->args[0],
                           xi_to_c_template_width_uses_f64_lane(v->op) ? XR_REP_F64 : XR_REP_I64);
@@ -12945,11 +12957,7 @@ static void xicgen_box(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
         emit_codegen_abort_expr(out);
         return;
     }
-    struct XrType *sty = v->args[0]->type;
-    XrRep from_rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
-    const char *conv_suffix = emit_conversion_prefix(out, sty, from_rep, XR_REP_TAGGED);
-    emit_vref(out, v->args[0]);
-    emit_conversion_suffix(out, conv_suffix);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
 }
 
 static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -14476,10 +14484,16 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, " != 0)");
         }
     } else if (v->type->kind == XR_KIND_RUNE) {
-        /* char(x): tagged XR_TAG_RUNE result, validated Unicode scalar. */
+        /* The runtime conversion returns a tagged Rune or null. A native
+         * non-nullable
+         * result must validate that tag before extracting it. */
+        if (dst_rep != XR_REP_TAGGED)
+            fprintf(out, "(uint32_t)xrt_expect_rune_arg(");
         fprintf(out, "xrt_to_rune(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
+        if (dst_rep != XR_REP_TAGGED)
+            fprintf(out, ")");
     } else if (v->type->kind == XR_KIND_POINTER) {
         const char *suffix = emit_conversion_prefix(out, v->type, src_rep, dst_rep);
         emit_value_as_rep_ctx(ctx, out, v->args[0], src_rep);

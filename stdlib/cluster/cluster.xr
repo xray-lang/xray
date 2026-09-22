@@ -42,6 +42,7 @@
 import crypto
 import math
 import mem
+import { Buffer } from mem
 import net
 import {
     DialOptions,

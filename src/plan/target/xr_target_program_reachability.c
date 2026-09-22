@@ -92,12 +92,32 @@ static bool reachability_mark_target(const XrSemanticPlan *const *modules, uint3
     if (xr_semantic_call_target_names_local_function(target, operation, local_function_count))
         return reachability_mark(reachability, caller_module, target->function, changed);
 
-    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) {
+    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+        target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY) {
         uint32_t dependency_module = UINT32_MAX;
         if (!reachability_dependency_module(modules, module_count, semantic, target->dependency,
                                             &dependency_module))
             return false;
         const XrSemanticPlan *dependency = modules[dependency_module];
+        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY) {
+            /* A dependency method names its declaration, not an export-table
+             * ordinal. Retaining its body does not prove a closed dispatch
+             * domain; the execution adapter must still establish that. */
+            uint32_t function = XR_SEMANTIC_INDEX_NONE;
+            uint32_t count = (uint32_t) xr_semantic_plan_source_method_count(dependency);
+            for (uint32_t index = 0u; index < count; ++index) {
+                const XrSemanticSourceMethodRecord *method =
+                    xr_semantic_plan_source_method(dependency, index);
+                if (!method || !xr_stable_id_equal(method->id, target->export_identity))
+                    continue;
+                if (function != XR_SEMANTIC_INDEX_NONE ||
+                    method->function >= xr_semantic_plan_function_count(dependency))
+                    return false;
+                function = method->function;
+            }
+            return function != XR_SEMANTIC_INDEX_NONE &&
+                   reachability_mark(reachability, dependency_module, function, changed);
+        }
         const XrSemanticSourceExportRecord *source_export =
             target->source_export < xr_semantic_plan_source_export_count(dependency)
                 ? xr_semantic_plan_source_export(dependency, target->source_export)
@@ -174,7 +194,7 @@ bool xr_target_program_reachability_build(const XrSemanticPlan *const *modules,
         for (uint32_t function = 0; function < count; function++) {
             const XrSemanticFunctionRecord *record =
                 xr_semantic_plan_function(modules[module], function);
-            if (record && record->is_module_initializer &&
+            if (record && (record->is_module_initializer || record->is_external_entry) &&
                 !reachability_mark(out, module, function, &changed))
                 goto invalid;
         }

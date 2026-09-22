@@ -26,6 +26,7 @@
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_visitor.h"
 #include "../parser/xtype_ref.h"
+#include "../parser/xast_walk.h"
 #include "xa_effect_db.h"
 #include "xa_node_table.h"
 #include "xa_selection.h"
@@ -339,7 +340,7 @@ struct ErrorSetCtx {
     bool changed;                    /* Fixpoint: did anything change this iteration? */
     bool publish_call_error_effect_facts;
     bool call_error_effect_publication_failed;
-    bool function_expr_effect_publication_failed;
+    bool body_effect_publication_failed;
 };
 
 /* Coroutine-boundary facts are per-body.  Expanding a callee's body into this
@@ -4266,6 +4267,11 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
     ctx->ast_walk_depth--;
 }
 
+static bool es_walk_expression_child(AstNode *child, void *user_data) {
+    es_walk_expr(user_data, child);
+    return true;
+}
+
 static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
     switch (node->type) {
         case AST_CALL_EXPR: {
@@ -4310,6 +4316,21 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
             if (!function_value_target_is_exact(call_target))
                 call_target = resolve_call_target(ctx, node->as.call_expr.callee);
             if (function_value_target_is_exact(call_target)) {
+                if (ctx->current_func && ctx->current_func->links.function_decl_node &&
+                    ctx->current_func->links.function_decl_node->type == AST_FUNCTION_DECL &&
+                    ctx->current_func->links.function_decl_node->as.function_decl.name &&
+                    strcmp(ctx->current_func->links.function_decl_node->as.function_decl.name,
+                           "checked") == 0) {
+                    fprintf(stderr, "DEBUG call checked target_count=%u target=%s\\n",
+                            call_target.target_count,
+                            call_target.target_symbols[0] &&
+                                    call_target.target_symbols[0]->links.function_decl_node &&
+                                    call_target.target_symbols[0]->links.function_decl_node->type ==
+                                        AST_FUNCTION_DECL
+                                ? call_target.target_symbols[0]->links.function_decl_node->as
+                                      .function_decl.name
+                                : "?");
+                }
                 publish_call_error_effect_fact(ctx, node, call_target);
                 for (uint32_t i = 0; i < call_target.target_count; i++) {
                     AstNode *function_expr = call_target.target_function_exprs[i];
@@ -4327,9 +4348,33 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
                         callee_sym->links.effect_id != XA_EFFECT_NONE) {
                         const XaEffectSummary *callee_summary =
                             xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
-                        if (callee_summary)
-                            xa_effect_summary_add_summary(ctx->analyzer->effect_db,
-                                                          ctx->current_summary, callee_summary);
+                        if (ctx->current_func && ctx->current_func->links.function_decl_node &&
+                            ctx->current_func->links.function_decl_node->type == AST_FUNCTION_DECL &&
+                            ctx->current_func->links.function_decl_node->as.function_decl.name &&
+                            strcmp(ctx->current_func->links.function_decl_node->as.function_decl.name,
+                                   "checked") == 0)
+                            fprintf(stderr, "DEBUG add callee id=%u summary=%p escaping=%u all=%d words=%u\\n",
+                                    (unsigned) callee_sym->links.effect_id,
+                                    (void *) callee_summary,
+                                    callee_summary ? callee_summary->escaping.count : 0u,
+                                    callee_summary && callee_summary->escaping.count
+                                        ? callee_summary->escaping.types[0].all_variants
+                                        : 0,
+                                    callee_summary && callee_summary->escaping.count
+                                        ? callee_summary->escaping.types[0].variants.word_count
+                                        : 0u);
+                        if (callee_summary) {
+                            bool add_ok = xa_effect_summary_add_summary(
+                                ctx->analyzer->effect_db, ctx->current_summary, callee_summary);
+                            if (ctx->current_func && ctx->current_func->links.function_decl_node &&
+                                ctx->current_func->links.function_decl_node->type == AST_FUNCTION_DECL &&
+                                ctx->current_func->links.function_decl_node->as.function_decl.name &&
+                                strcmp(ctx->current_func->links.function_decl_node->as.function_decl.name,
+                                       "checked") == 0)
+                                fprintf(stderr, "DEBUG added ok=%d dst=%u ptr=%p\\n", add_ok,
+                                        ctx->current_summary->escaping.count,
+                                        (void *) ctx->current_summary);
+                        }
                     }
                 }
                 break;
@@ -4361,77 +4406,33 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
         case AST_BINARY_GE:
         case AST_BINARY_AND:
         case AST_BINARY_OR:
-            es_walk_expr(ctx, node->as.binary.left);
-            es_walk_expr(ctx, node->as.binary.right);
-            break;
-
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
-            es_walk_expr(ctx, node->as.unary.operand);
-            break;
-
         case AST_TERNARY:
-            es_walk_expr(ctx, node->as.ternary.condition);
-            es_walk_expr(ctx, node->as.ternary.true_expr);
-            es_walk_expr(ctx, node->as.ternary.false_expr);
-            break;
-
         case AST_MEMBER_ACCESS:
-            es_walk_expr(ctx, node->as.member_access.object);
-            break;
-
         case AST_ENUM_CONSTRUCT:
-            es_walk_expr(ctx, node->as.enum_construct.variant_path);
-            for (int i = 0; i < node->as.enum_construct.field_count; i++)
-                es_walk_expr(ctx, node->as.enum_construct.field_values[i]);
-            break;
-
         case AST_INDEX_GET:
-            es_walk_expr(ctx, node->as.index_get.array);
-            es_walk_expr(ctx, node->as.index_get.index);
-            break;
-
         case AST_ARRAY_LITERAL:
-            if (node->as.array_literal.is_repeat) {
-                es_walk_expr(ctx, node->as.array_literal.repeat_value);
-                es_walk_expr(ctx, node->as.array_literal.repeat_count);
-            } else {
-                for (int i = 0; i < node->as.array_literal.count; i++)
-                    es_walk_expr(ctx, node->as.array_literal.elements[i]);
-            }
-            break;
-
         case AST_TUPLE_LITERAL:
-            for (int i = 0; i < node->as.tuple_literal.count; i++)
-                es_walk_expr(ctx, node->as.tuple_literal.elements[i]);
-            break;
-
         case AST_OBJECT_LITERAL:
-            for (int i = 0; i < node->as.object_literal.count; i++)
-                es_walk_expr(ctx, node->as.object_literal.values[i]);
-            break;
-
         case AST_MAP_LITERAL:
-            for (int i = 0; i < node->as.map_literal.count; i++) {
-                es_walk_expr(ctx, node->as.map_literal.keys[i]);
-                es_walk_expr(ctx, node->as.map_literal.values[i]);
-            }
-            break;
-
         case AST_SET_LITERAL:
-            for (int i = 0; i < node->as.set_literal.count; i++)
-                es_walk_expr(ctx, node->as.set_literal.elements[i]);
-            break;
-
         case AST_STRUCT_LITERAL:
-            for (int i = 0; i < node->as.struct_literal.field_count; i++)
-                es_walk_expr(ctx, node->as.struct_literal.field_values[i]);
-            break;
-
         case AST_TEMPLATE_STRING:
-            for (int i = 0; i < node->as.template_str.part_count; i++)
-                es_walk_expr(ctx, node->as.template_str.parts[i]);
+        case AST_NULLISH_COALESCE:
+        case AST_GROUPING:
+        case AST_AS_EXPR:
+        case AST_IS_EXPR:
+        case AST_FORCE_UNWRAP:
+        case AST_OPTIONAL_CHAIN:
+        case AST_RANGE:
+        case AST_SPREAD_EXPR:
+        case AST_MOVE_EXPR:
+            /* These expressions compose the effects of their evaluated
+             * children. Scope, call and suspension boundaries stay explicit. */
+            if (!xr_ast_for_each_child(node, es_walk_expression_child, ctx))
+                xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_INVALID_PROGRAM);
             break;
 
         case AST_MATCH_EXPR:
@@ -4441,11 +4442,6 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
                 if (arm)
                     es_walk_expr(ctx, arm->as.match_arm.body);
             }
-            break;
-
-        case AST_NULLISH_COALESCE:
-            es_walk_expr(ctx, node->as.binary.left);
-            es_walk_expr(ctx, node->as.binary.right);
             break;
 
         case AST_FUNCTION_EXPR:
@@ -4506,10 +4502,6 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
             es_walk_expr(ctx, node->as.member_set.object);
             es_walk_expr(ctx, node->as.member_set.value);
             record_catch_aggregate_member_set(ctx, &node->as.member_set);
-            break;
-
-        case AST_GROUPING:
-            es_walk_expr(ctx, node->as.grouping);
             break;
 
         default:
@@ -5163,6 +5155,15 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
         xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_INVALID_PROGRAM);
     XaEffectId previous_id = func_sym->links.effect_id;
     func_sym->links.effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary);
+    if (func_node->as.function_decl.name &&
+        (strcmp(func_node->as.function_decl.name, "checked") == 0 ||
+         strcmp(func_node->as.function_decl.name, "quotient") == 0)) {
+        fprintf(stderr, "DEBUG infer %s effect=%u sum=%p ctx=%p escaping=%u unknown=%u complete=%d\\n",
+                func_node->as.function_decl.name, (unsigned) func_sym->links.effect_id,
+                (void *) &summary, (void *) ctx->current_summary,
+                summary.escaping.count, summary.unknown_reasons,
+                xa_effect_summary_is_complete(&summary));
+    }
     for (int i = 0; i < func_sym->links.param_effect_count; i++)
         func_sym->links.param_effects[i].callable_effects = func_sym->links.effect_id;
     if (func_sym->links.effect_id != previous_id)
@@ -5311,6 +5312,22 @@ static bool compute_defer_block_summary(ErrorSetCtx *ctx, AstNode *body, XaEffec
     return true;
 }
 
+static XrFnThrowEffect publish_body_effect(ErrorSetCtx *ctx, AstNode *node,
+                                           const XaEffectSummary *summary) {
+    XaBodyEffectFact fact = {
+        .effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, summary),
+        .throw_effect =
+            xa_effect_summary_is_nothrow(summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW,
+        .completeness =
+            xa_effect_summary_is_complete(summary) ? XA_EFFECT_COMPLETE : XA_EFFECT_INCOMPLETE,
+        .unknown_reasons = summary->unknown_reasons,
+    };
+    if (fact.effect_id == XA_EFFECT_NONE ||
+        !xa_analyzer_set_body_effect(ctx->analyzer, node, &fact))
+        ctx->body_effect_publication_failed = true;
+    return fact.throw_effect;
+}
+
 static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
     if (!ctx || !node || node->type != AST_FUNCTION_EXPR)
         return;
@@ -5320,21 +5337,8 @@ static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
 
     XaEffectSummary summary;
     xa_effect_summary_init(&summary);
-    if (compute_function_expr_summary(ctx, node, &summary)) {
-        XrFnThrowEffect effect =
-            xa_effect_summary_is_nothrow(&summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
-        XaFunctionExprEffectFact fact = {
-            .effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary),
-            .throw_effect = effect,
-            .completeness =
-                xa_effect_summary_is_complete(&summary) ? XA_EFFECT_COMPLETE : XA_EFFECT_INCOMPLETE,
-            .unknown_reasons = summary.unknown_reasons,
-        };
-        if (fact.effect_id == XA_EFFECT_NONE ||
-            !xa_analyzer_set_function_expr_effect(ctx->analyzer, node, &fact))
-            ctx->function_expr_effect_publication_failed = true;
-        xr_type_function_set_throw_effect(type, effect);
-    }
+    if (compute_function_expr_summary(ctx, node, &summary))
+        xr_type_function_set_throw_effect(type, publish_body_effect(ctx, node, &summary));
     xa_effect_summary_clear(&summary);
 }
 
@@ -5572,10 +5576,9 @@ static void publish_function_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *
     ctx->analyzer->current_scope = saved_scope;
 }
 
-/* Publish call-site facts for executable top-level statements as well as for
- * declaration bodies.  Top-level code is the semantic body of `<main>` even
- * though it has no XaSymbol/effect-id of its own; omitting it would leave the
- * canonical producer dependent on a lowering-time type guess. */
+/* Publish the initializer body effect and its call-site effects from the same
+ * completed walk. The syntax node owns the body identity without requiring a
+ * declaration symbol or a second effect analysis in lowering. */
 static void publish_program_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *program) {
     if (!ctx || !program || program->type != AST_PROGRAM)
         return;
@@ -5603,6 +5606,7 @@ static void publish_program_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *p
     ctx->linked_scope_depth = 0;
     for (int i = 0; i < program->as.program.count; i++)
         es_walk_stmt(ctx, program->as.program.statements[i]);
+    publish_body_effect(ctx, program, &sink);
     xa_effect_summary_clear(&sink);
     ctx->current_summary = NULL;
     ctx->analyzer->current_scope = saved_scope;
@@ -5839,8 +5843,8 @@ static void clear_error_publication_pre(AstNode *node, void *userdata) {
     if (node->type == AST_CALL_EXPR) {
         xa_analyzer_clear_call_error_effect(analyzer, node);
         xa_analyzer_clear_callable_target_set(analyzer, node);
-    } else if (node->type == AST_FUNCTION_EXPR) {
-        xa_analyzer_clear_function_expr_effect(analyzer, node);
+    } else if (node->type == AST_FUNCTION_EXPR || node->type == AST_PROGRAM) {
+        xa_analyzer_clear_body_effect(analyzer, node);
     }
 }
 
@@ -5910,15 +5914,6 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
      * publish the equivalent product through symbol links. */
     for (int i = 0; i < function_exprs.count; i++)
         infer_function_expr_throw_effect(&ctx, function_exprs.items[i]);
-    if (ctx.function_expr_effect_publication_failed) {
-        const char *message =
-            "function-expression effect publication failed (AnalysisResourceFailure)";
-        XrLocation location = {.file = analyzer->current_file,
-                               .line = (uint32_t) ast->line,
-                               .column = (uint32_t) ast->column};
-        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_OUT_OF_MEMORY, message,
-                                   &location);
-    }
 
     publish_function_return_callable_throw_effects(&ctx, funcs, func_count);
     publish_function_param_throw_effects(&ctx);
@@ -5929,6 +5924,14 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     ctx.publish_call_error_effect_facts = false;
     if (ctx.call_error_effect_publication_failed) {
         const char *message = "call-error-effect publication failed (AnalysisResourceFailure)";
+        XrLocation location = {.file = analyzer->current_file,
+                               .line = (uint32_t) ast->line,
+                               .column = (uint32_t) ast->column};
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_OUT_OF_MEMORY, message,
+                                   &location);
+    }
+    if (ctx.body_effect_publication_failed) {
+        const char *message = "body-effect publication failed (AnalysisResourceFailure)";
         XrLocation location = {.file = analyzer->current_file,
                                .line = (uint32_t) ast->line,
                                .column = (uint32_t) ast->column};

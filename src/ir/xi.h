@@ -285,6 +285,9 @@ static inline bool xi_local_addr_names_operand_storage(int64_t aux) {
 #define XI_TRY_AUX_STATIC_CLEANUP 1
 #define XI_TRY_AUX_CLEANUP_LOCAL_HANDLER 2
 
+/* CATCH receives the panic result of its exact call producer through aux. */
+#define XI_CATCH_AUX_POINT_PANIC 1
+
 typedef enum XiPlaceLifetime {
     XI_PLACE_LIFETIME_NONE = 0,
     XI_PLACE_LIFETIME_CALL_BOUND = 1,
@@ -1848,11 +1851,16 @@ typedef struct XiPhi {
  * The terminator is encoded in (kind, control) rather than as a trailing
  * instruction. This matches Go SSA's design and simplifies iteration.
  */
+typedef enum XiExitReason {
+    XI_EXIT_REASON_NONE = 0,
+    XI_EXIT_REASON_PANIC = 1,
+} XiExitReason;
+
 typedef struct XiBlock {
     uint32_t id;   /* dense block ID (unique within function) */
     uint16_t kind; /* XiBlockKind */
     bool visited;  /* traversal scratch */
-    uint8_t _pad;
+    uint8_t exit_reason; /* XiExitReason for an explicitly normalized exit graph */
     uint32_t line; /* source line for the block terminator (0 = unknown) */
 
     /* Phi nodes at entry (linked list; NULL if no merge point) */

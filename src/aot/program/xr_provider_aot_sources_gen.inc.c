@@ -154,7 +154,71 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "\n"
         ,
     },
+    {
+        .contract_id = { { 0xf5, 0x98, 0x6b, 0xf9, 0xc7, 0x76, 0xcf, 0x33, 0xcc, 0x74, 0xc2, 0x6f, 0x62, 0xb5, 0xcd, 0xda } },
+        .operation_id = { { 0x52, 0x80, 0xb2, 0xe3, 0xe8, 0xc2, 0xb1, 0x0d, 0x17, 0x92, 0x5f, 0x92, 0x10, 0x58, 0xb2, 0xf4 } },
+        .kind = XR_AOT_NATIVE_TYPED,
+        .header = "execution/xr_byte_storage_provider.h",
+        .definition =
+            "_Static_assert(_Generic(&xr_byte_storage_allocate,\n"
+            "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
+            "    \"Provider host signature does not match its explicit adapter\");\n"
+            "static int xr_aot_native_provider_7(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "    (void)context;\n"
+            "    return xr_byte_storage_allocate(context, arguments, result);\n"
+            "}\n"
+            "\n"
+        ,
+    },
+    {
+        .contract_id = { { 0xf5, 0x98, 0x6b, 0xf9, 0xc7, 0x76, 0xcf, 0x33, 0xcc, 0x74, 0xc2, 0x6f, 0x62, 0xb5, 0xcd, 0xda } },
+        .operation_id = { { 0x75, 0xea, 0x81, 0x97, 0xf7, 0x81, 0x6e, 0x73, 0xff, 0x59, 0xc0, 0x80, 0xad, 0xbf, 0x46, 0x49 } },
+        .kind = XR_AOT_NATIVE_TYPED,
+        .header = "execution/xr_byte_storage_provider.h",
+        .definition =
+            "_Static_assert(_Generic(&xr_byte_storage_allocate_zeroed,\n"
+            "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
+            "    \"Provider host signature does not match its explicit adapter\");\n"
+            "static int xr_aot_native_provider_8(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "    (void)context;\n"
+            "    return xr_byte_storage_allocate_zeroed(context, arguments, result);\n"
+            "}\n"
+            "\n"
+        ,
+    },
+    {
+        .contract_id = { { 0xf5, 0x98, 0x6b, 0xf9, 0xc7, 0x76, 0xcf, 0x33, 0xcc, 0x74, 0xc2, 0x6f, 0x62, 0xb5, 0xcd, 0xda } },
+        .operation_id = { { 0x79, 0xff, 0x36, 0x06, 0x80, 0xc2, 0xb1, 0x0f, 0x0a, 0xba, 0x91, 0x62, 0x44, 0xa5, 0xdb, 0x54 } },
+        .kind = XR_AOT_NATIVE_TYPED,
+        .header = "execution/xr_byte_storage_provider.h",
+        .definition =
+            "_Static_assert(_Generic(&xr_byte_storage_length,\n"
+            "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
+            "    \"Provider host signature does not match its explicit adapter\");\n"
+            "static int xr_aot_native_provider_9(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "    (void)context;\n"
+            "    return xr_byte_storage_length(context, arguments, result);\n"
+            "}\n"
+            "\n"
+        ,
+    },
+    {
+        .contract_id = { { 0xf5, 0x98, 0x6b, 0xf9, 0xc7, 0x76, 0xcf, 0x33, 0xcc, 0x74, 0xc2, 0x6f, 0x62, 0xb5, 0xcd, 0xda } },
+        .operation_id = { { 0x99, 0x72, 0x62, 0x2e, 0xff, 0xa8, 0xe0, 0xdd, 0x4f, 0x95, 0xbe, 0xf9, 0x76, 0x64, 0x41, 0x05 } },
+        .kind = XR_AOT_NATIVE_TYPED,
+        .header = "execution/xr_byte_storage_provider.h",
+        .definition =
+            "_Static_assert(_Generic(&xr_byte_storage_allocate_aligned,\n"
+            "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
+            "    \"Provider host signature does not match its explicit adapter\");\n"
+            "static int xr_aot_native_provider_10(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "    (void)context;\n"
+            "    return xr_byte_storage_allocate_aligned(context, arguments, result);\n"
+            "}\n"
+            "\n"
+        ,
+    },
 };
-#define XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 7u
+#define XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 11u
 
 /* clang-format on */

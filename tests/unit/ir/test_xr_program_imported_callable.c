@@ -27,7 +27,6 @@
 #include "plan/target/xr_target_profile.h"
 #include "program/xr_program_from_xi.h"
 #include "program/xr_program_verify.h"
-#include "program/xr_reference_evaluator.h"
 #include "program/xr_validated_program_internal.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
 #include "runtime/value/xchunk.h"
@@ -304,6 +303,30 @@ static bool imported_callable_path_exists(const char *path) {
     return path && path[0] && stat(path, &status) == 0;
 }
 
+static bool generated_contains_noncomment_text(const char *source, const char *text) {
+    size_t length = strlen(text);
+    char quote = 0;
+    while (*source) {
+        if (quote) {
+            if (strncmp(source, text, length) == 0) return true;
+            if (*source == '\\' && source[1]) ++source;
+            else if (*source == quote) quote = 0;
+            ++source;
+        } else if (source[0] == '/' && source[1] == '*') {
+            const char *end = strstr(source + 2, "*/");
+            if (!end) return true;
+            source = end + 2;
+        } else if (source[0] == '/' && source[1] == '/') {
+            while (*source && *source != '\n') ++source;
+        } else {
+            if (strncmp(source, text, length) == 0) return true;
+            if (*source == '\"' || *source == '\'') quote = *source;
+            ++source;
+        }
+    }
+    return false;
+}
+
 TEST(imported_callable_fixture_failure_cleans_directory) {
     char created_directory[XR_TEST_PATH_MAX] = {0};
     ASSERT_FALSE(build_imported_callable_fixture(&g_active_fixture, NULL, NULL, true,
@@ -541,6 +564,7 @@ TEST(test_imported_callable_multi_target_program) {
         .entry_function = entry,
         .global_evidence = &fixture->evidence,
         .semantic_profile_fingerprint = semantic_profile.bytes,
+        .module_graph = fixture->graph,
     };
     XiValue *import_checks[2] = {0};
     ASSERT_EQ_UINT(collect_import_checktypes(apply, import_checks), 2u);
@@ -560,6 +584,20 @@ TEST(test_imported_callable_multi_target_program) {
         fprintf(stderr, "imported callable producer failed: %s: %s\n",
                 xr_program_build_status_name(producer_status), diagnostic);
     ASSERT_EQ_INT(producer_status, XR_PROGRAM_BUILD_OK);
+
+    // A panic introduced in a transitive body must not borrow the frozen infallible type.
+    XiFunc *bump = find_module_function(library, "bump");
+    ASSERT_NOT_NULL(bump);
+    XiValue *addition = NULL;
+    for (uint32_t block = 0u; block < bump->nblocks; ++block)
+        for (uint32_t index = 0u; index < bump->blocks[block]->nvalues; ++index)
+            if (bump->blocks[block]->values[index]->op == XI_ADD)
+                addition = bump->blocks[block]->values[index];
+    ASSERT_NOT_NULL(addition);
+    addition->op = XI_DIV;
+    ASSERT_TRUE(imported_callable_producer_rejects(&producer_input, diagnostic,
+                                                   sizeof(diagnostic)));
+    addition->op = XI_ADD;
 
     XgCallsiteSummary *mutable_library_callsite = (XgCallsiteSummary *) library_callsite;
     uint32_t saved_library_callsite_flags = mutable_library_callsite->flags;
@@ -774,12 +812,6 @@ TEST(test_imported_callable_multi_target_program) {
     ASSERT_TRUE((signature->effect_mask & XR_CORE_EFFECT_CALL) != 0u);
     ASSERT_TRUE((signature->effect_mask & XR_CORE_EFFECT_TRAP) != 0u);
 
-    XrReferenceOutcome reference = xr_reference_evaluate(
-        validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
-    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
-    ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
-    ASSERT_EQ_INT(reference.value.as.i64, 42);
-
     ImportedCallableProviderBindings bindings;
     ASSERT_TRUE(imported_callable_build_provider_bindings(profile, &bindings));
     XrExecutionBindingInput execution_input = {
@@ -803,7 +835,7 @@ TEST(test_imported_callable_multi_target_program) {
                                         xr_validated_program_entry_function(validated), NULL, 0u);
     ASSERT_EQ_INT(vm.kind, XR_VM_OUTCOME_RETURN);
     ASSERT_EQ_INT(vm.value.kind, XR_VM_VALUE_I64);
-    ASSERT_EQ_INT(vm.value.as.i64, reference.value.as.i64);
+    ASSERT_EQ_INT(vm.value.as.i64, 42);
     xr_vm_code_free(vm_code);
 
     XrBackendIR *backend_ir = NULL;
@@ -813,17 +845,17 @@ TEST(test_imported_callable_multi_target_program) {
                                      &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_TRUE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
-    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic),
                   XR_BACKEND_OK);
     ASSERT_NOT_NULL(generated.bytes);
     ASSERT_GT(generated.size, 0u);
     ASSERT_NOT_NULL(strstr(generated.bytes, "int main(void)"));
-    ASSERT_NULL(strstr(generated.bytes, "selector"));
-    ASSERT_NULL(strstr(generated.bytes, "identity"));
-    ASSERT_NULL(strstr(generated.bytes, "increment"));
-    ASSERT_NULL(strstr(generated.bytes, "imported_callable_library"));
+    ASSERT_FALSE(generated_contains_noncomment_text(generated.bytes, "selector"));
+    ASSERT_FALSE(generated_contains_noncomment_text(generated.bytes, "identity"));
+    ASSERT_FALSE(generated_contains_noncomment_text(generated.bytes, "increment"));
+    ASSERT_FALSE(generated_contains_noncomment_text(generated.bytes, "imported_callable_library"));
     ASSERT_NULL(strstr(generated.bytes, "xr_aot_alloc"));
     if (g_generated_c_path) {
         FILE *generated_file = fopen(g_generated_c_path, "wb");

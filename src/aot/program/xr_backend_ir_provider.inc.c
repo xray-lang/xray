@@ -20,6 +20,7 @@ typedef enum XrAotNativeProviderKind {
     XR_AOT_NATIVE_I64_UNARY,
     XR_AOT_NATIVE_BOOL_I64_UNARY,
     XR_AOT_NATIVE_OPTIONAL_I64_PAIR_NULLARY,
+    XR_AOT_NATIVE_TYPED,
     XR_AOT_NATIVE_KIND_COUNT,
 } XrAotNativeProviderKind;
 
@@ -32,21 +33,6 @@ typedef struct XrAotNativeProviderSource {
 } XrAotNativeProviderSource;
 
 #include "xr_provider_aot_sources_gen.inc.c"
-
-static const char *native_provider_kind_name(XrAotNativeProviderKind kind) {
-    switch (kind) {
-        case XR_AOT_NATIVE_I64_NULLARY:
-            return "i64_nullary";
-        case XR_AOT_NATIVE_I64_UNARY:
-            return "i64_unary";
-        case XR_AOT_NATIVE_BOOL_I64_UNARY:
-            return "bool_i64_unary";
-        case XR_AOT_NATIVE_OPTIONAL_I64_PAIR_NULLARY:
-            return "optional_i64_pair_nullary";
-        default:
-            return NULL;
-    }
-}
 
 static bool native_provider_requirement(const XrBackendIR *ir, size_t index,
                                         uint32_t *requirement_out, uint32_t *operation_out) {
@@ -176,101 +162,88 @@ static bool emit_native_provider_headers(CBuffer *buffer, const XrBackendIR *ir)
 }
 
 static bool emit_native_provider_call(CBuffer *buffer, XrAotNativeProviderKind kind, size_t index) {
-    switch (kind) {
-        case XR_AOT_NATIVE_I64_NULLARY:
-            return append_format(
-                buffer, "        return xr_aot_native_provider_%zu(context, result);\n", index);
-        case XR_AOT_NATIVE_I64_UNARY:
-            return append_format(
-                buffer, "        return xr_aot_native_provider_%zu(context, argument, result);\n",
-                index);
-        case XR_AOT_NATIVE_BOOL_I64_UNARY:
-            return append_format(
-                buffer,
-                "        bool value = false;\n"
-                "        int status = xr_aot_native_provider_%zu(context, argument, &value);\n"
-                "        if (status == 0) *result = value ? UINT8_C(1) : UINT8_C(0);\n"
-                "        return status;\n",
-                index);
-        case XR_AOT_NATIVE_OPTIONAL_I64_PAIR_NULLARY:
-            return append_format(
-                buffer,
-                "        bool value = false;\n"
-                "        int64_t left = 0, right = 0;\n"
-                "        int status = xr_aot_native_provider_%zu(context, &value, &left, &right);\n"
-                "        if (status == 0) {\n"
-                "            *present = value ? UINT8_C(1) : UINT8_C(0);\n"
-                "            *first = left; *second = right;\n"
-                "        }\n"
-                "        return status;\n",
-                index);
-        default:
-            return false;
+    if (kind == XR_AOT_NATIVE_TYPED)
+        return append_format(buffer,
+            "        return xr_aot_native_provider_%zu(context, arguments, result);\n", index);
+    bool unary = kind == XR_AOT_NATIVE_I64_UNARY || kind == XR_AOT_NATIVE_BOOL_I64_UNARY;
+    if (!append_format(buffer, "        if (arguments->count != UINT32_C(%u)) return 1;\n", unary ? 1u : 0u) ||
+        (unary && !append_format(buffer,
+            "        if (arguments->nodes[0].token != UINT8_C(%u)) return 1;\n", XR_PROVIDER_TYPE_I64)))
+        return false;
+    if (kind == XR_AOT_NATIVE_I64_NULLARY || kind == XR_AOT_NATIVE_I64_UNARY) {
+        return append_format(buffer,
+            "        int64_t value = 0;\n"
+            "        int status = xr_aot_native_provider_%zu(context, %s&value);\n"
+            "        if (status == 0) { result->count = 1; result->nodes[0].token = UINT8_C(%u);\n"
+            "            result->nodes[0].as.i64 = value; }\n"
+            "        return status;\n", index, unary ? "arguments->nodes[0].as.i64, " : "", XR_PROVIDER_TYPE_I64);
     }
+    if (kind == XR_AOT_NATIVE_BOOL_I64_UNARY) {
+        return append_format(buffer,
+            "        bool value = false;\n"
+            "        int status = xr_aot_native_provider_%zu(context, arguments->nodes[0].as.i64, &value);\n"
+            "        if (status == 0) { result->count = 1; result->nodes[0].token = UINT8_C(%u);\n"
+            "            result->nodes[0].as.boolean = value; }\n"
+            "        return status;\n", index, XR_PROVIDER_TYPE_BOOL);
+    }
+    if (kind == XR_AOT_NATIVE_OPTIONAL_I64_PAIR_NULLARY) {
+        return append_format(buffer,
+            "        bool present = false; int64_t first = 0, second = 0;\n"
+            "        int status = xr_aot_native_provider_%zu(context, &present, &first, &second);\n"
+            "        if (status == 0) {\n"
+            "            result->count = present ? 4 : 1;\n"
+            "            result->nodes[0].token = UINT8_C(%u); result->nodes[0].child_count = present ? 1 : 0;\n"
+            "            if (present) {\n"
+            "                result->nodes[1].token = UINT8_C(%u); result->nodes[1].child_count = 2;\n"
+            "                result->nodes[2].token = result->nodes[3].token = UINT8_C(%u);\n"
+            "                result->nodes[2].as.i64 = first; result->nodes[3].as.i64 = second;\n"
+            "            }\n"
+            "        }\n"
+            "        return status;\n", index, XR_PROVIDER_TYPE_OPTIONAL, XR_PROVIDER_TYPE_TUPLE, XR_PROVIDER_TYPE_I64);
+    }
+    return false;
 }
 
-static bool emit_native_provider_dispatch(CBuffer *buffer, const XrBackendIR *ir,
-                                          XrAotNativeProviderKind kind) {
-    const char *parameters;
-    const char *check = "!result";
-    switch (kind) {
-        case XR_AOT_NATIVE_I64_NULLARY:
-            parameters = "int64_t *result";
-            break;
-        case XR_AOT_NATIVE_I64_UNARY:
-            parameters = "int64_t argument, int64_t *result";
-            break;
-        case XR_AOT_NATIVE_BOOL_I64_UNARY:
-            parameters = "int64_t argument, uint8_t *result";
-            break;
-        case XR_AOT_NATIVE_OPTIONAL_I64_PAIR_NULLARY:
-            parameters = "uint8_t *present, int64_t *first, int64_t *second";
-            check = "!present || !first || !second";
-            break;
-        default:
-            return false;
-    }
-    if (!append_format(buffer,
-                       "static int xr_aot_host_%s(void *context, uint32_t requirement, uint32_t "
-                       "operation, %s) {\n"
-                       "    if (%s) return 1;\n",
-                       native_provider_kind_name(kind), parameters, check))
-        return false;
+static bool emit_native_provider_definitions(CBuffer *buffer, const XrBackendIR *ir) {
+    bool used = false;
     for (size_t index = 0u; index < XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT; ++index) {
         uint32_t requirement, operation;
-        if (xr_aot_native_provider_sources[index].kind != kind ||
-            !native_provider_requirement(ir, index, &requirement, &operation))
-            continue;
+        if (native_provider_requirement(ir, index, &requirement, &operation)) {
+            used = true;
+            if (!append_text(buffer, xr_aot_native_provider_sources[index].definition)) return false;
+        }
+    }
+    if (!used) return true;
+    if (!append_text(buffer,
+            "static void xr_aot_host_dispose(XrProviderValuePack *result) {\n"
+            "    if (!result) return;\n"
+            "    for (uint32_t i = 0; i < result->count && i < XR_PROVIDER_VALUE_MAX_NODES; ++i) {\n"
+            "        XrProviderValueNode *node = &result->nodes[i];\n"
+            "        if (node->token == 7 && node->as.resource.payload && node->as.resource.destroy)\n"
+            "            node->as.resource.destroy(node->as.resource.payload);\n"
+            "    }\n"
+            "    *result = (XrProviderValuePack){0};\n}\n"
+            "static int xr_aot_host_typed(void *context, uint32_t requirement, uint32_t operation,\n"
+            "    const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "    if (!arguments || !result || result->count) return 1;\n")) return false;
+    for (size_t index = 0u; index < XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT; ++index) {
+        uint32_t requirement, operation;
+        if (!native_provider_requirement(ir, index, &requirement, &operation)) continue;
         if (!append_format(buffer,
-                           "    if (requirement == UINT32_C(%u) && operation == UINT32_C(%u)) {\n",
-                           requirement, operation) ||
-            !emit_native_provider_call(buffer, kind, index) || !append_text(buffer, "    }\n"))
-            return false;
+                "    if (requirement == UINT32_C(%u) && operation == UINT32_C(%u)) {\n", requirement, operation) ||
+            !emit_native_provider_call(buffer, xr_aot_native_provider_sources[index].kind, index) ||
+            !append_text(buffer, "    }\n")) return false;
     }
     return append_text(buffer, "    return 1;\n}\n\n");
 }
 
-static bool emit_native_provider_definitions(CBuffer *buffer, const XrBackendIR *ir) {
+static bool emit_native_provider_main_bindings(CBuffer *buffer, const XrBackendIR *ir) {
     for (size_t index = 0u; index < XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT; ++index) {
         uint32_t requirement, operation;
-        if (native_provider_requirement(ir, index, &requirement, &operation) &&
-            !append_text(buffer, xr_aot_native_provider_sources[index].definition))
-            return false;
-    }
-    for (XrAotNativeProviderKind kind = XR_AOT_NATIVE_I64_NULLARY; kind < XR_AOT_NATIVE_KIND_COUNT;
-         ++kind)
-        if (native_provider_kind_used(ir, kind) && !emit_native_provider_dispatch(buffer, ir, kind))
-            return false;
-    return true;
-}
-
-static bool emit_native_provider_main_bindings(CBuffer *buffer, const XrBackendIR *ir) {
-    for (XrAotNativeProviderKind kind = XR_AOT_NATIVE_I64_NULLARY; kind < XR_AOT_NATIVE_KIND_COUNT;
-         ++kind) {
-        const char *name = native_provider_kind_name(kind);
-        if (native_provider_kind_used(ir, kind) &&
-            !append_format(buffer, "    xr_ctx.provider_call_%s = xr_aot_host_%s;\n", name, name))
-            return false;
+        if (native_provider_requirement(ir, index, &requirement, &operation))
+            return append_text(buffer,
+                "    xr_ctx->provider_call_typed = xr_aot_host_typed;\n"
+                "    xr_ctx->provider_dispose_typed = xr_aot_host_dispose;\n");
     }
     return true;
 }

@@ -129,6 +129,13 @@ roots, or general product activation.
    suspension convention and result slot but no backend symbol, source
    dependency, callee function, or argument ABI; missing registry-backed
    identity remains unavailable rather than falling back to selector text.
+   Selective native imports use the same suspension/result collector and are
+   admitted by the structural call-table validator under their existing target
+   kind. Fresh String, Array, and generated native-storage results require an
+   exact registry signature and complete owned return provenance. They reuse
+   owned tagged dynamic storage and bind RETURN_OWNED; coroutine state, result
+   slot, representation, and ownership remain independently verified. A missing
+   result contract does not grant a tagged carrier merely because a call yields.
    A builtin-instance yieldable call row is derived only from the frozen
    `BUILTIN_INSTANCE_YIELDABLE` SemanticPlan target. The receiver's frozen
    builtin identity and the selector's argument count select one entry of the
@@ -280,7 +287,7 @@ roots, or general product activation.
 5. Runtime loading accepts only an XTP v61 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V61 is a breaking hard cutover from
-   v60 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 50,
+   v60 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 51,
    TargetProfile schema 6, TargetPlan schema 61, program-provenance schema 5,
    and exact PSC v10 provenance, typed program bindings, and the direct-local
    scalar-ref v1 call-row interpretation; no compatibility alias is accepted. It
@@ -496,8 +503,27 @@ assert len(plan) == 949
 assert hashlib.sha256(plan).hexdigest() == '296bbd89fe4fa31bdb82be182b5a57266dd0686430537cf717d46e0848ab4e0c'
 ```
 
+Private native-storage field reads reuse the existing borrowed tagged field
+storage family. Local source wrappers require the exact generated module,
+wrapper, storage field and native nominal type. Inlined external receivers
+resolve their stable class identity against the actual dependency declaration;
+caller-local class indexes are never substituted. Builder and verifier both
+rederive that authority. Buffer records the same bridge as other source-owned
+resource wrappers. This does not add an executable dependency-method adapter or
+claim native-storage program coverage while its existing native gate fails.
+
 verification-test: test_target_plan
 verification-test: test_xtp_format
+
+Dependency method identity is recorded independently of suspension. Standalone
+plans defer the suspension obligation; ordered module-set verification joins the
+exact method identity to the frozen body and existing graph-sealing proof. Final
+or graph-sealed receivers use that body's suspension result. A remaining open
+hierarchy retains conservative suspension. Missing and invented coroutine states
+are both rejected. This records no machine-call adapter or new language limit.
+
+verification-test: test_semantic_plan
+verification-test: test_semantic_dependency_method_authority
 
 ## Digest anchors
 
@@ -510,7 +536,7 @@ anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b1
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h 15445afbdb7357fdafc243730f4df7ae93ad01546feceb260194223c0670a578
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c a1e3dd6027b07493017976dd71b0e4ffc5082aa532b277207e7e26915e15bc0a
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 3bad36a703a4aba1689baca3e9a849b8f19b5aa513972da98b7202212daff75c
 anchor-sha256: src/plan/format/xr_xtp_schema.h d20e8a97aa7c641bf0b36315378f9040f2404006451bd426e4ba324e4c6b52f6
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
@@ -532,22 +558,22 @@ anchor-sha256: src/plan/target/xr_target_profile.h d21c09134a6469510fddfe0e10e96
 anchor-sha256: src/plan/target/xr_target_profile.c 7b5cfb5d561174bd1b2e4c834efe4290d3297a00a97a847ea4c83ead36e0f3ac
 anchor-sha256: src/plan/target/xr_target_plan.h cc2f39d480b85c73e1bf69933d16ebb754bdb9c7565f7dfa4dcfe29b26520bdc
 anchor-sha256: src/plan/target/xr_target_plan.c 1b94777ed0f8fbeb50f9a91e4e860a5e3dd54a7d21095772d597007299311d5e
-anchor-sha256: src/plan/target/xr_target_builder.c 4d549c5265e2b43b1c59338130449903e2d2b91a4f1319e2d91b72fc1909905c
-anchor-sha256: src/plan/target/xr_target_verify.c 6a58af2b4a6270625b6260177e5bf2cfbceb273b5d07c9d19dd16dd575e58966
+anchor-sha256: src/plan/target/xr_target_builder.c e76535bb9914a51f3231ad4be8e487422835b8049624ad99a9bfa602af147b9e
+anchor-sha256: src/plan/target/xr_target_verify.c 89e5cc6db3ca18508cf5e019d5f80bc18f61b52b285e5e832d714b087ab1e833
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 97413cd1fd368e8a61f9ae14c75c321b3b956b8313da7519bae361af4c24a894
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 5e81f18c79504cd7876910b0ad0d88b270fd19fbc6de7a44d5daa2bf47263692
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 6692c2f42c38c2d39e30c9a19d1b005621a17a228c1adc4907a189713d548f93
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c c84a37c2862e2f57743954510e168954b48326344108ef620340c420efd7ef84
 anchor-sha256: src/runtime/xr_target_plan_load.c 162babb92d90b8ead7842e68de5a6bccbb0a304e3e62299de4bb64c8ccf7a22d
 anchor-sha256: src/runtime/xr_runtime_api.c d829970cacc48b6a5debca44e535c555d3c32c65a4eadde83169345ae2c2fda2
-anchor-sha256: src/app/cli/xcmd_run.c b0c0af958397594785111a104897beadfd40ec6456dd3497648185fe885b0633
+anchor-sha256: src/app/cli/xcmd_run.c 10d9b341970c715f92c2a6743e5c12c4c9b7057fdf25c95806541f6448fd0d96
 anchor-sha256: contracts/target-machine/legacy-product-residue.json afd5c7ac449ad1b51a953a4ab5fc0c928e76f95648a0b8f9841099e0a3cd6c2a
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c cf678b892659efffda38e3cfd00986363b45f97cebb478b0652605c8a70d7fbf
+anchor-sha256: tests/unit/plan/test_target_plan.c e4141a0eec7a2fcb4fbc7e6181a6487dcbb2c16cc3ce5423a1c9808201f739be
 anchor-sha256: tests/unit/plan/test_xtp_format.c ccf55e2a27879ee23c1203c55e93af696c89c27288ce81db97b2c6f89c8cca39
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c eec8355e8f44b033a8688ac38d6a37af3f49eb576e7f2766863a716df9772f33
-anchor-sha256: tests/unit/CMakeLists.txt 6c0d5bb82cc5ece7e944e8487ed973a225ab51f94fbb0d45b883f4b0b6e8f865
+anchor-sha256: tests/unit/CMakeLists.txt 458b4d783486fe54b85f79aee7d1c19c7a9b0b82942ccb47c5fa2c526086c4e6
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 30015dd2f75ad8917788a30b367f203d15e85d037af8d394940a4d30af87e69a
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 4514f40cccc03abe86c15f2a4fcf562b174fcba066193ab58a4b6992ed0d57b5
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f

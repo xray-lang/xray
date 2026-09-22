@@ -43,6 +43,17 @@ either side has to be argued rather than drift.
   value-numbered. Duplicating a barrier invents an edge and CSE-ing two of
   them removes one; both are rejected by the generator, not by review.
 
+The bounded blocking-operation pool publishes completion with release/acquire
+queue handoff. Publication transfers the job to its consumer, so the producer
+does not access it afterward. A coroutine's active job is registered under the
+pool mutex; completion, destruction and reuse serialize removal of both links
+under that mutex. The link remains registered through the last wake-side shell
+access. Late completion of a detached job cannot wake or unregister a later
+wait on the same shell. Rejected submission preserves the prior coroutine
+state and transfers no job ownership. Job data outlives a cancelled frame;
+resumed code reading that data holds an independent owner. Runtime teardown
+joins scheduler workers and drains the pool before destroying its mutex.
+
 ## Optimiser obligations
 
 - M8: alias disjointness is not a licence to reorder. No pass may move an
@@ -118,3 +129,6 @@ verification-test: test_channel_close
 verification-test: test_scope_wait
 verification-test: test_weak_handle
 verification-test: test_cycle_detector_traversal
+verification-test: test_async_pool
+verification-test: test_async_allocations
+verification-test: test_native_backend

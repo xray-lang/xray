@@ -2930,6 +2930,16 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     XrCompilerSessionConfig session_config = {0};
     XrCompilerSession *session = xr_compiler_session_new(&session_config);
     ASSERT_NOT_NULL(session);
+    XrCExportPlan native_test_export = {
+        .xray_name = "overflow",
+        .symbol = "xr_test_i64_overflow",
+        .visibility = "hidden",
+        .abi = "xray",
+    };
+    XrNativePackagePlan native_package = {
+        .exports = &native_test_export, .export_count = 1u, .valid = true,
+    };
+    xr_compiler_session_set_native_package_plan(session, &native_package);
     ScalarFixture fixture;
     ASSERT_TRUE(fixture_analyze(&fixture, session, "xi-i64-overflow", kI64OverflowPredicateSource));
     char error[512] = {0};
@@ -3335,13 +3345,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
 
     XiModule *modules[] = {native_module};
     XaotBundle bundle = {0};
-    XrCExportPlan native_test_export = {
-        .xray_name = "overflow",
-        .symbol = "xr_test_i64_overflow",
-        .visibility = "hidden",
-        .abi = "xray",
-    };
-    native_module->functions[0]->export_plan = &native_test_export;
+    ASSERT_TRUE(native_module->functions[0]->export_plan == &native_test_export);
     ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
     bundle.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
     ASSERT_TRUE(xaot_bundle_set_program_target_plan(&bundle, native_target));

@@ -750,7 +750,7 @@ typedef enum TextOperationStatus {
 static bool operation_is_text(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_CONSTANT_STRING ||
            operation_id == XR_CORE_OP_CORE_CONSTANT_RUNE ||
-           operation_id == XR_CORE_OP_CORE_STRING_FROM_I64 ||
+           operation_id == XR_CORE_OP_CORE_STRING_FROM_SCALAR ||
            operation_id == XR_CORE_OP_CORE_STRING_CONCAT ||
            operation_id == XR_CORE_OP_CORE_COMPARE_STRING ||
            operation_id == XR_CORE_OP_CORE_COMPARE_RUNE ||
@@ -783,7 +783,9 @@ static TextOperationStatus evaluate_text_operation(EvalContext *context,
             produced->as.rune = constant->value.rune;
             return TEXT_OPERATION_OK;
         }
-        case XR_CORE_OP_CORE_STRING_FROM_I64: {
+        case XR_CORE_OP_CORE_STRING_FROM_SCALAR: {
+            if (values[instruction->operands[0]].as.value.kind != XR_REFERENCE_VALUE_I64)
+                return TEXT_OPERATION_INVALID;
             int64_t source = values[instruction->operands[0]].as.value.as.i64;
             size_t size = xr_text_display_i64(source, NULL);
             XrReferenceStringValue *string = allocate_string(context, size);
@@ -1270,6 +1272,11 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     break;
                 }
                 case XR_CORE_OP_CORE_ASSERT_CONDITION:
+                    /* The historical reference subset has scalar panic tokens only. */
+                    if (instruction->immediate.u32 & XR_CORE_ASSERT_MESSAGE_PRESENT) {
+                        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
+                        goto done;
+                    }
                     if (!values[instruction->operands[0]].as.value.as.boolean) {
                         XrReferenceValue panic = {
                             .kind = XR_REFERENCE_VALUE_PANIC_INFO,
@@ -1578,7 +1585,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                 }
                 case XR_CORE_OP_CORE_CONSTANT_STRING:
                 case XR_CORE_OP_CORE_CONSTANT_RUNE:
-                case XR_CORE_OP_CORE_STRING_FROM_I64:
+                case XR_CORE_OP_CORE_STRING_FROM_SCALAR:
                 case XR_CORE_OP_CORE_STRING_CONCAT:
                 case XR_CORE_OP_CORE_COMPARE_STRING:
                 case XR_CORE_OP_CORE_COMPARE_RUNE:
@@ -1645,7 +1652,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                                    UINT32_MAX);
                     break;
                 }
-                case XR_CORE_OP_CORE_CLASS_SHARE: {
+                case XR_CORE_OP_CORE_OWNER_ALIAS: {
                     XrReferenceClassValue *value =
                         (XrReferenceClassValue *) (void *)
                             values[instruction->operands[0]].as.value.as.class_reference;
@@ -1980,7 +1987,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_OWNER_COPY ||
            operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
            operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT ||
-           operation_id == XR_CORE_OP_CORE_CLASS_SHARE ||
+           operation_id == XR_CORE_OP_CORE_OWNER_ALIAS ||
            operation_id == XR_CORE_OP_CORE_CLASS_FIELD_LOAD ||
            operation_id == XR_CORE_OP_CORE_CLASS_FIELD_PLACE ||
            operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
@@ -2159,7 +2166,7 @@ bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
         selected.max_steps == 0u || selected.max_value_cells == 0u || selected.max_call_depth == 0u)
         return false;
     XrExecutionLease lease = {0};
-    if (!xr_execution_instance_acquire(instance, &lease))
+    if (xr_execution_instance_acquire(instance, &lease) != XR_EXECUTION_OK)
         return false;
     XrValidatedProgram *program = xr_execution_lease_retain_program(&lease);
     if (!program || program->module_count != 0u || function_id >= program->function_count) {
@@ -2610,7 +2617,7 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 break;
             case XR_CORE_OP_CORE_CONSTANT_STRING:
             case XR_CORE_OP_CORE_CONSTANT_RUNE:
-            case XR_CORE_OP_CORE_STRING_FROM_I64:
+            case XR_CORE_OP_CORE_STRING_FROM_SCALAR:
             case XR_CORE_OP_CORE_STRING_CONCAT:
             case XR_CORE_OP_CORE_COMPARE_STRING:
             case XR_CORE_OP_CORE_COMPARE_RUNE:
@@ -2661,7 +2668,7 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                                UINT32_MAX);
                 break;
             }
-            case XR_CORE_OP_CORE_CLASS_SHARE: {
+            case XR_CORE_OP_CORE_OWNER_ALIAS: {
                 XrReferenceClassValue *value =
                     (XrReferenceClassValue *) (void *)
                         execution->values[instruction->operands[0]].as.value.as.class_reference;

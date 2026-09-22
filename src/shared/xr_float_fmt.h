@@ -26,16 +26,26 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Format `value` into `buf` (capacity `bufsz`). Returns the written length
- * (excluding the NUL), matching snprintf's return convention. */
+/* Format `value` into `buf` (capacity `bufsz`). Returns the required length
+ * excluding the NUL, even for a zero-capacity query or truncated output. */
 static inline int xr_format_float(char *buf, size_t bufsz, double value) {
-    int len = snprintf(buf, bufsz, "%.15g", value);
-    if (len >= 0 && !strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E') &&
-        len + 2 < (int) bufsz) {
-        buf[len] = '.';
-        buf[len + 1] = '0';
-        buf[len + 2] = '\0';
+    char rendered[64];
+    int len = snprintf(rendered, sizeof(rendered), "%.15g", value);
+    if (len < 0 || (size_t)len >= sizeof(rendered)) {
+        if (buf && bufsz) buf[0] = '\0';
+        return -1;
+    }
+    if (!strchr(rendered, '.') && !strchr(rendered, 'e') && !strchr(rendered, 'E') &&
+        (size_t)len + 2u < sizeof(rendered)) {
+        rendered[len] = '.';
+        rendered[len + 1] = '0';
+        rendered[len + 2] = '\0';
         len += 2;
+    }
+    if (buf && bufsz) {
+        size_t copied = (size_t)len < bufsz - 1u ? (size_t)len : bufsz - 1u;
+        memcpy(buf, rendered, copied);
+        buf[copied] = '\0';
     }
     return len;
 }

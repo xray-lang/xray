@@ -243,6 +243,28 @@ from execution admission; future representable types and effects are not
 implicitly executable. The current generated adapters admit trivial scalar
 queries, optional pairs of resource tokens, and consumed pipe-token close.
 
+Stdlib native resource declarations derive their logical identity from SHA-256
+of `xray-stdlib-resource-v1` plus one NUL, followed by the module and declaration
+name as UTF-8 strings, each preceded by its unsigned 64-bit little-endian byte
+length. The first 16 digest bytes form the nonzero resource identity. Exact
+module/name resolution selects the declaration before this derivation; physical
+body expressions, builtin slots, wrappers and field spelling do not enter this
+identity. The existing full native-class implementation fingerprint remains a
+separate protection. This identity does not establish execution storage or
+provider binding authority by itself.
+
+The logical prefix token `7` is a managed resource leaf followed by one
+nonzero 16-byte `XrStableId`. Its identity names the declared resource, never
+its host handle, destructor, address or physical layout. Tuple and optional
+children may contain it; their top-level ownership cannot be trivial. Resource
+transitions ending at that leaf must carry the same resource identity. The
+existing i64 resource-token contract remains unchanged: external resource
+consumption and language handle ownership are separate responsibilities, so an
+idempotent close can borrow a handle while consuming its external resource.
+The identity extractor and failed wire decoding publish no partial output.
+This token extends logical representation only; no native resource adapter or
+Program storage implementation is implied by structural acceptance.
+
 Refusal produces no normal result and enters the provider-failed trap edge.
 Resource transitions independently define consumption at call entry and
 acquisition on a present result. Refusal does not guarantee that the host has

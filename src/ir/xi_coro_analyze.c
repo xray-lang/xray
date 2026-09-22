@@ -1736,6 +1736,34 @@ XR_FUNC bool xi_coro_plan_ensure_slot_capacity(XiFunc *f, XiCoroPlan *plan) {
     return true;
 }
 
+static bool xi_coro_slot_value_is_current(const XiFunc *f, const XiValue *value) {
+    if (!value)
+        return false;
+    for (uint32_t i = 0; i < f->nparams; i++) {
+        if (f->params[i] == value)
+            return true;
+    }
+    const XiBlock *block = value->block;
+    if (!block)
+        return false;
+    bool block_present = false;
+    for (uint32_t i = 0; i < f->nblocks; i++)
+        block_present |= f->blocks[i] == block;
+    if (!block_present)
+        return false;
+    if (block->control == value)
+        return true;
+    for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+        if (&phi->value == value)
+            return true;
+    }
+    for (uint32_t i = 0; i < block->nvalues; i++) {
+        if (block->values[i] == value)
+            return true;
+    }
+    return false;
+}
+
 XR_FUNC bool xi_coro_plan_refresh_point_sets(XiFunc *f, XiCoroPlan *plan) {
     if (!f || !plan || plan->nslots > plan->slot_capacity ||
         plan->slot_capacity > XI_CORO_MAX_SLOTS)
@@ -1748,6 +1776,15 @@ XR_FUNC bool xi_coro_plan_refresh_point_sets(XiFunc *f, XiCoroPlan *plan) {
         xi_liveness_free(live);
         return false;
     }
+    /* Representation cleanup can remove SSA aliases after suspension splitting.
+     * Rebuild slot membership before deriving point sets and frame actions;
+     * arena residency alone does not make a removed value part of the IR. */
+    uint32_t nslots = 0;
+    for (uint32_t si = 0; si < plan->nslots; si++) {
+        if (xi_coro_slot_value_is_current(f, plan->slots[si].value))
+            plan->slots[nslots++] = plan->slots[si];
+    }
+    plan->nslots = nslots;
     if (!xi_coro_append_split_slots(f, plan, live)) {
         xi_liveness_free(live);
         return false;

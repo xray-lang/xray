@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Uncaught panics read the same on the VM, embedded-bytecode and AOT forms.
+"""Uncaught panics satisfy independent expectations on run and native build.
 
 One line, built from the fault's error code and message:
 
@@ -21,6 +21,7 @@ Usage: run_panic_report_tests.py [xray_binary]
 from __future__ import annotations
 
 import os
+import json
 import re
 import sys
 from pathlib import Path
@@ -110,12 +111,13 @@ def check_backtrace(rec: Recorder, xray: Path, div: Path,
 
 def check_aot(rec: Recorder, xray: Path, div: Path, work: Path,
               timeout: float | None) -> None:
-    """AOT parity, skipped when no native toolchain provider is READY."""
+    """Require a real native build before checking the independent report."""
     native = work / platform.exe_name("div_native")
     build = proc.run([xray, "build", "--native", div, "-o", native],
                      timeout=timeout)
     if not build.ok or not os.access(native, os.X_OK):
-        print("SKIP: aot div-by-zero - no native toolchain provider available")
+        rec.bad(f"FAIL: aot div-by-zero - native build failed (exit {build.returncode}): "
+                + (build.stdout + build.stderr).decode("utf-8", "replace"))
         return
 
     result = proc.run([native], timeout=timeout)
@@ -129,49 +131,129 @@ def check_aot(rec: Recorder, xray: Path, div: Path, work: Path,
                 f"err='{err}'")
 
 
-def check_embed(rec: Recorder, xray: Path, div: Path, work: Path,
+def check_default_build(rec: Recorder, xray: Path, div: Path, work: Path,
                 timeout: float | None) -> None:
-    """The generated entry must map every VM failure to process status 1."""
-    generated = work / "div_embed.c"
+    """The default product entry must report the panic and exit with status 1."""
+    generated = work / "div_default.c"
     emit = proc.run([xray, "build", "-c", div, "-o", generated], timeout=timeout)
     if not emit.ok or not generated.is_file():
-        rec.bad("FAIL: embedded div-by-zero - C source generation failed")
+        rec.bad("FAIL: default build div-by-zero - C source generation failed")
         return
 
-    normalized_return = "return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;"
-    try:
-        generated_text = generated.read_text(encoding="utf-8")
-    except OSError as exc:
-        rec.bad(f"FAIL: embedded div-by-zero - cannot read generated C: {exc}")
-        return
-    if normalized_return not in generated_text:
-        rec.bad("FAIL: embedded div-by-zero - generated entry leaks the VM result "
-                "as a process exit status")
-        return
-    rec.ok("embedded div-by-zero normalizes the process exit status")
-
-    embedded = work / platform.exe_name("div_embed")
-    build = proc.run([xray, "build", div, "-o", embedded], timeout=timeout)
+    executable = work / platform.exe_name("div_default")
+    build = proc.run([xray, "build", div, "-o", executable], timeout=timeout)
     if not build.ok:
-        diagnostic = build.stdout + build.stderr
-        if b"failed to start compiler" in diagnostic:
-            print("SKIP: embedded div-by-zero runtime - no portable C compiler available")
-            return
-        rec.bad("FAIL: embedded div-by-zero - binary build failed")
+        rec.bad("FAIL: default build div-by-zero - binary build failed: "
+                + (build.stdout + build.stderr).decode("utf-8", "replace"))
         return
-    if not os.access(embedded, os.X_OK):
-        rec.bad("FAIL: embedded div-by-zero - binary was not produced")
+    if not os.access(executable, os.X_OK):
+        rec.bad("FAIL: default build div-by-zero - binary was not produced")
         return
 
-    result = proc.run([embedded], timeout=timeout)
+    result = proc.run([executable], timeout=timeout)
     out = result.stdout.decode("utf-8", "replace").rstrip("\r\n")
     err = strip_ansi(result.stderr.decode("utf-8", "replace"))
     if (result.returncode == 1 and out == "before"
             and DIV_REPORT in err and TRACE not in err):
-        rec.ok("embedded div-by-zero matches the VM panic report")
+        rec.ok("default build div-by-zero matches the VM panic report")
     else:
-        rec.bad(f"FAIL: embedded div-by-zero - rc={result.returncode} out='{out}' "
+        rec.bad(f"FAIL: default build div-by-zero - rc={result.returncode} out='{out}' "
                 f"err='{err}'")
+
+
+def check_sequence_defer(rec: Recorder, xray: Path, work: Path,
+                         timeout: float | None) -> None:
+    for kind, index in ((kind, index) for kind in ("i64", "string")
+                        for index in (1, 3, -1)):
+        for store in (False, True):
+            label = f"array<{kind}> {'store' if store else 'read'} index {index} with defer"
+            source = work / f"defer_{kind}_{index}_{int(store)}.xr"
+            replacement = "42" if kind == "i64" else '"newer"'
+            initial = "[10, 20, 30]" if kind == "i64" else '["old", "two", "three"]'
+            operation = f"values[{index}] = {replacement}" if store else f"print(values[{index}])"
+            source.write_text('fn main() {\n' +
+                              f' var values: Array<{kind}> = {initial}\n' +
+                              ' defer { print("cleanup") }\n ' + operation +
+                              '\n}\nmain()\n', encoding="utf-8")
+            success = index == 1
+            stdout = "cleanup" if store or not success else ("20\ncleanup" if kind == "i64" else "two\ncleanup")
+            report = "" if success else (
+                f"[Uncaught Panic] E0430: array index out of range: {index} (length 3)")
+            check_run(rec, xray, "vm " + label, ["run", source],
+                      0 if success else 1, stdout, report,
+                      "[Uncaught Panic]" if success else TRACE, timeout)
+            native = work / platform.exe_name(f"defer_{kind}_{index}_{int(store)}")
+            build = proc.run([xray, "build", source, "-o", native], timeout=timeout)
+            if not build.ok or not native.is_file():
+                rec.bad(f"FAIL: native {label} build: " +
+                        (build.stdout + build.stderr).decode("utf-8", "replace"))
+                continue
+            check_run(rec, native, "native " + label, [],
+                      0 if success else 1, stdout, report,
+                      "[Uncaught Panic]" if success else TRACE, timeout)
+
+
+def check_borrowed_sequence_defer(rec: Recorder, xray: Path, work: Path,
+                                   timeout: float | None) -> None:
+    for nested in (False, True):
+        for index in (1, 3):
+            label = f"{'nested' if nested else 'module'} array borrow index {index} with defer"
+            source = work / f"borrow_{int(nested)}_{index}.xr"
+            if nested:
+                text = ('fn main() {\n'
+                        ' var xs: Array<Array<i64>> = [[10,20,30], [40,50,60]]\n'
+                        ' defer { print("cleanup") }\n'
+                        f' print(xs[0][{index}])\n' + '}\nmain()\n')
+            else:
+                text = ('var xs: Array<i64> = [10,20,30]\n'
+                        'fn main() {\n defer { print("cleanup") }\n'
+                        f' print(xs[{index}])\n' + '}\nmain()\n')
+            source.write_text(text, encoding="utf-8")
+            success = index == 1
+            stdout = "20\ncleanup" if success else "cleanup"
+            report = "" if success else (
+                "[Uncaught Panic] E0430: array index out of range: 3 (length 3)")
+            check_run(rec, xray, "vm " + label, ["run", source],
+                      0 if success else 1, stdout, report,
+                      "[Uncaught Panic]" if success else TRACE, timeout)
+            native = work / platform.exe_name(f"borrow_{int(nested)}_{index}")
+            build = proc.run([xray, "build", source, "-o", native], timeout=timeout)
+            if not build.ok or not native.is_file():
+                rec.bad(f"FAIL: native {label} build: " +
+                        (build.stdout + build.stderr).decode("utf-8", "replace"))
+                continue
+            check_run(rec, native, "native " + label, [],
+                      0 if success else 1, stdout, report,
+                      "[Uncaught Panic]" if success else TRACE, timeout)
+
+
+def check_assert_messages(rec: Recorder, xray: Path, work: Path,
+                          timeout: float | None) -> None:
+    cases = [(True, "ready"), (False, "消息: ready"), (False, ""), (False, "long" * 800)]
+    for index, (success, message) in enumerate(cases):
+        source = work / f"assert_message_{index}.xr"
+        source.write_text(
+            'fn message() -> string { print("message"); return ' + json.dumps(message, ensure_ascii=False) + '}\n'
+            'fn checked() { defer { print("cleanup") }; assert(' + str(success).lower() + ', message()) }\n'
+            'print("before")\nchecked()\nprint("after")\n', encoding="utf-8")
+        expected_out = b"before\nmessage\ncleanup\n" + (b"after\n" if success else b"")
+        expected_err = b"" if success else ("[Uncaught Panic] E0001: " + message + "\n").encode("utf-8")
+        native = work / platform.exe_name(f"assert_message_{index}")
+        commands = [("vm", [xray, "run", source])]
+        build = proc.run([xray, "build", source, "-o", native], timeout=timeout)
+        if build.ok and native.is_file():
+            commands.append(("native", [native]))
+        else:
+            rec.bad(f"FAIL: assertion message {index} native build: " +
+                    (build.stdout + build.stderr).decode("utf-8", "replace"))
+        for backend, command in commands:
+            result = proc.run(command, timeout=timeout)
+            if (result.returncode == (0 if success else 1) and
+                    result.stdout == expected_out and result.stderr == expected_err):
+                rec.ok(f"{backend} assertion message {index} evaluates once and renders exact bytes")
+            else:
+                rec.bad(f"FAIL: {backend} assertion message {index}: rc={result.returncode} "
+                        f"stdout={result.stdout!r} stderr={result.stderr!r}")
 
 
 def main(argv: list[str]) -> int:
@@ -192,8 +274,11 @@ def main(argv: list[str]) -> int:
                   1, "before", DIV_REPORT, TRACE, timeout)
         check_run(rec, xray, "vm array-oob panic report", ["run", oob],
                   1, "before", OOB_REPORT, TRACE, timeout)
+        check_assert_messages(rec, xray, ws.root, timeout)
+        check_sequence_defer(rec, xray, ws.root, timeout)
+        check_borrowed_sequence_defer(rec, xray, ws.root, timeout)
         check_backtrace(rec, xray, div, timeout)
-        check_embed(rec, xray, div, ws.root, timeout)
+        check_default_build(rec, xray, div, ws.root, timeout)
         check_aot(rec, xray, div, ws.root, timeout)
 
     print("----------------------------------------")

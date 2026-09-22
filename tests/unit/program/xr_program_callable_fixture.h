@@ -8,6 +8,7 @@
 
 typedef enum XrProgramCallableFixtureMutation {
     XR_CALLABLE_FIXTURE_VALID = 0,
+    XR_CALLABLE_FIXTURE_RETURN_CAPTURE,
     XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,
     XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
     XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
@@ -19,6 +20,9 @@ typedef enum XrProgramCallableFixtureMutation {
     XR_CALLABLE_FIXTURE_INVOKE_TRAP,
     XR_CALLABLE_FIXTURE_INVOKE_TRAP_BAD_TARGET,
     XR_CALLABLE_FIXTURE_INVOKE_TRAP_LOST_OWNER,
+    XR_CALLABLE_FIXTURE_DIRECT_PANIC,
+    XR_CALLABLE_FIXTURE_DIRECT_PANIC_WRONG_PAYLOAD,
+    XR_CALLABLE_FIXTURE_DIRECT_PANIC_UNDECLARED_CALLER,
 } XrProgramCallableFixtureMutation;
 
 enum {
@@ -58,6 +62,15 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
     XrCoreIrCallableSignatureInput fallible_signature = direct_signature;
     fallible_signature.error_type_id = XR_CORE_TYPE_ERROR;
     fallible_signature.effect_mask |= XR_CORE_EFFECT_ERROR;
+    bool direct_panic = mutation == XR_CALLABLE_FIXTURE_DIRECT_PANIC ||
+                        mutation == XR_CALLABLE_FIXTURE_DIRECT_PANIC_WRONG_PAYLOAD ||
+                        mutation == XR_CALLABLE_FIXTURE_DIRECT_PANIC_UNDECLARED_CALLER;
+    if (direct_panic) {
+        direct_signature.panic_type_id =
+            mutation == XR_CALLABLE_FIXTURE_DIRECT_PANIC_WRONG_PAYLOAD ? XR_CORE_TYPE_ERROR
+                                                                     : XR_CORE_TYPE_PANIC_INFO;
+        direct_signature.effect_mask |= XR_CORE_EFFECT_PANIC;
+    }
     if (mutation == XR_CALLABLE_FIXTURE_DIRECT_SUSPENDING) {
         direct_signature.effect_mask |= XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND;
         direct_signature.capability_mask |= XR_CORE_CAPABILITY_RUNTIME_COROUTINE_SUSPENSION;
@@ -538,18 +551,60 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
 
+    if (direct_panic) {
+        captured_target.panic_type_id = direct_signature.panic_type_id;
+        captured_target.effect_mask |= XR_CORE_EFFECT_PANIC;
+        captureless_target.panic_type_id = direct_signature.panic_type_id;
+        captureless_target.effect_mask |= XR_CORE_EFFECT_PANIC;
+        if (mutation != XR_CALLABLE_FIXTURE_DIRECT_PANIC_UNDECLARED_CALLER) {
+            entry.panic_type_id = XR_CORE_TYPE_PANIC_INFO;
+            entry.effect_mask |= XR_CORE_EFFECT_PANIC;
+        }
+    }
+    if (mutation == XR_CALLABLE_FIXTURE_RETURN_CAPTURE) {
+        entry_instructions[4] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_RETURN,
+            .operands = copy_direct, .operand_count = 1u};
+        entry_blocks[0].instruction_count = 5u;
+        entry.block_count = 1u;
+        entry.result_type_id = XR_CALLABLE_FIXTURE_DIRECT_TYPE;
+        entry.result_ownership = XR_CORE_IR_OWNER;
+        entry.error_type_id = XR_CORE_TYPE_VOID;
+        entry.panic_type_id = XR_CORE_TYPE_VOID;
+        entry.effect_mask = 0u;
+    }
+    XrCoreIrKey observe_argument = xr_callable_fixture_key("callable:observe:argument");
+    XrCoreIrKey observe_result = xr_callable_fixture_key("callable:observe:result");
+    XrCoreIrValueInput observe_parameter = {.key = observe_argument,
+        .type_id = XR_CALLABLE_FIXTURE_DIRECT_TYPE, .ownership = XR_CORE_IR_NON_OWNER};
+    XrCoreIrInstructionInput observe_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT, .operands = &observe_argument, .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT, .result = observe_result,
+         .result_type_id = XR_CORE_TYPE_I64, .operands = &observe_argument, .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN, .operands = &observe_result, .operand_count = 1u},
+    };
+    XrCoreIrBlockInput observe_block = {.key = xr_callable_fixture_key("callable:observe:block"),
+        .arguments = &observe_parameter, .argument_count = 1u,
+        .instructions = observe_instructions, .instruction_count = 3u};
+    uint16_t observe_type = XR_CALLABLE_FIXTURE_DIRECT_TYPE;
+    XrParamMode observe_mode = XR_PARAM_READ;
+    XrCoreIrFunctionInput observe = {.key = xr_callable_fixture_key("callable:observe:function"),
+        .parameter_types = &observe_type, .parameter_modes = &observe_mode, .parameter_count = 1u,
+        .result_type_id = XR_CORE_TYPE_I64, .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_TRAP,
+        .entry_block = observe_block.key, .blocks = &observe_block, .block_count = 1u};
     XrCoreIrFunctionInput functions[] = {
         captured_target,
         captureless_target,
         fallible_target,
         entry,
+        observe,
     };
     XrCoreIrModuleInput module = {
         .key = xr_callable_fixture_key("callable:module"),
         .constants = &constant,
         .constant_count = 1u,
         .functions = functions,
-        .function_count = 4u,
+        .function_count = mutation == XR_CALLABLE_FIXTURE_RETURN_CAPTURE ? 5u : 4u,
     };
     uint8_t profile[XR_PROGRAM_DIGEST_SIZE] = {0};
     uint16_t feature = XR_CORE_FEATURE_CORE_BASE;

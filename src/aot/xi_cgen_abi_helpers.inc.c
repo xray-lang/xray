@@ -171,7 +171,8 @@ static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     bool authoritative = false;
     bool named_aggregate = cg_value_emission_is_named_aggregate(ctx, v, &emission, &authoritative);
     if (authoritative)
-        return named_aggregate;
+        return named_aggregate || (emission.rep == XR_C_VALUE_REP_VIEW && emission.c_type &&
+                                   strcmp(emission.c_type, "xr_span_t") == 0);
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && plan->rep.kind == XAOT_VALUE_AGGREGATE;
 }
@@ -935,6 +936,8 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
     if (to_rep == XR_REP_I64) {
         if (from_rep == XR_REP_RAWPTR)
             fprintf(out, "(int64_t)(uintptr_t)(");
+        else if (from_rep == XR_REP_TAGGED && type && type->kind == XR_KIND_BOOL)
+            fprintf(out, "(uint8_t)XR_TO_BOOL(");
         else if (from_rep == XR_REP_TAGGED)
             fprintf(out, type && type->kind == XR_KIND_RUNE ? "XR_TO_RUNE(" : "XR_TO_INT(");
         else
@@ -1327,6 +1330,13 @@ static const XaotBoundaryStep *cg_value_boundary_step(XiCgenCtx *ctx, const XiFu
 static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FILE *out,
                                                              const XiFunc *f, const XiValue *call,
                                                              const XiFunc *target) {
+    if (cg_value_plan_is_span_aggregate(ctx, call)) {
+        if (!cg_func_return_abi_is_span(ctx, target)) {
+            fprintf(stderr, "[xi_cgen] ERROR: view result disagrees with callee return ABI\n");
+            ctx->error = true;
+        }
+        return NULL;
+    }
     XaotLeafAggregateTargetView leaf_aggregate = {0};
     XaotLeafAggregateTargetStatus leaf_status =
         cg_leaf_aggregate_call_view(ctx, f, call, &leaf_aggregate);

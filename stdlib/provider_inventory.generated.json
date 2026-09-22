@@ -1013,13 +1013,49 @@
     {
       "symbol": "mem.__alloc",
       "signature": "(n: i64): __BufferStorage",
-      "declared": false,
-      "admitted": false,
-      "blocking_reasons": [
-        "missing-provider-declaration"
-      ],
-      "declaration": null,
-      "logical_declaration_sha256": null,
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/byte-storage",
+        "operation": "xray.runtime.provider-operation.v1/byte-storage/allocate",
+        "logical": {
+          "parameters": [
+            {
+              "type": "i64",
+              "mode": "in",
+              "owner": "trivial"
+            }
+          ],
+          "result_type": "resource<mem.__BufferStorage>",
+          "result_owner": "owned",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "managed-allocation"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "typed",
+          "header": "execution/xr_byte_storage_provider.h",
+          "symbol": "xr_byte_storage_allocate"
+        }
+      },
+      "logical_declaration_sha256": "5ce1dc2fbb051d76a0efca9b41486b1480eb3293d972731edf932b2114dee71c",
       "binding": {
         "state": "NOT_VERIFIED",
         "reason": "requires-compiled-runtime-evidence"
@@ -1032,13 +1068,54 @@
     {
       "symbol": "mem.__allocAligned",
       "signature": "(n: i64, align: i64): __BufferStorage",
-      "declared": false,
-      "admitted": false,
-      "blocking_reasons": [
-        "missing-provider-declaration"
-      ],
-      "declaration": null,
-      "logical_declaration_sha256": null,
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/byte-storage",
+        "operation": "xray.runtime.provider-operation.v1/byte-storage/allocate-aligned",
+        "logical": {
+          "parameters": [
+            {
+              "type": "i64",
+              "mode": "in",
+              "owner": "trivial"
+            },
+            {
+              "type": "i64",
+              "mode": "in",
+              "owner": "trivial"
+            }
+          ],
+          "result_type": "resource<mem.__BufferStorage>",
+          "result_owner": "owned",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "managed-allocation"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "typed",
+          "header": "execution/xr_byte_storage_provider.h",
+          "symbol": "xr_byte_storage_allocate_aligned"
+        }
+      },
+      "logical_declaration_sha256": "1fda157aff6edf9c29a69d0f92d9731bf37f9dc9818b0646dd28213ba5337f7c",
       "binding": {
         "state": "NOT_VERIFIED",
         "reason": "requires-compiled-runtime-evidence"
@@ -1051,13 +1128,49 @@
     {
       "symbol": "mem.__allocZeroed",
       "signature": "(n: i64): __BufferStorage",
-      "declared": false,
-      "admitted": false,
-      "blocking_reasons": [
-        "missing-provider-declaration"
-      ],
-      "declaration": null,
-      "logical_declaration_sha256": null,
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/byte-storage",
+        "operation": "xray.runtime.provider-operation.v1/byte-storage/allocate-zeroed",
+        "logical": {
+          "parameters": [
+            {
+              "type": "i64",
+              "mode": "in",
+              "owner": "trivial"
+            }
+          ],
+          "result_type": "resource<mem.__BufferStorage>",
+          "result_owner": "owned",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "managed-allocation"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "typed",
+          "header": "execution/xr_byte_storage_provider.h",
+          "symbol": "xr_byte_storage_allocate_zeroed"
+        }
+      },
+      "logical_declaration_sha256": "5ce1dc2fbb051d76a0efca9b41486b1480eb3293d972731edf932b2114dee71c",
       "binding": {
         "state": "NOT_VERIFIED",
         "reason": "requires-compiled-runtime-evidence"
@@ -1108,13 +1221,49 @@
     {
       "symbol": "mem.__bufferLength",
       "signature": "(storage: __BufferStorage): i64",
-      "declared": false,
-      "admitted": false,
-      "blocking_reasons": [
-        "missing-provider-declaration"
-      ],
-      "declaration": null,
-      "logical_declaration_sha256": null,
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/byte-storage",
+        "operation": "xray.runtime.provider-operation.v1/byte-storage/length",
+        "logical": {
+          "parameters": [
+            {
+              "type": "resource<mem.__BufferStorage>",
+              "mode": "in",
+              "owner": "borrow"
+            }
+          ],
+          "result_type": "i64",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "none"
+          ],
+          "threads": "any",
+          "reentry": "allowed",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "typed",
+          "header": "execution/xr_byte_storage_provider.h",
+          "symbol": "xr_byte_storage_length"
+        }
+      },
+      "logical_declaration_sha256": "b8cc0a24d2baad4950af1682c5d70bb0494ab4e4521f196f3e4f6064bfa613c6",
       "binding": {
         "state": "NOT_VERIFIED",
         "reason": "requires-compiled-runtime-evidence"

@@ -12,15 +12,10 @@
 #define XR_PROGRAM_VM_H
 
 #include "../execution/xr_execution.h"
+#include "../shared/xr_value_format_core.h"
 
-#define XR_VM_CODE_OPTIONS_SCHEMA_VERSION UINT32_C(1)
-#define XR_VM_BUILD_ID "xray-program-vm-v2"
-
-typedef enum XrVmDecodePolicy {
-    XR_VM_DECODE_INVALID = 0,
-    XR_VM_DECODE_BASELINE_VIEW = 1,
-    XR_VM_DECODE_FIXED_ROWS = 2,
-} XrVmDecodePolicy;
+#define XR_VM_CODE_OPTIONS_SCHEMA_VERSION UINT32_C(2)
+#define XR_VM_BUILD_ID "xray-program-vm-v16"
 
 typedef enum XrVmQuickeningPolicy {
     XR_VM_QUICKENING_NONE = 0,
@@ -63,7 +58,7 @@ typedef void (*XrVmLifecycleEventHandler)(void *context, const XrVmLifecycleEven
 
 typedef struct XrVmCodeOptions {
     uint32_t schema_version;
-    uint8_t decode_policy;
+    uint8_t reserved8;
     uint8_t quickening_policy;
     uint16_t reserved16;
     uint64_t max_steps;
@@ -92,29 +87,55 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_CALLABLE,
     XR_VM_VALUE_STRING,
     XR_VM_VALUE_RUNE,
+    XR_VM_VALUE_I8,
+    XR_VM_VALUE_U8,
+    XR_VM_VALUE_I16,
+    XR_VM_VALUE_I32,
+    XR_VM_VALUE_U64,
+    XR_VM_VALUE_ATOMIC,
+    XR_VM_VALUE_F64,
+    XR_VM_VALUE_RESOURCE,
 } XrVmValueKind;
+
+/* Bounds diagnostics travel with the panic through cleanup and suspension. */
+typedef struct XrVmPanicInfo {
+    uint32_t code;
+    bool has_bounds;
+    int64_t index;
+    uint64_t length;
+    /* Optional immutable string owner; borrowed views share the panic lifetime. */
+    const void *message;
+} XrVmPanicInfo;
 
 typedef struct XrVmValue {
     XrVmValueKind kind;
     union {
         bool boolean;
         int64_t i64;
+        int8_t i8;
+        uint8_t u8;
+        int16_t i16;
+        int32_t i32;
+        uint64_t u64;
+        uint64_t f64_bits;
         uint32_t u32;
         uint16_t u16;
         uint16_t target_enum;
         uint32_t error;
-        uint32_t panic_info;
+        XrVmPanicInfo panic_info;
         const void *aggregate;
         const void *class_reference;
         const void *existential;
         const void *callable;
         const void *string;
+        const void *atomic_storage;
+        const void *resource;
         uint32_t rune;
     } as;
 } XrVmValue;
 
 /* Borrowed view of a string value; bytes belong to the VM arena or to a
- * detached outcome until that owner is disposed. */
+ * owned outcome until that owner is disposed. */
 typedef struct XrVmStringView {
     const uint8_t *bytes;
     uint32_t size;
@@ -130,6 +151,7 @@ typedef enum XrVmOutcomeKind {
     XR_VM_OUTCOME_RESOURCE_LIMIT,
     XR_VM_OUTCOME_INVALID_INVOCATION,
     XR_VM_OUTCOME_STALE_CODE,
+    XR_VM_OUTCOME_INITIALIZING,
 } XrVmOutcomeKind;
 
 typedef enum XrVmTrap {
@@ -141,14 +163,20 @@ typedef enum XrVmTrap {
     XR_VM_TRAP_PROFILE_UNAVAILABLE = 5,
     XR_VM_TRAP_VARIANT_TAG_MISMATCH = 6,
     XR_VM_TRAP_PROVIDER_CALL_FAILED = 7,
+    XR_VM_TRAP_MODULE_SLOT_UNINITIALIZED = 8,
+    XR_VM_TRAP_MODULE_SLOT_ALREADY_INITIALIZED = 9,
 } XrVmTrap;
 
 typedef struct XrVmOutcome {
     XrVmOutcomeKind kind;
     bool owns_dynamic_values;
     uint8_t reserved8[3];
+    /* Opaque keepalive for instance-owned failure payloads. */
+    void *private_owner;
     XrVmValue value;
     XrVmValue error_value;
+    /* PanicInfo may own a message; private_owner or the observing execution
+     * retains that message through the full failure observation lifetime. */
     XrVmValue panic_value;
     XrVmTrap trap;
     uint64_t steps;
@@ -199,16 +227,17 @@ XR_FUNC XrVmCode *xr_vm_code_retain(const XrVmCode *code);
 XR_FUNC bool xr_vm_code_matches_instance(const XrVmCode *code, const XrInstance *instance);
 XR_FUNC XrExecutionId xr_vm_code_execution_id(const XrVmCode *code);
 XR_FUNC XrFingerprint xr_vm_code_private_digest(const XrVmCode *code);
-XR_FUNC size_t xr_vm_code_private_size(const XrVmCode *code);
-XR_FUNC XrVmDecodePolicy xr_vm_code_decode_policy(const XrVmCode *code);
 XR_FUNC XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance,
                                        uint32_t function_id, const XrVmValue *arguments,
                                        uint32_t argument_count);
-/* Aggregate values returned by one-shot execution own an executor-private
- * detached tree. Views
- * borrow that tree until the outcome is disposed. */
+/* One-shot dynamic results retain their value graph, Code and instance lease.
+ * Views borrow that owner until outcome disposal. A sticky initializer error
+ * retains its original identity and prevents instance retirement until disposed. */
 XR_FUNC bool xr_vm_value_aggregate_view(const XrVmValue *value, XrVmAggregateView *view_out);
 XR_FUNC bool xr_vm_value_string_view(const XrVmValue *value, XrVmStringView *view_out);
+XR_FUNC bool xr_vm_panic_message_view(const XrVmPanicInfo *panic, XrVmStringView *view_out);
+/* The reader borrows code metadata; nodes borrow values from their result owner. */
+XR_FUNC XrValueFormatReader xr_vm_value_format_reader(const XrVmCode *code);
 XR_FUNC void xr_vm_outcome_dispose(XrVmOutcome *outcome);
 /* Ordinary and resumable entries use the same frame dispatcher. Step returns
  * at a suspension or terminal outcome; returned views borrow frame storage
@@ -216,6 +245,12 @@ XR_FUNC void xr_vm_outcome_dispose(XrVmOutcome *outcome);
 XR_FUNC bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance,
                                     uint32_t function_id, const XrVmValue *arguments,
                                     uint32_t argument_count, XrVmExecution **execution_out);
+/* Install before the first step. The borrowed context outlives this execution.
+ * The callback is polled before each operation in the complete call tree,
+ * including module initialization. A true result terminates through the same
+ * ownership cleanup as resource exhaustion. Code and instances do not retain it. */
+XR_FUNC bool xr_vm_execution_set_interrupt(XrVmExecution *execution, void *context,
+                                          bool (*requested)(void *context));
 XR_FUNC XrVmOutcome xr_vm_execution_step(XrVmExecution *execution);
 XR_FUNC XrVmOutcome xr_vm_execution_cancel(XrVmExecution *execution);
 XR_FUNC void xr_vm_execution_free(XrVmExecution *execution);

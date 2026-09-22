@@ -1,0 +1,6 @@
+import { next, total } from "./library"
+
+const header = "report"
+print("entry", header)
+print(next("alpha"), next("beta"), total())
+assert(total() == 42)

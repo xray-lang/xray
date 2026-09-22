@@ -8,8 +8,10 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_verify.h"
+#include "../../../src/ir/xi_effect.h"
 #include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_lower.h"
+#include "../../../src/ir/xi_lower_internal.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/analysis/xglobal_producer.h"
@@ -822,6 +824,18 @@ TEST(member_access) {
             found_len = 1;
     }
     assert(found_len && "should lower len() as a compiler-known builtin");
+    xi_func_free(f);
+}
+
+TEST(string_slice_default_end_reuses_receiver) {
+    XiFunc *f = lower_source("fn source() -> string { return \"hello\" }\n"
+                             "print(source().slice(1))\n");
+    assert(f != NULL);
+    XiValue *slice = func_tree_find_method(f, "slice");
+    assert(slice && slice->nargs == 3);
+    assert(slice->args[2]->op == XI_LEN && slice->args[2]->nargs == 1);
+    assert(slice->args[2]->args[0] == slice->args[0]);
+    assert(func_tree_count_op(f, XI_CALL) == 1);
     xi_func_free(f);
 }
 
@@ -2390,7 +2404,7 @@ TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
     XiFunc *safe_cast_functions[3] = {0};
     XiValue *safe_cast_tests[3] = {0};
     XiValue *safe_cast_projects[3] = {0};
-    XiValue *safe_cast_clones[3] = {0};
+    XiValue *safe_cast_acquires[3] = {0};
     XiValue *safe_cast_somes[3] = {0};
     XiValue *safe_cast_nones[3] = {0};
     const char *function_names[] = {"readClass", "readStruct", "readEnum", "isReadClass",
@@ -2518,8 +2532,8 @@ TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
                         project_count++;
                     }
                 }
-                if (f >= 4 && value->op == XI_COPY && xi_copy_is_value_clone(value))
-                    safe_cast_clones[f - 4] = value;
+                if (f >= 4 && (value->op == XI_OWNER_FORWARD || xi_copy_is_value_clone(value)))
+                    safe_cast_acquires[f - 4] = value;
                 if (f >= 4 && value->op == XI_SUM_INJECT) {
                     if (value->aux_int == 0)
                         safe_cast_nones[f - 4] = value;
@@ -2566,7 +2580,7 @@ TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
         XiFunc *safe_cast_function = safe_cast_functions[cast_index];
         XiValue *safe_cast_test = safe_cast_tests[cast_index];
         XiValue *safe_cast_project = safe_cast_projects[cast_index];
-        XiValue *safe_cast_clone = safe_cast_clones[cast_index];
+        XiValue *safe_cast_acquire = safe_cast_acquires[cast_index];
         XiValue *safe_cast_some = safe_cast_somes[cast_index];
         XiValue *safe_cast_none = safe_cast_nones[cast_index];
         REQUIRE_EXISTENTIAL_EVIDENCE(
@@ -2582,11 +2596,11 @@ TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
                 ? (safe_cast_project->xg_implementor_ownership ==
                        XG_NOMINAL_OWNERSHIP_AFFINE &&
                    safe_cast_project->xg_implementor_copy_contract == XG_NOMINAL_COPY_EXPLICIT &&
-                   safe_cast_clone != NULL)
+                   safe_cast_acquire != NULL)
                 : (safe_cast_project->xg_implementor_ownership ==
                        XG_NOMINAL_OWNERSHIP_TRIVIAL &&
                    safe_cast_project->xg_implementor_copy_contract == XG_NOMINAL_COPY_TRIVIAL &&
-                   safe_cast_clone == NULL),
+                   safe_cast_acquire == NULL),
             "safe-cast ownership must come from the exact nominal contract");
         XiBlock *test_block = safe_cast_test->block;
         XiBlock *success_block = safe_cast_project->block;
@@ -2595,7 +2609,7 @@ TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
             test_block && test_block->kind == XI_BLOCK_IF && test_block->control == safe_cast_test &&
                 test_block->succs[0] == success_block && test_block->succs[1] == failure_block,
             "safe cast must branch on its exact existential test");
-        XiValue *expected_payload = affine_class ? safe_cast_clone : safe_cast_project;
+        XiValue *expected_payload = affine_class ? safe_cast_acquire : safe_cast_project;
         REQUIRE_EXISTENTIAL_EVIDENCE(
             safe_cast_project->type && !safe_cast_project->type->is_nullable && expected_payload &&
                 expected_payload->block == success_block && safe_cast_some->block == success_block &&
@@ -2603,9 +2617,9 @@ TEST(existential_pack_and_witness_calls_bind_exact_nominal_evidence) {
             "Some must consume the ownership-correct non-null projection payload");
         if (affine_class) {
             REQUIRE_EXISTENTIAL_EVIDENCE(
-                safe_cast_clone->nargs == 1 && safe_cast_clone->args[0] == safe_cast_project &&
-                    xi_copy_is_value_clone(safe_cast_clone),
-                "borrowed affine projection must carry an explicit value clone");
+                safe_cast_acquire->nargs == 1 && safe_cast_acquire->args[0] == safe_cast_project &&
+                    safe_cast_acquire->op == XI_OWNER_FORWARD,
+                "borrowed class projection must acquire an owner without cloning identity");
         }
         REQUIRE_EXISTENTIAL_EVIDENCE(
             safe_cast_some->type && safe_cast_some->type->is_nullable && safe_cast_none->type &&
@@ -2875,12 +2889,36 @@ TEST(existential_safe_cast_fails_closed_for_borrowed_copy_forbidden_target) {
     memset(&evidence, 0, sizeof(evidence));
     XiFunc *root = lower_source_with_global_evidence_ex(
         "interface ReadValue { read() -> i64 }\n"
-        "class ReadClass implements ReadValue { read() -> i64 { return 1 } }\n"
-        "fn reject(value: ReadValue) -> ReadClass? { return value as ReadClass? }\n",
+        "struct ReadStruct implements ReadValue { read() -> i64 { return 1 } }\n"
+        "fn reject(value: ReadValue) -> ReadStruct? { return value as ReadStruct? }\n",
         &evidence, forbid_first_existential_copy);
     if (root != NULL) {
         fprintf(stderr,
-                "existential_safe_cast: borrowed copy-forbidden target must reject lowering\n");
+                "existential_safe_cast: borrowed copy-forbidden value must reject lowering\n");
+        abort();
+    }
+    root = lower_source_with_global_evidence_ex(
+        "interface ReadValue { read() -> i64 }\n"
+        "class ReadClass implements ReadValue { read() -> i64 { return 1 } }\n"
+        "fn accept(value: ReadValue) -> ReadClass? { return value as ReadClass? }\n",
+        &evidence, forbid_first_existential_copy);
+    XiFunc *accepted = root ? func_tree_find_func_name(root, "accept") : NULL;
+    uint32_t shares = 0u;
+    if (accepted) {
+        for (uint32_t block = 0u; block < accepted->nblocks; ++block) {
+            XiBlock *row = accepted->blocks[block];
+            for (uint32_t index = 0u; index < row->nvalues; ++index) {
+                XiValue *value = row->values[index];
+                if (xi_copy_is_value_clone(value)) {
+                    fprintf(stderr, "existential_safe_cast: class identity must not be cloned\n");
+                    abort();
+                }
+                shares += value->op == XI_OWNER_FORWARD;
+            }
+        }
+    }
+    if (!accepted || shares != 1u) {
+        fprintf(stderr, "existential_safe_cast: copy-forbidden class must share identity\n");
         abort();
     }
 }
@@ -3371,6 +3409,29 @@ TEST(defer_stmt) {
            "cleanup body should restore the pending error channel");
     assert(!func_tree_has_op(f, XI_CLOSURE_NEW) &&
            "cleanup lowering must not allocate a hidden closure");
+    XiValue *caught = func_tree_find_op(f, XI_CATCH);
+    assert(caught && caught->type && caught->type->kind == XR_KIND_INSTANCE);
+    assert(caught->type->instance.class_name &&
+           strcmp(caught->type->instance.class_name, "PanicInfo") == 0 &&
+           "cleanup forwarding must preserve the exact panic payload type");
+    assert(xi_op_result_ownership(caught->op) == XI_GEN_RESULT_OWNERSHIP_OWNED);
+    xi_func_free(f);
+}
+
+TEST(panic_catch_preserves_payload_type) {
+    XiFunc *f = lower_source("var result = 0\n"
+                             "try { assert(result != 0) }\n"
+                             "catch panic (p) { print(p.message); result = 42 }\n"
+                             "print(result)\n");
+    assert(f != NULL);
+    XiValue *caught = func_tree_find_op(f, XI_CATCH);
+    assert(caught && caught->type && caught->type->kind == XR_KIND_INSTANCE);
+    assert(caught->type->instance.class_name &&
+           strcmp(caught->type->instance.class_name, "PanicInfo") == 0);
+    assert(caught->nargs == 0u && caught->aux != NULL);
+    assert(xi_op_result_ownership(caught->op) == XI_GEN_RESULT_OWNERSHIP_OWNED);
+    XiValue *registration = (XiValue *) caught->aux;
+    assert(registration->op == XI_TRY && registration->aux == caught->block);
     xi_func_free(f);
 }
 
@@ -4066,6 +4127,25 @@ TEST(numeric_as_carries_typed_conversion_evidence) {
            "f64-to-i64 lowering must retain overflow behavior in Xi");
     assert(!func_tree_has_op(f, XI_AS) && "numeric casts must never lower through XI_AS");
     xi_func_free(f);
+
+    f = lower_source("fn widen(x: u8) -> i64 { return x as i64 }\n"
+                     "fn unsignedBits(x: i64) -> u64 { return x as u64 }\n"
+                     "fn signedBits(x: u64) -> i64 { return x as i64 }\n");
+    assert(f != NULL);
+    const char *names[] = {"widen", "unsignedBits", "signedBits"};
+    const uint8_t sources[] = {XR_NATIVE_U8, XR_NATIVE_I64, XR_NATIVE_U64};
+    const uint8_t targets[] = {XR_NATIVE_I64, XR_NATIVE_U64, XR_NATIVE_I64};
+    for (unsigned index = 0u; index < 3u; ++index) {
+        XiFunc *function = func_tree_find_func_name(f, names[index]);
+        XiValue *integer = function ? func_tree_find_op(function, XI_CONVERT) : NULL;
+        assert(integer && integer->nargs == 1u && integer->args[0]);
+        assert(integer->args[0]->type->scalar_rep == sources[index]);
+        assert(integer->type->scalar_rep == targets[index]);
+        assert(integer->conversion.source_scalar_rep == sources[index] &&
+               integer->conversion.target_scalar_rep == targets[index]);
+        assert((integer->flags & XI_FLAG_MAY_THROW) == 0);
+    }
+    xi_func_free(f);
 }
 
 TEST(enum_ordinal_as_lowers_to_typed_convert) {
@@ -4252,6 +4332,40 @@ TEST(flow_proven_force_unwrap_keeps_optional_projection) {
     xi_func_free(root);
 }
 
+TEST(flow_proven_optional_uses_project_payloads) {
+    XiFunc *root = lower_source(
+        "class Item { read() -> i64 { return 42 } }\n"
+        "fn consume(x: i64) -> i64 { return x }\n"
+        "fn receiver(x: Item?) -> i64 {\n"
+        "  if (x == null) { return 0 }\n"
+        "  return x.read()\n"
+        "}\n"
+        "fn arithmetic(x: i64?) -> i64 {\n"
+        "  if (x == null) { return 0 }\n"
+        "  return x + 1\n"
+        "}\n"
+        "fn argument(x: i64?) -> i64 {\n"
+        "  if (x == null) { return 0 }\n"
+        "  return consume(x)\n"
+        "}\n");
+    assert(root != NULL);
+    const char *names[] = {"receiver", "arithmetic", "argument"};
+    for (size_t index = 0u; index < sizeof(names) / sizeof(names[0]); ++index) {
+        XiFunc *function = func_tree_find_func_name(root, names[index]);
+        assert(function != NULL);
+        XiValue *payload = func_tree_find_op(function, XI_VARIANT_PROJECT);
+        assert(payload && payload->type && !payload->type->is_nullable);
+        assert(payload->nargs == 1u && payload->args[0] == function->params[0]);
+        assert(payload->args[0]->type->is_nullable);
+        assert(xi_variant_projection_variant(payload) == 1u);
+        assert(xi_variant_projection_field(payload) == 0u);
+        XiValue *guard = func_tree_find_op(function, XI_VARIANT_TEST);
+        assert(guard && guard->args[0] == payload->args[0]);
+        assert(!func_tree_find_op(function, XI_CHECKTYPE));
+    }
+    xi_func_free(root);
+}
+
 TEST(destructure_decl) {
     XiFunc *f = lower_source("var arr = [1, 2, 3]\n"
                              "var [a, b, c] = arr\n"
@@ -4357,6 +4471,33 @@ TEST(import_export_skip) {
     xi_func_free(f);
 }
 
+TEST(nullable_class_fields_use_tagged_storage) {
+    XiFunc *function = lower_source("class NullableFields {\n"
+                                     "  items: Array<string>? = null\n"
+                                     "  entries: Map<string, i64>? = null\n"
+                                     "  unique: Set<i64>? = null\n"
+                                     "  number: i64? = null\n"
+                                     "  text: string? = null\n"
+                                     "  plain: i64 = 7\n"
+                                     "}\n"
+                                     "class InheritedFields extends NullableFields {\n"
+                                     "  flag: bool = true\n"
+                                     "}\n");
+    assert(function && function->module && function->module->nclasses == 2);
+    for (uint16_t i = 0; i < function->module->nclasses; i++) {
+        const XiClassData *data = function->module->classes[i];
+        assert(data && data->instance_layout);
+        const XrAggregateLayout *layout = data->instance_layout;
+        assert(layout->field_count == (strcmp(data->class_name, "NullableFields") == 0 ? 6 : 7));
+        for (uint16_t field = 0; field < 5; field++)
+            assert(layout->fields[field].native_type == XR_NATIVE_VALUE);
+        assert(layout->fields[5].native_type == XR_NATIVE_I64);
+        if (layout->field_count == 7)
+            assert(layout->fields[6].native_type == XR_NATIVE_BOOL);
+    }
+    xi_func_free(function);
+}
+
 TEST(class_decl_skip) {
     XiFunc *f = lower_source("class Dog {\n"
                              "    name: string = \"\"\n"
@@ -4372,6 +4513,61 @@ TEST(class_decl_skip) {
     }
     assert(found_print && "should still have print after class decl");
     xi_func_free(f);
+}
+
+TEST(imported_enum_namespace_is_not_an_enum_value) {
+    XiFunc *function = lower_source("import { CoroState as State } from Coro\n"
+                                    "fn accepts(value: State) -> i64 { return 42 }\n");
+    assert(function != NULL);
+    uint32_t imports = 0u;
+    for (uint32_t block = 0u; block < function->nblocks; ++block)
+        for (uint32_t index = 0u; index < function->blocks[block]->nvalues; ++index) {
+            const XiValue *value = function->blocks[block]->values[index];
+            if (value->op != XI_IMPORT_REF)
+                continue;
+            const XiImportRef *reference = value->aux;
+            assert(reference != NULL && strcmp(reference->member_name, "CoroState") == 0);
+            assert(value->type != NULL && value->type->kind == XR_KIND_UNKNOWN);
+            ++imports;
+        }
+    assert(imports == 1u);
+    bool declaration = false;
+    for (uint16_t slot = 0u; slot < function->nshared; ++slot) {
+        const XiModuleSlot *row = &function->module_slots[slot];
+        if (!row->name || strcmp(row->name, "State") != 0)
+            continue;
+        assert(row->kind == XI_MODULE_SLOT_IMPORT);
+        assert(row->type != NULL && row->type->kind == XR_KIND_ENUM);
+        declaration = true;
+    }
+    assert(declaration);
+    xi_func_free(function);
+}
+
+TEST(import_declarations_and_runtime_interface_values) {
+    XaScope *scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
+    assert(scope != NULL);
+    XaAnalyzer analyzer = {0};
+    analyzer.global_scope = scope;
+    XiLower lower = {0};
+    lower.analyzer = &analyzer;
+    XrType interface_type = {.kind = XR_KIND_INTERFACE};
+    XrType class_type = {.kind = XR_KIND_CLASS};
+    const XaSymbolKind kinds[] = {XA_SYM_TYPE_ALIAS, XA_SYM_CLASS, XA_SYM_VARIABLE, XA_SYM_CLASS};
+    XrType *types[] = {&interface_type, &interface_type, &interface_type, &class_type};
+    const char *names[] = {"Alias", "Interface", "value", "Class"};
+    const bool expected[] = {true, true, false, false};
+    for (uint32_t i = 0; i < 4u; ++i) {
+        XaSymbol *symbol = xa_symbol_new(names[i], kinds[i]);
+        assert(symbol != NULL);
+        symbol->id = i + 1u;
+        symbol->is_imported = true;
+        symbol->links.type = types[i];
+        xa_scope_add_symbol(scope, symbol);
+        ImportMember member = {.symbol_id = symbol->id};
+        assert(xi_lower_import_member_is_type_only(&lower, &member) == expected[i]);
+    }
+    xa_scope_free(scope);
 }
 
 TEST(yield_stmt) {
@@ -4413,6 +4609,7 @@ int main(void) {
 
     run_force_unwrap();
     run_flow_proven_force_unwrap_keeps_optional_projection();
+    run_flow_proven_optional_uses_project_payloads();
     run_simple_arithmetic();
     run_source_spans_reach_xi_values();
     run_target_pointer_bits_lowers_from_exact_typed_xglobal_join();
@@ -4435,6 +4632,7 @@ int main(void) {
     run_array_literal();
     run_index_access();
     run_member_access();
+    run_string_slice_default_end_reuses_receiver();
     run_member_access_field_symbols_are_distinct();
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
     run_unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access();
@@ -4488,6 +4686,7 @@ int main(void) {
     run_defer_stmt();
     run_defer_block_uses_late_binding();
     run_defer_loop_cleanup_place_dominates_zero_iteration_exit();
+    run_panic_catch_preserves_payload_type();
     run_set_literal();
     run_is_expr();
     run_is_fixed_width_and_union_patterns_reify_runtime_targets();
@@ -4523,6 +4722,9 @@ int main(void) {
     run_enum_access();
     run_enum_record_syntax_lowers_to_exact_variant_operations();
     run_import_export_skip();
+    run_imported_enum_namespace_is_not_an_enum_value();
+    run_import_declarations_and_runtime_interface_values();
+    run_nullable_class_fields_use_tagged_storage();
     run_class_decl_skip();
     run_generic_class_declaration_has_no_runtime_publication();
     run_yield_stmt();

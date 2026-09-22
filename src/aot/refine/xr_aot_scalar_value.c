@@ -50,7 +50,8 @@ static bool value_belongs_to_block(const XiBlock *block, const XiValue *value) {
 static bool parameter_identity_is_exact(const XiFunc *function, const XiValue *value) {
     if (value->op != XI_PARAM)
         return true;
-    if (!function->params || value->aux_int < 0 || value->aux_int >= function->nparams)
+    if (!function->params || value->aux_int < 0 ||
+        value->aux_int >= xi_func_semantic_param_count(function))
         return false;
     uint16_t parameter = (uint16_t) value->aux_int;
     return function->params[parameter] == value;

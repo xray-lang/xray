@@ -24,6 +24,10 @@ typedef struct AllocationRecord {
 static AllocationRecord records[16];
 static size_t attempts, allocated, released, last_size, fail_at;
 static int bad_release;
+static int (*before_first_free)(void *context);
+static void *observation_context;
+static unsigned observations;
+static int observation_failure;
 
 static void *observed_malloc(size_t size) {
     ++attempts;
@@ -42,6 +46,12 @@ static void *observed_malloc(size_t size) {
 }
 
 static void observed_free(void *memory) {
+    if (before_first_free) {
+        int (*observe)(void *) = before_first_free;
+        before_first_free = NULL;
+        ++observations;
+        observation_failure = observe(observation_context);
+    }
     for (size_t index = 0u; index < allocated; ++index) {
         if (records[index].base == memory && records[index].freed == 0u) {
             records[index].freed = 1u;
@@ -72,6 +82,10 @@ static void reset_observation(void) {
     memset(records, 0, sizeof(records));
     attempts = allocated = released = last_size = fail_at = 0u;
     bad_release = 0;
+    before_first_free = NULL;
+    observation_context = NULL;
+    observations = 0u;
+    observation_failure = 0;
 }
 
 static int check_destroy(XrAotContext *context, size_t expected) {
@@ -85,11 +99,8 @@ static int check_destroy(XrAotContext *context, size_t expected) {
     return 0;
 }
 
-static int check_typed_program(void) {
-    reset_observation();
-    XrAotContext context = {0};
-    XrAotOutcome result = XR_FIXTURE_ENTRY(&context);
-    CHECK(result.kind == 0u && result.value_kind == 2u && result.i64 == 42);
+static int check_live_typed_payloads(void *opaque) {
+    (void) opaque;
     CHECK(attempts == 5u && allocated == 5u && released == 0u);
     size_t payload_sizes[] = {sizeof(XR_FIXTURE_PLAIN), sizeof(XR_FIXTURE_INNER),
                               sizeof(XR_FIXTURE_CAPTURE), sizeof(XR_FIXTURE_CAPTURE),
@@ -119,25 +130,23 @@ static int check_typed_program(void) {
     CHECK(original->f2 == 42 && copy->f2 == 42);
     original->f2 = 77;
     CHECK(copy->f2 == 42);
-    return check_destroy(&context, 5u);
+    return 0;
 }
 
-static int check_failed_copy_publication(void) {
-    reset_observation();
-    XrAotContext context = {0};
-    XrAotOutcome result = XR_FIXTURE_ENTRY(&context);
-    CHECK(result.kind == 0u && allocated == 5u);
+static int check_live_failed_copy_publication(void *opaque) {
+    XrAotContext *context = opaque;
+    CHECK(allocated == 5u && released == 0u);
     XR_FIXTURE_CAPTURE *source = (XR_FIXTURE_CAPTURE *) ((XrAotAllocation *) records[2].base + 1);
     XR_FIXTURE_CAPTURE destination = {0};
     destination.f2 = -7;
-    XrAotAllocation *previous = context.allocations;
+    XrAotAllocation *previous = context->allocations;
     fail_at = attempts + 1u;
-    CHECK(!XR_FIXTURE_COPY_CAPTURE(&context, source, &destination));
-    CHECK(attempts == 6u && allocated == 5u && context.allocations == previous);
+    CHECK(!XR_FIXTURE_COPY_CAPTURE(context, source, &destination));
+    CHECK(attempts == 6u && allocated == 5u && context->allocations == previous);
     CHECK(destination.f2 == -7 && destination.f0.payload.case_0.f0.capture == NULL);
     CHECK(source->f2 == 42 &&
           ((XR_FIXTURE_INNER *) source->f0.payload.case_0.f0.capture)->f0 == 42);
-    return check_destroy(&context, 5u);
+    return 0;
 }
 
 static int check_allocation_rejections(void) {
@@ -165,17 +174,15 @@ static int check_allocation_rejections(void) {
     return check_destroy(&context, 2u);
 }
 
-static int check_copy_dispatch_boundaries(void) {
-    reset_observation();
-    XrAotContext context = {0};
-    XrAotOutcome outcome = XR_FIXTURE_ENTRY(&context);
-    CHECK(outcome.kind == 0u && attempts == 5u && allocated == 5u);
+static int check_live_copy_dispatch_boundaries(void *opaque) {
+    XrAotContext *context = opaque;
+    CHECK(attempts == 5u && allocated == 5u && released == 0u);
     const XR_FIXTURE_CAPTURE *original =
         (const XR_FIXTURE_CAPTURE *) ((XrAotAllocation *) records[2].base + 1);
     XR_FIXTURE_CAPTURE source = *original;
     XR_FIXTURE_CAPTURE result = {0};
     source.f0.tag = 1u;
-    CHECK(XR_FIXTURE_COPY_CAPTURE(&context, &source, &result));
+    CHECK(XR_FIXTURE_COPY_CAPTURE(context, &source, &result));
     CHECK(result.f0.tag == 1u && result.f1.f0 == 42 && result.f2 == 42);
     CHECK(attempts == 5u && allocated == 5u);
     for (unsigned invalid = 0u; invalid < 3u; ++invalid) {
@@ -188,12 +195,31 @@ static int check_copy_dispatch_boundaries(void) {
             source.f0.payload.case_0.f0.function_id = UINT32_MAX;
         else
             source.f0.payload.case_0.f0.capture = NULL;
-        CHECK(!XR_FIXTURE_COPY_CAPTURE(&context, &source, &result));
+        CHECK(!XR_FIXTURE_COPY_CAPTURE(context, &source, &result));
         CHECK(result.f2 == -7 && result.f0.payload.case_0.f0.capture == NULL);
         CHECK(attempts == 5u && allocated == 5u && released == 0u);
     }
     CHECK(original->f0.tag == 0u && original->f2 == 42);
     CHECK(((XR_FIXTURE_INNER *) original->f0.payload.case_0.f0.capture)->f0 == 42);
+    return 0;
+}
+
+static int check_typed_program_observation(int (*observe)(void *)) {
+    reset_observation();
+    XrAotContext context = {0};
+    before_first_free = observe;
+    observation_context = &context;
+    XrAotOutcome result = XR_FIXTURE_ENTRY(&context);
+    CHECK(result.kind == 0u && result.value_kind == 2u && result.i64 == 42);
+    CHECK(observations == 1u && observation_failure == 0);
+    /* Both callable captures and their nested captures are physically gone;
+     * the borrowed
+     * existential's box still belongs to the entry arena. */
+    CHECK(allocated == 5u && released == 4u && !bad_release);
+    CHECK(records[0].freed == 0u);
+    for (size_t index = 1u; index < 5u; ++index)
+        CHECK(records[index].freed == 1u);
+    CHECK(context.allocations == (XrAotAllocation *) records[0].base);
     return check_destroy(&context, 5u);
 }
 
@@ -205,18 +231,23 @@ static int check_each_producer_failure(void) {
         XrAotOutcome result = XR_FIXTURE_ENTRY(&context);
         CHECK(result.kind == 4u);
         CHECK(attempts == index && allocated == index - 1u);
-        CHECK(released == 0u && !bad_release);
-        CHECK(context.allocations ==
-              (allocated ? (XrAotAllocation *) records[allocated - 1u].base : NULL));
+        /* Exceptional exits release every acquired callable owner immediately.
+         * Only the
+         * read existential's non-owning arena box may remain. */
+        CHECK(released == (index >= 2u ? index - 2u : 0u) && !bad_release);
+        CHECK(context.allocations == (allocated ? (XrAotAllocation *) records[0].base : NULL));
+        for (size_t owner = 1u; owner < allocated; ++owner)
+            CHECK(records[owner].freed == 1u);
         CHECK(check_destroy(&context, index - 1u) == 0);
     }
     return 0;
 }
 
 int main(void) {
-    if (check_typed_program() != 0 || check_failed_copy_publication() != 0 ||
-        check_copy_dispatch_boundaries() != 0 || check_allocation_rejections() != 0 ||
-        check_each_producer_failure() != 0)
+    if (check_typed_program_observation(check_live_typed_payloads) != 0 ||
+        check_typed_program_observation(check_live_failed_copy_publication) != 0 ||
+        check_typed_program_observation(check_live_copy_dispatch_boundaries) != 0 ||
+        check_allocation_rejections() != 0 || check_each_producer_failure() != 0)
         return 1;
     puts("allocation-native: PASS allocations=5 producer_failures=5");
     return 0;

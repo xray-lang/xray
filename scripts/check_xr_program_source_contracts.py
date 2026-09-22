@@ -120,7 +120,7 @@ def validate_native_fixtures(root: Path, unit_cmake: str, owner_test: str) -> No
             "source native registration must consume exactly one manifest projection")
     functions = re.findall(
         r"function\(add_xr_program_source_native_fixture fixture_id native_target "
-        r"expected_exit fixture_labels\s+expected_stdout_hex\)(.*?)endfunction\(\)",
+        r"expected_exit fixture_labels\s+expected_stdout_hex expected_stderr_hex\)(.*?)endfunction\(\)",
         unit_cmake, re.DOTALL)
     require(len(functions) == 1, "source natives require one fixture registration owner")
     for token in (
@@ -140,6 +140,9 @@ def validate_native_fixtures(root: Path, unit_cmake: str, owner_test: str) -> No
         "scripts/check_xr_program_aot_native.py",
         "--executable $<TARGET_FILE:${native_target}>",
         "--expected-exit ${expected_exit}",
+        "set(stdout_arguments --expected-stdout-hex ${expected_stdout_hex})",
+        "set(stderr_arguments --expected-stderr-hex ${expected_stderr_hex})",
+        "${stdout_arguments} ${stderr_arguments}",
         '${fixture_labels};generated-c;native;task-293',
     ):
         require(token in functions[0], f"source native fixture binding lacks {token}")
@@ -178,6 +181,9 @@ def validate(root: Path) -> None:
     unit_cmake = read(root, "tests/unit/CMakeLists.txt")
     cli_adapter = read(root, "src/app/cli/xcli_canonical_source.c")
     run_route = read(root, "src/app/cli/xcmd_run.c")
+    test_route = read(root, "src/app/cli/xcmd_test.c")
+    cli_vm = read(root, "src/app/cli/xcli_program_vm.c")
+    build_route = read(root, "src/app/cli/xcmd_build.c")
     check_route = read(root, "src/app/cli/xcmd_check.c")
     cli_spec = read(root, "src/app/cli/xcli_spec.c")
     run_route_test = read(root, "tests/cli/run_canonical_source_route_tests.py")
@@ -193,6 +199,30 @@ def validate(root: Path) -> None:
     wave_three = json.loads(
         read(root, "contracts/canonical-program/w7-wave3-contract-freeze.json")
     )
+
+    emission = re.search(r"static int cmd_build_canonical_native\(.*?(?=\nXR_FUNC int cmd_build\()",
+                         build_route, re.DOTALL)
+    require(emission is not None, "canonical C emission entry is missing")
+    for token in ("xr_cli_canonical_source_build", "xr_backend_ir_build(product.program",
+                  "xr_backend_ir_emit_c", "xr_generated_c_free", "xr_program_source_product_free"):
+        require(token in emission.group(), f"canonical C emission lacks {token}")
+    for token in ("xaot_build(", "xr_bundle_", "xr_execution_instance_create",
+                  "xr_vm_code_execute", "xr_program_validate("):
+        require(token not in emission.group(), f"canonical C emission regained {token}")
+    require("if (c_only || artifact_kind == XAOT_ARTIFACT_EXECUTABLE) {" in build_route,
+            "native C output must select the canonical entry before native linking")
+    for token in ("cmd_build_bytecode", "write_bytecode_main", "xr_bundle_", "invoke_cc(",
+                  "xray_vm_eval_bundle", 'xr_cli_opt_bool(&inv->options, "native")'):
+        require(token not in build_route, f"default build regained legacy routing: {token}")
+    native_compile = read(root, "src/app/cli/xcmd_build_program.inc.c")
+    for token in ("xr_native_artifact_seal", "xr_native_artifact_verify", "xr_fs_rename",
+                  "xtc_command_emit_compile", "xtc_command_emit_link", "xr_proc_spawn"):
+        require(token in native_compile, f"native Program compilation lacks {token}")
+    for token in ("xaot_build(", "XaotLinkManifest", "xr_bundle_", "xray_aot_core", "xray_core"):
+        require(token not in native_compile, f"native Program compilation regained {token}")
+    native_body = build_route.rsplit("\ncmd_build_native_library(", 1)[-1]
+    require("c_only" not in native_body,
+            "native executable path regained a second C-only producer")
 
     for token in ("module_roots", "entry_function", "semantic_profile_fingerprint"):
         require(token in header, f"source producer input lacks {token}")
@@ -222,7 +252,9 @@ def validate(root: Path) -> None:
         "xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer",
         "xi_pipeline_program_input_config",
         "xi_resolve_imports",
-        ".entry_function = entry",
+        ".entry_function = context->selections[0].function",
+        "candidate->xg_body_func_id != selection->body_id",
+        "product->retained_function_ids",
         "xr_program_write_from_xi",
         "&product->artifact, &product->program",
         "xr_program_source_product_free",
@@ -259,15 +291,19 @@ def validate(root: Path) -> None:
         require(token in cli_adapter, f"CLI source adapter lacks {token}")
     for token in (
         "xr_cli_canonical_source_build",
-        "xr_execution_instance_create",
-        "xr_vm_code_build",
-        "xr_vm_code_execute",
-        "xr_vm_execution_create",
+        "xr_cli_program_vm_open",
+        "xr_cli_program_vm_invoke",
         ".entry_kind = XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER",
         'strcmp(path + length - 3u, ".xr")',
         "XR_RUN_6013",
     ):
         require(token in run_route, f"canonical run route lacks {token}")
+    for token in ("xr_execution_instance_create", "xr_vm_code_build", "xr_vm_execution_create",
+                  "xr_vm_execution_set_interrupt", "xr_vm_execution_free", "retire_instance"):
+        require(token in cli_vm, f"shared CLI executor lacks {token}")
+    for token in ("xr_cli_canonical_source_build", ".discover_tests = 1u",
+                  "xr_cli_program_vm_open", "xr_cli_program_vm_invoke", "product.tests"):
+        require(token in test_route, f"canonical test route lacks {token}")
     for forbidden in (
         "xr_isolate_dofile",
         "xr_isolate_dostring",
@@ -277,8 +313,8 @@ def validate(root: Path) -> None:
         "xr_xtp_",
         "semantic-plan",
     ):
-        require(forbidden not in run_route,
-                f"canonical run route regained legacy execution: {forbidden}")
+        require(forbidden not in run_route + test_route + cli_vm,
+                f"canonical CLI route regained legacy execution: {forbidden}")
     for token in (
         "xa_mono_default_budget",
         "xa_mono_graph_pass",
@@ -332,7 +368,9 @@ def validate(root: Path) -> None:
         "xr_validated_program_bytes",
         "XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION",
         "XR_CORE_OP_CORE_COROUTINE_CALL_SEALED",
-        "xr_reference_execution_step",
+        "ASSERT_EQ_INT(vm_return.value.as.i64, 7)",
+        "ASSERT_EQ_UINT(vm_suspend.state_id, 1u)",
+        "ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED)",
         "xr_vm_execution_step",
         "xr_backend_ir_emit_c",
         "child_active_0",
@@ -458,9 +496,11 @@ def validate(root: Path) -> None:
         "rebound_fallible_target_artifact",
         "mismatched_fallible_error_artifact",
         "XR_CORE_OP_CORE_ERROR_PUBLISH",
-        "xr_reference_evaluate",
+        "PIPELINE_TEST_REQUIRE(vm.value.as.i64 == 478)",
+        "PIPELINE_TEST_REQUIRE(identity_log.finalizes == identity_log.constructs)",
+        "PIPELINE_TEST_REQUIRE(identity_log.reclaims == identity_log.constructs)",
         "xr_vm_code_execute",
-        "xr_backend_ir_translation_validate",
+        "xr_backend_ir_binding_verify",
     ):
         require(token in test, f"source producer evidence lacks {token}")
 
@@ -626,7 +666,6 @@ def validate(root: Path) -> None:
     canonical_coroutine_cancel = {"core.cancel.publish"}
     program_reference_class_contracts = {
         "core.class.construct",
-        "core.class.share",
         "core.class.field_load",
         "core.class.field_place",
         "core.place.exchange",
@@ -635,9 +674,10 @@ def validate(root: Path) -> None:
     wave_five_reborrow = {"core.existential.reborrow_read"}
     canonical_source_output = {
         "core.output.group", "core.constant.string", "core.constant.rune",
-        "core.string.concat", "core.string.from_i64", "core.compare.string",
+        "core.string.concat", "core.string.from_scalar", "core.compare.string", "core.sequence.length",
         "core.compare.rune",
     }
+    canonical_module_state = {"core.place.module", "core.place.initialize"}
     canonical_boolean = {
         "core.logical.not",
         "core.logical.and",
@@ -699,6 +739,18 @@ def validate(root: Path) -> None:
            for operation in wave_five_reborrow},
         **{operation: "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION"
            for operation in canonical_source_output},
+        **{operation: "IN_PROGRESS_MODULE_STATE_INTEGRATION"
+           for operation in canonical_module_state},
+        "core.owner.alias": "IN_PROGRESS_REFERENCE_ALIAS_INTEGRATION",
+        "core.array.construct": "IN_PROGRESS_ARRAY_INTEGRATION",
+        **{operation: "IN_PROGRESS_ATOMIC_INTEGRATION" for operation in (
+            "core.atomic.construct", "core.atomic.load", "core.atomic.exchange", "core.atomic.compare_exchange", "core.atomic.update")},
+        "core.sequence.element_place": "IN_PROGRESS_ARRAY_INTEGRATION",
+        "core.integer.convert": "IN_PROGRESS_INTEGER_INTEGRATION",
+        "core.integer.divmod": "IN_PROGRESS_INTEGER_INTEGRATION",
+        "core.constant.f64": "IN_PROGRESS_F64_INTEGRATION",
+        "core.compare.f64": "IN_PROGRESS_F64_INTEGRATION",
+        "core.scalar.bitcast64": "IN_PROGRESS_F64_INTEGRATION",
         **{operation: "COMPLETE_W7_WAVE5_BOOLEAN" for operation in canonical_boolean},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
         **{operation: "COMPLETE_H2_CLASS_REFERENCE_EXECUTION"
@@ -710,7 +762,7 @@ def validate(root: Path) -> None:
         require(rows[operation]["status"] == status,
                 f"operation has wrong source status: {operation}: "
                 f"expected {status}, got {rows[operation]['status']}")
-        if status == "COMPLETE_H2_CLASS_REFERENCE_EXECUTION":
+        if status in {"COMPLETE_H2_CLASS_REFERENCE_EXECUTION", "IN_PROGRESS_REFERENCE_ALIAS_INTEGRATION"}:
             require(not rows[operation].get("vm_implementation", "").startswith(
                         "NOT_YET_ACTIVE"),
                     f"operation VM implementation remains inactive: {operation}")
@@ -753,6 +805,10 @@ def self_test(root: Path) -> None:
             "src/app/cli/xcli_spec.c",
             "src/app/cli/xcmd_check.c",
             "src/app/cli/xcmd_run.c",
+            "src/app/cli/xcmd_test.c",
+            "src/app/cli/xcli_program_vm.c",
+            "src/app/cli/xcmd_build.c",
+            "src/app/cli/xcmd_build_program.inc.c",
             "src/program/xr_program_verify.c",
             "src/program/xr_reference_evaluator.c",
             "src/ir/xi_pipeline.h",
@@ -799,6 +855,80 @@ def self_test(root: Path) -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / relative, destination)
         validate(target)
+        test_path = target / "src/app/cli/xcmd_test.c"
+        original_test = test_path.read_text(encoding="utf-8")
+        for forbidden in ("XrProto", "xr_execute(", "XrTargetPlan"):
+            test_path.write_text(original_test + f"\n/* {forbidden} */\n", encoding="utf-8")
+            try:
+                validate(target)
+            except ContractError as exc:
+                require("canonical CLI route regained legacy execution" in str(exc),
+                        f"test route mutation reported the wrong invariant: {exc}")
+            else:
+                raise ContractError(f"test legacy route was accepted: {forbidden}")
+        test_path.write_text(original_test, encoding="utf-8")
+        build_path = target / "src/app/cli/xcmd_build.c"
+        original_build = build_path.read_text(encoding="utf-8")
+        build_path.write_text(original_build.replace("XrGeneratedC generated = {0};",
+                                                     "XrGeneratedC generated = {0}; xaot_build();",
+                                                     1), encoding="utf-8")
+        try:
+            validate(target)
+        except ContractError as exc:
+            require("canonical C emission regained xaot_build(" in str(exc),
+                    f"C producer fallback mutation reported the wrong invariant: {exc}")
+        else:
+            raise ContractError("canonical C producer fallback was accepted")
+        build_path.write_text(original_build, encoding="utf-8")
+        for token in ("cmd_build_bytecode", "write_bytecode_main", "xr_bundle_",
+                      "invoke_cc(", "xray_vm_eval_bundle",
+                      'xr_cli_opt_bool(&inv->options, "native")'):
+            build_path.write_text(original_build + f"\n/* {token} */\n", encoding="utf-8")
+            try:
+                validate(target)
+            except ContractError as exc:
+                require("default build regained legacy routing" in str(exc),
+                        f"default route mutation reported the wrong invariant: {exc}")
+            else:
+                raise ContractError(f"default build legacy route was accepted: {token}")
+        build_path.write_text(original_build, encoding="utf-8")
+        native_path = target / "src/app/cli/xcmd_build_program.inc.c"
+        original_native = native_path.read_text(encoding="utf-8")
+        native_path.write_text(original_native + "\n/* xray_core */\n", encoding="utf-8")
+        try:
+            validate(target)
+        except ContractError as exc:
+            require("native Program compilation regained xray_core" in str(exc),
+                    f"native runtime residue mutation reported the wrong invariant: {exc}")
+        else:
+            raise ContractError("native compiler archive residue was accepted")
+        native_path.write_text(original_native, encoding="utf-8")
+        for relative, anchors in (
+            ("tests/unit/program/test_xr_program_source_build.c", (
+                "ASSERT_EQ_INT(vm_return.value.as.i64, 7)",
+                "ASSERT_EQ_UINT(vm_suspend.state_id, 1u)",
+                "ASSERT_EQ_INT(xr_vm_execution_cancel(vm_cancel).kind, XR_VM_OUTCOME_CANCELLED)",
+            )),
+            ("tests/unit/ir/test_xi_pipeline.c", (
+                "PIPELINE_TEST_REQUIRE(vm.value.as.i64 == 478)",
+                "PIPELINE_TEST_REQUIRE(identity_log.finalizes == identity_log.constructs)",
+                "PIPELINE_TEST_REQUIRE(identity_log.reclaims == identity_log.constructs)",
+            )),
+        ):
+            path = target / relative
+            original = path.read_text(encoding="utf-8")
+            for anchor in anchors:
+                require(anchor in original, f"replacement observation is missing: {anchor}")
+                path.write_text(original.replace(anchor, "REMOVED_OBSERVATION"),
+                                encoding="utf-8")
+                try:
+                    validate(target)
+                except ContractError as exc:
+                    require("evidence lacks" in str(exc),
+                            f"observation mutation failed for the wrong reason: {exc}")
+                else:
+                    raise ContractError(f"missing replacement observation was accepted: {anchor}")
+            path.write_text(original, encoding="utf-8")
         source_owner = target / "src/program/xr_program_source_build.c"
         original_owner = source_owner.read_text(encoding="utf-8")
         source_owner.write_text(original_owner +
@@ -819,6 +949,9 @@ def self_test(root: Path) -> None:
             ("include(${XR_PROGRAM_SOURCE_FIXTURE_REGISTRATION})", ""),
             ('--fixture "${fixture_id}"', '--fixture "${native_target}"'),
             ("--expected-exit ${expected_exit}", "--expected-exit 0"),
+            ("set(stdout_arguments --expected-stdout-hex ${expected_stdout_hex})", ""),
+            ("set(stderr_arguments --expected-stderr-hex ${expected_stderr_hex})", ""),
+            ("${stdout_arguments} ${stderr_arguments}", "${stdout_arguments}"),
             ('add_executable(${native_target} "${generated_c}")',
              'add_executable(${native_target} "other.c")'),
             ("TARGET test_xr_program_source_build PRE_LINK", "TARGET other PRE_LINK"),

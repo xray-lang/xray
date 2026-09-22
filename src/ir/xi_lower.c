@@ -90,12 +90,13 @@ static void xi_lower_publish_effect_summary_sidecars(XiFunc *func, XaAnalyzer *a
     func->requires_unsafe_at_call = effect->requires_unsafe_at_call;
 }
 
-XR_FUNCDEF bool xi_lower_publish_function_expr_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer,
-                                                               const XaTypedProgram *program,
-                                                               const AstNode *node) {
-    XaFunctionExprEffectFact fact = {0};
-    if (!func || !analyzer || !program || !node || node->type != AST_FUNCTION_EXPR ||
-        !xa_typed_program_function_expr_effect(program, node, &fact))
+XR_FUNCDEF bool xi_lower_publish_body_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer,
+                                                      const XaTypedProgram *program,
+                                                      const AstNode *node) {
+    XaBodyEffectFact fact = {0};
+    if (!func || !analyzer || !program || !node ||
+        (node->type != AST_FUNCTION_EXPR && node->type != AST_PROGRAM) ||
+        !xa_typed_program_body_effect(program, node, &fact))
         return false;
     const XaEffectSummary *effect = xa_effect_db_get(analyzer->effect_db, fact.effect_id);
     if (!effect)
@@ -1273,7 +1274,7 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
             call->xg_interface_dispatch_slot = dispatch_slot;
             call->xg_interface_id = match->receiver_static_interface_id;
             call->xg_existential_kind =
-                (match->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) != 0u
+                (match->flags & XG_CALL_MAY_ERROR) != 0u
                     ? XI_EXISTENTIAL_WITNESS_INVOKE
                     : XI_EXISTENTIAL_WITNESS_DIRECT;
             switch ((XrParamMode) interface_method->receiver_mode) {
@@ -1831,8 +1832,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     l.func->is_generic_template =
         parent_ctx && parent_ctx->func && parent_ctx->func->is_generic_template;
     xi_lower_publish_effect_sidecars(l.func, analyzer, function_symbol);
-    if (func_node->type == AST_FUNCTION_EXPR && !xi_lower_publish_function_expr_effect_sidecars(
-                                                    l.func, analyzer, typed_program, func_node)) {
+    if (func_node->type == AST_FUNCTION_EXPR &&
+        !xi_lower_publish_body_effect_sidecars(l.func, analyzer, typed_program, func_node)) {
         xi_func_free(l.func);
         xi_lower_cleanup(&l);
         return NULL;
@@ -2670,17 +2671,24 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     if (xi_lower_import_member_is_type_only(l, m))
                         continue;
                     const char *mname = m->alias ? m->alias : m->name;
-                    if (!mname || xi_lower_import_member_is_type_only(l, m))
+                    if (!mname)
                         continue;
                     /* A value export binds with its declared type, as a
                      * namespace-qualified read of the same member does, so a
                      * frozen argument built from it carries that type. A
-                     * class or function export binds untyped: the plan names
-                     * the callee through the import itself, not a type. */
+                     * declaration namespace is not an instance of its nominal
+                     * enum or class. Enum-valued exports retain their declared
+                     * type; callable imports name their target through the
+                     * import identity. */
                     XrType *declared_type = xi_lower_declared_symbol_type(l, m->symbol_id);
+                    XaSymbol *declaration =
+                        l->analyzer && l->analyzer->global_scope
+                            ? xa_scope_lookup_by_id(l->analyzer->global_scope, m->symbol_id)
+                            : NULL;
                     XrType *import_type = declared_type;
-                    if (import_type && (import_type->kind == XR_KIND_CLASS ||
-                                        import_type->kind == XR_KIND_FUNCTION))
+                    if ((declaration && declaration->kind == XA_SYM_ENUM) ||
+                        (import_type && (import_type->kind == XR_KIND_CLASS ||
+                                         import_type->kind == XR_KIND_FUNCTION)))
                         import_type = NULL;
                     int vid = xi_lower_var_create(l, m->symbol_id, mname,
                                                   import_type ? import_type : l->type_any);
@@ -2991,6 +2999,12 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
         return NULL;
     }
     l.func->analyzer = analyzer;
+    if (program_node->type == AST_PROGRAM &&
+        !xi_lower_publish_body_effect_sidecars(l.func, analyzer, program, program_node)) {
+        xi_func_free(l.func);
+        xi_lower_cleanup(&l);
+        return NULL;
+    }
     l.func->nparams = 0;
     l.func->params = NULL;
     xi_lower_bind_module_body_id(&l);

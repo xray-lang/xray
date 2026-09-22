@@ -71,7 +71,11 @@ CONSUMER_TASKS = {
 STATUS_VALUES = {"COMPLETE", "NOT_YET_ACTIVE", "NOT_APPLICABLE"}
 ARITHMETIC_KINDS = {
     "none",
+    "integer-conversion",
+    "integer-division-remainder",
     "signed-integer-constant",
+    "binary64-constant",
+    "binary64-compare",
     "signed-integer",
     "signed-integer-division",
     "signed-integer-compare",
@@ -79,7 +83,7 @@ ARITHMETIC_KINDS = {
 SUCCESSOR_KEYS = {"normal", "error", "panic", "trap", "cancel", "suspend"}
 GENERIC_TYPES = {
     "A", "C", "Capture?", "E", "V", "T", "T...", "R", "R?", "P...",
-    "TargetEnum",
+    "TargetEnum", "optional-message:string",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
     "trap-edge-values...", "cancel-edge-values...", "suspend-edge-values...", "request-values...",
 }
@@ -174,7 +178,17 @@ def validate_named_registry(rows: Any, owner: str) -> tuple[set[int], set[str]]:
     names = {row.get("name") for row in values}
     require(len(names) == len(values) and None not in names, f"{owner} has duplicate or empty names")
     for row in values:
-        require(set(row) == {"stable_id", "name", "description"},
+        integer_name = re.fullmatch(r"([iu])(8|16|32|64)", str(row.get("name"))) if owner == "type registry" else None
+        expected_keys = {"stable_id", "name", "description"}
+        if integer_name:
+            expected_keys.add("integer")
+            integer = row.get("integer")
+            require(isinstance(integer, dict) and set(integer) == {"width", "signed"} and
+                    type(integer["width"]) is int and type(integer["signed"]) is bool and
+                    integer["width"] == int(integer_name[2]) and
+                    integer["signed"] == (integer_name[1] == "i"),
+                    f"{owner} row {row['name']} has invalid exact integer semantics")
+        require(set(row) == expected_keys,
                 f"{owner} row {row.get('name')} has unknown or missing fields")
         require(isinstance(row["stable_id"], int) and 0 <= row["stable_id"] <= 65535,
                 f"{owner} row {row['name']} has invalid stable id")
@@ -217,8 +231,8 @@ def referenced_types(type_rule: dict[str, Any]) -> set[str]:
                 and all(isinstance(name, str) and name not in GENERIC_TYPES for name in domain)
                 and len(domain) == len(set(domain)),
                 "operation type_rule.operand_domain must list unique concrete types")
-        require(any(name in VARIADIC_TYPES for name in operands),
-                "operation type_rule.operand_domain requires a variadic operand rule")
+        require(any(name in VARIADIC_TYPES for name in operands) or operands == ["T"],
+                "operation type_rule.operand_domain requires a variadic or single generic operand rule")
         result.update(domain)
     require(set(type_rule) <= {"operands", "result", "immediates", "operand_domain"},
             "operation type_rule has unknown fields")
@@ -331,14 +345,17 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} has unknown profile dependency")
         require(isinstance(operation["materialization"], str) and operation["materialization"],
                 f"operation {spelling} lacks materialization intent")
-        require(operation["determinism"].get("kind") == "deterministic",
-                f"W1 operation {spelling} must name deterministic semantics")
+        require(operation["determinism"].get("kind") ==
+                ("linearizable" if spelling in {"core.atomic.load", "core.atomic.exchange", "core.atomic.compare_exchange", "core.atomic.update"}
+                 else "deterministic"),
+                f"operation {spelling} has an invalid execution-trace contract")
         require(isinstance(operation["determinism"].get("allowed_trace"), str)
                 and operation["determinism"]["allowed_trace"],
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
-            "aggregate-construct", "aggregate-project", "aggregate-update", "assert-condition",
-            "class-construct", "class-share", "class-field-load", "class-field-place",
+            "scalar-bitcast64", "atomic-construct", "atomic-load", "atomic-exchange", "atomic-compare-exchange", "atomic-update",
+            "aggregate-construct", "array-construct", "sequence-element-place", "aggregate-project", "aggregate-update", "assert-condition",
+            "class-construct", "owner-alias", "class-field-load", "class-field-place",
             "block-arguments", "branch", "cancel-publish", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
             "place-exchange", "place-local", "place-module", "place-initialize",
@@ -461,8 +478,22 @@ def render_display_operand(operand: Any, owner: str) -> bytes | None:
             f"{owner} must name a type and a value")
     kind = operand["type"]
     value = operand["value"]
-    if kind == "i64":
-        return str(parse_i64(value, owner)).encode("ascii")
+    integer = re.fullmatch(r"([iu])(8|16|32|64)", str(kind))
+    if integer:
+        if isinstance(value, bool) or not re.fullmatch(r"-?[0-9]+", str(value)):
+            return None
+        parsed = int(value)
+        width = int(integer[2])
+        signed = integer[1] == "i"
+        minimum = -(1 << (width - 1)) if signed else 0
+        maximum = (1 << (width - int(signed))) - 1
+        return str(parsed).encode("ascii") if minimum <= parsed <= maximum else None
+    if kind == "f64":
+        require(isinstance(value, str), f"{owner} f64 operand must be a decimal string")
+        rendered = format(float(value), ".15g")
+        if "." not in rendered and "e" not in rendered and "E" not in rendered:
+            rendered += ".0"
+        return rendered.encode("ascii")
     if kind == "bool":
         require(isinstance(value, bool), f"{owner} bool operand must be a JSON bool")
         return b"true" if value else b"false"
@@ -490,6 +521,69 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
     require(isinstance(arguments, list), f"KAT {case['id']} arguments must be an array")
     require(isinstance(immediates, dict), f"KAT {case['id']} immediates must be an object")
 
+    if spelling == "core.sequence.length":
+        if len(arguments) != 1 or immediates or case.get("result_type") != "i64":
+            return {"rejected": "sequence-length-shape"}
+        operand = arguments[0]
+        if not isinstance(operand, dict) or set(operand) != {"type", "value"} or operand["type"] != "string":
+            return {"rejected": "sequence-type"}
+        raw = string_bytes(operand["value"], f"KAT {case['id']}")
+        return {"value": str(len(raw.decode("utf-8")))}
+
+    if spelling == "core.integer.divmod":
+        if len(arguments) != 2 or set(immediates) != {"operation"}:
+            return {"rejected": "integer-divmod-shape"}
+        mode = immediates["operation"]
+        if mode not in {"quotient", "remainder"}:
+            return {"rejected": "integer-divmod-mode"}
+        result_type = str(case.get("result_type"))
+        integer = re.fullmatch(r"([iu])(8|16|32|64)", result_type)
+        if not integer or any(not isinstance(arg, dict) or
+                              set(arg) != {"type", "value"} or arg["type"] != result_type
+                              for arg in arguments):
+            return {"rejected": "integer-type"}
+        width = int(integer[2])
+        signed = integer[1] == "i"
+        minimum = -(1 << (width - 1)) if signed else 0
+        maximum = (1 << (width - int(signed))) - 1
+        left, right = (int(arg["value"]) for arg in arguments)
+        if not all(minimum <= value <= maximum for value in (left, right)):
+            return {"rejected": "integer-range"}
+        if right == 0:
+            return {"panic": "integer-division-by-zero" if mode == "quotient"
+                             else "integer-remainder-by-zero"}
+        quotient = abs(left) // abs(right)
+        if (left < 0) != (right < 0):
+            quotient = -quotient
+        result = quotient if mode == "quotient" else left - quotient * right
+        result %= 1 << width
+        if signed and result >= (1 << (width - 1)):
+            result -= 1 << width
+        return {"value": str(result)}
+
+    if spelling == "core.integer.convert":
+        require(len(arguments) == 1 and not immediates,
+                f"KAT {case['id']} integer conversion arity or immediates are malformed")
+        source = arguments[0]
+        require(isinstance(source, dict) and set(source) == {"type", "value"},
+                f"KAT {case['id']} must carry one exact typed integer")
+        source_type = re.fullmatch(r"([iu])(8|16|32|64)", str(source["type"]))
+        target_type = re.fullmatch(r"([iu])(8|16|32|64)", str(case.get("result_type")))
+        if not source_type or not target_type:
+            return {"rejected": "integer-type"}
+        value = int(source["value"])
+        source_width = int(source_type[2])
+        source_signed = source_type[1] == "i"
+        minimum = -(1 << (source_width - 1)) if source_signed else 0
+        maximum = (1 << (source_width - int(source_signed))) - 1
+        if not minimum <= value <= maximum:
+            return {"rejected": "integer-range"}
+        target_width = int(target_type[2])
+        result = value % (1 << target_width)
+        if target_type[1] == "i" and result >= (1 << (target_width - 1)):
+            result -= 1 << target_width
+        return {"value": str(result)}
+
     if spelling == "core.constant.string":
         require(not arguments, f"KAT {case['id']} string constant must not have operands")
         raw = string_bytes(immediates.get("value"), f"KAT {case['id']} value")
@@ -504,10 +598,16 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         if not rune_is_scalar_value(value):
             return {"rejected": "not-a-unicode-scalar-value"}
         return {"value": value}
-    if spelling == "core.string.from_i64":
+    if spelling == "core.string.from_scalar":
         require(len(arguments) == 1 and not immediates,
                 f"KAT {case['id']} string.from_i64 contract is malformed")
-        return string_result(str(parse_i64(arguments[0], f"KAT {case['id']} operand")).encode("ascii"))
+        operand = arguments[0]
+        if not isinstance(operand, dict):
+            operand = {"type": "i64", "value": operand}
+        require(operand.get("type") != "string", f"KAT {case['id']} requires a scalar")
+        rendered = render_display_operand(operand, f"KAT {case['id']} operand")
+        require(rendered is not None, f"KAT {case['id']} scalar is not displayable")
+        return string_result(rendered)
     if spelling == "core.string.concat":
         require(len(arguments) == 2 and not immediates,
                 f"KAT {case['id']} string.concat arity is not two")
@@ -533,6 +633,21 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         require(predicate in COMPARE_PREDICATES, f"KAT {case['id']} compare predicate is invalid")
         return {"value": COMPARE_PREDICATES[predicate](left, right)}
 
+    if spelling in {"core.constant.f64", "core.compare.f64"}:
+        import struct
+        def binary64_bits(value: Any) -> str:
+            require(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{16}", value) is not None,
+                    f"KAT {case['id']} requires exact binary64 hexadecimal bits")
+            return value
+        if spelling == "core.constant.f64":
+            require(not arguments, f"KAT {case['id']} constant must not have operands")
+            return {"bits": binary64_bits(immediates.get("bits"))}
+        require(len(arguments) == 2, f"KAT {case['id']} binary64 compare arity is not two")
+        left, right = (struct.unpack(">d", bytes.fromhex(binary64_bits(value)))[0]
+                       for value in arguments)
+        predicate = immediates.get("predicate")
+        require(predicate in COMPARE_PREDICATES, f"KAT {case['id']} invalid binary64 predicate")
+        return {"value": COMPARE_PREDICATES[predicate](left, right)}
     if spelling == "core.constant.i64":
         require(not arguments, f"KAT {case['id']} constant must not have operands")
         return {"value": str(parse_i64(immediates.get("value"), f"KAT {case['id']} value"))}
@@ -678,7 +793,8 @@ def construct_ownership_valid(actual: dict[str, Any], field_types: Any,
     return consumed == set(after)
 
 
-def continuation_graph_valid(actual: dict[str, Any], *, cancel: bool, trap: bool) -> bool:
+def continuation_graph_valid(actual: dict[str, Any], *, cancel: bool, trap: bool,
+                             typed: tuple[str, ...] = ()) -> bool:
     """Check explicit KAT edge facts, never a claimed cleanup-valid boolean.
 
     These are finite control-flow test inputs, not another executable format.
@@ -692,7 +808,7 @@ def continuation_graph_valid(actual: dict[str, Any], *, cancel: bool, trap: bool
         return False
     entries, blocks = graph["entries"], graph["blocks"]
     reasons = {"normal"} | ({"cancel"} if cancel else set()) | ({"trap7"} if trap else set())
-    if (not isinstance(entries, dict) or set(entries) != reasons
+    if (not isinstance(entries, dict) or set(entries) != reasons | set(typed)
             or not isinstance(blocks, list) or not blocks):
         return False
 
@@ -721,7 +837,7 @@ def continuation_graph_valid(actual: dict[str, Any], *, cancel: bool, trap: bool
         return True
 
     for reason, target in entries.items():
-        if not admit(target, reason):
+        if not admit(target, "normal" if reason in typed else reason):
             return False
     while pending:
         target = pending.pop()
@@ -744,7 +860,7 @@ def continuation_graph_valid(actual: dict[str, Any], *, cancel: bool, trap: bool
 def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     actual = case.get("actual")
     require(isinstance(actual, dict), f"KAT {case['id']} actual contract must be an object")
-    if validator in {"provider-call", "sealed-call", "sealed-invoke", "indirect-call",
+    if validator in {"provider-call", "output-group", "sealed-call", "sealed-invoke", "indirect-call",
                      "indirect-invoke", "witness-call", "witness-invoke"}:
         typed_successors = 0
         if validator.endswith("-invoke"):
@@ -802,9 +918,30 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
             return False
         categories = actual.get("operand_categories")
         ownerships = actual.get("operand_ownerships")
+        has_trap_edge = actual.get("successor_count", 0) != 0
+        live_values = actual.get("live_values", [])
+        edge_values = actual.get("trap_edge_values", [])
+        if (not isinstance(ownerships, list) or len(ownerships) != len(operands)
+                or not isinstance(live_values, list) or not isinstance(edge_values, list)
+                or any(type(value) is not int or value < 0 for value in live_values + edge_values)):
+            return False
+        if has_trap_edge:
+            if (actual.get("successor_count") != 1
+                    or actual.get("trap") != "provider-call-failed"
+                    or len(set(live_values)) != len(live_values)
+                    or len(set(edge_values)) != len(edge_values)
+                    or set(live_values) != set(edge_values)
+                    or actual.get("edge_types") != actual.get("parameter_types")
+                    or not isinstance(actual.get("edge_types"), list)
+                    or len(actual["edge_types"]) != len(edge_values)):
+                return False
+        elif live_values or edge_values or "owner" in ownerships:
+            return False
         return (actual.get("result_type") == "void"
                 and categories == ["value"] * len(operands)
-                and ownerships == ["non-owner"] * len(operands)
+                and all(ownership == "non-owner" or
+                        (operand["type"] == "string" and ownership == "owner")
+                        for operand, ownership in zip(operands, ownerships))
                 and actual.get("provider_requirement") is True
                 and actual.get("atomic_group") is True
                 and actual.get("separator") == "space"
@@ -827,6 +964,8 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         )
         return (actual.get("condition_type") == "bool"
                 and actual.get("failure_kind") == "condition-false"
+                and (not actual.get("message_present", False)
+                     or actual.get("message_type") == "string")
                 and (not has_panic_edge or panic_edge_valid))
     if validator == "return":
         values = actual.get("value_types")
@@ -882,7 +1021,7 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
                 and actual.get("callable_error_type") == "void"
-                and actual.get("callable_panic_type") == "void"
+                and actual.get("callable_panic_type") in {"void", "panic-info"}
                 and actual.get("callable_may_suspend") is False
                 and actual.get("callable_may_cancel") is False
                 and (not has_trap_edge or trap_edge_valid))
@@ -927,7 +1066,7 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
                 and actual.get("callee_error_type") == "void"
-                and actual.get("callee_panic_type") == "void"
+                and actual.get("callee_panic_type") in {"void", "panic-info"}
                 and (not has_trap_edge or trap_edge_valid))
     if validator == "witness-invoke":
         ordinal = actual.get("slot_ordinal")
@@ -956,6 +1095,109 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and (not has_error or error_type != "panic-info")
                 and (not has_panic or panic_type == "panic-info")
                 and (not has_trap_edge or trap_edge_valid))
+    if validator == "sequence-element-place":
+        length, index = actual.get("length"), actual.get("index")
+        element = actual.get("element_type")
+        if (type(length) is not int or not 0 <= length <= (1 << 63) - 1
+                or type(index) is not int or not -(1 << 63) <= index <= (1 << 63) - 1):
+            return False
+        admitted = 0 <= index < length
+        return (actual.get("sequence_kind") in {"array", "fixed-array", "slice"}
+                and isinstance(element, str) and element not in {"", "void"}
+                and actual.get("result_type") == element
+                and actual.get("index_type") == "i64"
+                and actual.get("source_rooted") is True
+                and actual.get("source_consumed") is False
+                and type(actual.get("source_writable")) is bool
+                and actual.get("result_writable") is actual.get("source_writable")
+                and actual.get("result_category") == "place"
+                and actual.get("result_ownership") == "non-owner"
+                and actual.get("storage_relation") == "aliases-source-element"
+                and actual.get("outcome") == ("place" if admitted else "index-out-of-bounds-panic")
+                and actual.get("accessed_storage") is admitted
+                and actual.get("published_place") is admitted
+                and type(actual.get("allocation_count")) is int
+                and actual.get("allocation_count") == 0
+                and actual.get("cleanup_owners_preserved") is True)
+    if validator == "scalar-bitcast64":
+        bits = actual.get("input_bits")
+        return (actual.get("source_type") in {"i64", "u64", "f64"}
+                and actual.get("result_type") in {"i64", "u64", "f64"}
+                and isinstance(bits, str) and re.fullmatch(r"[0-9a-f]{16}", bits) is not None
+                and actual.get("result_bits") == bits
+                and actual.get("operand_ownership") == "non-owner"
+                and actual.get("result_ownership") == "non-owner")
+    if validator in {"atomic-construct", "atomic-load", "atomic-exchange", "atomic-compare-exchange", "atomic-update"}:
+        element = actual.get("element_type")
+        action = validator.removeprefix("atomic-")
+        scalar_valid = lambda value: (type(value) is bool if element == "bool" else
+            isinstance(value, str) and len(value) == 16 and all(c in "0123456789abcdef" for c in value)
+            if element == "f64" else type(value) is int and -(1 << 63) <= value < (1 << 63))
+        common = (element in {"i64", "bool", "f64"}
+                  and actual.get("type_kind") == "atomic"
+                  and actual.get("type_ownership") == "affine"
+                  and actual.get("copy_contract") == "identity-preserving"
+                  and actual.get("source_consumed") is False)
+        if action == "construct":
+            return (common and actual.get("operand_type") == element
+                    and actual.get("result_type") == f"Atomic<{element}>"
+                    and actual.get("result_ownership") == "owner"
+                    and scalar_valid(actual.get("initial"))
+                    and type(actual.get("stored")) is type(actual.get("initial"))
+                    and actual.get("stored") == actual.get("initial")
+                    and actual.get("identity") == "fresh")
+        valid_order = type(actual.get("ordering")) is int and 0 <= actual["ordering"] <= 4
+        common = (common and valid_order and actual.get("source_rooted") is True
+                  and actual.get("result_type") == element
+                  and actual.get("result_ownership") == "non-owner"
+                  and scalar_valid(actual.get("observed"))
+                  and type(actual.get("returned")) is type(actual.get("observed"))
+                  and actual.get("returned") == actual.get("observed")
+                  and actual.get("identity") == "preserved")
+        if action == "load":
+            return common and actual.get("modified") is False
+        if action == "update":
+            mode = actual.get("mode")
+            operand = actual.get("replacement")
+            if not (common and actual.get("operand_type") == element and scalar_valid(operand)
+                    and type(mode) is int and mode in (0, 1, 2)
+                    and (element == "i64" or (mode <= 1 if element == "f64" else mode == 2))):
+                return False
+            old = actual["observed"]
+            if element == "f64":
+                import struct
+                left = struct.unpack(">d", bytes.fromhex(old))[0]
+                right = struct.unpack(">d", bytes.fromhex(operand))[0]
+                stored = struct.pack(">d", left + right if mode == 0 else left - right).hex()
+                return actual.get("stored") == stored
+            stored = (old + operand if mode == 0 else old - operand if mode == 1 else old ^ operand)
+            stored = bool(stored) if element == "bool" else ((stored + (1 << 63)) % (1 << 64)) - (1 << 63)
+            return type(actual.get("stored")) is type(stored) and actual.get("stored") == stored
+        if action == "compare-exchange":
+            expected = actual.get("expected")
+            desired = actual.get("replacement")
+            matched = actual.get("observed") == expected
+            stored = desired if matched else actual.get("observed")
+            return (common and actual.get("operand_type") == element
+                    and scalar_valid(expected) and scalar_valid(desired)
+                    and type(actual.get("stored")) is type(stored)
+                    and actual.get("stored") == stored
+                    and actual.get("matched") is matched
+                    and actual.get("failure_ordering") == "Relaxed")
+        return (common and actual.get("operand_type") == element
+                and scalar_valid(actual.get("replacement"))
+                and type(actual.get("stored")) is type(actual.get("replacement"))
+                and actual.get("stored") == actual.get("replacement"))
+    if validator == "array-construct":
+        operands = actual.get("operand_types")
+        element = actual.get("element_type")
+        ownership = actual.get("element_ownership")
+        return (isinstance(operands, list) and isinstance(element, str) and bool(element)
+                and all(operand == element for operand in operands)
+                and actual.get("type_kind") == "array"
+                and actual.get("result_type") == f"Array<{element}>"
+                and actual.get("type_ownership") == "affine"
+                and construct_ownership_valid(actual, operands, [ownership] * len(operands)))
     if validator == "aggregate-construct":
         return (actual.get("operand_types") == actual.get("field_types")
                 and isinstance(actual.get("aggregate_type"), str)
@@ -977,15 +1219,15 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and isinstance(fields, list) and isinstance(ordinal, int)
                 and 0 <= ordinal < len(fields) and actual.get("value_type") == fields[ordinal])
     if validator == "class-construct":
-        return (actual.get("type_kind") == "class-reference"
+        return (actual.get("type_kind") in {"class-reference", "record-reference"}
                 and actual.get("operand_types") == actual.get("field_types")
                 and actual.get("type_ownership") == "affine"
                 and actual.get("copy_contract") in {"explicit", "forbidden"}
                 and actual.get("result_ownership") == "owner"
                 and construct_ownership_valid(actual, actual.get("field_types"),
                                               actual.get("field_type_ownerships")))
-    if validator == "class-share":
-        return (actual.get("type_kind") == "class-reference"
+    if validator == "owner-alias":
+        return (actual.get("type_kind") in {"class-reference", "record-reference", "array"}
                 and actual.get("operand_type") == actual.get("result_type")
                 and actual.get("type_ownership") == "affine"
                 and actual.get("operand_category") == "value"
@@ -999,7 +1241,7 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     if validator in {"class-field-load", "class-field-place"}:
         fields = actual.get("field_types")
         ordinal = actual.get("field_ordinal")
-        shared = (actual.get("type_kind") == "class-reference"
+        shared = (actual.get("type_kind") in {"class-reference", "record-reference"}
                   and actual.get("operand_type") == actual.get("class_type")
                   and actual.get("operand_category") == "value"
                   and isinstance(fields, list) and isinstance(ordinal, int)
@@ -1229,10 +1471,24 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         cancel_values = actual.get("cancel_edge_values", [])
         trap_values = actual.get("trap_edge_values", [])
         successor_count = actual.get("successor_count")
+        typed = tuple(kind for kind in ("error", "panic")
+                      if actual.get(f"callee_{kind}_type") != "void")
+        declared = 2 + len(typed)
+        for kind in typed:
+            value_type = actual.get(f"callee_{kind}_type")
+            values = actual.get(f"{kind}_edge_values")
+            if (not isinstance(value_type, str) or value_type == "void"
+                    or (kind == "panic") != (value_type == "panic-info")
+                    or actual.get(f"{kind}_argument_type") != value_type
+                    or not isinstance(values, list) or not isinstance(live, list)
+                    or not isinstance(owners, list) or len(set(values)) != len(values)
+                    or any(value not in live for value in values)
+                    or any(values.count(owner) != 1 for owner in owners)):
+                return False
         trap_valid = (
-            successor_count == 2 and trap_values == []
+            successor_count == declared and trap_values == []
         ) or (
-            successor_count == 3
+            successor_count == declared + 1
             and actual.get("trap") == "provider-call-failed"
             and isinstance(live, list) and isinstance(owners, list)
             and isinstance(trap_values, list)
@@ -1258,10 +1514,9 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("result_type") == "void"
                 and trap_valid
                 and actual.get("resume_state") == actual.get("continuation_state")
-                and continuation_graph_valid(actual, cancel=True, trap=successor_count == 3)
+                and continuation_graph_valid(actual, cancel=True,
+                                             trap=successor_count == declared + 1, typed=typed)
                 and target_valid
-                and actual.get("callee_error_type") == "void"
-                and actual.get("callee_panic_type") == "void"
                 and actual.get("scalar_non_owner_boundary") is True
                 and isinstance(actual.get("live_values"), list)
                 and actual.get("live_values") == actual.get("resume_edge_values"))
@@ -1308,6 +1563,18 @@ def c_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=True)
 
 
+def panic_operand_prefix(operation: dict[str, Any]) -> int:
+    operands = operation["type_rule"]["operands"]
+    if (len(operands) < 2 or operands[-1] != "panic-edge-values..." or
+            any(item.endswith("...") for item in operands[:-1])):
+        return 0
+    successors = operation["successors"]
+    require(successors == dict(normal=True, error=False, panic=True, trap=False,
+                               cancel=False, suspend=False),
+            f"optional panic operation has an incompatible successor contract: {operation['spelling']}")
+    return len(operands) - 1 - operands.count("optional-message:string")
+
+
 def operation_arity(operation: dict[str, Any]) -> int:
     operands = operation["type_rule"]["operands"]
     return 255 if any(name in VARIADIC_TYPES for name in operands) else len(operands)
@@ -1348,6 +1615,14 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         lines.append(f"    XR_CORE_TYPE_{c_identifier(row['name'])} = {row['stable_id']},")
     lines.extend([
         "} XrCoreTypeId;",
+        "",
+        "typedef struct XrCoreIntegerType {",
+        "    uint16_t type_id;",
+        "    uint8_t width;",
+        "    bool is_signed;",
+        "} XrCoreIntegerType;",
+        "",
+        "const XrCoreIntegerType *xr_core_spec_integer_type(uint16_t type_id);",
         "",
     ])
     type_ids = {row["name"]: row["stable_id"] for row in registry["types"]}
@@ -1419,6 +1694,8 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         "typedef struct XrCoreOperationSpec {",
         "    uint16_t stable_id;",
         "    uint8_t operand_arity;",
+        "    uint8_t panic_operand_prefix;",
+        "    bool has_trap_continuation;",
         "    uint8_t result_type;",
         "    uint8_t successor_mask;",
         "    uint32_t effect_mask;",
@@ -1439,6 +1716,16 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         "extern const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT];",
         "",
         "const XrCoreOperationSpec *xr_core_spec_operation_by_id(uint16_t stable_id);",
+        "static inline uint8_t xr_core_spec_panic_operand_prefix(uint16_t stable_id) {",
+        "    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(stable_id);",
+        "    return operation ? operation->panic_operand_prefix : 0u;",
+        "}",
+        "enum { XR_CORE_ASSERT_MESSAGE_PRESENT = 256u };",
+        "static inline uint8_t xr_core_spec_panic_value_prefix(uint16_t stable_id, uint32_t control) {",
+        "    uint8_t prefix = xr_core_spec_panic_operand_prefix(stable_id);",
+        "    return (uint8_t)(prefix + (stable_id == XR_CORE_OP_CORE_ASSERT_CONDITION &&",
+        "                                (control & XR_CORE_ASSERT_MESSAGE_PRESENT) != 0u));",
+        "}",
         "const XrCoreOperationSpec *xr_core_spec_operation_by_spelling(const char *spelling);",
         "bool xr_core_spec_feature_active(uint16_t stable_id);",
         "",
@@ -1463,8 +1750,25 @@ def generate_source(registry: dict[str, Any]) -> str:
         "",
         "#include <string.h>",
         "",
-        "const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] = {",
+        "static const XrCoreIntegerType integer_types[] = {",
     ]
+    for row in registry["types"]:
+        integer = row.get("integer")
+        if integer:
+            lines.append(f"    {{XR_CORE_TYPE_{c_identifier(row['name'])}, {integer['width']}u, " +
+                         ("true" if integer["signed"] else "false") + "},")
+    lines.extend([
+        "};",
+        "",
+        "const XrCoreIntegerType *xr_core_spec_integer_type(uint16_t type_id) {",
+        "    for (size_t index = 0; index < sizeof(integer_types) / sizeof(integer_types[0]); ++index)",
+        "        if (integer_types[index].type_id == type_id)",
+        "            return &integer_types[index];",
+        "    return NULL;",
+        "}",
+        "",
+        "const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] = {",
+    ])
     for operation in registry["operations"]:
         result = operation["type_rule"]["result"]
         result_id = type_ids.get(result, type_ids["type-variable"])
@@ -1477,6 +1781,8 @@ def generate_source(registry: dict[str, Any]) -> str:
             "    {",
             f"        {operation['stable_id']}u,",
             f"        {operation_arity(operation)}u,",
+            f"        {panic_operand_prefix(operation)}u,",
+            f"        {'true' if 'trap-edge-values...' in operation['type_rule']['operands'] else 'false'},",
             f"        {result_id}u,",
             f"        {successor_mask}u,",
             f"        UINT32_C({effect_mask}),",
@@ -1642,6 +1948,16 @@ def expect_invalid(label: str, registry: dict[str, Any], kats: dict[str, Any]) -
 
 
 def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
+    for name in ("i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64"):
+        for field, invalid in (("width", 128), ("width", True), ("signed", 1),
+                               ("signed", name.startswith("u"))):
+            mutation = copy.deepcopy(registry)
+            row = next(row for row in mutation["types"] if row["name"] == name)
+            row["integer"][field] = invalid
+            expect_invalid(f"invalid {name} {field}", mutation, kats)
+        mutation = copy.deepcopy(registry)
+        next(row for row in mutation["types"] if row["name"] == name).pop("integer")
+        expect_invalid(f"missing {name} integer semantics", mutation, kats)
     require(c_identifier("TargetOs") == "TARGET_OS",
             "CamelCase Core type names must project to stable separated C identifiers")
     first = generate_outputs(registry, kats)
@@ -1731,6 +2047,7 @@ def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
             ("coroutine-suspend-timer-valid", "coroutine-suspend"),
             ("coroutine-call-provider-trap-continuation-valid", "coroutine-call"),
             ("provider-call-trap-continuation-valid", "provider-call"),
+            ("output-group-trap-continuation-valid", "output-group"),
             ("sealed-call-trap-continuation-valid", "sealed-call"),
             ("sealed-invoke-provider-trap-continuation", "sealed-invoke"),
             ("indirect-call-trap-continuation-valid", "indirect-call"),
@@ -1753,6 +2070,19 @@ def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
         malformed["actual"]["continuation_graph"]["entries"]["normal"] = True
         require(not contract_oracle(malformed, validator),
                 f"{validator} accepted a boolean block identity")
+
+    element_place = next(case for case in kats["cases"]
+                         if case["id"] == "sequence-element-place-first")
+    for field in element_place["actual"]:
+        missing = copy.deepcopy(element_place)
+        del missing["actual"][field]
+        require(not contract_oracle(missing, "sequence-element-place"),
+                f"element-place oracle accepted missing fact: {field}")
+    for field in ("length", "index", "allocation_count"):
+        malformed = copy.deepcopy(element_place)
+        malformed["actual"][field] = False
+        require(not contract_oracle(malformed, "sequence-element-place"),
+                f"element-place oracle accepted boolean integer: {field}")
 
     positive = next(case for case in kats["cases"]
                     if case["id"] == "cleanup-graph-multiblock-reason-exits")

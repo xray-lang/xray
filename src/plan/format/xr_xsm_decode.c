@@ -597,6 +597,7 @@ static void decode_functions(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->flags = xr_xsm_take_u8(reader);
         record->is_module_initializer = xr_xsm_take_u8(reader);
         record->carries_coroutine_ops = xr_xsm_take_u8(reader);
+        record->is_external_entry = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         XrSemanticParameterRecord *record = &plan->parameters[i];

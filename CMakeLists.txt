@@ -522,6 +522,7 @@ add_custom_command(
     COMMAND ${XRAY_PYTHON} ${GEN_STDLIB_TYPES}
     DEPENDS ${STDLIBGEN}
             ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py
+            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_types.py
             ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_codegen.py
             ${GEN_STDLIB_TYPES}
             ${XRAY_STDLIB_DEF_FILES}
@@ -734,6 +735,8 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.c
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.c
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_provider_typed.inc.c
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_provider_value.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution_identity.c
             ${CMAKE_SOURCE_DIR}/src/execution/xr_boundary_materialization.h
@@ -754,7 +757,9 @@ add_custom_command(
             --root ${CMAKE_SOURCE_DIR}
     COMMAND ${CMAKE_COMMAND} -E touch ${XRAY_PROGRAM_VM_CONTRACT_CHECK_STAMP}
     DEPENDS ${PROGRAMVMCONTRACTCHECK}
+            ${CMAKE_SOURCE_DIR}/CMakeLists.txt
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_native_execution.c
             ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.h
             ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.c
             ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm_dispatch.inc.c
@@ -779,10 +784,16 @@ add_custom_command(
     DEPENDS ${PROGRAMAOTCONTRACTCHECK}
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.h
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_internal.h
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_native_descriptor.h
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_verify.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_copy.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_class.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_module.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_exports.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_provider_typed.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_provider.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_provider_aot_sources_gen.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_native_artifact.c
@@ -896,7 +907,7 @@ add_custom_target(run-xr-program-wave4-differential
     DEPENDS ${PROGRAMWAVE4DIFF}
             ${PROGRAMWAVE4EXITCHECK}
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-exit-gate.json
-    COMMENT "Running the W7 Wave 4 source, Reference, VM and native-AOT gate"
+    COMMENT "Running source, VM and native-AOT independent-observation checks"
     VERBATIM
 )
 
@@ -2000,8 +2011,9 @@ add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-m
 
 # Canonical XrProgram execution is a self-contained embeddable product. It owns
 # only format admission, immutable target binding, generation lifecycle, and
-# the private typed VM view. Source/frontend builders, the reference evaluator,
-# the legacy Proto VM, TargetPlan, and AOT are deliberately absent.
+# private typed execution. The native frame adapter only invokes loaded code.
+# Source/frontend builders, the reference evaluator, the legacy Proto VM,
+# TargetPlan, and the AOT compiler are deliberately absent.
 set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
     src/runtime/abi/xr_provider_logical_contract.c
     src/base/xsha256.c
@@ -2020,6 +2032,7 @@ set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
     src/program/xr_program_verify.c
     src/execution/xr_execution_identity.c
     src/execution/xr_execution.c
+    src/execution/xr_native_execution.c
     src/execution/xr_boundary_materialization.c
     src/vm/xr_program_vm.c
 )
@@ -2070,8 +2083,93 @@ add_custom_command(
     VERBATIM
 )
 add_custom_target(gen-text-kernel-embed DEPENDS ${XRAY_TEXT_KERNEL_EMBED})
+set(XRAY_FLOAT_FORMAT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_float_fmt.h)
+set(XRAY_FLOAT_FORMAT_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_float_format_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_FLOAT_FORMAT_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_FLOAT_FORMAT_HEADER}
+            -DOUTPUT=${XRAY_FLOAT_FORMAT_EMBED}
+            -DSYMBOL=xr_float_format_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_FLOAT_FORMAT_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared float formatter for generated C"
+    VERBATIM)
+add_custom_target(gen-float-format-embed DEPENDS ${XRAY_FLOAT_FORMAT_EMBED})
+set(XRAY_INTEGER_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_integer_conversion_core.h)
+set(XRAY_INTEGER_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_integer_kernel_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_INTEGER_KERNEL_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_INTEGER_KERNEL_HEADER}
+            -DOUTPUT=${XRAY_INTEGER_KERNEL_EMBED}
+            -DSYMBOL=xr_integer_kernel_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_INTEGER_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared integer conversion kernel for generated C"
+    VERBATIM)
+add_custom_target(gen-integer-kernel-embed DEPENDS ${XRAY_INTEGER_KERNEL_EMBED})
+set(XRAY_INTEGER_DIVISION_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_integer_division_core.h)
+set(XRAY_INTEGER_DIVISION_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_integer_division_kernel_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_INTEGER_DIVISION_KERNEL_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_INTEGER_DIVISION_KERNEL_HEADER}
+            -DOUTPUT=${XRAY_INTEGER_DIVISION_KERNEL_EMBED}
+            -DSYMBOL=xr_integer_division_kernel_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_INTEGER_DIVISION_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared integer division kernel for generated C"
+    VERBATIM)
+add_custom_target(gen-integer-division-kernel-embed DEPENDS ${XRAY_INTEGER_DIVISION_KERNEL_EMBED})
+set(XRAY_VALUE_FORMAT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_value_format_core.h)
+set(XRAY_VALUE_FORMAT_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_value_format_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_VALUE_FORMAT_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_VALUE_FORMAT_HEADER}
+            -DOUTPUT=${XRAY_VALUE_FORMAT_EMBED}
+            -DSYMBOL=xr_value_format_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_VALUE_FORMAT_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared value formatter for generated C"
+    VERBATIM)
+set(XRAY_SYNC_KERNEL_EMBEDS)
+foreach(XR_SYNC_PART atomic_compat semantic_owner_ids_gen sync_core)
+    set(XR_SYNC_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_${XR_SYNC_PART}.h)
+    set(XR_SYNC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_${XR_SYNC_PART}_embedded.inc.c)
+    add_custom_command(
+        OUTPUT ${XR_SYNC_OUTPUT}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${XR_SYNC_INPUT} -DOUTPUT=${XR_SYNC_OUTPUT}
+                -DSYMBOL=xr_${XR_SYNC_PART}_source
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        DEPENDS ${XR_SYNC_INPUT} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        COMMENT "Embedding the shared ${XR_SYNC_PART} kernel for generated C"
+        VERBATIM)
+    list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_SYNC_OUTPUT})
+endforeach()
+add_custom_target(gen-sync-kernel-embed DEPENDS ${XRAY_SYNC_KERNEL_EMBEDS})
+set(XRAY_PROVIDER_VALUE_EMBEDS)
+foreach(XR_PROVIDER_INPUT IN ITEMS base/xstable_id.h execution/xr_provider_value.h)
+    get_filename_component(XR_PROVIDER_NAME "${XR_PROVIDER_INPUT}" NAME_WE)
+    set(XR_PROVIDER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${XR_PROVIDER_NAME}_embedded.inc.c")
+    add_custom_command(OUTPUT "${XR_PROVIDER_OUTPUT}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_PROVIDER_INPUT}
+                -DOUTPUT=${XR_PROVIDER_OUTPUT} -DSYMBOL=${XR_PROVIDER_NAME}_source
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_PROVIDER_INPUT}
+                ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        VERBATIM)
+    list(APPEND XRAY_PROVIDER_VALUE_EMBEDS "${XR_PROVIDER_OUTPUT}")
+endforeach()
 set_source_files_properties(src/aot/program/xr_backend_ir_emit_c.c PROPERTIES
-    OBJECT_DEPENDS ${XRAY_TEXT_KERNEL_EMBED})
+    OBJECT_DEPENDS "${XRAY_TEXT_KERNEL_EMBED};${XRAY_INTEGER_KERNEL_EMBED};${XRAY_INTEGER_DIVISION_KERNEL_EMBED};${XRAY_VALUE_FORMAT_EMBED};${XRAY_SYNC_KERNEL_EMBEDS};${XRAY_PROVIDER_VALUE_EMBEDS}")
 
 # The canonical-program AOT compiler is a private build product. This narrow
 # target keeps its warning contract independent from the legacy Xi/TargetPlan
@@ -2088,7 +2186,7 @@ add_library(xray_program_aot_compiler STATIC
     ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})
 add_dependencies(xray_program_aot_compiler
     gen-stdlib-metadata
-    gen-core-spec gen-xr-program-schema gen-text-kernel-embed check-xr-program-semantics
+    gen-core-spec gen-xr-program-schema gen-text-kernel-embed gen-float-format-embed gen-integer-kernel-embed check-xr-program-semantics
     check-xr-execution-contracts check-xr-program-aot-contracts)
 target_include_directories(xray_program_aot_compiler PRIVATE
     ${XRAY_COMMON_INCLUDES}
@@ -2828,6 +2926,16 @@ if(BUILD_TESTS)
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
     add_dependencies(test_xi_lowering_gen gen-xi-lowering)
+    add_dependencies(run-xr-program-wave4-differential
+        test_xi_pipeline
+        test_xr_program_imported_callable
+        test_xr_program_vm
+        test_xr_program_aot
+        test_xr_program_aot_callable
+        test_xr_program_aot_existential
+        test_xr_program_source_aot_native
+        test_xr_program_imported_callable_native
+    )
 
     add_executable(xray_package_payload_fixture
         tests/benchmarks/compiler/global_evidence_cache/package_payload_fixture.c
@@ -4565,7 +4673,7 @@ if(BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(canonical_source_run_cli PROPERTIES
-        LABELS "cli;canonical-program;source-owner;vm;task-302"
+        LABELS "cli;canonical-program;source-owner;vm;aot;task-302"
         TIMEOUT 60
     )
 
@@ -4600,6 +4708,18 @@ if(BUILD_TESTS)
     )
     set_tests_properties(plan_command_cli PROPERTIES
         LABELS "cli;artifact;target-machine"
+        TIMEOUT 120
+    )
+
+    add_test(
+        NAME canonical_program_test_cli
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_program_test_entry_tests.py
+                --xray $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(canonical_program_test_cli PROPERTIES
+        LABELS "cli;vm;canonical-program;regression;ownership"
         TIMEOUT 120
     )
 
@@ -5411,13 +5531,19 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    if(CMAKE_NM)
+        set(XRAY_RUNTIME_SYMBOL_READER "${CMAKE_NM}")
+    else()
+        find_program(XRAY_RUNTIME_SYMBOL_READER NAMES llvm-nm nm
+            HINTS "$ENV{ProgramFiles}/LLVM/bin" REQUIRED)
+    endif()
     add_test(
         NAME xr_program_vm_contracts
         COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --archive $<TARGET_FILE:xray_program_vm_runtime>
                 --executable $<TARGET_FILE:test_xr_program_vm_runtime>
-                --nm ${CMAKE_NM}
+                --nm "${XRAY_RUNTIME_SYMBOL_READER}"
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(xr_program_vm_contracts PROPERTIES

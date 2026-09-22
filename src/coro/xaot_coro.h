@@ -398,7 +398,9 @@ XR_FUNC XrAotResult xr_aot_io_wait(const XrAotContext *ctx, int fd, int events, 
 XR_FUNC XrAotResult xr_aot_io_wait_resume(const XrAotContext *ctx);
 /* Submit one genuinely blocking hosted operation to the bounded scheduler
  * pool. The submit call consumes one data owner on every path; destroy_data
- * releases that owner after completion or immediate rejection. */
+ * releases that owner after completion or immediate rejection. Data must not
+ * borrow the coroutine frame: cancellation can destroy it before invoke ends.
+ * A resumed caller reading results must hold a separate data owner. */
 XR_FUNC XrAotResult xr_aot_async_submit(const XrAotContext *ctx, XrAotAsyncInvokeFn invoke,
                                         void *data, XrAotAsyncDestroyFn destroy_data);
 XR_FUNC XrAotResult xr_aot_async_resume(const XrAotContext *ctx);

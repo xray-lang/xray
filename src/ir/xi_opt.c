@@ -2932,6 +2932,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_NOT:
         case XI_ISNULL:
         case XI_IS:
+        case XI_VARIANT_TEST:
         case XI_CHAN_TRY_SEND:
         case XI_CHAN_IS_CLOSED:
         case XI_CHAN_RECV_STATUS:

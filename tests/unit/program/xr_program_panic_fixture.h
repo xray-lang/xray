@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-#define XR_PANIC_FIXTURE_AFFINE_TYPE UINT16_C(16)
+#define XR_PANIC_FIXTURE_AFFINE_TYPE XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
 
 typedef enum XrProgramPanicFixtureMutation {
     XR_PANIC_FIXTURE_VALID = 0,

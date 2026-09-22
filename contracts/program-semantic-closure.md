@@ -179,7 +179,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     fail closed. The verifier independently reconstructs the same unique local
     declaration/PSC join instead of trusting the publisher's annotation or
     scanning same-shaped PSC rows.
-15. SemanticPlan schema 50 and program-provenance schema 5 admit the bounded
+15. SemanticPlan schema 51 and program-provenance schema 5 admit the bounded
     scalar, leaf aggregate, leaf value-product, and graph families only after
     PSC-to-Xi verification. The plan stores pointer-free
     PSC schema/family/fingerprint/GCI/counts, its exact module row, and typed
@@ -220,7 +220,7 @@ projection defined below; they never imply TargetPlan admission on their own.
 17. XSM exact-version encoding serializes counts and provenance followed by all program
     type, type-field, function, dependency, and call bindings. Their counts participate in
     decoder storage/payload budgets; every field participates in the
-    SemanticPlan fingerprint. Decode requires schema 50, exact bounds and
+    SemanticPlan fingerprint. Decode requires schema 51, exact bounds and
     payload digest, reconstructs the frozen plan, and reruns generic semantic
     verification. A dependency-bearing graph entry is accepted only by the
     module-set decoder with the exact ordered producer plan; the zero-dependency
@@ -229,6 +229,12 @@ projection defined below; they never imply TargetPlan admission on their own.
     ordinal, stable type or source-class identity, family, flag, reserved,
     fingerprint, or join mutations fail closed even when outer framing is
     otherwise valid.
+    Each function also freezes whether a typed export, link, or entry manifest
+    can enter it without a source call. This boolean participates in the plan
+    fingerprint and executable closure, but not in the function's stable ID.
+    XSM stores it after the initializer and coroutine-body flags; schema 50 is
+    rejected rather than read without this authority. Malformed booleans fail
+    semantic verification even after recomputing the payload and plan digests.
 18. The implemented execution boundary closes source -> PSC v9 -> Xi -> SemanticPlan 49 ->
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
@@ -386,6 +392,16 @@ registrations inside cold handlers. Normal exits close active boundaries; an exp
 may abandon an outer closed boundary and must preserve its reason. Cancellation owner payload
 exactness is checked only after live-in propagation reaches its fixed point.
 
+Dependency method identity is recorded independently of suspension. Standalone
+plans defer the suspension obligation; ordered module-set verification joins the
+exact method identity to the frozen body and existing graph-sealing proof. Final
+or graph-sealed receivers use that body's suspension result. A remaining open
+hierarchy retains conservative suspension. Missing and invented coroutine states
+are both rejected. This records no machine-call adapter or new language limit.
+
+verification-test: test_semantic_plan
+verification-test: test_semantic_dependency_method_authority
+
 ## Digest anchors
 
 anchor-sha256: CMakeLists.txt 47ee39ca24a9504213c739915c436c514ca17c48d1f48d1ed9675bbadcba4255
@@ -418,12 +434,12 @@ anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 52e2ebfd1e8583e7e656703ee96536d36f8f002286c89065f28ba875e39fac45
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 65d4414cddcc0217f8ead6640be987a4b4918a0c6fa283d2cda6245d086c5a16
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 812040061aa42a4f9353e9d269ccc23aec9cf3534813db0aa4c5d1f027544570
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h 15445afbdb7357fdafc243730f4df7ae93ad01546feceb260194223c0670a578
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c a1e3dd6027b07493017976dd71b0e4ffc5082aa532b277207e7e26915e15bc0a
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 3bad36a703a4aba1689baca3e9a849b8f19b5aa513972da98b7202212daff75c
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 642eff61fb0b06185d2aec4c0ce8d91919148de3d29d74a17e68bd1a5016b3fa
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 838f7adc60c3de52fda23ed25c07edb678a6274eb87d0deec2da033e701dca10
@@ -445,13 +461,13 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 97085f29b14fd95ab3f942fa67
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c cbc5cfc599653e3668f4b7dd6a81755baeb274b67a455e52155cc16205f68a23
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2b5667297212ffe1df19d87643c5045b1a6cfed11bc8683c
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 5752336b4e08abff7a4fcd65fa9c3c067b4eb7819f1e4d4eb1a5217d5cd725be
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 94f96f7462b343afb2a2eb8837cbb75e4f20b576b25af6db0298a2fb3edf2cf4
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c eec8355e8f44b033a8688ac38d6a37af3f49eb576e7f2766863a716df9772f33
 anchor-sha256: tests/unit/frontend/test_parser.c 83d2fcc57c562b0def2f589440f0f7991ed049680c4941c5b7ccd48e22f56eb1
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 090ebd1d78787598cf224d26de99d5384a98a0c79de15966e75d9e934402dc99
-anchor-sha256: tests/unit/CMakeLists.txt 6c0d5bb82cc5ece7e944e8487ed973a225ab51f94fbb0d45b883f4b0b6e8f865
+anchor-sha256: tests/unit/CMakeLists.txt 458b4d783486fe54b85f79aee7d1c19c7a9b0b82942ccb47c5fa2c526086c4e6
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
 anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc

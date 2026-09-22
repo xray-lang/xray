@@ -11,6 +11,8 @@
 #include "../test_framework.h"
 #include "coro/xasync.h"
 #include "coro/xcoroutine.h"
+#include "coro/xcoro_pool.h"
+#include "os/os_time.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -60,6 +62,7 @@ TEST(async_submit_rejects_when_queue_full) {
 
     xr_async_pool_destroy(&pool);
     ASSERT_EQ_INT(atomic_load_explicit(&destroy_count, memory_order_relaxed), 2);
+    xr_coro_free(&rejected_coro);
 }
 
 TEST(async_submit_rejects_after_shutdown) {
@@ -87,10 +90,221 @@ TEST(async_submit_rejects_after_shutdown) {
     xr_async_pool_destroy(&pool);
 }
 
+TEST(async_coroutine_free_detaches_pending_job) {
+    XrRuntime runtime = {0};
+    XrAsyncPool pool;
+    XrCoroutine coro = {0};
+    atomic_int destroy_count;
+    atomic_init(&destroy_count, 0);
+    xr_async_pool_init(&pool, &runtime, 1, 2);
+    XrAsyncJob *job = xr_async_job_create(&coro, 0, noop_invoke, &destroy_count);
+    ASSERT_NOT_NULL(job);
+    job->destroy_data = count_destroy;
+    ASSERT_TRUE(xr_async_submit(&pool, job));
+    xr_coro_free(&coro);
+    ASSERT_TRUE(job->coro == NULL);
+    ASSERT_EQ_INT(atomic_load(&destroy_count), 0);
+    xr_async_pool_destroy(&pool);
+    ASSERT_EQ_INT(atomic_load(&destroy_count), 1);
+}
+
+typedef struct AsyncProbe {
+    atomic_bool entered;
+    atomic_bool release;
+    atomic_int invoked;
+    atomic_int destroyed;
+} AsyncProbe;
+
+static void probe_invoke(void *data) {
+    AsyncProbe *probe = data;
+    atomic_fetch_add(&probe->invoked, 1);
+    atomic_store_explicit(&probe->entered, true, memory_order_release);
+    while (!atomic_load_explicit(&probe->release, memory_order_acquire))
+        xr_thread_yield();
+}
+
+static void probe_destroy(void *data) {
+    AsyncProbe *probe = data;
+    atomic_fetch_add(&probe->destroyed, 1);
+}
+
+static bool wait_for_probe(AsyncProbe *probe) {
+    uint64_t deadline = xr_time_monotonic_ms() + 5000;
+    while (!atomic_load_explicit(&probe->entered, memory_order_acquire)) {
+        if (xr_time_monotonic_ms() >= deadline)
+            return false;
+        xr_thread_yield();
+    }
+    return true;
+}
+
+static bool wait_for_completion(XrAsyncPool *pool) {
+    uint64_t deadline = xr_time_monotonic_ms() + 5000;
+    while (!atomic_load_explicit(&pool->ready_queues[0].head, memory_order_acquire)) {
+        if (xr_time_monotonic_ms() >= deadline)
+            return false;
+        xr_thread_yield();
+    }
+    return true;
+}
+
+TEST(async_repeated_submit_preserves_active_wait) {
+    XrRuntime runtime = {0};
+    XrAsyncPool pool;
+    XrCoroutine coro = {0};
+    xr_async_pool_init(&pool, &runtime, 1, 2);
+    XrAsyncJob *first = xr_async_job_create(&coro, 0, noop_invoke, NULL);
+    XrAsyncJob *second = xr_async_job_create(&coro, 0, noop_invoke, NULL);
+    ASSERT_NOT_NULL(first);
+    ASSERT_NOT_NULL(second);
+    ASSERT_TRUE(xr_async_submit(&pool, first));
+    uint32_t flags = xr_coro_flags_load(&coro);
+    ASSERT_FALSE(xr_async_submit(&pool, second));
+    ASSERT_EQ_INT(xr_coro_flags_load(&coro), flags);
+    ASSERT_TRUE(coro.ext->async_job == first);
+    xr_async_job_free(second);
+    xr_async_pool_destroy(&pool);
+    ASSERT_TRUE(coro.ext->async_job == NULL);
+    ASSERT_TRUE(atomic_load(&coro.ext->async_pool) == NULL);
+    xr_coro_free(&coro);
+}
+
+TEST(async_inflight_job_outlives_destroyed_coroutine) {
+    XrRuntime runtime = {0};
+    XrAsyncPool pool;
+    AsyncProbe probe = {0};
+    XrCoroutine *coro = xr_calloc(1, sizeof(*coro));
+    ASSERT_NOT_NULL(coro);
+    coro->gc_flags = XR_CORO_GC_LIGHTWEIGHT;
+    xr_async_pool_init(&pool, &runtime, 1, 2);
+    XrAsyncJob *job = xr_async_job_create(coro, 0, probe_invoke, &probe);
+    ASSERT_NOT_NULL(job);
+    job->destroy_data = probe_destroy;
+    ASSERT_TRUE(xr_async_submit(&pool, job));
+    ASSERT_TRUE(xr_async_pool_start_threads(&pool));
+    bool entered = wait_for_probe(&probe);
+    xr_coro_destroy(coro);
+    bool detached = job->coro == NULL;
+    int early_destroy = atomic_load(&probe.destroyed);
+    atomic_store_explicit(&probe.release, true, memory_order_release);
+    bool completed = wait_for_completion(&pool);
+    int drained = xr_async_check_ready(&pool, 0);
+    xr_async_pool_destroy(&pool);
+    ASSERT_TRUE(entered);
+    ASSERT_TRUE(detached);
+    ASSERT_EQ_INT(early_destroy, 0);
+    ASSERT_TRUE(completed);
+    ASSERT_EQ_INT(drained, 1);
+    ASSERT_EQ_INT(atomic_load(&probe.invoked), 1);
+    ASSERT_EQ_INT(atomic_load(&probe.destroyed), 1);
+}
+
+TEST(async_late_completion_preserves_new_wait) {
+    XrRuntime runtime = {0};
+    XrAsyncPool pool;
+    XrCoroutine coro = {0};
+    AsyncProbe old_probe = {0};
+    AsyncProbe new_probe = {0};
+    atomic_store(&old_probe.release, true);
+    xr_async_pool_init(&pool, &runtime, 1, 2);
+    XrAsyncJob *first = xr_async_job_create(&coro, 0, probe_invoke, &old_probe);
+    XrAsyncJob *second = xr_async_job_create(&coro, 0, probe_invoke, &new_probe);
+    ASSERT_NOT_NULL(first);
+    ASSERT_NOT_NULL(second);
+    first->destroy_data = probe_destroy;
+    second->destroy_data = probe_destroy;
+    ASSERT_TRUE(xr_async_submit(&pool, first));
+    xr_async_detach_coro(&coro);
+    ASSERT_TRUE(xr_async_submit(&pool, second));
+    ASSERT_TRUE(xr_async_pool_start_threads(&pool));
+    bool entered = wait_for_probe(&new_probe);
+    int old_drained = xr_async_check_ready(&pool, 0);
+    bool new_link_preserved = coro.ext->async_job == second;
+    atomic_store_explicit(&new_probe.release, true, memory_order_release);
+    bool completed = wait_for_completion(&pool);
+    int new_drained = xr_async_check_ready(&pool, 0);
+    xr_async_pool_destroy(&pool);
+    ASSERT_TRUE(entered);
+    ASSERT_EQ_INT(old_drained, 1);
+    ASSERT_TRUE(new_link_preserved);
+    ASSERT_TRUE(completed);
+    ASSERT_EQ_INT(new_drained, 1);
+    ASSERT_TRUE(coro.ext->async_job == NULL);
+    ASSERT_TRUE(atomic_load(&coro.ext->async_pool) == NULL);
+    ASSERT_EQ_INT(atomic_load(&old_probe.destroyed), 1);
+    ASSERT_EQ_INT(atomic_load(&new_probe.destroyed), 1);
+    xr_coro_free(&coro);
+}
+
+typedef struct AsyncDrain {
+    XrAsyncPool *pool;
+    atomic_bool stop;
+    int drained;
+} AsyncDrain;
+
+static void *drain_completions(void *data) {
+    AsyncDrain *drain = data;
+    while (!atomic_load_explicit(&drain->stop, memory_order_acquire)) {
+        drain->drained += xr_async_check_ready(drain->pool, 0);
+        xr_thread_yield();
+    }
+    drain->drained += xr_async_check_ready(drain->pool, 0);
+    return NULL;
+}
+
+TEST(async_completion_races_coroutine_destruction) {
+    XrRuntime runtime = {0};
+    XrAsyncPool pool;
+    AsyncProbe probe = {0};
+    AsyncDrain drain = {0};
+    xr_thread_t consumer;
+    atomic_store(&probe.release, true);
+    xr_async_pool_init(&pool, &runtime, 4, 512);
+    drain.pool = &pool;
+    ASSERT_TRUE(xr_async_pool_start_threads(&pool));
+    ASSERT_TRUE(xr_thread_create(&consumer, drain_completions, &drain));
+    int submitted = 0;
+    for (int i = 0; i < 256; i++) {
+        XrCoroutine *coro = xr_calloc(1, sizeof(*coro));
+        if (!coro)
+            break;
+        coro->gc_flags = XR_CORO_GC_LIGHTWEIGHT;
+        XrAsyncJob *job = xr_async_job_create(coro, 0, probe_invoke, &probe);
+        if (!job) {
+            xr_coro_destroy(coro);
+            break;
+        }
+        job->destroy_data = probe_destroy;
+        bool accepted = xr_async_submit(&pool, job);
+        if (!accepted)
+            xr_async_job_free(job);
+        xr_coro_destroy(coro);
+        if (!accepted)
+            break;
+        submitted++;
+    }
+    uint64_t deadline = xr_time_monotonic_ms() + 5000;
+    while (atomic_load(&probe.destroyed) < submitted && xr_time_monotonic_ms() < deadline)
+        xr_thread_yield();
+    atomic_store_explicit(&drain.stop, true, memory_order_release);
+    int joined = xr_thread_join(consumer, NULL);
+    xr_async_pool_destroy(&pool);
+    ASSERT_EQ_INT(joined, 0);
+    ASSERT_EQ_INT(submitted, 256);
+    ASSERT_EQ_INT(drain.drained, 256);
+    ASSERT_EQ_INT(atomic_load(&probe.invoked), 256);
+    ASSERT_EQ_INT(atomic_load(&probe.destroyed), 256);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Async Pool");
 RUN_TEST(async_submit_rejects_when_queue_full);
 RUN_TEST(async_submit_rejects_after_shutdown);
+RUN_TEST(async_coroutine_free_detaches_pending_job);
+RUN_TEST(async_repeated_submit_preserves_active_wait);
+RUN_TEST(async_inflight_job_outlives_destroyed_coroutine);
+RUN_TEST(async_late_completion_preserves_new_wait);
+RUN_TEST(async_completion_races_coroutine_destruction);
 
 TEST_MAIN_END()

@@ -116,14 +116,22 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
     if (!scalar_identity) {
         if (xr_aot_rep_adapter_value_is_exact(target_plan, func, value, error, sizeof(error)))
             return true;
-        if (getenv("XRAY_AOT_REFINE_TRACE"))
+        if (getenv("XRAY_AOT_REFINE_TRACE")) {
+            const XiValue *source = value->nargs == 1u && value->args ? value->args[0] : NULL;
             fprintf(stderr,
                     "[aot-prepare] value identity failure function=%s value=%u op=%u:%s "
-                    "backend-origin=%u semantic=%s adapter=%s\n",
+                    "backend-origin=%u source=%u:%s source-kind=%u source-native=%u "
+                    "source-rep=%u semantic=%s adapter=%s\n",
                     func->name ? func->name : "<anonymous>", value->id, value->op,
                     xi_generated_op_name(value->op), value->backend_origin,
+                    source ? source->id : UINT32_MAX,
+                    source ? xi_generated_op_name(source->op) : "none",
+                    source && source->type ? (unsigned) source->type->kind : UINT32_MAX,
+                    source && source->type ? (unsigned) source->type->scalar_rep : UINT32_MAX,
+                    source ? source->rep : UINT32_MAX,
                     scalar_error[0] ? scalar_error : "unavailable",
                     error[0] ? error : "unavailable");
+        }
         bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
         return false;
     }
@@ -176,7 +184,7 @@ static const char *prepare_exact_raw_pointer_c_type(const XaotBundle *bundle, co
         view.target_register_kind != XR_MACHINE_REP_RAW_PTR ||
         view.target_memory_kind != XR_MACHINE_REP_RAW_PTR || view.rep != XR_C_VALUE_REP_RAW_PTR ||
         !view.c_type) {
-        if (getenv("XRAY_AOT_REFINE_TRACE"))
+        if (getenv("XRAY_AOT_REFINE_TRACE")) {
             fprintf(stderr,
                     "[aot-prepare] raw pointer projection failure function=%s value=%u "
                     "register=%u/%u memory=%u/%u kinds=%u/%u rep=%u reason=%s\n",
@@ -187,6 +195,7 @@ static const char *prepare_exact_raw_pointer_c_type(const XaotBundle *bundle, co
                     binding ? binding->memory_rep : XR_SEMANTIC_INDEX_NONE, view.target_memory_rep,
                     view.target_register_kind, view.target_memory_kind, view.rep,
                     error[0] ? error : "unavailable");
+        }
         return NULL;
     }
     return view.c_type;
@@ -306,6 +315,8 @@ static bool prepare_target_machine_value_rep(const XaotBundle *bundle, const XiF
         return false;
     if (machine->kind == XR_MACHINE_REP_ENUM_ORDINAL)
         out->flags = XAOT_VALUE_FLAG_ENUM;
+    else if (machine->kind == XR_MACHINE_REP_VIEW)
+        out->flags = XAOT_VALUE_FLAG_SLICE;
     return true;
 }
 
@@ -3267,8 +3278,8 @@ done:
     return true;
 }
 
-/* Prove every index access in the function and record the result —proven
- * ones with evidence, unproven ones with a reason —in the bounds plan.
+/* Prove every index access in the function and record the result 鈥攑roven
+ * ones with evidence, unproven ones with a reason 鈥攊n the bounds plan.
  * Emission consults only the plan (no pattern matching in Cgen), so the
  * proof, the verifier and the dump stay in lockstep, and the unproven rows
  * expose the remaining bounds-check budget for audit. */
@@ -3327,7 +3338,7 @@ static bool prepare_func_span_access_plans(XaotBundle *bundle, const XiFunc *fun
  * be bounds-proven (checked slow paths read ->data directly, which would
  * break restrict), the only permitted method call is the proven fill push
  * (emitted as a raw cache store), and anything that could create a second
- * pointer —calls, stores, captures, phi participation —is rejected.
+ * pointer 鈥攃alls, stores, captures, phi participation 鈥攊s rejected.
  * Returning the array is fine: the restrict scope ends with the function. */
 static bool prepare_alias_array_uses_are_cache_local(const XaotBundle *bundle, const XiFunc *func,
                                                      const XiValue *target,
@@ -4377,6 +4388,13 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             if ((vp->rep.kind == XAOT_VALUE_SCALAR || vp->rep.kind == XAOT_VALUE_VOID) &&
                 !enum_ordinal && !rep_adapter) {
+                if (getenv("XRAY_AOT_REFINE_TRACE"))
+                    fprintf(stderr,
+                            "[aot-prepare] unbound scalar function=%s value=%u op=%u:%s "
+                            "backend-origin=%u rep-kind=%u\n",
+                            func->name ? func->name : "<anonymous>", vp->value->id, vp->value->op,
+                            xi_generated_op_name(vp->value->op), vp->value->backend_origin,
+                            vp->rep.kind);
                 bundle->error_msg = "AOT prepare refused an unbound legacy scalar value row";
                 return false;
             }
@@ -4462,6 +4480,13 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             if ((vp->rep.kind == XAOT_VALUE_SCALAR || vp->rep.kind == XAOT_VALUE_VOID) &&
                 !enum_ordinal && !rep_adapter) {
+                if (getenv("XRAY_AOT_REFINE_TRACE"))
+                    fprintf(stderr,
+                            "[aot-prepare] unbound scalar function=%s value=%u op=%u:%s "
+                            "backend-origin=%u rep-kind=%u\n",
+                            func->name ? func->name : "<anonymous>", vp->value->id, vp->value->op,
+                            xi_generated_op_name(vp->value->op), vp->value->backend_origin,
+                            vp->rep.kind);
                 bundle->error_msg = "AOT prepare refused an unbound legacy scalar value row";
                 return false;
             }
@@ -4834,29 +4859,6 @@ static bool prepare_func_fixed_bytes_plans(XaotBundle *bundle, const XiFunc *fun
     return true;
 }
 
-static bool prepare_apply_return_abi_value_plans(XaotBundle *bundle,
-                                                 const XaotFuncPlan *func_plan) {
-    XaotValueRep ret_rep;
-
-    if (!bundle || !func_plan || !func_plan->func)
-        return false;
-    ret_rep = xaot_abi_slot_value_rep(&func_plan->abi.ret);
-    if (ret_rep.kind != XAOT_VALUE_AGGREGATE)
-        return true;
-    for (uint32_t bi = 0; bi < func_plan->func->nblocks; bi++) {
-        XiBlock *blk = func_plan->func->blocks[bi];
-        if (!blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
-            continue;
-        XaotValuePlan *vp = xaot_bundle_find_value_plan_mut(bundle, blk->control);
-        if (!vp) {
-            bundle->error_msg = "AOT aggregate return control has no value plan";
-            return false;
-        }
-        prepare_value_plan_set_rep(vp, xaot_value_rep_borrow(ret_rep));
-    }
-    return true;
-}
-
 static bool value_rep_is_struct_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_STRUCT) != 0;
 }
@@ -5170,17 +5172,18 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
     if (!prepare_effective_value_rep(bundle, caller_plan->func, call, &call_rep))
         return false;
     ret_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
+    if (value_reps_equal(ret_rep, call_rep))
+        return true;
     if (ret_rep.kind == XAOT_VALUE_AGGREGATE) {
         call_plan = xaot_bundle_find_value_plan_mut(bundle, call);
         if (!call_plan) {
             bundle->error_msg = "AOT aggregate direct call result has no legacy value plan";
             return false;
         }
+        ret_rep.type = call->type;
         prepare_value_plan_set_rep(call_plan, xaot_value_rep_borrow(ret_rep));
         return true;
     }
-    if (value_reps_equal(ret_rep, call_rep))
-        return true;
 
     step = xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET,
                                          caller_plan->func, call, NULL, XAOT_BOUNDARY_DIRECT_CALL);
@@ -5218,11 +5221,34 @@ static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFun
             ret_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
             if (ret_rep.kind != XAOT_VALUE_AGGREGATE)
                 continue;
+            const XrTargetValueRepRecord *binding = NULL;
+            if (!prepare_target_value_binding(bundle, func, call, &binding))
+                return false;
+            if (binding) {
+                XaotValueRep call_rep;
+                if (!prepare_effective_value_rep(bundle, func, call, &call_rep))
+                    return false;
+                bool same_rep = value_reps_equal(call_rep, ret_rep);
+                xaot_value_rep_dispose(&call_rep);
+                if (!same_rep) {
+                    bundle->error_msg = "AOT frozen call result disagrees with callee aggregate ABI";
+                    return false;
+                }
+                /* A frozen carrier is already complete. It must not acquire a
+                 * second mutable value plan merely to repeat the same ABI. */
+                continue;
+            }
             call_plan = xaot_bundle_find_value_plan_mut(bundle, call);
             if (!call_plan) {
                 bundle->error_msg = "AOT aggregate direct call result has no value plan";
                 return false;
             }
+            if (value_reps_equal(call_plan->rep, ret_rep))
+                continue;
+            /* The callee supplies physical storage, while the result keeps
+             * the
+             * caller's frozen semantic type and ownership identity. */
+            ret_rep.type = call->type;
             prepare_value_plan_set_rep(call_plan, xaot_value_rep_borrow(ret_rep));
         }
     }
@@ -5254,8 +5280,16 @@ static bool prepare_seed_source_export_call_place_reps(XaotBundle *bundle, XiFun
         !xr_aot_scalar_semantic_value_id(caller_target, func, call, &semantic_function,
                                          &semantic_value, NULL, 0))
         return true;
+    uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_target_plan_find_function(caller_target, caller_semantic, semantic_function,
+                                      &target_function)) {
+        bundle->error_msg = "AOT source-export caller has no exact TargetPlan function";
+        return false;
+    }
     calls = xr_target_plan_calls(caller_target, &call_count);
     for (uint32_t i = 0; i < call_count; i++) {
+        if (calls[i].caller_function != target_function)
+            continue;
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(caller_semantic, calls[i].semantic_operation);
         if (!operation || operation->function != semantic_function ||
@@ -5577,6 +5611,16 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
         }
     } else {
         if (call_arg_count > target_plan->abi.nparams) {
+            if (getenv("XRAY_AOT_REFINE_TRACE"))
+                fprintf(stderr,
+                        "[aot-prepare] direct call ABI mismatch caller=%s value=%u op=%s "
+                        "line=%u target=%s nargs=%u first=%u params=%u abi-params=%u "
+                        "abi-authority=%u\n",
+                        caller_plan->func->name ? caller_plan->func->name : "<anonymous>", call->id,
+                        xi_generated_op_name(call->op), call->line,
+                        target->name ? target->name : "<anonymous>", (unsigned) call->nargs,
+                        (unsigned) first_arg, (unsigned) target->nparams,
+                        (unsigned) target_plan->abi.nparams, (unsigned) target_plan->abi_authority);
             bundle->error_msg = "AOT direct call has more arguments than target ABI";
             return false;
         }
@@ -5735,7 +5779,7 @@ static bool func_attr_body_summary_disqualifies(const XaotBundle *bundle, const 
  * __attribute__((const)) (touches no memory) or ((pure)) (reads only).
  * Evidence is the body summary plus per-value effect flags; the verifier
  * re-checks both.
- * Disqualification is not an error —the function simply gets no plan. */
+ * Disqualification is not an error 鈥攖he function simply gets no plan. */
 static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
                                    const XgBodySummary *body) {
     bool reads_mem;
@@ -5793,12 +5837,19 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
                                    uint16_t depth, bool is_module_init,
                                    const XrCProgramDirectI64EmissionBinding *program_scope) {
     XaotFuncPlan *plan;
-    const XgBodySummary *body;
     uint16_t ci;
     XrCAbiBoundaryKind direct_i64_boundary = XR_C_ABI_BOUNDARY_INVALID;
 
     if (!bundle || !func)
         return false;
+    const XrSemanticFunctionRecord *function_contract =
+        xr_semantic_plan_function(func->semantic_plan, func->semantic_plan_function_index);
+    bool external_entry = func->export_plan || func->link_plan || func->entry_plan;
+    if ((function_contract && function_contract->is_external_entry != (uint8_t) external_entry) ||
+        (!function_contract && external_entry)) {
+        bundle->error_msg = "AOT external entry differs from its frozen function contract";
+        return false;
+    }
     if (program_scope && !xr_c_program_direct_i64_function_binding(program_scope, func)) {
         for (ci = 0; ci < func->nchildren; ci++) {
             if (!prepare_func_recursive(bundle, func->children[ci], module_index,
@@ -5863,15 +5914,29 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         bundle->stats.functions_tagged_abi++;
     }
 
-    body = prepare_find_body_summary_for_func(bundle, func, module_index, is_module_init);
+    for (ci = 0; ci < func->nchildren; ci++) {
+        if (!prepare_func_recursive(bundle, func->children[ci], module_index,
+                                    (uint16_t) (depth + 1), false, program_scope))
+            return false;
+    }
+    return true;
+}
+
+/* Resolve whole-program callable roots before projecting executable values.
+ * Every function identity and ABI is already installed, including later
+ * modules, so physical planning never determines the entry closure. */
+static bool prepare_func_body_plans(XaotBundle *bundle, const XaotFuncPlan *plan) {
+    XiFunc *func = plan->func;
+    uint32_t module_index = plan->module_index;
+    bool is_module_init = bundle->modules[module_index]->init == func;
+    const XgBodySummary *body =
+        prepare_find_body_summary_for_func(bundle, func, module_index, is_module_init);
 
     if (!prepare_func_values(bundle, func))
         return false;
     if (!prepare_func_fixed_bytes_plans(bundle, func))
         return false;
     if (!prepare_func_enum_domain_plan(bundle, func))
-        return false;
-    if (!prepare_apply_return_abi_value_plans(bundle, plan))
         return false;
     if (!prepare_func_array_storage_plans(bundle, func))
         return false;
@@ -5896,13 +5961,6 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     if (!is_module_init && !prepare_func_attr_plan(bundle, func, body))
         return false;
 
-    for (ci = 0; ci < func->nchildren; ci++) {
-        if (!prepare_func_recursive(bundle, func->children[ci], module_index,
-                                    (uint16_t) (depth + 1), false, program_scope))
-            return false;
-    }
-    if (!prepare_apply_aggregate_value_plans(bundle, func))
-        return false;
     return true;
 }
 
@@ -6067,6 +6125,14 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
     }
     bundle->has_entry_plan = true;
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!bundle->func_plans[mi].reachable)
+            continue;
+        if (!prepare_func_body_plans(bundle, &bundle->func_plans[mi]))
+            return false;
+    }
+    for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!bundle->func_plans[mi].reachable)
+            continue;
         if (!prepare_func_extern_decls(bundle, bundle->func_plans[mi].func))
             return false;
     }
@@ -6081,6 +6147,8 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
      * then rerun the local aggregate propagation so copies and method receiver
      * arguments inherit the exact target ABI instead of remaining tagged. */
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!bundle->func_plans[mi].reachable)
+            continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_seed_direct_call_aggregate_returns(bundle, func))
             return false;
@@ -6088,22 +6156,30 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
             return false;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!bundle->func_plans[mi].reachable)
+            continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_apply_aggregate_value_plans(bundle, func))
             return false;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!bundle->func_plans[mi].reachable)
+            continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_seed_place_load_aggregate_reps(bundle, func))
             return false;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!bundle->func_plans[mi].reachable)
+            continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_apply_aggregate_value_plans(bundle, func))
             return false;
     }
     prepare_target_vector_value_plans(bundle);
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!bundle->func_plans[mi].reachable)
+            continue;
         if (!prepare_func_boundary_steps(bundle, &bundle->func_plans[mi]))
             return false;
     }

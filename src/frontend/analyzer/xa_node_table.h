@@ -69,24 +69,20 @@ typedef struct XaNodeCallErrorEffectEntry {
     XaCallErrorEffectFact fact;
 } XaNodeCallErrorEffectEntry;
 
-/* Canonical body-effect conclusion for one anonymous function expression.
- * This is deliberately
- * distinct from XaCallErrorEffectFact: it describes the
- * callable body itself, not the
- * flow-sensitive result of invoking a value at
- * one callsite.  The effect id names the complete
- * analyzer effect product. */
-typedef struct XaFunctionExprEffectFact {
+/* Canonical effect conclusion for a symbol-free body: an anonymous function
+ * expression or a module initializer. The effect id names the analyzer product;
+ * call-site effects remain separate flow-sensitive facts. */
+typedef struct XaBodyEffectFact {
     XaEffectId effect_id;
     XrFnThrowEffect throw_effect;
     XaEffectCompleteness completeness;
     XaUnknownReasonSet unknown_reasons;
-} XaFunctionExprEffectFact;
+} XaBodyEffectFact;
 
-typedef struct XaNodeFunctionExprEffectEntry {
+typedef struct XaNodeBodyEffectEntry {
     uint32_t node_id;
-    XaFunctionExprEffectFact fact;
-} XaNodeFunctionExprEffectEntry;
+    XaBodyEffectFact fact;
+} XaNodeBodyEffectEntry;
 
 /* Pointer-free identity for one exact function-value target.  Both ids are
  * semantic identities:
@@ -220,14 +216,14 @@ XR_FUNC bool xa_node_table_snapshot_call_error_effects(const XaNodeTable *t,
                                                        uint32_t *out_count);
 XR_FUNC void xa_node_table_clear_call_error_effect(XaNodeTable *t, const struct AstNode *node);
 
-XR_FUNC bool xa_node_table_set_function_expr_effect(XaNodeTable *t, const struct AstNode *node,
-                                                    const XaFunctionExprEffectFact *fact);
-XR_FUNC bool xa_node_table_get_function_expr_effect(const XaNodeTable *t,
-                                                    const struct AstNode *node,
-                                                    XaFunctionExprEffectFact *out_fact);
-XR_FUNC bool xa_node_table_snapshot_function_expr_effects(
-    const XaNodeTable *t, XaNodeFunctionExprEffectEntry **out_entries, uint32_t *out_count);
-XR_FUNC void xa_node_table_clear_function_expr_effect(XaNodeTable *t, const struct AstNode *node);
+XR_FUNC bool xa_node_table_set_body_effect(XaNodeTable *t, const struct AstNode *node,
+                                           const XaBodyEffectFact *fact);
+XR_FUNC bool xa_node_table_get_body_effect(const XaNodeTable *t, const struct AstNode *node,
+                                           XaBodyEffectFact *out_fact);
+XR_FUNC bool xa_node_table_snapshot_body_effects(const XaNodeTable *t,
+                                                 XaNodeBodyEffectEntry **out_entries,
+                                                 uint32_t *out_count);
+XR_FUNC void xa_node_table_clear_body_effect(XaNodeTable *t, const struct AstNode *node);
 
 XR_FUNC bool xa_node_table_set_target_query(XaNodeTable *t, const struct AstNode *node,
                                             const XaTargetQueryFact *fact);

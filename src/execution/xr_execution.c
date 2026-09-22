@@ -26,6 +26,7 @@ typedef struct XrBoundOperation {
         XrProviderBoolI64UnaryEntry bool_i64_unary;
         XrProviderOptionalI64PairNullaryEntry optional_i64_pair_nullary;
         XrProviderOutputWriteEntry output_write;
+        XrProviderTypedEntry typed;
     } entry;
     void *context;
 } XrBoundOperation;
@@ -41,6 +42,7 @@ typedef struct XrBoundProvider {
 typedef struct XrExecutionLeaseTicket {
     uint64_t id;
     uint32_t in_flight_calls;
+    bool resource_pin;
 } XrExecutionLeaseTicket;
 
 typedef struct XrExecutionRuntimeState {
@@ -48,6 +50,13 @@ typedef struct XrExecutionRuntimeState {
     void *value;
     void (*destroy)(void *);
 } XrExecutionRuntimeState;
+
+struct XrExecutionResource {
+    XrExecutionResourcePin pin;
+    XrStableId resource_id;
+    void *payload;
+    void (*destroy)(void *);
+};
 
 struct XrInstance {
     XrValidatedProgram *program;
@@ -62,6 +71,7 @@ struct XrInstance {
     XrExecutionLeaseTicket *lease_tickets;
     size_t lease_ticket_capacity;
     uint64_t next_lease_ticket;
+    uint64_t resource_pins;
     uint64_t initialization_ticket;
     uint32_t initialized_modules;
     bool initializer_active;
@@ -106,14 +116,20 @@ static void destroy_drained_state(XrInstance *instance, XrExecutionRuntimeState 
     lease_unlock(instance);
 }
 
-static XrExecutionLeaseTicket *find_lease_ticket_locked(XrInstance *instance, uint64_t ticket) {
+static XrExecutionLeaseTicket *find_ticket_locked(XrInstance *instance, uint64_t ticket,
+                                                   bool resource_pin) {
     if (ticket == 0u)
         return NULL;
     for (size_t index = 0; index < instance->lease_ticket_capacity; ++index) {
-        if (instance->lease_tickets[index].id == ticket)
+        if (instance->lease_tickets[index].id == ticket &&
+            instance->lease_tickets[index].resource_pin == resource_pin)
             return &instance->lease_tickets[index];
     }
     return NULL;
+}
+
+static XrExecutionLeaseTicket *find_lease_ticket_locked(XrInstance *instance, uint64_t ticket) {
+    return find_ticket_locked(instance, ticket, false);
 }
 
 static bool lease_ticket_is_active_locked(XrInstance *instance, uint64_t ticket) {
@@ -295,7 +311,8 @@ static XrProviderTrampolineKind program_operation_trampoline_kind(const XrValida
                             candidate = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
                             break;
                         default:
-                            return XR_PROVIDER_TRAMPOLINE_INVALID;
+                            candidate = XR_PROVIDER_TRAMPOLINE_TYPED;
+                            break;
                     }
                 }
                 if (found != XR_PROVIDER_TRAMPOLINE_INVALID && found != candidate)
@@ -340,6 +357,23 @@ static bool provider_operation_uses_output_write_trampoline(
            operation->effect_flags == XR_TARGET_PROVIDER_EFFECT_IO &&
            operation->lifetime_flags == XR_TARGET_PROVIDER_LIFETIME_BORROWS &&
            operation->failure_flags == XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS;
+}
+
+static bool provider_operation_uses_typed_trampoline(const XrTargetProviderOperationContract *operation) {
+    const XrTargetProviderCallAbiContract *abi = operation ? &operation->call_abi : NULL;
+    return abi && abi->schema_version == XR_RUNTIME_ABI_SCHEMA_VERSION &&
+           abi->calling_convention == XR_TARGET_PROVIDER_CALLING_CONVENTION_C &&
+           abi->variadic == 0u && abi->parameter_count == 3u &&
+           abi->result.value_kind == XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER &&
+           abi->result.width == 4u && abi->result.alignment == 4u &&
+           abi->result.ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE && abi->result.flags == 0u &&
+           provider_slot_is_output_pointer(&abi->parameters[0], abi->pointer_width, abi->pointer_alignment,
+                                            XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE) &&
+           provider_slot_is_output_pointer(&abi->parameters[1], abi->pointer_width, abi->pointer_alignment,
+                                            XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE) &&
+           provider_slot_is_output_pointer(&abi->parameters[2], abi->pointer_width, abi->pointer_alignment, 0u) &&
+           operation->failure_flags == XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS &&
+           operation->lifetime_flags == XR_TARGET_PROVIDER_LIFETIME_BORROWS;
 }
 
 static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
@@ -403,9 +437,15 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
                 expected_trampoline = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY;
             else if (provider_operation_uses_output_write_trampoline(expected_operation))
                 expected_trampoline = XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE;
+            else if (provider_operation_uses_typed_trampoline(expected_operation))
+                expected_trampoline = XR_PROVIDER_TRAMPOLINE_TYPED;
+            XrProviderTrampolineKind program_trampoline =
+                program_operation_trampoline_kind(input->program, provider, operation);
             if (expected_trampoline == XR_PROVIDER_TRAMPOLINE_INVALID ||
-                expected_trampoline !=
-                    program_operation_trampoline_kind(input->program, provider, operation))
+                (expected_trampoline == XR_PROVIDER_TRAMPOLINE_TYPED
+                     ? program_trampoline == XR_PROVIDER_TRAMPOLINE_INVALID ||
+                       program_trampoline == XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE
+                     : expected_trampoline != program_trampoline))
                 return reject(diagnostic, XR_EXECUTION_DIAGNOSTIC_PROVIDER_ABI, provider,
                               operation, expected->contract_id, expected_operation->stable_id,
                               XR_EXECUTION_PROVIDER_REJECTED);
@@ -420,6 +460,8 @@ static XrExecutionStatus validate_bindings(const XrExecutionBindingInput *input,
                      ? actual_operation->entry.bool_i64_unary == NULL
                  : expected_trampoline == XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY
                      ? actual_operation->entry.optional_i64_pair_nullary == NULL
+                 : expected_trampoline == XR_PROVIDER_TRAMPOLINE_TYPED
+                     ? actual_operation->entry.typed == NULL
                      : actual_operation->entry.output_write == NULL))
                 return reject(diagnostic, XR_EXECUTION_DIAGNOSTIC_PROVIDER_OPERATION,
                               provider, operation, expected->contract_id,
@@ -483,6 +525,8 @@ static bool copy_bindings(XrInstance *instance, const XrProviderBinding *binding
                      XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY)
                 destination->operations[operation].entry.optional_i64_pair_nullary =
                     source->operations[operation].entry.optional_i64_pair_nullary;
+            else if (source->operations[operation].trampoline_kind == XR_PROVIDER_TRAMPOLINE_TYPED)
+                destination->operations[operation].entry.typed = source->operations[operation].entry.typed;
             else
                 destination->operations[operation].entry.output_write =
                     source->operations[operation].entry.output_write;
@@ -560,15 +604,9 @@ XrExecutionStatus xr_execution_instance_create_successor(const XrInstance *retir
     return xr_execution_instance_create(&input, instance_out, diagnostic_out);
 }
 
-bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease_out) {
-    if (!instance || !lease_out || lease_out->instance || lease_out->ticket != 0u)
-        return false;
-    lease_lock(instance);
-    if (atomic_load_explicit(&instance->state, memory_order_relaxed) != XR_INSTANCE_ACTIVE ||
-        instance->next_lease_ticket == 0u) {
-        lease_unlock(instance);
-        return false;
-    }
+static XrExecutionLeaseTicket *allocate_ticket_locked(XrInstance *instance, bool resource_pin) {
+    if (instance->next_lease_ticket == 0u)
+        return NULL;
     size_t slot = 0u;
     while (slot < instance->lease_ticket_capacity && instance->lease_tickets[slot].id != 0u)
         ++slot;
@@ -576,14 +614,12 @@ bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease
         size_t old_capacity = instance->lease_ticket_capacity;
         size_t new_capacity = old_capacity < 8u ? 8u : old_capacity * 2u;
         if (new_capacity < old_capacity || new_capacity > SIZE_MAX / sizeof(XrExecutionLeaseTicket)) {
-            lease_unlock(instance);
-            return false;
+            return NULL;
         }
         XrExecutionLeaseTicket *grown =
             xr_realloc(instance->lease_tickets, new_capacity * sizeof(*grown));
         if (!grown) {
-            lease_unlock(instance);
-            return false;
+            return NULL;
         }
         memset(grown + old_capacity, 0,
                (new_capacity - old_capacity) * sizeof(*grown));
@@ -595,12 +631,132 @@ bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease
     instance->next_lease_ticket = ticket == UINT64_MAX ? 0u : ticket + 1u;
     instance->lease_tickets[slot].id = ticket;
     instance->lease_tickets[slot].in_flight_calls = 0u;
+    instance->lease_tickets[slot].resource_pin = resource_pin;
+    return &instance->lease_tickets[slot];
+}
+
+XrExecutionStatus xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease_out) {
+    if (!instance || !lease_out || lease_out->instance || lease_out->ticket != 0u)
+        return XR_EXECUTION_INVALID_INPUT;
+    lease_lock(instance);
+    if (atomic_load_explicit(&instance->state, memory_order_relaxed) != XR_INSTANCE_ACTIVE ||
+        instance->next_lease_ticket == 0u) {
+        lease_unlock(instance);
+        return XR_EXECUTION_GENERATION_REJECTED;
+    }
+    XrExecutionLeaseTicket *ticket = allocate_ticket_locked(instance, false);
+    if (!ticket) {
+        lease_unlock(instance);
+        return XR_EXECUTION_OUT_OF_MEMORY;
+    }
     atomic_fetch_add_explicit(&instance->leases, 1u, memory_order_relaxed);
     lease_out->instance = instance;
-    lease_out->ticket = ticket;
+    lease_out->ticket = ticket->id;
+    lease_unlock(instance);
+    return XR_EXECUTION_OK;
+}
+
+static XrExecutionStatus resource_pin_acquire(const XrExecutionLease *lease,
+                                              XrExecutionResourcePin *pin_out) {
+    if (!lease || !lease->instance || !pin_out || pin_out->instance || pin_out->ticket != 0u)
+        return XR_EXECUTION_INVALID_INPUT;
+    XrInstance *instance = lease->instance;
+    lease_lock(instance);
+    if (!find_lease_ticket_locked(instance, lease->ticket) || instance->resource_pins == UINT64_MAX) {
+        lease_unlock(instance);
+        return XR_EXECUTION_GENERATION_REJECTED;
+    }
+    XrExecutionLeaseTicket *ticket = allocate_ticket_locked(instance, true);
+    if (!ticket) {
+        lease_unlock(instance);
+        return XR_EXECUTION_OUT_OF_MEMORY;
+    }
+    ++instance->resource_pins;
+    pin_out->instance = instance;
+    pin_out->ticket = ticket->id;
+    lease_unlock(instance);
+    return XR_EXECUTION_OK;
+}
+
+bool xr_execution_resource_pin_acquire(const XrExecutionLease *lease,
+                                       XrExecutionResourcePin *pin_out) {
+    return resource_pin_acquire(lease, pin_out) == XR_EXECUTION_OK;
+}
+
+bool xr_execution_resource_pin_release(XrExecutionResourcePin *pin) {
+    if (!pin || !pin->instance || pin->ticket == 0u)
+        return false;
+    XrInstance *instance = pin->instance;
+    lease_lock(instance);
+    XrExecutionLeaseTicket *ticket = find_ticket_locked(instance, pin->ticket, true);
+    if (!ticket) {
+        lease_unlock(instance);
+        return false;
+    }
+    XR_CHECK(instance->resource_pins != 0u, "resource pin count lost its ticket");
+    ticket->id = 0u;
+    --instance->resource_pins;
+    pin->instance = NULL;
+    pin->ticket = 0u;
     lease_unlock(instance);
     return true;
 }
+
+XrExecutionStatus xr_execution_resource_adopt(
+    const XrExecutionLease *lease, uint16_t type_id, XrStableId resource_id,
+    void *payload, void (*destroy)(void *), XrExecutionResource **resource_out) {
+    if (!resource_out || *resource_out || !payload || !destroy)
+        return XR_EXECUTION_INVALID_INPUT;
+    XrExecutionResourcePin pin = {0};
+    XrExecutionStatus status = resource_pin_acquire(lease, &pin);
+    if (status != XR_EXECUTION_OK)
+        return status;
+    /* The pin keeps the immutable Program alive even if another holder releases
+     * a copied lease after acquisition. It does not extend a language borrow. */
+    const XrValidatedType *type = xr_validated_program_type(pin.instance->program, type_id);
+    if (!type || type->kind != XR_CORE_IR_TYPE_PROVIDER_RESOURCE ||
+        !stable_id_equal(type->resource_id, resource_id)) {
+        XR_CHECK(xr_execution_resource_pin_release(&pin), "resource admission lost its pin");
+        return XR_EXECUTION_INVALID_INPUT;
+    }
+    XrExecutionResource *resource = xr_calloc(1u, sizeof(*resource));
+    if (!resource) {
+        XR_CHECK(xr_execution_resource_pin_release(&pin), "resource allocation lost its pin");
+        return XR_EXECUTION_OUT_OF_MEMORY;
+    }
+    resource->pin = pin;
+    resource->resource_id = resource_id;
+    resource->payload = payload;
+    resource->destroy = destroy;
+    *resource_out = resource;
+    return XR_EXECUTION_OK;
+}
+
+bool xr_execution_resource_borrow(const XrExecutionLease *lease,
+                                   const XrExecutionResource *resource,
+                                   XrStableId resource_id, void **payload_out) {
+    if (!lease || !resource || !payload_out || !resource->payload ||
+        lease->instance != resource->pin.instance ||
+        !stable_id_equal(resource->resource_id, resource_id) ||
+        !xr_execution_lease_is_valid(lease))
+        return false;
+    *payload_out = resource->payload;
+    return true;
+}
+
+void xr_execution_resource_free(XrExecutionResource **resource) {
+    if (!resource || !*resource)
+        return;
+    XrExecutionResource *owned = *resource;
+    *resource = NULL;
+    void *payload = owned->payload;
+    owned->payload = NULL;
+    owned->destroy(payload);
+    XR_CHECK(xr_execution_resource_pin_release(&owned->pin), "resource finalizer lost its pin");
+    xr_free(owned);
+}
+
+#include "xr_execution_provider_typed.inc.c"
 
 bool xr_execution_lease_release(XrExecutionLease *lease) {
     if (!lease || !lease->instance || lease->ticket == 0u)
@@ -1071,7 +1227,7 @@ XrExecutionStatus xr_execution_instance_retire(XrInstance *instance,
                       (XrStableId) {{0}}, (XrStableId) {{0}}, XR_EXECUTION_INVALID_INPUT);
     lease_lock(instance);
     if (atomic_load_explicit(&instance->leases, memory_order_relaxed) != 0u ||
-        instance->runtime_state.value || instance->state_cleanup_active) {
+        instance->resource_pins != 0u || instance->runtime_state.value || instance->state_cleanup_active) {
         lease_unlock(instance);
         return reject(diagnostic_out, XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY, 0, 0,
                       (XrStableId) {{0}}, (XrStableId) {{0}}, XR_EXECUTION_GENERATION_REJECTED);

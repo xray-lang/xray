@@ -353,7 +353,7 @@ def validate_source_native_targets(cmake: str) -> list[str]:
             "test_xi_pipeline",
             "--source-aot-c ${XR_PROGRAM_SOURCE_AOT_GENERATED_C}",
             "test_xr_program_source_aot_native",
-            "477",
+            "478",
         ),
         (
             "source imported callable",
@@ -399,6 +399,10 @@ def validate_qualification_cmake(root: Path) -> list[str]:
     gaps: list[str] = []
     top_level = read(root, "CMakeLists.txt")
     unit = read(root, "tests/unit/CMakeLists.txt")
+    dependencies = cmake_invocations(top_level, "add_dependencies")
+    if not any(set(("run-xr-program-wave4-differential", *EXPECTED_DIFFERENTIAL_TESTS)).issubset(
+            invocation.split()) for invocation in dependencies):
+        gaps.append("Wave 4 runner does not build every observed executable")
     if not cmake_has_invocation(top_level, "set", (
             "PROGRAMWAVE4EXITCHECK",
             "${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_exit.py",
@@ -417,11 +421,15 @@ def validate_qualification_cmake(root: Path) -> list[str]:
 
     unit_calls = (
         ("add_xray_unit_test", ("test_xi_lower", "ir/test_xi_lower.c")),
-        ("add_xray_unit_test", ("test_xi_pipeline", "ir/test_xi_pipeline.c")),
+        ("add_xray_bootstrap_unit_test", ("test_xi_pipeline", "ir/test_xi_pipeline.c")),
         ("add_xray_unit_test", ("test_xr_program_imported_callable",
                                 "ir/test_xr_program_imported_callable.c")),
-        ("add_xray_unit_test", ("test_xr_program_vm", "vm/test_xr_program_vm.c")),
-        ("add_xray_unit_test", ("test_xr_program_aot", "aot/test_xr_program_aot.c")),
+        ("add_executable", ("test_xr_program_vm", "vm/test_xr_program_vm.c")),
+        ("add_test", ("NAME test_xr_program_vm",
+                      "COMMAND $<TARGET_FILE:test_xr_program_vm>")),
+        ("add_executable", ("test_xr_program_aot", "aot/test_xr_program_aot.c")),
+        ("add_test", ("NAME test_xr_program_aot",
+                      "COMMAND $<TARGET_FILE:test_xr_program_aot>")),
         ("add_test", ("NAME test_xr_program_verify",
                       "COMMAND $<TARGET_FILE:test_xr_program_verify>")),
         ("add_xr_program_aot_native_case", ("existential existential 42",)),
@@ -442,11 +450,11 @@ def validate_source_execution_paths(root: Path) -> list[str]:
             (
                 "run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();",
                 "validated_program_has_operation(validated, required_source_operations[index])",
-                "xr_reference_evaluate(",
-                "reference.value.as.i64 == 477",
                 "xr_vm_code_execute(",
-                "vm.value.as.i64 == reference.value.as.i64",
-                "xr_backend_ir_translation_validate(",
+                "vm.value.as.i64 == 478",
+                "identity_log.finalizes == identity_log.constructs",
+                "identity_log.reclaims == identity_log.constructs",
+                "xr_backend_ir_binding_verify(",
                 "xr_backend_ir_emit_c(",
                 "fwrite(generated.bytes",
             ),
@@ -458,11 +466,9 @@ def validate_source_execution_paths(root: Path) -> list[str]:
                 "RUN_TEST(test_imported_callable_multi_target_program);",
                 "XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT",
                 "callsite->callable_target_count == 2u",
-                "xr_reference_evaluate(",
-                "reference.value.as.i64, 42",
                 "xr_vm_code_execute(",
-                "vm.value.as.i64, reference.value.as.i64",
-                "xr_backend_ir_translation_validate(",
+                "vm.value.as.i64, 42",
+                "xr_backend_ir_binding_verify(",
                 "xr_backend_ir_emit_c(",
                 "fwrite(generated.bytes",
             ),
@@ -713,7 +719,7 @@ def validate_source_domains(root: Path, data: dict[str, object],
 
 def validate_differential_entry(root: Path, data: dict[str, object],
                                 blockers: list[str]) -> None:
-    entry = data.get("three_channel_differential_entry")
+    entry = data.get("independent_execution_entry")
     require(isinstance(entry, dict) and set(entry) == {
         "entry_script", "command", "channels", "source_native_aot"
     }, "Wave 4 three-channel differential entry is malformed")
@@ -727,9 +733,9 @@ def validate_differential_entry(root: Path, data: dict[str, object],
     channels = entry.get("channels")
     require(isinstance(channels, list) and [row.get("id") for row in channels
                                            if isinstance(row, dict)] == [
-        "source-reference",
+        "source-independent-expectations",
         "source-vm",
-        "source-aot-translation",
+        "source-aot-program-binding",
         "native-aot-executor-fixtures",
     ], "Wave 4 differential channel set drifted")
     for row in channels:
@@ -748,7 +754,7 @@ def validate_differential_entry(root: Path, data: dict[str, object],
         read(root, "tests/unit/CMakeLists.txt")))
     native_gaps.extend(validate_source_execution_paths(root))
     if native_gaps:
-        blockers.append("three-channel source differential: " + "; ".join(native_gaps))
+        blockers.append("independent source execution: " + "; ".join(native_gaps))
 
 
 def validate_freeze_state(root: Path, status: object) -> None:
@@ -776,7 +782,7 @@ def validate_freeze_state(root: Path, status: object) -> None:
 
 def validate(root: Path) -> list[str]:
     data = load(root, "contracts/canonical-program/w7-wave4-exit-gate.json")
-    require(data.get("schema") == "xray-w7-wave4-exit-gate/1",
+    require(data.get("schema") == "xray-w7-wave4-exit-gate/2",
             "Wave 4 exit schema drifted")
     require(data.get("owner_tasks") == [293, 301], "Wave 4 exit owners drifted")
     require(data.get("compatibility") == "none", "Wave 4 regained compatibility")
@@ -872,6 +878,29 @@ def self_test(root: Path) -> None:
         baseline_open = exit_data["status"] == "OPEN_W7_WAVE4"
         require(bool(baseline_blockers) == baseline_open,
                 "Wave 4 exit self-test baseline is not truthful")
+
+        for relative, anchors in (
+            ("tests/unit/ir/test_xi_pipeline.c", (
+                "vm.value.as.i64 == 478",
+                "identity_log.finalizes == identity_log.constructs",
+                "identity_log.reclaims == identity_log.constructs",
+                "xr_backend_ir_emit_c(",
+            )),
+            ("tests/unit/ir/test_xr_program_imported_callable.c", (
+                "vm.value.as.i64, 42",
+                "xr_vm_code_execute(",
+                "xr_backend_ir_emit_c(",
+            )),
+        ):
+            path = target / relative
+            original = path.read_text(encoding="utf-8")
+            for anchor in anchors:
+                require(anchor in original, f"replacement source observation is absent: {anchor}")
+                path.write_text(original.replace(anchor, "REMOVED_OBSERVATION") +
+                                f"\n/* decoy {anchor} */\n", encoding="utf-8")
+                expect_blocker_or_failure(target, len(baseline_blockers),
+                                          f"replacement source observation removal: {anchor}")
+            path.write_text(original, encoding="utf-8")
 
         matrix_path = target / "contracts/canonical-program/operation-capability-matrix.json"
         original_matrix = matrix_path.read_text(encoding="utf-8")
@@ -969,6 +998,14 @@ def self_test(root: Path) -> None:
 
         top_level_path = target / "CMakeLists.txt"
         original_top_level = top_level_path.read_text(encoding="utf-8")
+        for executable in EXPECTED_DIFFERENTIAL_TESTS:
+            needle = f"        {executable}\n"
+            require(needle in original_top_level, f"missing build dependency {executable}")
+            top_level_path.write_text(original_top_level.replace(
+                needle, f"        # {executable}\n", 1), encoding="utf-8")
+            expect_blocker_or_failure(target, len(baseline_blockers),
+                                      f"missing build dependency {executable}")
+        top_level_path.write_text(original_top_level, encoding="utf-8")
         top_level_path.write_text(
             original_top_level.replace(
                 "NAME xr_program_wave4_exit_self_test",

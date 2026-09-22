@@ -18,6 +18,7 @@
 #include "xr_semantic_array_type_shape.h"
 #include "xr_semantic_local_addr_shape.h"
 #include "xr_semantic_native_module_shape.h"
+#include "xr_semantic_native_module_call_shape.h"
 #include "xr_semantic_owner_transfer_shape.h"
 #include "xr_semantic_string_shape.h"
 #include "../../stdlib/xstdlib_metadata.h"
@@ -153,18 +154,9 @@ xr_semantic_native_direct_unique_storage(const char *module, const char *name, s
 
 static inline const XrStdlibNativeClassDefEntry *
 xr_semantic_native_direct_unique_wrapper(const char *module, const char *name, size_t name_length) {
-    const XrStdlibNativeClassDefEntry *match = NULL;
-    for (uint32_t i = 0; module && name && i < XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT; i++) {
-        const XrStdlibNativeClassDefEntry *entry = &xr_stdlib_native_class_def_entries[i];
-        if (!entry->module || strcmp(entry->module, module) != 0 || !entry->source_wrapper ||
-            strlen(entry->source_wrapper) != name_length ||
-            memcmp(entry->source_wrapper, name, name_length) != 0)
-            continue;
-        if (match)
-            return NULL;
-        match = entry;
-    }
-    return match;
+    return module ? xr_stdlib_metadata_unique_source_provider_span(module, strlen(module), name,
+                                                                   name_length)
+                  : NULL;
 }
 
 static inline bool xr_semantic_native_direct_named_type_key_is_exact(
@@ -263,9 +255,9 @@ xr_semantic_native_direct_signature_type_matches(const XrSemanticPlan *plan, uin
     if (spelling_length == 4 && memcmp(spelling, "rune", 4) == 0)
         return type && type->kind == XR_KIND_RUNE && type->builtin_type == XR_TID_NULL &&
                type->flags == 0 && type->child_count == 0 && type->scalar_rep == XR_SCALAR_REP_NONE;
-    if (!result_position && spelling_length == 6 && memcmp(spelling, "string", 6) == 0)
+    if (spelling_length == 6 && memcmp(spelling, "string", 6) == 0)
         return xr_semantic_tagged_string_type_is_exact(type);
-    if (!result_position && spelling_length > 7 && memcmp(spelling, "Array<", 6) == 0 &&
+    if (spelling_length > 7 && memcmp(spelling, "Array<", 6) == 0 &&
         spelling[spelling_length - 1u] == '>') {
         uint32_t child_count = 0;
         const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
@@ -284,21 +276,21 @@ xr_semantic_native_direct_signature_type_matches(const XrSemanticPlan *plan, uin
                                                               spelling_length, type, false) ||
                xr_semantic_native_direct_storage_type_matches(module, spelling, spelling_length,
                                                               type, false, NULL);
-    return spelling_length > 1u && spelling[spelling_length - 1u] == '?' &&
-           xr_semantic_native_direct_storage_type_matches(module, spelling, spelling_length - 1u,
-                                                          type, true, NULL);
+    bool nullable = spelling_length > 1u && spelling[spelling_length - 1u] == '?';
+    return xr_semantic_native_direct_storage_type_matches(
+        module, spelling, spelling_length - (nullable ? 1u : 0u), type, nullable, NULL);
 }
 
 typedef enum XrSemanticNativeDirectResultKind {
     XR_SEM_NATIVE_DIRECT_RESULT_INVALID = 0,
     XR_SEM_NATIVE_DIRECT_RESULT_TRIVIAL,
-    XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NULLABLE_NATIVE,
+    XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NATIVE,
 } XrSemanticNativeDirectResultKind;
 
 /* A direct provider either returns a scalar/unit with no ownership transfer or
- * a freshly owned nullable native-class carrier.  The latter is deliberately
+ * a freshly owned native-class carrier.  The latter is deliberately
  * narrower than "any tagged result": the generated registry must state fresh,
- * the signature/type judgement must already have tied the nullable result to
+ * the signature/type judgement must already have tied the exact result to
  * one native class, and SemanticPlan must freeze the call's complete owned
  * provenance. */
 static inline XrSemanticNativeDirectResultKind
@@ -317,11 +309,11 @@ xr_semantic_native_direct_result_kind(const XrSemanticPlan *plan,
                    : XR_SEM_NATIVE_DIRECT_RESULT_INVALID;
     return strcmp(entry->return_ownership, "fresh") == 0 && type &&
                    type->kind == XR_KIND_INSTANCE &&
-                   type->flags == (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE |
-                                   XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+                   (type->flags & ~XR_SEM_TYPE_NULLABLE) ==
+                       (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
                    operation->return_provenance == XR_SEM_RETURN_OWNED &&
                    operation->return_complete == 1
-               ? XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NULLABLE_NATIVE
+               ? XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NATIVE
                : XR_SEM_NATIVE_DIRECT_RESULT_INVALID;
 }
 
@@ -454,7 +446,8 @@ static inline bool xr_semantic_native_direct_signature_is_exact(
     const char *result_end = result + strlen(result);
     while (result_end > result && result_end[-1] == ' ')
         result_end--;
-    return reference_argument && xr_semantic_native_direct_signature_type_matches(
+    bool fresh_result = entry->return_ownership && strcmp(entry->return_ownership, "fresh") == 0;
+    return (reference_argument || fresh_result) && xr_semantic_native_direct_signature_type_matches(
                                      plan, operation->result_type, entry->module, result,
                                      (size_t) (result_end - result), true);
 }
@@ -486,8 +479,8 @@ static inline bool xr_semantic_native_direct_identity(const XrStdlibDefEntry *en
 }
 
 /* A grounded normal stdlib call whose generated direct shim accepts and
- * returns tagged XrValue carriers. This family exists only where at least one
- * argument is reference-capable; scalar-only calls remain owned by the older
+ * returns tagged XrValue carriers. This family requires a reference-capable
+ * argument or a freshly owned native result; scalar-only calls remain owned by the older
  * NATIVE_MODULE_SCALAR family. Every admitted parameter is a READ/PLAIN
  * BORROW-SHARE value, and the registry signature is checked against both the
  * import function type and the call operands. */
@@ -572,7 +565,7 @@ static inline bool xr_semantic_native_direct_call_shape_is_exact(
         result_kind == XR_SEM_NATIVE_DIRECT_RESULT_INVALID ||
         (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_TRIVIAL &&
          operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT) ||
-        (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NULLABLE_NATIVE &&
+        (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NATIVE &&
          operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED))
         return false;
     XrStableId identity = {{0}};
@@ -621,11 +614,70 @@ xr_semantic_native_direct_fresh_result_is_exact(const XrSemanticPlan *plan,
     const XrStdlibDefEntry *entry = NULL;
     if (!xr_semantic_native_direct_call_shape_is_exact(plan, operation, &entry, NULL) ||
         xr_semantic_native_direct_result_kind(plan, operation, entry) !=
-            XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NULLABLE_NATIVE)
+            XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NATIVE)
         return false;
     if (out_entry)
         *out_entry = entry;
     return true;
+}
+
+/* A suspended registry call returns one fresh tagged carrier only when both
+ * the frozen provenance and the registry signature prove that ownership.
+ * Namespace and selective imports use the same result contract. */
+static inline bool xr_semantic_native_yieldable_fresh_result_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    const XrStdlibDefEntry **out_entry) {
+    uint32_t operand_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!operation || !operands || !metadata || operation->operand_count == 0 ||
+        operation->operand_begin >= operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_complete != 1 ||
+        operation->return_parameter != -1 || operation->result_alias_operand != -1 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
+        return false;
+    const XrSemanticOperandRecord *head = &operands[operation->operand_begin];
+    const char *module = NULL, *member = NULL;
+    if (operation->opcode == XI_CALL) {
+        const XrSemanticOperationRecord *import = xr_semantic_native_direct_import_for_value(
+            plan, operation->function, head->value);
+        if (!import || head->role != XR_SEM_OPERAND_CALLEE ||
+            import->opcode != XI_IMPORT_REF || import->metadata_count != 2 ||
+            import->metadata_begin >= metadata_count ||
+            metadata_count - import->metadata_begin < 2 ||
+            import->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+            !xr_semantic_native_direct_function_type_is_exact(
+                plan, xr_semantic_plan_type(plan, head->type), operation, head + 1u))
+            return false;
+        module = metadata[import->metadata_begin];
+        member = metadata[import->metadata_begin + 1u];
+    } else if (operation->opcode == XI_CALL_METHOD) {
+        if (head->role != XR_SEM_OPERAND_RECEIVER || operation->metadata_count != 1 ||
+            operation->metadata_begin >= metadata_count ||
+            (operation->semantic_immediate & 1) != 0)
+            return false;
+        module = xr_semantic_native_module_namespace_path(plan, head->value);
+        member = metadata[operation->metadata_begin];
+    } else {
+        return false;
+    }
+    const XrStdlibDefEntry *entry =
+        module && member ? xr_stdlib_metadata_unique_func(module, member) : NULL;
+    bool valid = entry && entry->vm && entry->vm_binding && entry->aot && entry->aot[0] &&
+           strcmp(entry->vm_binding, "yieldable") == 0 && entry->return_ownership &&
+           strcmp(entry->return_ownership, "fresh") == 0 &&
+           operation->operand_count == (uint16_t) (entry->argc + 1u) &&
+           xr_semantic_native_direct_signature_is_exact(plan, entry, operation, head + 1u) &&
+           (xr_semantic_tagged_string_type_is_exact(type) ||
+            xr_semantic_array_type_row_is_exact(type) ||
+            xr_semantic_native_direct_result_kind(plan, operation, entry) ==
+                XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NATIVE);
+    if (valid && out_entry)
+        *out_entry = entry;
+    return valid;
 }
 
 /* A force unwrap does not change the native object carried by an owned tagged
@@ -644,7 +696,8 @@ static inline bool xr_semantic_native_storage_owner_forward_is_exact(
     const XrStdlibDefEntry *producer_entry = NULL;
     if (!source || operation->opcode != XI_OWNER_FORWARD || source->type == operation->result_type ||
         !producer || producer->result_type != source->type ||
-        !xr_semantic_native_direct_fresh_result_is_exact(plan, producer, &producer_entry))
+        (!xr_semantic_native_direct_fresh_result_is_exact(plan, producer, &producer_entry) &&
+         !xr_semantic_native_yieldable_fresh_result_is_exact(plan, producer, &producer_entry)))
         return false;
     const XrStdlibNativeClassDefEntry *storage =
         xr_stdlib_metadata_fresh_result_native_class(producer_entry);

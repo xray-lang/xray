@@ -17,7 +17,14 @@
 #define XR_C_EMISSION_PLAN_H
 
 #include "xr_c_emission_schema.h"
-#include "../../plan/semantic/xr_semantic_ids.h"
+#include "../../base/xstable_id.h"
+#include <stddef.h>
+
+/* The emission plan API is intentionally usable by the dumb C emitter without
+ * importing compiler-layer visibility or semantic-plan headers. */
+#ifndef XR_FUNC
+#define XR_FUNC
+#endif
 
 typedef struct XrTargetPlan XrTargetPlan;
 typedef struct XrSemanticPlan XrSemanticPlan;

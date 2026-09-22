@@ -13,6 +13,7 @@
 
 #include "xstdlib_defs_generated.h"
 #include "../base/xsha256.h"
+#include "../base/xstable_id.h"
 #include <string.h>
 
 static inline void xr_stdlib_metadata_hash_u64(XrSHA256Context *ctx, uint64_t value) {
@@ -27,6 +28,28 @@ static inline void xr_stdlib_metadata_hash_string(XrSHA256Context *ctx, const ch
     xr_stdlib_metadata_hash_u64(ctx, (uint64_t) length);
     if (length)
         xr_sha256_update(ctx, (const uint8_t *) value, length);
+}
+
+/* Logical resource identity excludes host layout and implementation callbacks.
+ * The caller supplies the exact declaration selected by module/name resolution. */
+static inline bool
+xr_stdlib_metadata_resource_identity(const XrStdlibNativeClassDefEntry *entry, XrStableId *out) {
+    if (!entry || !out || !entry->module || !entry->module[0] || entry->module[0] == '.' ||
+        !entry->name || !entry->name[0])
+        return false;
+    static const uint8_t domain[] = "xray-stdlib-resource-v1\0";
+    XrSHA256Context context;
+    uint8_t digest[32];
+    xr_sha256_init(&context);
+    xr_sha256_update(&context, domain, sizeof(domain) - 1u);
+    xr_stdlib_metadata_hash_string(&context, entry->module);
+    xr_stdlib_metadata_hash_string(&context, entry->name);
+    xr_sha256_final(&context, digest);
+    const uint8_t zero[XR_STABLE_ID_BYTES] = {0};
+    if (memcmp(digest, zero, sizeof(zero)) == 0)
+        return false;
+    memcpy(out->bytes, digest, sizeof(out->bytes));
+    return true;
 }
 
 static inline void
@@ -108,6 +131,26 @@ xr_stdlib_metadata_unique_native_class_span(const char *module, size_t module_le
 }
 
 static inline const XrStdlibNativeClassDefEntry *
+xr_stdlib_metadata_unique_source_provider_span(const char *module, size_t module_length,
+                                               const char *wrapper, size_t wrapper_length) {
+    if (!module || module_length == 0 || module[0] == '.' || !wrapper || wrapper_length == 0)
+        return NULL;
+    const XrStdlibNativeClassDefEntry *match = NULL;
+    for (uint32_t i = 0; i < XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibNativeClassDefEntry *entry = &xr_stdlib_native_class_def_entries[i];
+        if (!entry->module || strlen(entry->module) != module_length ||
+            memcmp(entry->module, module, module_length) != 0 || !entry->source_wrapper ||
+            strlen(entry->source_wrapper) != wrapper_length ||
+            memcmp(entry->source_wrapper, wrapper, wrapper_length) != 0)
+            continue;
+        if (match)
+            return NULL;
+        match = entry;
+    }
+    return match;
+}
+
+static inline const XrStdlibNativeClassDefEntry *
 xr_stdlib_metadata_fresh_result_native_class(const XrStdlibDefEntry *entry) {
     if (!entry || !entry->module || !entry->signature || !entry->return_ownership ||
         strcmp(entry->return_ownership, "fresh") != 0)
@@ -120,10 +163,12 @@ xr_stdlib_metadata_fresh_result_native_class(const XrStdlibDefEntry *entry) {
     const char *end = result + strlen(result);
     while (end > result && end[-1] == ' ')
         end--;
-    if (end <= result + 1 || end[-1] != '?')
+    if (end <= result)
         return NULL;
+    if (end[-1] == '?')
+        end--;
     return xr_stdlib_metadata_unique_native_class_span(entry->module, strlen(entry->module), result,
-                                                       (size_t) (end - result - 1));
+                                                       (size_t) (end - result));
 }
 
 static inline const XrStdlibDefEntry *
@@ -228,7 +273,9 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
  * qualifies when the registry names exactly one entry for the module, member,
  * and callsite arity, every argument crosses the boundary as one plain tagged
  * value, the member returns a single value through the generated direct shim,
- * and no conditional compilation or result enum qualifies the row. Runtime
+ * and no conditional VM binding or result enum qualifies the row. AOT defines
+ * configure the implementation through the link manifest; they do not remove
+ * the declared shim or change its call ABI. Runtime
  * capabilities remain part of the exact direct-call identity; callers that
  * need the narrower capability-free namespace-scalar family use the member
  * predicate below.
@@ -249,7 +296,7 @@ xr_stdlib_metadata_exact_native_direct_call_span(const char *module, size_t modu
         return NULL;
     if (entry->aot[0] == '\0' || entry->vm[0] == '\0' || strcmp(entry->aot_kind, "method") != 0 ||
         strcmp(entry->ret, "value") != 0 || strcmp(entry->vm_binding, "normal") != 0 ||
-        entry->aot_enum[0] != '\0' || entry->vm_ifdef[0] != '\0' || entry->define[0] != '\0')
+        entry->aot_enum[0] != '\0' || entry->vm_ifdef[0] != '\0')
         return NULL;
     uint32_t spec = 0;
     for (; entry->arg_spec[spec] != '\0'; spec++) {

@@ -27,96 +27,13 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_CLASS_HANDLE,
     XR_BACKEND_VALUE_STRING_HANDLE,
     XR_BACKEND_VALUE_RUNE_U32,
+    XR_BACKEND_VALUE_I8,
+    XR_BACKEND_VALUE_U8,
+    XR_BACKEND_VALUE_I16,
+    XR_BACKEND_VALUE_I32,
+    XR_BACKEND_VALUE_U64,
+    XR_BACKEND_VALUE_F64,
 } XrBackendValueRepresentation;
-
-typedef struct XrBackendInstruction {
-    uint16_t operation_id;
-    uint16_t result_type_id;
-    XrCoreIrValueCategory result_category;
-    XrCoreIrOwnershipDisposition result_ownership;
-    uint32_t result_id;
-    uint32_t *operands;
-    uint32_t operand_count;
-    XrCoreIrImmediateKind immediate_kind;
-    union {
-        int64_t i64;
-        uint32_t u32;
-        bool boolean;
-        uint32_t constant_id;
-        uint32_t function_id;
-        struct {
-            uint32_t module_index;
-            uint32_t slot_index;
-        } module_slot;
-        uint32_t field_ordinal;
-        uint32_t variant_ordinal;
-        struct {
-            uint32_t variant_ordinal;
-            uint32_t field_ordinal;
-        } variant_field;
-        uint16_t type_id;
-        struct {
-            uint32_t requirement_index;
-            uint32_t operation_index;
-        } provider_operation;
-        struct {
-            uint32_t function_id;
-            uint32_t safepoint_id;
-        } coroutine_call;
-        struct {
-            uint32_t safepoint_id;
-            uint16_t request_kind;
-            uint16_t request_operand_count;
-        } coroutine_suspend;
-    } immediate;
-    uint32_t *successors;
-    uint32_t successor_count;
-} XrBackendInstruction;
-
-typedef struct XrBackendBlock {
-    uint32_t *argument_ids;
-    uint16_t *argument_types;
-    XrCoreIrValueCategory *argument_categories;
-    XrCoreIrOwnershipDisposition *argument_ownerships;
-    uint32_t argument_count;
-    XrBackendInstruction *instructions;
-    uint32_t instruction_count;
-} XrBackendBlock;
-
-typedef struct XrBackendCoroutineState {
-    uint32_t continuation_block;
-} XrBackendCoroutineState;
-
-typedef struct XrBackendCoroutineSafepoint {
-    uint32_t resume_state_id;
-    uint32_t *live_value_ids;
-    uint32_t live_value_count;
-} XrBackendCoroutineSafepoint;
-
-typedef struct XrBackendFunction {
-    uint16_t *parameter_types;
-    XrParamMode *parameter_modes;
-    uint32_t parameter_count;
-    uint16_t result_type_id;
-    XrCoreIrOwnershipDisposition result_ownership;
-    uint16_t error_type_id;
-    uint16_t panic_type_id;
-    uint32_t effect_mask;
-    uint32_t capability_mask;
-    uint32_t entry_block;
-    XrBackendBlock *blocks;
-    uint32_t block_count;
-    uint16_t *value_types;
-    XrCoreIrValueCategory *value_categories;
-    XrCoreIrOwnershipDisposition *value_ownerships;
-    uint8_t *value_representations;
-    XrBackendCoroutineState *coroutine_states;
-    uint32_t coroutine_state_count;
-    XrBackendCoroutineSafepoint *coroutine_safepoints;
-    uint32_t coroutine_safepoint_count;
-    uint32_t value_count;
-    uint32_t flags;
-} XrBackendFunction;
 
 struct XrBackendIR {
     atomic_uint_least32_t references;
@@ -127,11 +44,6 @@ struct XrBackendIR {
     XrOptimizationPolicyId optimization_policy_id;
     XrFingerprint lowering_digest;
     XrBackendOptions options;
-    XrValidatedConstant *constants;
-    uint32_t constant_count;
-    XrBackendFunction *functions;
-    uint32_t function_count;
-    uint32_t entry_function;
     uint16_t pointer_width;
     uint16_t operating_system;
     uint16_t architecture;

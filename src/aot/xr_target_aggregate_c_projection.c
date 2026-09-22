@@ -225,11 +225,10 @@ static bool named_struct_projection_hash_depth(
     return true;
 }
 
-bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan, uint32_t semantic_type,
-                                    XrCAggregateProjection *out) {
+bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan, const XrSemanticPlan *semantic,
+                                    uint32_t semantic_type, XrCAggregateProjection *out) {
     if (out)
         memset(out, 0, sizeof(*out));
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
     const XrSemanticProgramTypeBinding *binding = NULL;
     const XrTargetProfile *profile = xr_target_plan_profile(target_plan);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
@@ -240,9 +239,25 @@ bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan, uint32_t se
         !layouts || !fields || !leaf_program_binding(semantic, semantic_type, &binding))
         return false;
 
+    uint32_t partition_index = 0, partition_count = 0;
+    if (!xr_target_plan_partition_for_semantic(target_plan, semantic, &partition_index))
+        return false;
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(target_plan, &partition_count);
+    uint32_t layout_begin = 0, layout_end = layout_count;
+    if (partition_count) {
+        if (!partitions || partition_index >= partition_count)
+            return false;
+        const XrTargetModulePartitionRecord *partition = &partitions[partition_index];
+        if (partition->layouts_begin > layout_count ||
+            partition->layouts_count > layout_count - partition->layouts_begin)
+            return false;
+        layout_begin = partition->layouts_begin;
+        layout_end = layout_begin + partition->layouts_count;
+    }
     const XrTargetLayoutRecord *layout = NULL;
     uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; i < layout_count; i++) {
+    for (uint32_t i = layout_begin; i < layout_end; i++) {
         if (layouts[i].semantic_type != semantic_type)
             continue;
         if (layout)
@@ -451,12 +466,19 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
     const XrTargetFieldRecord *fields = xr_target_plan_fields(target_plan, &field_count);
     const XrTargetMachineRepRecord *machine_reps =
         xr_target_plan_machine_reps(target_plan, &machine_rep_count);
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && slots && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    const XrSemanticPlan *semantic =
+        slot ? xr_target_plan_module_for_function(target_plan, slot->function, NULL) : NULL;
     const XrTargetProfile *profile = xr_target_plan_profile(target_plan);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     if (!target_plan || !binding || !out || !xr_target_plan_is_verified(target_plan) ||
         !xr_target_plan_fingerprint_is_intact(target_plan) || !register_rep || !memory_rep ||
         !layouts || !fields || !machine_reps || !semantic || !machine ||
+        slot->semantic_value != binding->semantic_value ||
+        slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
         register_rep->kind != XR_MACHINE_REP_AGGREGATE ||
         memory_rep->kind != XR_MACHINE_REP_AGGREGATE ||
         register_rep->detail != memory_rep->detail || register_rep->detail >= layout_count)
@@ -472,7 +494,7 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
     if (leaf_product_program_family(xr_semantic_plan_program_provenance(semantic)))
         return false;
     if (leaf_program_binding(semantic, layout->semantic_type, NULL))
-        return xr_c_leaf_aggregate_projection(target_plan, layout->semantic_type, out);
+        return xr_c_leaf_aggregate_projection(target_plan, semantic, layout->semantic_type, out);
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return fixed_array_projection(target_plan, binding, register_rep, layout, fields,
                                       field_count, type, machine, out);

@@ -1,14 +1,13 @@
 {
   "schema": "xray-program-vm-coverage/1",
   "task": 299,
-  "vm_build_id": "xray-program-vm-v2",
+  "vm_build_id": "xray-program-vm-v16",
   "input_authority": "XrValidatedProgram",
   "execution_authority": "XrInstance",
   "distribution_format": "XrProgram",
   "public_bytecode_format": null,
   "private_views": [
-    "baseline-validated-graph",
-    "fixed-instruction-rows"
+    "baseline-validated-graph"
   ],
   "persistent_private_code": false,
   "quickening": "DISABLED_UNTIL_MEASURED",
@@ -23,14 +22,13 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 70,
+  "operation_count": 83,
   "operations": [
     {
       "stable_id": 1,
       "spelling": "core.constant.i64",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -38,7 +36,6 @@
       "spelling": "core.constant.bool",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -46,7 +43,6 @@
       "spelling": "core.constant.target_enum",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -54,7 +50,6 @@
       "spelling": "core.constant.string",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -62,7 +57,6 @@
       "spelling": "core.constant.rune",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -70,7 +64,6 @@
       "spelling": "core.add.i64",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -78,7 +71,6 @@
       "spelling": "core.sub.i64",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -86,7 +78,6 @@
       "spelling": "core.mul.i64",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -94,7 +85,6 @@
       "spelling": "core.div.i64",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -102,7 +92,6 @@
       "spelling": "core.logical.not",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -110,7 +99,6 @@
       "spelling": "core.logical.and",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -118,7 +106,6 @@
       "spelling": "core.logical.or",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -126,7 +113,6 @@
       "spelling": "core.compare.i64",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -134,7 +120,6 @@
       "spelling": "core.compare.target_enum",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -142,7 +127,6 @@
       "spelling": "core.compare.rune",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -150,7 +134,6 @@
       "spelling": "core.compare.string",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -158,7 +141,6 @@
       "spelling": "core.block.argument",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -166,7 +148,6 @@
       "spelling": "core.branch",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -174,7 +155,6 @@
       "spelling": "core.conditional_branch",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -182,7 +162,6 @@
       "spelling": "core.return",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -190,7 +169,6 @@
       "spelling": "core.call.sealed_direct",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -198,7 +176,6 @@
       "spelling": "core.call.sealed_invoke",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -206,7 +183,6 @@
       "spelling": "core.call.indirect_direct",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -214,7 +190,6 @@
       "spelling": "core.call.indirect_invoke",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -222,7 +197,6 @@
       "spelling": "core.call.witness_direct",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -230,7 +204,6 @@
       "spelling": "core.call.witness_invoke",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -238,7 +211,6 @@
       "spelling": "core.trap",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -246,7 +218,6 @@
       "spelling": "core.error.publish",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -254,7 +225,6 @@
       "spelling": "core.panic.publish",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -262,7 +232,6 @@
       "spelling": "core.cancel.publish",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -270,7 +239,6 @@
       "spelling": "core.target.pointer_width",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -278,7 +246,6 @@
       "spelling": "core.target.operating_system",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -286,7 +253,6 @@
       "spelling": "core.target.architecture",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -294,7 +260,6 @@
       "spelling": "core.target.native_abi",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -302,7 +267,6 @@
       "spelling": "core.target.endianness",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -310,7 +274,6 @@
       "spelling": "core.aggregate.construct",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -318,7 +281,6 @@
       "spelling": "core.aggregate.project",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -326,7 +288,6 @@
       "spelling": "core.aggregate.update",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -334,7 +295,6 @@
       "spelling": "core.variant.construct",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -342,7 +302,6 @@
       "spelling": "core.variant.test",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -350,7 +309,6 @@
       "spelling": "core.variant.project",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -358,7 +316,6 @@
       "spelling": "core.existential.pack",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -366,7 +323,6 @@
       "spelling": "core.existential.test",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -374,7 +330,6 @@
       "spelling": "core.existential.project",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -382,7 +337,6 @@
       "spelling": "core.callable.pack",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -390,7 +344,6 @@
       "spelling": "core.existential.reborrow_read",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -398,7 +351,6 @@
       "spelling": "core.owner.copy",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -406,7 +358,6 @@
       "spelling": "core.owner.move",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -414,7 +365,6 @@
       "spelling": "core.owner.drop",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -422,7 +372,6 @@
       "spelling": "core.place.local",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -430,7 +379,6 @@
       "spelling": "core.place.load",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -438,7 +386,6 @@
       "spelling": "core.place.store",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -446,7 +393,6 @@
       "spelling": "core.place.project",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -454,7 +400,6 @@
       "spelling": "core.place.take",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -462,7 +407,6 @@
       "spelling": "core.assert.condition",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -470,7 +414,6 @@
       "spelling": "core.coroutine.yield",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -478,7 +421,6 @@
       "spelling": "core.provider.call",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -486,7 +428,6 @@
       "spelling": "core.coroutine.call.sealed",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -494,7 +435,6 @@
       "spelling": "core.coroutine.suspend",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -502,7 +442,6 @@
       "spelling": "core.coroutine.call.indirect",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -510,15 +449,13 @@
       "spelling": "core.class.construct",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
       "stable_id": 143,
-      "spelling": "core.class.share",
+      "spelling": "core.owner.alias",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -526,7 +463,6 @@
       "spelling": "core.class.field_load",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -534,7 +470,6 @@
       "spelling": "core.class.field_place",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -542,7 +477,6 @@
       "spelling": "core.place.exchange",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -550,15 +484,6 @@
       "spelling": "core.output.group",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
-      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
-    },
-    {
-      "stable_id": 150,
-      "spelling": "core.string.from_i64",
-      "vm": "COMPLETE",
-      "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
@@ -566,30 +491,122 @@
       "spelling": "core.string.concat",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
-      "fixed_row_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
       "stable_id": 152,
       "spelling": "core.place.module",
-      "vm": "NOT_YET_ACTIVE",
-      "baseline_view": "NOT_YET_ACTIVE",
-      "fixed_row_view": "NOT_YET_ACTIVE",
-      "differential_oracle": null
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     },
     {
       "stable_id": 153,
       "spelling": "core.place.initialize",
-      "vm": "NOT_YET_ACTIVE",
-      "baseline_view": "NOT_YET_ACTIVE",
-      "fixed_row_view": "NOT_YET_ACTIVE",
-      "differential_oracle": null
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 154,
+      "spelling": "core.integer.convert",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 155,
+      "spelling": "core.integer.divmod",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 156,
+      "spelling": "core.sequence.length",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 157,
+      "spelling": "core.array.construct",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 158,
+      "spelling": "core.sequence.element_place",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 159,
+      "spelling": "core.atomic.construct",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 160,
+      "spelling": "core.atomic.load",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 161,
+      "spelling": "core.atomic.exchange",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 162,
+      "spelling": "core.atomic.compare_exchange",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 163,
+      "spelling": "core.atomic.update",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 164,
+      "spelling": "core.constant.f64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 165,
+      "spelling": "core.compare.f64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 166,
+      "spelling": "core.scalar.bitcast64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 167,
+      "spelling": "core.string.from_scalar",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
     }
   ],
-  "incomplete_operations": [
-    "core.place.module",
-    "core.place.initialize"
-  ],
+  "incomplete_operations": [],
   "profile_matrix": [
     "lp64-x86_64-windows",
     "ilp32-wasm32-wasi"
@@ -601,7 +618,7 @@
   ],
   "runtime_product": {
     "target": "xray_program_vm_runtime",
-    "source_count": 19,
+    "source_count": 20,
     "forbidden_closures": [
       "frontend",
       "CoreIR-writer",

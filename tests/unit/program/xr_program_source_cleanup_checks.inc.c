@@ -8,16 +8,14 @@
  * xr_program_source_cleanup_checks.inc.c - Independent backend cleanup checks
  *
  * KEY CONCEPT:
- *   Execute each cleanup scenario in both private VM views and generated native
+ *   Execute each cleanup scenario in the VM and generated native
  *   code. Provider traces and cancellation outcomes are independent oracles.
  */
 
 static void branching_cleanup_check_vm(const XrValidatedProgram *program,
                                        const XrTargetProfile *profile, XrInstance *instance,
-                                       uint32_t entry, BranchingCleanupProbe *probe,
-                                       XrVmDecodePolicy policy) {
+                                       uint32_t entry, BranchingCleanupProbe *probe) {
     XrVmCodeOptions options = xr_vm_code_default_options();
-    options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
     ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
@@ -54,10 +52,8 @@ static void branching_cleanup_check_vm(const XrValidatedProgram *program,
 
 static void nested_cleanup_check_vm(const XrValidatedProgram *program,
                                     const XrTargetProfile *profile, XrInstance *instance,
-                                    uint32_t entry, BranchingCleanupProbe *probe,
-                                    XrVmDecodePolicy policy) {
+                                    uint32_t entry, BranchingCleanupProbe *probe) {
     XrVmCodeOptions options = xr_vm_code_default_options();
-    options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
     ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
@@ -113,10 +109,8 @@ static void child_cleanup_assert_vm(XrVmOutcome suspended, XrVmOutcome outcome,
 
 static void child_cleanup_check_vm(const XrValidatedProgram *program,
                                    const XrTargetProfile *profile, XrInstance *instance,
-                                   uint32_t entry, ChildCleanupProbe *probe,
-                                   XrVmDecodePolicy policy) {
+                                   uint32_t entry, ChildCleanupProbe *probe) {
     XrVmCodeOptions options = xr_vm_code_default_options();
-    options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
     ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
@@ -140,10 +134,8 @@ static void child_cleanup_check_vm(const XrValidatedProgram *program,
 
 static void field_ref_cleanup_check_vm(const XrValidatedProgram *program,
                                        const XrTargetProfile *profile, XrInstance *instance,
-                                       uint32_t entry, FieldRefCleanupProbe *probe,
-                                       XrVmDecodePolicy policy) {
+                                       uint32_t entry, FieldRefCleanupProbe *probe) {
     XrVmCodeOptions options = xr_vm_code_default_options();
-    options.decode_policy = (uint8_t) policy;
     XrVmCode *code = NULL;
     XrVmCodeDiagnostic diagnostic;
     ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic), XR_VM_CODE_OK);
@@ -268,11 +260,10 @@ static void assert_uncaught_vm_error(const XrValidatedProgram *program,
                                      const XrTargetProfile *profile, XrInstance *instance,
                                      uint32_t entry, uint16_t error_type_id,
                                      PipeProviderProbe *probe) {
-    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
-    for (uint32_t policy = 0u; policy < 2u; ++policy) {
+
+    {
         probe->close_calls = 0u;
         XrVmCodeOptions options = xr_vm_code_default_options();
-        options.decode_policy = policies[policy];
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic diagnostic;
         ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &diagnostic),
@@ -292,6 +283,154 @@ static void assert_uncaught_vm_error(const XrValidatedProgram *program,
     }
 }
 
+static void write_builtin_panic_cleanup_aot(const XrValidatedProgram *program,
+                                            const XrTargetProfile *profile, uint32_t checked,
+                                            uint32_t read_cleanup, uint32_t panic_code,
+                                            bool message, const char *output_path) {
+    XrBackendOptions options = xr_backend_default_options();
+    XrBackendDiagnostic diagnostic;
+    XrBackendIR *ir = NULL;
+    ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic), XR_BACKEND_OK);
+    ASSERT_TRUE(xr_backend_ir_binding_verify(ir, &diagnostic));
+    XrGeneratedC generated = {0};
+    XrGeneratedC repeated = {0};
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, true, &repeated, &diagnostic), XR_BACKEND_OK);
+    ASSERT_EQ_UINT(generated.size, repeated.size);
+    ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
+    ASSERT_NOT_NULL(strstr(generated.bytes, "int main(void)"));
+    if (output_path) {
+        FILE *output = fopen(output_path, "wb");
+        ASSERT_NOT_NULL(output);
+        ASSERT_TRUE(fputs("#define main xr_builtin_entry_main\n", output) >= 0);
+        ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        ASSERT_TRUE(fputs(
+            "\n#undef main\nstatic XrAotLifecycleEvent xr_events[64];\n"
+            "static uint32_t xr_event_count;\n"
+            "static void xr_record(void *context, const XrAotLifecycleEvent *event) {\n"
+            "    (void)context;\n"
+            "    if (xr_event_count < 64) xr_events[xr_event_count] = *event;\n"
+            "    ++xr_event_count;\n"
+            "}\n"
+            "int main(void) {\n"
+            "  for (uint32_t instance = 0; instance < 2; ++instance) {\n"
+            "    XrAotContext context = {0};\n"
+            "    context.lifecycle_event = xr_record;\n", output) >= 0);
+        if (program->module_slot_count != 0u)
+            ASSERT_TRUE(fputs("    XrAotModules modules = {0};\n"
+                              "    modules.storage.modules = &modules; "
+                              "context.modules = &modules;\n", output) >= 0);
+        if (program->module_count != 0u)
+            ASSERT_TRUE(fputs("    if (xr_aot_initialize_modules(&context).kind != 0) "
+                              "return 250;\n", output) >= 0);
+        ASSERT_TRUE(fputs(
+            "    for (uint32_t iteration = 0; iteration < 4; ++iteration) {\n"
+            "      uint8_t succeeds = (uint8_t)(iteration & 1u); XrAotPanicInfo panic = {0};\n"
+            "      xr_event_count = 0;\n", output) >= 0);
+        if (program->functions[checked].coroutine_safepoint_count != 0u) {
+            ASSERT_TRUE(fprintf(output,
+                "      XrAotCoroutineFrame%u frame = {0};\n"
+                "      XrAotOutcome result = xr_aot_fn_%u_step(&context, &frame, 0, "
+                "succeeds, &panic);\n"
+                "      if (result.kind != 5 || frame.state != 1) return 249;\n"
+                "      for (uint32_t i = 0; i < xr_event_count; ++i)\n"
+                "        if (xr_events[i].kind == 8 || xr_events[i].kind == 9) return 248;\n"
+                "      result = xr_aot_fn_%u_step(&context, &frame, 0, succeeds, &panic);\n",
+                checked, checked, checked) > 0);
+            if (program->functions[checked].coroutine_safepoint_count == 2u)
+                ASSERT_TRUE(fprintf(output,
+                    "      if (succeeds) {\n"
+                    "        if (result.kind != 5 || frame.state != 2) return 247;\n"
+                    "        for (uint32_t i = 0; i < xr_event_count; ++i)\n"
+                    "          if (xr_events[i].kind == 8 || xr_events[i].kind == 9) return 246;\n"
+                    "        result = xr_aot_fn_%u_step(&context, &frame, 0, succeeds, &panic);\n"
+                    "      }\n", checked) > 0);
+        } else {
+            ASSERT_TRUE(fprintf(output,
+                "      XrAotOutcome result = xr_aot_fn_%u(&context, succeeds, &panic);\n",
+                checked) > 0);
+        }
+        ASSERT_TRUE(fprintf(output,
+            "      if (succeeds ? result.kind != 0 || result.i64 != 42\n"
+            "                   : result.kind != 3 || panic.code != %u) return 251;\n",
+            panic_code) > 0);
+        if (message)
+            ASSERT_TRUE(fputs(
+                "      if (!succeeds) {\n"
+                "        if (!panic.message || panic.message->size != 14 ||\n"
+                "            memcmp(panic.message->bytes, \"assert message\", 14) != 0) return 244;\n"
+                "        xr_aot_free(&context, panic.message); panic.message = NULL;\n"
+                "      }\n", output) >= 0);
+        if (read_cleanup != UINT32_MAX)
+            ASSERT_TRUE(fprintf(output,
+                "      XrAotOutcome observed = xr_aot_fn_%u(&context);\n"
+                "      if (observed.kind != 0 || observed.i64 != (succeeds ? 11 : 22)) "
+                "return 252;\n", read_cleanup) > 0);
+        ASSERT_TRUE(fputs(
+            "      uint64_t created[2] = {0}; uint32_t creates = 0, finals = 0;\n"
+            "      uint32_t finalized[2] = {0}, reclaimed[2] = {0};\n"
+            "      if (xr_event_count > 64) return 253;\n"
+            "      for (uint32_t i = 0; i < xr_event_count; ++i) {\n"
+            "        const XrAotLifecycleEvent *event = &xr_events[i];\n"
+            "        if (event->kind == 1) {\n"
+            "          if (creates == 2) return 254;\n"
+            "          created[creates++] = event->identity;\n"
+            "        } else if (event->kind == 8 || event->kind == 9) {\n"
+            "          if (creates != 2) return 255;\n"
+            "          uint32_t object = event->identity == created[0] ? 0u : 1u;\n"
+            "          if (event->identity != created[object]) return 255;\n"
+            "          if (event->kind == 8) {\n"
+            "            if (finals == 2 || (!succeeds && "
+            "event->identity != created[1u-finals])) return 255;\n"
+            "            ++finals; ++finalized[object];\n"
+            "          } else ++reclaimed[object];\n"
+            "        }\n"
+            "      }\n"
+            "      if (creates != 2 || finalized[0] != 1 || finalized[1] != 1 ||\n"
+            "          reclaimed[0] != 1 || reclaimed[1] != 1 || context.allocations) return 255;\n"
+            "    }\n"
+            "    uint32_t before = xr_event_count;\n"
+            "    xr_aot_context_destroy(&context);\n", output) >= 0);
+        if (program->module_slot_count != 0u)
+            ASSERT_TRUE(fputs("    xr_aot_modules_clear(&modules);\n", output) >= 0);
+        ASSERT_TRUE(fputs(
+            "    if (xr_event_count != before) return 255;\n"
+            "  }\n"
+            "  return xr_builtin_entry_main();\n"
+            "}\n", output) >= 0);
+        ASSERT_EQ_INT(fclose(output), 0);
+    }
+    xr_generated_c_free(&repeated);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+}
+
+static void write_probe_typed_host(FILE *output) {
+    ASSERT_TRUE(fputs(
+        "\n"
+        "static int (*xr_probe_read_entry)(void *, uint32_t, uint32_t, int64_t *);\n"
+        "static int (*xr_probe_close_entry)(void *, uint32_t, uint32_t, int64_t, uint8_t *);\n"
+        "static void xr_probe_dispose(XrProviderValuePack *result) { *result = (XrProviderValuePack){0}; }\n"
+        "static int xr_probe_typed(void *context, uint32_t requirement, uint32_t operation,\n"
+        "                         const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+        "    if (!arguments || !result || result->count) return 1;\n"
+        "    if (!arguments->count && xr_probe_read_entry) {\n"
+        "        int64_t value = 0;\n"
+        "        if (xr_probe_read_entry(context, requirement, operation, &value) != 0) return 1;\n"
+        "        result->count = 1; result->nodes[0].token = 3; result->nodes[0].as.i64 = value;\n"
+        "        return 0;\n"
+        "    }\n"
+        "    if (arguments->count == 1 && arguments->nodes[0].token == 3 && xr_probe_close_entry) {\n"
+        "        uint8_t value = 0;\n"
+        "        if (xr_probe_close_entry(context, requirement, operation, arguments->nodes[0].as.i64, &value) != 0) return 1;\n"
+        "        result->count = 1; result->nodes[0].token = 2; result->nodes[0].as.boolean = value != 0;\n"
+        "        return 0;\n"
+        "    }\n"
+        "    return 1;\n"
+        "}\n"
+        , output) >= 0);
+}
+
 static void write_uncaught_error_aot(XrValidatedProgram *program, const XrTargetProfile *profile,
                                      uint32_t entry, uint16_t error_type_id,
                                      const char *output_path) {
@@ -299,7 +438,7 @@ static void write_uncaught_error_aot(XrValidatedProgram *program, const XrTarget
     XrBackendDiagnostic diagnostic;
     XrBackendIR *ir = NULL;
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic), XR_BACKEND_OK);
-    ASSERT_TRUE(xr_backend_ir_translation_validate(ir, &diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(ir, &diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic), XR_BACKEND_OK);
@@ -313,6 +452,7 @@ static void write_uncaught_error_aot(XrValidatedProgram *program, const XrTarget
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        write_probe_typed_host(output);
         ASSERT_TRUE(
             fprintf(
                 output,
@@ -331,7 +471,9 @@ static void write_uncaught_error_aot(XrValidatedProgram *program, const XrTarget
                 "}\n"
                 "int main(void) {\n"
                 "    XrAotContext context = {0};\n"
-                "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "    context.provider_call_typed = xr_probe_typed;\n"
+                "    context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                 "    XrAotType%u error = {0};\n"
                 "    XrAotOutcome outcome = xr_aot_fn_%u(&context, &error);\n"
                 "    if (outcome.kind != 2 || error.tag != 0 || "
@@ -351,12 +493,14 @@ static void assert_aot_provider_trap_cleanup(const XrValidatedProgram *program,
                                              const XrTargetProfile *profile, uint32_t entry,
                                              uint32_t clock_requirement, uint32_t io_requirement,
                                              const char *output_path) {
+    ASSERT_EQ_UINT(program->functions[entry].error_type_id, XR_CORE_TYPE_VOID);
+    ASSERT_EQ_UINT(program->functions[entry].panic_type_id, XR_CORE_TYPE_PANIC_INFO);
     XrBackendOptions options = xr_backend_default_options();
     XrBackendDiagnostic backend_diagnostic;
     XrBackendIR *backend_ir = NULL;
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
@@ -366,13 +510,14 @@ static void assert_aot_provider_trap_cleanup(const XrValidatedProgram *program,
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NULL(strstr(generated.bytes, "int main(void)"));
-    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_i64_nullary"));
-    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_typed"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_dispose_typed"));
     ASSERT_NOT_NULL(strstr(generated.bytes, ".trap == 7"));
     if (output_path) {
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        write_probe_typed_host(output);
         ASSERT_TRUE(
             fprintf(output,
                     "\nstatic uint32_t xr_probe_events;\n"
@@ -399,11 +544,14 @@ static void assert_aot_provider_trap_cleanup(const XrValidatedProgram *program,
                     "}\n"
                     "int main(void) {\n"
                     "    XrAotContext context = {0};\n"
-                    "    context.provider_call_i64_nullary = xr_probe_refuse;\n"
-                    "    context.provider_call_bool_i64_unary = xr_probe_close;\n"
-                    "    XrAotOutcome outcome = xr_aot_fn_%u(&context);\n"
+                    "    xr_probe_read_entry = xr_probe_refuse;\n"
+                    "    context.provider_call_typed = xr_probe_typed;\n"
+                "    context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
+                    "    XrAotPanicInfo panic = {0};\n"
+                    "    XrAotOutcome outcome = xr_aot_fn_%u(&context, &panic);\n"
                     "    int exit_code = outcome.kind == 1 && outcome.trap == 7 && "
-                    "xr_probe_events == 5 ? 207 : 255;\n"
+                    "panic.code == UINT32_C(0) && xr_probe_events == 5 ? 207 : 255;\n"
                     "    xr_aot_context_destroy(&context);\n"
                     "    return exit_code;\n"
                     "}\n",
@@ -424,7 +572,7 @@ static void assert_aot_child_cleanup(const XrValidatedProgram *program,
     XrBackendIR *backend_ir = NULL;
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
@@ -434,12 +582,13 @@ static void assert_aot_child_cleanup(const XrValidatedProgram *program,
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_entry_coroutine_cancel"));
-    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_i64_nullary"));
-    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_typed"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_dispose_typed"));
     if (output_path) {
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        write_probe_typed_host(output);
         ASSERT_TRUE(
             fprintf(
                 output,
@@ -496,9 +645,11 @@ static void assert_aot_child_cleanup(const XrValidatedProgram *program,
                 "        xr_probe_refused[1] = refused[xr_probe_mode][1];\n"
                 "        xr_probe_false_close = false_close[xr_probe_mode];\n"
                 "        XrAotEntryCoroutineFrame frame;\n"
-                "        xr_aot_entry_coroutine_frame_initialize(&frame);\n"
-                "        frame.context.provider_call_i64_nullary = xr_probe_clock;\n"
-                "        frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "        xr_aot_entry_coroutine_frame_initialize(&frame, NULL, NULL);\n"
+                "        xr_probe_read_entry = xr_probe_clock;\n"
+                "        frame.context.provider_call_typed = xr_probe_typed;\n"
+                "    frame.context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                 "        XrBackendNativeOutcome suspended = xr_aot_entry_coroutine_step(&frame);\n"
                 "        if (suspended.kind != 1 || suspended.state_id != 1 || "
                 "suspended.safepoint_id != 0 || xr_probe_count != 0) return 255;\n"
@@ -532,17 +683,17 @@ static void assert_aot_branching_cleanup(const XrValidatedProgram *program,
     XrBackendIR *backend_ir = NULL;
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     bool observed_nonowner_cancel_input = false;
-    XrBackendInstruction *tuple_probe = NULL;
+    XrValidatedInstruction *tuple_probe = NULL;
     uint32_t tuple_probe_start = 0u;
-    for (uint32_t function_id = 0u; function_id < backend_ir->function_count; ++function_id) {
-        XrBackendFunction *function = &backend_ir->functions[function_id];
+    for (uint32_t function_id = 0u; function_id < backend_ir->program->function_count; ++function_id) {
+        XrValidatedFunction *function = &backend_ir->program->functions[function_id];
         for (uint32_t block_id = 0u; block_id < function->block_count; ++block_id) {
-            XrBackendBlock *block = &function->blocks[block_id];
+            XrValidatedBlock *block = &function->blocks[block_id];
             for (uint32_t instruction_id = 0u; instruction_id < block->instruction_count;
                  ++instruction_id) {
-                XrBackendInstruction *instruction = &block->instructions[instruction_id];
+                XrValidatedInstruction *instruction = &block->instructions[instruction_id];
                 uint32_t safepoint_id = UINT32_MAX;
                 uint32_t live_start = 0u;
                 if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
@@ -550,13 +701,14 @@ static void assert_aot_branching_cleanup(const XrValidatedProgram *program,
                 } else if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED) {
                     safepoint_id = instruction->immediate.coroutine_call.safepoint_id;
                     uint32_t callee = instruction->immediate.coroutine_call.function_id;
-                    ASSERT_LT(callee, backend_ir->function_count);
-                    live_start = backend_ir->functions[callee].parameter_count;
+                    ASSERT_LT(callee, backend_ir->program->function_count);
+                    live_start = backend_ir->program->functions[callee].parameter_count;
                 } else {
                     continue;
                 }
                 ASSERT_LT(safepoint_id, function->coroutine_safepoint_count);
-                XrBackendCoroutineSafepoint *point = &function->coroutine_safepoints[safepoint_id];
+                XrValidatedCoroutineSafepoint *point =
+                    &function->coroutine_safepoints[safepoint_id];
                 ASSERT_TRUE(live_start <= instruction->operand_count);
                 ASSERT_TRUE(point->live_value_count <= instruction->operand_count - live_start);
                 if (!tuple_probe && point->live_value_count > 1u &&
@@ -566,7 +718,7 @@ static void assert_aot_branching_cleanup(const XrValidatedProgram *program,
                 }
                 ASSERT_TRUE(instruction->successor_count >= 2u);
                 ASSERT_LT(instruction->successors[1], function->block_count);
-                XrBackendBlock *cancel = &function->blocks[instruction->successors[1]];
+                XrValidatedBlock *cancel = &function->blocks[instruction->successors[1]];
                 uint32_t cancel_start = live_start + point->live_value_count;
                 ASSERT_TRUE(cancel_start <= instruction->operand_count);
                 ASSERT_TRUE(cancel->argument_count <= instruction->operand_count - cancel_start);
@@ -596,6 +748,7 @@ static void assert_aot_branching_cleanup(const XrValidatedProgram *program,
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        write_probe_typed_host(output);
         ASSERT_TRUE(
             fprintf(
                 output,
@@ -627,8 +780,10 @@ static void assert_aot_branching_cleanup(const XrValidatedProgram *program,
                 "        xr_probe_count = 0;\n"
                 "        xr_probe_refuse_call = refuse_call[mode];\n"
                 "        XrAotEntryCoroutineFrame frame;\n"
-                "        xr_aot_entry_coroutine_frame_initialize(&frame);\n"
-                "        frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "        xr_aot_entry_coroutine_frame_initialize(&frame, NULL, NULL);\n"
+                "        frame.context.provider_call_typed = xr_probe_typed;\n"
+                "    frame.context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                 "        XrBackendNativeOutcome outcome = xr_aot_entry_coroutine_step(&frame);\n"
                 "        uint32_t suspension = 0;\n"
                 "        while (outcome.kind == 1 && suspension < 3) {\n"
@@ -662,7 +817,7 @@ static void assert_aot_nested_cleanup(const XrValidatedProgram *program,
     XrBackendIR *backend_ir = NULL;
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
@@ -675,6 +830,7 @@ static void assert_aot_nested_cleanup(const XrValidatedProgram *program,
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        write_probe_typed_host(output);
         ASSERT_TRUE(
             fprintf(
                 output,
@@ -715,8 +871,10 @@ static void assert_aot_nested_cleanup(const XrValidatedProgram *program,
                 "        xr_probe_count = 0;\n"
                 "        xr_probe_refuse_call = refuse_call[mode];\n"
                 "        XrAotEntryCoroutineFrame frame;\n"
-                "        xr_aot_entry_coroutine_frame_initialize(&frame);\n"
-                "        frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "        xr_aot_entry_coroutine_frame_initialize(&frame, NULL, NULL);\n"
+                "        frame.context.provider_call_typed = xr_probe_typed;\n"
+                "    frame.context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                 "        XrBackendNativeOutcome outcome = xr_aot_entry_coroutine_step(&frame);\n"
                 "        uint32_t suspension = 0;\n"
                 "        while (outcome.kind == 1 && suspension < 3) {\n"
@@ -750,7 +908,7 @@ static void assert_aot_pipe_cancel_cleanup(const XrValidatedProgram *program,
     XrBackendIR *backend_ir = NULL;
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
@@ -760,12 +918,13 @@ static void assert_aot_pipe_cancel_cleanup(const XrValidatedProgram *program,
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_entry_coroutine_cancel"));
-    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_typed"));
     ASSERT_NULL(strstr(generated.bytes, "TargetPlan"));
     if (output_path) {
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        write_probe_typed_host(output);
         ASSERT_TRUE(
             fprintf(output,
                     "\nstatic uint32_t xr_probe_calls;\n"
@@ -782,8 +941,10 @@ static void assert_aot_pipe_cancel_cleanup(const XrValidatedProgram *program,
                     "}\n"
                     "int main(void) {\n"
                     "    XrAotEntryCoroutineFrame resumed;\n"
-                    "    xr_aot_entry_coroutine_frame_initialize(&resumed);\n"
-                    "    resumed.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                    "    xr_aot_entry_coroutine_frame_initialize(&resumed, NULL, NULL);\n"
+                    "    resumed.context.provider_call_typed = xr_probe_typed;\n"
+                "    resumed.context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                     "    XrBackendNativeOutcome suspended = "
                     "xr_aot_entry_coroutine_step(&resumed);\n"
                     "    if (suspended.kind != UINT32_C(1) || suspended.state_id != UINT32_C(1) || "
@@ -793,8 +954,10 @@ static void assert_aot_pipe_cancel_cleanup(const XrValidatedProgram *program,
                     "xr_probe_calls != 2) return 254;\n"
                     "    xr_aot_entry_coroutine_frame_dispose(&resumed);\n"
                     "    XrAotEntryCoroutineFrame cancelled;\n"
-                    "    xr_aot_entry_coroutine_frame_initialize(&cancelled);\n"
-                    "    cancelled.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                    "    xr_aot_entry_coroutine_frame_initialize(&cancelled, NULL, NULL);\n"
+                    "    cancelled.context.provider_call_typed = xr_probe_typed;\n"
+                "    cancelled.context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                     "    suspended = xr_aot_entry_coroutine_step(&cancelled);\n"
                     "    if (suspended.kind != UINT32_C(1) || xr_probe_calls != 2) return 253;\n"
                     "    XrBackendNativeOutcome stopped = "
@@ -819,7 +982,7 @@ static void assert_aot_affine_coroutine_cleanup(const XrValidatedProgram *progra
     XrBackendIR *backend_ir = NULL;
     ASSERT_EQ_INT(xr_backend_ir_build(program, profile, &options, &backend_ir, &backend_diagnostic),
                   XR_BACKEND_OK);
-    ASSERT_TRUE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    ASSERT_TRUE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC repeated = {0};
     ASSERT_EQ_INT(xr_backend_ir_emit_c(backend_ir, false, &generated, &backend_diagnostic),
@@ -829,12 +992,13 @@ static void assert_aot_affine_coroutine_cleanup(const XrValidatedProgram *progra
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "child_active_"));
-    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_bool_i64_unary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "provider_call_typed"));
     ASSERT_NULL(strstr(generated.bytes, "xr_place_"));
     if (output_path) {
         FILE *output = fopen(output_path, "wb");
         ASSERT_NOT_NULL(output);
         ASSERT_EQ_UINT(fwrite(generated.bytes, 1u, generated.size, output), generated.size);
+        write_probe_typed_host(output);
         ASSERT_TRUE(
             fprintf(
                 output,
@@ -873,8 +1037,10 @@ static void assert_aot_affine_coroutine_cleanup(const XrValidatedProgram *progra
                 "static int xr_probe_run_normal(void) {\n"
                 "    uint32_t base = xr_probe_calls;\n"
                 "    XrAotEntryCoroutineFrame frame;\n"
-                "    xr_aot_entry_coroutine_frame_initialize(&frame);\n"
-                "    frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "    xr_aot_entry_coroutine_frame_initialize(&frame, NULL, NULL);\n"
+                "    frame.context.provider_call_typed = xr_probe_typed;\n"
+                "    frame.context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                 "    for (uint32_t observation = 0; observation < UINT32_C(4); ++observation) {\n"
                 "        XrBackendNativeOutcome suspended = "
                 "xr_aot_entry_coroutine_step(&frame);\n"
@@ -890,8 +1056,10 @@ static void assert_aot_affine_coroutine_cleanup(const XrValidatedProgram *progra
                 "static int xr_probe_run_cancel(uint32_t cancel_after) {\n"
                 "    uint32_t base = xr_probe_calls;\n"
                 "    XrAotEntryCoroutineFrame frame;\n"
-                "    xr_aot_entry_coroutine_frame_initialize(&frame);\n"
-                "    frame.context.provider_call_bool_i64_unary = xr_probe_close;\n"
+                "    xr_aot_entry_coroutine_frame_initialize(&frame, NULL, NULL);\n"
+                "    frame.context.provider_call_typed = xr_probe_typed;\n"
+                "    frame.context.provider_dispose_typed = xr_probe_dispose;\n"
+                "    xr_probe_close_entry = xr_probe_close;\n"
                 "    for (uint32_t observation = 0; observation < cancel_after; ++observation) {\n"
                 "        XrBackendNativeOutcome suspended = "
                 "xr_aot_entry_coroutine_step(&frame);\n"

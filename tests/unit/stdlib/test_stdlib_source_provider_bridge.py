@@ -79,6 +79,13 @@ class SourceProviderBridgeTests(unittest.TestCase):
 """
         )
 
+    def test_wrapper_can_implement_interfaces(self) -> None:
+        self.parse(source=GOOD_SOURCE.replace("class Box {", "class Box implements Lengthable, Display {"))
+
+    def test_nonfinal_wrapper_with_interfaces_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "expected exactly one exported final source class"):
+            self.parse(source=GOOD_SOURCE.replace("final class Box {", "class Box implements Lengthable {"))
+
     def test_public_native_leaf_is_rejected(self) -> None:
         with self.assertRaisesRegex(SystemExit, "stdlib-internal only"):
             self.parse(provider_def(function_visibility="public"))

@@ -8,11 +8,11 @@
  * xr_semantic_source_structural_field_shape.h - Exact structural field results
  *
  * KEY CONCEPT:
- *   OBJECT_GET_F selects a field by the ordinal frozen in the operation.  A
- *   managed result is a borrowed tagged carrier only when that ordinal names
- *   the same result type in an exact source structural shape.  The judgement
- *   depends on the serialized producer, receiver layout and ownership facts;
- *   it does not depend on a module, field spelling, or consumer.
+ *   Structural and tuple reads select the ordinal frozen in the operation. A
+ *   managed result is
+ * a borrowed tagged carrier only when that ordinal names the same result type in an exact source
+ * structural shape.  The judgement depends on the serialized producer, receiver layout and
+ * ownership facts; it does not depend on a module, field spelling, or consumer.
  */
 
 #ifndef XR_SEMANTIC_SOURCE_STRUCTURAL_FIELD_SHAPE_H
@@ -35,16 +35,17 @@ static inline bool xr_semantic_source_structural_field_read_is_exact(
         plan ? xr_semantic_plan_operands(plan, &operand_count) : NULL;
     const uint32_t *children = plan ? xr_semantic_plan_type_children(plan, &child_count) : NULL;
     XrStableId zero = {{0}};
-    if (!plan || !operation || !operands || !children || operation->opcode != XI_OBJECT_GET_F ||
+    if (!plan || !operation || !operands || !children ||
+        (operation->opcode != XI_OBJECT_GET_F && operation->opcode != XI_TUPLE_GET) ||
         operation->operand_count != 1 || operation->operand_begin >= operand_count ||
         operation->metadata_count != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
         operation->auxiliary_kind != XI_AUX_KIND_NONE ||
         operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
-        operation->effects != xi_generated_op_effects(XI_OBJECT_GET_F) ||
-        operation->flags != xi_generated_op_default_flags(XI_OBJECT_GET_F) ||
-        operation->ownership_use != xi_generated_op_own_use(XI_OBJECT_GET_F) ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->flags != xi_generated_op_default_flags(operation->opcode) ||
+        operation->ownership_use != xi_generated_op_own_use(operation->opcode) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
         operation->evidence[0] != 0 || operation->evidence[1] != 0 || operation->evidence[2] != 0 ||
         operation->evidence[4] != 0 || operation->evidence[5] != 0 || operation->evidence[6] != 0 ||
@@ -76,7 +77,10 @@ static inline bool xr_semantic_source_structural_field_read_is_exact(
         receiver->access != XR_CALL_ARG_PLAIN || receiver->origin != XI_PLACE_ORIGIN_NONE ||
         receiver->lifetime != XI_PLACE_LIFETIME_NONE || receiver->escape != XI_PLACE_ESCAPE_NONE ||
         receiver->flags != 0 ||
-        !xr_semantic_source_structural_shape_is_exact(plan, receiver->type) ||
+        (operation->opcode == XI_OBJECT_GET_F
+             ? !xr_semantic_source_structural_shape_is_exact(plan, receiver->type)
+             : (type->kind != XR_KIND_TUPLE || xr_semantic_aggregate_type_kind(type) != 1 ||
+                type->aggregate_extent != type->child_count)) ||
         type->child_begin > child_count || type->child_count > child_count - type->child_begin ||
         operation->semantic_immediate < 0 ||
         operation->semantic_immediate >= (int64_t) type->child_count)

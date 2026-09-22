@@ -429,14 +429,16 @@
             {
               "path": "tests/unit/aot/test_xr_program_aot_coroutine_native_step.c",
               "tokens": [
-                "xr_backend_execution_create(execution_id, &xr_aot_entry_coroutine_descriptor",
+                "xr_backend_execution_create(instance, &xr_aot_entry_coroutine_descriptor",
+                "xr_execution_instance_lease_count(instance) == 1u",
+                "xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_GENERATION_REJECTED",
                 "mismatch.execution_id.bytes[0] ^= UINT8_C(1)",
                 "XR_BACKEND_EXECUTION_SUSPENDED",
                 "xr_backend_execution_step(execution).kind == XR_BACKEND_EXECUTION_INVALID"
               ]
             },
             {
-              "path": "src/aot/program/xr_backend_ir.c",
+              "path": "src/execution/xr_native_execution.c",
               "tokens": [
                 "descriptor->execution_id",
                 "execution_id",
@@ -446,7 +448,7 @@
             {
               "path": "tests/unit/ir/test_xi_pipeline.c",
               "tokens": [
-                "e2e_program_cooperative_yield_closes_source_reference_vm_and_aot",
+                "e2e_program_cooperative_yield_closes_source_vm_and_aot",
                 "g_yield_aot_output_path",
                 "xr_aot_entry_coroutine_descriptor"
               ]

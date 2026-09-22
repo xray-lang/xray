@@ -60,6 +60,33 @@ XR_FUNC const char *xaot_boundary_step_kind_name(XaotBoundaryStepKind kind);
 
 struct XaotBundle;
 
+typedef struct XaotBoundaryCallTargets {
+    const XiFunc *direct;
+    const XiFunc *parameter_target;
+    uint16_t first_arg;
+    uint16_t first_param;
+} XaotBoundaryCallTargets;
+
+typedef struct XaotBoundaryFunctionCalls {
+    const XiFunc *function;
+    XaotBoundaryCallTargets *targets;
+    uint32_t target_count;
+} XaotBoundaryFunctionCalls;
+
+/* All outputs are cleared on failure. Common target admission is local to
+ * this synchronous traversal; independent queries never inherit it. */
+XR_FUNC bool xaot_boundary_resolve_call_batches(const struct XaotBundle *bundle,
+                                                 XaotBoundaryFunctionCalls *functions,
+                                                 uint32_t function_count);
+
+/* Resolve all calls in one synchronous function batch. The caller owns the
+ * value-id-indexed output; bindings remain valid only until Xi or its target
+ * authority changes. No callback or persistent admission state is retained. */
+XR_FUNC bool xaot_boundary_resolve_function_calls(const struct XaotBundle *bundle,
+                                                  const XiFunc *function,
+                                                  XaotBoundaryCallTargets *targets,
+                                                  uint32_t target_count);
+
 /* Borrowed, non-owning projection of one verified closed-i64 direct call.
  * Every pointer remains owned by the bound TargetPlan or Xi module.  The view
  * is valid only while target_fingerprint still matches that plan; it is never

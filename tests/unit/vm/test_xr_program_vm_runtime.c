@@ -33,6 +33,28 @@ static void build_bindings(const XrTargetProfile *profile, RuntimeBindings *bind
 int main(void) {
     XrValidatedProgram *program = NULL;
     XrProgramDiagnostic program_diagnostic;
+    unsigned char corrupted[sizeof(xr_program_vm_embedded_fixture)];
+    memcpy(corrupted, xr_program_vm_embedded_fixture, sizeof(corrupted));
+    corrupted[XR_PROGRAM_MAGIC_SIZE + 2u] = UINT8_C(3);
+    REQUIRE(xr_program_validate(corrupted, sizeof(corrupted), NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+    REQUIRE(program == NULL);
+    corrupted[XR_PROGRAM_MAGIC_SIZE + 2u] = UINT8_C(4);
+    REQUIRE(xr_program_validate(corrupted, sizeof(corrupted), NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+    REQUIRE(program == NULL);
+    memcpy(corrupted, xr_program_vm_embedded_fixture, sizeof(corrupted));
+    corrupted[XR_PROGRAM_MAGIC_SIZE + 4u + 1u] ^= UINT8_C(1);
+    REQUIRE(xr_program_validate(corrupted, sizeof(corrupted), NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+    REQUIRE(program == NULL && program_diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_CORE_SPEC_IDENTITY);
+    /* The exact pre-message contract is obsolete; no fallback decoder accepts it. */
+    static const unsigned char old_core_spec[32] = {0x80,0xe7,0xef,0xb9,0x72,0xdd,0xfe,0xde,0x0f,0xf4,0x05,0xc0,0xce,0x17,0xf4,0x26,0x7a,0x6b,0x81,0x94,0x6c,0xac,0xde,0xad,0x75,0x22,0x04,0x25,0xe1,0xeb,0x1c,0x89};
+    memcpy(corrupted, xr_program_vm_embedded_fixture, sizeof(corrupted));
+    memcpy(corrupted + 13u, old_core_spec, sizeof(old_core_spec));
+    REQUIRE(xr_program_validate(corrupted, sizeof(corrupted), NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+    REQUIRE(program == NULL && program_diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_CORE_SPEC_IDENTITY);
     REQUIRE(xr_program_validate(xr_program_vm_embedded_fixture,
                                 (size_t) xr_program_vm_embedded_fixture_size, NULL, &program,
                                 &program_diagnostic) == XR_PROGRAM_VERIFY_OK);

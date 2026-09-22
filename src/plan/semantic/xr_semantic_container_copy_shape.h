@@ -73,8 +73,9 @@ static inline bool xr_semantic_container_copy_is_exact(const XrSemanticPlan *pla
      * graph copier; there is no homogeneous element lane on the outer root. */
     if (result->kind == XR_KIND_STRUCT_OBJECT) {
         if (argument->type != operation->result_type ||
-            result->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
-            !xr_semantic_source_structural_shape_is_exact(plan, operation->result_type))
+            (result->flags & ~(uint8_t) XR_SEM_TYPE_NULLABLE) !=
+                (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+            !xr_semantic_source_structural_copy_shape_is_exact(plan, operation->result_type))
             return false;
         if (argument_value)
             *argument_value = argument->value;

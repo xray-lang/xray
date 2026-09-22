@@ -4,6 +4,13 @@
 #ifndef XR_SEMANTIC_OWNER_IDS_GEN_H
 #define XR_SEMANTIC_OWNER_IDS_GEN_H
 
+/* Inline owner queries also appear in self-contained generated C. */
+#if defined(__GNUC__) || defined(__clang__)
+#define XR_SEMANTIC_OWNER_FUNCTION static inline __attribute__((unused))
+#else
+#define XR_SEMANTIC_OWNER_FUNCTION static inline
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -150,7 +157,7 @@
 #define XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO UINT64_C(0xc8cd54a90f6bdba8)
 #define XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_CONSUMERS UINT32_C(0x0000003f)
 
-static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,
+XR_SEMANTIC_OWNER_FUNCTION uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,
                                                         uint64_t owner_id_lo) {
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO)
@@ -287,14 +294,14 @@ static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,
     return 0;
 }
 
-static inline bool xr_semantic_owner_has_consumer(uint64_t owner_id_hi,
+XR_SEMANTIC_OWNER_FUNCTION bool xr_semantic_owner_has_consumer(uint64_t owner_id_hi,
                                                    uint64_t owner_id_lo,
                                                    uint32_t consumer_bit) {
     uint32_t bits = xr_semantic_owner_consumer_bits(owner_id_hi, owner_id_lo);
     return bits != 0 && consumer_bit != 0 && (bits & consumer_bit) != 0;
 }
 
-static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,
+XR_SEMANTIC_OWNER_FUNCTION const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,
                                                            uint64_t owner_id_lo) {
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_OWNER_FORWARD_LO)

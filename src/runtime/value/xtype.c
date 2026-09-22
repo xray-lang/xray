@@ -1611,6 +1611,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
             copy->instance.class_name =
                 type->instance.class_name ? xr_pool_strdup(pool, type->instance.class_name) : NULL;
             copy->instance.class_ref = type->instance.class_ref;
+            copy->instance.resource_id = type->instance.resource_id;
             copy->instance.superclass = type->instance.superclass;
             if (type->instance.type_arg_count > 0 && type->instance.type_args) {
                 size_t type_arg_size;
@@ -2581,6 +2582,9 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return true;
     }
     if (a->kind == XR_KIND_INSTANCE || a->kind == XR_KIND_CLASS) {
+        if (memcmp(a->instance.resource_id.bytes, b->instance.resource_id.bytes,
+                   XR_STABLE_ID_BYTES) != 0)
+            return false;
         // A resolved class reference is the nominal identity. Never fall back
         // to a display name when either side has exact declaration authority.
         if (a->instance.class_ref || b->instance.class_ref) {
@@ -2813,6 +2817,12 @@ bool xr_type_is_subclass_of(XrType *type, XrType *target) {
         return false;
     if (target->kind != XR_KIND_CLASS && target->kind != XR_KIND_INSTANCE)
         return false;
+    const uint8_t zero_resource[XR_STABLE_ID_BYTES] = {0};
+    if (memcmp(type->instance.resource_id.bytes, zero_resource, XR_STABLE_ID_BYTES) != 0 ||
+        memcmp(target->instance.resource_id.bytes, zero_resource, XR_STABLE_ID_BYTES) != 0)
+        return !type->instance.class_ref && !target->instance.class_ref &&
+               memcmp(type->instance.resource_id.bytes, target->instance.resource_id.bytes,
+                      XR_STABLE_ID_BYTES) == 0 && nominal_instance_args_equal(type, target);
 
     // Walk up inheritance chain via XrType.superclass first
     XrType *current = type;

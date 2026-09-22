@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import struct
 from typing import Sequence
 
 from provider_declarations import ProviderDeclaration, admission_reasons
+from provider_types import logical_type, native_resource_id
 
 
 ADAPTERS = {
+    "typed": "XR_STDLIB_PROVIDER_TYPED",
     "i64-nullary-u64": "XR_STDLIB_PROVIDER_I64_NULLARY_U64",
     "i64-nullary-i64": "XR_STDLIB_PROVIDER_I64_NULLARY_I64",
     "i64-unary-status-out": "XR_STDLIB_PROVIDER_I64_UNARY_STATUS_OUT",
@@ -21,8 +24,8 @@ EFFECTS = {"none": 0, "reads-clock": 8, "reads-process": 16,
            "reads-environment": 32, "io": 64,
            "managed-allocation": 128, "managed-deallocation": 256}
 PLATFORMS = {"linux": 1, "macos": 2, "windows": 4}
-TYPES = {"i64": b"\x03", "bool": b"\x02", "(i64, i64)?": b"\x06\x05\x02\x03\x03"}
 HOST_PROTOTYPES = {
+    "typed": "XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *)",
     "i64-nullary-u64": "uint64_t (*)(void)",
     "i64-nullary-i64": "int64_t (*)(void)",
     "i64-unary-status-out": "bool (*)(int64_t, int64_t *)",
@@ -42,15 +45,15 @@ def logical_bytes(declaration: ProviderDeclaration) -> bytes:
     if reasons:
         raise ValueError("provider declaration is not admitted: " + ", ".join(reasons))
     logical = declaration.logical
-    types = b"".join(TYPES[parameter.type] for parameter in logical.parameters)
-    types += TYPES[logical.result_type] + b"\x01"  # The typed error result is unit.
+    types = b"".join(logical_type(parameter.type)[0] for parameter in logical.parameters)
+    types += logical_type(logical.result_type)[0] + b"\x01"  # The typed error result is unit.
     effects = sum(EFFECTS[effect] for effect in logical.effects)
     platforms = sum(PLATFORMS[platform] for platform in logical.platforms)
     result = bytearray(struct.pack("<III10B", 1, effects, platforms, 1,
                                   len(logical.parameters), len(types), len(logical.resources),
-                                  1, 1, 1, 1, 1, 1))
-    for _ in logical.parameters:
-        result.extend((1, 1))  # Admission requires IN mode and trivial ownership.
+                                  4 if logical.result_owner == "owned" else 1, 1, 1, 1, 1, 1))
+    for parameter in logical.parameters:
+        result.extend((1, 2 if parameter.owner == "borrow" else 1))
     result.extend(types)
     for resource in logical.resources:
         result.extend(stable_id(resource.resource))
@@ -106,6 +109,17 @@ def emit_provider_keys(entries: Sequence[object]) -> str:
     for declaration in sorted(declarations, key=lambda row: row.operation):
         name = declaration.operation.split("/", 1)[1].upper().replace("-", "_").replace("/", "_")
         lines.append(f'#define XR_PROVIDER_{name}_OPERATION_KEY "{declaration.operation}"')
+    resources = set()
+    for declaration in declarations:
+        for text in [declaration.logical.result_type, *(p.type for p in declaration.logical.parameters)]:
+            resources.update(re.findall(r"resource<([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)>", text))
+    resource_macros = set()
+    for module, name in sorted(resources):
+        macro = "XR_PROVIDER_RESOURCE_" + module.upper() + "_" + name.upper() + "_ID"
+        if macro in resource_macros:
+            raise ValueError("distinct resource identities have colliding C macro names")
+        resource_macros.add(macro)
+        lines.append(f"#define {macro} {{ {byte_initializer(native_resource_id(module, name))} }}")
     lines += ["", "#endif  // XR_STDLIB_PROVIDER_KEYS_GEN_H", ""]
     return "\n".join(lines)
 
@@ -141,6 +155,9 @@ def emit_provider_descriptors(entries: Sequence[object]) -> str:
 
 def host_adapter_body(declaration: ProviderDeclaration) -> tuple[str, str, list[str]]:
     host = declaration.host
+    if host.adapter == "typed":
+        return "TYPED", "const XrProviderValuePack *arguments, XrProviderValuePack *result", [
+            f"    return {host.symbol}(context, arguments, result);"]
     if host.adapter in {"i64-nullary-u64", "i64-nullary-i64"}:
         body = ["    if (!result_out) return XR_PROVIDER_CALL_FAILED;"]
         if host.adapter == "i64-nullary-u64":

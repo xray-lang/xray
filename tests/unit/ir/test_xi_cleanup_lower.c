@@ -9,6 +9,7 @@
  */
 
 #include "../test_framework.h"
+#include "analysis/xglobal_summary.h"
 #include "frontend/analyzer/xa_typed_program.h"
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/canonical/xcanon.h"
@@ -16,6 +17,7 @@
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xparse.h"
 #include "ir/xi_cleanup.h"
+#include "ir/xi_edit.h"
 #include "ir/xi_lower.h"
 #include "ir/xi_verify.h"
 #include "toolchain/xcompiler_session.h"
@@ -196,6 +198,109 @@ TEST(possible_cleanup_panic_does_not_erase_the_normal_boundary) {
     ASSERT_EQ_INT(counts.largest_frontier, 1u);
 }
 
+TEST(primitive_panic_exits_have_independent_nested_cleanup_frontiers) {
+    XrVMConfig config = {0};
+    XrVMRuntime *runtime = xray_vm_new_full(&config);
+    ASSERT(runtime != NULL);
+    XiFunc *root = lower_cleanup_source(runtime,
+        "fn run(divisor: i64) -> i64 {\n"
+        "  var count = 0\n"
+        "  defer { count = count + 1 }\n"
+        "  {\n"
+        "    defer { if (divisor > 0) { count = count + 2 } else { count = count + 3 } }\n"
+        "    const quotient = 84 / divisor\n"
+        "    const remainder = 85 % divisor\n"
+        "    return quotient + remainder\n"
+        "  }\n"
+        "}\n");
+    XgGlobalEvidence evidence = {0};
+    char error[256] = {0};
+    bool valid = root && xi_normalize_panic_exits(root, &evidence, runtime, error, sizeof(error));
+    XiFunc *function = root && root->nchildren == 1u ? root->children[0] : NULL;
+    uint32_t receivers = 0u;
+    uint32_t ended_regions = 0u;
+    if (valid && function) {
+        for (uint32_t b = 0u; b < function->nblocks; ++b) {
+            XiBlock *block = function->blocks[b];
+            if (block->exit_reason != XI_EXIT_REASON_PANIC)
+                continue;
+            for (uint32_t i = 0u; i < block->nvalues; ++i) {
+                XiValue *value = block->values[i];
+                ended_regions += value->op == XI_END_TRY;
+                if (value->op != XI_CATCH || value->aux_int != XI_CATCH_AUX_POINT_PANIC)
+                    continue;
+                XiValue *point = value->aux;
+                valid = valid && point && point->block && point->block->nvalues > 0u &&
+                        point->block->values[0] == point && block->npreds == 1u &&
+                        block->preds[0] == point->block &&
+                        (point->op == XI_DIV || point->op == XI_MOD);
+                ++receivers;
+            }
+        }
+        valid = valid && xi_cleanup_verify(function, error, sizeof(error));
+        XiEditFingerprint before = xi_edit_fingerprint(function);
+        valid = valid && xi_normalize_panic_exits(root, &evidence, runtime, error, sizeof(error));
+        XiEditFingerprint after = xi_edit_fingerprint(function);
+        valid = valid && before.cfg == after.cfg && before.values == after.values;
+    } else {
+        valid = false;
+    }
+    if (!valid)
+        fprintf(stderr, "normalized cleanup rejected: %s\n", error);
+    xi_func_free(root);
+    xray_vm_delete(runtime);
+    ASSERT(valid);
+    ASSERT_EQ_INT(receivers, 2u);
+    ASSERT_EQ_INT(ended_regions, 4u);
+}
+
+TEST(panic_normalization_preserves_constructive_error_consumer) {
+    XrVMConfig config = {0};
+    XrVMRuntime *runtime = xray_vm_new_full(&config);
+    ASSERT(runtime);
+    XiFunc *root = lower_cleanup_source(
+        runtime, "fn part(value:i64)->i64 { return value / 1000 }\n"
+                 "class Box {\n"
+                 "  value:i64\n"
+                 "  constructor(value:i64) { this.value=part(value) }\n"
+                 "}\nconst box=Box(1000)\n");
+    XiValue *check = NULL;
+    for (uint32_t b = 0u; root && b < root->nblocks; ++b)
+        for (uint32_t i = 0u; i < root->blocks[b]->nvalues; ++i) {
+            XiValue *value = root->blocks[b]->values[i];
+            if (value->op == XI_ERR_CHECK && value->error_producer)
+                check = value;
+        }
+    bool valid = root && check && check->error_producer->block == check->block;
+    char error[256] = {0};
+    if (valid) {
+        XiValue *producer = check->error_producer;
+        root->xg_body_func_id = 1u;
+        producer->xg_callsite_id = 1u;
+        XgCallsiteSummary site = {
+            .callsite_id = 1u, .owner_func_id = 1u,
+            .flags = XG_CALL_ERROR_EFFECT_VERIFIED | XG_CALL_MAY_PANIC,
+        };
+        XgGlobalEvidence evidence = {.callsites = &site, .ncallsites = 1u};
+        valid = xi_normalize_panic_exits(root, &evidence, runtime, error, sizeof(error)) &&
+                xi_err_check_producer(root, check) == producer &&
+                check->block == producer->block &&
+                check->block->control == check &&
+                check->block->kind == XI_BLOCK_IF &&
+                xi_value_has_panic_continuation(root, producer) &&
+                xi_verify_stage(root, root->stage, error, sizeof(error));
+        XiEditFingerprint before = xi_edit_fingerprint(root);
+        valid = valid && xi_normalize_panic_exits(root, &evidence, runtime, error, sizeof(error));
+        XiEditFingerprint after = xi_edit_fingerprint(root);
+        valid = valid && before.cfg == after.cfg && before.values == after.values;
+    }
+    if (!valid)
+        fprintf(stderr, "constructive error normalization rejected: %s\n", error);
+    xi_func_free(root);
+    xray_vm_delete(runtime);
+    ASSERT(valid);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Xi cleanup source identities");
 RUN_TEST(three_source_defers_keep_distinct_lifo_frontiers);
@@ -203,4 +308,6 @@ RUN_TEST(branching_cleanup_pairs_are_not_confused_with_block_layout);
 RUN_TEST(nested_cleanup_bodies_keep_independent_frontier_occurrences);
 RUN_TEST(nested_cleanup_can_read_outer_cleanup_local);
 RUN_TEST(possible_cleanup_panic_does_not_erase_the_normal_boundary);
+RUN_TEST(primitive_panic_exits_have_independent_nested_cleanup_frontiers);
+RUN_TEST(panic_normalization_preserves_constructive_error_consumer);
 TEST_MAIN_END()

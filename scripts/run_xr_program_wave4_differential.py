@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the source/Reference/VM/native-AOT Wave 4 qualification entry."""
+"""Run the source, VM and native-AOT Wave 4 independent-observation checks."""
 
 from __future__ import annotations
 

@@ -24,6 +24,9 @@ static const XiImportRef *module_import_ref_for_value(const XaotBundle *bundle,
 static const XiClassData *resolve_imported_class(const XaotBundle *bundle, const XiImportRef *ref,
                                                  const XiModule **owner_out);
 static const XiModule *bundle_module_for_func(const XaotBundle *bundle, const XiFunc *func);
+static const XiImportRef *binding_import_ref_for_value(const XaotBundle *bundle,
+                                                       const XiFunc *current,
+                                                       const XiValue *value);
 
 static XaotDirectI64TargetStatus direct_i64_error(char *errbuf, size_t errbuf_len,
                                                   const char *message) {
@@ -53,9 +56,15 @@ static bool direct_i64_machine_rep(const XrTargetPlan *target, uint16_t rep) {
            machine->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
 }
 
-XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
-    const XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
+typedef struct BoundaryCallAdmission {
+    const XaotBundle *bundle;
+    const XrTargetPlan *target;
+} BoundaryCallAdmission;
+
+static XaotDirectI64TargetStatus direct_i64_function_status(
+    const BoundaryCallAdmission *admission, const XiFunc *function, const XrTargetPlan **target_out,
     const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len) {
+    const XaotBundle *bundle = admission->bundle;
     if (target_out)
         *target_out = NULL;
     if (function_out)
@@ -68,7 +77,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
     const XrTargetPlan *target = semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
     if (!target || semantic != function->semantic_plan ||
         xr_target_plan_completed_family_mask(target) != XR_TARGET_REQUIRED_FAMILIES ||
-        !xr_target_plan_is_verified(target) || !xr_target_plan_fingerprint_is_intact(target))
+        !xr_target_plan_is_verified(target) ||
+        (target != admission->target && !xr_target_plan_fingerprint_is_intact(target)))
         return direct_i64_error(errbuf, errbuf_len,
                                 "direct-i64 function has corrupt TargetPlan authority");
 
@@ -91,6 +101,62 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
         *target_out = target;
     if (function_out)
         *function_out = &functions[index];
+    return XAOT_DIRECT_I64_TARGET_FOUND;
+}
+
+XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
+    const XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
+    const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len) {
+    const BoundaryCallAdmission admission = {.bundle = bundle};
+    return direct_i64_function_status(&admission, function, target_out, function_out, errbuf,
+                                      errbuf_len);
+}
+
+/* Target call tables contain only admitted execution families. Semantic call
+ * targets also retain consumers whose bodies still require the legacy ABI. */
+static XaotDirectI64TargetStatus direct_i64_semantic_callers_status(
+    const XaotBundle *bundle, const XrSemanticPlan *callee_semantic,
+    const XrTargetFunctionRecord *callee, char *errbuf, size_t errbuf_len) {
+    const XrTargetPlan *target = xaot_bundle_program_target_plan(bundle);
+    const XrSemanticFunctionRecord *declaration =
+        xr_semantic_plan_function(callee_semantic, callee->semantic_function);
+    if (!declaration)
+        return direct_i64_error(errbuf, errbuf_len, "direct-i64 callee declaration is missing");
+    uint32_t target_call_count = 0;
+    const XrTargetCallRecord *target_calls = xr_target_plan_calls(target, &target_call_count);
+    for (uint32_t mi = 0; mi < xr_target_plan_program_module_count(target); mi++) {
+        const XrSemanticPlan *semantic = xr_target_plan_program_module(target, mi);
+        for (uint32_t ci = 0; ci < xr_semantic_plan_call_target_count(semantic); ci++) {
+            const XrSemanticCallTargetRecord *call = xr_semantic_plan_call_target(semantic, ci);
+            bool local = call && semantic == callee_semantic &&
+                         call->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                         call->function == callee->semantic_function;
+            bool imported = call && call->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT &&
+                            xr_stable_id_equal(call->callee_function, declaration->id);
+            if (!local && !imported)
+                continue;
+            const XrSemanticOperationRecord *operation =
+                xr_semantic_plan_operation(semantic, call->operation);
+            uint32_t caller = UINT32_MAX;
+            if (!operation ||
+                !xr_target_plan_find_function(target, semantic, operation->function, &caller))
+                return direct_i64_error(errbuf, errbuf_len,
+                                        "direct-i64 semantic caller identity is missing");
+            if (xr_target_plan_function_execution_family_mask(target, caller) !=
+                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
+                return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+            uint32_t matches = 0;
+            for (uint32_t ti = 0; target_calls && ti < target_call_count; ti++) {
+                const XrTargetCallRecord *row = &target_calls[ti];
+                if (row->caller_function == caller && row->semantic_call_target == ci &&
+                    row->callee_function == callee->id &&
+                    row->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL)
+                    matches++;
+            }
+            if (matches != 1)
+                return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+        }
+    }
     return XAOT_DIRECT_I64_TARGET_FOUND;
 }
 
@@ -153,14 +219,29 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
     if (status != XAOT_DIRECT_I64_TARGET_FOUND)
         return status;
 
+    status = direct_i64_semantic_callers_status(bundle, semantic, function_row, errbuf, errbuf_len);
+    if (status != XAOT_DIRECT_I64_TARGET_FOUND)
+        return status;
+
     /* A function can relinquish its legacy ABI only when every inbound edge
      * is itself an executable closed-i64 call row.  A module initializer may
      * call an otherwise closed helper while also performing unsupported work;
      * that helper keeps its legacy ABI until the initializer family migrates. */
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(semantic, function_row->semantic_function);
+    if (!semantic_function)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "direct-i64 ABI has no semantic function identity");
     for (uint32_t i = 0; calls && i < call_count; i++) {
-        if (calls[i].callee_function != function_row->id)
+        /* Imported calls name the callee by stable identity instead of the
+         * local
+         * function index. They still consume its current ABI. */
+        bool source_export =
+            calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+            xr_stable_id_equal(calls[i].source_callee_identity, semantic_function->id);
+        if (calls[i].callee_function != function_row->id && !source_export)
             continue;
         if (calls[i].target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
             calls[i].calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
@@ -600,13 +681,14 @@ static void leaf_find_program_function(const XiFunc *function, uint32_t program_
         leaf_find_program_function(function->children[i], program_row, match, match_count);
 }
 
-static bool leaf_aggregate_rep(const XrTargetPlan *target, uint16_t rep, uint32_t semantic_type) {
+static bool leaf_aggregate_rep(const XrTargetPlan *target, const XrSemanticPlan *semantic,
+                               uint16_t rep, uint32_t semantic_type) {
     const XrTargetMachineRepRecord *machine = xr_target_plan_machine_rep(target, rep);
     XrCAggregateProjection projection = {0};
     return machine && machine->kind == XR_MACHINE_REP_AGGREGATE && machine->register_bits == 128 &&
            machine->memory_size == 16 && machine->memory_align == 8 &&
            machine->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
-           xr_c_leaf_aggregate_projection(target, semantic_type, &projection) &&
+           xr_c_leaf_aggregate_projection(target, semantic, semantic_type, &projection) &&
            machine->detail == projection.layout;
 }
 
@@ -853,7 +935,7 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_call_view(
         result_rep->slot != target_call->result_slot ||
         target_call->result_register_rep != argument->register_rep ||
         target_call->result_memory_rep != argument->register_rep ||
-        !leaf_aggregate_rep(target, argument->register_rep, operation->result_type))
+        !leaf_aggregate_rep(target, semantic, argument->register_rep, operation->result_type))
         return leaf_aggregate_error(errbuf, errbuf_len,
                                     "leaf-aggregate representation or slot join is inexact");
 
@@ -962,6 +1044,13 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_constructor_call_target(const XaotBu
         const XiValue *callee = xi_value_trace_repr(call->args[0]);
         if (callee && callee->op == XI_GET_SHARED)
             target = boundary_resolve_shared_constructor(bundle, current, (int) callee->aux_int);
+        if (!target) {
+            const XiImportRef *ref = binding_import_ref_for_value(bundle, current, callee);
+            const XiModule *owner = NULL;
+            const XiClassData *cls = resolve_imported_class(bundle, ref, &owner);
+            if (cls && owner && owner->init)
+                target = boundary_find_constructor(owner->init, cls);
+        }
     } else if (call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0) {
         const XiImportRef *module_ref = module_import_ref_for_value(bundle, current, call->args[0]);
         if (module_ref) {
@@ -1421,26 +1510,14 @@ static const XiFunc *resolve_dispatch_plan_target(const XaotBundle *bundle, cons
     return xaot_bundle_find_dispatch_target_func(bundle, target, NULL);
 }
 
-XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle *bundle,
-                                                               const XiFunc *current,
-                                                               const XiValue *call,
-                                                               uint16_t *first_arg_out) {
+static const XiFunc *resolve_uncovered_direct_call(const XaotBundle *bundle,
+                                                  const XiFunc *current, const XiValue *call,
+                                                  uint16_t *first_arg_out) {
     const XiValue *callee;
 
     if (first_arg_out)
         *first_arg_out = 0;
     if (!bundle || !current || !call)
-        return NULL;
-    /* Covered typed calls have a single TargetPlan owner.  Returning no
-     * legacy answer here makes any missed consumer fail closed instead of
-     * silently reconstructing the callee from a closure/name shape. */
-    XaotLeafAggregateTargetStatus leaf_aggregate =
-        xaot_boundary_leaf_aggregate_function_status(bundle, current, NULL, NULL, NULL, 0);
-    if (leaf_aggregate != XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
-        return NULL;
-    XaotDirectI64TargetStatus direct_i64 =
-        xaot_boundary_direct_i64_function_status(bundle, current, NULL, NULL, NULL, 0);
-    if (direct_i64 != XAOT_DIRECT_I64_TARGET_UNCOVERED)
         return NULL;
     if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) {
         /* Module-member call: args[0] is the imported namespace object, not a
@@ -1489,4 +1566,142 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
     if (callee->op == XI_IMPORT_REF && callee->aux)
         return resolve_import_ref(bundle, (const XiImportRef *) callee->aux);
     return NULL;
+}
+
+
+XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle *bundle,
+                                                               const XiFunc *current,
+                                                               const XiValue *call,
+                                                               uint16_t *first_arg_out) {
+    if (first_arg_out)
+        *first_arg_out = 0;
+    if (!bundle || !current || !call)
+        return NULL;
+    /* Covered typed calls retain their sole TargetPlan owner. A corrupt or
+     * covered authority must never fall through to closure/name resolution. */
+    if (xaot_boundary_leaf_aggregate_function_status(bundle, current, NULL, NULL, NULL, 0) !=
+            XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED ||
+        xaot_boundary_direct_i64_function_status(bundle, current, NULL, NULL, NULL, 0) !=
+            XAOT_DIRECT_I64_TARGET_UNCOVERED)
+        return NULL;
+    return resolve_uncovered_direct_call(bundle, current, call, first_arg_out);
+}
+
+static bool resolve_function_calls(const BoundaryCallAdmission *admission, const XiFunc *function,
+                                   XaotBoundaryCallTargets *targets, uint32_t target_count) {
+    const XaotBundle *bundle = admission->bundle;
+    size_t target_bytes = (size_t) target_count * sizeof(*targets);
+    if (!bundle || !function || !targets || target_bytes / sizeof(*targets) != target_count)
+        return false;
+    memset(targets, 0, target_bytes);
+    bool admitted = false;
+    XaotLeafAggregateTargetStatus leaf = XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED;
+    XaotDirectI64TargetStatus scalar = XAOT_DIRECT_I64_TARGET_UNCOVERED;
+    for (uint32_t bi = 0; bi < function->nblocks; bi++) {
+        const XiBlock *block = function->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || (value->op != XI_CALL && value->op != XI_TAIL_CALL &&
+                           value->op != XI_CALL_METHOD && value->op != XI_CALL_METHOD_DIRECT))
+                continue;
+            if (value->id >= target_count)
+                goto invalid;
+            /* Function coverage and its TargetPlan cannot change inside this
+             * callback-free traversal. Check them once, retaining all exact
+             * per-call checks for covered typed paths. */
+            if (!admitted) {
+                leaf = xaot_boundary_leaf_aggregate_function_status(
+                    bundle, function, NULL, NULL, NULL, 0);
+                if (leaf == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+                    goto invalid;
+                if (leaf == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED) {
+                    scalar = direct_i64_function_status(
+                        admission, function, NULL, NULL, NULL, 0);
+                    if (scalar == XAOT_DIRECT_I64_TARGET_INVALID)
+                        goto invalid;
+                }
+                admitted = true;
+            }
+            XaotBoundaryCallTargets *call = &targets[value->id];
+            if (leaf == XAOT_LEAF_AGGREGATE_TARGET_FOUND) {
+                XaotLeafAggregateTargetView view = {0};
+                if (xaot_boundary_leaf_aggregate_call_view(bundle, function, value, &view,
+                                                           NULL, 0) !=
+                    XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+                    goto invalid;
+                call->direct = view.callee;
+            } else if (scalar == XAOT_DIRECT_I64_TARGET_FOUND) {
+                XaotDirectI64TargetView view = {0};
+                if (xaot_boundary_direct_i64_call_view(bundle, function, value, &view, NULL, 0) !=
+                    XAOT_DIRECT_I64_TARGET_FOUND)
+                    goto invalid;
+                call->direct = view.callee;
+            } else {
+                call->parameter_target =
+                    resolve_uncovered_direct_call(bundle, function, value, &call->first_arg);
+            }
+            if (!call->parameter_target)
+                call->parameter_target = xaot_boundary_resolve_constructor_call_target(
+                    bundle, function, value, &call->first_arg, &call->first_param);
+            if (!call->direct)
+                call->direct = call->parameter_target;
+        }
+    }
+    return true;
+invalid:
+    memset(targets, 0, target_bytes);
+    return false;
+}
+
+static bool clear_function_call_batches(XaotBoundaryFunctionCalls *functions, uint32_t count) {
+    if (count && !functions)
+        return false;
+    bool valid = true;
+    for (uint32_t index = 0; index < count; index++) {
+        XaotBoundaryFunctionCalls *function = &functions[index];
+        size_t bytes = (size_t) function->target_count * sizeof(*function->targets);
+        if (bytes / sizeof(*function->targets) != function->target_count ||
+            (function->target_count && !function->targets)) {
+            valid = false;
+            continue;
+        }
+        if (bytes)
+            memset(function->targets, 0, bytes);
+        if (function->target_count && !function->function)
+            valid = false;
+    }
+    return valid;
+}
+
+XR_FUNC bool xaot_boundary_resolve_call_batches(const XaotBundle *bundle,
+                                                 XaotBoundaryFunctionCalls *functions,
+                                                 uint32_t function_count) {
+    if (!clear_function_call_batches(functions, function_count) || !bundle)
+        return false;
+    const XrTargetPlan *target = xaot_bundle_program_target_plan(bundle);
+    if (target && (xr_target_plan_completed_family_mask(target) != XR_TARGET_REQUIRED_FAMILIES ||
+                   !xr_target_plan_is_verified(target) ||
+                   !xr_target_plan_fingerprint_is_intact(target)))
+        return false;
+    const BoundaryCallAdmission admission = {.bundle = bundle, .target = target};
+    for (uint32_t index = 0; index < function_count; index++) {
+        XaotBoundaryFunctionCalls *function = &functions[index];
+        if (function->target_count &&
+            !resolve_function_calls(&admission, function->function, function->targets,
+                                      function->target_count)) {
+            (void) clear_function_call_batches(functions, function_count);
+            return false;
+        }
+    }
+    return true;
+}
+
+XR_FUNC bool xaot_boundary_resolve_function_calls(const XaotBundle *bundle,
+                                                  const XiFunc *function,
+                                                  XaotBoundaryCallTargets *targets,
+                                                  uint32_t target_count) {
+    if (!function || !targets)
+        return false;
+    XaotBoundaryFunctionCalls calls = {function, targets, target_count};
+    return xaot_boundary_resolve_call_batches(bundle, &calls, 1);
 }

@@ -4534,7 +4534,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
                     fprintf(out, " = XR_FROM_BOOL(xrt_has_pending_error());\n");
                 else
-                    fprintf(out, " = xrt_has_pending_error();\n");
+                    fprintf(out, " = (uint8_t)xrt_has_pending_error();\n");
             }
             return;
         }

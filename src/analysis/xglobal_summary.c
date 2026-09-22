@@ -115,6 +115,17 @@ XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t scalar_r
     return type_key_folded32(h);
 }
 
+XR_FUNC uint32_t xg_synthetic_named_type_key(const char *name) {
+    if (!name || !name[0])
+        return 0u;
+    uint64_t hash = type_key_fold_u64(XR_FNV64_OFFSET_BASIS, XR_TREF_NAMED);
+    hash = type_key_fold_u64(hash, 0u);
+    hash = type_key_fold_u64(hash, 0u);
+    hash = type_key_fold_u64(hash, 0u);
+    hash = type_key_fold_bytes(hash, name, strlen(name));
+    return type_key_folded32(hash);
+}
+
 XR_FUNC uint64_t xg_json_shape_hash_begin(uint32_t field_count) {
     return type_key_fold_u64(XR_FNV64_OFFSET_BASIS, field_count);
 }

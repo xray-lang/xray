@@ -44,27 +44,27 @@ XrAtomic *xr_atomic_new(XrVMRuntime *X, XrAtomicKind kind, int64_t initial) {
 
 int64_t xr_atomic_load(XrAtomic *a, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_load: NULL atomic");
-    return atomic_load_explicit(&a->value, xr_to_c11_load_order(ord));
+    return xr_atomic_i64_load_core(&a->value, (int64_t) ord);
 }
 
 void xr_atomic_store(XrAtomic *a, int64_t val, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_store: NULL atomic");
-    atomic_store_explicit(&a->value, val, xr_to_c11_store_order(ord));
+    xr_atomic_i64_store_core(&a->value, val, (int64_t) ord);
 }
 
 int64_t xr_atomic_fetch_add(XrAtomic *a, int64_t delta, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_fetch_add: NULL atomic");
-    return atomic_fetch_add_explicit(&a->value, delta, xr_to_c11_rmw_order(ord));
+    return xr_atomic_i64_fetch_add_core(&a->value, delta, (int64_t) ord);
 }
 
 int64_t xr_atomic_fetch_sub(XrAtomic *a, int64_t delta, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_fetch_sub: NULL atomic");
-    return atomic_fetch_sub_explicit(&a->value, delta, xr_to_c11_rmw_order(ord));
+    return xr_atomic_i64_fetch_sub_core(&a->value, delta, (int64_t) ord);
 }
 
 int64_t xr_atomic_swap(XrAtomic *a, int64_t desired, XrAtomicOrdering ord) {
     XR_DCHECK(a != NULL, "xr_atomic_swap: NULL atomic");
-    return atomic_exchange_explicit(&a->value, desired, xr_to_c11_rmw_order(ord));
+    return xr_atomic_i64_exchange_core(&a->value, desired, (int64_t) ord);
 }
 
 bool xr_atomic_compare_exchange(XrAtomic *a, int64_t *expected, int64_t desired,
@@ -73,6 +73,5 @@ bool xr_atomic_compare_exchange(XrAtomic *a, int64_t *expected, int64_t desired,
     XR_DCHECK(expected != NULL, "xr_atomic_compare_exchange: NULL expected");
     /* Strong CAS: no spurious failures. On failure, *expected is
      * updated to the current value (standard C11 behaviour). */
-    return atomic_compare_exchange_strong_explicit(&a->value, expected, desired,
-                                                   xr_to_c11_rmw_order(ord), memory_order_relaxed);
+    return xr_atomic_i64_compare_exchange_core(&a->value, expected, desired, (int64_t) ord) != 0;
 }

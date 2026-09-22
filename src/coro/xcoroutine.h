@@ -78,6 +78,8 @@ struct XrCoroMonitor;
 struct XrCoroRegistry;
 struct XrRuntime;
 struct XrRuntimeCore;
+struct XrAsyncPool;
+struct XrAsyncJob;
 typedef struct XrWaitQueue XrWaitQueue;
 typedef struct XrCoroutine XrCoroutine;
 
@@ -106,6 +108,11 @@ typedef struct XrCoroExt {
 
     /* === Await/scope wait state (cold; only blocking await/scope paths use it) === */
     XrCoroWaitState wait;
+
+    /* Completion and teardown serialize the job link under the pool mutex.
+     * The pool outlives its workers and drains all jobs before destruction. */
+    _Atomic(struct XrAsyncPool *) async_pool;
+    struct XrAsyncJob *async_job;
 
     XrValue *recv_slot;
     XrSlotRef recv_slot_ref;
@@ -184,10 +191,9 @@ struct XrCoroutine {
     uint16_t gc_flags;               //  2 bytes: pool and backend lifetime flags
     // --- 64 bytes boundary ---
 
-    /* === Work Stealing Freshness (set on enqueue, read on steal peek) === */
-    /* Atomic because steal-side freshness scans peek this field through the
-     * victim's deque without taking ownership; relaxed is enough — the value
-     * is a heuristic and tolerates staleness, it only needs tear-freedom. */
+    /* Enqueuers and dispatch owners use this timestamp. Speculative steal
+     * scans use the
+     * queue's copied hint and never dereference the shell. */
     _Atomic int64_t submit_time;  //  8 bytes: monotonic ms when enqueued to run queue
 
     /* === Backend Execution State === */

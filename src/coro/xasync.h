@@ -47,6 +47,7 @@ typedef struct XrAsyncJob {
 
     // Task ownership
     struct XrCoroutine *coro;
+    struct XrAsyncPool *pool;
     int worker_id;
 
     // Task function
@@ -121,6 +122,10 @@ XR_FUNC void xr_async_pool_destroy(XrAsyncPool *pool);
 // Submit async task (coroutine suspended until completion). Returns false
 // when the pool is shut down or the bounded queue is full.
 XR_FUNC bool xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job);
+
+/* Detach a coroutine before destroying or reusing its execution state. The
+ * blocking operation retains its independent data owner until it finishes. */
+XR_FUNC void xr_async_detach_coro(struct XrCoroutine *coro);
 
 // Check completion queue, wake coroutines (called in Worker loop)
 XR_FUNC int xr_async_check_ready(XrAsyncPool *pool, int worker_id);

@@ -20,6 +20,11 @@ PRIVATE_ROOTS = (
     "src/aot/xaot_coro.h",
     "src/aot/xrt_thread_aot.h",
 )
+NATIVE_RUNTIME_ROOTS = (
+    "src/os/win/time_win.c", "src/os/win/pipe_win.c",
+    "src/os/unix/time_unix.c", "src/os/unix/pipe_unix.c",
+    "src/shared/xr_time_offset.h", "src/shared/xr_os_core.h",
+)
 PUBLIC_ROOTS = (
     "include/runtime.h",
     "include/xray_export.h",
@@ -86,7 +91,7 @@ def derive(root: Path) -> list[Path]:
     # Every path below is resolved, so the root has to be as well: reached
     # through a symlinked prefix it would contain none of them.
     root = root.resolve()
-    pending = [(root / relative).resolve() for relative in (*PRIVATE_ROOTS, *PUBLIC_ROOTS)]
+    pending = [(root / relative).resolve() for relative in (*PRIVATE_ROOTS, *PUBLIC_ROOTS, *NATIVE_RUNTIME_ROOTS)]
     seen: set[Path] = set()
     while pending:
         path = pending.pop()
@@ -95,7 +100,7 @@ def derive(root: Path) -> list[Path]:
         if not path.is_file():
             raise ClosureError(f"SDK root is missing: {path}")
         relative = path.relative_to(root).as_posix()
-        if not relative.endswith(ALLOWED_SUFFIXES):
+        if not relative.endswith(ALLOWED_SUFFIXES) and relative not in NATIVE_RUNTIME_ROOTS:
             raise ClosureError(f"SDK closure contains an unsupported source kind: {relative}")
         if FORBIDDEN_PATH_RE.search(relative):
             raise ClosureError(f"SDK closure reaches a forbidden legacy path: {relative}")

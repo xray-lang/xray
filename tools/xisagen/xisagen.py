@@ -1274,6 +1274,14 @@ def generate_semantic_owner_ids_header(explicit_owners: list[XiObservableOwnerDe
         '#ifndef XR_SEMANTIC_OWNER_IDS_GEN_H',
         '#define XR_SEMANTIC_OWNER_IDS_GEN_H',
         '',
+        '/* Inline owner queries also appear in self-contained generated C. */',
+        '#if defined(__GNUC__) || defined(__clang__)',
+        '#define XR_SEMANTIC_OWNER_FUNCTION static inline __attribute__((unused))',
+        '#else',
+        '#define XR_SEMANTIC_OWNER_FUNCTION static inline',
+        '#endif',
+
+        '',
         '#include <stdbool.h>',
         '#include <stddef.h>',
         '#include <stdint.h>',
@@ -1294,7 +1302,7 @@ def generate_semantic_owner_ids_header(explicit_owners: list[XiObservableOwnerDe
         lines.append(f'#define XR_SEM_OWNER_ID_{ident}_CONSUMERS {_c_u32(row.consumer_bits)}')
     lines.extend([
         '',
-        'static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,',
+        'XR_SEMANTIC_OWNER_FUNCTION uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,',
         '                                                        uint64_t owner_id_lo) {',
     ])
     for owner, row in explicit_rows:
@@ -1308,14 +1316,14 @@ def generate_semantic_owner_ids_header(explicit_owners: list[XiObservableOwnerDe
         '    return 0;',
         '}',
         '',
-        'static inline bool xr_semantic_owner_has_consumer(uint64_t owner_id_hi,',
+        'XR_SEMANTIC_OWNER_FUNCTION bool xr_semantic_owner_has_consumer(uint64_t owner_id_hi,',
         '                                                   uint64_t owner_id_lo,',
         '                                                   uint32_t consumer_bit) {',
         '    uint32_t bits = xr_semantic_owner_consumer_bits(owner_id_hi, owner_id_lo);',
         '    return bits != 0 && consumer_bit != 0 && (bits & consumer_bit) != 0;',
         '}',
         '',
-        'static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,',
+        'XR_SEMANTIC_OWNER_FUNCTION const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,',
         '                                                           uint64_t owner_id_lo) {',
     ])
     for owner, row in explicit_rows:
@@ -1506,7 +1514,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     for i, trait in enumerate(sorted(VALID_XI_ALGEBRAIC_TRAITS)):
         lines.append(f'#define XI_GEN_ALGEBRAIC_{_xi_c_ident(trait)} (1u << {i})')
     lines.append('')
-    lines.append(f'enum {{ XI_GEN_OP_COUNT = {len(ops)} }};')
+    lines.append(f'#define XI_GEN_OP_COUNT {len(ops)}')
     lines.append('typedef char xi_generated_op_count_must_match_XiOp[')
     lines.append('    ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];')
     lines.append('')

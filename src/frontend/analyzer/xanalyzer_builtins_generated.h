@@ -168,7 +168,7 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 #define GEN_MATH_FUNCTION_COUNT 28
 
 static const XaBuiltinClass g_gen_mem_classes[] = {
-    {"__BufferStorage", true, "", ""},
+    {"__BufferStorage", true, "Buffer", "_storage"},
 };
 #define GEN_MEM_CLASS_COUNT 1
 
@@ -179,10 +179,10 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cacheLineSize", "(): i64", "CPU cache line size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__alloc", "(n: i64): __BufferStorage", "Allocate n uninitialized bytes in a private managed storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__allocZeroed", "(n: i64): __BufferStorage", "Allocate n zero-initialized bytes in a private managed storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__alloc", "(n: i64): __BufferStorage", "Allocate n uninitialized bytes in a private managed storage handle", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__allocZeroed", "(n: i64): __BufferStorage", "Allocate n zero-initialized bytes in a private managed storage handle", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__bufferAsBytes", "(storage: __BufferStorage): const Slice<u8>", "Borrow a readonly byte view from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_BORROWED_PARAM_0},
     {"__bufferBorrowPtr", "(storage: __BufferStorage): MutPtr<u8>", "Borrow the raw pointer from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__bufferResize", "(storage: __BufferStorage, n: i64): bool", "Resize a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},

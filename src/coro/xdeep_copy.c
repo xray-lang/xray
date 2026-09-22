@@ -1118,7 +1118,7 @@ XrValue xr_deep_copy_explicit_to_coro_core(XrRuntimeCore *core, XrValue value,
             xr_shared_retain(obj);
         return value;
     }
-explicit_copy_value:
+explicit_copy_value:;
     XrCopyContext ctx;
     xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
     ctx.share_existing_shared = false;

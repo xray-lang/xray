@@ -10,6 +10,7 @@
  * Generated from explicit provider declarations. Do not edit.
  */
 
+#include "execution/xr_byte_storage_provider.h"
 #include "os/os_pipe.h"
 #include "os/os_time.h"
 #include "shared/xr_os_core.h"
@@ -109,6 +110,42 @@ static XrProviderCallStatus xr_stdlib_provider_call_6(
     return XR_PROVIDER_CALL_OK;
 }
 
+_Static_assert(_Generic(&xr_byte_storage_allocate,
+    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),
+    "Provider host signature does not match its explicit adapter");
+static XrProviderCallStatus xr_stdlib_provider_call_7(
+    void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {
+    (void)context;
+    return xr_byte_storage_allocate(context, arguments, result);
+}
+
+_Static_assert(_Generic(&xr_byte_storage_allocate_zeroed,
+    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),
+    "Provider host signature does not match its explicit adapter");
+static XrProviderCallStatus xr_stdlib_provider_call_8(
+    void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {
+    (void)context;
+    return xr_byte_storage_allocate_zeroed(context, arguments, result);
+}
+
+_Static_assert(_Generic(&xr_byte_storage_length,
+    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),
+    "Provider host signature does not match its explicit adapter");
+static XrProviderCallStatus xr_stdlib_provider_call_9(
+    void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {
+    (void)context;
+    return xr_byte_storage_length(context, arguments, result);
+}
+
+_Static_assert(_Generic(&xr_byte_storage_allocate_aligned,
+    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),
+    "Provider host signature does not match its explicit adapter");
+static XrProviderCallStatus xr_stdlib_provider_call_10(
+    void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {
+    (void)context;
+    return xr_byte_storage_allocate_aligned(context, arguments, result);
+}
+
 static const XrProviderOperationBinding xr_stdlib_provider_bindings[] = {
     {
         .operation_id = { { 0x48, 0x83, 0x2a, 0x90, 0x67, 0x12, 0x89, 0x24, 0x47, 0xd7, 0x3f, 0xa2, 0x84, 0xa0, 0x74, 0x0c } },
@@ -145,7 +182,27 @@ static const XrProviderOperationBinding xr_stdlib_provider_bindings[] = {
         .trampoline_kind = XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY,
         .entry.optional_i64_pair_nullary = xr_stdlib_provider_call_6,
     },
+    {
+        .operation_id = { { 0x52, 0x80, 0xb2, 0xe3, 0xe8, 0xc2, 0xb1, 0x0d, 0x17, 0x92, 0x5f, 0x92, 0x10, 0x58, 0xb2, 0xf4 } },
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_TYPED,
+        .entry.typed = xr_stdlib_provider_call_7,
+    },
+    {
+        .operation_id = { { 0x75, 0xea, 0x81, 0x97, 0xf7, 0x81, 0x6e, 0x73, 0xff, 0x59, 0xc0, 0x80, 0xad, 0xbf, 0x46, 0x49 } },
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_TYPED,
+        .entry.typed = xr_stdlib_provider_call_8,
+    },
+    {
+        .operation_id = { { 0x79, 0xff, 0x36, 0x06, 0x80, 0xc2, 0xb1, 0x0f, 0x0a, 0xba, 0x91, 0x62, 0x44, 0xa5, 0xdb, 0x54 } },
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_TYPED,
+        .entry.typed = xr_stdlib_provider_call_9,
+    },
+    {
+        .operation_id = { { 0x99, 0x72, 0x62, 0x2e, 0xff, 0xa8, 0xe0, 0xdd, 0x4f, 0x95, 0xbe, 0xf9, 0x76, 0x64, 0x41, 0x05 } },
+        .trampoline_kind = XR_PROVIDER_TRAMPOLINE_TYPED,
+        .entry.typed = xr_stdlib_provider_call_10,
+    },
 };
-#define XR_STDLIB_PROVIDER_BINDING_COUNT 7u
+#define XR_STDLIB_PROVIDER_BINDING_COUNT 11u
 
 /* clang-format on */

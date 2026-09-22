@@ -378,7 +378,7 @@ xr_program_indirect_coroutine_fixture_write(XrProgramIndirectCoroutineMutation m
         child_entry_instructions[2].operands = child_string_operands;
         child_entry_instructions[2].operand_count = 2u;
         child_entry_instructions[1] = (XrCoreIrInstructionInput) {
-            .operation_id = XR_CORE_OP_CORE_STRING_FROM_I64,
+            .operation_id = XR_CORE_OP_CORE_STRING_FROM_SCALAR,
             .result = string_result_key,
             .result_type_id = XR_CORE_TYPE_STRING,
             .result_category = XR_CORE_IR_VALUE,
@@ -399,7 +399,7 @@ xr_program_indirect_coroutine_fixture_write(XrProgramIndirectCoroutineMutation m
     if (string_budget) {
         parent_entry_instructions[3] = parent_entry_instructions[1];
         parent_entry_instructions[1] = (XrCoreIrInstructionInput) {
-            .operation_id = XR_CORE_OP_CORE_STRING_FROM_I64,
+            .operation_id = XR_CORE_OP_CORE_STRING_FROM_SCALAR,
             .result = parent_string_key, .result_type_id = XR_CORE_TYPE_STRING,
             .result_category = XR_CORE_IR_VALUE, .result_ownership = XR_CORE_IR_OWNER,
             .operands = &value_key, .operand_count = 1u,

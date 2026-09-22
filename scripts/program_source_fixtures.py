@@ -103,12 +103,16 @@ def validate_registry(payload: object, source: str,
         if (not isinstance(fixture, dict) or
                 not {"id", "expected_exit", "labels", "backends"} <= set(fixture) or
                 not set(fixture) <= {"id", "expected_exit", "labels", "backends",
-                                     "expected_stdout_hex"}):
+                                     "expected_stdout_hex", "expected_stderr_hex"}):
             raise FixtureError(f"invalid fixture record for {name}")
         stdout_hex = fixture.get("expected_stdout_hex", "")
         if (not isinstance(stdout_hex, str) or len(stdout_hex) % 2 != 0 or
                 not re.fullmatch(r"[0-9a-f]*", stdout_hex)):
             raise FixtureError(f"fixture {name} requires lowercase even-length stdout hex")
+        stderr_hex = fixture.get("expected_stderr_hex", "")
+        if (not isinstance(stderr_hex, str) or len(stderr_hex) % 2 != 0 or
+                not re.fullmatch(r"[0-9a-f]*", stderr_hex)):
+            raise FixtureError(f"fixture {name} requires lowercase even-length stderr hex")
         ident = fixture["id"]
         if (not isinstance(ident, str) or not IDENTIFIER.fullmatch(ident)
                 or ident == "none" or ident in fixtures):
@@ -252,8 +256,9 @@ def project_registry(registry: dict) -> tuple[bytes, bytes]:
     for fixture, target in zip(native_fixtures, native_target_names(registry)):
         labels = ";".join(fixture["labels"])
         stdout_hex = fixture.get("expected_stdout_hex", "")
+        stderr_hex = fixture.get("expected_stderr_hex", "")
         cmake.append(f'add_xr_program_source_native_fixture({fixture["id"]} '
-                     f'{target} {fixture["expected_exit"]} "{labels}" "{stdout_hex}")')
+                     f'{target} {fixture["expected_exit"]} "{labels}" "{stdout_hex}" "{stderr_hex}")')
     for (case, fixture), test_name in zip(pending_fixture_cases(registry),
                                           pending_test_names(registry)):
         labels = ";".join(fixture["labels"])
@@ -476,6 +481,17 @@ class RegistryTests(unittest.TestCase):
         self.assertIn(b"XR_CORE_OP_CORE_CLASS_CONSTRUCT", pending_header)
         self.assertNotIn(b"add_xr_program_source_native_fixture(", pending_cmake)
         self.assertIn(b"add_xr_program_source_pending_fixture(example example ", pending_cmake)
+
+    def test_stderr_expectation_is_exact_and_projected(self):
+        candidate = copy.deepcopy(self.payload)
+        candidate["cases"][0]["fixture"]["expected_stderr_hex"] = "6572726f720a"
+        registry = validate_registry(candidate, self.source, self.core_operations)
+        _, cmake = project_registry(registry)
+        self.assertIn(b'"6572726f720a"', cmake)
+        for malformed in (True, "x1", "ABC", "0g", "a"):
+            candidate["cases"][0]["fixture"]["expected_stderr_hex"] = malformed
+            with self.assertRaises(FixtureError):
+                validate_registry(candidate, self.source, self.core_operations)
 
     def test_missing_duplicate_unknown_and_malformed_records_fail_closed(self):
         mutations = [lambda value: value["cases"].pop(),

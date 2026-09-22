@@ -678,6 +678,39 @@ static void test_backend_policy_generated_metadata(void) {
     printf("  PASS\n");
 }
 
+static void test_backend_lower_preserves_resolved_import_calls(void) {
+    printf("--- test_backend_lower_preserves_resolved_import_calls ---\n");
+    XrType scalar = {.kind = XR_KIND_FLOAT, .id = 91, .frozen = true, .scalar_rep = XR_NATIVE_F64};
+    for (unsigned named = 0; named < 2; named++) {
+        XiFunc *function = xi_func_new("resolved_import_call", &scalar);
+        XiBlock *entry = function ? xi_block_new(function) : NULL;
+        assert(function && entry);
+        XiImportRef *import = (XiImportRef *) xi_func_arena_alloc(function, sizeof(*import));
+        assert(import);
+        *import = (XiImportRef) {.module_path = "math", .member_name = named ? "sqrt" : NULL};
+        XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &stub_function, 0);
+        XiValue *argument = xi_const_float(function, entry, 81.0, &scalar);
+        XiValue *call = xi_value_new(function, entry, named ? XI_CALL : XI_CALL_METHOD, &scalar, 2);
+        assert(callee && argument && call);
+        callee->aux = import;
+        call->args[0] = callee;
+        call->args[1] = argument;
+        call->aux = named ? NULL : (void *) "sqrt";
+        call->flags |= XI_FLAG_TAIL;
+        uint16_t opcode = call->op;
+        uint32_t flags = call->flags;
+        void *metadata = call->aux;
+        xi_block_set_return(entry, call);
+        function->stage = XI_STAGE_REPPED;
+        xi_backend_lower(function);
+        assert(call->op == opcode && call->nargs == 2 && call->aux == metadata);
+        assert(call->args[0] == callee && call->args[1] == argument && call->flags == flags);
+        assert(xi_op_is_backend_legal(call->op));
+        xi_func_free(function);
+    }
+    printf("  PASS\n");
+}
+
 static void test_backend_lower_rewrites_generated_builtin_ops(void) {
     printf("--- test_backend_lower_rewrites_generated_builtin_ops ---\n");
 
@@ -1376,6 +1409,7 @@ int main(void) {
     test_backend_lower_preserves_collection_ops();
     test_backend_lower_preserves_type_slice_and_range_ops();
     test_backend_policy_generated_metadata();
+    test_backend_lower_preserves_resolved_import_calls();
     test_backend_lower_rewrites_generated_builtin_ops();
     test_stage_monotonicity();
     test_consumed_handle_is_rejected();

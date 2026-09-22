@@ -15,12 +15,12 @@
 #include "base/xhashmap.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
+#include "os/os_temp.h"
+#include "../test_win_compat.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 /* ========== Isolate Stub ========== */
 
@@ -31,13 +31,14 @@
 /* ========== Test Fixtures ========== */
 
 static char g_tmpdir[512];
+static char g_created_files[32][1024];
+static size_t g_created_file_count;
 static XrVMRuntime *g_iso;
 static XrCompilerSession *g_session;
 
 static void setup(void) {
-    snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/xray_test_graph_XXXXXX");
-    char *d = mkdtemp(g_tmpdir);
-    if (!d)
+    g_created_file_count = 0u;
+    if (xr_temp_dir_create("xray-test-graph", g_tmpdir, sizeof(g_tmpdir)) != 0)
         abort();
     /* Same canonical-root requirement as the resolver suite: the graph
      * canonicalizes the entry it is handed, and the identity authority
@@ -50,30 +51,34 @@ static void setup(void) {
 }
 
 static void teardown(void) {
-    char cmd[600];
-    snprintf(cmd, sizeof(cmd), "rm -rf %s", g_tmpdir);
-    (void) system(cmd);
+    while (g_created_file_count > 0u)
+        if (remove(g_created_files[--g_created_file_count]) != 0)
+            abort();
+    if (xr_test_rmdir(g_tmpdir) != 0)
+        abort();
+    g_tmpdir[0] = '\0';
 }
 
 static void create_file(const char *rel_path, const char *content) {
     char full[1024];
-    snprintf(full, sizeof(full), "%s/%s", g_tmpdir, rel_path);
-    char dir[1024];
-    strncpy(dir, full, sizeof(dir) - 1);
-    dir[sizeof(dir) - 1] = '\0';
-    char *slash = strrchr(dir, '/');
-    if (slash) {
-        *slash = '\0';
-        char mkd[1100];
-        snprintf(mkd, sizeof(mkd), "mkdir -p %s", dir);
-        (void) system(mkd);
-    }
+    /* This fixture owns flat files below its atomically reserved directory. */
+    int length = snprintf(full, sizeof(full), "%s/%s", g_tmpdir, rel_path);
+    if (!g_tmpdir[0] || strchr(rel_path, '/') || strchr(rel_path, '\\') || length < 0 ||
+        (size_t) length >= sizeof(full))
+        abort();
     FILE *f = fopen(full, "w");
     if (!f)
         abort();
     if (content)
         fputs(content, f);
-    fclose(f);
+    if (fclose(f) != 0)
+        abort();
+    for (size_t i = 0u; i < g_created_file_count; ++i)
+        if (strcmp(g_created_files[i], full) == 0)
+            return;
+    if (g_created_file_count >= sizeof(g_created_files) / sizeof(g_created_files[0]))
+        abort();
+    memcpy(g_created_files[g_created_file_count++], full, (size_t) length + 1u);
 }
 
 static char *abs_path(const char *rel) {
@@ -85,7 +90,7 @@ static char *abs_path(const char *rel) {
 static int build_script_graph(XrModuleGraph *graph, const char *entry, char **error) {
     XrModuleIdentityAuthority authority = {
         .kind = XR_MODULE_IDENTITY_SCRIPT,
-        .physical_root = g_tmpdir[0] ? g_tmpdir : "/tmp",
+        .physical_root = g_tmpdir,
     };
     return xr_module_graph_build(graph, entry, &authority, error);
 }
@@ -301,18 +306,20 @@ TEST(graph_find_by_canonical) {
 }
 
 TEST(graph_entry_not_found) {
+    setup();
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = build_script_graph(g, "/tmp/nonexistent_xray_file_9999.xr", &err);
+    int rc = build_script_graph(g, abs_path("nonexistent.xr"), &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     xr_free(err);
 
     xr_module_graph_free(g);
     xr_module_resolver_free(r);
+    teardown();
 }
 
 TEST(graph_parse_failure_is_build_failure) {

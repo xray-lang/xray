@@ -1931,6 +1931,29 @@ TEST(select_rep_identity_copy_preserves_source_carrier) {
     xi_func_free(f);
 }
 
+TEST(select_rep_variant_test_uses_native_bool) {
+    for (uint32_t ordinal = 0; ordinal < 2; ordinal++) {
+        XiFunc *f = make_func("variant_test_bool", &stub_bool);
+        XiBlock *block = f->entry;
+        XiValue *source = xi_param(f, block, 0, &stub_nullable_int);
+        XiValue *test = xi_value_new(f, block, XI_VARIANT_TEST, &stub_bool, 1);
+        XiValue *negated = xi_value_new(f, block, XI_NOT, &stub_bool, 1);
+        REQUIRE(source && test && negated);
+        test->args[0] = source;
+        test->aux_int = ordinal;
+        negated->args[0] = test;
+        xi_block_set_return(block, negated);
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(f, &policy);
+        REQUIRE(source->rep == XR_REP_TAGGED && test->args[0] == source);
+        REQUIRE(test->rep == XR_REP_I64 && negated->args[0] == test);
+        REQUIRE(negated->rep == XR_REP_I64 && block->control == negated);
+        for (uint32_t i = 0; i < block->nvalues; i++)
+            REQUIRE(block->values[i]->backend_origin == XI_BACKEND_VALUE_NONE);
+        xi_func_free(f);
+    }
+}
+
 TEST(select_rep_no_change_for_call) {
     /* CALL with TAGGED-rep params: no BOX/UNBOX needed */
     XiFunc *f = make_func("test", &stub_func);
@@ -2156,6 +2179,70 @@ TEST(full_pipeline_preserves_frozen_coroutine_plan) {
     char error[256] = {0};
     assert(xi_verify_stage(f, XI_STAGE_CORO_LOWERED, error, sizeof(error)));
     xi_func_free(f);
+}
+
+static void check_representation_cleanup_coroutine_alias(bool owned) {
+    XrType *type = owned ? &stub_str : &stub_int;
+    XiFunc *f = make_func("coro_rep_alias", type);
+    XiValue *value;
+    if (owned) {
+        XiValue *left = xi_const_str(f, f->entry, "left", type);
+        XiValue *right = xi_const_str(f, f->entry, "right", type);
+        value = xi_value_new(f, f->entry, XI_STR_CONCAT, type, 2u);
+        assert(left && right && value);
+        value->args[0] = left;
+        value->args[1] = right;
+    } else {
+        value = xi_const_int(f, f->entry, 42, type);
+    }
+    XiValue *alias = xi_value_new(f, f->entry, XI_COPY, type, 1u);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_void, 0u);
+    assert(value && alias && yield);
+    alias->args[0] = value;
+    xi_block_set_return(f->entry, alias);
+    f->stage = XI_STAGE_SEMANTIC_LOWERED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    assert(xi_coro_lower(f, NULL));
+    f->stage = XI_STAGE_CORO_LOWERED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_CORO_LOWERED);
+    f->lowering_facts.initialized = true;
+    f->lowering_facts.semantic_ops_lowered = true;
+    f->lowering_facts.coroutine_required = true;
+    f->lowering_facts.coroutine_lowered = true;
+    f->lowering_facts.callable_lowered = true;
+    assert(xi_coro_plan_find_slot(f->coro_plan, alias) != NULL);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    xi_opt_refresh_representations_with_policy(f, &policy);
+    bool alias_present = false;
+    for (uint32_t b = 0u; b < f->nblocks; ++b)
+        for (uint32_t v = 0u; v < f->blocks[b]->nvalues; ++v)
+            alias_present |= f->blocks[b]->values[v] == alias;
+    assert(!alias_present && "representation cleanup must remove the identity copy");
+    assert(xi_coro_plan_rebase(f));
+    char error[256] = {0};
+    bool valid = xi_verify_stage(f, XI_STAGE_CORO_LOWERED, error, sizeof(error));
+    if (!valid)
+        fprintf(stderr, "rebased representation cleanup: %s\n", error);
+    assert(valid);
+    assert(xi_coro_plan_find_slot(f->coro_plan, alias) == NULL);
+    const XiCoroSlot *slot = xi_coro_plan_find_slot(f->coro_plan, value);
+    assert(slot && slot->live_across);
+    assert(f->coro_plan->points[0].nlive == 1u);
+    assert(f->coro_plan->points[0].live[0] == value);
+    assert(f->coro_plan->points[0].resume_block->control == value);
+    assert(slot->frame_root == owned && slot->frame_release == owned);
+    assert(f->coro_plan->points[0].nroots == (owned ? 1u : 0u));
+    assert(f->coro_plan->points[0].ndrops == (owned ? 1u : 0u));
+    if (owned) {
+        assert(f->coro_plan->points[0].roots[0] == value);
+        assert(f->coro_plan->points[0].drops[0] == value);
+    }
+    xi_func_free(f);
+}
+
+TEST(representation_cleanup_rebases_removed_coroutine_values) {
+    check_representation_cleanup_coroutine_alias(false);
+    check_representation_cleanup_coroutine_alias(true);
 }
 
 TEST(non_coroutine_plan_keeps_full_optimizer_pipeline) {
@@ -2881,6 +2968,7 @@ int main(void) {
     run_select_rep_enum_ordinal_requires_exact_native_witness();
     run_select_rep_unbox_param_for_arith();
     run_select_rep_identity_copy_preserves_source_carrier();
+    run_select_rep_variant_test_uses_native_bool();
     run_select_rep_no_change_for_call();
     run_select_rep_arith_chain_stays_unboxed();
     run_select_rep_keeps_narrow_store_for_shared_typed_array();
@@ -2890,6 +2978,7 @@ int main(void) {
     run_select_rep_array_hof_mutation_cannot_authorize_native_seed();
     run_select_rep_advances_empty_func_tree();
     run_full_pipeline_preserves_frozen_coroutine_plan();
+    run_representation_cleanup_rebases_removed_coroutine_values();
     run_non_coroutine_plan_keeps_full_optimizer_pipeline();
     run_the_none_level_runs_no_pass_and_reports_no_statistics();
     run_statistics_say_which_passes_do_not_count_values();

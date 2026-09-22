@@ -6,6 +6,7 @@
 typedef struct XrCoreIrVariant {
     uint16_t *payload_types;
     uint32_t payload_count;
+    char *display_name;
 } XrCoreIrVariant;
 
 typedef struct XrCoreIrCallableSignature {
@@ -36,10 +37,14 @@ typedef struct XrCoreIrType {
     XrCoreIrVariant *variants;
     uint32_t variant_count;
     uint16_t view_element_type;
+    uint16_t array_element_type;
+    uint16_t atomic_element_type;
+    XrStableId resource_id;
     XrCoreIrViewCapability view_capability;
     XrCoreIrCallableSignature callable_signature;
     XrCoreIrKey existential_interface;
     XrCoreIrInterfaceUseKind interface_use_kind;
+    char *display_name;
 } XrCoreIrType;
 
 typedef struct XrCoreIrInstruction {
@@ -204,5 +209,8 @@ void xr_program_set_diagnostic(char *diagnostic, size_t diagnostic_size, const c
  * globally sorting function keys, not by module storage order. */
 const XrCoreIrFunction *xr_program_function_by_canonical_id(const XrCoreIrProgram *program,
                                                             uint32_t function_id);
+XR_FUNC XrProgramBuildStatus xr_program_function_ids_from_keys(const XrCoreIrProgram *program,
+                                                               const XrCoreIrKey *keys,
+                                                               uint32_t count, uint32_t *ids);
 
 #endif /* XR_PROGRAM_INTERNAL_H */

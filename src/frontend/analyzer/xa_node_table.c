@@ -37,8 +37,8 @@ typedef struct XaNodeEntry {
     XrConversionWitness conversion;
     bool has_call_error_effect;
     XaCallErrorEffectFact call_error_effect;
-    bool has_function_expr_effect;
-    XaFunctionExprEffectFact function_expr_effect;
+    bool has_body_effect;
+    XaBodyEffectFact body_effect;
     bool has_target_query;
     XaTargetQueryFact target_query;
     bool has_suspend_point;
@@ -225,7 +225,7 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 
 static bool entry_has_no_facts(const XaNodeEntry *e) {
     return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion &&
-           !e->has_call_error_effect && !e->has_function_expr_effect && !e->has_target_query &&
+           !e->has_call_error_effect && !e->has_body_effect && !e->has_target_query &&
            !e->has_suspend_point && !e->has_callable_target_set && !e->has_generic_specialization;
 }
 
@@ -634,7 +634,7 @@ void xa_node_table_clear_call_error_effect(XaNodeTable *t, const struct AstNode 
         remove_entry_by_id(t, node->node_id);
 }
 
-static bool function_expr_effect_fact_valid(const XaFunctionExprEffectFact *fact) {
+static bool body_effect_fact_valid(const XaBodyEffectFact *fact) {
     if (!fact || fact->effect_id == XA_EFFECT_NONE ||
         (fact->throw_effect != XR_FN_EFFECT_NO_THROW &&
          fact->throw_effect != XR_FN_EFFECT_MAY_THROW) ||
@@ -643,39 +643,39 @@ static bool function_expr_effect_fact_valid(const XaFunctionExprEffectFact *fact
     return fact->completeness != XA_EFFECT_COMPLETE || fact->unknown_reasons == XA_UNKNOWN_NONE;
 }
 
-bool xa_node_table_set_function_expr_effect(XaNodeTable *t, const struct AstNode *node,
-                                            const XaFunctionExprEffectFact *fact) {
-    if (!t || !node || node->type != AST_FUNCTION_EXPR || !function_expr_effect_fact_valid(fact))
+bool xa_node_table_set_body_effect(XaNodeTable *t, const struct AstNode *node,
+                                   const XaBodyEffectFact *fact) {
+    if (!t || !node || (node->type != AST_FUNCTION_EXPR && node->type != AST_PROGRAM) ||
+        !body_effect_fact_valid(fact))
         return false;
     XaNodeEntry *entry = find_or_create(t, node->node_id);
     if (!entry)
         return false;
-    entry->has_function_expr_effect = true;
-    entry->function_expr_effect = *fact;
+    entry->has_body_effect = true;
+    entry->body_effect = *fact;
     return true;
 }
 
-bool xa_node_table_get_function_expr_effect(const XaNodeTable *t, const struct AstNode *node,
-                                            XaFunctionExprEffectFact *out_fact) {
-    if (!t || !node || node->type != AST_FUNCTION_EXPR)
+bool xa_node_table_get_body_effect(const XaNodeTable *t, const struct AstNode *node,
+                                   XaBodyEffectFact *out_fact) {
+    if (!t || !node || (node->type != AST_FUNCTION_EXPR && node->type != AST_PROGRAM))
         return false;
     const XaNodeEntry *entry = find_entry(t, node->node_id);
-    if (!entry || !entry->has_function_expr_effect)
+    if (!entry || !entry->has_body_effect)
         return false;
     if (out_fact)
-        *out_fact = entry->function_expr_effect;
+        *out_fact = entry->body_effect;
     return true;
 }
 
-static int compare_node_function_expr_effect_entry(const void *left, const void *right) {
-    const XaNodeFunctionExprEffectEntry *a = (const XaNodeFunctionExprEffectEntry *) left;
-    const XaNodeFunctionExprEffectEntry *b = (const XaNodeFunctionExprEffectEntry *) right;
+static int compare_node_body_effect_entry(const void *left, const void *right) {
+    const XaNodeBodyEffectEntry *a = (const XaNodeBodyEffectEntry *) left;
+    const XaNodeBodyEffectEntry *b = (const XaNodeBodyEffectEntry *) right;
     return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
 }
 
-bool xa_node_table_snapshot_function_expr_effects(const XaNodeTable *t,
-                                                  XaNodeFunctionExprEffectEntry **out_entries,
-                                                  uint32_t *out_count) {
+bool xa_node_table_snapshot_body_effects(const XaNodeTable *t, XaNodeBodyEffectEntry **out_entries,
+                                         uint32_t *out_count) {
     if (!out_entries || !out_count)
         return false;
     *out_entries = NULL;
@@ -686,41 +686,41 @@ bool xa_node_table_snapshot_function_expr_effects(const XaNodeTable *t,
     uint32_t count = 0;
     for (int i = 0; i < t->bucket_count; i++) {
         for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
-            if (entry->has_function_expr_effect)
+            if (entry->has_body_effect)
                 count++;
         }
     }
     if (count == 0)
         return true;
 
-    XaNodeFunctionExprEffectEntry *entries =
-        (XaNodeFunctionExprEffectEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
+    XaNodeBodyEffectEntry *entries =
+        (XaNodeBodyEffectEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
     if (!entries)
         return false;
     uint32_t index = 0;
     for (int i = 0; i < t->bucket_count; i++) {
         for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
-            if (!entry->has_function_expr_effect)
+            if (!entry->has_body_effect)
                 continue;
             entries[index].node_id = entry->node_id;
-            entries[index].fact = entry->function_expr_effect;
+            entries[index].fact = entry->body_effect;
             index++;
         }
     }
-    qsort(entries, count, sizeof(*entries), compare_node_function_expr_effect_entry);
+    qsort(entries, count, sizeof(*entries), compare_node_body_effect_entry);
     *out_entries = entries;
     *out_count = count;
     return true;
 }
 
-void xa_node_table_clear_function_expr_effect(XaNodeTable *t, const struct AstNode *node) {
+void xa_node_table_clear_body_effect(XaNodeTable *t, const struct AstNode *node) {
     if (!t || !node)
         return;
     XaNodeEntry *entry = (XaNodeEntry *) find_entry(t, node->node_id);
-    if (!entry || !entry->has_function_expr_effect)
+    if (!entry || !entry->has_body_effect)
         return;
-    entry->has_function_expr_effect = false;
-    entry->function_expr_effect = (XaFunctionExprEffectFact) {0};
+    entry->has_body_effect = false;
+    entry->body_effect = (XaBodyEffectFact) {0};
     if (entry_has_no_facts(entry))
         remove_entry_by_id(t, node->node_id);
 }

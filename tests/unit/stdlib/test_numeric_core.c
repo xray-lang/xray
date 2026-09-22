@@ -20,6 +20,7 @@
 #include "shared/xr_static_address_core.h"
 #include "shared/xr_reference_count_core.h"
 #include "shared/xr_sync_core.h"
+#include "os/os_thread.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -157,6 +158,52 @@ TEST(int_div_mod_owner_freezes_signed_unsigned_and_zero_edges) {
                       XR_SEM_OWNER_ID_SHARED_INT_DIV_MOD_LO, XR_SEM_CONSUMER_VM,
                       XR_INT_DIV_MOD_DIV, XR_INT_DIV_MOD_PROOF_POSITIVE, -7, 3),
                   -2);
+}
+
+TEST(integer_divmod_preserves_exact_width_and_signedness) {
+    static const struct {
+        uint8_t width;
+        bool is_signed;
+        uint64_t left, right, quotient, remainder;
+    } cases[] = {
+        {8u, true, UINT64_C(0x80), UINT64_MAX, UINT64_C(0xffffffffffffff80), 0u},
+        {16u, true, UINT64_C(0x8000), UINT64_MAX, UINT64_C(0xffffffffffff8000), 0u},
+        {32u, true, UINT64_C(0x80000000), UINT64_MAX, UINT64_C(0xffffffff80000000), 0u},
+        {64u, true, UINT64_C(0x8000000000000000), UINT64_MAX,
+         UINT64_C(0x8000000000000000), 0u},
+        {8u, false, 255u, 3u, 85u, 0u},
+        {16u, false, 65535u, 3u, 21845u, 0u},
+        {32u, false, UINT64_C(4294967295), 3u, UINT64_C(1431655765), 0u},
+        {64u, false, UINT64_MAX, 3u, UINT64_C(6148914691236517205), 0u},
+        {64u, false, UINT64_MAX, 1u, UINT64_MAX, 0u},
+        {64u, false, UINT64_C(9223372036854775809), 3u, UINT64_C(3074457345618258603), 0u},
+        {64u, false, UINT64_MAX, 10u, UINT64_C(1844674407370955161), 5u},
+        {64u, false, UINT64_C(9223372036854775808), UINT64_MAX,
+         0u, UINT64_C(9223372036854775808)},
+        {8u, true, UINT64_C(0xf9), 3u, UINT64_C(0xfffffffffffffffe), UINT64_MAX},
+        {16u, true, 7u, UINT64_C(0xfffd), UINT64_C(0xfffffffffffffffe), 1u},
+        {32u, true, UINT64_C(0xfffffff9), UINT64_C(0xfffffffd), 2u, UINT64_MAX},
+        {64u, true, UINT64_C(0xfffffffffffffff9), 3u,
+         UINT64_C(0xfffffffffffffffe), UINT64_MAX},
+    };
+    for (unsigned index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        for (unsigned remainder = 0u; remainder < 2u; ++remainder) {
+            XrIntegerDivModResult result = xr_integer_divmod_eval(
+                cases[index].left, cases[index].right, cases[index].width,
+                cases[index].is_signed, remainder != 0u);
+            ASSERT_FALSE(result.divisor_is_zero);
+            ASSERT_EQ_UINT(result.bits, remainder ? cases[index].remainder : cases[index].quotient);
+            XrIntegerDivModResult zero = xr_integer_divmod_eval(
+                cases[index].left, 0u, cases[index].width, cases[index].is_signed, remainder != 0u);
+            ASSERT_TRUE(zero.divisor_is_zero);
+            ASSERT_EQ_UINT(zero.bits, 0u);
+        }
+    }
+    /* The full-width carrier may contain discarded high bits. */
+    ASSERT_TRUE(xr_integer_divmod_eval(255u, 256u, 8u, false, false).divisor_is_zero);
+    ASSERT_TRUE(xr_integer_divmod_eval(255u, 256u, 8u, true, true).divisor_is_zero);
+    ASSERT_EQ_UINT(xr_integer_divmod_nonzero_bits(UINT64_C(0xf9), 3u, 8u, true, false, true),
+                   UINT64_C(0xfffffffffffffffe));
 }
 
 TEST(numeric_core_shift_counts_are_mod64) {
@@ -735,6 +782,198 @@ TEST(atomic_store_core_freezes_ordering_without_aliases) {
                   "xr_atomic_store_plan_core");
 }
 
+typedef struct AtomicF64Worker {
+    _Atomic(int64_t) *storage;
+    double previous[256];
+} AtomicF64Worker;
+
+static void *atomic_f64_worker(void *opaque) {
+    AtomicF64Worker *worker = opaque;
+    for (size_t index = 0u; index < 256u; ++index)
+        worker->previous[index] = xr_atomic_f64_fetch_update_core(worker->storage, 1.0, 0, 3);
+    return NULL;
+}
+
+TEST(atomic_f64_updates_are_linearizable_under_contention) {
+    _Atomic(int64_t) storage;
+    atomic_init(&storage, 0);
+    xr_thread_t threads[4];
+    AtomicF64Worker workers[4] = {0};
+    size_t started = 0u;
+    for (; started < 4u; ++started) {
+        workers[started].storage = &storage;
+        if (!xr_thread_create(&threads[started], atomic_f64_worker, &workers[started]))
+            break;
+    }
+    int join_result = 0;
+    for (size_t index = 0u; index < started; ++index)
+        join_result |= xr_thread_join(threads[index], NULL);
+    ASSERT_EQ_UINT(started, 4u);
+    ASSERT_EQ_INT(join_result, 0);
+    uint8_t seen[1024] = {0};
+    for (size_t thread = 0u; thread < 4u; ++thread) {
+        for (size_t index = 0u; index < 256u; ++index) {
+            double previous = workers[thread].previous[index];
+            ASSERT(previous >= 0.0 && previous < 1024.0);
+            uint32_t ordinal = (uint32_t) previous;
+            ASSERT(previous == (double) ordinal);
+            ASSERT_EQ_INT(seen[ordinal], 0);
+            seen[ordinal] = 1u;
+        }
+    }
+    int64_t bits = atomic_load(&storage);
+    double result;
+    memcpy(&result, &bits, sizeof(result));
+    ASSERT(result == 1024.0);
+}
+
+TEST(atomic_f64_update_preserves_old_value_and_ieee_bits) {
+    for (int64_t ordering = 0; ordering <= 4; ++ordering) {
+        _Atomic(int64_t) storage;
+        double initial = 1.5;
+        int64_t bits;
+        memcpy(&bits, &initial, sizeof(bits));
+        atomic_init(&storage, bits);
+        ASSERT(xr_atomic_f64_fetch_update_core(&storage, 2.25, 0, ordering) == 1.5);
+        ASSERT(xr_atomic_f64_fetch_update_core(&storage, 2.25, 1, ordering) == 3.75);
+        ASSERT_EQ_INT(atomic_load(&storage), bits);
+
+        atomic_store(&storage, INT64_MIN);
+        double previous = xr_atomic_f64_fetch_update_core(&storage, 0.0, 1, ordering);
+        memcpy(&bits, &previous, sizeof(bits));
+        ASSERT_EQ_INT(bits, INT64_MIN);
+        ASSERT_EQ_INT(atomic_load(&storage), INT64_MIN);
+        previous = xr_atomic_f64_fetch_update_core(&storage, 0.0, 0, ordering);
+        memcpy(&bits, &previous, sizeof(bits));
+        ASSERT_EQ_INT(bits, INT64_MIN);
+        ASSERT_EQ_INT(atomic_load(&storage), 0);
+
+        const int64_t nan_bits = INT64_C(0x7ff8000000000042);
+        atomic_store(&storage, nan_bits);
+        previous = xr_atomic_f64_fetch_update_core(&storage, 1.0, 0, ordering);
+        memcpy(&bits, &previous, sizeof(bits));
+        ASSERT_EQ_INT(bits, nan_bits);
+        bits = atomic_load(&storage);
+        ASSERT_EQ_INT(bits & INT64_C(0x7ff0000000000000), INT64_C(0x7ff0000000000000));
+        ASSERT((bits & INT64_C(0x000fffffffffffff)) != 0);
+    }
+}
+
+typedef struct AtomicStorageWorker {
+    XrAtomicStorageCore *storage;
+    uint32_t *published;
+    uint32_t index;
+    uint32_t observed_sum;
+    uint32_t failures;
+    XrAtomicStorageRelease released;
+} AtomicStorageWorker;
+
+static void *atomic_storage_worker(void *opaque) {
+    AtomicStorageWorker *worker = opaque;
+    for (uint32_t iteration = 0u; iteration < 256u; ++iteration) {
+        if (!xr_atomic_storage_retain_core(worker->storage)) {
+            ++worker->failures;
+            break;
+        }
+        xr_atomic_i64_fetch_add_core(&worker->storage->value, 1, 0);
+        if (xr_atomic_storage_release_core(worker->storage) != XR_ATOMIC_STORAGE_RELEASE_RETAINED)
+            ++worker->failures;
+    }
+    worker->published[worker->index] = worker->index + 1u;
+    worker->released = xr_atomic_storage_release_core(worker->storage);
+    if (worker->released == XR_ATOMIC_STORAGE_RELEASE_LAST) {
+        for (uint32_t index = 0u; index < 4u; ++index)
+            worker->observed_sum += worker->published[index];
+    }
+    return NULL;
+}
+
+TEST(atomic_storage_last_release_observes_all_owners) {
+    XrAtomicStorageCore storage;
+    xr_atomic_storage_init_core(&storage, 0);
+    for (uint32_t index = 1u; index < 4u; ++index)
+        ASSERT(xr_atomic_storage_retain_core(&storage));
+    uint32_t published[4] = {0};
+    xr_thread_t threads[4];
+    AtomicStorageWorker workers[4] = {0};
+    size_t started = 0u;
+    for (; started < 4u; ++started) {
+        workers[started].storage = &storage;
+        workers[started].published = published;
+        workers[started].index = (uint32_t) started;
+        if (!xr_thread_create(&threads[started], atomic_storage_worker, &workers[started]))
+            break;
+    }
+    int joined = 0;
+    for (size_t index = 0u; index < started; ++index)
+        joined |= xr_thread_join(threads[index], NULL);
+    for (size_t index = started; index < 4u; ++index)
+        (void) xr_atomic_storage_release_core(&storage);
+    ASSERT_EQ_UINT(started, 4u);
+    ASSERT_EQ_INT(joined, 0);
+    uint32_t last = 0u;
+    for (size_t index = 0u; index < 4u; ++index) {
+        ASSERT_EQ_UINT(workers[index].failures, 0u);
+        if (workers[index].released == XR_ATOMIC_STORAGE_RELEASE_LAST) {
+            ++last;
+            ASSERT_EQ_UINT(workers[index].observed_sum, 10u);
+        } else {
+            ASSERT_EQ_INT(workers[index].released, XR_ATOMIC_STORAGE_RELEASE_RETAINED);
+        }
+    }
+    ASSERT_EQ_UINT(last, 1u);
+    ASSERT_EQ_UINT(atomic_load(&storage.owners), 0u);
+    ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage.value, 4), 1024);
+}
+
+TEST(atomic_storage_copy_keeps_identity_and_count_bounds) {
+    XrAtomicStorageCore storage;
+    xr_atomic_storage_init_core(&storage, 40);
+    XrAtomicStorageCore *alias = &storage;
+    ASSERT(xr_atomic_storage_retain_core(alias));
+    ASSERT_EQ_INT(xr_atomic_i64_fetch_add_core(&alias->value, 2, 4), 40);
+    ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage.value, 4), 42);
+    ASSERT_EQ_INT(xr_atomic_storage_release_core(&storage), XR_ATOMIC_STORAGE_RELEASE_RETAINED);
+    ASSERT_EQ_INT(xr_atomic_i64_load_core(&alias->value, 4), 42);
+    ASSERT_EQ_INT(xr_atomic_storage_release_core(alias), XR_ATOMIC_STORAGE_RELEASE_LAST);
+    /* Stack storage remains allocated here solely to probe forbidden resurrection. */
+    ASSERT_FALSE(xr_atomic_storage_retain_core(&storage));
+    ASSERT_EQ_INT(xr_atomic_storage_release_core(&storage), XR_ATOMIC_STORAGE_RELEASE_INVALID);
+    atomic_store(&storage.owners, UINT32_MAX);
+    ASSERT_FALSE(xr_atomic_storage_retain_core(&storage));
+    ASSERT_EQ_INT(atomic_load(&storage.owners), UINT32_MAX);
+}
+
+TEST(atomic_scalar_operations_preserve_old_values_and_wrap) {
+    for (int64_t ordering = 0; ordering <= 4; ++ordering) {
+        _Atomic(int64_t) storage;
+        atomic_init(&storage, 40);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), 40);
+        ASSERT_EQ_INT(xr_atomic_i64_fetch_add_core(&storage, 2, ordering), 40);
+        ASSERT_EQ_INT(xr_atomic_i64_exchange_core(&storage, 7, ordering), 42);
+        int64_t expected = 7;
+        ASSERT(xr_atomic_i64_compare_exchange_core(&storage, &expected, 9, ordering));
+        ASSERT_EQ_INT(expected, 7);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), 9);
+        ASSERT_FALSE(xr_atomic_i64_compare_exchange_core(&storage, &expected, 11, ordering));
+        ASSERT_EQ_INT(expected, 9);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), 9);
+        xr_atomic_i64_store_core(&storage, INT64_MAX, ordering);
+        ASSERT_EQ_INT(xr_atomic_i64_fetch_add_core(&storage, 1, ordering), INT64_MAX);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), INT64_MIN);
+        ASSERT_EQ_INT(xr_atomic_i64_fetch_sub_core(&storage, 1, ordering), INT64_MIN);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), INT64_MAX);
+        xr_atomic_i64_store_core(&storage, 0, ordering);
+        ASSERT_EQ_INT(xr_atomic_i64_fetch_sub_core(&storage, INT64_MIN, ordering), 0);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), INT64_MIN);
+        xr_atomic_i64_store_core(&storage, 0, ordering);
+        ASSERT_EQ_INT(xr_atomic_i64_fetch_xor_core(&storage, 1, ordering), 0);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), 1);
+        ASSERT_EQ_INT(xr_atomic_i64_fetch_xor_core(&storage, 1, ordering), 1);
+        ASSERT_EQ_INT(xr_atomic_i64_load_core(&storage, ordering), 0);
+    }
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -751,6 +990,7 @@ RUN_TEST(numeric_core_abs_wraps_int64_min);
 RUN_TEST(numeric_core_integer_arithmetic_wraps);
 RUN_TEST(numeric_neg_owner_freezes_scalar_bits_and_bigint_sign);
 RUN_TEST(int_div_mod_owner_freezes_signed_unsigned_and_zero_edges);
+RUN_TEST(integer_divmod_preserves_exact_width_and_signedness);
 RUN_TEST(numeric_core_shift_counts_are_mod64);
 RUN_TEST(shift_owner_bigint_plan_and_limb_kernel);
 RUN_TEST(bitwise_binary_owner_freezes_scalar_and_bigint_edges);
@@ -776,6 +1016,11 @@ RUN_TEST(static_address_core_freezes_stability_and_borrow_contract);
 RUN_TEST(reference_count_core_freezes_retain_and_release_contract);
 RUN_TEST(atomic_load_core_freezes_ordering_without_aliases);
 RUN_TEST(atomic_store_core_freezes_ordering_without_aliases);
+RUN_TEST(atomic_f64_update_preserves_old_value_and_ieee_bits);
+RUN_TEST(atomic_f64_updates_are_linearizable_under_contention);
+RUN_TEST(atomic_scalar_operations_preserve_old_values_and_wrap);
+RUN_TEST(atomic_storage_copy_keeps_identity_and_count_bounds);
+RUN_TEST(atomic_storage_last_release_observes_all_owners);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

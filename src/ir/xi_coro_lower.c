@@ -9,6 +9,7 @@
  */
 
 #include "xi_coro_lower.h"
+#include "xi_cleanup.h"
 #include "xi_edit.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -272,89 +273,6 @@ static uint32_t coro_block_index(const XiFunc *f, const XiBlock *block) {
     return UINT32_MAX;
 }
 
-static bool coro_try_region_reaches_point(const XiFunc *f, const XiValue *try_op,
-                                          const XiValue *point) {
-    if (!f || !try_op || !try_op->block || !point || !point->block)
-        return true;
-    uint32_t try_index = try_op->block->nvalues;
-    for (uint32_t i = 0; i < try_op->block->nvalues; i++) {
-        if (try_op->block->values[i] == try_op) {
-            try_index = i;
-            break;
-        }
-    }
-    if (try_index == try_op->block->nvalues)
-        return true;
-
-    uint8_t *visited = (uint8_t *) xr_calloc(f->nblocks, sizeof(uint8_t));
-    XiBlock **queue = (XiBlock **) xr_calloc(f->nblocks, sizeof(XiBlock *));
-    if (!visited || !queue) {
-        xr_free(visited);
-        xr_free(queue);
-        return true;
-    }
-    uint32_t head = 0, tail = 0;
-    uint32_t try_bi = coro_block_index(f, try_op->block);
-    if (try_bi == UINT32_MAX) {
-        xr_free(visited);
-        xr_free(queue);
-        return true;
-    }
-    visited[try_bi] = 1;
-
-    bool stopped = false;
-    for (uint32_t i = try_index + 1; i < try_op->block->nvalues; i++) {
-        XiValue *value = try_op->block->values[i];
-        if (value == point) {
-            xr_free(visited);
-            xr_free(queue);
-            return true;
-        }
-        if (value && value->op == XI_END_TRY && value->aux == try_op) {
-            stopped = true;
-            break;
-        }
-    }
-    if (!stopped) {
-        for (uint32_t s = 0; s < 2; s++) {
-            XiBlock *succ = try_op->block->succs[s];
-            uint32_t succ_bi = coro_block_index(f, succ);
-            if (succ && succ_bi != UINT32_MAX && !visited[succ_bi] && tail < f->nblocks) {
-                visited[succ_bi] = 1;
-                queue[tail++] = succ;
-            }
-        }
-    }
-    bool found = false;
-    while (head < tail && !found) {
-        XiBlock *block = queue[head++];
-        bool ends_region = false;
-        for (uint32_t i = 0; i < block->nvalues; i++) {
-            XiValue *value = block->values[i];
-            if (value == point) {
-                found = true;
-                break;
-            }
-            if (value && value->op == XI_END_TRY && value->aux == try_op) {
-                ends_region = true;
-                break;
-            }
-        }
-        if (found || ends_region)
-            continue;
-        for (uint32_t s = 0; s < 2; s++) {
-            XiBlock *succ = block->succs[s];
-            uint32_t succ_bi = coro_block_index(f, succ);
-            if (succ && succ_bi != UINT32_MAX && !visited[succ_bi] && tail < f->nblocks) {
-                visited[succ_bi] = 1;
-                queue[tail++] = succ;
-            }
-        }
-    }
-    xr_free(visited);
-    xr_free(queue);
-    return found;
-}
 
 static bool coro_block_has_catch_for_try(const XiBlock *handler, const XiValue *try_op) {
     if (!handler || !try_op)
@@ -495,7 +413,7 @@ static bool coro_point_active_handler_count(const XiFunc *f, const XiValue *poin
         const XiBlock *block = f->blocks[bi];
         for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
             const XiValue *try_op = block->values[vi];
-            if (!try_op || try_op->op != XI_TRY || !coro_try_region_reaches_point(f, try_op, point))
+            if (!try_op || try_op->op != XI_TRY || !xi_try_region_reaches_point(f, try_op, point))
                 continue;
             if (!coro_panic_handler_is_supported(f, try_op) || count == UINT16_MAX)
                 return false;
@@ -513,7 +431,7 @@ static bool coro_fill_point_active_handlers(const XiFunc *f, XiCoroSuspendPoint 
         for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
             XiValue *try_op = block->values[vi];
             if (!try_op || try_op->op != XI_TRY ||
-                !coro_try_region_reaches_point(f, try_op, point->op))
+                !xi_try_region_reaches_point(f, try_op, point->op))
                 continue;
             uint16_t insert = count;
             while (insert > 0 && point->active_handlers[insert - 1]->id > try_op->id) {
@@ -525,7 +443,7 @@ static bool coro_fill_point_active_handlers(const XiFunc *f, XiCoroSuspendPoint 
         }
     }
     for (uint16_t i = 1; i < point->active_handler_count; i++) {
-        if (!coro_try_region_reaches_point(f, point->active_handlers[i - 1],
+        if (!xi_try_region_reaches_point(f, point->active_handlers[i - 1],
                                            point->active_handlers[i]))
             return false;
     }
@@ -1025,6 +943,18 @@ XR_FUNC bool xi_coro_plan_rebase(XiFunc *f) {
     if (!plan->analysis_complete || !plan->cfg_rewritten || !plan->points || !plan->dispatch ||
         !plan->frame_actions)
         return false;
+    /* Panic normalization can split the pre-suspend block. The last normal
+     * continuation is now the predecessor; retaining the original block would
+     * attach spill actions to the panic branch instead of the suspension edge. */
+    for (uint32_t i = 0; i < plan->nstates; ++i) {
+        XiCoroSuspendPoint *point = &plan->points[i];
+        XiBlock *suspend = point->suspend_block;
+        if (!suspend || suspend->npreds != 1u || !suspend->preds[0] ||
+            suspend->preds[0]->kind != XI_BLOCK_PLAIN ||
+            suspend->preds[0]->succs[0] != suspend)
+            return false;
+        point->pre_block = suspend->preds[0];
+    }
     if (!coro_reisolate_suspend_blocks(f, plan))
         return false;
     for (uint32_t i = 0; i < plan->nstates; i++) {

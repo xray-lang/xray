@@ -7404,6 +7404,49 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_distinguishes_collocated_imports) {
+    setup_parser_session();
+    AstNode *ast = xr_parse(g_session,
+                            "import alpha\n"
+                            "import { One, Two } from beta\n"
+                            "import gamma\n");
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(ast->as.program.count, 3);
+    /* Synthesized imports inherit the source position of their originating
+     * declaration while introducing distinct module storage bindings. */
+    for (int i = 1; i < ast->as.program.count; i++) {
+        ast->as.program.statements[i]->line = ast->as.program.statements[0]->line;
+        ast->as.program.statements[i]->column = ast->as.program.statements[0]->column;
+    }
+    XrModuleSpec spec;
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    int topo = 0;
+    XrModuleGraph graph = {.specs = &spec, .spec_count = 1, .topo_order = &topo,
+                           .topo_count = 1, .entry_index = 0};
+    XgGlobalEvidence evidence = {0}, repeated = {0};
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(evidence.ndecls, 4);
+    const char *names[] = {"alpha", "One", "Two", "gamma"};
+    for (uint32_t i = 0; i < evidence.ndecls; i++) {
+        ASSERT_EQ_UINT(evidence.decls[i].name_id, xg_name_id(names[i]));
+        ASSERT_EQ_UINT(evidence.decls[i].module_id, 1);
+        ASSERT_EQ_UINT(evidence.decls[i].source_span_id, 1);
+        ASSERT_TRUE(evidence.decls[i].source_node_id != 0);
+        for (uint32_t j = 0; j < i; j++)
+            ASSERT_NE(evidence.decls[i].source_node_id, evidence.decls[j].source_node_id);
+    }
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph(
+        &repeated, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(repeated.ndecls, evidence.ndecls);
+    for (uint32_t i = 0; i < evidence.ndecls; i++)
+        ASSERT_EQ_UINT(repeated.decls[i].source_node_id, evidence.decls[i].source_node_id);
+    xg_global_evidence_free(&repeated);
+    xg_global_evidence_free(&evidence);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_build_key_uses_explicit_imported_summary_hash) {
     XrModuleSpec specs[2];
     int entry_deps[1] = {1};
@@ -10953,6 +10996,43 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_prelude_constructor_has_exact_native_identity) {
+    setup_parser_session();
+    const char *source =
+        "fn make(value: i64) -> Atomic<i64> { return Atomic<i64>(value) }\n"
+        "fn shadow(Atomic: fn(i64) -> Atomic<i64>) { Atomic(1) }\n";
+    XgGlobalEvidence evidence;
+    XaAnalyzer *analyzer = NULL;
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &evidence, &analyzer, NULL));
+    const XgBodySummary *make = evidence_find_body_by_name(&evidence, "make");
+    const XgBodySummary *shadow = evidence_find_body_by_name(&evidence, "shadow");
+    ASSERT_NOT_NULL(make);
+    ASSERT_NOT_NULL(shadow);
+    ASSERT_EQ_UINT(make->callsite_count, 1u);
+    ASSERT_EQ_UINT(shadow->callsite_count, 1u);
+    const XgCallsiteSummary *native = xg_global_evidence_find_callsite(&evidence, make->callsite_start);
+    const XgCallsiteSummary *indirect =
+        xg_global_evidence_find_callsite(&evidence, shadow->callsite_start);
+    ASSERT_NOT_NULL(native);
+    ASSERT_NOT_NULL(indirect);
+    ASSERT_EQ_UINT(native->kind, XG_CALL_NATIVE);
+    ASSERT_EQ_UINT(native->method_name_id, xg_name_id("Atomic"));
+    ASSERT_EQ_UINT(indirect->kind, XG_CALL_CLOSURE);
+    ASSERT_TRUE((make->effect_bits & XG_BODY_MAY_ALLOC) != 0u);
+    ASSERT_TRUE((make->capability_bits & XG_CAP_ATOMIC) != 0u);
+    uint8_t *reachable = xr_calloc(evidence.nbodies, sizeof(*reachable));
+    ASSERT_NOT_NULL(reachable);
+    ASSERT_TRUE(xg_body_reachability_mark_closed_world_calls(
+        &evidence, make->func_id, reachable, evidence.nbodies));
+    memset(reachable, 0, evidence.nbodies);
+    ASSERT_FALSE(xg_body_reachability_mark_closed_world_calls(
+        &evidence, shadow->func_id, reachable, evidence.nbodies));
+    xr_free(reachable);
+    xa_analyzer_free(analyzer);
+    xg_global_evidence_free(&evidence);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_enum_member_selection_is_not_a_memory_read) {
     setup_parser_session();
     const char *source = "enum SelectionError { Failed }\n"
@@ -10969,6 +11049,67 @@ TEST(global_evidence_enum_member_selection_is_not_a_memory_read) {
     xa_analyzer_free(analyzer);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
+}
+
+TEST(global_evidence_preserves_integer_division_panic_through_calls) {
+    ASSERT_EQ_UINT(xg_synthetic_named_type_key("PanicInfo"), UINT32_C(0x1b9625cc));
+    ASSERT_EQ_UINT(xg_synthetic_named_type_key(NULL), 0u);
+    ASSERT_EQ_UINT(xg_synthetic_named_type_key(""), 0u);
+    const char *types[] = {"i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64"};
+    for (size_t index = 0u; index < sizeof(types) / sizeof(types[0]); ++index) {
+        setup_parser_session();
+        char source[1536];
+        int size = snprintf(source, sizeof(source),
+            "fn quotient(value: %s, divisor: %s) -> %s { return value / divisor }\n"
+            "fn relay(value: %s, divisor: %s) -> %s { return quotient(value, divisor) }\n"
+            "fn indirect(value: %s, divisor: %s) -> %s {\n"
+            "  var selected = quotient\nreturn selected(value, divisor)\n}\n",
+            types[index], types[index], types[index], types[index], types[index], types[index],
+            types[index], types[index], types[index]);
+        ASSERT_TRUE(size > 0 && (size_t) size < sizeof(source));
+        int interface_size = snprintf(source + size, sizeof(source) - (size_t) size,
+            "interface Calculator { calculate(value: %s, divisor: %s) -> %s }\n"
+            "class Divider implements Calculator {\n"
+            "  calculate(value: %s, divisor: %s) -> %s { return quotient(value, divisor) }\n}\n"
+            "fn viaInterface(item: Calculator, value: %s, divisor: %s) -> %s {\n"
+            "  return item.calculate(value, divisor)\n}\n",
+            types[index], types[index], types[index], types[index], types[index], types[index],
+            types[index], types[index], types[index]);
+        ASSERT_TRUE(interface_size > 0 && (size_t) interface_size < sizeof(source) - (size_t) size);
+        size += interface_size;
+        if (index < 8u) {
+            int remainder_size = snprintf(source + size, sizeof(source) - (size_t) size,
+                "fn remainder(value: %s, divisor: %s) -> %s { return value %% divisor }\n",
+                types[index], types[index], types[index]);
+            ASSERT_TRUE(remainder_size > 0 && (size_t) remainder_size < sizeof(source) - (size_t) size);
+        }
+        XgGlobalEvidence evidence;
+        XaAnalyzer *analyzer = NULL;
+        ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &evidence, &analyzer, NULL));
+        bool panics = index < 8u;
+        ASSERT_EQ_UINT(evidence.ninterface_methods, 1u);
+        const XgInterfaceMethodSummary *slot = &evidence.interface_methods[0];
+        ASSERT_EQ_UINT(slot->contract_complete, 1u);
+        ASSERT_EQ_UINT(slot->error_type_key, 0u);
+        ASSERT_EQ_UINT(slot->panic_type_key, panics ? UINT32_C(0x1b9625cc) : 0u);
+        ASSERT_EQ_INT((slot->effect_bits & XG_BODY_MAY_PANIC) != 0u, panics);
+        const char *names[] = {"quotient", "relay", "indirect", "viaInterface", "remainder"};
+        for (size_t function = 0u; function < (panics ? 5u : 4u); ++function) {
+            const XgBodySummary *body = evidence_find_body_by_name(&evidence, names[function]);
+            ASSERT_NOT_NULL(body);
+            uint32_t effects = 0u;
+            ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&evidence, body, &effects));
+            ASSERT_EQ_INT((effects & XG_BODY_MAY_PANIC) != 0u, panics);
+            for (uint32_t call = 0u; call < evidence.ncallsites; ++call) {
+                if (evidence.callsites[call].owner_func_id == body->func_id)
+                    ASSERT_EQ_INT((evidence.callsites[call].flags & XG_CALL_MAY_PANIC) != 0u,
+                                  panics);
+            }
+        }
+        xa_analyzer_free(analyzer);
+        xg_global_evidence_free(&evidence);
+        teardown_parser_session();
+    }
 }
 
 TEST(global_evidence_publishes_exact_nominal_interface_witnesses) {
@@ -16351,6 +16492,7 @@ RUN_TEST(global_evidence_verifier_rederives_method_body_signature);
 RUN_TEST(global_evidence_verifier_rejects_stale_body_identity_rows);
 RUN_TEST(global_evidence_verifier_rederives_link_dependency_plans);
 RUN_TEST(global_evidence_producer_finalizes_class_graph_order_independently);
+RUN_TEST(global_evidence_producer_distinguishes_collocated_imports);
 RUN_TEST(global_evidence_build_key_uses_explicit_imported_summary_hash);
 RUN_TEST(global_evidence_build_skips_imported_package_module_rows);
 RUN_TEST(global_evidence_requires_selected_module_to_own_both_private_import_decls);
@@ -16392,7 +16534,9 @@ RUN_TEST(global_evidence_producer_names_go_lambda_body_anonymous);
 RUN_TEST(global_evidence_producer_fills_callsite_argument_type_keys);
 RUN_TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch);
 RUN_TEST(global_evidence_producer_marks_read_mem_effect);
+RUN_TEST(global_evidence_prelude_constructor_has_exact_native_identity);
 RUN_TEST(global_evidence_enum_member_selection_is_not_a_memory_read);
+RUN_TEST(global_evidence_preserves_integer_division_panic_through_calls);
 RUN_TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_captures);
 RUN_TEST(global_evidence_producer_marks_call_effect);
 RUN_TEST(global_evidence_producer_marks_native_method_calls_as_native_capability);

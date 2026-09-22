@@ -44,6 +44,7 @@ H2_SOURCE_CTEST_NAMES = (
     "test_xr_program_provider_requirements",
     "test_xr_program_vm",
     "test_xr_program_source_build",
+    "test_xr_program_source_allocations",
     "xr_program_schema",
     "xr_program_schema_self_test",
     "xr_program_semantic_coverage",
@@ -59,6 +60,7 @@ H2_SOURCE_BUILD_TARGETS = (
     "test_xr_program_provider_requirements",
     "test_xr_program_vm",
     "test_xr_program_source_build",
+    "test_xr_program_source_allocations",
 )
 
 H2_VM_CTEST_NAMES = (
@@ -135,6 +137,8 @@ H2_BUILD_TARGETS = _stable_union(
 
 
 _SCRIPT_AND_EXECUTABLE_TESTS = (
+    "test_xr_program_source_allocations",
+    "test_xr_program_value_struct_string_allocations",
     "canonical_source_run_cli",
     "canonical_cutover_manifests",
     "canonical_cutover_manifests_self_test",
@@ -183,7 +187,13 @@ _SCRIPT_AND_EXECUTABLE_TESTS = (
 # whose build list and executed-case denominator are intentionally exact.
 # Script-only gates have no Ninja target. Native source fixtures are projected
 # from the same registry as CMake; the CLI is not a blanket build proxy.
+_COROUTINE_OUTCOME_NATIVE_TARGETS = tuple(
+    f"test_xr_program_aot_coroutine_outcome_{scenario}" for scenario in range(8)
+)
+
 _EXECUTABLE_TARGETS = (
+    "test_xr_program_source_allocations",
+    "test_xr_program_value_struct_string_allocations",
     "test_core_spec",
     "test_text_kernel",
     "test_xr_program",
@@ -213,11 +223,11 @@ def load_inventory(manifest: Path = source_fixtures.MANIFEST,
     registry = source_fixtures.load_registry(manifest, source)
     native_targets = source_fixtures.native_target_names(registry)
     pending_tests = source_fixtures.pending_test_names(registry)
-    tests = _SCRIPT_AND_EXECUTABLE_TESTS + native_targets + pending_tests
-    targets = _EXECUTABLE_TARGETS + tuple(_SUPPORT_BUILD_TARGET_TESTS) + native_targets
+    tests = _SCRIPT_AND_EXECUTABLE_TESTS + _COROUTINE_OUTCOME_NATIVE_TARGETS + native_targets + pending_tests
+    targets = _EXECUTABLE_TARGETS + _COROUTINE_OUTCOME_NATIVE_TARGETS + tuple(_SUPPORT_BUILD_TARGET_TESTS) + native_targets
     if len(tests) != len(set(tests)) or len(targets) != len(set(targets)):
         raise source_fixtures.FixtureError("canonical profile contains duplicate registration")
-    if not set(_EXECUTABLE_TARGETS + native_targets) <= set(tests):
+    if not set(_EXECUTABLE_TARGETS + _COROUTINE_OUTCOME_NATIVE_TARGETS + native_targets) <= set(tests):
         raise source_fixtures.FixtureError("canonical build target lacks a qualification test")
     if not set(_SUPPORT_BUILD_TARGET_TESTS.values()) <= set(tests):
         raise source_fixtures.FixtureError("canonical support target lacks a qualification test")

@@ -195,7 +195,13 @@ xr_semantic_array_member_owned_reference_type_is_exact(const XrSemanticPlan *pla
                                                        const XrSemanticTypeRecord *type) {
     if (xr_semantic_tagged_string_type_is_exact(type) ||
         xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
-        xr_semantic_array_type_row_is_exact(type))
+        xr_semantic_array_type_row_is_exact(type) ||
+        (type && type->kind == XR_KIND_CHANNEL &&
+         type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+         type->scalar_rep == XR_SCALAR_REP_NONE &&
+         (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
+             (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
+         type->source_class == XR_SEMANTIC_INDEX_NONE && type->canonical_key))
         return true;
     if (!plan || !type || type->kind != XR_KIND_STRUCT_OBJECT)
         return false;
@@ -229,6 +235,22 @@ static inline bool xr_semantic_array_member_reference_contract_is_exact(
                       operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
     bool exact_fill = strcmp(shape->selector, "fill") == 0 && operation->operand_count == 4 &&
                       operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+    /* Nested Arrays use the same tagged ownership carrier as other managed
+     * references. Their element row already carries the complete Array
+     * lifecycle contract, so push can consume that one root directly. */
+    if (exact_push && xr_semantic_array_type_row_is_exact(element_type)) {
+        uint32_t operand_count = 0;
+        const XrSemanticOperandRecord *operands =
+            xr_semantic_plan_operands(plan, &operand_count);
+        uint32_t semantic_operand = operation->operand_begin + shape->element_operand;
+        if (!operands || semantic_operand >= operand_count)
+            return false;
+        const XrSemanticOperandRecord *element = &operands[semantic_operand];
+        return element->type == element_type_index && element->role == XR_SEM_OPERAND_ARGUMENT &&
+               element->parameter == (int16_t) (shape->element_operand - 1u) &&
+               element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+               element->ownership_action == XR_SEM_OPERAND_CONSUME;
+    }
     /* Filling a range duplicates one input into several slots. The current
      * source-class/String path owns the retain contract for that operation;
      * an Array value is admitted only by push, which moves the one ownership

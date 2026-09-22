@@ -26,8 +26,8 @@
 #define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
 /* Builtin rows are the CoreSpec runtime types below the dynamic base; the
  * registry meta type (11) is never a program type. */
-#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 13u
-#define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(16)
+#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 19u
+#define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(32)
 
 typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_VOID = 0,
@@ -43,12 +43,21 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_TARGET_ENDIAN = 10,
     XR_PROGRAM_TYPE_KIND_STRING = 12,
     XR_PROGRAM_TYPE_KIND_RUNE = 13,
-    XR_PROGRAM_TYPE_KIND_AGGREGATE = 16,
-    XR_PROGRAM_TYPE_KIND_VARIANT = 17,
-    XR_PROGRAM_TYPE_KIND_VIEW = 18,
-    XR_PROGRAM_TYPE_KIND_CALLABLE = 19,
-    XR_PROGRAM_TYPE_KIND_EXISTENTIAL = 20,
-    XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE = 21,
+    XR_PROGRAM_TYPE_KIND_I8 = 14,
+    XR_PROGRAM_TYPE_KIND_U8 = 15,
+    XR_PROGRAM_TYPE_KIND_I16 = 16,
+    XR_PROGRAM_TYPE_KIND_I32 = 17,
+    XR_PROGRAM_TYPE_KIND_U64 = 18,
+    XR_PROGRAM_TYPE_KIND_AGGREGATE = 32,
+    XR_PROGRAM_TYPE_KIND_VARIANT = 33,
+    XR_PROGRAM_TYPE_KIND_VIEW = 34,
+    XR_PROGRAM_TYPE_KIND_CALLABLE = 35,
+    XR_PROGRAM_TYPE_KIND_EXISTENTIAL = 36,
+    XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE = 37,
+    XR_PROGRAM_TYPE_KIND_ARRAY = 38,
+    XR_PROGRAM_TYPE_KIND_ATOMIC = 39,
+    XR_PROGRAM_TYPE_KIND_RECORD_REFERENCE = 40,
+    XR_PROGRAM_TYPE_KIND_PROVIDER_RESOURCE = 41,
 } XrProgramTypeKind;
 
 typedef struct XrCoreIrKey {
@@ -62,7 +71,17 @@ typedef enum XrCoreIrTypeKind {
     XR_CORE_IR_TYPE_CALLABLE = 4,
     XR_CORE_IR_TYPE_EXISTENTIAL = 5,
     XR_CORE_IR_TYPE_CLASS_REFERENCE = 6,
+    XR_CORE_IR_TYPE_ARRAY = 7,
+    XR_CORE_IR_TYPE_ATOMIC = 8,
+    XR_CORE_IR_TYPE_RECORD_REFERENCE = 9,
+    XR_CORE_IR_TYPE_PROVIDER_RESOURCE = 10,
 } XrCoreIrTypeKind;
+
+/* Both logical kinds share identity-bearing field storage. Nominal conformance
+ * and method-receiver rules must still test CLASS_REFERENCE explicitly. */
+static inline bool xr_program_type_kind_is_reference_record(XrCoreIrTypeKind kind) {
+    return kind == XR_CORE_IR_TYPE_CLASS_REFERENCE || kind == XR_CORE_IR_TYPE_RECORD_REFERENCE;
+}
 
 typedef enum XrCoreIrNominalKind {
     XR_CORE_IR_NOMINAL_NONE = 0,
@@ -102,6 +121,7 @@ typedef enum XrCoreIrCopyContract {
 typedef struct XrCoreIrVariantInput {
     const uint16_t *payload_types;
     uint32_t payload_count;
+    const char *display_name;
 } XrCoreIrVariantInput;
 
 /* Dynamic CoreIR type IDs are compiler-local labels. The builder canonicalizes
@@ -120,10 +140,16 @@ typedef struct XrCoreIrTypeInput {
     const XrCoreIrVariantInput *variants;
     uint32_t variant_count;
     uint16_t view_element_type;
+    uint16_t array_element_type;
+    uint16_t atomic_element_type;
+    XrStableId resource_id;
     XrCoreIrViewCapability view_capability;
     const XrCoreIrCallableSignatureInput *callable_signature;
     XrCoreIrKey existential_interface;
     XrCoreIrInterfaceUseKind interface_use_kind;
+    /* Optional source spelling for value rendering. Never a lookup identity.
+     * The builder copies it; NULL encodes the canonical absent name. */
+    const char *display_name;
 } XrCoreIrTypeInput;
 
 typedef enum XrCoreIrConstantKind {
@@ -131,6 +157,7 @@ typedef enum XrCoreIrConstantKind {
     XR_CORE_IR_CONSTANT_BOOL = 2,
     XR_CORE_IR_CONSTANT_STRING = 3,
     XR_CORE_IR_CONSTANT_RUNE = 4,
+    XR_CORE_IR_CONSTANT_F64 = 5,
 } XrCoreIrConstantKind;
 
 /* One fixed builtin type row: logical ownership and copy contract of a
@@ -178,6 +205,7 @@ typedef struct XrCoreIrConstantInput {
     XrCoreIrConstantKind kind;
     union {
         int64_t i64;
+        uint64_t f64_bits;
         bool boolean;
         struct {
             const uint8_t *bytes;

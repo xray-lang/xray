@@ -613,7 +613,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Reset yield_streak: yields during spawn loop don't count
         // toward compute-bound pressure detection.
         p->yield_streak = 0;
-        if (!xr_steal_queue_push(&p->cont_deque, coro)) {
+        if (!xr_steal_queue_push(&p->cont_deque, coro, 0)) {
             xr_worker_push(worker, coro);
         } else {
             // Wake an idle worker so it can steal the continuation.

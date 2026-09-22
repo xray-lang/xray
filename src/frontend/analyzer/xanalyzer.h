@@ -327,7 +327,7 @@ XR_FUNC void xa_analyzer_set_node_conversion(XaAnalyzer *analyzer, const struct 
 XR_FUNC bool xa_analyzer_get_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
                                              XrConversionWitness *out_witness);
 struct XaCallErrorEffectFact;
-struct XaFunctionExprEffectFact;
+struct XaBodyEffectFact;
 struct XaTargetQueryFact;
 struct XaSuspendPointFact;
 struct XaCallableTargetSetFact;
@@ -337,12 +337,11 @@ XR_FUNC bool xa_analyzer_set_call_error_effect(XaAnalyzer *analyzer, const struc
 XR_FUNC bool xa_analyzer_get_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
                                                struct XaCallErrorEffectFact *out_fact);
 XR_FUNC void xa_analyzer_clear_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node);
-XR_FUNC bool xa_analyzer_set_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
-                                                  const struct XaFunctionExprEffectFact *fact);
-XR_FUNC bool xa_analyzer_get_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
-                                                  struct XaFunctionExprEffectFact *out_fact);
-XR_FUNC void xa_analyzer_clear_function_expr_effect(XaAnalyzer *analyzer,
-                                                    const struct AstNode *node);
+XR_FUNC bool xa_analyzer_set_body_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                         const struct XaBodyEffectFact *fact);
+XR_FUNC bool xa_analyzer_get_body_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                         struct XaBodyEffectFact *out_fact);
+XR_FUNC void xa_analyzer_clear_body_effect(XaAnalyzer *analyzer, const struct AstNode *node);
 XR_FUNC bool xa_analyzer_set_target_query(XaAnalyzer *analyzer, const struct AstNode *node,
                                           const struct XaTargetQueryFact *fact);
 XR_FUNC bool xa_analyzer_get_target_query(XaAnalyzer *analyzer, const struct AstNode *node,

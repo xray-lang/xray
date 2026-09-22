@@ -28,7 +28,7 @@
       "const": "fail-closed"
     },
     "types": {
-      "$ref": "#/$defs/namedRegistry"
+      "$ref": "#/$defs/typeRegistry"
     },
     "effects": {
       "$ref": "#/$defs/namedRegistry"
@@ -226,6 +226,53 @@
         },
         "coverage": {
           "$ref": "#/$defs/coverage"
+        }
+      }
+    },
+    "typeRegistry": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stable_id",
+          "name",
+          "description"
+        ],
+        "properties": {
+          "stable_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "integer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "width",
+              "signed"
+            ],
+            "properties": {
+              "width": {
+                "enum": [
+                  8,
+                  16,
+                  32,
+                  64
+                ]
+              },
+              "signed": {
+                "type": "boolean"
+              }
+            }
+          }
         }
       }
     }

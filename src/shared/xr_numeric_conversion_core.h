@@ -11,6 +11,7 @@
 
 #include "xr_semantic_owner_ids_gen.h"
 #include "xr_native_type_core.h"
+#include "xr_integer_conversion_core.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -135,15 +136,9 @@ static inline int64_t xr_numeric_int_convert_i64(int64_t raw, uint8_t source_rep
     if (source_bits == 0 || target_bits == 0)
         return raw;
 
-    uint64_t bits = xr_numeric_i64_to_bits(raw) & xr_numeric_mask_for_bits(source_bits);
-    if (xr_numeric_scalar_is_signed_int(source_rep) && source_bits < 64 &&
-        (bits & (UINT64_C(1) << (source_bits - 1))) != 0)
-        bits |= ~xr_numeric_mask_for_bits(source_bits);
-
-    bits &= xr_numeric_mask_for_bits(target_bits);
-    if (xr_numeric_scalar_is_signed_int(target_rep) && target_bits < 64 &&
-        (bits & (UINT64_C(1) << (target_bits - 1))) != 0)
-        bits |= ~xr_numeric_mask_for_bits(target_bits);
+    uint64_t bits = xr_integer_convert_bits(
+        xr_numeric_i64_to_bits(raw), source_bits, xr_numeric_scalar_is_signed_int(source_rep),
+        target_bits, xr_numeric_scalar_is_signed_int(target_rep));
     return xr_numeric_i64_from_bits(bits);
 }
 

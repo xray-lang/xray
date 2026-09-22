@@ -709,6 +709,24 @@ static bool xi_lower_optional_payload_matches(const XrType *optional, const XrTy
     return xr_type_equals(&expected, (XrType *) payload);
 }
 
+/* Flow narrowing changes the logical value from None | Some(T) to its T
+ * payload. Preserve that operation even when the legacy carrier is unchanged. */
+static XiValue *xi_lower_project_proven_optional(XiLower *l, AstNode *node, XiValue *value,
+                                                 XrType *target_type) {
+    if (!value || !xi_lower_optional_payload_matches(value->type, target_type))
+        return value;
+    XiValue *payload =
+        xi_value_new(l->func, l->cur_block, XI_VARIANT_PROJECT, target_type, 1);
+    if (!payload) {
+        l->had_error = true;
+        return NULL;
+    }
+    payload->args[0] = value;
+    payload->aux_int = xi_variant_pack_projection(1u, 0u);
+    payload->line = (uint32_t) node->line;
+    return payload;
+}
+
 /* Nullable source boundaries are a closed semantic sum, not a backend tagged-
  * value convention.
  * Publish the injection in Xi before canonical Program
@@ -769,17 +787,9 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, AstNode *node, XiValue 
         return xi_lower_apply_primitive_type_view(l, node, val, target_type);
     }
 
-    /* `T?` reaching a `T` target is a narrowing the analyzer already proved:
-     * it rejects the unguarded form outright ("cannot assign 'T?' to 'T'
-     * without null check"), so the only thing a dynamic check could catch here
-     * has been excluded statically.  Emitting one anyway is not merely wasted
-     * work -- it keeps the value in tagged form and blocks the unboxed
-     * representation the narrowing exists to enable. */
-    if (val->type && val->type->is_nullable && !target_type->is_nullable) {
-        XrType *val_non_null = xr_type_non_nullable(l->isolate, val->type);
-        if (val_non_null && xr_type_equals(target_type, val_non_null))
-            return xi_lower_apply_primitive_type_view(l, node, val, target_type);
-    }
+    /* The analyzer rejects an unguarded nullable-to-payload boundary. */
+    if (xi_lower_optional_payload_matches(val->type, target_type))
+        return xi_lower_project_proven_optional(l, node, val, target_type);
 
     XrType *check_type = target_type;
     bool allow_null = target_type->is_nullable ||
@@ -7971,6 +7981,21 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                                            method_pcount, method_read_places,
                                            method_read_place_count, (int) node->line))
             return NULL;
+        /* The omitted string-slice end is the rune length of the already
+         * evaluated
+         * receiver. Freeze the full range before semantic consumers
+         * see the call,
+         * preserving receiver and explicit-argument evaluation. */
+        if (args.count == 1 && recv->type && recv->type->kind == XR_KIND_STRING &&
+            !recv->type->is_nullable && ma->name && strcmp(ma->name, "slice") == 0) {
+            XiValue *end = xi_value_new(l->func, l->cur_block, XI_LEN, l->type_int, 1);
+            if (!end)
+                return NULL;
+            end->args[0] = recv;
+            end->line = (uint32_t) node->line;
+            if (!xi_lower_arg_list_push(l, &args, end, XI_LOWER_MAX_CALL_ARGS, (int) node->line))
+                return NULL;
+        }
         XiValue **arg_vals = args.items;
         int n = args.count;
         /* System-domain collections are destroyed without an execution-local
@@ -8017,6 +8042,20 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return NULL;
         }
         XiMethodSymbolId method_symbol = (XiMethodSymbolId) xi_lower_method_symbol(l, ma->name);
+        const XaSelection *scalar_selection = xa_analyzer_get_selection(l->analyzer, call->callee);
+        if (n == 0 && call->type_arg_count == 0 && method_symbol == XI_METHOD_SYMBOL_TOSTRING && recv->type &&
+            !recv->type->is_nullable && result_type && result_type->kind == XR_KIND_STRING &&
+            !result_type->is_nullable && (!scalar_selection || !scalar_selection->target_symbol) &&
+            (recv->type->kind == XR_KIND_INT || recv->type->kind == XR_KIND_FLOAT ||
+             recv->type->kind == XR_KIND_BOOL || recv->type->kind == XR_KIND_RUNE)) {
+            /* Sealed scalar methods use the same conversion as string(value).
+             * Resolved user methods retain their normal call and receiver contract. */
+            XiValue *converted = xi_value_new(l->func, l->cur_block, XI_CONVERT, result_type, 1u);
+            if (!converted) return NULL;
+            converted->args[0] = recv;
+            converted->line = (uint32_t) node->line;
+            return converted;
+        }
         bool exact_map_entry_iterator_has_next = n == 0 &&
                                                  method_symbol == XI_METHOD_SYMBOL_HAS_NEXT &&
                                                  xi_map_entries_iterator_is_exact(recv);
@@ -9021,8 +9060,8 @@ static XiFunc *parallel_call_lower_lambda_func(
     child_l.func->parent_func = parent->func;
     child_l.func->analyzer = parent->analyzer;
     child_l.func->is_generic_template = parent->func && parent->func->is_generic_template;
-    if (!xi_lower_publish_function_expr_effect_sidecars(child_l.func, parent->analyzer,
-                                                        child_l.typed_program, lambda_node)) {
+    if (!xi_lower_publish_body_effect_sidecars(child_l.func, parent->analyzer,
+                                               child_l.typed_program, lambda_node)) {
         xi_func_free(child_l.func);
         xi_lower_cleanup(&child_l);
         return NULL;
@@ -11134,6 +11173,11 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
                 return NULL;
             result->args[0] = val;
         }
+        /* Equal erased storage does not make distinct integer types an
+         * identity. Keep the conversion through copy propagation. */
+        if (result->op == XI_COPY && XR_TYPE_IS_INT(cast_type) && XR_TYPE_IS_INT(source_type) &&
+            !xr_type_equals(val->type, cast_type))
+            result->op = XI_CONVERT;
         result->conversion = conversion;
         result->line = (uint32_t) node->line;
         if (XR_TYPE_IS_FLOAT(source_type) && XR_TYPE_IS_INT(cast_type))
@@ -11289,28 +11333,29 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
         bool borrowed = project_use == XI_INTERFACE_USE_READ || project_use == XI_INTERFACE_USE_REF;
         bool transferred =
             project_use == XI_INTERFACE_USE_MOVE || project_use == XI_INTERFACE_USE_OWNED_STORAGE;
+        bool reference_projection = target_conformance->implementor_kind == XG_DECL_CLASS;
         if (!borrowed && !transferred) {
             l->had_error = true;
             return NULL;
         }
-        if (borrowed && affine_contract &&
+        if (borrowed && affine_contract && !reference_projection &&
             target_conformance->implementor_copy_contract == XG_NOMINAL_COPY_FORBIDDEN) {
             l->had_error = true;
             return NULL;
         }
         if (borrowed && affine_contract) {
-            /* A borrowed carrier exposes an affine referent without transferring
-             * an
-             * owner. The exact conformance contract requires Xi to clone it
-             * before
-             * constructing the owned Optional<T>. */
-            some_payload = xi_value_new(l->func, success, XI_COPY, project_type, 1);
+            /* A class cast preserves object identity. Acquire an owner for the
+             * Optional payload; only value types require an independent clone. */
+            some_payload = xi_value_new(l->func, success,
+                                        reference_projection ? XI_OWNER_FORWARD : XI_COPY,
+                                        project_type, 1);
             if (!some_payload) {
                 l->had_error = true;
                 return NULL;
             }
             some_payload->args[0] = project;
-            xi_lower_mark_value_clone_copy(some_payload);
+            if (!reference_projection)
+                xi_lower_mark_value_clone_copy(some_payload);
             some_payload->line = (uint32_t) node->line;
         }
         XiValue *some = xi_value_new(l->func, success, XI_SUM_INJECT, cast_type, 1);
@@ -12209,6 +12254,8 @@ static XiValue *xi_lower_expr_impl(XiLower *l, AstNode *node) {
 XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
     XiSourceSpan previous = xi_lower_push_source_span(l, node);
     XiValue *value = xi_lower_expr_impl(l, node);
+    if (value)
+        value = xi_lower_project_proven_optional(l, node, value, xi_lower_node_type(l, node));
     xi_lower_pop_source_span(l, previous);
     return value;
 }

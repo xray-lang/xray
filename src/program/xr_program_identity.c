@@ -34,6 +34,12 @@ static const XrProgramBuiltinTypeRow builtin_type_rows[XR_CORE_PROGRAM_BUILTIN_T
     {XR_CORE_TYPE_TARGET_ENDIAN, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
     {XR_CORE_TYPE_STRING, XR_CORE_IR_TYPE_OWNERSHIP_AFFINE, XR_CORE_IR_COPY_EXPLICIT},
     {XR_CORE_TYPE_RUNE, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+    {XR_CORE_TYPE_I8, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+    {XR_CORE_TYPE_U8, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+    {XR_CORE_TYPE_I16, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+    {XR_CORE_TYPE_I32, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+    {XR_CORE_TYPE_U64, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+    {XR_CORE_TYPE_F64, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
 };
 
 const XrProgramBuiltinTypeRow *xr_program_builtin_type_row(uint16_t type_id) {
@@ -67,12 +73,14 @@ bool xr_program_id_equal(XrProgramId left, XrProgramId right) {
 }
 
 /* A constant row is canonical when its kind names exactly its builtin type and
- * its payload is admissible: any i64, any bool, strict UTF-8 text within the
+ * its payload is admissible: any i64 or binary64 bit pattern, any bool, strict UTF-8 text within the
  * artifact-wide byte ceiling, or one Unicode scalar value. */
 bool xr_program_constant_payload_is_canonical(uint16_t type_id, XrCoreIrConstantKind kind,
                                               const uint8_t *string_bytes, uint32_t string_size,
                                               uint32_t rune) {
     switch (kind) {
+        case XR_CORE_IR_CONSTANT_F64:
+            return type_id == XR_CORE_TYPE_F64;
         case XR_CORE_IR_CONSTANT_I64:
             return type_id == XR_CORE_TYPE_I64;
         case XR_CORE_IR_CONSTANT_BOOL:

@@ -218,22 +218,23 @@ int main(int argc, char **argv) {
     XrBackendOptions options = xr_backend_default_options();
     char message[256] = {0};
     GraphCounts counts = {0};
-    bool ok = profile &&
-              (cleanup ? write_cleanup_program(profile, &artifact, message, sizeof(message))
-                       : xr_program_coroutine_branch_fixture_write(
-                             &artifact, message, sizeof(message))) == XR_PROGRAM_BUILD_OK &&
-              xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
-                                  &program_diagnostic) == XR_PROGRAM_VERIFY_OK &&
-              exact_graph_counts(program, cleanup, &counts) &&
-              xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK &&
-              xr_backend_ir_verify(ir, &diagnostic) &&
-              xr_backend_ir_translation_validate(ir, &diagnostic) &&
-              xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK &&
-              xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) == XR_BACKEND_OK &&
-              generated.size != 0u && generated.size == repeated.size &&
-              memcmp(generated.bytes, repeated.bytes, generated.size) == 0 &&
-              write_stable_bytes(argv[4], generated.bytes, generated.size) &&
-              write_facts(argv[6], cleanup, &counts, &generated);
+    bool ok =
+        profile &&
+        (cleanup
+             ? write_cleanup_program(profile, &artifact, message, sizeof(message))
+             : xr_program_coroutine_branch_fixture_write(&artifact, message, sizeof(message))) ==
+            XR_PROGRAM_BUILD_OK &&
+        xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &program_diagnostic) ==
+            XR_PROGRAM_VERIFY_OK &&
+        exact_graph_counts(program, cleanup, &counts) &&
+        xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK &&
+        xr_backend_ir_verify(ir, &diagnostic) && xr_backend_ir_binding_verify(ir, &diagnostic) &&
+        xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK &&
+        xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) == XR_BACKEND_OK &&
+        generated.size != 0u && generated.size == repeated.size &&
+        memcmp(generated.bytes, repeated.bytes, generated.size) == 0 &&
+        write_stable_bytes(argv[4], generated.bytes, generated.size) &&
+        write_facts(argv[6], cleanup, &counts, &generated);
     if (!ok)
         fprintf(stderr, "coroutine graph %s generation failed: program=%u backend=%u %s\n", argv[2],
                 (unsigned) program_diagnostic.kind, (unsigned) diagnostic.status, message);

@@ -25,6 +25,7 @@ typedef enum XrProgramTextFixtureMutation {
     XR_PROGRAM_TEXT_FIXTURE_DOUBLE_DROP,
     /* the concatenation result is produced as a non-owner */
     XR_PROGRAM_TEXT_FIXTURE_CONCAT_NON_OWNER,
+    XR_PROGRAM_TEXT_FIXTURE_SCALAR_STRING_OPERAND,
 } XrProgramTextFixtureMutation;
 
 #define XR_PROGRAM_TEXT_FIXTURE_STDOUT "-5 true abcd \xF0\x9F\x98\x80 true abcd\nabcd\n\n"
@@ -112,7 +113,7 @@ xr_program_text_fixture_write_mutated(XrProgramTextFixtureMutation mutation,
         ab, mutation == XR_PROGRAM_TEXT_FIXTURE_CONCAT_I64_OPERAND ? minus_five : cd};
     XrCoreIrKey drop_ab_operands[] = {ab};
     XrCoreIrKey drop_cd_operands[] = {cd};
-    XrCoreIrKey rendered_operands[] = {minus_five};
+    XrCoreIrKey rendered_operands[] = {mutation == XR_PROGRAM_TEXT_FIXTURE_SCALAR_STRING_OPERAND ? joined : minus_five};
     XrCoreIrKey equal_operands[] = {joined, abcd};
     XrCoreIrKey less_operands[] = {rendered, abcd};
     XrCoreIrKey rune_less_operands[] = {
@@ -170,7 +171,7 @@ xr_program_text_fixture_write_mutated(XrProgramTextFixtureMutation mutation,
          .operands = drop_cd_operands,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
-        {.operation_id = XR_CORE_OP_CORE_STRING_FROM_I64,
+        {.operation_id = XR_CORE_OP_CORE_STRING_FROM_SCALAR,
          .result = rendered,
          .result_type_id = XR_CORE_TYPE_STRING,
          .result_ownership = XR_CORE_IR_OWNER,

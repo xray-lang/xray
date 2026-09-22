@@ -2,6 +2,8 @@
  * Task 297: XrProgram semantic verifier and independent reference evaluator.
  */
 
+#include "xr_program_atomic_fixture.h"
+#include "xr_program_f64_fixture.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,12 +25,17 @@
 #include "xr_program_indirect_coroutine_fixture.h"
 #include "xr_program_ref_coroutine_fixture.h"
 #include "xr_program_coroutine_trap_fixture.h"
+#include "xr_program_coroutine_outcome_fixture.h"
 #include "xr_program_cleanup_graph_fixture.h"
 #include "xr_program_output_fixture.h"
 #include "xr_program_text_fixture.h"
+#include "xr_program_output_trap_fixture.h"
 #include "xr_program_trap_fixture.h"
 #include "xr_program_construct_fixture.h"
 #include "xr_program_module_fixture.h"
+#include "xr_program_integer_fixture.h"
+#include "xr_program_sequence_length_fixture.h"
+#include "xr_program_array_fixture.h"
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
@@ -47,7 +54,7 @@ _Static_assert(XR_CORE_OP_CORE_CONSTANT_STRING == 4, "string constant stable id 
 _Static_assert(XR_CORE_OP_CORE_CONSTANT_RUNE == 5, "rune constant stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COMPARE_RUNE == 26, "rune compare stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COMPARE_STRING == 27, "string compare stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_STRING_FROM_I64 == 150, "string from i64 stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_FROM_SCALAR == 167, "scalar string stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_STRING_CONCAT == 151, "string concat stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_SUSPEND == 140, "coroutine suspension stable id drifted");
@@ -55,7 +62,7 @@ _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_SEALED == 138, "coroutine call sta
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT == 141,
                "indirect coroutine call stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CLASS_CONSTRUCT == 142, "class construct stable id drifted");
-_Static_assert(XR_CORE_OP_CORE_CLASS_SHARE == 143, "class share stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_OWNER_ALIAS == 143, "class share stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CLASS_FIELD_LOAD == 144, "class field load stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CLASS_FIELD_PLACE == 145, "class field place stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PLACE_EXCHANGE == 146, "place exchange stable id drifted");
@@ -67,7 +74,13 @@ _Static_assert(XR_CORE_TYPE_TARGET_ENDIAN == 10, "TargetEndian stable type id dr
 _Static_assert(XR_CORE_TYPE_TYPE_VARIABLE == 11, "type-variable stable type id drifted");
 _Static_assert(XR_CORE_TYPE_STRING == 12, "string stable type id drifted");
 _Static_assert(XR_CORE_TYPE_RUNE == 13, "rune stable type id drifted");
-_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 13u, "runtime builtin row count drifted");
+_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 19u, "runtime builtin row count drifted");
+_Static_assert(XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE == 32u, "dynamic types overlap scalar ids");
+_Static_assert(XR_CORE_TYPE_I8 == 14u && XR_CORE_TYPE_U8 == 15u && XR_CORE_TYPE_I16 == 16u &&
+                   XR_CORE_TYPE_I32 == 17u && XR_CORE_TYPE_U64 == 18u,
+               "exact integer type ids drifted");
+
+_Static_assert(XR_CORE_TYPE_F64 == 19u, "f64 stable type id drifted");
 
 static int failures = 0;
 
@@ -185,6 +198,16 @@ static uint64_t test_take_uvar(const uint8_t *bytes, size_t size, size_t *offset
     }
     CHECK(false);
     return UINT64_MAX;
+}
+
+static bool test_skip_display_names(const uint8_t *bytes, size_t size, size_t *cursor,
+                                    uint64_t variant_count) {
+    for (uint64_t index = 0u; index <= variant_count; ++index) {
+        uint64_t length = test_take_uvar(bytes, size, cursor);
+        if (*cursor > size || length > size - *cursor) return false;
+        *cursor += (size_t) length;
+    }
+    return true;
 }
 
 static void test_skip_instruction(const uint8_t *bytes, size_t size, size_t *offset) {
@@ -469,6 +492,7 @@ static bool collect_dynamic_copy_contract_offsets(const XrProgramArtifact *artif
     size_t count = 0u;
     for (uint64_t index = XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; index < total_count; ++index) {
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t display_variant_count = 0u;
         uint64_t kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
         if (count >= capacity)
@@ -490,6 +514,7 @@ static bool collect_dynamic_copy_contract_offsets(const XrProgramArtifact *artif
         } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
             (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
             uint64_t variant_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            display_variant_count = variant_count;
             for (uint64_t variant = 0u; variant < variant_count; ++variant) {
                 uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
                 for (uint64_t field = 0u; field < field_count; ++field)
@@ -506,6 +531,8 @@ static bool collect_dynamic_copy_contract_offsets(const XrProgramArtifact *artif
         } else {
             return false;
         }
+        if (!test_skip_display_names(artifact->bytes, artifact->size, &cursor, display_variant_count))
+            return false;
         if (cursor > artifact->size)
             return false;
     }
@@ -618,6 +645,7 @@ static bool dynamic_aggregate_nominal_offset(const XrProgramArtifact *artifact,
             (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
     for (uint64_t index = XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; index < type_count; ++index) {
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t display_variant_count = 0u;
         uint64_t kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
@@ -641,6 +669,7 @@ static bool dynamic_aggregate_nominal_offset(const XrProgramArtifact *artifact,
                 (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
         } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
             uint64_t variant_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            display_variant_count = variant_count;
             for (uint64_t variant = 0u; variant < variant_count; ++variant) {
                 uint64_t payload_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
                 for (uint64_t field = 0u; field < payload_count; ++field)
@@ -650,6 +679,8 @@ static bool dynamic_aggregate_nominal_offset(const XrProgramArtifact *artifact,
                    kind == XR_PROGRAM_TYPE_KIND_EXISTENTIAL) {
             (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
         }
+        if (!test_skip_display_names(artifact->bytes, artifact->size, &cursor, display_variant_count))
+            return false;
         if (cursor > artifact->size)
             return false;
     }
@@ -1293,7 +1324,7 @@ static XrProgramArtifact build_class_alias_mutation_artifact(uint32_t field_ordi
          .operands = construct_operands,
          .operand_count = 1u,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
-        {.operation_id = XR_CORE_OP_CORE_CLASS_SHARE,
+        {.operation_id = XR_CORE_OP_CORE_OWNER_ALIAS,
          .result = alias,
          .result_type_id = CLASS_TYPE,
          .result_ownership = XR_CORE_IR_OWNER,
@@ -1680,7 +1711,7 @@ static XrProgramArtifact build_forbidden_class_alias_artifact(uint16_t alias_ope
 
 static void test_copy_forbidden_class_can_share_but_not_clone(void) {
     XrProgramArtifact artifact =
-        build_forbidden_class_alias_artifact(XR_CORE_OP_CORE_CLASS_SHARE);
+        build_forbidden_class_alias_artifact(XR_CORE_OP_CORE_OWNER_ALIAS);
     XrValidatedProgram *program = validate_ok(&artifact);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
@@ -1690,7 +1721,64 @@ static void test_copy_forbidden_class_can_share_but_not_clone(void) {
     xr_program_artifact_free(&artifact);
 }
 
-static XrProgramArtifact build_affine_class_exchange_artifact(bool call_before_old_drop) {
+static uint32_t add_class_exchange_borrow_probe(XrCoreIrInstructionInput *instructions,
+                                                uint32_t count, uint32_t variant,
+                                                XrCoreIrKey *values) {
+    if (variant == 0u)
+        return count;
+    XrCoreIrInstructionInput place = instructions[6];
+    uint32_t borrow_index = 7u;
+    if (variant >= 5u) {
+        memmove(&instructions[7], &instructions[6], (count - 6u) * sizeof(*instructions));
+        instructions[6] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_OWNER_ALIAS,
+            .result = values[3],
+            .result_type_id = instructions[5].result_type_id,
+            .result_ownership = XR_CORE_IR_OWNER,
+            .operands = place.operands,
+            .operand_count = 1u,
+        };
+        instructions[7].operands = &values[3];
+        instructions[count + 1u] = instructions[count];
+        instructions[count] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+            .operands = &values[3],
+            .operand_count = 1u,
+        };
+        count += 2u;
+        ++borrow_index;
+    }
+    bool field_load = variant <= 2u || variant >= 5u;
+    memmove(&instructions[borrow_index + 1u], &instructions[borrow_index],
+            (count - borrow_index) * sizeof(*instructions));
+    instructions[borrow_index] = (XrCoreIrInstructionInput) {
+        .operation_id = field_load ? XR_CORE_OP_CORE_CLASS_FIELD_LOAD : XR_CORE_OP_CORE_PLACE_LOAD,
+        .result = values[0],
+        .result_type_id = place.result_type_id,
+        .operands = field_load ? place.operands : &values[2],
+        .operand_count = 1u,
+        .immediate_kind = field_load ? XR_CORE_IR_IMMEDIATE_FIELD : XR_CORE_IR_IMMEDIATE_NONE,
+        .immediate.field_ordinal = 0u,
+    };
+    values[2] = place.result;
+    ++count;
+    uint32_t use_index = borrow_index + ((variant & 1u) != 0u ? 2u : 3u);
+    memmove(&instructions[use_index + 1u], &instructions[use_index],
+            (count - use_index) * sizeof(*instructions));
+    instructions[use_index] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_CLASS_FIELD_LOAD,
+        .result = values[1],
+        .result_type_id = XR_CORE_TYPE_I64,
+        .operands = &values[0],
+        .operand_count = 1u,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+        .immediate.field_ordinal = 0u,
+    };
+    return count + 1u;
+}
+
+static XrProgramArtifact build_affine_class_exchange_artifact(bool call_before_old_drop,
+                                                              uint32_t borrow_variant) {
     enum {
         CHILD_CLASS_TYPE = 42,
         PARENT_CLASS_TYPE = 43,
@@ -1767,7 +1855,7 @@ static XrProgramArtifact build_affine_class_exchange_artifact(bool call_before_o
     XrCoreIrKey exchange_operands[] = {place, replacement};
     XrCoreIrKey old_operands[] = {old};
     XrCoreIrKey result_operands[] = {answer};
-    XrCoreIrInstructionInput entry_instructions[12] = {0};
+    XrCoreIrInstructionInput entry_instructions[16] = {0};
     uint32_t entry_count = 0u;
     entry_instructions[entry_count++] = (XrCoreIrInstructionInput) {
         .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
@@ -1867,6 +1955,12 @@ static XrProgramArtifact build_affine_class_exchange_artifact(bool call_before_o
         .operand_count = 1u,
         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
     };
+    XrCoreIrKey borrow_values[] = {key("affine-class-exchange:borrow"),
+                                   key("affine-class-exchange:borrow-read"),
+                                   {{0}},
+                                   key("affine-class-exchange:parent-alias")};
+    entry_count = add_class_exchange_borrow_probe(entry_instructions, entry_count, borrow_variant,
+                                                  borrow_values);
     XrCoreIrKey entry_block_key = key("affine-class-exchange:block:entry");
     XrCoreIrBlockInput entry_block = {
         .key = entry_block_key,
@@ -1901,7 +1995,7 @@ static XrProgramArtifact build_affine_class_exchange_artifact(bool call_before_o
 }
 
 static void test_affine_class_exchange_commit_interval(void) {
-    XrProgramArtifact artifact = build_affine_class_exchange_artifact(false);
+    XrProgramArtifact artifact = build_affine_class_exchange_artifact(false, 0u);
     XrValidatedProgram *program = validate_ok(&artifact);
     if (program) {
         ClassLifecycleLog log = {0};
@@ -1929,9 +2023,19 @@ static void test_affine_class_exchange_commit_interval(void) {
     }
     xr_program_artifact_free(&artifact);
 
-    artifact = build_affine_class_exchange_artifact(true);
+    artifact = build_affine_class_exchange_artifact(true, 0u);
     expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
     xr_program_artifact_free(&artifact);
+    for (uint32_t variant = 1u; variant <= 6u; ++variant) {
+        artifact = build_affine_class_exchange_artifact(false, variant);
+        if ((variant & 1u) != 0u) {
+            program = validate_ok(&artifact);
+            xr_validated_program_free(program);
+        } else {
+            expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+        }
+        xr_program_artifact_free(&artifact);
+    }
 }
 
 static XrProgramArtifact build_detached_aggregate_alias_artifact(void) {
@@ -2224,6 +2328,46 @@ static void test_class_clone_transaction_and_teardown_origin(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_value_struct_immutable_string_fields(void) {
+    uint16_t text_field = XR_CORE_TYPE_STRING;
+    uint16_t nested_field = 91u;
+    XrCoreIrTypeInput types[] = {
+        {.key = key("value-struct:inner"), .local_id = 91u,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE, .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = &text_field, .field_count = 1u},
+        {.key = key("value-struct:outer"), .local_id = 92u,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE, .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = &nested_field, .field_count = 1u},
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(build_with_type_graph(types, 2u, &artifact) == XR_PROGRAM_BUILD_OK);
+    if (artifact.bytes) {
+        XrValidatedProgram *program = validate_ok(&artifact);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    /* Encode anonymous value aggregates, then add each nominal declaration
+     * directly to the wire so producer rejection cannot hide verifier gaps. */
+    types[0].nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    types[1].nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    CHECK(build_with_type_graph(types, 2u, &artifact) == XR_PROGRAM_BUILD_OK);
+    for (uint32_t index = 0u; artifact.bytes && index < 2u; ++index) {
+        size_t nominal = SIZE_MAX;
+        CHECK(dynamic_aggregate_nominal_offset(&artifact, types[index].key, &nominal));
+        if (nominal >= artifact.size)
+            break;
+        artifact.bytes[nominal] = XR_CORE_IR_NOMINAL_STRUCT;
+        XrValidatedProgram *program = validate_ok(&artifact);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_dynamic_type_graph_rejection(void) {
     enum {
         SELF_TYPE = 41,
@@ -2296,6 +2440,26 @@ static void test_dynamic_type_graph_rejection(void) {
     CHECK(build_with_type_graph(managed_struct_types, 3u, &managed_wire_artifact) ==
           XR_PROGRAM_BUILD_OK);
     size_t managed_nominal_offset = SIZE_MAX;
+    CHECK(dynamic_aggregate_nominal_offset(&managed_wire_artifact,
+                                           managed_struct_types[2].key,
+                                           &managed_nominal_offset));
+    expect_mutated_verify(&managed_wire_artifact, managed_nominal_offset,
+                          XR_CORE_IR_NOMINAL_STRUCT, XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_TYPE);
+    xr_program_artifact_free(&managed_wire_artifact);
+
+    managed_struct_types[0].kind = XR_CORE_IR_TYPE_ARRAY;
+    managed_struct_types[0].nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    managed_struct_types[0].field_types = NULL;
+    managed_struct_types[0].field_count = 0u;
+    managed_struct_types[0].array_element_type = XR_CORE_TYPE_STRING;
+    managed_struct_types[2].nominal_kind = XR_CORE_IR_NOMINAL_STRUCT;
+    CHECK(build_with_type_graph(managed_struct_types, 3u, NULL) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+    managed_struct_types[2].nominal_kind = XR_CORE_IR_NOMINAL_NONE;
+    CHECK(build_with_type_graph(managed_struct_types, 3u, &managed_wire_artifact) ==
+          XR_PROGRAM_BUILD_OK);
+    managed_nominal_offset = SIZE_MAX;
     CHECK(dynamic_aggregate_nominal_offset(&managed_wire_artifact,
                                            managed_struct_types[2].key,
                                            &managed_nominal_offset));
@@ -5194,6 +5358,140 @@ static void test_class_reference_interface_conformance(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static XrProgramArtifact build_projected_class_share(bool owned_root, bool dropped_root,
+                                                     bool forwarded) {
+    enum { CLASS_TYPE = 70, RECORD_TYPE = 71 };
+    uint16_t fields[] = {CLASS_TYPE};
+    uint16_t class_fields[] = {XR_CORE_TYPE_PANIC_INFO};
+    XrCoreIrTypeInput types[] = {
+        {.key = key("projected-share:class"),
+         .local_id = CLASS_TYPE,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_FORBIDDEN,
+         .field_types = class_fields,
+         .field_count = 1u},
+        {.key = key("projected-share:record"),
+         .local_id = RECORD_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_NONE,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_FORBIDDEN,
+         .field_types = fields,
+         .field_count = 1u},
+    };
+    XrCoreIrKey root = key("projected-share:root");
+    XrCoreIrKey projected = key("projected-share:projected");
+    XrCoreIrKey incoming = key("projected-share:incoming");
+    XrCoreIrKey shared = key("projected-share:shared");
+    XrCoreIrKey root_operand[] = {root};
+    XrCoreIrKey project_operand[] = {projected};
+    XrCoreIrKey share_operand[] = {forwarded ? incoming : projected};
+    XrCoreIrKey shared_operand[] = {shared};
+    XrCoreIrKey entry_key = key("projected-share:entry");
+    XrCoreIrKey next_key = key("projected-share:next");
+    XrCoreIrValueInput argument = {
+        .key = root,
+        .type_id = RECORD_TYPE,
+        .ownership = owned_root ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER,
+    };
+    XrCoreIrValueInput next_argument = {.key = incoming, .type_id = CLASS_TYPE};
+    XrCoreIrInstructionInput drop = {
+        .operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .operands = root_operand,
+        .operand_count = 1u,
+    };
+    XrCoreIrInstructionInput entry[6] = {
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected,
+         .result_type_id = CLASS_TYPE,
+         .operands = root_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+    };
+    XrCoreIrInstructionInput tail[] = {
+        {.operation_id = XR_CORE_OP_CORE_OWNER_ALIAS,
+         .result = shared,
+         .result_type_id = CLASS_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = share_operand,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = shared_operand,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN, .result_type_id = XR_CORE_TYPE_VOID},
+    };
+    uint32_t count = 1u;
+    if (dropped_root)
+        entry[count++] = drop;
+    if (forwarded) {
+        entry[count++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_BRANCH,
+            .result_type_id = XR_CORE_TYPE_VOID,
+            .operands = project_operand,
+            .operand_count = 1u,
+            .successors = &next_key,
+            .successor_count = 1u,
+        };
+    } else {
+        entry[count++] = tail[0];
+        entry[count++] = tail[1];
+        if (owned_root && !dropped_root)
+            entry[count++] = drop;
+        entry[count++] = tail[2];
+    }
+    XrCoreIrBlockInput blocks[] = {
+        {.key = entry_key, .arguments = &argument, .argument_count = 1u,
+         .instructions = entry, .instruction_count = count},
+        {.key = next_key, .arguments = &next_argument, .argument_count = 1u,
+         .instructions = tail, .instruction_count = 3u},
+    };
+    uint16_t parameter = RECORD_TYPE;
+    XrParamMode mode = owned_root ? XR_PARAM_MOVE : XR_PARAM_READ;
+    XrCoreIrFunctionInput function = {
+        .key = key("projected-share:function"),
+        .parameter_types = &parameter,
+        .parameter_modes = &mode,
+        .parameter_count = 1u,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .entry_block = entry_key,
+        .blocks = blocks,
+        .block_count = forwarded ? 2u : 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("projected-share:module"), .functions = &function, .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(types, 2u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_projected_class_share_roots(void) {
+    for (uint32_t variant = 0u; variant < 5u; ++variant) {
+        bool owned_root = variant == 2u || variant == 3u || variant == 4u;
+        bool dropped_root = variant == 3u || variant == 4u;
+        bool forwarded = variant == 1u || variant == 4u;
+        XrProgramArtifact artifact = build_projected_class_share(
+            owned_root, dropped_root, forwarded);
+        if (variant < 3u) {
+            XrValidatedProgram *program = validate_ok(&artifact);
+            xr_validated_program_free(program);
+        } else {
+            /* A dead local root fails use checking in its own block. Passing
+             * only the borrow to another block cannot create a frame anchor. */
+            expect_semantic_reject(&artifact, forwarded
+                                                  ? XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE
+                                                  : XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+        }
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 static void test_existential_clone_safe_subset(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -5364,6 +5662,7 @@ static bool find_existential_type_offsets(const XrProgramArtifact *artifact,
             (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
     for (uint64_t index = XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT; index < total_count; ++index) {
         uint64_t type_id = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t display_variant_count = 0u;
         uint64_t kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
         size_t ownership = cursor;
         (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
@@ -5382,6 +5681,7 @@ static bool find_existential_type_offsets(const XrProgramArtifact *artifact,
             }
         } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
             uint64_t variant_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            display_variant_count = variant_count;
             for (uint64_t variant = 0u; variant < variant_count; ++variant) {
                 uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
                 for (uint64_t field = 0u; field < field_count; ++field)
@@ -5400,6 +5700,8 @@ static bool find_existential_type_offsets(const XrProgramArtifact *artifact,
                 offsets->ref_type_id = (uint16_t) type_id;
             }
         }
+        if (!test_skip_display_names(artifact->bytes, artifact->size, &cursor, display_variant_count))
+            return false;
     }
     return offsets->read_ownership != SIZE_MAX && offsets->read_copy_contract != SIZE_MAX &&
            offsets->read_use_kind != SIZE_MAX && offsets->aggregate_field != SIZE_MAX &&
@@ -5535,6 +5837,53 @@ static void test_callable_pack_and_indirect_calls(void) {
     }
     xr_program_artifact_free(&artifact);
 
+    CHECK(xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_DIRECT_PANIC, &artifact,
+                                                    diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    xr_validated_program_free(program);
+    XrProgramView panic_view;
+    CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &panic_view, NULL, 0u) ==
+          XR_PROGRAM_DECODE_OK);
+    size_t cursor = (size_t) panic_view.sections[XR_PROGRAM_SECTION_FUNCTIONS - 1u].offset;
+    uint64_t signatures = test_take_uvar(artifact.bytes, artifact.size, &cursor);
+    uint32_t mutated = 0u;
+    for (uint64_t signature = 0u; signature < signatures; ++signature) {
+        (void) test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        uint64_t parameters = test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        for (uint64_t parameter = 0u; parameter < parameters; ++parameter) {
+            (void) test_take_uvar(artifact.bytes, artifact.size, &cursor);
+            (void) test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        }
+        for (uint32_t field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        uint64_t origins = test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        CHECK(origins == 0u);
+        (void) test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        size_t panic_offset = cursor;
+        uint64_t panic_type = test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        (void) test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        (void) test_take_uvar(artifact.bytes, artifact.size, &cursor);
+        if (panic_type == XR_CORE_TYPE_PANIC_INFO) {
+            expect_mutated_verify(&artifact, panic_offset, XR_CORE_TYPE_ERROR,
+                                  XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                                  XR_PROGRAM_DIAGNOSTIC_FUNCTION);
+            ++mutated;
+        }
+    }
+    CHECK(mutated != 0u);
+    xr_program_artifact_free(&artifact);
+    CHECK(xr_program_callable_fixture_write_mutated(
+              XR_CALLABLE_FIXTURE_DIRECT_PANIC_WRONG_PAYLOAD, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    xr_program_artifact_free(&artifact);
+    CHECK(xr_program_callable_fixture_write_mutated(
+              XR_CALLABLE_FIXTURE_DIRECT_PANIC_UNDECLARED_CALLER, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_EFFECT);
+    xr_program_artifact_free(&artifact);
+
     CHECK(xr_program_callable_fixture_write_mutated(XR_CALLABLE_FIXTURE_DIRECT_TRAP, &artifact,
                                                     diagnostic,
                                                     sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
@@ -5631,6 +5980,43 @@ static void test_coroutine_state_and_exact_liveness(void) {
               XR_PROGRAM_BUILD_OK);
         expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_COROUTINE);
         xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_coroutine_typed_outcome_contract(void) {
+    const XrProgramDiagnosticKind rejected[] = {
+        XR_PROGRAM_DIAGNOSTIC_NONE,
+        XR_PROGRAM_DIAGNOSTIC_COROUTINE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+        XR_PROGRAM_DIAGNOSTIC_COROUTINE,
+        XR_PROGRAM_DIAGNOSTIC_COROUTINE,
+        XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+        XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+        XR_PROGRAM_DIAGNOSTIC_NONE,
+        XR_PROGRAM_DIAGNOSTIC_EFFECT,
+    };
+    for (uint32_t indirect = 0u; indirect < 2u; ++indirect) {
+        for (uint32_t panics = 0u; panics < 2u; ++panics) {
+            for (uint32_t mutation = 0u; mutation < XR_COUNTOF(rejected); ++mutation) {
+                XrProgramArtifact artifact = {0};
+                char diagnostic[256] = {0};
+                CHECK(xr_program_coroutine_outcome_fixture_write(indirect != 0u, panics != 0u,
+                    (XrProgramCoroutineOutcomeMutation) mutation, &artifact, diagnostic,
+                    sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+                if (rejected[mutation] == XR_PROGRAM_DIAGNOSTIC_NONE) {
+                    XrValidatedProgram *program = validate_ok(&artifact);
+                    CHECK(program != NULL);
+                    xr_validated_program_free(program);
+                } else {
+                    expect_semantic_reject(&artifact, rejected[mutation]);
+                }
+                xr_program_artifact_free(&artifact);
+            }
+        }
     }
 }
 
@@ -6264,6 +6650,38 @@ static void test_provider_output_semantics(void) {
  * the reference evaluator, the bool operand mutation of the i64 fixture is
  * now a legal typed output, and every text mutation is rejected by the rule
  * it breaks. */
+static void test_output_trap_ownership(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_output_trap_fixture_write(XR_OUTPUT_TRAP_VALID, &artifact, diagnostic,
+                                               sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+    static const struct {
+        XrProgramOutputTrapMutation mutation;
+        XrProgramDiagnosticKind expected;
+    } rejections[] = {
+        {XR_OUTPUT_TRAP_MISSING_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_OUTPUT_TRAP_DUPLICATE_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_OUTPUT_TRAP_WRONG_EDGE_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_OUTPUT_TRAP_EXTRA_SUCCESSOR, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {XR_OUTPUT_TRAP_WRONG_REASON, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {XR_OUTPUT_TRAP_RETURNS, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        {XR_OUTPUT_TRAP_IMPLICIT_EXIT, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+    };
+    for (size_t i = 0u; i < sizeof(rejections) / sizeof(rejections[0]); ++i) {
+        XrProgramBuildStatus status = xr_program_output_trap_fixture_write(
+            rejections[i].mutation, &artifact, diagnostic, sizeof(diagnostic));
+        if (status != XR_PROGRAM_BUILD_OK)
+            fprintf(stderr, "output trap mutation %u failed to build: %s\n",
+                    (unsigned) rejections[i].mutation, diagnostic);
+        CHECK(status == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, rejections[i].expected);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 static void test_text_semantics(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -6305,6 +6723,7 @@ static void test_text_semantics(void) {
         {XR_PROGRAM_TEXT_FIXTURE_DOUBLE_DROP, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
         /* an affine value defined as a non-owner has no root contract */
         {XR_PROGRAM_TEXT_FIXTURE_CONCAT_NON_OWNER, XR_PROGRAM_DIAGNOSTIC_ROOT},
+        {XR_PROGRAM_TEXT_FIXTURE_SCALAR_STRING_OPERAND, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
     };
     for (size_t index = 0u; index < sizeof(rejections) / sizeof(rejections[0]); ++index) {
         CHECK(xr_program_text_fixture_write_mutated(rejections[index].mutation, &artifact,
@@ -6451,13 +6870,333 @@ static void test_aggregate_construct_owner_transfers(void) {
 
 #include "xr_program_module_operation_checks.inc.c"
 
+static void test_exact_integer_conversion_admission(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_integer_fixture_write(true, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        CHECK(program->function_count == 64u);
+        for (uint32_t index = 0u; index < program->function_count; ++index) {
+            const XrValidatedFunction *function = &program->functions[index];
+            CHECK(xr_program_integer_fixture_function(program, function->parameter_types[0],
+                                                       function->result_type_id) == index);
+            CHECK(function->blocks[0].instructions[1].operation_id ==
+                  XR_CORE_OP_CORE_INTEGER_CONVERT);
+        }
+        xr_validated_program_free(program);
+    }
+    size_t ownership_offset = find_operation_offset(&artifact, XR_CORE_OP_CORE_INTEGER_CONVERT);
+    CHECK(ownership_offset != SIZE_MAX);
+    if (ownership_offset != SIZE_MAX) {
+        for (unsigned field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact.bytes, artifact.size, &ownership_offset);
+        CHECK(artifact.bytes[ownership_offset] == XR_CORE_IR_NON_OWNER);
+        expect_mutated_verify(&artifact, ownership_offset, XR_CORE_IR_OWNER,
+                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                              XR_PROGRAM_DIAGNOSTIC_TYPE);
+    }
+    xr_program_artifact_free(&artifact);
+    for (unsigned mutation = 1u; mutation <= 4u; ++mutation) {
+        XrProgramBuildStatus status =
+            xr_program_integer_fixture_write(true, mutation, &artifact);
+        if (mutation == 3u) {
+            CHECK(status == XR_PROGRAM_BUILD_INVALID_INPUT);
+            CHECK(artifact.bytes == NULL);
+            continue;
+        }
+        CHECK(status == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, mutation == 4u
+                                             ? XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE
+                                             : XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_exact_integer_divmod_admission(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_integer_divmod_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        CHECK(program->function_count == 16u);
+        for (uint32_t index = 0u; index < program->function_count; ++index) {
+            const XrValidatedFunction *function = &program->functions[index];
+            CHECK(function->blocks[0].instructions[1].operation_id == XR_CORE_OP_CORE_INTEGER_DIVMOD);
+            CHECK(xr_program_integer_divmod_fixture_function(
+                      program, function->result_type_id,
+                      function->blocks[0].instructions[1].immediate.u32) == index);
+        }
+        xr_validated_program_free(program);
+    }
+    size_t ownership_offset = find_operation_offset(&artifact, XR_CORE_OP_CORE_INTEGER_DIVMOD);
+    CHECK(ownership_offset != SIZE_MAX);
+    if (ownership_offset != SIZE_MAX) {
+        for (unsigned field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact.bytes, artifact.size, &ownership_offset);
+        CHECK(artifact.bytes[ownership_offset] == XR_CORE_IR_NON_OWNER);
+        expect_mutated_verify(&artifact, ownership_offset, XR_CORE_IR_OWNER,
+                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    }
+    xr_program_artifact_free(&artifact);
+    for (unsigned mutation = 1u; mutation <= 6u; ++mutation) {
+        CHECK(xr_program_integer_divmod_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, mutation == 5u ? XR_PROGRAM_DIAGNOSTIC_FUNCTION
+                                                         : XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_panic_point_continuation_admission(void) {
+    const uint16_t operations[] = {XR_CORE_OP_CORE_ASSERT_CONDITION, XR_CORE_OP_CORE_INTEGER_DIVMOD};
+    for (unsigned index = 0u; index < 2u; ++index) {
+        XrProgramArtifact artifact = {0};
+        CHECK(xr_program_panic_point_fixture_write(operations[index], XR_ASSERT_FIXTURE_CHAINED_CLEANUP,
+                                                   &artifact, NULL, 0u) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = validate_ok(&artifact);
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+        const struct {
+            XrProgramAssertFixtureMutation mutation;
+            XrProgramDiagnosticKind diagnostic;
+        } invalid[] = {
+            {XR_ASSERT_FIXTURE_WRONG_PANIC_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+            {XR_ASSERT_FIXTURE_MISSING_OWNER_TRANSFER, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
+            {XR_ASSERT_FIXTURE_NO_EDGE_WITH_LIVE_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+            {XR_ASSERT_FIXTURE_CHAINED_OWNER_LEAK, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+            {XR_ASSERT_FIXTURE_CHAINED_RECOVERY, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW},
+        };
+        for (unsigned bad = 0u; bad < sizeof(invalid) / sizeof(invalid[0]); ++bad) {
+            char diagnostic[256] = {0};
+            XrProgramBuildStatus status = xr_program_panic_point_fixture_write(
+                operations[index], invalid[bad].mutation, &artifact, diagnostic, sizeof(diagnostic));
+            if (status != XR_PROGRAM_BUILD_OK)
+                fprintf(stderr, "panic fixture op=%u mutation=%u build failed: %s\n",
+                        operations[index], invalid[bad].mutation, diagnostic);
+            CHECK(status == XR_PROGRAM_BUILD_OK);
+            expect_semantic_reject(&artifact, invalid[bad].diagnostic);
+            xr_program_artifact_free(&artifact);
+        }
+    }
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_panic_point_fixture_write(XR_CORE_OP_CORE_INTEGER_DIVMOD,
+                                               XR_ASSERT_FIXTURE_RESULT_ON_PANIC_EDGE,
+                                               &artifact, NULL, 0u) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+}
+
+static void test_sequence_length(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_sequence_length_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program->functions[0].blocks[0].instructions[4].operation_id ==
+          XR_CORE_OP_CORE_SEQUENCE_LENGTH);
+    xr_validated_program_free(program);
+    size_t ownership_offset = find_operation_offset(&artifact, XR_CORE_OP_CORE_SEQUENCE_LENGTH);
+    CHECK(ownership_offset != SIZE_MAX);
+    if (ownership_offset != SIZE_MAX) {
+        for (unsigned field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact.bytes, artifact.size, &ownership_offset);
+        CHECK(artifact.bytes[ownership_offset] == XR_CORE_IR_NON_OWNER);
+        expect_mutated_verify(&artifact, ownership_offset, XR_CORE_IR_OWNER,
+                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    }
+    xr_program_artifact_free(&artifact);
+    static const XrProgramDiagnosticKind expected[] = {
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+        XR_PROGRAM_DIAGNOSTIC_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE,
+        XR_PROGRAM_DIAGNOSTIC_VALUE_USE, XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+    };
+    for (unsigned mutation = 1u; mutation <= 6u; ++mutation) {
+        XrProgramBuildStatus status = xr_program_sequence_length_fixture_write(mutation, &artifact);
+        if (mutation == 3u) {
+            CHECK(status == XR_PROGRAM_BUILD_INVALID_INPUT);
+            CHECK(artifact.bytes == NULL);
+            continue;
+        }
+        CHECK(status == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, expected[mutation - 1u]);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_array_values(void) {
+    XrProgramArtifact artifact = {0};
+    for (unsigned scenario = 0u; scenario < 5u; ++scenario) {
+        CHECK(xr_program_array_fixture_write(scenario, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = validate_ok(&artifact);
+        if (!program) return;
+        CHECK(program->functions[0].blocks[0].instructions[scenario == 1u ? 0u : 2u].operation_id ==
+              XR_CORE_OP_CORE_ARRAY_CONSTRUCT);
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+    static const XrProgramDiagnosticKind expected[] = {
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+        XR_PROGRAM_DIAGNOSTIC_ROOT, XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+        XR_PROGRAM_DIAGNOSTIC_VALUE_USE, XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+    };
+    for (unsigned mutation = 1u; mutation <= 7u; ++mutation) {
+        CHECK(xr_program_array_fixture_write(0u, mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, expected[mutation - 1u]);
+        xr_program_artifact_free(&artifact);
+    }
+    static const XrProgramDiagnosticKind alias_expected[] = {
+        XR_PROGRAM_DIAGNOSTIC_ROOT, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+    };
+    for (unsigned mutation = 8u; mutation <= 11u; ++mutation) {
+        CHECK(xr_program_array_fixture_write(4u, mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, alias_expected[mutation - 8u]);
+        xr_program_artifact_free(&artifact);
+    }
+
+}
+
+static void test_array_element_place_admission(void) {
+    const unsigned loan_cases[] = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 8u, 9u, 10u, 11u, 12u};
+    for (unsigned i = 0u; i < sizeof(loan_cases) / sizeof(loan_cases[0]); ++i) {
+        unsigned scenario = loan_cases[i];
+        XrProgramArtifact artifact = {0};
+        CHECK(xr_program_array_loan_fixture_write(scenario, &artifact) == XR_PROGRAM_BUILD_OK);
+        if (scenario == 1u || scenario == 4u || scenario == 6u || scenario == 9u || scenario == 11u || scenario == 12u) {
+            expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+        } else {
+            fprintf(stderr, "array element loan scenario %u\n", scenario);
+            XrValidatedProgram *program = validate_ok(&artifact);
+            xr_validated_program_free(program);
+        }
+        xr_program_artifact_free(&artifact);
+    }
+    const unsigned accepted[] = {0u, 8u};
+    for (size_t i = 0u; i < sizeof(accepted) / sizeof(accepted[0]); ++i) {
+        XrProgramArtifact artifact = {0};
+        CHECK(xr_program_array_place_fixture_write(accepted[i], &artifact) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = validate_ok(&artifact);
+        if (program) {
+            CHECK(program->module_slot_count == 0u);
+            unsigned places = 0u;
+            for (uint32_t b = 0u; b < program->functions[0].block_count; ++b) {
+                const XrValidatedBlock *block = &program->functions[0].blocks[b];
+                for (uint32_t n = 0u; n < block->instruction_count; ++n)
+                    places += block->instructions[n].operation_id ==
+                              XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE;
+            }
+            CHECK(places == 1u);
+            xr_validated_program_free(program);
+        }
+        xr_program_artifact_free(&artifact);
+    }
+    const unsigned rejected[] = {1u, 2u, 3u, 5u, 9u};
+    const XrProgramDiagnosticKind diagnostics[] = {
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, XR_PROGRAM_DIAGNOSTIC_VALUE_USE,
+        XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE,
+    };
+    for (size_t i = 0u; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
+        XrProgramArtifact artifact = {0};
+        CHECK(xr_program_array_place_fixture_write(rejected[i], &artifact) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, diagnostics[i]);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+
+static void test_atomic_operation_admission(void) {
+    for (unsigned mode = 0u; mode <= 7u; ++mode)
+    for (unsigned boolean = 0u; boolean < 3u; ++boolean) {
+        if (boolean == 1u && mode >= 5u && mode != 7u) continue;
+        if (boolean == 2u && mode == 7u) continue;
+        for (unsigned mutation = 0u; mutation < (mode >= 5u ? 8u : 7u); ++mutation) {
+            XrProgramArtifact artifact = {0};
+            XrProgramBuildStatus built = xr_program_atomic_fixture_write_scalar(boolean == 2u ? XR_CORE_TYPE_F64 : boolean ? XR_CORE_TYPE_BOOL : XR_CORE_TYPE_I64, mutation, mode, &artifact);
+            if (mutation == 3u || mutation == 6u) {
+                CHECK(built == XR_PROGRAM_BUILD_INVALID_INPUT && artifact.bytes == NULL);
+                xr_program_artifact_free(&artifact);
+                continue;
+            }
+            CHECK(built == XR_PROGRAM_BUILD_OK);
+            XrValidatedProgram *program = NULL;
+            XrProgramDiagnostic diagnostic = {0};
+            XrProgramVerifyStatus status = xr_program_validate(
+                artifact.bytes, artifact.size, NULL, &program, &diagnostic);
+            if (mutation == 0u) {
+                CHECK(status == XR_PROGRAM_VERIFY_OK && program != NULL);
+                if (program) {
+                    const XrValidatedInstruction *ops = program->functions[program->entry_function].blocks[0].instructions;
+                    CHECK(ops[2].operation_id == XR_CORE_OP_CORE_ATOMIC_CONSTRUCT);
+                    CHECK(ops[4].operation_id == (mode >= 5u ? XR_CORE_OP_CORE_ATOMIC_UPDATE : mode ? XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE : XR_CORE_OP_CORE_ATOMIC_EXCHANGE));
+                    CHECK(ops[6].operation_id == XR_CORE_OP_CORE_ATOMIC_LOAD);
+                }
+            } else {
+                CHECK(status != XR_PROGRAM_VERIFY_OK && program == NULL);
+                CHECK(diagnostic.kind == (mutation == 4u ? XR_PROGRAM_DIAGNOSTIC_VALUE_USE
+                                                        : XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE));
+            }
+            xr_validated_program_free(program);
+            xr_program_artifact_free(&artifact);
+        }
+    }
+}
+
+static void test_assert_message_contract(void) {
+    for (unsigned mutation = 0u; mutation < 4u; ++mutation) {
+        XrProgramArtifact artifact = {0};
+        CHECK(xr_program_assert_message_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = NULL;
+        XrProgramVerifyStatus status = xr_program_validate(artifact.bytes, artifact.size,
+                                                          NULL, &program, NULL);
+        CHECK(mutation == 0u ? status == XR_PROGRAM_VERIFY_OK : status != XR_PROGRAM_VERIFY_OK);
+        if (mutation == 0u && program) {
+            XrReferenceValue argument = {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = true};
+            XrReferenceOutcome result = xr_reference_evaluate(program, xr_validated_program_entry_function(program),
+                                                               &argument, 1u, NULL, NULL);
+            CHECK(result.kind == XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
+            xr_reference_outcome_dispose(&result);
+        }
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 int main(void) {
+    test_assert_message_contract();
+    for (unsigned mutation = 0u; mutation < 6u; ++mutation) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        CHECK(xr_program_f64_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrProgramVerifyStatus status = xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL);
+        CHECK(mutation ? status != XR_PROGRAM_VERIFY_OK : status == XR_PROGRAM_VERIFY_OK);
+        CHECK(mutation ? program == NULL : program != NULL);
+        if (!mutation && program) {
+            CHECK(program->functions[program->entry_function].blocks[0].instructions[0].operation_id == XR_CORE_OP_CORE_CONSTANT_F64);
+            CHECK(program->functions[program->entry_function].blocks[0].instructions[8].operation_id == XR_CORE_OP_CORE_COMPARE_F64);
+        bool bitcast_seen = false;
+        for (uint32_t index = 0u; index < program->functions[program->entry_function].blocks[0].instruction_count; ++index)
+            bitcast_seen |= program->functions[program->entry_function].blocks[0].instructions[index].operation_id == XR_CORE_OP_CORE_SCALAR_BITCAST64;
+        CHECK(bitcast_seen);
+        }
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+
+    test_atomic_operation_admission();
+    test_array_element_place_admission();
+    test_panic_point_continuation_admission();
+    test_exact_integer_divmod_admission();
+    test_sequence_length();
+    test_array_values();
+    test_exact_integer_conversion_admission();
+    test_module_borrow_after_exchange();
+    test_cross_block_module_array_borrow();
+    test_projected_borrow_after_parent_exchange();
     test_module_operation_admission();
     test_module_const_place_survives_branch();
     test_module_place_ref_call_admission();
     test_module_place_ref_interface_admission();
     test_aggregate_construct_owner_transfers();
     test_aggregate_variant_operations();
+    test_value_struct_immutable_string_fields();
     test_dynamic_type_graph_rejection();
     test_class_alias_mutation_and_lifecycle();
     test_class_trivial_field_load_is_snapshot();
@@ -6487,10 +7226,12 @@ int main(void) {
     test_existential_clone_safe_subset();
     test_witness_receiver_capability_and_interface_identity();
     test_existential_pack_test_project();
+    test_projected_class_share_roots();
     test_existential_owned_read_reborrow();
     test_callable_pack_and_indirect_calls();
     test_coroutine_state_and_exact_liveness();
     test_indirect_coroutine_call_contract();
+    test_coroutine_typed_outcome_contract();
     test_coroutine_cancel_cleanup_requires_exact_owner_transfer();
     test_coroutine_related_field_refs_require_one_live_storage_root();
     test_coroutine_child_trap_requires_recoverable_cleanup_inputs();
@@ -6499,6 +7240,7 @@ int main(void) {
     test_cleanup_reason_graph_cannot_suspend();
     test_provider_output_semantics();
     test_text_semantics();
+    test_output_trap_ownership();
     test_provider_trap_continuation_semantics();
     test_inactive_operation_fails_closed_before_semantics();
     if (failures != 0) {

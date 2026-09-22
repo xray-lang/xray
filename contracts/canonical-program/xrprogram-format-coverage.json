@@ -1,7 +1,7 @@
 {
   "schema": "xray-program-format-coverage/1",
-  "format": "3.2",
-  "schema_sha256": "c089ea8ab82f94fab0b3dcf6d47ec0a8e72a2e559a1a204e1e1f4279360779e5",
+  "format": "3.9",
+  "schema_sha256": "45ea23754a62656fc42ab17ba7925d98422b1efa429524f27d9ea28d892baa46",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "structural_decoder": "COMPLETE",
   "semantic_admission": "OPEN",
@@ -9,7 +9,7 @@
   "aot_consumer": "OPEN",
   "incomplete_operations": [
     "core.class.construct",
-    "core.class.share",
+    "core.owner.alias",
     "core.class.field_load",
     "core.class.field_place",
     "core.place.exchange"

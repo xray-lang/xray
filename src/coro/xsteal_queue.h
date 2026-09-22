@@ -34,10 +34,15 @@ struct XrCoroutine;
 
 // ========== Steal Queue Structure ==========
 
+typedef struct XrStealQueueSlot {
+    _Atomic(struct XrCoroutine *) coro;
+    _Atomic int64_t submit_time;
+} XrStealQueueSlot;
+
 // Lock-free work-stealing queue (Chase-Lev deque)
 // push/pop: owner thread, steal: other threads
 typedef struct XrStealQueue {
-    _Atomic(struct XrCoroutine *) *buffer;  // Ring buffer
+    XrStealQueueSlot *buffer;               // Ring buffer and owned freshness hints
     _Atomic int64_t top;                    // Steal end (head)
     _Atomic int64_t bottom;                 // Local end (tail)
     int64_t mask;                           // Size mask
@@ -59,7 +64,7 @@ XR_FUNC void xr_steal_queue_destroy(XrStealQueue *q);
 
 // Push coroutine (owner thread only, lock-free)
 // Returns false if queue is full (caller should handle overflow)
-XR_FUNC bool xr_steal_queue_push(XrStealQueue *q, struct XrCoroutine *coro);
+XR_FUNC bool xr_steal_queue_push(XrStealQueue *q, struct XrCoroutine *coro, int64_t submit_time);
 
 // Pop coroutine (owner thread only, LIFO)
 XR_FUNC struct XrCoroutine *xr_steal_queue_pop(XrStealQueue *q);
@@ -82,18 +87,23 @@ XR_FUNC bool xr_steal_queue_empty(XrStealQueue *q);
 // Returns number of entries written to out_buf (up to max_out)
 XR_FUNC int xr_steal_queue_snapshot(XrStealQueue *q, struct XrCoroutine **out_buf, int max_out);
 
-// ========== Non-destructive Peek (for time-aware stealing) ==========
-
-// Peek at the oldest item (steal end) without removing it.
-// Racy but safe as a freshness hint — worst case we see a stale item.
-static inline struct XrCoroutine *xr_steal_queue_peek_top(XrStealQueue *q) {
-    if (!q || !q->buffer)
-        return NULL;
-    int64_t t = atomic_load_explicit(&q->top, memory_order_relaxed);
-    int64_t b = atomic_load_explicit(&q->bottom, memory_order_relaxed);
+/* Freshness scans borrow queue storage, never a coroutine. Only a successful
+ * pop or steal
+ * transfers the right to dereference a queued shell. Ring reuse
+ * may make this hint stale, but
+ * cannot expose a reclaimed shell. */
+static inline bool xr_steal_queue_peek_time(XrStealQueue *q, int64_t *out_time) {
+    if (!q || !q->buffer || !out_time)
+        return false;
+    int64_t t = atomic_load_explicit(&q->top, memory_order_acquire);
+    int64_t b = atomic_load_explicit(&q->bottom, memory_order_acquire);
     if (t >= b)
-        return NULL;
-    return atomic_load_explicit(&q->buffer[t & q->mask], memory_order_relaxed);
+        return false;
+    int64_t time = atomic_load_explicit(&q->buffer[t & q->mask].submit_time, memory_order_relaxed);
+    if (atomic_load_explicit(&q->top, memory_order_acquire) != t)
+        return false;
+    *out_time = time;
+    return true;
 }
 
 #endif  // XSTEAL_QUEUE_H

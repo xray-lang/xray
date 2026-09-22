@@ -24,6 +24,7 @@
 #include "xstruct_layout.h"
 #include "xenum_layout.h"
 #include "../../base/xdefs.h"
+#include "../../base/xstable_id.h"
 #include "../../shared/xr_param_mode.h"
 #include "../../shared/xr_view_origin.h"
 #include "../../shared/xr_json_type.h"
@@ -231,6 +232,7 @@ struct XrType {
         struct {
             const char *class_name;
             XrClassInfo *class_ref;
+            XrStableId resource_id;  // Exact native declaration identity; zero for ordinary classes.
             XrType *superclass;  // For inheritance chain
             XrType **type_args;  // Generic type arguments (e.g., Box<int> -> [int])
             int type_arg_count;  // Number of type arguments

@@ -17,6 +17,7 @@
 #include "xr_semantic_plan.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../ir/xi_own.h"
 #include "../../runtime/value/xtype.h"
 
 /* A borrow view over one exact scalar element. The view itself is a pointer and
@@ -124,6 +125,70 @@ static inline bool xr_semantic_slice_bounds_are_exact(const XrSemanticPlan *plan
     return true;
 }
 
+/* A returned view retains the callee's declared parameter root. The descriptor
+ * is a value; its pointee remains borrowed from the exact call argument. */
+static inline bool xr_semantic_direct_local_slice_result_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t *out_element_type) {
+    uint32_t element = XR_SEMANTIC_INDEX_NONE;
+    if (!plan || !operation || operation->opcode != XI_CALL ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        !xr_semantic_slice_view_type_is_exact(plan, operation->result_type, &element))
+        return false;
+    const XrSemanticCallTargetRecord *target = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_call_target_count(plan); ++i) {
+        const XrSemanticCallTargetRecord *candidate = xr_semantic_plan_call_target(plan, i);
+        if (!candidate || xr_semantic_plan_operation(plan, candidate->operation) != operation)
+            continue;
+        if (target || candidate->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            return false;
+        target = candidate;
+    }
+    const XrSemanticFunctionRecord *callee =
+        target ? xr_semantic_plan_function(plan, target->function) : NULL;
+    if (!callee || callee->return_type != operation->result_type ||
+        callee->return_provenance != XR_SEM_RETURN_BORROWED_PARAM ||
+        callee->return_parameter < 0 || callee->return_parameter >= callee->parameter_count ||
+        operation->return_provenance != callee->return_provenance ||
+        operation->return_parameter != callee->return_parameter || !operation->return_complete ||
+        operation->operand_count != (uint32_t) callee->parameter_count + 1u)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!operands || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    uint32_t ordinal = (uint32_t) callee->return_parameter;
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(plan, callee->parameter_begin + ordinal);
+    const XrSemanticOperandRecord *root = &operands[operation->operand_begin + ordinal + 1u];
+    uint32_t parameter_element = XR_SEMANTIC_INDEX_NONE;
+    uint32_t argument_element = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *result = xr_semantic_plan_type(plan, operation->result_type);
+    const XrSemanticTypeRecord *argument = xr_semantic_plan_type(plan, root->type);
+    const XrSemanticTypeRecord *declared =
+        parameter ? xr_semantic_plan_type(plan, parameter->type) : NULL;
+    /* CALL may consume the non-owning descriptor, never its borrowed root. */
+    if (!parameter || parameter->function != target->function || parameter->mode != XR_PARAM_READ ||
+        (parameter->ownership != XI_OWN_BORROWED && parameter->ownership != XI_OWN_OWNED) ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        root->role != XR_SEM_OPERAND_ARGUMENT || root->parameter != (int16_t) ordinal ||
+        root->parameter_mode != XR_PARAM_READ ||
+        (root->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
+        root->ownership_action != (parameter->ownership == XI_OWN_OWNED
+                                       ? XR_SEM_OPERAND_CONSUME : XR_SEM_OPERAND_BORROW) ||
+        root->transfer_mode != XR_TRANSFER_SHARE || root->access != XR_CALL_ARG_PLAIN ||
+        !xr_semantic_slice_view_type_is_exact(plan, parameter->type, &parameter_element) ||
+        !xr_semantic_slice_view_type_is_exact(plan, root->type, &argument_element) ||
+        element != parameter_element || element != argument_element ||
+        (((argument->flags | declared->flags) & XR_SEM_TYPE_CONST) &&
+         !(result->flags & XR_SEM_TYPE_CONST)))
+        return false;
+    if (out_element_type)
+        *out_element_type = element;
+    return true;
+}
+
 static inline bool xr_semantic_range_slice_is_exact(const XrSemanticPlan *plan,
                                                     const XrSemanticOperationRecord *operation,
                                                     uint32_t *out_element_type) {
@@ -170,6 +235,13 @@ static inline bool xr_semantic_range_slice_is_exact(const XrSemanticPlan *plan,
             return false;
     }
     return true;
+}
+
+static inline bool xr_semantic_slice_view_result_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t *out_element_type) {
+    return xr_semantic_range_slice_is_exact(plan, operation, out_element_type) ||
+           xr_semantic_direct_local_slice_result_is_exact(plan, operation, out_element_type);
 }
 
 #endif  // XR_SEMANTIC_RANGE_SLICE_SHAPE_H

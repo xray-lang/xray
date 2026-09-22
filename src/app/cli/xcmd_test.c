@@ -8,55 +8,55 @@
  * xcmd_test.c - 'xray test' command implementation
  *
  * KEY CONCEPT:
- *   Unified execution model: the test executor materializes one physical root
- *   task on demand, then reuses it for hooks and @test functions. Isolate
- *   creation itself remains task-free; the explicit test executor owns the
- *   scheduler-backed root required by timeout/cancellation semantics.
- *
- *   Parallel execution: test files run concurrently on a thread pool
- *   (each file gets its own isolate). -j N controls parallelism.
- *
- * WHY THIS DESIGN:
- *   - Previous design created a new coroutine per @test, causing context
- *     mismatch and divergence from direct execution.
- *   - Reusing main_coro matches xr_execute() semantics exactly.
- *   - File-level parallelism is natural (each isolate is independent).
+ *   Each file builds one detached Program and runs tests and hooks in one
+ *   module instance. File workers share no execution state.
  */
 
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "../../api/xisolate_profile.h"
 #include "xcli_output.h"
-#include "xray.h"
-#include "../../api/xtest_runner.h"
-#include "../../runtime/xisolate_api.h"
-#include "../../runtime/xexec_state.h"
-#include "../../runtime/core/xr_runtime_core.h"
-#include "../../module/xmodule.h"
-#include "../../vm/xvm_internal.h"
-#include "../../vm/xvm_coro_api.h"
-#include "../../coro/xcoroutine.h"
-#include "../../coro/xworker.h"
-#include "../../frontend/parser/xparse.h"
-#include "../../frontend/analyzer/xanalyzer.h"
-#include "../../ir/xi_module.h"
-#include "../../toolchain/xcompiler_session.h"
+#include "xcli_canonical_source.h"
+#include "xcli_program_vm.h"
+#include "../toolchain/xtc_target_profile.h"
+#include "../../api/xisolate_profile.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../module/xmodule_graph.h"
-#include "../../module/xmodule_resolver.h"
-#include "../../runtime/object/xpanic_info.h"
-#include <stdio.h>
-#include <string.h>
 #include "../../os/os_fs.h"
 #include "../../os/os_dir.h"
 #include "../../os/os_thread.h"
 #include "../../os/os_time.h"
+#include "../../plan/target/xr_target_profile.h"
+#include "xray_vm.h"
+#include <stdio.h>
+#include <string.h>
 #include <stdatomic.h>
 
 #define TEST_FILE_TIMEOUT_SEC 120
 #define TEST_WORKER_STACK_SIZE (8u * 1024u * 1024u)
+
+typedef enum {
+    TEST_PASSED,
+    TEST_FAILED,
+    TEST_ERROR,
+    TEST_SKIPPED,
+    TEST_TIMEOUT
+} XrTestStatus;
+
+typedef struct XrTestConfig {
+    bool verbose;
+    bool fail_fast;
+    const char *filter;  // NULL = run all
+} XrTestConfig;
+
+// Failure record for end-of-run summary
+typedef struct XrTestFailureRecord {
+    char *file;       // owned copy
+    char *test_name;  // owned copy
+    char *message;    // owned copy
+    XrTestStatus status;
+} XrTestFailureRecord;
+
 
 /* ========== Per-File Result (thread-safe, no shared state) ========== */
 
@@ -116,506 +116,200 @@ static void get_display_name(const char *filepath, char *buf, size_t bufsz) {
 
 #define get_time_ms() xr_cli_get_time_ms()
 
-/* ========== Closure Lookup ========== */
-
-// Find runtime closure in shared array that matches the given proto.
-// After top-level execution, closures with upvalue bindings are stored
-// in the shared array via OP_SETSHARED. This lets us recover the live
-// closure (with proper upvalue pointers) for each @test function.
-static XrClosure *find_closure_for_proto(XrVMRuntime *X, XrProto *target_proto) {
-    XrVMState *vm = xr_isolate_get_vm_state(X);
-    XrSharedArray *shared = &vm->shared;
-    for (int i = 0; i < shared->count; i++) {
-        XrValue val = shared->data[i];
-        if (xr_value_is_closure(val)) {
-            XrClosure *closure = xr_value_to_closure(val);
-            if (closure && closure->proto == target_proto)
-                return closure;
-        }
-    }
-    return NULL;
+static bool test_entry_is_case(const XrProgramSourceTestEntry *entry) {
+    return entry->kind == XR_PROGRAM_TEST_CASE || entry->kind == XR_PROGRAM_TEST_SKIP;
 }
 
-// Get or create closure for a test/hook proto
-static XrClosure *get_test_closure(XrVMRuntime *X, XrProto *proto) {
-    XrClosure *closure = find_closure_for_proto(X, proto);
-    if (!closure)
-        closure = xr_closure_new(X, proto, xr_isolate_get_main_coro(X));
-    return closure;
+static bool test_entry_selected(const XrProgramSourceTestEntry *entry, const XrTestConfig *config) {
+    return entry->kind == XR_PROGRAM_TEST_CASE &&
+           (!config->filter || strstr(entry->name, config->filter));
 }
 
-/* ========== Error Extraction ========== */
+typedef struct XrTestMessageSink {
+    char *message;
+    size_t size;
+    size_t used;
+} XrTestMessageSink;
 
-static const char *extract_coro_error(XrCoroutine *coro) {
-    if (!coro)
-        return "unknown error";
-    XrValue err = coro->error;
-    if (XR_IS_STRING(err)) {
-        XrString *s = (XrString *) XR_TO_PTR(err);
-        if (s && s->data[0] != '\0')
-            return s->data;
-    }
-    XrVMRuntime *vm_owner = xr_runtime_core_vm_owner(coro->core);
-    if (vm_owner && xr_value_is_panic_info(vm_owner, err)) {
-        // Coroutine errors now preserve the original Exception instance
-        // (so linked-scope rethrow surfaces the right object — see F026).
-        const char *m = xr_panic_info_get_message(vm_owner, err);
-        if (m && m[0] != '\0')
-            return m;
-    }
-    return "test failed";
-}
-
-/* ========== File-Level Watchdog ========== */
-
-typedef struct {
-    XrVMRuntime *X;
-    xr_mutex_t mutex;
-    xr_cond_t cond;
-    bool done;
-    int timeout_sec;
-} FileWatchdog;
-
-static void *file_watchdog_thread(void *arg) {
-    FileWatchdog *wd = (FileWatchdog *) arg;
-    // Track an absolute monotonic deadline so spurious wake-ups
-    // do not extend the watchdog window.
-    uint64_t deadline_ns = xr_time_monotonic_ns() + (uint64_t) wd->timeout_sec * 1000000000ULL;
-
-    xr_mutex_lock(&wd->mutex);
-    while (!wd->done) {
-        uint64_t now_ns = xr_time_monotonic_ns();
-        if (now_ns >= deadline_ns)
-            break;
-        bool signalled = xr_cond_wait_for_ns(&wd->cond, &wd->mutex, deadline_ns - now_ns);
-        if (!signalled && !wd->done) {
-            XrRuntime *runtime = (XrRuntime *) xr_isolate_get_scheduler_runtime(wd->X);
-            if (runtime)
-                xr_runtime_force_stop(runtime);
-            break;
-        }
-    }
-    xr_mutex_unlock(&wd->mutex);
-    return NULL;
-}
-
-static void watchdog_start(FileWatchdog *wd, XrVMRuntime *X, int timeout_sec, xr_thread_t *tid) {
-    wd->X = X;
-    wd->done = false;
-    wd->timeout_sec = timeout_sec;
-    xr_mutex_init(&wd->mutex);
-    xr_cond_init(&wd->cond);
-    xr_thread_create(tid, file_watchdog_thread, wd);
-}
-
-static void watchdog_stop(FileWatchdog *wd, xr_thread_t tid) {
-    xr_mutex_lock(&wd->mutex);
-    wd->done = true;
-    xr_cond_signal(&wd->cond);
-    xr_mutex_unlock(&wd->mutex);
-    xr_thread_join(tid, NULL);
-    xr_mutex_destroy(&wd->mutex);
-    xr_cond_destroy(&wd->cond);
-}
-
-/* ========== Unified Test Execution (reuse an on-demand physical root) ========== */
-
-// Run a closure on main_coro (identical semantics to xr_execute).
-// Returns 0 on success, -1 on failure.
-static int run_inline(XrVMRuntime *X, XrClosure *closure) {
-    XrCoroutine *main_coro = xr_isolate_get_main_coro(X);
-    if (!main_coro) {
-        main_coro = xr_coro_create_bootstrap(X);
-        if (!main_coro)
-            return -1;
-        xr_isolate_set_main_coro(X, main_coro);
-    }
-    xr_coro_reset_for_call(main_coro, X, closure);
-    xr_main_thread_run(X, main_coro);
-
-    if (xr_coro_flags_has(main_coro, XR_CORO_FLG_DONE) &&
-        !xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) && XR_IS_NULL(main_coro->error)) {
+static int test_message_write(void *context, const void *bytes, size_t size) {
+    XrTestMessageSink *sink = context;
+    if (!sink->size)
         return 0;
-    }
-    return -1;
+    size_t room = sink->size - sink->used - 1u;
+    size_t copied = size < room ? size : room;
+    if (copied)
+        memcpy(sink->message + sink->used, bytes, copied);
+    sink->used += copied;
+    sink->message[sink->used] = '\0';
+    if (copied != size && sink->size >= 4u)
+        memcpy(sink->message + sink->size - 4u, "...", 4u);
+    return 1;
 }
 
-// Run hook functions (before_all, after_all, before_each, after_each).
-// Returns 0 if all hooks succeeded, -1 on first failure.
-static int run_hooks(XrVMRuntime *X, XrTestFunc *hooks, int count) {
-    for (int i = 0; i < count; i++) {
-        XrClosure *closure = get_test_closure(X, hooks[i].proto);
-        if (!closure)
-            return -1;
-        if (run_inline(X, closure) != 0)
-            return -1;
+static XrTestStatus invoke_test_entry(XrCliProgramVm *vm, uint32_t function_id, double deadline,
+                                      char *message, size_t message_size) {
+    XrTestMessageSink capture = {message, message_size, 0u};
+    XrValueFormatSink errors = {&capture, test_message_write};
+    XrCliVmResult result = xr_cli_program_vm_invoke(vm, function_id, deadline, &errors);
+    if (result.timed_out) {
+        snprintf(message, message_size, "exceeded timeout");
+        return TEST_TIMEOUT;
     }
-    return 0;
+    if (result.kind == XR_VM_OUTCOME_RETURN)
+        return TEST_PASSED;
+    if (result.error_reported || result.panic_reported)
+        return TEST_FAILED;
+    snprintf(message, message_size, "execution failed (outcome=%u trap=%u panic=%u)",
+             (unsigned) result.kind, (unsigned) result.trap, result.panic_info.code);
+    return TEST_FAILED;
 }
 
-static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
-                                     const char *filepath,
-                                     const XrModuleIdentityAuthority *entry_authority,
-                                     XrModuleGraph **out_graph,
-                                     XaAnalyzer **out_analyzer, char *err_buf, size_t err_buf_sz) {
-    if (out_graph)
-        *out_graph = NULL;
-    if (out_analyzer)
-        *out_analyzer = NULL;
-
-    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
-    XrModuleResolver *resolver = registry ? xr_module_registry_get_resolver(registry) : NULL;
-    if (!resolver)
-        return 0;
-
-    XrModuleGraph *graph = xr_module_graph_new(session, resolver);
-    if (!graph) {
-        snprintf(err_buf, err_buf_sz, "cannot create module graph");
-        return 1;
-    }
-
-    char *graph_err = NULL;
-    int graph_rc = entry_authority
-                       ? xr_module_graph_build(graph, filepath, entry_authority, &graph_err)
-                       : -1;
-    if (graph_rc != 0) {
-        snprintf(err_buf, err_buf_sz, "%s", graph_err ? graph_err : "module graph build failed");
-        xr_free(graph_err);
-        xr_module_graph_free(graph);
-        return 1;
-    }
-    xr_free(graph_err);
-
-    xr_module_graph_topological_sort(graph);
-    if (graph->has_cycle) {
-        snprintf(err_buf, err_buf_sz, "%s",
-                 graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
-        xr_module_graph_free(graph);
-        return 1;
-    }
-
-    if (graph->topo_count <= 1) {
-        xr_module_graph_free(graph);
-        return 0;
-    }
-
-    XaAnalyzer *analyzer = xa_analyzer_new(session);
-    if (!analyzer) {
-        snprintf(err_buf, err_buf_sz, "cannot create analyzer for module graph");
-        xr_module_graph_free(graph);
-        return 1;
-    }
-
-    xa_analyzer_set_graph(analyzer, graph);
-    int graph_errors = 0;
-    for (int ti = 0; ti < graph->topo_count; ti++) {
-        int idx = graph->topo_order[ti];
-        XrModuleSpec *spec = &graph->specs[idx];
-        if (!spec->ast || !spec->source_path)
+static bool run_hooks(XrCliProgramVm *vm, const XrProgramSourceProduct *product,
+                      XrProgramSourceTestKind kind, double deadline, char *message,
+                      size_t message_size) {
+    bool passed = true;
+    for (uint32_t index = 0u; index < product->test_entry_count; ++index) {
+        const XrProgramSourceTestEntry *hook = &product->tests[index];
+        if (hook->kind != kind)
             continue;
-
-        xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
-        spec->export_symbols =
-            xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
-
-        graph_errors += xa_analyzer_print_errors(analyzer, spec->source_path);
-        xa_analyzer_clear_diagnostics(analyzer);
+        char failure[256] = {0};
+        if (invoke_test_entry(vm, hook->function_id, deadline, failure, sizeof(failure)) !=
+            TEST_PASSED) {
+            if (passed)
+                snprintf(message, message_size, "hook '%s': %s", hook->name, failure);
+            passed = false;
+            if (kind == XR_PROGRAM_TEST_BEFORE_ALL || kind == XR_PROGRAM_TEST_BEFORE_EACH)
+                break;
+        }
     }
-
-    if (graph_errors > 0) {
-        snprintf(err_buf, err_buf_sz, "module graph analysis failed");
-        xa_analyzer_set_graph(analyzer, NULL);
-        xa_analyzer_free(analyzer);
-        xr_module_graph_free(graph);
-        return 1;
-    }
-
-    xr_compiler_session_set_module_graph(session, graph);
-
-    if (out_graph)
-        *out_graph = graph;
-    if (out_analyzer)
-        *out_analyzer = analyzer;
-    return 0;
+    return passed;
 }
-
-/* Load the dependencies of a compiled test graph into the registry's
- * topological module table. The program image is installed first, so every
- * module the test imports runs as compiled for this test file: a standard
- * library layer or file module specialized by it, not the runtime's embedded
- * copy or a fresh per-file compilation. */
-static bool load_test_module_graph(XrVMRuntime *X, XrModuleGraph *graph,
-                                   const XrCompiledModuleGraph *compilation, XrProgramImage *image,
-                                   char *err_buf, size_t err_buf_sz) {
-    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
-    if (!registry || !xr_program_image_build(X, graph, compilation, image)) {
-        snprintf(err_buf, err_buf_sz, "program image construction failed");
-        return false;
-    }
-    xr_program_image_install(image, registry);
-    XrModule **mod_table = NULL;
-    if (!xr_module_graph_preload(X, graph, &mod_table)) {
-        snprintf(err_buf, err_buf_sz, "module dependency initialization failed");
-        return false;
-    }
-    registry->module_table = mod_table;
-    registry->module_table_count = graph->topo_count;
-    return true;
-}
-
-/* ========== Run Single Test File ========== */
 
 static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFileResult *result) {
     memset(result, 0, sizeof(*result));
-    strncpy(result->filepath, filepath, sizeof(result->filepath) - 1);
-
-    // Create fresh isolate via profile factory
+    snprintf(result->filepath, sizeof(result->filepath), "%s", filepath);
+    XrProgramSourceProduct product = {0};
+    XrTargetProfile *profile = NULL;
+    XrCliProgramVm vm = {0};
+    XrTargetCodegenFacts codegen = {0};
+    char error[512] = {0};
+    double file_start = get_time_ms();
+    if (!xtc_target_profile_build_current_native_hosted(&codegen, &profile, error, sizeof(error)))
+        goto failed;
     XrVMConfig params;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_TEST, &params);
     params.script_file = filepath;
-    XrVMRuntime *X = xr_isolate_profile_create(&params);
-    if (!X) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg), "failed to create isolate");
-        result->errors = 1;
-        return;
+    XrVMRuntime *compiler_host = xr_isolate_profile_create(&params);
+    if (!compiler_host) {
+        snprintf(error, sizeof(error), "compiler host creation failed");
+        goto failed;
     }
-    xr_isolate_set_suppress_exception_print(X, true);
-    xr_isolate_multicore_init(X, 0);
-    xr_module_system_init_with_script(X, filepath);
-
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    XrModuleIdentityAuthority entry_authority = {0};
-    char *entry_authority_root = NULL;
-    XrModuleGraph *active_graph = NULL;
-    XaAnalyzer *active_graph_analyzer = NULL;
-    XrCompiledModuleGraph graph_compilation = {0};
-    XrProgramImage program_image = {0};
-    XrCompilerSessionOperationScope compile_operation = {0};
-    char graph_error[256] = "";
-    if (!xr_compiler_session_operation_begin(session, &compile_operation)) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg),
-                 "compiler session is busy");
-        result->errors = 1;
-        goto cleanup_graph;
+    XrCliCanonicalSourceRequest request = {
+        .schema_version = XR_CLI_CANONICAL_SOURCE_SCHEMA_VERSION,
+        .compiler_host = compiler_host,
+        .entry_source_path = filepath,
+        .entry_kind = XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER,
+        .source_profile = XR_PROGRAM_SOURCE_PROFILE_DEVELOPMENT,
+        .discover_tests = 1u,
+        .semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile),
+    };
+    XrCliCanonicalSourceDiagnostic diagnostic;
+    XrCliCanonicalSourceStatus build =
+        xr_cli_canonical_source_build(&request, &product, &diagnostic);
+    xray_vm_delete(compiler_host);
+    if (build != XR_CLI_CANONICAL_SOURCE_OK) {
+        snprintf(error, sizeof(error), "%s", diagnostic.message);
+        goto failed;
     }
-    if (!xr_module_identity_script_authority_from_source(
-            filepath, &entry_authority, &entry_authority_root)) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg),
-                 "cannot establish test module identity authority");
-        result->errors = 1;
-        goto cleanup_graph;
-    }
-    if (prepare_test_module_graph(X, session, filepath, &entry_authority, &active_graph,
-                                  &active_graph_analyzer, graph_error,
-                                  sizeof(graph_error)) != 0) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg), "%s",
-                 graph_error[0] ? graph_error : "module graph preparation failed");
-        result->errors = 1;
-        goto cleanup_graph;
-    }
-    if (active_graph &&
-        !xr_compile_module_graph_dependencies(session, active_graph_analyzer, active_graph,
-                                              &graph_compilation)) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg),
-                 "dependency semantic authority compilation failed");
-        result->errors = 1;
-        goto cleanup_graph;
-    }
-    if (active_graph && !load_test_module_graph(X, active_graph, &graph_compilation,
-                                                &program_image, graph_error,
-                                                sizeof(graph_error))) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg), "%s", graph_error);
-        result->errors = 1;
-        goto cleanup_graph;
-    }
-
-    /* A graph owns the entry syntax: it is what graph-wide specialization
-     * rewrote and what the shared analyzer typed, so it is what compiles. A
-     * single-file test with no graph is parsed here. */
-    char *source = NULL;
-    AstNode *ast = NULL;
-    if (!active_graph) {
-        source = xr_cli_read_file(filepath);
-        if (!source) {
-            result->has_error = true;
-            snprintf(result->error_msg, sizeof(result->error_msg), "cannot read file");
-            result->errors = 1;
-            goto cleanup_graph;
-        }
-        ast = xr_parse_with_source(session, source, filepath);
-        if (!ast) {
-            result->has_error = true;
-            snprintf(result->error_msg, sizeof(result->error_msg), "parse failed");
-            result->errors = 1;
-            goto cleanup_source;
+    int selected = 0;
+    for (uint32_t index = 0u; index < product.test_entry_count; ++index) {
+        const XrProgramSourceTestEntry *entry = &product.tests[index];
+        if (test_entry_is_case(entry)) {
+            ++result->test_count;
+            if (test_entry_selected(entry, config))
+                ++selected;
+            else
+                ++result->skipped;
         }
     }
-
-    XiModule *entry_module = NULL;
-    XrModuleSpec *entry_spec =
-        active_graph ? &active_graph->specs[active_graph->entry_index] : NULL;
-    XrProto *proto = entry_spec
-                         ? xr_compile_ast_in_graph(session, active_graph_analyzer, entry_spec->ast,
-                                                   entry_spec->source_path, active_graph,
-                                                   graph_compilation.modules,
-                                                   graph_compilation.count, &entry_module,
-                                                   &entry_authority)
-                         : xr_compile_ast_with_source(session, ast, filepath, &entry_authority);
-    if (!proto) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg), "compile failed");
-        result->errors = 1;
-        goto cleanup_ast;
-    }
-    if (!xr_compiler_session_operation_succeed(&compile_operation)) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg),
-                 "compiler transaction failed");
-        result->errors = 1;
-        xr_free_code(X, proto);
-        goto cleanup_ast;
-    }
-
-    // Discover @test functions
-    XrTestSuite *suite = xr_test_discover(proto, filepath);
-    if (suite->test_count == 0) {
-        result->test_count = 0;
-        goto cleanup_suite;
-    }
-    result->test_count = suite->test_count;
-
-    // Start file-level watchdog
-    FileWatchdog wd;
-    xr_thread_t wd_tid;
-    watchdog_start(&wd, X, TEST_FILE_TIMEOUT_SEC, &wd_tid);
-
-    double file_start = get_time_ms();
-
-    // Execute top-level code (imports, shared vars, function definitions)
-    int exec_result = xr_execute(X, proto);
-    if (exec_result != 0) {
-        result->has_error = true;
-        snprintf(result->error_msg, sizeof(result->error_msg), "top-level execution failed");
-        result->errors = 1;
-        watchdog_stop(&wd, wd_tid);
-        goto cleanup_suite;
-    }
-
-    // Run @before_all hooks
-    if (suite->before_all_count > 0) {
-        if (run_hooks(X, suite->before_all, suite->before_all_count) != 0) {
-            for (int i = 0; i < suite->test_count; i++) {
-                result->errors++;
-                const char *tname =
-                    suite->tests[i].proto->name ? suite->tests[i].proto->name->data : "<anonymous>";
-                file_result_add_failure(result, tname, "@before_all failed", TEST_ERROR);
-            }
-            watchdog_stop(&wd, wd_tid);
-            result->duration_ms = get_time_ms() - file_start;
-            goto cleanup_suite;
-        }
-    }
-
-    // Run each @test
-    for (int i = 0; i < suite->test_count; i++) {
-        XrTestFunc *test = &suite->tests[i];
-        const char *tname = test->proto->name ? test->proto->name->data : "<anonymous>";
-
-        // @test(skip)
-        if (test->attr == ATTR_TEST_SKIP) {
-            result->skipped++;
-            continue;
-        }
-
-        // Filter
-        if (config->filter && !strstr(tname, config->filter)) {
-            result->skipped++;
-            continue;
-        }
-
-        // Run @before_each
-        if (suite->before_each_count > 0) {
-            if (run_hooks(X, suite->before_each, suite->before_each_count) != 0) {
-                result->errors++;
-                file_result_add_failure(result, tname, "@before_each failed", TEST_ERROR);
-                if (config->fail_fast)
-                    break;
-                continue;
+    if (!selected)
+        goto cleanup;
+    if (!xr_cli_program_vm_open(&vm, product.program, profile, error, sizeof(error)))
+        goto failed;
+    double file_deadline = get_time_ms() + TEST_FILE_TIMEOUT_SEC * 1000.0;
+    if (invoke_test_entry(&vm, xr_validated_program_entry_function(product.program), file_deadline,
+                          error, sizeof(error)) != TEST_PASSED)
+        goto failed;
+    bool setup =
+        run_hooks(&vm, &product, XR_PROGRAM_TEST_BEFORE_ALL, file_deadline, error, sizeof(error));
+    if (!setup) {
+        for (uint32_t index = 0u; index < product.test_entry_count; ++index) {
+            const XrProgramSourceTestEntry *entry = &product.tests[index];
+            if (test_entry_selected(entry, config)) {
+                ++result->errors;
+                file_result_add_failure(result, entry->name, error, TEST_ERROR);
             }
         }
-
-        // Run @test (unified model: reuse main_coro)
-        double test_start = get_time_ms();
-        XrClosure *closure = get_test_closure(X, test->proto);
-        if (!closure) {
-            result->errors++;
-            file_result_add_failure(result, tname, "failed to create closure", TEST_ERROR);
-            if (config->fail_fast)
-                break;
+    }
+    for (uint32_t index = 0u; setup && index < product.test_entry_count; ++index) {
+        const XrProgramSourceTestEntry *entry = &product.tests[index];
+        if (!test_entry_selected(entry, config))
             continue;
+        XrTestStatus status = TEST_ERROR;
+        if (run_hooks(&vm, &product, XR_PROGRAM_TEST_BEFORE_EACH, file_deadline, error,
+                      sizeof(error))) {
+            double deadline = file_deadline;
+            if (entry->timeout_seconds) {
+                double test_deadline = get_time_ms() + entry->timeout_seconds * 1000.0;
+                if (test_deadline < deadline)
+                    deadline = test_deadline;
+            }
+            status = invoke_test_entry(&vm, entry->function_id, deadline, error, sizeof(error));
         }
-
-        int rc = run_inline(X, closure);
-        double test_dur = get_time_ms() - test_start;
-
-        // Determine result
-        if (test->timeout > 0 && test_dur > test->timeout * 1000.0) {
-            result->timeout++;
-            file_result_add_failure(result, tname, "exceeded timeout", TEST_TIMEOUT);
-        } else if (rc == 0) {
-            result->passed++;
-        } else {
-            result->failed++;
-            XrCoroutine *main_coro = xr_isolate_get_main_coro(X);
-            file_result_add_failure(result, tname, extract_coro_error(main_coro), TEST_FAILED);
+        char hook_error[512] = {0};
+        if (!run_hooks(&vm, &product, XR_PROGRAM_TEST_AFTER_EACH, file_deadline, hook_error,
+                       sizeof(hook_error))) {
+            if (status == TEST_PASSED) {
+                status = TEST_ERROR;
+                snprintf(error, sizeof(error), "%s", hook_error);
+            } else {
+                file_result_add_failure(result, entry->name, hook_error, TEST_ERROR);
+            }
         }
-
-        // Run @after_each (even if test failed)
-        if (suite->after_each_count > 0) {
-            run_hooks(X, suite->after_each, suite->after_each_count);
+        if (status == TEST_PASSED)
+            ++result->passed;
+        else {
+            if (status == TEST_TIMEOUT)
+                ++result->timeout;
+            else if (status == TEST_ERROR)
+                ++result->errors;
+            else
+                ++result->failed;
+            file_result_add_failure(result, entry->name, error, status);
         }
-
-        if (config->fail_fast && (result->failed + result->errors + result->timeout) > 0)
+        if (config->fail_fast && status != TEST_PASSED)
+            break;
+        if (get_time_ms() >= file_deadline)
             break;
     }
-
-    // Run @after_all hooks
-    if (suite->after_all_count > 0) {
-        run_hooks(X, suite->after_all, suite->after_all_count);
+    if (!run_hooks(&vm, &product, XR_PROGRAM_TEST_AFTER_ALL, file_deadline, error, sizeof(error))) {
+        ++result->errors;
+        file_result_add_failure(result, "@after_all", error, TEST_ERROR);
     }
-
-    watchdog_stop(&wd, wd_tid);
+    goto cleanup;
+failed:
+    result->has_error = true;
+    ++result->errors;
+    snprintf(result->error_msg, sizeof(result->error_msg), "%s", error);
+cleanup:
+    if (!xr_cli_program_vm_close(&vm)) {
+        result->has_error = true;
+        ++result->errors;
+        snprintf(result->error_msg, sizeof(result->error_msg), "execution instance did not retire");
+    }
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
     result->duration_ms = get_time_ms() - file_start;
-
-cleanup_suite:
-    xr_test_suite_free(suite);
-    xr_free_code(X, proto);
-cleanup_ast:
-    if (ast)
-        xr_program_destroy(ast);
-cleanup_source:
-    xr_free(source);
-cleanup_graph:
-    if (compile_operation.active)
-        (void) xr_compiler_session_operation_fail(
-            &compile_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
-    xr_compiler_session_set_module_graph(session, NULL);
-    xr_program_image_dispose(&program_image);
-    xr_compiled_module_graph_dispose(&graph_compilation);
-    if (active_graph_analyzer) {
-        xa_analyzer_set_graph(active_graph_analyzer, NULL);
-        xa_analyzer_free(active_graph_analyzer);
-    }
-    if (active_graph)
-        xr_module_graph_free(active_graph);
-    xr_free(entry_authority_root);
-    xray_vm_delete(X);
 }
 
 /* ========== File Collection ========== */
@@ -741,7 +435,7 @@ static int compute_align_width(char **files, int count) {
 
 // Print results for a single file
 static void print_file_result(XrTestFileResult *r, int align_width, bool verbose) {
-    if (r->test_count == 0)
+    if (r->test_count == 0 && !r->has_error)
         return;
 
     char name[256];

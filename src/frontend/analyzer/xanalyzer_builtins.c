@@ -8,6 +8,7 @@
  * xanalyzer_builtins.c - Built-in type member definitions
  */
 
+#include "../../stdlib/xstdlib_metadata.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer.h"
 #include "xanalyzer_native_types.h"
@@ -1742,8 +1743,15 @@ static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *
                     xa_builtin_find_class_by_name_for_module(module_name, name_buf);
                 if (class_decl) {
                     type = xr_type_new_instance(X, NULL);
-                    if (type)
+                    if (type) {
                         type->instance.class_name = class_decl->name;
+                        const XrStdlibNativeClassDefEntry *entry = module_name
+                            ? xr_stdlib_metadata_unique_native_class_span(module_name, strlen(module_name),
+                                                                          name_buf, base_len)
+                            : NULL;
+                        if (entry)
+                            (void) xr_stdlib_metadata_resource_identity(entry, &type->instance.resource_id);
+                    }
                 }
             }
             if (!type) {

@@ -17,6 +17,7 @@
 #define XR_EXECUTION_H
 
 #include "xr_execution_identity.h"
+#include "xr_provider_value.h"
 
 #define XR_EXECUTION_BINDING_SCHEMA_VERSION UINT32_C(4)
 
@@ -30,11 +31,6 @@ typedef enum XrProviderBehaviorFlags {
     (XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT |                           \
      XR_PROVIDER_BEHAVIOR_CALLBACK_SAFE)
 
-typedef enum XrProviderCallStatus {
-    XR_PROVIDER_CALL_OK = 0,
-    XR_PROVIDER_CALL_FAILED,
-} XrProviderCallStatus;
-
 typedef enum XrProviderTrampolineKind {
     XR_PROVIDER_TRAMPOLINE_INVALID = 0,
     XR_PROVIDER_TRAMPOLINE_I64_UNARY,
@@ -42,7 +38,12 @@ typedef enum XrProviderTrampolineKind {
     XR_PROVIDER_TRAMPOLINE_BOOL_I64_UNARY,
     XR_PROVIDER_TRAMPOLINE_OPTIONAL_I64_PAIR_NULLARY,
     XR_PROVIDER_TRAMPOLINE_OUTPUT_WRITE,
+    XR_PROVIDER_TRAMPOLINE_TYPED,
 } XrProviderTrampolineKind;
+
+typedef XrProviderCallStatus (*XrProviderTypedEntry)(void *context,
+                                                   const XrProviderValuePack *arguments,
+                                                   XrProviderValuePack *result);
 
 /* Every admitted provider entry is an execution-owned typed trampoline.  The
  * provider-specific C ABI remains behind this boundary and cannot escape into
@@ -68,6 +69,7 @@ typedef struct XrProviderOperationBinding {
         XrProviderBoolI64UnaryEntry bool_i64_unary;
         XrProviderOptionalI64PairNullaryEntry optional_i64_pair_nullary;
         XrProviderOutputWriteEntry output_write;
+        XrProviderTypedEntry typed;
     } entry;
     /* The binding owner keeps entry code and context alive until retirement
      * and completion of every pinned call or callback. Instance construction
@@ -149,6 +151,43 @@ typedef struct XrExecutionLease {
     uint64_t ticket;
 } XrExecutionLease;
 
+/* A resource pin preserves provider code/context through finalization, without
+ * granting execution authority or postponing drained module-state cleanup.
+ * Acquire requires a live execution lease. Release follows finalization; copied
+ * pins name the same one-shot ticket. The owner must keep the instance address
+ * valid until release returns, as for execution leases. */
+typedef struct XrExecutionResourcePin {
+    XrInstance *instance;
+    uint64_t ticket;
+} XrExecutionResourcePin;
+
+XR_FUNC bool xr_execution_resource_pin_acquire(const XrExecutionLease *lease,
+                                               XrExecutionResourcePin *pin_out);
+XR_FUNC bool xr_execution_resource_pin_release(XrExecutionResourcePin *pin);
+
+/* Executor-private affine owner for an admitted provider resource payload.
+ * Adoption checks the Program type and the provider's declared resource identity;
+ * only success transfers payload ownership. The provider boundary must establish
+ * the operation's authority separately. Neither a host pointer nor this owner is
+ * a serialized language value or a substitute for provider binding.
+ *
+ * Borrow requires a live lease from the same instance and the exact resource
+ * identity. The caller preserves that lease and the owner through the borrow.
+ * Free consumes the sole owner, invokes its non-failing destructor outside the
+ * instance lock, then releases its resource pin. Owners cannot be copied, and
+ * borrowing cannot race with free. Backend slot layouts remain private. */
+
+XR_FUNC XrExecutionStatus xr_execution_resource_adopt(
+    const XrExecutionLease *lease, uint16_t type_id, XrStableId resource_id,
+    void *payload, void (*destroy)(void *), XrExecutionResource **resource_out);
+XR_FUNC bool xr_execution_resource_borrow(const XrExecutionLease *lease,
+                                          const XrExecutionResource *resource,
+                                          XrStableId resource_id, void **payload_out);
+XR_FUNC void xr_execution_resource_free(XrExecutionResource **resource);
+
+XR_FUNC void xr_execution_provider_result_dispose(XrProviderValuePack *result);
+
+
 typedef enum XrExecutionStateBindingResult {
     XR_EXECUTION_STATE_INVALID = 0,
     XR_EXECUTION_STATE_EMPTY,
@@ -193,6 +232,7 @@ typedef enum XrExecutionProviderCallResult {
     XR_EXECUTION_PROVIDER_CALL_FAILED,
     XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE,
     XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE,
+    XR_EXECUTION_PROVIDER_CALL_OUT_OF_MEMORY,
 } XrExecutionProviderCallResult;
 
 XR_FUNC XrExecutionStatus xr_execution_instance_create(const XrExecutionBindingInput *input,
@@ -201,7 +241,7 @@ XR_FUNC XrExecutionStatus xr_execution_instance_create(const XrExecutionBindingI
 XR_FUNC XrExecutionStatus xr_execution_instance_create_successor(
     const XrInstance *retired, const XrProviderBinding *providers, size_t provider_count,
     XrInstance **instance_out, XrExecutionDiagnostic *diagnostic_out);
-XR_FUNC bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease_out);
+XR_FUNC XrExecutionStatus xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease_out);
 XR_FUNC bool xr_execution_lease_release(XrExecutionLease *lease);
 XR_FUNC bool xr_execution_lease_is_valid(const XrExecutionLease *lease);
 XR_FUNC XrExecutionInitializationStatus xr_execution_lease_initialization_next(
@@ -225,6 +265,9 @@ XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_optional_
 XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_output_write(
     const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
     const uint8_t *bytes, size_t size);
+XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_typed(
+    const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
+    const XrProviderValuePack *arguments, XrProviderValuePack *result_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_begin_drain(XrInstance *instance,
                                                             XrExecutionDiagnostic *diagnostic_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_retire(XrInstance *instance,

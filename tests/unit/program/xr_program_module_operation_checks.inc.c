@@ -289,3 +289,273 @@ static void test_module_place_ref_interface_admission(void) {
         xr_program_artifact_free(&artifact);
     }
 }
+
+static void test_cross_block_module_array_borrow(void) {
+    for (uint32_t variant = 0u; variant < 4u; ++variant) {
+        XrProgramArtifact artifact = {0};
+        CHECK(xr_program_module_array_borrow_fixture_write(variant, &artifact) == XR_PROGRAM_BUILD_OK);
+        if (variant == 1u || variant == 2u)
+            expect_semantic_reject(&artifact, variant == 2u
+                ? XR_PROGRAM_DIAGNOSTIC_ROOT : XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+        else {
+            XrValidatedProgram *validated = validate_ok(&artifact);
+            xr_validated_program_free(validated);
+        }
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_module_borrow_after_exchange(void) {
+    for (uint32_t variant = 0u; variant < 6u; ++variant) {
+        bool released = (variant & 1u) != 0u;
+        bool local = variant >= 4u;
+        bool alias = variant >= 2u;
+        XrProgramModuleFixture fixture;
+        xr_program_module_fixture_init(&fixture);
+        xr_program_module_fixture_add_slots(&fixture);
+        fixture.slots[0][0].type_id = XR_CORE_TYPE_STRING;
+        XrCoreIrConstantInput constant = {
+            .key = key("module:borrow:text"),
+            .type_id = XR_CORE_TYPE_STRING,
+            .kind = XR_CORE_IR_CONSTANT_STRING,
+            .value.string = {(const uint8_t *) "kept", 4u},
+        };
+        fixture.modules[0].constants = &constant;
+        fixture.modules[0].constant_count = 1u;
+        XrCoreIrKey place = key("module:borrow:place");
+        XrCoreIrKey initial = key("module:borrow:initial");
+        XrCoreIrKey borrow = key("module:borrow:value");
+        XrCoreIrKey replacement = key("module:borrow:replacement");
+        XrCoreIrKey old = key("module:borrow:old");
+        XrCoreIrKey copied = key("module:borrow:copy");
+        XrCoreIrKey second_place = key("module:borrow:alias");
+        XrCoreIrKey initialize[] = {place, initial};
+        XrCoreIrKey exchange[] = {alias ? second_place : place, replacement};
+        XrCoreIrInstructionInput instructions[] = {
+            {.operation_id = XR_CORE_OP_CORE_CONSTANT_STRING,
+             .result = initial,
+             .result_type_id = XR_CORE_TYPE_STRING,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+             .immediate.key = constant.key},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_MODULE,
+             .result = place,
+             .result_type_id = XR_CORE_TYPE_STRING,
+             .result_category = XR_CORE_IR_PLACE,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_MODULE_SLOT,
+             .immediate.module_slot = {fixture.modules[0].key, fixture.slots[0][0].key}},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_INITIALIZE,
+             .operands = initialize,
+             .operand_count = 2u},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_MODULE,
+             .result = second_place,
+             .result_type_id = XR_CORE_TYPE_STRING,
+             .result_category = XR_CORE_IR_PLACE,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_MODULE_SLOT,
+             .immediate.module_slot = {fixture.modules[0].key, fixture.slots[0][0].key}},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+             .result = borrow,
+             .result_type_id = XR_CORE_TYPE_STRING,
+             .operands = &place,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_CONSTANT_STRING,
+             .result = replacement,
+             .result_type_id = XR_CORE_TYPE_STRING,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+             .immediate.key = constant.key},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_EXCHANGE,
+             .result = old,
+             .result_type_id = XR_CORE_TYPE_STRING,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .operands = exchange,
+             .operand_count = 2u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+             .result = copied,
+             .result_type_id = XR_CORE_TYPE_STRING,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .operands = &borrow,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = &old, .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = &copied, .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = &initial, .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_RETURN},
+        };
+        if (local) {
+            instructions[1] = (XrCoreIrInstructionInput) {
+                .operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+                .result = place,
+                .result_type_id = XR_CORE_TYPE_STRING,
+                .result_category = XR_CORE_IR_PLACE,
+                .operands = &initial,
+                .operand_count = 1u,
+            };
+            instructions[3] = instructions[1];
+            instructions[3].result = second_place;
+            memmove(&instructions[2], &instructions[3], 9u * sizeof(instructions[0]));
+        } else {
+            instructions[10] = instructions[11];
+        }
+        uint32_t copy_index = local ? 6u : 7u;
+        if (released) {
+            XrCoreIrInstructionInput before = instructions[copy_index];
+            instructions[copy_index] = instructions[copy_index + 1u];
+            instructions[copy_index + 1u] = before;
+        }
+        fixture.blocks[0].instructions = instructions;
+        fixture.blocks[0].instruction_count = 11u;
+        fixture.functions[0].effect_mask = XR_CORE_EFFECT_TRAP;
+        XrCoreIrProgram *program = NULL;
+        XrProgramArtifact artifact = {0};
+        char diagnostic[256] = {0};
+        CHECK(xr_core_ir_program_build(&fixture.input, &program, diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_OK);
+        CHECK(xr_program_write(program, &artifact, diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *validated = NULL;
+        XrProgramDiagnostic semantic = {0};
+        XrProgramVerifyStatus status =
+            xr_program_validate(artifact.bytes, artifact.size, NULL, &validated, &semantic);
+        if ((status == XR_PROGRAM_VERIFY_OK) == released)
+            fprintf(stderr, "exchanged borrow variant=%u status=%u diagnostic=%u\n", variant,
+                    (unsigned) status, (unsigned) semantic.kind);
+        CHECK(status == (released ? XR_PROGRAM_VERIFY_SEMANTIC_REJECTED : XR_PROGRAM_VERIFY_OK));
+        if (released)
+            CHECK(semantic.kind == XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+        xr_validated_program_free(validated);
+        xr_program_artifact_free(&artifact);
+        xr_core_ir_program_free(program);
+    }
+}
+
+static void test_projected_borrow_after_parent_exchange(void) {
+    for (uint32_t variant = 0u; variant < 5u; ++variant) {
+        bool released = (variant & 1u) != 0u || variant == 4u;
+        XrProgramModuleFixture fixture;
+        xr_program_module_fixture_init(&fixture);
+        uint16_t field = XR_CORE_TYPE_STRING;
+        XrCoreIrTypeInput type = {.key = key("borrow-parent-type"),
+                                  .local_id = 100u,
+                                  .kind = XR_CORE_IR_TYPE_AGGREGATE,
+                                  .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+                                  .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+                                  .field_types = &field,
+                                  .field_count = 1u};
+        fixture.input.types = &type;
+        fixture.input.type_count = 1u;
+        XrCoreIrConstantInput constant = {
+            .key = key("borrow-parent-text"),
+            .type_id = field,
+            .kind = XR_CORE_IR_CONSTANT_STRING,
+            .value.string = {.bytes = (const uint8_t *) "snapshot", .size = 8u}};
+        fixture.modules[0].constants = &constant;
+        fixture.modules[0].constant_count = 1u;
+        XrCoreIrKey initial = key("initial-string"), aggregate = key("initial-aggregate");
+        XrCoreIrKey place = key("parent-place"), projected = key("field-place");
+        XrCoreIrKey borrow = key("field-borrow"), replacement = key("replacement-string");
+        XrCoreIrKey next = key("replacement-aggregate"), old = key("old-aggregate"),
+                    copy = key("borrow-copy");
+        XrCoreIrKey exchange[] = {place, next};
+        XrCoreIrInstructionInput rows[] = {
+            {.operation_id = XR_CORE_OP_CORE_CONSTANT_STRING,
+             .result = initial,
+             .result_type_id = field,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+             .immediate.key = constant.key},
+            {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+             .result = aggregate,
+             .result_type_id = 100u,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .operands = &initial,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+             .result = place,
+             .result_type_id = 100u,
+             .result_category = XR_CORE_IR_PLACE,
+             .operands = &aggregate,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_PROJECT,
+             .result = projected,
+             .result_type_id = field,
+             .result_category = XR_CORE_IR_PLACE,
+             .operands = &place,
+             .operand_count = 1u,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+             .immediate.field_ordinal = 0u},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+             .result = borrow,
+             .result_type_id = field,
+             .operands = &projected,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_CONSTANT_STRING,
+             .result = replacement,
+             .result_type_id = field,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+             .immediate.key = constant.key},
+            {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+             .result = next,
+             .result_type_id = 100u,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .operands = &replacement,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_PLACE_EXCHANGE,
+             .result = old,
+             .result_type_id = 100u,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .operands = exchange,
+             .operand_count = 2u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+             .result = copy,
+             .result_type_id = field,
+             .result_ownership = XR_CORE_IR_OWNER,
+             .operands = &borrow,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = &old, .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = &copy, .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+             .operands = &aggregate,
+             .operand_count = 1u},
+            {.operation_id = XR_CORE_OP_CORE_RETURN},
+        };
+        if (variant >= 2u) {
+            XrCoreIrInstructionInput load = rows[4];
+            memmove(&rows[4], &rows[5], 3u * sizeof(rows[0]));
+            rows[7] = load;
+        }
+        if (variant == 4u) {
+            XrCoreIrInstructionInput load = rows[7];
+            rows[7] = rows[9];
+            rows[9] = rows[8];
+            rows[8] = load;
+        } else if (released) {
+            XrCoreIrInstructionInput saved = rows[8];
+            rows[8] = rows[9];
+            rows[9] = saved;
+        }
+        fixture.blocks[0].instructions = rows;
+        fixture.blocks[0].instruction_count = sizeof(rows) / sizeof(rows[0]);
+        XrCoreIrProgram *program = NULL;
+        XrProgramArtifact artifact = {0};
+        char reason[256] = {0};
+        XrProgramBuildStatus built =
+            xr_core_ir_program_build(&fixture.input, &program, reason, sizeof(reason));
+        if (built != XR_PROGRAM_BUILD_OK)
+            fprintf(stderr, "projected fixture: %s\n", reason);
+        CHECK(built == XR_PROGRAM_BUILD_OK);
+        CHECK(xr_program_write(program, &artifact, NULL, 0u) == XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *validated = NULL;
+        XrProgramDiagnostic diagnostic = {0};
+        XrProgramVerifyStatus status =
+            xr_program_validate(artifact.bytes, artifact.size, NULL, &validated, &diagnostic);
+        fprintf(stderr, "projected borrow variant=%u status=%u diagnostic=%u\n", variant, status,
+                diagnostic.kind);
+        CHECK(status == (released ? XR_PROGRAM_VERIFY_SEMANTIC_REJECTED : XR_PROGRAM_VERIFY_OK));
+        if (released)
+            CHECK(diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+        xr_validated_program_free(validated);
+        xr_program_artifact_free(&artifact);
+        xr_core_ir_program_free(program);
+    }
+}

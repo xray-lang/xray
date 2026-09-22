@@ -25,8 +25,10 @@
 #include "../../../src/aot/refine/xr_aot_representation_refinement.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_module.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_cleanup_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_panic_catch_shape.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile.h"
@@ -408,19 +410,25 @@ static void test_cross_function_value_substitution_fails_closed(void) {
     xi_func_free(root);
 }
 
-static void test_parameter_identity_requires_exact_member(void) {
+static void check_parameter_identity_requires_exact_member(bool variadic) {
     XiFunc *function = xi_func_new("parameter_identity", &scalar_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
-    XiValue *parameter = xi_param(function, entry, 0, &scalar_int);
+    XrType arguments = {.kind = XR_KIND_ARRAY,
+                        .id = 9240,
+                        .frozen = true,
+                        .scalar_rep = XR_SCALAR_REP_NONE,
+                        .container = {.element_type = &scalar_int}};
+    XiValue *parameter = xi_param(function, entry, 0, variadic ? &arguments : &scalar_int);
     XiValue *replacement = xi_const_int(function, entry, 7, &scalar_int);
     REQUIRE(parameter && replacement);
     function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
     REQUIRE(function->params != NULL);
     function->params[0] = parameter;
-    function->nparams = 1;
-    xi_block_set_return(entry, parameter);
+    function->nparams = variadic ? 0 : 1;
+    function->is_vararg = variadic;
+    xi_block_set_return(entry, variadic ? replacement : parameter);
     function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
     REQUIRE(build_and_attach_scalar_fixture_semantic(function, error, sizeof(error)));
@@ -430,6 +438,16 @@ static void test_parameter_identity_requires_exact_member(void) {
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_aot_scalar_semantic_value_id(plan, function, parameter, &semantic_function,
                                             &semantic_value, error, sizeof(error)));
+    parameter->aux_int = 1;
+    REQUIRE(!xr_aot_scalar_semantic_value_id(plan, function, parameter, &semantic_function,
+                                             &semantic_value, error, sizeof(error)));
+    parameter->aux_int = 0;
+    if (variadic) {
+        function->is_vararg = false;
+        REQUIRE(!xr_aot_scalar_semantic_value_id(plan, function, parameter, &semantic_function,
+                                                 &semantic_value, error, sizeof(error)));
+        function->is_vararg = true;
+    }
     function->params[0] = replacement;
     REQUIRE(!xr_aot_scalar_semantic_value_id(plan, function, parameter, &semantic_function,
                                              &semantic_value, error, sizeof(error)));
@@ -438,6 +456,11 @@ static void test_parameter_identity_requires_exact_member(void) {
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xi_func_free(function);
+}
+
+static void test_parameter_identity_requires_exact_member(void) {
+    check_parameter_identity_requires_exact_member(false);
+    check_parameter_identity_requires_exact_member(true);
 }
 
 typedef struct ScalarKnownAnswer {
@@ -951,18 +974,34 @@ static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
 }
 
 static void test_panic_catch_c_emission_recipe_is_exact(void) {
+    XrType panic_info = {.kind = XR_KIND_INSTANCE,
+                         .id = 20,
+                         .scalar_rep = XR_SCALAR_REP_NONE,
+                         .frozen = true,
+                         .instance = {.class_name = "PanicInfo"}};
     XiFunc *function = xi_func_new("panic_catch_c_emission", &scalar_unit);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
-    REQUIRE(entry != NULL);
-    XiValue *caught = xi_value_new(function, entry, XI_CATCH, &dynamic_any, 0);
-    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
-    REQUIRE(caught != NULL && release != NULL);
+    XiBlock *handler = xi_block_new(function);
+    REQUIRE(entry != NULL && handler != NULL);
+    entry->sealed = handler->sealed = true;
+    XiValue *registration = xi_value_new(function, entry, XI_TRY, &scalar_unit, 0);
+    XiValue *end = xi_value_new(function, entry, XI_END_TRY, &scalar_unit, 0);
+    XiValue *caught = xi_value_new(function, handler, XI_CATCH, &panic_info, 0);
+    XiValue *release = xi_value_new(function, handler, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(registration != NULL && end != NULL && caught != NULL && release != NULL);
+    registration->aux = handler;
+    registration->aux_int = -1;
+    end->aux = registration;
+    caught->aux = registration;
     release->args[0] = caught;
+    xi_block_add_pred(handler, entry);
     xi_block_set_return(entry, NULL);
+    xi_block_set_return(handler, NULL);
+    char error[512] = {0};
+    REQUIRE(xi_verify(function, error, sizeof(error)));
     function->stage = XI_STAGE_OPTIMIZED;
 
-    char error[512] = {0};
     REQUIRE(build_and_attach_scalar_fixture_semantic(function, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(function->semantic_plan, profile);
@@ -977,6 +1016,25 @@ static void test_panic_catch_c_emission_recipe_is_exact(void) {
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_aot_scalar_semantic_value_id(target, function, caught, &semantic_function,
                                             &semantic_value, error, sizeof(error)));
+    const XrSemanticOperationRecord *catch_operation = NULL;
+    for (uint32_t index = 0u; index < xr_semantic_plan_operation_count(function->semantic_plan);
+         ++index) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(function->semantic_plan, index);
+        if (operation->result_value == semantic_value)
+            catch_operation = operation;
+    }
+    REQUIRE(catch_operation &&
+            xr_semantic_panic_catch_is_exact(function->semantic_plan, catch_operation));
+    XrSemanticTypeRecord *payload_type = (XrSemanticTypeRecord *) xr_semantic_plan_type(
+        function->semantic_plan, catch_operation->result_type);
+    REQUIRE(payload_type && payload_type->kind == XR_KIND_INSTANCE);
+    payload_type->kind = XR_KIND_UNKNOWN;
+    REQUIRE(!xr_semantic_panic_catch_is_exact(function->semantic_plan, catch_operation));
+    payload_type->kind = XR_KIND_CLASS;
+    REQUIRE(!xr_semantic_panic_catch_is_exact(function->semantic_plan, catch_operation));
+    payload_type->kind = XR_KIND_INSTANCE;
+    REQUIRE(xr_semantic_panic_catch_is_exact(function->semantic_plan, catch_operation));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view, error, sizeof(error)));
     REQUIRE(view.rep == XR_C_VALUE_REP_TAGGED &&

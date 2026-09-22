@@ -12,6 +12,8 @@ import json
 import re
 from typing import Mapping, Sequence
 
+from provider_types import logical_type
+
 
 LOGICAL_PROPERTIES = frozenset({
     "provider_parameter_modes", "provider_parameter_owners", "provider_result_owner",
@@ -235,7 +237,20 @@ def admission_reasons(declaration: ProviderDeclaration) -> tuple[str, ...]:
     if (logical.error != "none" or logical.panic != "none" or logical.suspend != "never"
             or logical.callbacks != "none"):
         reasons.append("typed-error-panic-suspend-or-callback-binding-not-implemented")
-    if logical.result_owner != "trivial" or any(
+    typed = host.adapter == "typed"
+    if typed:
+        try:
+            parameter_types = [logical_type(parameter.type) for parameter in logical.parameters]
+            result_type = logical_type(logical.result_type)
+            if len(parameter_types) > 8 or sum(len(row[0]) for row in parameter_types) + len(result_type[0]) + 1 > 64:
+                reasons.append("logical-signature-exceeds-transport-bound")
+            if logical.result_owner != ("owned" if result_type[1] else "trivial") or any(
+                    parameter.mode != "in" or parameter.owner != ("borrow" if shape[1] else "trivial")
+                    for parameter, shape in zip(logical.parameters, parameter_types)):
+                reasons.append("typed-signature-ownership-mismatch")
+        except ValueError:
+            reasons.append("logical-type-not-implemented")
+    elif logical.result_owner != "trivial" or any(
             parameter.mode != "in" or parameter.owner != "trivial"
             for parameter in logical.parameters):
         reasons.append("managed-or-reference-parameter-binding-not-implemented")
@@ -251,9 +266,9 @@ def admission_reasons(declaration: ProviderDeclaration) -> tuple[str, ...]:
         "bool-i64-pipe-close": (("i64",), "bool"),
     }
     actual = (tuple(parameter.type for parameter in logical.parameters), logical.result_type)
-    if host.adapter not in shapes:
+    if not typed and host.adapter not in shapes:
         reasons.append("host-adapter-not-implemented")
-    elif actual != shapes[host.adapter]:
+    elif not typed and actual != shapes[host.adapter]:
         reasons.append("declared-signature-does-not-match-explicit-host-adapter")
     expected_resources = ()
     if host.adapter == "optional-i64-pair-pipe-create":

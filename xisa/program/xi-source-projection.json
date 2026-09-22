@@ -19,6 +19,13 @@
     },
     {
       "xi_operation": "xi.const",
+      "result_type": "f64",
+      "projection_kind": "constant",
+      "core_operation": "core.constant.f64",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.const",
       "result_type": "bool",
       "projection_kind": "constant",
       "core_operation": "core.constant.bool",
@@ -39,32 +46,46 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.const",
+      "result_type": "integer",
+      "projection_kind": "constant",
+      "core_operation": "core.constant.i64",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.add",
-      "result_type": "i64",
-      "projection_kind": "binary-arithmetic",
+      "result_type": "integer",
+      "projection_kind": "integer-wrapping",
       "core_operation": "core.add.i64",
       "immediate_u32": 1
     },
     {
       "xi_operation": "xi.sub",
-      "result_type": "i64",
-      "projection_kind": "binary-arithmetic",
+      "result_type": "integer",
+      "projection_kind": "integer-wrapping",
       "core_operation": "core.sub.i64",
       "immediate_u32": 1
     },
     {
       "xi_operation": "xi.mul",
-      "result_type": "i64",
-      "projection_kind": "binary-arithmetic",
+      "result_type": "integer",
+      "projection_kind": "integer-wrapping",
       "core_operation": "core.mul.i64",
       "immediate_u32": 1
     },
     {
       "xi_operation": "xi.div",
-      "result_type": "i64",
-      "projection_kind": "binary-arithmetic",
-      "core_operation": "core.div.i64",
+      "result_type": "integer",
+      "projection_kind": "integer-divmod",
+      "core_operation": "core.integer.divmod",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.mod",
+      "result_type": "integer",
+      "projection_kind": "integer-divmod",
+      "core_operation": "core.integer.divmod",
+      "immediate_u32": 1
     },
     {
       "xi_operation": "xi.not",
@@ -328,8 +349,106 @@
     {
       "xi_operation": "xi.convert",
       "result_type": "string",
-      "projection_kind": "string-from-i64",
-      "core_operation": "core.string.from_i64",
+      "projection_kind": "string-from-scalar",
+      "core_operation": "core.string.from_scalar",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.convert",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.narrow.i8",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.narrow.u8",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.narrow.i16",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.narrow.u16",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.narrow.i32",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.narrow.u32",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.widen.i8",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.widen.u8",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.widen.i16",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.widen.u16",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.widen.i32",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.widen.u32",
+      "result_type": "integer",
+      "projection_kind": "integer-convert",
+      "core_operation": "core.integer.convert",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.len",
+      "result_type": "i64",
+      "projection_kind": "sequence-length",
+      "core_operation": "core.sequence.length",
       "immediate_u32": 0
     }
   ],
@@ -430,7 +549,7 @@
     },
     {
       "source": "class-identity-alias-requiring-independent-owner",
-      "core_operation": "core.class.share"
+      "core_operation": "core.owner.alias"
     },
     {
       "source": "exact-class-field-load",
@@ -470,7 +589,15 @@
     },
     {
       "source": "i64-piece-of-variadic-xi.str.concat",
-      "core_operation": "core.string.from_i64"
+      "core_operation": "core.string.from_scalar"
+    },
+    {
+      "source": "exact-array-new-plus-complete-index-initialization-prefix",
+      "core_operation": "core.array.construct"
+    },
+    {
+      "source": "exact-array-index-read-or-replacement",
+      "core_operation": "core.sequence.element_place"
     }
   ]
 }

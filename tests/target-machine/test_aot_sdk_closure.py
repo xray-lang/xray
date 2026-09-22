@@ -22,7 +22,7 @@ def write(path: Path, text: str) -> None:
 
 
 def fixture(root: Path) -> None:
-    for relative in closure.PRIVATE_ROOTS:
+    for relative in (*closure.PRIVATE_ROOTS, *closure.NATIVE_RUNTIME_ROOTS):
         write(root / relative, '#include "dep.h"\n')
         write((root / relative).parent / "dep.h", "#define PRIVATE_DEP 1\n")
     for relative in closure.PUBLIC_ROOTS:
@@ -52,6 +52,10 @@ def self_test() -> int:
         paths = [row["install_path"] for row in manifest["entries"]]
         if paths != sorted(paths) or len(paths) != len(set(paths)):
             raise AssertionError("closure install paths are not canonical")
+
+        for relative in closure.NATIVE_RUNTIME_ROOTS:
+            if not any(row["source_path"] == relative for row in manifest["entries"]):
+                raise AssertionError(f"native runtime source is missing from SDK: {relative}")
 
         missing = Path(directory) / "missing"
         shutil.copytree(root, missing)

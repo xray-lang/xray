@@ -252,8 +252,8 @@ class H2BackendDifferentialTests(unittest.TestCase):
                 for executor in document["executors"]
             ]
             with mock.patch.object(gate.subprocess, "run", side_effect=results) as run:
-                self.assertEqual(gate.run_active(document, binaries), 4)
-            self.assertEqual(run.call_count, 4)
+                self.assertEqual(gate.run_active(document, binaries), 3)
+            self.assertEqual(run.call_count, 3)
             self.assertEqual(
                 [call.args[0][1:] for call in run.call_args_list],
                 [executor["active_command"]["arguments"]

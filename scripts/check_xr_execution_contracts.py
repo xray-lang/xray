@@ -14,6 +14,8 @@ PROFILE_HEADER = Path("src/plan/target/xr_target_profile.h")
 PROFILE_SOURCE = Path("src/plan/target/xr_target_profile.c")
 EXECUTION_HEADER = Path("src/execution/xr_execution.h")
 EXECUTION_SOURCE = Path("src/execution/xr_execution.c")
+TYPED_PROVIDER_HEADER = Path("src/execution/xr_provider_value.h")
+TYPED_PROVIDER_SOURCE = Path("src/execution/xr_execution_provider_typed.inc.c")
 EXECUTION_IDENTITY_HEADER = Path("src/execution/xr_execution_identity.h")
 EXECUTION_IDENTITY_SOURCE = Path("src/execution/xr_execution_identity.c")
 BOUNDARY_HEADER = Path("src/execution/xr_boundary_materialization.h")
@@ -111,7 +113,7 @@ def canonical_json(value: object) -> str:
 
 
 def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
-    paths = (PROFILE_HEADER, PROFILE_SOURCE, EXECUTION_HEADER, EXECUTION_SOURCE,
+    paths = (PROFILE_HEADER, PROFILE_SOURCE, EXECUTION_HEADER, EXECUTION_SOURCE, TYPED_PROVIDER_SOURCE, TYPED_PROVIDER_HEADER,
              EXECUTION_IDENTITY_HEADER, EXECUTION_IDENTITY_SOURCE,
              BOUNDARY_HEADER, BOUNDARY_SOURCE, OBJECT_INSTANCE_HEADER)
     sources = {
@@ -121,7 +123,12 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     profile_header = sources[PROFILE_HEADER]
     profile_source = sources[PROFILE_SOURCE]
     execution_header = sources[EXECUTION_HEADER]
+    require('#include "xr_provider_value.h"' in execution_header, "typed provider transport header is not included")
+    execution_header += sources[TYPED_PROVIDER_HEADER]
     execution_source = sources[EXECUTION_SOURCE]
+    require('#include "xr_execution_provider_typed.inc.c"' in execution_source,
+            "typed provider implementation is not compiled")
+    execution_source += sources[TYPED_PROVIDER_SOURCE]
     execution_identity_header = sources[EXECUTION_IDENTITY_HEADER]
     execution_identity_source = sources[EXECUTION_IDENTITY_SOURCE]
     boundary_header = sources[BOUNDARY_HEADER]
@@ -180,7 +187,9 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
                   "xr_execution_lease_retain_program", "xr_execution_lease_retain_profile",
                   "xr_execution_lease_provider_call_i64_unary",
                   "xr_execution_lease_provider_call_i64_nullary",
-                  "xr_execution_lease_provider_output_write"):
+                  "xr_execution_lease_provider_output_write",
+                  "xr_execution_lease_provider_call_typed", "typed_pack_matches",
+                  "typed_result_resources_unique", "xr_execution_resource_adopt"):
         require(token in execution_source, f"generation lease contract omits {token}")
     for token in ("uint64_t ticket", "lease_tickets", "lease_ticket_is_active_locked",
                   "next_lease_ticket", "in_flight_calls"):
@@ -235,6 +244,19 @@ def self_test(root: Path) -> None:
         raise GateError("host sizeof mutation was accepted")
 
     execution = (root / EXECUTION_SOURCE).read_text(encoding="utf-8")
+    for overrides in (
+        {EXECUTION_HEADER: (root / EXECUTION_HEADER).read_text(encoding="utf-8").replace('#include "xr_provider_value.h"', '')},
+        {TYPED_PROVIDER_HEADER: (root / TYPED_PROVIDER_HEADER).read_text(encoding="utf-8") + '\n#include "../vm/forbidden.h"\n'},
+        {EXECUTION_SOURCE: execution.replace('#include "xr_execution_provider_typed.inc.c"', '')},
+        {TYPED_PROVIDER_SOURCE: (root / TYPED_PROVIDER_SOURCE).read_text(encoding="utf-8") +
+                               '\n#include "../vm/forbidden.h"\n'},
+    ):
+        try:
+            validate(root, overrides)
+        except GateError:
+            pass
+        else:
+            raise GateError("missing or executor-dependent typed provider source was accepted")
     mutated = execution.replace("xr_target_provider_contract_fingerprint",
                                 "missing_provider_fingerprint", 1)
     require(mutated != execution, "provider mutation did not apply")

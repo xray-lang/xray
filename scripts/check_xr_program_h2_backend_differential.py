@@ -26,13 +26,12 @@ REGISTRY = ROOT / "xisa/core/registry.json"
 
 EXECUTOR_IDS = (
     "vm-baseline",
-    "vm-fixed",
     "aot-backendir",
     "aot-generated-c-native",
 )
 EXPECTED_OPERATIONS = (
     (142, "core.class.construct"),
-    (143, "core.class.share"),
+    (143, "core.owner.alias"),
     (144, "core.class.field_load"),
     (145, "core.class.field_place"),
     (146, "core.place.exchange"),
@@ -85,8 +84,7 @@ REFERENCE_PROGRAM_TOKENS = (
     ".operands = exchange_operands",
 )
 VM_PENDING_TOKENS = (
-    "XR_VM_DECODE_BASELINE_VIEW",
-    "XR_VM_DECODE_FIXED_ROWS",
+    "xr_vm_code_build",
     "XR_VM_CODE_UNSUPPORTED_OPERATION",
     "diagnostic.status == XR_VM_CODE_UNSUPPORTED_OPERATION",
     "diagnostic.operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT",
@@ -99,10 +97,8 @@ AOT_PENDING_TOKENS = (
     "spec->aot_status, XR_CORE_COVERAGE_NOT_YET_ACTIVE",
 )
 ACTIVE_REQUIRED_TOKENS = {
-    "vm-baseline": ("XR_VM_DECODE_BASELINE_VIEW", "XR_VM_OUTCOME_RETURN",
+    "vm-baseline": ("execute_class_alias_vm", "XR_VM_OUTCOME_RETURN",
                     "XR_VM_VALUE_I64", "h2-class-differential"),
-    "vm-fixed": ("XR_VM_DECODE_FIXED_ROWS", "XR_VM_OUTCOME_RETURN",
-                 "XR_VM_VALUE_I64", "h2-class-differential"),
     "aot-backendir": ("xr_backend_ir_build", "XR_BACKEND_OK", "xr_backend_ir_emit_c",
                       "h2-class-differential"),
     "aot-generated-c-native": ("xr_backend_ir_emit_c", "strict-native-host-run",
@@ -111,8 +107,6 @@ ACTIVE_REQUIRED_TOKENS = {
 EXPECTED_ACTIVE_COMMANDS = {
     "vm-baseline": {"binary": "vm", "arguments": ["--h2-class-differential", "baseline"],
                     "route": "vm-baseline-view"},
-    "vm-fixed": {"binary": "vm", "arguments": ["--h2-class-differential", "fixed"],
-                 "route": "vm-fixed-rows"},
     "aot-backendir": {"binary": "aot", "arguments": ["--h2-class-differential", "backend-ir"],
                       "route": "aot-backendir"},
     "aot-generated-c-native": {
@@ -385,8 +379,7 @@ def validate_manifest(document: Any, registry: Any, root: Path = ROOT) -> dict[s
 
     if tuple(by_id) != EXECUTOR_IDS:
         raise GateError("executor order/set drifted")
-    for left, right in (("vm-baseline", "vm-fixed"),
-                        ("aot-backendir", "aot-generated-c-native")):
+    for left, right in (("aot-backendir", "aot-generated-c-native"),):
         if by_id[left]["state"] != by_id[right]["state"]:
             raise GateError(f"paired executor states are asymmetric: {left}/{right}")
     return document

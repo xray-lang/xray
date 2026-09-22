@@ -37,16 +37,17 @@ typedef struct XrSemanticManagedAggregateArgumentShape {
 
 static inline int xr_semantic_aggregate_type_kind(const XrSemanticTypeRecord *type);
 
-static inline bool xr_semantic_source_structural_shape_is_exact(const XrSemanticPlan *plan,
-                                                                uint32_t semantic_type) {
+static inline bool xr_semantic_source_structural_shape_is_exact_with_nullability(
+    const XrSemanticPlan *plan, uint32_t semantic_type, bool allow_nullable) {
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
     if (!plan || !type || type->kind != XR_KIND_STRUCT_OBJECT ||
         type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count == 0 ||
         type->aggregate_extent != type->child_count ||
         (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
             (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
-        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
-                        XR_SEM_TYPE_AGGREGATE_EXACT)) != 0)
+        (type->flags & (XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
+                        XR_SEM_TYPE_AGGREGATE_EXACT |
+                        (allow_nullable ? 0u : XR_SEM_TYPE_NULLABLE))) != 0)
         return false;
     uint32_t type_entity = XR_SEMANTIC_INDEX_NONE;
     uint32_t shape_entity = XR_SEMANTIC_INDEX_NONE;
@@ -83,6 +84,20 @@ static inline bool xr_semantic_source_structural_shape_is_exact(const XrSemantic
     return field_mask == (type->child_count == 64u
                               ? UINT64_MAX
                               : (UINT64_C(1) << type->child_count) - UINT64_C(1));
+}
+
+static inline bool xr_semantic_source_structural_shape_is_exact(const XrSemanticPlan *plan,
+                                                                uint32_t semantic_type) {
+    return xr_semantic_source_structural_shape_is_exact_with_nullability(plan, semantic_type,
+                                                                          false);
+}
+
+/* `copy` may preserve the nullable carrier of a structural value.  The field
+ * graph is still exact; only the outer tagged root admits the null state. */
+static inline bool xr_semantic_source_structural_copy_shape_is_exact(const XrSemanticPlan *plan,
+                                                                     uint32_t semantic_type) {
+    return xr_semantic_source_structural_shape_is_exact_with_nullability(plan, semantic_type,
+                                                                          true);
 }
 
 /* Classify the narrow managed-field aggregate shape already frozen in the

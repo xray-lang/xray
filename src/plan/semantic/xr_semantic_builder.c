@@ -1791,6 +1791,8 @@ static bool build_source_methods(XrSemanticBuildContext *ctx) {
 static void set_function_return_contract(const XiFunc *source, XrSemanticFunctionRecord *record) {
     record->return_parameter = source->arc_return_ownership.param_index;
     record->is_module_initializer = source->is_module_initializer ? 1u : 0u;
+    record->is_external_entry =
+        source->export_plan || source->link_plan || source->entry_plan ? 1u : 0u;
     /* Walks the body once: a function carries coroutine operations when any of
      * its own values is one. Only the body counts -- a call to a coroutine is
      * an ordinary call here. */
@@ -3462,9 +3464,6 @@ static bool append_source_instance_method_dependency_call_target(XrSemanticBuild
         const XrSemanticPlan *plan = module && module->init ? module->init->semantic_plan : NULL;
         if (!plan || plan->schema != XR_SEMANTIC_SCHEMA_VERSION || !plan->frozen || !plan->verified)
             continue;
-        const uint8_t *suspendable = plan_suspendability(ctx, plan);
-        if (!suspendable)
-            continue;
         for (uint32_t sm = 0; sm < plan->source_method_count; sm++) {
             const XrSemanticSourceMethodRecord *candidate = &plan->source_methods[sm];
             const XrSemanticSourceClassRecord *source_class =
@@ -3481,7 +3480,7 @@ static bool append_source_instance_method_dependency_call_target(XrSemanticBuild
                 (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0 ||
                 candidate->flags != method_required ||
                 candidate->parameter_count != call->operand_count ||
-                candidate->function >= plan->function_count || !suspendable[candidate->function] ||
+                candidate->function >= plan->function_count ||
                 strcmp(candidate->name, (const char *) value->aux) != 0)
                 continue;
             if (match_method)
@@ -3797,6 +3796,13 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
                    : native_direct    ? XR_SEM_CALL_TARGET_NATIVE_DIRECT
                    : native_yieldable ? XR_SEM_CALL_TARGET_NATIVE_YIELDABLE
                                       : XR_SEM_CALL_TARGET_INDIRECT_CALLABLE;
+    if (function >= 0 && value->type && value->type->kind == XR_KIND_SLICE) {
+        XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+        const XrSemanticFunctionRecord *callee = &ctx->plan->functions[function];
+        call->return_provenance = callee->return_provenance;
+        call->return_parameter = callee->return_parameter;
+        call->return_complete = callee->return_provenance != XR_SEM_RETURN_NONE;
+    }
     if (indirect_callable) {
         const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
         record->callable_type = ctx->plan->operands[call->operand_begin].type;
@@ -3909,35 +3915,16 @@ static bool xi_rune_to_uint32_exact(const XiValue *value) {
            value->type->scalar_rep == XR_NATIVE_U32;
 }
 
-static bool xi_required_rune_parameter_exact(const XiValue *value) {
-    const XiFunc *function = value && value->block ? value->block->func : NULL;
-    if (!value || value->op != XI_PARAM || value->param_mode != XR_PARAM_READ ||
-        value->transfer_mode != XR_TRANSFER_SHARE || !function || !function->params ||
-        !value->type || value->type->kind != XR_KIND_RUNE || value->type->is_nullable)
-        return false;
-    uint32_t matches = 0;
-    for (uint16_t i = 0; i < function->nparams; i++) {
-        if (function->params[i] != value)
-            continue;
-        if (i >= function->min_params)
-            return false;
-        matches++;
-    }
-    return matches == 1;
-}
-
-/* `r.toString()` on a rune from a `String.runes()` iterator or the current
- * function's unique required Rune parameter: the one-rune string. Sits beside
- * toUInt32 -- same scalar receiver type, narrower producer authority. */
+/* Rune conversion depends on its exact type and method contract, not on the
+ * operation that supplied the scalar value. */
 static bool xi_rune_to_string_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
            strcmp((const char *) value->aux, "toString") == 0 &&
            value->aux_kind == XI_AUX_KIND_NONE &&
            value->aux_int == (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1 && receiver->type &&
-           receiver->type->kind == XR_KIND_RUNE && value->type &&
-           value->type->kind == XR_KIND_STRING && !value->type->is_nullable &&
-           (xi_iterator_rune_source_exact(receiver) || xi_required_rune_parameter_exact(receiver));
+           receiver->type->kind == XR_KIND_RUNE && !receiver->type->is_nullable && value->type &&
+           value->type->kind == XR_KIND_STRING && !value->type->is_nullable;
 }
 
 static bool xi_rune_is_whitespace_exact(const XiValue *value) {
@@ -4120,41 +4107,6 @@ static bool semantic_string_builder_append_string_exact(const XrSemanticBuildCon
  * that hands back its receiver states RESULT_RECEIVER: its result is the
  * receiver's own reference rather than a new value, so the row claims no
  * storage for it and every use of that result stays without authority. */
-static bool xi_array_member_scalar_exact(const XiValue *value) {
-    const XiValue *receiver = value && value->nargs >= 1 ? value->args[0] : NULL;
-    const XrType *receiver_type = receiver ? receiver->type : NULL;
-    const XrArrayMemberShape *shape =
-        value && value->op == XI_CALL_METHOD && value->aux && value->aux_kind == XI_AUX_KIND_NONE
-            ? xr_array_member_shape((const char *) value->aux, value->nargs)
-            : NULL;
-    /* The tail bit records where the call sits, not what it is: lowering sets it
-     * on any `return <method call>`, so demanding the bare default refused the
-     * very same member for its surroundings. `return out.join("|")` in the
-     * stdlib probe is exactly that shape. */
-    if (!shape || !receiver || !receiver_type || value->aux_int <= 0 ||
-        (value->flags & XI_FLAG_MAY_SUSPEND) != 0 || receiver_type->kind != XR_KIND_ARRAY ||
-        !receiver_type->container.element_type || !value->type)
-        return false;
-    for (uint16_t i = 1; i < value->nargs; i++) {
-        if (!value->args[i] || !value->args[i]->type)
-            return false;
-    }
-    switch (shape->result_shape) {
-        case XR_ARRAY_MEMBER_RESULT_UNIT:
-            return value->type->kind == XR_KIND_UNIT;
-        case XR_ARRAY_MEMBER_RESULT_INT:
-            return value->type->kind == XR_KIND_INT;
-        case XR_ARRAY_MEMBER_RESULT_BOOL:
-            return value->type->kind == XR_KIND_BOOL;
-        case XR_ARRAY_MEMBER_RESULT_STRING:
-            /* The default arm below is the receiver-returning one, which would
-             * demand the result be the array itself. */
-            return value->type->kind == XR_KIND_STRING && !value->type->is_nullable;
-        default:
-            return value->type == receiver_type;
-    }
-}
-
 /* Array.reserve is admitted by the analyzer's stable intrinsic id. The
  * frozen operation then proves the complete receiver/capacity/result shape;
  * no selector or live Xi type participates in the classification. */
@@ -4406,6 +4358,7 @@ static bool semantic_array_member_reference_contract_exact(
                       ctx->plan, shape, record, element_type_index, element_type);
 }
 
+/* Validate the shared Array member shape before publishing its intrinsic. */
 static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx,
                                                const XrSemanticOperationRecord *record) {
     if (!ctx || !record || record->operand_begin > ctx->plan->operand_count ||
@@ -5039,8 +4992,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         semantic_array_fill_scalar_exact(ctx, record, value->array_element_storage)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR;
         record->array_element_storage = value->array_element_storage;
-    } else if (xi_array_member_scalar_exact(value) &&
-               semantic_array_member_scalar_exact(ctx, record))
+    } else if (semantic_array_member_scalar_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
     /* Namespace shape and frozen boundary types must both be exact before
      * this scalar convention can own the call. */

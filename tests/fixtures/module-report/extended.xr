@@ -1,0 +1,7 @@
+import { next, total } from "./library"
+import { render } from "./facade"
+
+const header = "report"
+print("entry", header)
+print(render(2), next("tail"), total())
+assert(total() == 44)

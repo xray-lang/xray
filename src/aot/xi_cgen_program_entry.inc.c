@@ -8,6 +8,10 @@
 static void cg_emit_main_stdio_policy(XiCgenCtx *ctx, FILE *out) {
     if (ctx && ctx->freestanding_profile)
         return;
+    fprintf(out, "#if defined(XR_OS_WINDOWS)\n"
+                 "    if (_setmode(_fileno(stdout), _O_BINARY) == -1 ||\n"
+                 "        _setmode(_fileno(stderr), _O_BINARY) == -1) return 1;\n"
+                 "#endif\n");
     fprintf(out, "    setvbuf(stdout, NULL, _IONBF, 0);\n");
     fprintf(out, "    setvbuf(stderr, NULL, _IONBF, 0);\n");
 }

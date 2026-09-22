@@ -1523,9 +1523,10 @@ static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *na
     if (links->type->kind == XR_KIND_CLASS) {
         if (links->class_info)
             return xr_type_new_instance(analyzer->isolate, links->class_info);
-        if (links->type->instance.class_name)
-            return xr_type_new_named_instance(analyzer->isolate, links->type->instance.class_name);
-        return xr_type_new_instance(analyzer->isolate, NULL);
+        XrType *instance = xr_type_copy(analyzer->isolate, links->type);
+        if (instance)
+            instance->kind = XR_KIND_INSTANCE;
+        return instance;
     }
     return NULL;
 }

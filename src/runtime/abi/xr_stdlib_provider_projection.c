@@ -43,6 +43,8 @@ static bool logical_signature_matches(const XrProviderLogicalContract *logical, 
     uint8_t parameters = 0u;
     uint8_t resources = 0u;
     switch (adapter) {
+        case XR_STDLIB_PROVIDER_TYPED:
+            return true;
         case XR_STDLIB_PROVIDER_I64_NULLARY_U64:
         case XR_STDLIB_PROVIDER_I64_NULLARY_I64:
             types = nullary_i64;
@@ -76,7 +78,8 @@ static bool logical_is_admitted(const XrProviderLogicalContract *logical, uint8_
                                  XR_PROVIDER_EFFECT_MAY_SUSPEND;
     if (logical->runtime_profiles != XR_PROVIDER_LOGICAL_PROFILE_HOSTED ||
         (logical->effects & unsupported) != 0u ||
-        logical->result_owner != XR_PROVIDER_OWNER_TRIVIAL ||
+        (logical->result_owner != XR_PROVIDER_OWNER_TRIVIAL &&
+         !(adapter == XR_STDLIB_PROVIDER_TYPED && logical->result_owner == XR_PROVIDER_OWNER_OWNED)) ||
         logical->error_owner != XR_PROVIDER_OWNER_TRIVIAL ||
         logical->threads != XR_PROVIDER_THREADS_ANY ||
         logical->reentry != XR_PROVIDER_REENTRY_ALLOWED ||
@@ -85,7 +88,9 @@ static bool logical_is_admitted(const XrProviderLogicalContract *logical, uint8_
         return false;
     for (uint8_t index = 0u; index < logical->parameter_count; ++index)
         if (logical->parameter_modes[index] != XR_PROVIDER_MODE_IN ||
-            logical->parameter_owners[index] != XR_PROVIDER_OWNER_TRIVIAL)
+            (logical->parameter_owners[index] != XR_PROVIDER_OWNER_TRIVIAL &&
+             !(adapter == XR_STDLIB_PROVIDER_TYPED &&
+               logical->parameter_owners[index] == XR_PROVIDER_OWNER_BORROWED)))
             return false;
     return true;
 }
@@ -119,6 +124,20 @@ static bool project_adapter(uint8_t adapter, XrTargetProviderOperationContract *
                        (uint8_t) layout->i64.align, XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE),
     };
     switch (adapter) {
+        case XR_STDLIB_PROVIDER_TYPED:
+            abi->parameter_count = 3u;
+            abi->result = slot(XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER,
+                               (uint8_t) layout->i32.size, (uint8_t) layout->i32.align,
+                               XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE);
+            for (uint16_t index = 0u; index < abi->parameter_count; ++index) {
+                abi->parameters[index] = slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS,
+                    abi->pointer_width, abi->pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED);
+                abi->parameters[index].flags = index == 0u ? XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE :
+                    index == 1u ? XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE : 0u;
+            }
+            operation->lifetime_flags = XR_TARGET_PROVIDER_LIFETIME_BORROWS;
+            operation->failure_flags = XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS;
+            break;
         case XR_STDLIB_PROVIDER_I64_NULLARY_U64:
         case XR_STDLIB_PROVIDER_I64_NULLARY_I64:
             break;

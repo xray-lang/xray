@@ -16,6 +16,8 @@ REGISTRY = Path("xisa/core/registry.json")
 VM_HEADER = Path("src/vm/xr_program_vm.h")
 VM_SOURCE = Path("src/vm/xr_program_vm.c")
 VM_DISPATCH = Path("src/vm/xr_program_vm_dispatch.inc.c")
+VM_PROVIDER = Path("src/vm/xr_program_vm_provider.inc.c")
+NATIVE_RUNTIME = Path("src/execution/xr_native_execution.c")
 VM_TEST = Path("tests/unit/vm/test_xr_program_vm.c")
 RUNTIME_TEST = Path("tests/unit/vm/test_xr_program_vm_runtime.c")
 TARGET_FIXTURE = Path("tests/unit/plan/target_profile_test_fixture.c")
@@ -40,6 +42,7 @@ RUNTIME_SOURCES = (
     "src/program/xr_program_verify.c",
     "src/execution/xr_execution_identity.c",
     "src/execution/xr_execution.c",
+    "src/execution/xr_native_execution.c",
     "src/execution/xr_boundary_materialization.c",
     "src/vm/xr_program_vm.c",
 )
@@ -102,7 +105,6 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
             "spelling": row["spelling"],
             "vm": row["coverage"]["vm"]["status"],
             "baseline_view": row["coverage"]["vm"]["status"],
-            "fixed_row_view": row["coverage"]["vm"]["status"],
             "differential_oracle": (
                 "CoreSpec-known-answers-and-source-expectations"
                 if row["coverage"]["vm"]["status"] == "COMPLETE" else None
@@ -117,12 +119,12 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": "xray-program-vm-coverage/1",
         "task": 299,
-        "vm_build_id": "xray-program-vm-v2",
+        "vm_build_id": "xray-program-vm-v16",
         "input_authority": "XrValidatedProgram",
         "execution_authority": "XrInstance",
         "distribution_format": "XrProgram",
         "public_bytecode_format": None,
-        "private_views": ["baseline-validated-graph", "fixed-instruction-rows"],
+        "private_views": ["baseline-validated-graph"],
         "persistent_private_code": False,
         "quickening": "DISABLED_UNTIL_MEASURED",
         "execution_budgets": ["steps", "call-depth", "aggregate-value-cells"],
@@ -177,7 +179,7 @@ def cmake_runtime_sources(cmake: str) -> tuple[str, ...]:
 
 
 def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> None:
-    paths = (VM_HEADER, VM_SOURCE, VM_DISPATCH, VM_TEST, RUNTIME_TEST, TARGET_FIXTURE, CMAKE)
+    paths = (VM_HEADER, VM_SOURCE, VM_DISPATCH, VM_PROVIDER, NATIVE_RUNTIME, VM_TEST, RUNTIME_TEST, TARGET_FIXTURE, CMAKE)
     sources = {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
         for path in paths
@@ -186,18 +188,24 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     header = sources[VM_HEADER]
     require('#include "xr_program_vm_dispatch.inc.c"' in sources[VM_SOURCE],
             "VM shared instruction handlers are not compiled")
-    vm = sources[VM_SOURCE] + "\n" + sources[VM_DISPATCH]
+    require('#include "xr_program_vm_provider.inc.c"' in sources[VM_SOURCE],
+            "VM typed provider materialization is not compiled")
+    vm = sources[VM_SOURCE] + "\n" + sources[VM_DISPATCH] + "\n" + sources[VM_PROVIDER]
     test = sources[VM_TEST]
     runtime_test = sources[RUNTIME_TEST]
     cmake = sources[CMAKE]
 
-    require('#define XR_VM_BUILD_ID "xray-program-vm-v2"' in header,
+    require('#define XR_VM_BUILD_ID "xray-program-vm-v16"' in header,
             "VM build identity is missing")
-    for token in ("XR_VM_DECODE_BASELINE_VIEW", "XR_VM_DECODE_FIXED_ROWS",
+    for token in ("xr_vm_code_build",
                   "XR_VM_QUICKENING_NONE", "XrExecutionId", "max_value_cells"):
         require(token in header or token in vm, f"missing VM contract token {token}")
+    for retired in ("XrVmFixedInstruction", "fixed_view_build", "fixed_functions",
+                    "decode_policy", "xr_vm_code_private_size"):
+        require(retired not in header + vm, f"retired VM view returned: {retired}")
     for forbidden in FORBIDDEN_VM_TOKENS:
-        require(forbidden not in vm, f"VM depends on forbidden semantic owner {forbidden}")
+        require(forbidden not in vm + sources[NATIVE_RUNTIME],
+                f"execution runtime depends on forbidden semantic owner {forbidden}")
     require("xr_execution_instance_acquire" in vm and
             "xr_execution_lease_release" in vm,
             "VM does not hold exact generation leases")
@@ -236,8 +244,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
                 f"VM lifecycle disagrees with registry for {row['spelling']}")
         require(token in test, f"VM differential test omits {row['spelling']}")
 
-    for token in ("xr_reference_evaluate", "XR_VM_DECODE_BASELINE_VIEW",
-                  "XR_VM_DECODE_FIXED_ROWS", "XR_VM_OUTCOME_STALE_CODE",
+    for token in ("xr_reference_evaluate", "xr_vm_code_build", "XR_VM_OUTCOME_STALE_CODE",
                   "max_value_cells"):
         require(token in test, f"VM test omits {token}")
     require("XR_TARGET_ARCH_WASM32" in sources[TARGET_FIXTURE] and
@@ -333,7 +340,12 @@ def self_test(root: Path) -> None:
         raise GateError("legacy u32 VM result was accepted")
 
     for overrides in (
+        {VM_SOURCE: vm + "\n/* XrVmFixedInstruction */\n"},
+        {VM_HEADER: (root / VM_HEADER).read_text(encoding="utf-8") + "\n/* decode_policy */\n"},
+        {NATIVE_RUNTIME: (root / NATIVE_RUNTIME).read_text(encoding="utf-8") + "\n/* xr_reference_evaluate */\n"},
         {VM_SOURCE: vm.replace('#include "xr_program_vm_dispatch.inc.c"', '')},
+        {VM_SOURCE: vm.replace('#include "xr_program_vm_provider.inc.c"', '')},
+        {VM_PROVIDER: (root / VM_PROVIDER).read_text(encoding="utf-8") + "\n/* xr_reference_evaluate */\n"},
         {VM_DISPATCH: handlers + "\n/* xr_reference_evaluate */\n"},
         {VM_DISPATCH: re.sub(rf"\bcase\s+{re.escape(first)}\s*:",
                             "case XR_CORE_OP_MISSING:", handlers)},

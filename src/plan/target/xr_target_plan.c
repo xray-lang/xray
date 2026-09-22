@@ -1213,8 +1213,9 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR;
         bool native_module_scalar =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR;
-        bool native_namespace_yieldable =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+        bool native_yieldable =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE;
         bool native_direct = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT;
         /* The construction is one of the rows that names a SemanticPlan call
          * target rather than a sealed builtin, so its target index must index
@@ -1244,12 +1245,12 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              !rune_is_whitespace && !string_slice_range && !string_utf8_static &&
              !stringbuilder_to_string && !stringbuilder_append_string && !stringbuilder_clear &&
              !json_namespace_value && !array_member_scalar && !native_module_scalar &&
-             !native_namespace_yieldable && !native_direct && !source_class_constructor &&
+             !native_yieldable && !native_direct && !source_class_constructor &&
              !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof &&
              !panic_info_constructor && !scalar_copy && !container_copy && !map_entries_iterator &&
              !map_entry_iterator_has_next && !map_entry_iterator_next) ||
             plan->calls[i].semantic_operation >= xr_semantic_plan_operation_count(semantic) ||
-            ((direct_local || program_direct || source_export || native_namespace_yieldable ||
+            ((direct_local || program_direct || source_export || native_yieldable ||
               native_direct || source_class_constructor) &&
              plan->calls[i].semantic_call_target >= xr_semantic_plan_call_target_count(semantic)) ||
             ((channel_close || runtime_constructor || string_byte_slice_view ||

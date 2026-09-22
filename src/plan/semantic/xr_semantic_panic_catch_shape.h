@@ -17,15 +17,11 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "xr_semantic_plan.h"
+#include "xr_semantic_panic_info_shape.h"
 
-/* The value a handler receives when it catches a panic.  Two opcodes reach the
- * same payload by different control flow: XI_CATCH is the handler entry of a
- * `catch` clause, and XI_ERR_CATCH is the one on the error-channel path.  Both
- * take no operand, name no callee, and hand back one owned reference whose type
- * the plan cannot narrow -- a handler binds whatever was raised.  Writing the
- * judgement once is what keeps the two from being answered differently: the
- * opcode-derived facts are read from the operation's own opcode rather than
- * from a spelling fixed at one of them. */
+/* Panic catches retain their exact PanicInfo instance type. An erased business
+ * error catch can use the same physical tagged carrier without sharing the
+ * panic channel's type. Both results own the received payload. */
 static inline bool xr_semantic_panic_catch_is_exact(const XrSemanticPlan *plan,
                                                     const XrSemanticOperationRecord *operation) {
     XrStableId zero = {{0}};
@@ -59,7 +55,11 @@ static inline bool xr_semantic_panic_catch_is_exact(const XrSemanticPlan *plan,
     for (uint32_t i = 0; i < 8; i++)
         if (operation->evidence[i] != (i == 7 ? XR_SEMANTIC_INDEX_NONE : 0u))
             return false;
-    return type && type->kind == XR_KIND_UNKNOWN && type->builtin_type == XR_TID_NULL &&
+    bool payload_type =
+        operation->opcode == XI_CATCH
+            ? xr_semantic_panic_info_type_is_exact(type, XR_KIND_INSTANCE)
+            : type && type->kind == XR_KIND_UNKNOWN;
+    return payload_type && type->builtin_type == XR_TID_NULL &&
            type->source_class == XR_SEMANTIC_INDEX_NONE && type->source_enum_key == NULL &&
            xr_stable_id_equal(type->source_enum_identity, zero) &&
            xr_stable_id_equal(type->source_class_identity, zero) && type->child_count == 0 &&
@@ -69,10 +69,8 @@ static inline bool xr_semantic_panic_catch_is_exact(const XrSemanticPlan *plan,
            type->enum_flags == 0 && type->reserved_enum == 0;
 }
 
-/* Reading a field off a caught payload.  The handler's binding is the one value
- * this read may name: a payload's type is never narrowed, so the field is
- * reached through the runtime's own property lookup rather than a class layout,
- * and the read borrows the payload instead of taking it. */
+/* Runtime payload fields use the carrier's property lookup and borrow their
+ * receiver; they do not acquire a user-class field layout or consume it. */
 static inline bool
 xr_semantic_panic_catch_field_read_is_exact(const XrSemanticPlan *plan,
                                             const XrSemanticOperationRecord *operation) {

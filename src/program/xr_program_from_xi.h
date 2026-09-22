@@ -15,30 +15,37 @@
 
 struct XiFunc;
 struct XgGlobalEvidence;
+struct XrModuleGraph;
 
 typedef struct XrProgramFromXiInput {
     const struct XiFunc *const *module_roots;
     uint32_t module_count;
     const struct XiFunc *entry_function;
+    const struct XiFunc *const *retained_functions;
+    uint32_t retained_function_count;
     const struct XgGlobalEvidence *global_evidence;
+    const struct XrModuleGraph *module_graph;
     const uint8_t *semantic_profile_fingerprint;
 } XrProgramFromXiInput;
 
-/* Xi is compiler-private source IR. This function accepts only an Optimized,
- * target-neutral graph with exact source-module authority and whose old
- * SemanticPlan has never been built. The caller selects one exact Xi function
- * as the linked-program entry. Calls consume the same verified global evidence
- * identities that were bound during Xi lowering; no source spelling, Xi value
- * shape, or legacy plan row is used to infer a target. The result is the
- * canonical distributable artifact and one independently owned immutable
- * program validated with the default admission policy and budget. Both output
- * pointers are required and must be empty on entry. On failure they remain
- * empty; on success neither output borrows Xi or the other's byte storage.
- * A consumer with a different admission policy must validate the bytes under
- * that policy. Unsupported Xi operations fail closed. */
+/* Accepts an Optimized, target-neutral Xi graph with exact module authority and
+ * no legacy SemanticPlan. entry_function selects the single default entry;
+ * retained_functions adds complete callable roots without extra default entries.
+ *
+ * For a nonzero retained_function_count, retained_function_ids must address that
+ * many writable slots. IDs use request order and refer to the returned Program.
+ * For bounded requests, every supplied slot is UINT32_MAX on failure.
+ *
+ * Calls consume verified global evidence bound during lowering. Source spelling,
+ * value shape and legacy plan rows never infer targets. The required artifact
+ * and program outputs must be empty on entry. They own independent byte storage
+ * and never borrow Xi. Rejection leaves both empty. The writer validates under
+ * default admission policy; a different policy requires fresh byte admission.
+ * Unsupported Xi operations fail closed. */
 XR_FUNC XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                                                       XrProgramArtifact *artifact_out,
                                                       XrValidatedProgram **program_out,
+                                                      uint32_t *retained_function_ids,
                                                       char *diagnostic, size_t diagnostic_size);
 
 #endif /* XR_PROGRAM_FROM_XI_H */

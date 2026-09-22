@@ -9,6 +9,7 @@
 typedef struct XrValidatedVariant {
     uint16_t *payload_types;
     uint32_t payload_count;
+    char *display_name;
 } XrValidatedVariant;
 
 typedef struct XrValidatedType {
@@ -23,10 +24,14 @@ typedef struct XrValidatedType {
     XrValidatedVariant *variants;
     uint32_t variant_count;
     uint16_t view_element_type;
+    uint16_t array_element_type;
+    uint16_t atomic_element_type;
+    XrStableId resource_id;
     XrCoreIrViewCapability view_capability;
     uint32_t signature_id;
     uint32_t interface_id;
     XrCoreIrInterfaceUseKind interface_use_kind;
+    char *display_name;
 } XrValidatedType;
 
 typedef struct XrValidatedSignature {
@@ -107,6 +112,7 @@ typedef struct XrValidatedConstant {
     XrCoreIrConstantKind kind;
     union {
         int64_t i64;
+        uint64_t f64_bits;
         bool boolean;
         struct {
             const uint8_t *bytes;
@@ -335,6 +341,24 @@ xr_validated_program_provider_call_kind(const XrValidatedProgram *program, uint1
         return XR_PROVIDER_LOGICAL_CALL_OPTIONAL_I64_PAIR_NULLARY;
     return XR_PROVIDER_LOGICAL_CALL_INVALID;
 }
+
+/* Logical signatures are checked against Program types independently of an
+ * executor's physical adapter inventory. The view is bounded prefix type data;
+ * matching never allocates or retains borrowed contract storage. */
+XR_FUNC bool xr_validated_program_provider_type_matches(const XrValidatedProgram *program,
+                                                         uint16_t type_id,
+                                                         XrProviderLogicalTypeView logical);
+
+/* Canonical ownership transfer for a validated operand. The returned SSA owner
+ * is consumed after
+ * successful execution, or at callee entry for MOVE arguments.
+ * calls_only restricts the query to
+ * the latter case. No execution state is kept. */
+XR_FUNC uint32_t xr_validated_instruction_consumed_owner(const XrValidatedProgram *program,
+                                                         const XrValidatedFunction *function,
+                                                         const XrValidatedInstruction *instruction,
+                                                         uint32_t operand_index, uint32_t block_id,
+                                                         bool calls_only);
 
 /* Private query for an affine READ existential's exact owner. */
 /* It follows canonical block arguments and explicit reborrow anchors. */

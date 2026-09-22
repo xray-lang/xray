@@ -8,7 +8,7 @@ order: 013
 
 ## 12. 测试系统 (Testing)
 
-> 真值源：`src/app/cli/xcmd_test.c`、`src/api/xtest_runner.c`、`src/frontend/parser/xparse_decl.c` 与 analyzer 的全局 assertion builtin 表。
+> 真值源：`src/app/cli/xcmd_test.c`、`src/program/xr_program_source_build.c`、`src/frontend/parser/xparse_decl.c` 与 analyzer 的全局 assertion builtin 表。
 
 ### 12.1 测试声明：`@test` 注解
 
@@ -140,7 +140,7 @@ fn measuredKernel(value: u64) -> u64 {
 
 ## 12. Testing
 
-> Source of truth: `src/app/cli/xcmd_test.c`, `src/api/xtest_runner.c`, `src/frontend/parser/xparse_decl.c`, and the analyzer's global assertion-builtin table.
+> Source of truth: `src/app/cli/xcmd_test.c`, `src/program/xr_program_source_build.c`, `src/frontend/parser/xparse_decl.c`, and the analyzer's global assertion-builtin table.
 
 ### 12.1 Declaring Tests: the `@test` Attribute
 

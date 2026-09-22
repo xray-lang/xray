@@ -29,12 +29,12 @@ static int check_descriptor(void) {
     _Static_assert(sizeof(expected) == sizeof(descriptor->execution_id.bytes),
                    "execution identity width changed");
     CHECK(memcmp(expected, descriptor->execution_id.bytes, sizeof(expected)) == 0);
-    CHECK(descriptor->schema_version == 3u && descriptor->reserved32 == 0u);
+    CHECK(descriptor->schema_version == 9u && descriptor->reserved32 == 0u);
     CHECK(descriptor->frame_size == sizeof(XrAotEntryCoroutineFrame));
     CHECK(xr_aot_entry_coroutine_frame_size() == descriptor->frame_size);
     CHECK(descriptor->initialize && descriptor->step && descriptor->cancel && descriptor->drop);
     CHECK(descriptor->step(NULL).kind == 4u && descriptor->cancel(NULL).kind == 4u);
-    descriptor->initialize(NULL);
+    descriptor->initialize(NULL, NULL, NULL);
     descriptor->drop(NULL);
     return 0;
 }
@@ -49,9 +49,11 @@ typedef struct ProviderTrace {
     int invalid;
 } ProviderTrace;
 
-static int poll_provider(void *opaque, uint32_t requirement, uint32_t operation, int64_t token,
-                         int64_t *result) {
+static int poll_provider(void *opaque, uint32_t requirement, uint32_t operation, const XrProviderValuePack *arguments,
+                         XrProviderValuePack *result) {
     ProviderTrace *trace = opaque;
+    if (!arguments || arguments->count != 1u || arguments->nodes[0].token != 3u) return 1;
+    int64_t token = arguments->nodes[0].as.i64;
     if (!trace)
         return 1;
     if (requirement != 0u || operation != 0u || !result || trace->count != 0u ||
@@ -63,9 +65,12 @@ static int poll_provider(void *opaque, uint32_t requirement, uint32_t operation,
     ++trace->count;
     if (trace->refuse)
         return 1;
-    *result = 99;
+    result->count = 1u; result->nodes[0].token = 3u;
+    result->nodes[0].as.i64 = 99;
     return 0;
 }
+
+static void dispose_result(XrProviderValuePack *result) { *result = (XrProviderValuePack){0}; }
 
 static int check_cleanup(void) {
     const XrBackendNativeDescriptor *descriptor = &xr_aot_entry_coroutine_descriptor;
@@ -75,9 +80,10 @@ static int check_cleanup(void) {
         int refuse = (mode & 1u) != 0u;
         ProviderTrace trace = {.refuse = refuse};
         XrAotEntryCoroutineFrame frame;
-        descriptor->initialize(&frame);
+        descriptor->initialize(&frame, NULL, NULL);
         frame.context.provider_context = &trace;
-        frame.context.provider_call_i64_unary = poll_provider;
+        frame.context.provider_call_typed = poll_provider;
+        frame.context.provider_dispose_typed = dispose_result;
         XrBackendNativeOutcome paused = descriptor->step(&frame);
         CHECK(paused.kind == 1u && paused.state_id == 1u && paused.safepoint_id == 0u);
         CHECK(trace.count == 0u && !trace.invalid);
@@ -107,7 +113,7 @@ static int check_branch(void) {
     const XrBackendNativeDescriptor *descriptor = &xr_aot_entry_coroutine_descriptor;
     for (uint32_t cancel = 0u; cancel < XR_GRAPH_CASES; ++cancel) {
         XrAotEntryCoroutineFrame frame;
-        descriptor->initialize(&frame);
+        descriptor->initialize(&frame, NULL, NULL);
         XrBackendNativeOutcome paused = descriptor->step(&frame);
         CHECK(paused.kind == 1u && paused.state_id == 1u && paused.safepoint_id == 0u);
         XrBackendNativeOutcome outcome =

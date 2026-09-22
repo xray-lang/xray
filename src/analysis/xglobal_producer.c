@@ -27,6 +27,7 @@
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
+#include "../module/xprelude_runtime.h"
 #include "../shared/xr_core_intrinsic.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
@@ -960,7 +961,7 @@ static uint32_t hash_named_type_key32(const char *name, XrTypeRef **type_args, i
         return 0;
     if (type_args && type_arg_count > 0)
         return hash_synthetic_tref32(XR_TREF_GENERIC, name, type_args, type_arg_count);
-    return hash_synthetic_tref32(XR_TREF_NAMED, name, NULL, 0);
+    return xg_synthetic_named_type_key(name);
 }
 
 static uint8_t class_field_int_semantic_kind(uint8_t scalar_rep) {
@@ -3480,6 +3481,19 @@ static const XrCoreIntrinsicDesc *body_variable_core_intrinsic(XgBodyCollect *bc
     XaSymbol *symbol = body_variable_builtin_function(bc, variable);
     XaSymbolLinks *links = symbol ? xa_analyzer_get_links(bc->producer->analyzer, symbol) : NULL;
     return links ? xr_core_intrinsic_by_id(links->core_builtin_id) : NULL;
+}
+
+static bool body_prelude_constructor(XgBodyCollect *bc, const AstNode *call,
+                                      const char *name, const XaSymbol *symbol) {
+    if (!bc->producer->analyzer || symbol || !name || xa_prelude_declaration_module(name))
+        return false;
+    XaAnalyzer *analyzer = bc->producer->analyzer;
+    const XrPreludeSymbols *prelude = xr_prelude_get_symbols(analyzer->isolate);
+    const XrPreludeTypeEntry *entry =
+        prelude ? xr_prelude_lookup_type(prelude, name, strlen(name)) : NULL;
+    XrType *result = xa_analyzer_get_node_type(analyzer, call);
+    return entry && entry->native_type != 0u &&
+           xr_type_is_builtin_named_class(result, entry->name);
 }
 
 static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) {
@@ -9943,6 +9957,15 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             generic_kind = XG_GENERIC_INST_CLASS;
             generic_origin_decl_id = class_summary->decl_id;
             generic_origin_class_id = class_row->class_id;
+        } else if (body_prelude_constructor(bc, call, callee_name, analyzer_symbol)) {
+            /* Prelude-only constructors have no lexical symbol or source body.
+             * Require both registry authority and the analyzed nominal result. */
+            bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE | XG_BODY_MAY_ALLOC;
+            bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
+            bc->capability_bits |= XG_CAP_NATIVE | XG_CAP_OBJECTS;
+            row.kind = XG_CALL_NATIVE;
+            row.method_id = (XgMethodId) callee_name_id;
+            row.method_name_id = callee_name_id;
         } else if (body_variable_is_stdlib_native_function(bc, &callee->as.variable)) {
             /* A module-owned native crosses the native boundary; it is
              * distinguished from a language builtin before the general
@@ -11389,6 +11412,16 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_BINARY_AND:
         case AST_BINARY_OR:
         case AST_NULLISH_COALESCE:
+            if (node->type == AST_BINARY_DIV || node->type == AST_BINARY_MOD) {
+                const XrType *result = bc->producer->analyzer
+                    ? xa_analyzer_get_node_type(bc->producer->analyzer, node) : NULL;
+                /* Floating division has IEEE results. Integer or unresolved
+                 * division retains the zero-divisor panic in every call summary. */
+                if (!result || result->kind != XR_KIND_FLOAT) {
+                    bc->effect_bits |= XG_BODY_MAY_PANIC;
+                    bc->capability_bits |= XG_CAP_EXCEPTION;
+                }
+            }
             walk_body_for_calls(bc, node->as.binary.left);
             walk_body_for_calls(bc, node->as.binary.right);
             break;
@@ -12079,8 +12112,18 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
         }
         callsite->callable_effect_union = effect_union;
         callsite->callable_capability_union = capability_union;
+        /* The analyzer's call fact is flow-sensitive: a throw handled by the
+         * surrounding catch must not become an escaping error merely because
+         * closed-world target composition sees the callee's raw throw. Keep
+         * that verified decision while still refining transitive suspend and
+         * panic effects from the canonical target set. */
+        bool source_error_verified =
+            (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u;
+        bool source_may_error = source_error_verified &&
+                                (callsite->flags & XG_CALL_MAY_ERROR) != 0u;
         callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_SUSPEND | XG_CALL_MAY_PANIC);
-        if ((effect_union & XG_BODY_MAY_ERROR) != 0u)
+        if ((source_error_verified && source_may_error) ||
+            (!source_error_verified && (effect_union & XG_BODY_MAY_ERROR) != 0u))
             callsite->flags |= XG_CALL_MAY_ERROR;
         if ((effect_union & XG_BODY_MAY_SUSPEND) != 0u)
             callsite->flags |= XG_CALL_MAY_SUSPEND;
@@ -12091,6 +12134,28 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
     for (uint32_t i = 0u; i < producer->evidence->ncallsites; ++i) {
         XgCallsiteSummary *callsite = &producer->evidence->callsites[i];
         uint32_t effect_union = 0u;
+        if (callsite->kind == XG_CALL_DIRECT_FUNC) {
+            /* Closed-world direct calls use the same body contract as every
+             * other resolved callsite.  The source analyzer may not have a
+             * declaration-level error bit to publish, but an unhandled error
+             * edge in the callee is still part of the callable's frozen
+             * module contract. */
+            if (xg_callsite_effects_compose_closed_world_calls(producer->evidence, callsite,
+                                                               &effect_union)) {
+                bool source_error_verified =
+                    (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u;
+                bool source_may_error = source_error_verified &&
+                                        (callsite->flags & XG_CALL_MAY_ERROR) != 0u;
+                callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC);
+                if ((source_error_verified && source_may_error) ||
+                    (!source_error_verified && (effect_union & XG_BODY_MAY_ERROR) != 0u))
+                    callsite->flags |= XG_CALL_MAY_ERROR;
+                if ((effect_union & XG_BODY_MAY_PANIC) != 0u)
+                    callsite->flags |= XG_CALL_MAY_PANIC;
+                callsite->flags |= XG_CALL_ERROR_EFFECT_VERIFIED;
+            }
+            continue;
+        }
         const XgMethodSummary *method = NULL;
         for (uint32_t method_index = 0u;
              callsite->kind == XG_CALL_METHOD && method_index < producer->evidence->nmethods;
@@ -12136,8 +12201,13 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
                                                                    &effect_union)) {
             goto fail;
         }
+        bool source_error_verified =
+            (callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u;
+        bool source_may_error = source_error_verified &&
+                                (callsite->flags & XG_CALL_MAY_ERROR) != 0u;
         callsite->flags &= ~(XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC);
-        if ((effect_union & XG_BODY_MAY_ERROR) != 0u)
+        if ((source_error_verified && source_may_error) ||
+            (!source_error_verified && (effect_union & XG_BODY_MAY_ERROR) != 0u))
             callsite->flags |= XG_CALL_MAY_ERROR;
         if ((effect_union & XG_BODY_MAY_PANIC) != 0u)
             callsite->flags |= XG_CALL_MAY_PANIC;
@@ -12841,11 +12911,12 @@ static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const A
                 XgDeclSummary import_decl;
                 memset(&import_decl, 0, sizeof(import_decl));
                 import_decl.module_id = module_id;
-                import_decl.source_node_id =
-                    producer_source_node_id(module_id, stmt) + (uint32_t) i;
                 import_decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
                 import_decl.kind = XG_DECL_GLOBAL;
                 import_decl.name_id = hash_name32(member->alias ? member->alias : member->name);
+                import_decl.source_node_id = producer_unique_decl_source_node_id(
+                    p, module_id, producer_source_node_id(module_id, stmt) + (uint32_t) i,
+                    import_decl.kind, import_decl.name_id, 0);
                 import_decl.source_span_id = (uint32_t) stmt->line;
                 import_decl.storage_domain = XR_STORAGE_MODULE_STATIC;
                 import_decl.storage_mutability = XR_STORAGE_READONLY;
@@ -12863,10 +12934,11 @@ static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const A
     }
     memset(&decl, 0, sizeof(decl));
     decl.module_id = module_id;
-    decl.source_node_id = producer_source_node_id(module_id, stmt);
     decl.decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     decl.kind = XG_DECL_GLOBAL;
     decl.name_id = hash_name32(name);
+    decl.source_node_id = producer_unique_decl_source_node_id(
+        p, module_id, producer_source_node_id(module_id, stmt), decl.kind, decl.name_id, 0);
     decl.type_key =
         stmt->type == AST_IMPORT_STMT ? 0 : hash_tref32(stmt->as.var_decl.type_annotation);
     decl.source_span_id = (uint32_t) stmt->line;

@@ -29,7 +29,7 @@ struct XaOwnershipCandidateProof;
 struct XaFinalMoveProof;
 struct XaAllocationInstancePlan;
 struct XaCallErrorEffectFact;
-struct XaFunctionExprEffectFact;
+struct XaBodyEffectFact;
 struct XaTargetQueryFact;
 struct XaSuspendPointFact;
 struct XaCallableTargetSetFact;
@@ -95,9 +95,9 @@ XR_FUNC bool xa_typed_program_conversion(const XaTypedProgram *program, const st
 XR_FUNC bool xa_typed_program_call_error_effect(const XaTypedProgram *program,
                                                 const struct AstNode *call_node,
                                                 struct XaCallErrorEffectFact *out_fact);
-XR_FUNC bool xa_typed_program_function_expr_effect(const XaTypedProgram *program,
-                                                   const struct AstNode *function_expr,
-                                                   struct XaFunctionExprEffectFact *out_fact);
+XR_FUNC bool xa_typed_program_body_effect(const XaTypedProgram *program,
+                                          const struct AstNode *body,
+                                          struct XaBodyEffectFact *out_fact);
 XR_FUNC bool xa_typed_program_target_query(const XaTypedProgram *program,
                                            const struct AstNode *member_access,
                                            struct XaTargetQueryFact *out_fact);

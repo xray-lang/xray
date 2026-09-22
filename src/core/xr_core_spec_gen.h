@@ -9,9 +9,9 @@
 
 #define XR_CORE_SPEC_EPOCH 1u
 /* clang-format off */
-#define XR_CORE_SPEC_SEMANTIC_SHA256 "d76caa30d00d3f3f4b89b83af7b55eda220a3fff4bc855afca1cbf6e6228b8e7"
+#define XR_CORE_SPEC_SEMANTIC_SHA256 "a150eed8c055fdc2c839638d82deb9f2553d17b0cac50c21151cffbdb05012ff"
 /* clang-format on */
-#define XR_CORE_SPEC_OPERATION_COUNT 70u
+#define XR_CORE_SPEC_OPERATION_COUNT 83u
 #define XR_CORE_SPEC_FEATURE_COUNT 1u
 #define XR_CORE_SPEC_VARIADIC_ARITY UINT8_MAX
 
@@ -30,10 +30,27 @@ typedef enum XrCoreTypeId {
     XR_CORE_TYPE_TYPE_VARIABLE = 11,
     XR_CORE_TYPE_STRING = 12,
     XR_CORE_TYPE_RUNE = 13,
+    XR_CORE_TYPE_I8 = 14,
+    XR_CORE_TYPE_U8 = 15,
+    XR_CORE_TYPE_I16 = 16,
+    XR_CORE_TYPE_I32 = 17,
+    XR_CORE_TYPE_U64 = 18,
+    XR_CORE_TYPE_F64 = 19,
 } XrCoreTypeId;
 
-/* Operand types admitted by core.output.group: i64, bool, string, rune. */
-#define XR_CORE_OPERAND_DOMAIN_CORE_OUTPUT_GROUP UINT32_C(12294)
+typedef struct XrCoreIntegerType {
+    uint16_t type_id;
+    uint8_t width;
+    bool is_signed;
+} XrCoreIntegerType;
+
+const XrCoreIntegerType *xr_core_spec_integer_type(uint16_t type_id);
+
+/* Operand types admitted by core.output.group: i8, u8, i16, u16, i32, u32, i64, u64, bool, string, rune, f64. */
+#define XR_CORE_OPERAND_DOMAIN_CORE_OUTPUT_GROUP UINT32_C(1044558)
+
+/* Operand types admitted by core.string.from_scalar: i8, u8, i16, u16, i32, u32, i64, u64, f64, bool, rune. */
+#define XR_CORE_OPERAND_DOMAIN_CORE_STRING_FROM_SCALAR UINT32_C(1040462)
 
 typedef enum XrCoreEffectMask {
     XR_CORE_EFFECT_TRAP = UINT32_C(1),
@@ -127,15 +144,28 @@ typedef enum XrCoreOperationId {
     XR_CORE_OP_CORE_COROUTINE_SUSPEND = 140,
     XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT = 141,
     XR_CORE_OP_CORE_CLASS_CONSTRUCT = 142,
-    XR_CORE_OP_CORE_CLASS_SHARE = 143,
+    XR_CORE_OP_CORE_OWNER_ALIAS = 143,
     XR_CORE_OP_CORE_CLASS_FIELD_LOAD = 144,
     XR_CORE_OP_CORE_CLASS_FIELD_PLACE = 145,
     XR_CORE_OP_CORE_PLACE_EXCHANGE = 146,
     XR_CORE_OP_CORE_OUTPUT_GROUP = 148,
-    XR_CORE_OP_CORE_STRING_FROM_I64 = 150,
     XR_CORE_OP_CORE_STRING_CONCAT = 151,
     XR_CORE_OP_CORE_PLACE_MODULE = 152,
     XR_CORE_OP_CORE_PLACE_INITIALIZE = 153,
+    XR_CORE_OP_CORE_INTEGER_CONVERT = 154,
+    XR_CORE_OP_CORE_INTEGER_DIVMOD = 155,
+    XR_CORE_OP_CORE_SEQUENCE_LENGTH = 156,
+    XR_CORE_OP_CORE_ARRAY_CONSTRUCT = 157,
+    XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE = 158,
+    XR_CORE_OP_CORE_ATOMIC_CONSTRUCT = 159,
+    XR_CORE_OP_CORE_ATOMIC_LOAD = 160,
+    XR_CORE_OP_CORE_ATOMIC_EXCHANGE = 161,
+    XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE = 162,
+    XR_CORE_OP_CORE_ATOMIC_UPDATE = 163,
+    XR_CORE_OP_CORE_CONSTANT_F64 = 164,
+    XR_CORE_OP_CORE_COMPARE_F64 = 165,
+    XR_CORE_OP_CORE_SCALAR_BITCAST64 = 166,
+    XR_CORE_OP_CORE_STRING_FROM_SCALAR = 167,
 } XrCoreOperationId;
 
 typedef enum XrCoreSuccessorMask {
@@ -157,6 +187,8 @@ typedef enum XrCoreCoverageStatus {
 typedef struct XrCoreOperationSpec {
     uint16_t stable_id;
     uint8_t operand_arity;
+    uint8_t panic_operand_prefix;
+    bool has_trap_continuation;
     uint8_t result_type;
     uint8_t successor_mask;
     uint32_t effect_mask;
@@ -177,6 +209,16 @@ typedef struct XrCoreOperationSpec {
 extern const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT];
 
 const XrCoreOperationSpec *xr_core_spec_operation_by_id(uint16_t stable_id);
+static inline uint8_t xr_core_spec_panic_operand_prefix(uint16_t stable_id) {
+    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(stable_id);
+    return operation ? operation->panic_operand_prefix : 0u;
+}
+enum { XR_CORE_ASSERT_MESSAGE_PRESENT = 256u };
+static inline uint8_t xr_core_spec_panic_value_prefix(uint16_t stable_id, uint32_t control) {
+    uint8_t prefix = xr_core_spec_panic_operand_prefix(stable_id);
+    return (uint8_t)(prefix + (stable_id == XR_CORE_OP_CORE_ASSERT_CONDITION &&
+                                (control & XR_CORE_ASSERT_MESSAGE_PRESENT) != 0u));
+}
 const XrCoreOperationSpec *xr_core_spec_operation_by_spelling(const char *spelling);
 bool xr_core_spec_feature_active(uint16_t stable_id);
 

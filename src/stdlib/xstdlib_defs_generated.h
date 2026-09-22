@@ -12,6 +12,7 @@
 
 #include <stdbool.h>
 #include <math.h>
+#include <stddef.h>
 #include <stdint.h>
 #include "../base/xentry_plan.h"
 
@@ -250,10 +251,10 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"mem", "__cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", "mem_cache_flush", "normal", "", "xrt_mem_cache_flush", "vv", "value", "", "", "", "core", "method", "", "", "", "", 0, 2, true},
     {"mem", "__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", "mem_nontemporal_store", "normal", "", "xrt_mem_nontemporal_store", "vvv", "value", "", "", "", "core", "method", "", "", "", "", 0, 3, true},
     {"mem", "__cacheLineSize", "(): i64", "CPU cache line size in bytes", "mem_cache_line_size", "normal", "", "xrt_mem_cache_line_size", "", "value", "", "", "", "core", "method", "", "", "", "", 0, 0, true},
-    {"mem", "__alloc", "(n: i64): __BufferStorage", "Allocate n uninitialized bytes in a private managed storage handle", "mem_alloc", "normal", "", "xrt_mem_alloc", "v", "value", "", "", "", "core", "method", "fresh", "", "", "", 0, 1, true},
-    {"mem", "__allocZeroed", "(n: i64): __BufferStorage", "Allocate n zero-initialized bytes in a private managed storage handle", "mem_alloc_zeroed", "normal", "", "xrt_mem_alloc_zeroed", "v", "value", "", "", "", "core", "method", "fresh", "", "", "", 0, 1, true},
-    {"mem", "__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "", "core", "method", "fresh", "", "", "", 0, 2, true},
-    {"mem", "__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", "mem_buffer_length", "normal", "", "xrt_mem_buffer_length", "v", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 1, true},
+    {"mem", "__alloc", "(n: i64): __BufferStorage", "Allocate n uninitialized bytes in a private managed storage handle", "mem_alloc", "normal", "", "xrt_mem_alloc", "v", "value", "", "", "", "core", "method", "fresh", "xray.runtime.provider.v1/byte-storage", "xray.runtime.provider-operation.v1/byte-storage/allocate", "", 0, 1, true},
+    {"mem", "__allocZeroed", "(n: i64): __BufferStorage", "Allocate n zero-initialized bytes in a private managed storage handle", "mem_alloc_zeroed", "normal", "", "xrt_mem_alloc_zeroed", "v", "value", "", "", "", "core", "method", "fresh", "xray.runtime.provider.v1/byte-storage", "xray.runtime.provider-operation.v1/byte-storage/allocate-zeroed", "", 0, 1, true},
+    {"mem", "__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "", "core", "method", "fresh", "xray.runtime.provider.v1/byte-storage", "xray.runtime.provider-operation.v1/byte-storage/allocate-aligned", "", 0, 2, true},
+    {"mem", "__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", "mem_buffer_length", "normal", "", "xrt_mem_buffer_length", "v", "value", "", "", "", "runtime", "method", "", "xray.runtime.provider.v1/byte-storage", "xray.runtime.provider-operation.v1/byte-storage/length", "", 0, 1, true},
     {"mem", "__bufferAsBytes", "(storage: __BufferStorage): const Slice<u8>", "Borrow a readonly byte view from a private Buffer storage handle", "mem_buffer_as_bytes", "normal", "", "xrt_mem_buffer_as_bytes", "v", "value", "", "", "", "runtime", "method", "borrowed_param:0", "", "", "", 0, 1, true},
     {"mem", "__bufferBorrowPtr", "(storage: __BufferStorage): MutPtr<u8>", "Borrow the raw pointer from a private Buffer storage handle", "mem_buffer_borrow_ptr", "normal", "", "xrt_mem_buffer_borrow_ptr", "v", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 1, true},
     {"mem", "__bufferResize", "(storage: __BufferStorage, n: i64): bool", "Resize a private Buffer storage handle", "mem_buffer_resize", "normal", "", "xrt_mem_buffer_resize", "vv", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 2, true},
@@ -380,7 +381,7 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) 2)
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
-    {"mem", "__BufferStorage", "objectClass", "memBufferClass", "xr_buffer_native_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER", "", ""},
+    {"mem", "__BufferStorage", "objectClass", "memBufferClass", "xr_buffer_native_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER", "Buffer", "_storage"},
     {"net", "__NetConnStorage", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NET_CONN_STORAGE", "NetConn", "_storage"},
     {"net", "__NetListenerStorage", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NET_LISTENER_STORAGE", "NetListener", "_storage"},
     {"net", "__TlsContextStorage", "", "tlsContextStorageClass", "xr_tls_context_storage_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "", "", ""},

@@ -5811,7 +5811,7 @@ main()
 
 ## 12. 测试系统 (Testing)
 
-> 真值源：`src/app/cli/xcmd_test.c`、`src/api/xtest_runner.c`、`src/frontend/parser/xparse_decl.c` 与 analyzer 的全局 assertion builtin 表。
+> 真值源：`src/app/cli/xcmd_test.c`、`src/program/xr_program_source_build.c`、`src/frontend/parser/xparse_decl.c` 与 analyzer 的全局 assertion builtin 表。
 
 ### 12.1 测试声明：`@test` 注解
 

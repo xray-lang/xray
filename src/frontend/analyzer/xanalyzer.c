@@ -37,6 +37,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
 #include "../../module/xmodule_graph.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -1986,6 +1987,14 @@ static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {
         links->type = xr_type_new_class(analyzer->isolate, name);
+        if (links->type && analyzer->current_module_is_stdlib &&
+            analyzer->current_stdlib_module_name) {
+            const char *module = analyzer->current_stdlib_module_name;
+            const XrStdlibNativeClassDefEntry *entry =
+                xr_stdlib_metadata_unique_native_class_span(module, strlen(module), name, strlen(name));
+            if (entry)
+                (void) xr_stdlib_metadata_resource_identity(entry, &links->type->instance.resource_id);
+        }
         links->declared_type = links->type;
         links->is_definitely_assigned = true;
         links->file_path = file;
@@ -2558,22 +2567,21 @@ void xa_analyzer_clear_call_error_effect(XaAnalyzer *analyzer, const struct AstN
         xa_node_table_clear_call_error_effect((XaNodeTable *) analyzer->node_table, node);
 }
 
-bool xa_analyzer_set_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
-                                          const XaFunctionExprEffectFact *fact) {
+bool xa_analyzer_set_body_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                 const XaBodyEffectFact *fact) {
     return analyzer && analyzer->node_table && node && fact &&
-           xa_node_table_set_function_expr_effect((XaNodeTable *) analyzer->node_table, node, fact);
+           xa_node_table_set_body_effect((XaNodeTable *) analyzer->node_table, node, fact);
 }
 
-bool xa_analyzer_get_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node,
-                                          XaFunctionExprEffectFact *out_fact) {
+bool xa_analyzer_get_body_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                 XaBodyEffectFact *out_fact) {
     return analyzer && analyzer->node_table && node &&
-           xa_node_table_get_function_expr_effect((XaNodeTable *) analyzer->node_table, node,
-                                                  out_fact);
+           xa_node_table_get_body_effect((XaNodeTable *) analyzer->node_table, node, out_fact);
 }
 
-void xa_analyzer_clear_function_expr_effect(XaAnalyzer *analyzer, const struct AstNode *node) {
+void xa_analyzer_clear_body_effect(XaAnalyzer *analyzer, const struct AstNode *node) {
     if (analyzer && analyzer->node_table && node)
-        xa_node_table_clear_function_expr_effect((XaNodeTable *) analyzer->node_table, node);
+        xa_node_table_clear_body_effect((XaNodeTable *) analyzer->node_table, node);
 }
 
 bool xa_analyzer_set_target_query(XaAnalyzer *analyzer, const struct AstNode *node,

@@ -1521,6 +1521,7 @@ XR_FUNC uint32_t xg_stable_source_node_id(XgModuleId module_id, uint32_t ast_kin
                                           uint32_t column);
 XR_FUNC uint32_t xg_interface_parameter_site_id(XgFuncId owner_func_id, uint32_t parameter_ordinal);
 XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind);
+XR_FUNC uint32_t xg_synthetic_named_type_key(const char *name);
 XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t scalar_rep);
 XR_FUNC uint64_t xg_json_shape_hash_begin(uint32_t field_count);
 XR_FUNC uint64_t xg_json_shape_hash_add_field(uint64_t hash, uint8_t shape_kind, uint32_t name_id,

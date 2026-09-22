@@ -239,6 +239,11 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
     if ((value->type && XR_TYPE_IS_UNIT(value->type)) ||
         xi_generated_op_result_kind(value->op) == XI_GEN_RESULT_VOID)
         return value_rep_make(value->type, XAOT_REP_VOID);
+    /* Boxing changes the carrier while preserving the semantic type. Apply
+     * that boundary
+     * before the type's native view or pointer representation. */
+    if (value->op == XI_BOX || value->op == XI_ENUM_DESCRIPTOR_BOX)
+        return value_rep_make(value->type, XAOT_REP_TAGGED);
     /* CFn has one AOT representation everywhere: a bare native entry pointer.
      * Opcode-local legacy reps (notably CHECKTYPE's tagged result) must not
      * override the semantic type at the frozen backend-plan boundary. */

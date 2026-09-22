@@ -248,7 +248,6 @@ void xr_rwlock_wrunlock(xr_rwlock_t *l) {
 
 // InitOnceExecuteOnce takes a callback with a different signature
 // than the user's `void (*)(void)`. Trampoline through a thunk.
-static void *xr_once_user_fn_;  // thread-local? no — InitOnce serialises calls.
 
 static BOOL CALLBACK xr_once_thunk_(PINIT_ONCE once, PVOID param, PVOID *ctx) {
     (void) once;

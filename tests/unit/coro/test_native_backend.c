@@ -342,7 +342,29 @@ typedef enum AotTestMode {
     AOT_TEST_DONE,
     AOT_TEST_BLOCK,
     AOT_TEST_ERROR,
+    AOT_TEST_ASYNC,
 } AotTestMode;
+
+typedef struct AotAsyncOwner {
+    atomic_int references;
+    atomic_int *destroyed;
+    int64_t value;
+    uint64_t invoke_thread;
+} AotAsyncOwner;
+
+static void aot_async_owner_invoke(void *data) {
+    AotAsyncOwner *owner = data;
+    owner->value = 42;
+    owner->invoke_thread = xr_thread_current_id();
+}
+
+static void aot_async_owner_release(void *data) {
+    AotAsyncOwner *owner = data;
+    if (atomic_fetch_sub_explicit(&owner->references, 1, memory_order_acq_rel) == 1) {
+        atomic_fetch_add(owner->destroyed, 1);
+        xr_free(owner);
+    }
+}
 
 typedef struct AotTestFrame {
     AotTestMode mode;
@@ -351,6 +373,7 @@ typedef struct AotTestFrame {
     int resume_count;
     XrValue value;
     XrValue error;
+    AotAsyncOwner *async_owner;
 } AotTestFrame;
 
 static void aot_test_configure_runtime_core(struct XrRuntimeCore *core, uint32_t caps,
@@ -385,6 +408,19 @@ static XrAotResult aot_test_resume(void *raw_frame, const XrAotContext *ctx) {
             return xr_aot_blocked();
         case AOT_TEST_ERROR:
             return xr_aot_error(frame->error, true);
+        case AOT_TEST_ASYNC:
+            if (frame->resume_count == 1) {
+                atomic_fetch_add_explicit(&frame->async_owner->references, 1, memory_order_relaxed);
+                return xr_aot_async_submit(ctx, aot_async_owner_invoke, frame->async_owner,
+                                             aot_async_owner_release);
+            } else {
+                XrAotResult resumed = xr_aot_async_resume(ctx);
+                if (resumed.kind != XR_AOT_RUN_DONE)
+                    return resumed;
+                if (frame->async_owner->invoke_thread == xr_thread_current_id())
+                    return xr_aot_error(XR_NULL_VAL, false);
+                return xr_aot_done(xr_int(frame->async_owner->value));
+            }
         default:
             return xr_aot_error(XR_NULL_VAL, false);
     }
@@ -402,6 +438,8 @@ static void aot_test_release(void *raw_frame, struct XrCoroHeap *heap) {
     (void) heap;
     if (frame && frame->release_count)
         (*frame->release_count)++;
+    if (frame && frame->async_owner)
+        aot_async_owner_release(frame->async_owner);
     xr_aot_frame_free(frame);
 }
 
@@ -833,6 +871,31 @@ TEST(aot_run_main_uses_runtime_without_isolate) {
     ASSERT_EQ_INT(release_count, 1);
 
     xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_async_result_survives_job_owner_release) {
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO;
+    cfg.scheduler_workers = 2;
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    atomic_int destroyed;
+    atomic_init(&destroyed, 0);
+    int frame_released = 0;
+    AotTestFrame *frame = aot_test_frame_new(AOT_TEST_ASYNC, XR_NULL_VAL, XR_NULL_VAL,
+                                              &frame_released, NULL);
+    ASSERT_NOT_NULL(frame);
+    frame->async_owner = xr_calloc(1, sizeof(*frame->async_owner));
+    ASSERT_NOT_NULL(frame->async_owner);
+    atomic_init(&frame->async_owner->references, 1);
+    frame->async_owner->destroyed = &destroyed;
+    XrValue result = xr_aot_run_main(runtime, &aot_test_desc, frame);
+    xr_aot_runtime_delete(runtime);
+    ASSERT_TRUE(XR_IS_INT(result));
+    ASSERT_EQ_INT(XR_TO_INT(result), 42);
+    ASSERT_EQ_INT(frame_released, 1);
+    ASSERT_EQ_INT(atomic_load(&destroyed), 1);
 }
 
 TEST(aot_context_builtin_prefers_runtime_table) {
@@ -1856,6 +1919,7 @@ RUN_TEST(aot_test_yield_provider_preserves_scalar_and_atomic_contracts);
 RUN_TEST(aot_parallel_cap_creates_scheduler_runtime);
 RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
 RUN_TEST(aot_run_main_uses_runtime_without_isolate);
+RUN_TEST(aot_async_result_survives_job_owner_release);
 RUN_TEST(aot_context_builtin_prefers_runtime_table);
 RUN_TEST(aot_runtime_registers_prelude_enums_without_isolate);
 RUN_TEST(aot_runtime_copy_context_uses_core_without_isolate);

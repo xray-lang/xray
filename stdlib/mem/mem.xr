@@ -103,7 +103,13 @@ fn _allocationSize(n: i64) -> i64 {
 }
 
 fn _validAlignment(align: i64) -> bool {
-    return align >= 8 && (align & (align - 1)) == 0
+    if (align < 8) { return false }
+    var candidate: i64 = 8
+    while (candidate < align) {
+        if (candidate > align / 2) { return false }
+        candidate = candidate * 2
+    }
+    return candidate == align
 }
 
 export fn alloc(n: i64) -> Buffer { return Buffer(n) }

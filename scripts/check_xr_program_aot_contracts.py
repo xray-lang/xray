@@ -13,13 +13,19 @@ from typing import Any
 
 REGISTRY = Path("xisa/core/registry.json")
 HEADER = Path("src/aot/program/xr_backend_ir.h")
+INTERNAL = Path("src/aot/program/xr_backend_ir_internal.h")
+NATIVE_DESCRIPTOR = Path("src/execution/xr_native_descriptor.h")
 LOWERING = Path("src/aot/program/xr_backend_ir.c")
 VERIFY = Path("src/aot/program/xr_backend_ir_verify.c")
 EMITTER = Path("src/aot/program/xr_backend_ir_emit_c.c")
 COPY_EMITTER = Path("src/aot/program/xr_backend_ir_emit_copy.inc.c")
+CLASS_EMITTER = Path("src/aot/program/xr_backend_ir_emit_class.inc.c")
+MODULE_EMITTER = Path("src/aot/program/xr_backend_ir_emit_module.inc.c")
+EXPORT_EMITTER = Path("src/aot/program/xr_backend_ir_emit_exports.inc.c")
 PROVIDER_EMITTER = Path("src/aot/program/xr_backend_ir_provider.inc.c")
 PROVIDER_SOURCES = Path("src/aot/program/xr_provider_aot_sources_gen.inc.c")
-EMISSION_FRAGMENTS = (COPY_EMITTER, PROVIDER_EMITTER, PROVIDER_SOURCES)
+TYPED_PROVIDER_EMITTER = Path("src/aot/program/xr_backend_ir_emit_provider_typed.inc.c")
+EMISSION_FRAGMENTS = (TYPED_PROVIDER_EMITTER, COPY_EMITTER, CLASS_EMITTER, MODULE_EMITTER, EXPORT_EMITTER, PROVIDER_EMITTER, PROVIDER_SOURCES)
 POINTER_ABI_ASSERT = (
     '"_Static_assert(sizeof(void *) == %u && _Alignof(void *) == %u,\\n"'
 )
@@ -68,7 +74,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
             "backend_ir": row["coverage"]["aot"]["status"],
             "portable_c11": row["coverage"]["aot"]["status"],
             "translation_validation": (
-                "STRUCTURAL_EXACT"
+                "DIRECT_PROGRAM_BINDING"
                 if row["coverage"]["aot"]["status"] == "COMPLETE" else None
             ),
         }
@@ -84,7 +90,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         "input_authority": "XrValidatedProgram + exact XrTargetProfile + XrBackendOptions",
         "execution_authority": "not-an-AOT-compiler-input",
         "private_realization": "XrBackendIR",
-        "backend": "xray-c11-aot@1",
+        "backend": "xray-c11-aot@2",
         "operation_count": len(operations),
         "operations": operations,
         "incomplete_operations": incomplete,
@@ -126,7 +132,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
 
 
 def sources(root: Path, overrides: dict[Path, str] | None = None) -> dict[Path, str]:
-    paths = (HEADER, LOWERING, VERIFY, EMITTER, *EMISSION_FRAGMENTS, ARTIFACT, TEST, CMAKE, TEST_CMAKE,
+    paths = (HEADER, INTERNAL, NATIVE_DESCRIPTOR, LOWERING, VERIFY, EMITTER, *EMISSION_FRAGMENTS, ARTIFACT, TEST, CMAKE, TEST_CMAKE,
              IDENTITY, EXECUTION_IDENTITY_HEADER, EXECUTION_IDENTITY_SOURCE)
     return {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
@@ -158,7 +164,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
         "XrOptimizationPolicyId",
     ):
         require(token in header, f"missing AOT contract type {token}")
-    aot_sources = header + lowering + verifier + emission + artifact
+    aot_sources = header + text[INTERNAL] + text[NATIVE_DESCRIPTOR] + lowering + verifier + emission + artifact
     for forbidden in (
         "XrInstance",
         "XrExecutionLease",
@@ -179,9 +185,27 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     require("xr_execution_id_compute" in execution_identity_header and
             "xray-execution-id-v1" in execution_identity_source,
             "shared pure execution identity owner is missing")
-    require("xr_backend_ir_translation_validate" in lowering and
-            "xr_backend_ir_translation_validate" in emitter,
-            "translation validation is not mandatory at lowering and emission")
+    require("xr_backend_ir_verify(ir, diagnostic_out)" in lowering and
+            "xr_backend_ir_verify(ir, diagnostic_out)" in emitter and
+            "xr_backend_ir_binding_verify(ir, diagnostic_out)" in verifier,
+            "immutable Program binding verification is not mandatory at build and emission")
+    require("xr_validated_program_retain(program)" in lowering and
+            "xr_validated_program_free(ir->program)" in lowering,
+            "AOT must retain and release its immutable Program owner")
+    require("xr_execution_id_compute(ir->program, ir->profile" in verifier and
+            "xr_fingerprint_equal(expected, ir->execution_id)" in verifier,
+            "AOT binding does not rederive exact Program/Profile identity")
+    require("ir->program->functions" in emitter and "ir->program->constants" in emission,
+            "AOT emitter does not read the retained Program directly")
+    for forbidden in ("XrBackendInstruction", "XrBackendBlock", "XrBackendFunction",
+                      "XrBackendCoroutineState", "XrBackendCoroutineSafepoint",
+                      "copy_u32_array", "copy_u16_array", "lower_function", "lower_block",
+                      "lower_instruction", "value_representations", "immediate_equal"):
+        require(forbidden not in aot_sources,
+                f"AOT retains duplicate logical structure or storage: {forbidden}")
+    for token in ("test_direct_program_lifetime_and_emission",
+                  "test_foreign_profile_and_program_binding_mutation"):
+        require(token in test, f"AOT replacement responsibility lacks {token}")
     require("xi_cgen_verify_output" in emitter,
             "generated C is not protected by the always-on output verifier")
     for forbidden in ("TargetPlan", "XrVmCode", "xr_vm_", "xvm_", "AstNode", "XiValue"):
@@ -191,11 +215,12 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
             "AOT implementation calls the reference evaluator")
     require(text[PROVIDER_EMITTER].count(POINTER_ABI_ASSERT) == 1,
             "native provider pointer ABI must be checked against the selected target")
-    require("sizeof(void" not in emission.replace(POINTER_ABI_ASSERT, "", 1),
+    native_representation = emission + text[NATIVE_DESCRIPTOR] + text[INTERNAL]
+    require("sizeof(void" not in native_representation.replace(POINTER_ABI_ASSERT, "", 1),
             "target query is inferred from the host compiler")
-    require("int64_t v%u" not in emission,
+    require("int64_t v%u" not in native_representation,
             "typed local spelling must come from BackendIR representation")
-    require("XrAotValue" not in emission,
+    require("XrAotValue" not in native_representation,
             "generated local values use a systematic tagged representation")
     require(re.search(
         r"case\s+XR_CORE_TYPE_U16\s*:\s*"
@@ -211,7 +236,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     for token in (
         "XrAotContext *xr_ctx",
         "xr_aot_alloc(xr_ctx",
-        "xr_aot_context_destroy(&xr_ctx)",
+        "xr_aot_context_destroy(xr_ctx)",
         ".data = (void *)existential_payload_",
     ):
         require(token in emitter or token in test,
@@ -245,7 +270,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     for token in (
         "xr_reference_evaluate",
         "xr_vm_code_execute",
-        "xr_backend_ir_translation_validate",
+        "xr_backend_ir_binding_verify",
         "XR_TARGET_RUNTIME_PROFILE_FREESTANDING",
         "xr_native_artifact_verify",
     ):
@@ -263,7 +288,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     dependencies = re.search(r"\bDEPENDS\b(?P<paths>.*?)\bCOMMENT\b",
                              contract_command.group("body") if contract_command else "",
                              re.DOTALL)
-    for fragment in EMISSION_FRAGMENTS:
+    for fragment in (INTERNAL, NATIVE_DESCRIPTOR, *EMISSION_FRAGMENTS):
         require(dependencies is not None and
                 "${CMAKE_SOURCE_DIR}/" + fragment.as_posix() in dependencies.group("paths"),
                 f"AOT contract stamp does not depend on {fragment}")
@@ -292,6 +317,30 @@ def self_test(root: Path) -> None:
     else:
         raise GateError("missing AOT operation mutation was accepted")
 
+    for path, token in ((LOWERING, "xr_validated_program_retain(program)"),
+                        (LOWERING, "xr_validated_program_free(ir->program)"),
+                        (LOWERING, "xr_backend_ir_verify(ir, diagnostic_out)"),
+                        (EMITTER, "xr_backend_ir_verify(ir, diagnostic_out)"),
+                        (VERIFY, "xr_backend_ir_binding_verify(ir, diagnostic_out)"),
+                        (VERIFY, "xr_fingerprint_equal(expected, ir->execution_id)")):
+        source = (root / path).read_text(encoding="utf-8")
+        require(token in source, f"replacement responsibility mutation lacks {token}")
+        try:
+            validate_sources(root, {path: source.replace(token, "missing_binding_owner")})
+        except GateError:
+            pass
+        else:
+            raise GateError(f"missing replacement responsibility accepted: {token}")
+    internal = (root / INTERNAL).read_text(encoding="utf-8")
+    for token in ("XrBackendInstruction", "XrBackendBlock", "XrBackendFunction",
+                  "XrBackendCoroutineState", "XrBackendCoroutineSafepoint", "value_representations"):
+        try:
+            validate_sources(root, {INTERNAL: internal + f"\n/* {token} */\n"})
+        except GateError:
+            pass
+        else:
+            raise GateError(f"duplicate logical owner accepted: {token}")
+
     lowering = (root / LOWERING).read_text(encoding="utf-8")
     mutated = lowering.replace("#include <string.h>",
                                "#include <string.h>\n/* TargetPlan */", 1)
@@ -313,7 +362,7 @@ def self_test(root: Path) -> None:
     else:
         raise GateError("live XrInstance AOT input was accepted")
 
-    for fragment in EMISSION_FRAGMENTS:
+    for fragment in (INTERNAL, NATIVE_DESCRIPTOR, *EMISSION_FRAGMENTS):
         source = (root / fragment).read_text(encoding="utf-8")
         for forbidden in ("XrInstance", "XrExecutionLease", "xr_execution_instance_",
                           "xr_execution_lease_", "TargetPlan", "XrVmCode", "xr_vm_",
@@ -327,7 +376,7 @@ def self_test(root: Path) -> None:
                 raise GateError(f"{fragment} accepted forbidden authority/representation {forbidden}")
 
     cmake = (root / CMAKE).read_text(encoding="utf-8")
-    for fragment in EMISSION_FRAGMENTS:
+    for fragment in (INTERNAL, NATIVE_DESCRIPTOR, *EMISSION_FRAGMENTS):
         dependency = "            ${CMAKE_SOURCE_DIR}/" + fragment.as_posix() + "\n"
         require(cmake.count(dependency) == 1, f"{fragment} dependency mutation is ambiguous")
         try:

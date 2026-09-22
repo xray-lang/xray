@@ -43,11 +43,10 @@
     "generated_coverage": "contracts/canonical-program/xrprogram-vm-coverage.json",
     "runtime_product": "xray_program_vm_runtime",
     "private_views": [
-      "baseline-validated-graph",
-      "fixed-instruction-rows"
+      "baseline-validated-graph"
     ],
     "incomplete_operations": [],
-    "note": "The current VM still executes both private views. Their retirement requires shared execution and lifecycle checks, including text ownership; source product qualification remains separate."
+    "note": "The VM consumes one immutable validated graph. Independent execution, typed ownership, instance lifetime, allocation and native checks replace the fixed-row copy and duplicate coverage. Full source/product qualification remains separate."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -58,7 +57,7 @@
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
     "incomplete_operations": [],
-    "note": "Active operations have BackendIR and portable C11 lowering. Real source native tests check behavior; complete product-entry qualification remains separate."
+    "note": "Active operations emit portable C11 directly from retained immutable Program tables. AOT owns only physical realization facts and verifies exact input binding, ownership, cleanup and ABI. Real source native tests check behavior; complete product-entry qualification remains separate."
   },
   "operations": [
     {
@@ -634,8 +633,8 @@
     },
     {
       "id": "core.output.group",
-      "core_spec_contract": "Render a typed group of i64, bool, rune and string values as one atomic UTF-8 provider write, using explicit literal separators and suffix; refusal is trap 7.",
-      "program_encoding": "Typed operands, void result, literal group fragments and exact provider requirement indices.",
+      "core_spec_contract": "Render fixed-width signed/unsigned integers, f64, bool, rune and string values as one atomic UTF-8 provider write, joined by one space and followed by one line feed; refusal is trap 7. Floating display uses the existing shared formatter.",
+      "program_encoding": "Typed display operands, optional trap-edge operand suffix, void result and exact provider requirement indices.",
       "vm_implementation": "Shared text kernel formats the complete group before one lease-pinned provider write.",
       "aot_lowering": "embedded generated C accepts only the typed byte-output callback; hosted standalone C binds binary stdout directly, while freestanding standalone output without an embedder is rejected",
       "source_producer": "The analyzer print plan projects typed values and literal fragments into one output group.",
@@ -1170,14 +1169,14 @@
       "decoder_verifier_oracle": "bounded class-reference decode, exact field verification, affine owner validation, and private reference-cell evaluation"
     },
     {
-      "id": "core.class.share",
-      "core_spec_contract": "create an independent affine owner for the same class-reference identity without consuming the source owner",
-      "program_encoding": "one CLASS_REFERENCE operand and result with the same exact TypeId",
-      "vm_implementation": "private class-handle share increments one exact referent owner count without consuming the source",
-      "aot_lowering": "BackendIR preserves the exact class TypeId and generated C increments the private object owner count before alias publication",
-      "source_producer": "source alias escape and borrowed-RHS ownership promotion produce one logical share; explicit deep copy remains core.owner.copy and move remains an identity transfer",
-      "old_owner_deletion": "generic aggregate copy is not a class identity-sharing path",
-      "status": "COMPLETE_H2_CLASS_REFERENCE_EXECUTION",
+      "id": "core.owner.alias",
+      "core_spec_contract": "Create an independent affine owner for the same mutable class or array identity without consuming the rooted source.",
+      "program_encoding": "One class-reference or array value operand; result has the same exact TypeId and owner disposition.",
+      "vm_implementation": "Increment the existing typed referent owner count; the last owner releases elements and storage.",
+      "aot_lowering": "Increment the class object or typed array storage owner count before alias publication.",
+      "source_producer": "Source alias escape and borrowed-RHS promotion use one owner.alias operation for classes and arrays; explicit deep copy remains owner.copy.",
+      "old_owner_deletion": "Retired class-only operation spelling and dispatch identity; value copy is no longer an implicit alias acquisition path.",
+      "status": "IN_PROGRESS_REFERENCE_ALIAS_INTEGRATION",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/core/kats.json",
@@ -1191,7 +1190,10 @@
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_class.inc.c",
         "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot_class.inc.c"
+        "tests/unit/aot/test_xr_program_aot_class.inc.c",
+        "tests/unit/program/xr_program_array_fixture.h",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c"
       ],
       "decoder_verifier_oracle": "exact class TypeId and affine-owner verification with identity-preserving logical share evaluation"
     },
@@ -1328,14 +1330,14 @@
       ]
     },
     {
-      "id": "core.string.from_i64",
-      "core_spec_contract": "Canonical base-10 signed integer text.",
-      "program_encoding": "One i64 operand and one owned string result.",
-      "decoder_verifier_oracle": "Compare decimal expectations including zero, negative values and INT64_MIN; no host overflow.",
+      "id": "core.string.from_scalar",
+      "core_spec_contract": "One owned string with the exact display bytes of a fixed-width integer, f64, bool or rune.",
+      "program_encoding": "One non-owner scalar value operand and one owned string result.",
+      "decoder_verifier_oracle": "Independent integer extremes, floating signed zero, bool and Unicode display expectations; reject invalid types and ownership.",
       "vm_implementation": "Typed Program operation with the shared pure text kernel; value ownership remains executor-private.",
       "aot_lowering": "Portable C11 typed lowering and the same embedded pure text kernel; native behavior is checked against independent expected output.",
       "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
-      "old_owner_deletion": "Canonical source execution has no per-function legacy string opcode or fallback; the former i64-only output handler is replaced by typed group output.",
+      "old_owner_deletion": "Retired operation 150 and deleted the integer-only VM/native conversion path; typed output and scalar conversion reuse the same display adapter and kernel. No alias or fallback.",
       "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
       "evidence": [
         "xisa/core/kats.json",
@@ -1379,6 +1381,295 @@
         "tests/unit/program/xr_program_text_fixture.h",
         "tests/unit/program/xr_program_source_cases.json",
         "tests/unit/program/test_xr_program_source_build.c"
+      ]
+    },
+    {
+      "id": "core.integer.convert",
+      "core_spec_contract": "Exact 8/16/32/64-bit signed and unsigned integer conversion modulo the target width, interpreted using source then target signedness.",
+      "program_encoding": "One exact integer VALUE operand, no immediate, and one trivial exact integer result.",
+      "decoder_verifier_oracle": "Reject non-integer source/result, owner disposition and extra immediates. Independent literal answers cover all 64 type pairs plus truncation and high-bit boundaries.",
+      "vm_implementation": "The shared ordinary/coroutine arithmetic dispatcher uses the pure integer bit kernel and exact typed value carriers.",
+      "aot_lowering": "Direct Program lowering embeds the same freestanding C11 kernel; real clang-cl and MSVC native drivers check independent expected values.",
+      "source_producer": "Generated Xi convert/narrow/widen projections. Integer constants compose existing i64 payload constants and this conversion; explicit changes of integer type survive copy propagation.",
+      "old_owner_deletion": "The old numeric conversion wrapper delegates to the same bit kernel, removing its duplicate masking/sign-extension algorithm. No per-library opcode, Reference executor, or legacy product fallback is added.",
+      "status": "IN_PROGRESS_INTEGER_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/shared/xr_integer_conversion_core.h",
+        "tests/unit/program/xr_program_integer_conversion_cases.inc.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ]
+    },
+    {
+      "id": "core.place.module",
+      "core_spec_contract": "alias the exact instance module slot without reading or publishing its value",
+      "program_encoding": "verified module and module-local slot indexes with exact pointee type and PLACE result category",
+      "vm_implementation": "frame place aliases the retained instance-owned slot; independent instances have disjoint mutable state",
+      "aot_lowering": "direct Program descriptor indexes the instance module slot with exact C field type",
+      "source_producer": "canonical module declaration identities and GET_SHARED/SET_SHARED resolve through the shared source owner and writer",
+      "old_owner_deletion": "no legacy module cache or runtime generation table participates in canonical slot identity",
+      "status": "IN_PROGRESS_MODULE_STATE_INTEGRATION",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "src/vm/xr_program_vm_dispatch.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_module.inc.c",
+        "tests/unit/aot/test_xr_program_aot_module_state.c",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ],
+      "decoder_verifier_oracle": "bounded module and slot identity; exact type/category; dependency visibility; initializer ownership; signed hostile wire rejection"
+    },
+    {
+      "id": "core.place.initialize",
+      "core_spec_contract": "consume one exact typed value and publish the owning initializer slot once; duplicate publication traps without replacing the owner",
+      "program_encoding": "one typed module PLACE plus one consumed typed value, no result, explicit trap effect",
+      "vm_implementation": "instance publication transfers the reachable value graph after successful allocation; records actual publication order for reverse physical cleanup",
+      "aot_lowering": "typed generated slot publication uses the shared initialization protocol; failed publication retains cleanup responsibility",
+      "source_producer": "first module declaration publication lowers through the existing canonical initializer and shared value ownership facts",
+      "old_owner_deletion": "removed the VM/native unimplemented refusal for module slots; full old-entry deletion and batch qualification remain pending",
+      "status": "IN_PROGRESS_MODULE_STATE_INTEGRATION",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/core/kats.json",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "tests/unit/program/xr_program_module_operation_checks.inc.c",
+        "src/vm/xr_program_vm_dispatch.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_module.inc.c",
+        "tests/unit/aot/test_xr_program_aot_module_state.c",
+        "tests/unit/program/test_xr_program_source_build.c"
+      ],
+      "decoder_verifier_oracle": "exact owning module initializer, consumed value and non-owning place; duplicate publication and initialization failure preserve the first instance failure"
+    },
+    {
+      "id": "core.integer.divmod",
+      "core_spec_contract": "Exact same-type integer quotient/remainder, truncating toward zero and wrapping minimum/-1; zero publishes panic420/421.",
+      "program_encoding": "Two exact integer values, quotient/remainder mode and optional panic continuation preserving all live owners.",
+      "decoder_verifier_oracle": "Reject mismatched types, result ownership, bad mode, malformed panic prefix and missing preserved owners. Independent numeric and panic outcomes are required.",
+      "vm_implementation": "The shared ordinary/coroutine arithmetic dispatcher uses the pure integer bit kernel and exact typed value carriers.",
+      "aot_lowering": "Direct Program lowering embeds the same freestanding C11 kernel; real clang-cl and MSVC native drivers check independent expected values.",
+      "source_producer": "Generated Xi div/mod projection composes lossless operand promotion and the shared optional panic continuation.",
+      "old_owner_deletion": "The old division wrapper delegates to the same exact-width kernel. Assertion and integer division share panic transfer and owner-continuation verification; no new Reference executor or legacy fallback.",
+      "status": "IN_PROGRESS_INTEGER_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "src/shared/xr_integer_division_core.h",
+        "tests/unit/program/test_xr_program_source_build.c",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/program/xr_program_integer_divmod_cases.inc.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
+      ]
+    },
+    {
+      "id": "core.sequence.length",
+      "core_spec_contract": "O(1) logical sequence length: immutable string Unicode scalar count or array element count.",
+      "program_encoding": "One borrowed string or array operand, non-owning i64 result and no immediate.",
+      "decoder_verifier_oracle": "Independent scalar-count KATs and rejection of wrong types, ownership, immediate and dead operands.",
+      "vm_implementation": "Read cached scalar count or array cell count in the shared ordinary/coroutine executor.",
+      "aot_lowering": "Read cached string scalar count or typed array element count; real generated C runs against independent output.",
+      "source_producer": "Generated Xi projection selected by the verified operand/result type contract.",
+      "old_owner_deletion": "Canonical Xi LEN projects to one sequence primitive; no library-name dispatch or legacy fallback.",
+      "status": "IN_PROGRESS_TEXT_OUTPUT_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_sequence_length_fixture.h",
+        "tests/unit/runtime/test_text_kernel.c",
+        "tests/cli/run_canonical_source_route_tests.py",
+        "tests/ffi/run_c_export_smoke.py"
+      ]
+    },
+    {
+      "id": "core.array.construct",
+      "core_spec_contract": "Fresh affine array of exact homogeneous elements; transfer each affine input exactly once, including empty arrays",
+      "program_encoding": "Typed result and ordered value operands; no representation data",
+      "decoder_verifier_oracle": "Independent exact element-type and affine transfer KATs; wrong type, duplicate owner, borrowed element, non-owner result, illegal immediate and dead-value mutations are rejected.",
+      "vm_implementation": "Existing owned value cells and recursive lifecycle",
+      "aot_lowering": "Typed contiguous element storage and recursive lifecycle",
+      "source_producer": "Collapse the exact complete Xi initialization prefix; copy immutable/value elements and retain mutable class/array identity with owner.alias.",
+      "old_owner_deletion": "Removed nested-array source refusal and accidental deep-copy acquisition. Dynamic construction, indexing and mutation still need canonical implementations before legacy deletion.",
+      "status": "IN_PROGRESS_ARRAY_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_array_fixture.h",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.sequence.element_place",
+      "core_spec_contract": "Exact rooted non-owning element place; bounds panic preserves index/length and cleanup owners.",
+      "program_encoding": "Sequence value and signed i64 index, exact element place type, optional panic continuation.",
+      "decoder_verifier_oracle": "Independent bounds KATs; readonly, wrong element/index, dead owner, exchanged and nested loan tests.",
+      "vm_implementation": "Typed element alias into existing array cells; shared cleanup and PanicInfo value.",
+      "aot_lowering": "Portable C11 bounds check and typed element pointer; descriptor carries bounds data.",
+      "source_producer": "Expand exact Array INDEX_GET/SET into checked place and existing load/store/exchange operations.",
+      "old_owner_deletion": "VM/native unimplemented rejection removed; source indexing integration and wider sequence consumers remain unfinished.",
+      "status": "IN_PROGRESS_ARRAY_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_array_fixture.h",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.atomic.construct",
+      "core_spec_contract": "Fresh synchronized storage, one affine owner and exact i64/bool element.",
+      "program_encoding": "One scalar operand, affine Atomic result, no immediate.",
+      "decoder_verifier_oracle": "Independent KATs and malformed type, ordering, owner and use-after-drop rejection.",
+      "vm_implementation": "Shared scalar atomic kernel with per-owner wrappers and reference-counted independent storage.",
+      "aot_lowering": "Direct Program C11 lowering uses the same storage kernel and typed last-owner release; real MSVC and clang-cl native fixtures.",
+      "source_producer": "Sealed builtin construction and stable load/swap intrinsic IDs; current source operation binding supports default ordering. Explicit ordering and the complete method family remain open.",
+      "old_owner_deletion": "Whole-type temporary backend rejection removed. Old runtime scalar entry points delegate to the shared kernel; legacy execution consumers remain until full source migration.",
+      "status": "IN_PROGRESS_ATOMIC_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_atomic_fixture.h",
+        "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.atomic.load",
+      "core_spec_contract": "Linearizable observation through a live rooted Atomic handle.",
+      "program_encoding": "One non-consuming Atomic operand, exact scalar result, ordering immediate 0..4.",
+      "decoder_verifier_oracle": "Independent KATs and malformed type, ordering, owner and use-after-drop rejection.",
+      "vm_implementation": "Shared scalar atomic kernel with per-owner wrappers and reference-counted independent storage.",
+      "aot_lowering": "Direct Program C11 lowering uses the same storage kernel and typed last-owner release; real MSVC and clang-cl native fixtures.",
+      "source_producer": "Sealed builtin construction and stable load/swap intrinsic IDs; current source operation binding supports default ordering. Explicit ordering and the complete method family remain open.",
+      "old_owner_deletion": "Whole-type temporary backend rejection removed. Old runtime scalar entry points delegate to the shared kernel; legacy execution consumers remain until full source migration.",
+      "status": "IN_PROGRESS_ATOMIC_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_atomic_fixture.h",
+        "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.atomic.exchange",
+      "core_spec_contract": "Linearizable replacement returning the old scalar without consuming the handle.",
+      "program_encoding": "Atomic handle and exact replacement scalar, old scalar result, ordering immediate 0..4.",
+      "decoder_verifier_oracle": "Independent KATs and malformed type, ordering, owner and use-after-drop rejection.",
+      "vm_implementation": "Shared scalar atomic kernel with per-owner wrappers and reference-counted independent storage.",
+      "aot_lowering": "Direct Program C11 lowering uses the same storage kernel and typed last-owner release; real MSVC and clang-cl native fixtures.",
+      "source_producer": "Sealed builtin construction and stable load/swap intrinsic IDs; current source operation binding supports default ordering. Explicit ordering and the complete method family remain open.",
+      "old_owner_deletion": "Whole-type temporary backend rejection removed. Old runtime scalar entry points delegate to the shared kernel; legacy execution consumers remain until full source migration.",
+      "status": "IN_PROGRESS_ATOMIC_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_atomic_fixture.h",
+        "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.atomic.compare_exchange",
+      "core_spec_contract": "Strong scalar CAS returns actual old value; exact-bit match replaces, failure is Relaxed and never spuriously succeeds or fails.",
+      "program_encoding": "Atomic handle, exact expected and desired values; scalar old-value result; ordering immediate 0..4.",
+      "decoder_verifier_oracle": "Independent KATs and malformed type, ordering, owner and use-after-drop rejection.",
+      "vm_implementation": "Shared scalar atomic kernel with per-owner wrappers and reference-counted independent storage.",
+      "aot_lowering": "Direct Program C11 lowering uses the same storage kernel and typed last-owner release; real MSVC and clang-cl native fixtures.",
+      "source_producer": "Stable compareExchange intrinsic lowers to CAS, exact scalar equality composed from existing comparison/boolean operations, and ordinary (old, matched) tuple construction. Default ordering i64/bool source VM/native cases pass; explicit/dynamic ordering and the wider family remain open.",
+      "old_owner_deletion": "Whole-type temporary backend rejection removed. Old runtime scalar entry points delegate to the shared kernel; legacy execution consumers remain until full source migration.",
+      "status": "IN_PROGRESS_ATOMIC_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_atomic_fixture.h",
+        "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.atomic.update",
+      "core_spec_contract": "Linearizable wrapping scalar add/sub/XOR returns actual old value; bool permits only XOR.",
+      "program_encoding": "Atomic handle and exact scalar operand, scalar old-value result; control encodes mode*8+ordering, mode0..2 and ordering0..4.",
+      "decoder_verifier_oracle": "Independent KATs and malformed type, ordering, owner and use-after-drop rejection.",
+      "vm_implementation": "Shared scalar atomic kernel with per-owner wrappers and reference-counted independent storage.",
+      "aot_lowering": "Direct Program C11 lowering uses the same storage kernel and typed last-owner release; real MSVC and clang-cl native fixtures.",
+      "source_producer": "Stable fetchAdd/fetchSub/add/sub intrinsic IDs bind default ordering i64 updates; void forms discard the old scalar. Bool toggle composes constant true and the same XOR update. Explicit/dynamic ordering and f64 remain open.",
+      "old_owner_deletion": "Whole-type temporary backend rejection removed. Old runtime scalar entry points delegate to the shared kernel; legacy execution consumers remain until full source migration.",
+      "status": "IN_PROGRESS_ATOMIC_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_atomic_fixture.h",
+        "tests/unit/program/xr_program_atomic_type_checks.inc.c",
+        "tests/unit/vm/test_xr_program_vm_allocations.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.constant.f64",
+      "core_spec_contract": "Exact binary64 constant bits and IEEE-754 comparisons; signed zeros compare equal, NaN is unordered.",
+      "program_encoding": "Exact f64 pool reference or two f64 operands with predicate 0..5 and bool result.",
+      "decoder_verifier_oracle": "Independent bit-pattern and comparison KATs; exact operand/result types and pool/predicate checks.",
+      "vm_implementation": "Bit-preserving scalar carrier and common execution dispatch.",
+      "aot_lowering": "Typed double scalar, bitwise constant initialization and C11 comparison.",
+      "source_producer": "Canonical Xi f64 constants and exact same-type comparisons.",
+      "old_owner_deletion": "No legacy execution fallback; remaining legacy consumers are not yet retired.",
+      "status": "IN_PROGRESS_F64_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_f64_fixture.h",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.compare.f64",
+      "core_spec_contract": "Exact binary64 constant bits and IEEE-754 comparisons; signed zeros compare equal, NaN is unordered.",
+      "program_encoding": "Exact f64 pool reference or two f64 operands with predicate 0..5 and bool result.",
+      "decoder_verifier_oracle": "Independent bit-pattern and comparison KATs; exact operand/result types and pool/predicate checks.",
+      "vm_implementation": "Bit-preserving scalar carrier and common execution dispatch.",
+      "aot_lowering": "Typed double scalar, bitwise constant initialization and C11 comparison.",
+      "source_producer": "Canonical Xi f64 constants and exact same-type comparisons.",
+      "old_owner_deletion": "No legacy execution fallback; remaining legacy consumers are not yet retired.",
+      "status": "IN_PROGRESS_F64_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_f64_fixture.h",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
+      ]
+    },
+    {
+      "id": "core.scalar.bitcast64",
+      "core_spec_contract": "Preserve all 64 representation bits between i64, u64 and f64 without numeric conversion.",
+      "program_encoding": "One non-owner scalar operand and exact 64-bit result; no immediate.",
+      "decoder_verifier_oracle": "Independent raw-bit identity KATs, forbidden type and ownership rejection.",
+      "vm_implementation": "Bit-preserving scalar carrier and common execution dispatch.",
+      "aot_lowering": "Portable C11 memcpy between equally sized scalar locals.",
+      "source_producer": "Resolved floating Atomic CAS composes two bitcasts, integer equality and the ordinary result tuple.",
+      "old_owner_deletion": "No legacy execution fallback; remaining legacy consumers are not yet retired.",
+      "status": "IN_PROGRESS_F64_INTEGRATION",
+      "evidence": [
+        "xisa/core/kats.json",
+        "tests/unit/program/xr_program_f64_fixture.h",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c",
+        "tests/cli/run_canonical_source_route_tests.py"
       ]
     }
   ],

@@ -26,21 +26,27 @@
  * never carry a source class.  The namespace plus the frozen `constructor`
  * selector names exactly one implementation with no open dispatch domain.
  *
- * The constructor's receiver and result share this one type record: the class
- * token is spelled with the class type itself rather than an instance type,
- * because no instance type exists for a class that source can never name. */
-static inline bool xr_semantic_panic_info_class_type_is_exact(const XrSemanticTypeRecord *type) {
+ * Synthetic constructor receivers/results retain the class-token type. Panic
+ * catches carry the instance type; both refer to the same reserved namespace. */
+static inline bool xr_semantic_panic_info_type_is_exact(const XrSemanticTypeRecord *type,
+                                                        uint16_t kind) {
+    if (kind != XR_KIND_CLASS && kind != XR_KIND_INSTANCE)
+        return false;
     char expected[160];
     int written = snprintf(
         expected, sizeof(expected), "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:9:PanicInfo[0]",
-        (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
+        (unsigned) kind, (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE);
     XrStableId zero = {{0}};
     return type && written > 0 && (size_t) written < sizeof(expected) &&
-           type->kind == XR_KIND_CLASS && type->builtin_type == XR_TID_NULL &&
+           type->kind == kind && type->builtin_type == XR_TID_NULL &&
            type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE && type->source_class == XR_SEMANTIC_INDEX_NONE &&
            xr_stable_id_equal(type->source_class_identity, zero) && type->canonical_key &&
            strcmp(type->canonical_key, expected) == 0;
+}
+
+static inline bool xr_semantic_panic_info_class_type_is_exact(const XrSemanticTypeRecord *type) {
+    return xr_semantic_panic_info_type_is_exact(type, XR_KIND_CLASS);
 }
 
 /* The class token operation itself: a reserved global read that yields the

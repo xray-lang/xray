@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-#define XR_INVOKE_FIXTURE_AFFINE_TYPE UINT16_C(16)
+#define XR_INVOKE_FIXTURE_AFFINE_TYPE XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
 
 typedef enum XrProgramInvokeFixtureMutation {
     XR_INVOKE_FIXTURE_VALID = 0,

@@ -111,7 +111,7 @@ static void test_module_slots_construction(void) {
     xr_program_module_fixture_add_slots(&fixture);
     const uint16_t field = XR_CORE_TYPE_I64;
     XrCoreIrTypeInput type = {
-        .key = key("module-slot-aggregate"), .local_id = 19u,
+        .key = key("module-slot-aggregate"), .local_id = XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 3u,
         .kind = XR_CORE_IR_TYPE_AGGREGATE, .field_types = &field, .field_count = 1u,
     };
     fixture.input.types = &type;
@@ -143,7 +143,8 @@ static void test_module_slots_construction(void) {
             for (uint32_t index = 0u; index < 2u; ++index) {
                 const XrValidatedModuleSlot *slot = &validated->modules[module].slots[index];
                 if (xr_core_ir_key_equal(slot->key, key("counter:1"))) {
-                    CHECK(slot->type_id == (module == 0u ? 16u : XR_CORE_TYPE_I64));
+                    CHECK(slot->type_id == (module == 0u ? XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
+                                                        : XR_CORE_TYPE_I64));
                     CHECK(slot->flags == 0u);
                 } else {
                     CHECK(xr_core_ir_key_equal(slot->key, key("label:2")));

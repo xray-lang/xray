@@ -32,6 +32,7 @@
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/ir/xi_value_query.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_dynamic_value_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_panic_info_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan.h"
@@ -3787,6 +3788,42 @@ TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
     test_func_free(ir);
 }
 
+static const char *g_rune_values_c_output;
+
+TEST(cgen_rune_string_accepts_scalar_producers) {
+    const char *source =
+        "@noinline fn text(value: i64) -> string { return rune(value)!.toString() }\n"
+        "@noinline fn choose(left: bool) -> string {\n"
+        "    var value = rune(65)!\n"
+        "    if (left) { value = rune(0x1f642)! }\n"
+        "    return value.toString()\n"
+        "}\n"
+        "@noinline fn rejected(value: i64) -> bool {\n"
+        "    try { print(text(value)) } catch panic (p) { return true }\n"
+        "    return false\n"
+        "}\n"
+        "print(text(65), text(0x1f642), choose(false), choose(true))\n"
+        "print(\"hex:\" + rune(97)!.toString())\n"
+        "print(rejected(-1), rejected(0xd800), rejected(0xdfff), rejected(0x110000),\n"
+        "      rejected(4294967361))\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "constructed and merged Rune source compiles");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "rune_values", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "all exact Rune producers share the string recipe");
+    TEST_REQUIRE(contains(code, "xrt_to_string(XR_FROM_RUNE("),
+                 "shared string conversion preserves the exact Rune tag");
+    TEST_REQUIRE(!contains(code, "XRT_SYM_TOSTRING"), "Rune conversion has no generic dispatch");
+    if (g_rune_values_c_output) {
+        FILE *output = fopen(g_rune_values_c_output, "wb");
+        size_t length = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, length, output) == length && fclose(output) == 0,
+                     "Rune scalar producer C output is complete");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
 TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
     XrType unit_type = {
         .kind = XR_KIND_UNIT, .id = 979, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
@@ -4177,22 +4214,31 @@ TEST(cgen_native_array_arguments_share_generated_value_abi) {
 
 static const char *g_encoding_slice_c_output;
 
-static void check_owned_call_admission(XrTargetPlan *target, const XrSemanticPlan *semantic,
+static uint32_t check_call_result_admission(XrTargetPlan *target, const XrSemanticPlan *semantic,
                                        const XiRepPolicy *policy) {
     uint32_t checked = 0;
+    uint32_t view_checked = 0;
     XrFingerprint saved_fingerprint = target->fingerprint;
     for (uint32_t i = 0; i < target->calls_count; i++) {
         XrTargetCallRecord *call = &target->calls[i];
-        if (call->target_kind != XR_TARGET_CALL_TARGET_PANIC_INFO_CONSTRUCTOR &&
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, call->semantic_operation);
+        const XrSemanticTypeRecord *result = operation
+            ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+        bool view = call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
+                    result && result->kind == XR_KIND_SLICE;
+        if (!view && call->target_kind != XR_TARGET_CALL_TARGET_PANIC_INFO_CONSTRUCTOR &&
             call->target_kind != XR_TARGET_CALL_TARGET_STRING_UTF8_STATIC)
             continue;
         XrTargetCallRecord saved = *call;
-        for (uint32_t mutation = 0; mutation < 2; mutation++) {
+        for (uint32_t mutation = 0; mutation < (view ? 3u : 2u); mutation++) {
             *call = saved;
             if (mutation == 0)
                 call->identity.bytes[0] ^= 1u;
+            else if (mutation == 1)
+                call->result_ownership = view ? XR_TARGET_CALL_RETURN_OWNED : XR_TARGET_CALL_BORROW;
             else
-                call->result_ownership = XR_TARGET_CALL_BORROW;
+                call->result_slot = XR_SEMANTIC_INDEX_NONE;
             xr_target_call_compute_fingerprint(target, call->id, &call->fingerprint);
             xr_target_plan_compute_fingerprint(target, &target->fingerprint);
             XrAotRefinementDiagnostic diag = {0};
@@ -4200,41 +4246,54 @@ static void check_owned_call_admission(XrTargetPlan *target, const XrSemanticPla
             TEST_REQUIRE(!xr_aot_representation_refinement_build_from_authority(
                              target, semantic, policy, &rejected, &diag) &&
                              !rejected,
-                         "rehashed owned call identity and ownership remain independently checked");
+                         "rehashed call identity, result ownership and view storage remain independently checked");
         }
         *call = saved;
         target->fingerprint = saved_fingerprint;
         checked++;
+        view_checked += view ? 1u : 0u;
     }
-    TEST_REQUIRE(checked > 0, "source retains its owned call contracts");
+    TEST_REQUIRE(checked > 0, "source retains its call result contracts");
+    return view_checked;
 }
 
 TEST(cgen_encoding_inline_and_named_slice_share_type_identity) {
-    const char *source = "@noinline fn replace(bytes: ref Array<u8>) { bytes[0] = 72 }\n"
-                         "@noinline fn delegate(bytes: ref Array<u8>) { replace(ref bytes) }\n"
-                         "@noinline fn make(present: bool) -> Array<u8>? {\n"
-                         "    if (present) { return [104, 101, 108, 108, 111] }\n"
-                         "    return null\n"
-                         "}\n"
-                         "fn decode(bytes: Array<u8>) {\n"
-                         "    const view: Slice<u8> = bytes[:]\n"
-                         "    print(string.fromUtf8(view)!, string.fromUtf8(bytes[:])!)\n"
-                         "}\n"
-                         "fn first(view: const Slice<u8>) -> i64 { return view[0] as i64 }\n"
-                         "fn inspect(text: string) {\n"
-                         "    const view: Slice<u8> = text.bytes()\n"
-                         "    print(len(view), first(view))\n"
-                         "}\n"
-                         "var bytes: Array<u8> = make(true)!\n"
-                         "bytes[1] = 97\n"
-                         "delegate(ref bytes)\n"
-                         "decode(bytes)\n"
-                         "inspect(\"hello\")\n"
-                         "print(make(false) == null, len(make(true)!), make(true)![0])\n"
+    const char *source =
+        "@noinline fn replace(bytes: ref Array<u8>) { bytes[0] = 72 }\n"
+        "@noinline fn delegate(bytes: ref Array<u8>) { replace(ref bytes) }\n"
+        "@noinline fn make(present: bool) -> Array<u8>? {\n"
+        "    if (present) { return [104, 101, 108, 108, 111] }\n"
+        "    return null\n"
+        "}\n"
+        "fn decode(bytes: Array<u8>) {\n"
+        "    const view: Slice<u8> = bytes[:]\n"
+        "    print(string.fromUtf8(view)!, string.fromUtf8(bytes[:])!)\n"
+        "}\n"
+        "fn first(view: const Slice<u8>) -> i64 { return view[0] as i64 }\n"
+        "enum ViewFailure { Rejected }\n"
+        "@noinline fn checkedView(view: Slice<u8>, accept: bool) -> const Slice<u8> from view {\n"
+        "    if (!accept) { throw ViewFailure.Rejected }\n"
+        "    return view\n"
+        "}\n"
+        "fn inspect(text: string) {\n"
+        "    const view: Slice<u8> = text.bytes()\n"
+        "    print(len(view), first(view))\n"
+        "}\n"
+        "var bytes: Array<u8> = make(true)!\n"
+        "bytes[1] = 97\n"
+        "delegate(ref bytes)\n"
+        "decode(bytes)\n"
+        "inspect(\"hello\")\n"
+        "print(make(false) == null, len(make(true)!), make(true)![0])\n"
         "print(CryptoError.InvalidLength == CryptoError.InvalidLength,\n"
         "      NumberParseError.InvalidSyntax != NumberParseError.OutOfRange,\n"
         "      CompressionError.InvalidData == CompressionError.InvalidData,\n"
-        "      Utf8Error.InvalidUtf8 == Utf8Error.InvalidUtf8)\n";
+        "      Utf8Error.InvalidUtf8 == Utf8Error.InvalidUtf8)\n"
+        "@noinline fn tail(text: string, start: i64) -> string { return text.slice(start) }\n"
+        "print(tail(\"A\\u{1f642}B\", 1), tail(\"end\", 3))\n"
+        "print(tail(\"hello\", 1).slice(1))\n"
+        "print(len(checkedView(bytes[:], true)))\n"
+        "try { checkedView(bytes[:], false) } catch (error) { print(\"caught\") }\n";
     XiFunc *ir = compile_to_ir(source);
     TEST_REQUIRE(ir != NULL, "inline and named Slice source compiles");
     TestSourceFacts *facts = test_source_facts(ir);
@@ -4276,7 +4335,7 @@ TEST(cgen_encoding_inline_and_named_slice_share_type_identity) {
                      target, ref_ir->semantic_plan, &policy, &refinement, &diag),
                  "forwarded byte-array ref source has exact representation authority");
     xr_aot_refinement_plan_free(refinement);
-    check_owned_call_admission(target, ref_ir->semantic_plan, &policy);
+    check_call_result_admission(target, ref_ir->semantic_plan, &policy);
     xr_target_plan_free(target);
     XiFunc *peer = compile_to_ir_with_identity(ref_source, ref_config, "ref-peer-test");
     TEST_REQUIRE(peer && peer->semantic_plan, "reference peer freezes its own module facts");
@@ -4296,13 +4355,17 @@ TEST(cgen_encoding_inline_and_named_slice_share_type_identity) {
     test_func_free(peer);
     target = NULL;
     refinement = NULL;
-    TEST_REQUIRE(xr_target_plan_build(ir->semantic_plan, profile, &target, error, sizeof(error)),
-                 "encoding source retains its exact target authority");
+    bool target_built =
+        xr_target_plan_build(ir->semantic_plan, profile, &target, error, sizeof(error));
+    if (!target_built)
+        fprintf(stderr, "encoding target: %s\n", error);
+    TEST_REQUIRE(target_built, "encoding source retains its exact target authority");
     TEST_REQUIRE(xr_aot_representation_refinement_build_from_authority(
                      target, ir->semantic_plan, &policy, &refinement, &diag),
                  "encoding source consumes its namespace as frozen call authority");
     xr_aot_refinement_plan_free(refinement);
-    check_owned_call_admission(target, ir->semantic_plan, &policy);
+    TEST_REQUIRE(check_call_result_admission(target, ir->semantic_plan, &policy) == 2,
+                 "normal and caught-error view calls retain independent result admission");
     xr_target_plan_free(target);
     xr_target_profile_free(profile);
     test_func_free(ref_ir);
@@ -10355,6 +10418,36 @@ TEST(cgen_numeric_width_uses_stable_owner_adapter) {
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_numeric_width_eval") == 0 &&
            "CGen must resolve the stable numeric width owner adapter");
+
+    const char *src = "fn narrow(value: i64) -> i64 {\n"
+                      "    var a = value as i8\n"
+                      "    var b = value as u8\n"
+                      "    var c = value as i16\n"
+                      "    var d = value as u16\n"
+                      "    var e = value as i32\n"
+                      "    var f = value as u32\n"
+                      "    return (a as i64) + (b as i64) + (c as i64) + "
+                      "(d as i64) + (e as i64) + (f as i64)\n"
+                      "}\n"
+                      "print(narrow(511))\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "integer-width source must compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "integer-width C generation must succeed");
+    const char *casts[] = {
+        "(int8_t)xrt_numeric_width_eval(xr_numeric_narrow_i8, ",
+        "(uint8_t)xrt_numeric_width_eval(xr_numeric_narrow_u8, ",
+        "(int16_t)xrt_numeric_width_eval(xr_numeric_narrow_i16, ",
+        "(uint16_t)xrt_numeric_width_eval(xr_numeric_narrow_u16, ",
+        "(int32_t)xrt_numeric_width_eval(xr_numeric_narrow_i32, ",
+        "(uint32_t)xrt_numeric_width_eval(xr_numeric_narrow_u32, ",
+    };
+    for (size_t i = 0; i < sizeof(casts) / sizeof(casts[0]); i++)
+        assert(contains(code, casts[i]) &&
+               "normalized kernel results must explicitly match their narrow C storage");
+    xr_free(code);
+    test_func_free(ir);
 }
 
 TEST(cgen_byte_slice_scalar_uses_stable_owner_adapter) {
@@ -12366,7 +12459,7 @@ TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
                  "ERR_CHECK and ERR_CATCH identities are unique in stmt_check");
     char check_token[96];
     char catch_token[96];
-    snprintf(check_token, sizeof(check_token), "v%u = xrt_has_pending_error();", check_op->id);
+    snprintf(check_token, sizeof(check_token), "v%u = (uint8_t)xrt_has_pending_error();", check_op->id);
     snprintf(catch_token, sizeof(catch_token), "v%u = xrt_pending_error", check_catch->id);
     TEST_REQUIRE(
         count_between(check_c, check_end, check_token) == 1 &&
@@ -15696,6 +15789,10 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
 
 TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
     const char *src = "type Counted = {count: i64, wire: Array<i64>?}\n"
+                      "type Options = {enabled: bool, strict: bool}\n"
+                      "export const DEFAULT: Options = {enabled: true, strict: false}\n"
+                      "assert(DEFAULT.enabled)\n"
+                      "assert(!DEFAULT.strict)\n"
                       "fn make_counted(present: bool) -> Counted {\n"
                       "    if (present) { return {count: 10, wire: [17, 25]} }\n"
                       "    return {count: -1, wire: null}\n"
@@ -15726,7 +15823,12 @@ TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
                       "var child = independent.item\n"
                       "child.count = 7\n"
                       "print(read_count(envelope.item))\n"
-                      "print(read_count(child))\n";
+                      "print(read_count(child))\n"
+                      "@noinline fn parts(path: string) -> (string, string, string) {\n"
+                      "    return (path, \"?q\", \"#f\")\n"
+                      "}\n"
+                      "var triple = parts(\"/root\")\n"
+                      "print(triple.0 + triple.1 + triple.2)\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -15741,6 +15843,48 @@ TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
            "structural fields must not fall back to name lookup");
     assert(!contains(code, "xrt_getprop(v0, 234)") &&
            "a structural count field must not lower as the builtin count property");
+
+    XrSemanticPlan *semantic = ir->semantic_plan;
+    uint32_t const_objects = 0u;
+    for (uint32_t index = 0u; index < xr_semantic_plan_operation_count(semantic); ++index) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, index);
+        const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, operation->result_type);
+        if (operation->opcode == XI_OBJECT_NEW && type && type->kind == XR_KIND_STRUCT_OBJECT &&
+            (type->flags & XR_SEM_TYPE_CONST) != 0u) {
+            ++const_objects;
+            XrSemanticOperationRecord *mutable_operation = (XrSemanticOperationRecord *) operation;
+            int64_t saved = operation->semantic_immediate;
+            TEST_REQUIRE(xr_semantic_structural_allocation_is_exact(semantic, operation),
+                         "qualified object allocation keeps its exact owner contract");
+            mutable_operation->semantic_immediate = saved + 1;
+            TEST_REQUIRE(!xr_semantic_structural_allocation_is_exact(semantic, operation),
+                         "field count corruption is rejected");
+            mutable_operation->semantic_immediate =
+                xi_object_pack_aux(type->child_count, XR_OBJ_STORAGE_INHERIT);
+            TEST_REQUIRE(!xr_semantic_structural_allocation_is_exact(semantic, operation),
+                         "unresolved bytecode-only storage request is rejected");
+            mutable_operation->semantic_immediate = saved | (INT64_C(1) << 48);
+            TEST_REQUIRE(!xr_semantic_structural_allocation_is_exact(semantic, operation),
+                         "reserved storage bits are rejected");
+            mutable_operation->semantic_immediate = saved;
+        }
+    }
+    TEST_REQUIRE(const_objects == 1u, "exported constant retains its qualified object type");
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *target = NULL;
+    char error[512] = {0};
+    TEST_REQUIRE(profile && xr_target_plan_build(semantic, profile, &target, error, sizeof(error)),
+                 "constant and mutable object roots have exact physical authority");
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    TEST_REQUIRE(xr_aot_representation_refinement_build_from_authority(target, semantic, &policy,
+                                                                       &refinement, &diag),
+                 "constant object initialization and reads retain tagged root storage");
+    xr_aot_refinement_plan_free(refinement);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
 
     if (g_structural_root_c_output) {
         FILE *output = fopen(g_structural_root_c_output, "wb");
@@ -15805,10 +15949,20 @@ TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
 #include "test_xi_cgen_optional.inc.c"
 
 int main(int argc, char **argv) {
+    /* Keep the failing case visible when an always-on contract aborts under CTest. */
+    setvbuf(stdout, NULL, _IONBF, 0);
     printf("=== Xi CGen Unit Tests ===\n\n");
-
     g_test_filter = getenv("XRAY_TEST_FILTER");
     setup();
+    if (argc == 2 && strcmp(argv[1], "closure-elision") == 0) {
+        run_cgen_shared_static_function_retain_is_elided();
+        run_cgen_coro_shared_static_function_retain_is_elided();
+        run_cgen_returned_suspendable_closure_uses_verified_child_frame();
+        run_cgen_stack_alloc_closure_preserves_cell_capture();
+        run_cgen_closure_values_and_indirect_calls_use_portable_c();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "structural-array") == 0) {
         g_structural_array_c_output = argc == 3 ? argv[2] : NULL;
         run_cgen_structural_array_preserves_element_owners();
@@ -15876,6 +16030,12 @@ int main(int argc, char **argv) {
         puts("Iterator<rune>.nth CGen recipe tests passed");
         return tests_failed > 0 ? 1 : 0;
     }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "rune-values") == 0) {
+        g_rune_values_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_rune_string_accepts_scalar_producers();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "rune-to-string-emission") == 0) {
         g_rune_to_string_c_output = argc == 3 ? argv[2] : NULL;
         run_cgen_rune_to_string_consumes_immutable_emission_recipe();
@@ -15931,6 +16091,7 @@ int main(int argc, char **argv) {
     run_cgen_iterator_rune_nth_consumes_immutable_emission_recipe();
     run_cgen_rune_to_uint32_consumes_immutable_emission_recipe();
     run_cgen_rune_to_string_consumes_immutable_emission_recipe();
+    run_cgen_rune_string_accepts_scalar_producers();
     run_cgen_rune_is_whitespace_consumes_immutable_emission_recipe();
     run_cgen_encoding_inline_and_named_slice_share_type_identity();
     run_cgen_span_passed_only_to_direct_call_omits_data_cache();

@@ -1,0 +1,15 @@
+import { next } from "./library"
+
+const warmup = next("warm")
+print("facade", warmup)
+
+export fn render(limit: i64) -> string {
+    var index = 0
+    var text = ""
+    while (index < limit) {
+        if (index != 0) { text = text + "|" }
+        text = text + next("row")
+        index = index + 1
+    }
+    return text
+}

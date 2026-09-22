@@ -161,6 +161,20 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "integer-conversion"
+header = "src/shared/xr_integer_conversion_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "integer-division"
+header = "src/shared/xr_integer_division_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "int-arith"
 header = "src/shared/xr_int_arith_core.h"
 representation = "native"

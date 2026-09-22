@@ -201,13 +201,41 @@ compatibility opcode, reserved hole, or second bounds owner.
     invalid child bindings, and graphs below the Repped stage fail attachment
     before any ownership transfer.
 
+25. A panic catch defines one nonnullable `PanicInfo` instance owner. Both
+    source catches and compiler-emitted cleanup handlers retain this exact
+    type through Xi transformations; unknown, scalar and class-declaration
+    types cannot stand in for the payload. The catch names a live local
+    `XI_TRY` whose target is its block, or an exact local call,
+    assertion, or integer division/remainder under `XI_CATCH_AUX_POINT_PANIC`.
+    The latter has one receiver and one predecessor naming the producer's
+    block. Xi establishes an incoming ownership frontier before that producer;
+    dead prefix owners end before either outcome and live owners cross an
+    ordinary edge. Lexical cleanup graphs are cloned and composed in Xi with
+    explicit `END_TRY` operations, remapped boundary identities and error
+    regions. Normalized panic blocks retain their exit reason across normal
+    edges; entry blocks and ordinary successors cannot acquire it implicitly.
+    Program consumes these facts without claiming a lexical cleanup graph for
+    panic. Normal, business-error and panic outcomes remain distinct.
+    A call with only a panic channel occupies an isolated block with an
+    explicit normal continuation; it does not manufacture a business-error
+    check. A suspended fallible call retains the unique ERR_CHECK in its
+    resume block. Ownership balancing includes the declared panic and trap
+    successors, preserving borrowed owners until the selected continuation
+    and excluding references already transferred to a callee.
+    The handler defines exactly one payload. Verification establishes pointer
+    membership before reading the registration. Program projection consumes the typed result and must not
+    recover its type or ownership from a backend's cleanup-edge inventory.
+
 ## Verification
 
 verification-test: test_xi_cleanup
+verification-test: test_xi_allocations
 verification-test: test_xi_cleanup_lower
 verification-test: test_xi_cleanup_clone
 verification-test: test_xi_cleanup_integration
 verification-test: test_xi_pipeline
 verification-test: test_xi_emit
 verification-test: test_xi_opt
+verification-test: test_xi_lower
+verification-test: test_xi_verify_ext
 verification-test: test_module_graph

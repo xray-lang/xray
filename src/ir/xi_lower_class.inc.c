@@ -271,6 +271,25 @@ static bool class_info_is_polymorphic(const XrClassInfo *info) {
     return info && (info->has_subclass || info->base != NULL);
 }
 
+/* Nullable fields retain their tag regardless of the payload kind. Both local
+ * declarations and imported base classes must choose the same physical lane. */
+static int class_field_native_storage_type(const XrType *type) {
+    if (!type || type->kind == XR_KIND_UNKNOWN)
+        return -1;
+    if (type->is_nullable)
+        return XR_NATIVE_VALUE;
+    int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
+    if (native >= 0)
+        return native;
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE)
+        return XR_NATIVE_ARRAY_REF;
+    if (type->kind == XR_KIND_MAP)
+        return XR_NATIVE_MAP_REF;
+    if (type->kind == XR_KIND_SET)
+        return XR_NATIVE_SET_REF;
+    return -1;
+}
+
 /* Append the native field layout for `info` (walking its base chain, base fields
  * first) into `layout` starting at `*out_idx`. Returns false when any field is
  * not representable in a native class instance, in which case the whole class
@@ -290,16 +309,7 @@ static bool class_collect_native_fields_from_info(XiLower *l, XrClassInfo *info,
             return false;
         XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, fs);
         XrType *type = links ? links->type : NULL;
-        if (!type || type->kind == XR_KIND_UNKNOWN || type->is_nullable)
-            return false;
-        int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
-        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE ||
-                           type->kind == XR_KIND_SLICE))
-            native = XR_NATIVE_ARRAY_REF;
-        if (native < 0 && type->kind == XR_KIND_MAP)
-            native = XR_NATIVE_MAP_REF;
-        if (native < 0 && type->kind == XR_KIND_SET)
-            native = XR_NATIVE_SET_REF;
+        int native = class_field_native_storage_type(type);
         if (native < 0)
             return false;
         (void) polymorphic;
@@ -418,14 +428,7 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
         type = xi_lower_type_or_any(l, type, "class field type", 0);
         if (!type || type->kind == XR_KIND_UNKNOWN)
             return NULL;
-        int native = type->is_nullable ? -1 : xr_type_kind_to_native(type->kind, type->scalar_rep);
-        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE ||
-                           type->kind == XR_KIND_SLICE))
-            native = XR_NATIVE_ARRAY_REF;
-        if (native < 0 && type->kind == XR_KIND_MAP)
-            native = XR_NATIVE_MAP_REF;
-        if (native < 0 && type->kind == XR_KIND_SET)
-            native = XR_NATIVE_SET_REF;
+        int native = class_field_native_storage_type(type);
         /* A generated stdlib provider wrapper has one private nominal storage
          * field.  It crosses the AOT object layout as an owned tagged value;
          * stdlibgen has already proved the exact name/type/module contract. */

@@ -16,8 +16,8 @@
  * text, so no executor carries a second copy of these rules.
  *
  * The file is portable C11, header-only, allocation-free and self-contained:
- * generated C embeds it verbatim, so it must not include project headers,
- * define non-static symbols, or use any identifier outside the xr_text_
+ * generated C embeds it with the shared float formatter; guarded project includes
+ * are resolved before embedding. It must not define non-static symbols outside the xr_text_
  * prefix.  Every function is a `static inline` that tolerates being unused,
  * so an executor that needs only part of the surface compiles warning-free
  * under -Wall -Wextra -Werror and /W4 /WX.
@@ -29,6 +29,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#ifndef XR_FLOAT_FMT_H
+#include "../../shared/xr_float_fmt.h"
+#endif
 
 /* Generated C compiles this text in its main translation unit with every
  * warning fatal; clang reports an unused `static inline` there, so the
@@ -44,6 +47,7 @@
 #define XR_TEXT_RUNE_MAX UINT32_C(0x10FFFF)
 /* Bytes needed by the widest canonical i64 rendering ("-9223372036854775808"). */
 #define XR_TEXT_I64_DISPLAY_MAX 20u
+#define XR_TEXT_U64_DISPLAY_MAX 20u
 /* Bytes needed by the widest UTF-8 encoding of one scalar value. */
 #define XR_TEXT_RUNE_UTF8_MAX 4u
 /* Bytes needed by the widest bool rendering ("false"). */
@@ -64,13 +68,17 @@ enum {
     XR_TEXT_DISPLAY_I64 = 1,
     XR_TEXT_DISPLAY_BOOL = 2,
     XR_TEXT_DISPLAY_STRING = 3,
-    XR_TEXT_DISPLAY_RUNE = 4
+    XR_TEXT_DISPLAY_RUNE = 4,
+    XR_TEXT_DISPLAY_U64 = 5,
+    XR_TEXT_DISPLAY_F64 = 6
 };
 
 typedef struct XrTextDisplayOperand {
     uint32_t kind;
     uint32_t rune;
     int64_t i64;
+    uint64_t u64;
+    double f64;
     int boolean;
     const uint8_t *bytes;
     size_t size;
@@ -126,22 +134,25 @@ XR_TEXT_KERNEL_FUNCTION int xr_text_utf8_is_valid(const uint8_t *bytes, size_t s
     return 1;
 }
 
-/* Renders the canonical signed decimal form; returns the byte count.  A null
- * output only measures. */
-XR_TEXT_KERNEL_FUNCTION size_t xr_text_display_i64(int64_t value, uint8_t *out) {
-    uint8_t reverse[XR_TEXT_I64_DISPLAY_MAX];
+/* The caller has already admitted strict UTF-8. Count leading bytes once
+ * at construction; execution-private immutable carriers cache this value. */
+XR_TEXT_KERNEL_FUNCTION size_t xr_text_scalar_count(const uint8_t *bytes, size_t size) {
+    size_t count = 0u;
+    for (size_t index = 0u; index < size; ++index)
+        count += (bytes[index] & UINT8_C(0xC0)) != UINT8_C(0x80) ? 1u : 0u;
+    return count;
+}
+
+/* Both signed and unsigned display use one magnitude conversion. A null
+ * output only measures; the largest unsigned value never crosses int64_t. */
+XR_TEXT_KERNEL_FUNCTION size_t xr_text_display_u64(uint64_t value, uint8_t *out) {
+    uint8_t reverse[XR_TEXT_U64_DISPLAY_MAX];
     size_t count = 0u;
     size_t cursor = 0u;
-    uint64_t magnitude = value < 0 ? UINT64_C(0) - (uint64_t) value : (uint64_t) value;
     do {
-        reverse[count++] = (uint8_t) ('0' + (unsigned) (magnitude % UINT64_C(10)));
-        magnitude /= UINT64_C(10);
-    } while (magnitude != 0u);
-    if (value < 0) {
-        if (out)
-            out[cursor] = (uint8_t) '-';
-        ++cursor;
-    }
+        reverse[count++] = (uint8_t) ('0' + (unsigned) (value % UINT64_C(10)));
+        value /= UINT64_C(10);
+    } while (value != 0u);
     while (count != 0u) {
         --count;
         if (out)
@@ -149,6 +160,14 @@ XR_TEXT_KERNEL_FUNCTION size_t xr_text_display_i64(int64_t value, uint8_t *out) 
         ++cursor;
     }
     return cursor;
+}
+
+XR_TEXT_KERNEL_FUNCTION size_t xr_text_display_i64(int64_t value, uint8_t *out) {
+    uint64_t magnitude = value < 0 ? UINT64_C(0) - (uint64_t) value : (uint64_t) value;
+    size_t prefix = value < 0 ? 1u : 0u;
+    if (prefix && out)
+        out[0] = (uint8_t) '-';
+    return prefix + xr_text_display_u64(magnitude, out ? out + prefix : NULL);
 }
 
 /* Renders `true` or `false`; returns the byte count.  A null output only
@@ -257,6 +276,15 @@ XR_TEXT_KERNEL_FUNCTION size_t xr_text_display_operand(const XrTextDisplayOperan
     switch (operand->kind) {
         case XR_TEXT_DISPLAY_I64:
             return xr_text_display_i64(operand->i64, out);
+        case XR_TEXT_DISPLAY_U64:
+            return xr_text_display_u64(operand->u64, out);
+        case XR_TEXT_DISPLAY_F64: {
+            char buffer[32];
+            int length = xr_format_float(buffer, sizeof(buffer), operand->f64);
+            if (length <= 0 || (size_t)length >= sizeof(buffer)) return 0u;
+            if (out) memcpy(out, buffer, (size_t)length);
+            return (size_t)length;
+        }
         case XR_TEXT_DISPLAY_BOOL:
             return xr_text_display_bool(operand->boolean, out);
         case XR_TEXT_DISPLAY_STRING:

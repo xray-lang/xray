@@ -737,7 +737,6 @@ def resolve_native_binary(requested: Path) -> Path:
 
 def build_aot(xray: Path, source: Path, output: Path, timeout: float) -> Path:
     env = os.environ.copy()
-    env.setdefault("XRAY_AOT_FAST_TEST_BUILD", "1")
     env.setdefault("XRAY_TOOLCHAIN_PROBE_SCALE", "4")
     raw = run_raw(
         [xray, "build", "--native", "-O", "0", source, "-o", output],

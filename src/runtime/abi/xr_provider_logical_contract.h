@@ -41,6 +41,8 @@ typedef enum XrProviderLogicalTypeToken {
     XR_PROVIDER_TYPE_BYTES = 4,
     XR_PROVIDER_TYPE_TUPLE = 5,
     XR_PROVIDER_TYPE_OPTIONAL = 6,
+    /* Followed by one nonzero, target-independent XrStableId. */
+    XR_PROVIDER_TYPE_RESOURCE = 7,
 } XrProviderLogicalTypeToken;
 
 typedef enum XrProviderLogicalParameterMode {
@@ -173,6 +175,10 @@ XR_FUNC bool xr_provider_logical_contract_fingerprint(const XrProviderLogicalCon
  * inputs; the next two indexes select the result and typed error. */
 XR_FUNC bool xr_provider_logical_contract_type(const XrProviderLogicalContract *contract,
                                                uint8_t index, XrProviderLogicalTypeView *out);
+/* A resource leaf carries its exact nominal resource identity, never a host
+ * handle, pointer, layout or destructor. Failure leaves the output unchanged. */
+XR_FUNC bool xr_provider_logical_resource_type_id(XrProviderLogicalTypeView type,
+                                                  XrStableId *out);
 /* Failed encoding/decoding leaves every output unchanged. Encoded bytes have
  * a canonical field order and no C padding or target ABI representation. */
 XR_FUNC bool xr_provider_logical_contract_encode(const XrProviderLogicalContract *contract,

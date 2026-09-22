@@ -30,6 +30,16 @@ FORBIDDEN = (
 )
 
 
+def forbidden_symbol_family(symbol_text: str) -> str | None:
+    # Inventories contain normalized symbol names, not object filenames. Match
+    # compiler prefixes at symbol boundaries, preserving C/COFF decoration and
+    # C++ or unwind prefixes without rejecting source names containing a token.
+    for pattern in FORBIDDEN:
+        if re.search(r"(?<![A-Za-z0-9_])(?:__imp_)?_*" + pattern, symbol_text, re.IGNORECASE):
+            return pattern
+    return None
+
+
 def expected_process_exit(logical_result: int, *, windows: bool) -> int:
     _ = windows
     return logical_result & 0xFF
@@ -58,12 +68,18 @@ def main() -> int:
     parser.add_argument("--executable", type=Path, required=True)
     parser.add_argument("--expected-exit", type=int, required=True)
     parser.add_argument("--expected-stdout-hex")
+    parser.add_argument("--expected-stderr-hex")
     args = parser.parse_args()
     executable = args.executable.resolve()
     if not executable.is_file():
         print(f"missing pure-AOT executable: {executable}", file=sys.stderr)
         return 1
-    result = subprocess.run([str(executable)], check=False, stdout=subprocess.PIPE)
+    result = subprocess.run([str(executable)], check=False, capture_output=True)
+    if result.stderr:
+        sys.stderr.buffer.write(result.stderr)
+    if args.expected_stderr_hex is not None and result.stderr != bytes.fromhex(args.expected_stderr_hex):
+        print(f"pure-AOT stderr mismatch: got {result.stderr!r}", file=sys.stderr)
+        return 1
     expected_exit = expected_process_exit(args.expected_exit, windows=os.name == "nt")
     if result.returncode != expected_exit:
         print(
@@ -85,10 +101,10 @@ def main() -> int:
     if symbol_text is None:
         print(f"pure-AOT symbol inspection failed: {symbol_error}", file=sys.stderr)
         return 1
-    for pattern in FORBIDDEN:
-        if re.search(pattern, symbol_text, re.IGNORECASE):
-            print(f"pure-AOT executable contains forbidden symbol {pattern}", file=sys.stderr)
-            return 1
+    forbidden = forbidden_symbol_family(symbol_text)
+    if forbidden is not None:
+        print(f"pure-AOT executable contains forbidden symbol {forbidden}", file=sys.stderr)
+        return 1
     print("pure-AOT executable: PASS (result and symbol inventory)")
     return 0
 

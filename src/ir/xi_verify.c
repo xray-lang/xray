@@ -149,6 +149,18 @@ static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
             verr(ctx, "func '%s': blocks[%u]->id is %u (must equal index)", f->name, b, blk->id);
             return;
         }
+        if (blk->exit_reason > XI_EXIT_REASON_PANIC ||
+            (blk == f->entry && blk->exit_reason != XI_EXIT_REASON_NONE)) {
+            verr(ctx, "func '%s': b%u has an invalid normalized exit reason", f->name, blk->id);
+            return;
+        }
+        for (uint32_t edge = 0u; edge < 2u; ++edge) {
+            const XiBlock *next = blk->succs[edge];
+            if (next && next->exit_reason != blk->exit_reason) {
+                verr(ctx, "func '%s': b%u crosses a normalized exit boundary", f->name, blk->id);
+                return;
+            }
+        }
     }
 }
 
@@ -1447,6 +1459,80 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
     return true;
 }
 
+static bool verify_panic_catch_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *block,
+                                        const XiValue *caught) {
+    if (caught->op != XI_CATCH)
+        return true;
+    const XrType *type = caught->type;
+    if (!type || type->kind != XR_KIND_INSTANCE || type->is_nullable || type->is_value_type ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->instance.type_arg_count != 0 ||
+        !type->instance.class_name || strcmp(type->instance.class_name, "PanicInfo") != 0) {
+        verr(ctx, "func '%s': panic catch v%u has no exact PanicInfo payload", f->name, caught->id);
+        return false;
+    }
+    /* Match a live local instruction before reading the auxiliary pointer. */
+    const XiValue *registration = NULL;
+    for (uint32_t b = 0u; b < f->nblocks && !registration; ++b) {
+        const XiBlock *candidate = f->blocks[b];
+        for (uint32_t i = 0u; candidate && i < candidate->nvalues; ++i) {
+            if (candidate->values[i] == caught->aux) {
+                registration = candidate->values[i];
+                break;
+            }
+        }
+    }
+    bool call_panic = caught->aux_int == XI_CATCH_AUX_POINT_PANIC;
+    bool exact_registration = false;
+    if (registration && registration->block && registration->block != block) {
+        if (call_panic) {
+            uint32_t checks = 0u;
+            for (uint32_t b = 0u; b < f->nblocks; ++b)
+                checks += xi_err_check_producer(f, f->blocks[b]->control) == registration;
+            const XiBlock *producer_block = registration->block;
+            bool panic_only = checks == 0u && producer_block->kind == XI_BLOCK_PLAIN &&
+                              producer_block->nvalues == 1u &&
+                              producer_block->values[0] == registration &&
+                              producer_block->succs[0] && !producer_block->succs[1];
+            bool invoke = (registration->op == XI_CALL || registration->op == XI_CALL_METHOD ||
+                           registration->op == XI_CALL_METHOD_DIRECT) &&
+                          (checks == 1u || panic_only);
+            bool primitive = registration->op == XI_ASSERTION ||
+                             registration->op == XI_INDEX_GET || registration->op == XI_INDEX_SET ||
+                             ((registration->op == XI_DIV || registration->op == XI_MOD) &&
+                              registration->type && registration->type->kind == XR_KIND_INT);
+            exact_registration = (invoke || primitive) &&
+                block->exit_reason == XI_EXIT_REASON_PANIC &&
+                block->npreds == 1u && block->preds[0] == registration->block;
+            for (uint32_t b = 0u; b < f->nblocks && exact_registration; ++b) {
+                const XiBlock *other = f->blocks[b];
+                for (uint32_t i = 0u; i < other->nvalues; ++i) {
+                    const XiValue *value = other->values[i];
+                    if (value != caught && value->op == XI_CATCH &&
+                        value->aux_int == XI_CATCH_AUX_POINT_PANIC && value->aux == registration)
+                        exact_registration = false;
+                }
+            }
+        } else {
+            exact_registration = caught->aux_int == 0 && registration->op == XI_TRY &&
+                                 registration->nargs == 0u && registration->aux == block;
+        }
+    }
+    if (caught->nargs != 0u || !exact_registration) {
+        verr(ctx, "func '%s': panic catch v%u has no exact local handler registration", f->name,
+             caught->id);
+        return false;
+    }
+    uint32_t payloads = 0u;
+    for (uint32_t i = 0u; i < block->nvalues; ++i)
+        payloads += block->values[i]->op == XI_CATCH;
+    if (payloads != 1u) {
+        verr(ctx, "func '%s': panic handler b%u has multiple payload definitions", f->name,
+             block->id);
+        return false;
+    }
+    return true;
+}
+
 static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1472,6 +1558,8 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
             if (!verify_exact_bit_contract(ctx, f, blk, v))
                 return;
             if (!verify_conversion_contract(ctx, f, blk, v))
+                return;
+            if (!verify_panic_catch_contract(ctx, f, blk, v))
                 return;
 
             if (xi_verify_generated_op_has_check(op, XI_VERIFY_CHECK_OBSOLETE)) {
@@ -1646,8 +1734,10 @@ static void verify_error_check_producers(VerifyCtx *ctx, const XiFunc *f) {
             } else if (!error_check_follows_coro_producer(f, v, producer) ||
                        error_check_has_intervening_boundary(blk, 0u, i)) {
                 verr(ctx,
-                     "func '%s': error check v%u producer v%u is not in its exact continuation",
-                     f->name, v->id, producer->id);
+                     "func '%s': error check v%u in b%u producer v%u (%s, line %u) in b%u "
+                     "is not in its exact continuation",
+                     f->name, v->id, blk->id, producer->id, xi_op_name(producer->op),
+                     producer->line, producer->block->id);
                 return;
             }
 

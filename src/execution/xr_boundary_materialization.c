@@ -581,10 +581,14 @@ XrBoundaryMaterializationStatus xr_execution_materialize_boundary_type(
         return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
     }
     XrExecutionLease lease = {0};
-    if (!xr_execution_instance_acquire(instance, &lease)) {
+    XrExecutionStatus acquired = xr_execution_instance_acquire(instance, &lease);
+    if (acquired != XR_EXECUTION_OK) {
+        bool memory = acquired == XR_EXECUTION_OUT_OF_MEMORY;
         if (diagnostic_out)
-            diagnostic_out->kind = XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
-        return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
+            diagnostic_out->kind = memory ? XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_MEMORY
+                                          : XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
+        return memory ? XR_BOUNDARY_MATERIALIZATION_OUT_OF_MEMORY
+                      : XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
     }
     XrBoundaryLayoutBuilder builder;
     if (!builder_init(&builder, &lease, boundary_kind, budget)) {
@@ -716,10 +720,14 @@ XrBoundaryMaterializationStatus xr_execution_materialize_boundary_call(
         return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
     }
     XrExecutionLease lease = {0};
-    if (!xr_execution_instance_acquire(instance, &lease)) {
+    XrExecutionStatus acquired = xr_execution_instance_acquire(instance, &lease);
+    if (acquired != XR_EXECUTION_OK) {
+        bool memory = acquired == XR_EXECUTION_OUT_OF_MEMORY;
         if (diagnostic_out)
-            diagnostic_out->kind = XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
-        return XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
+            diagnostic_out->kind = memory ? XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_MEMORY
+                                          : XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_INPUT;
+        return memory ? XR_BOUNDARY_MATERIALIZATION_OUT_OF_MEMORY
+                      : XR_BOUNDARY_MATERIALIZATION_INVALID_INPUT;
     }
     XrBoundaryLayoutBuilder builder;
     if (!builder_init(&builder, &lease, boundary_kind, budget)) {

@@ -194,7 +194,7 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         if (rep == XR_REP_TAGGED)
             fprintf(out, "XR_FROM_BOOL(xrt_has_pending_error());\n");
         else
-            fprintf(out, "xrt_has_pending_error();\n");
+            fprintf(out, "(uint8_t)xrt_has_pending_error();\n");
         return true;
     }
 

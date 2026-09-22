@@ -17,17 +17,12 @@
 #include <limits.h>
 #include <string.h>
 
-struct XrBackendExecution {
-    XrBackendNativeStep step;
-    XrBackendNativeCancel cancel;
-    XrBackendNativeDrop drop;
-    void *frame;
-    XrBackendExecutionOutcome last;
-    bool finished;
-};
 
 static bool operation_is_supported(uint16_t operation_id) {
     switch (operation_id) {
+        case XR_CORE_OP_CORE_PLACE_MODULE:
+        case XR_CORE_OP_CORE_PLACE_INITIALIZE:
+        case XR_CORE_OP_CORE_CONSTANT_F64:
         case XR_CORE_OP_CORE_CONSTANT_I64:
         case XR_CORE_OP_CORE_CONSTANT_BOOL:
         case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
@@ -35,8 +30,13 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CONSTANT_RUNE:
         case XR_CORE_OP_CORE_COMPARE_STRING:
         case XR_CORE_OP_CORE_COMPARE_RUNE:
-        case XR_CORE_OP_CORE_STRING_FROM_I64:
+        case XR_CORE_OP_CORE_INTEGER_DIVMOD:
+        case XR_CORE_OP_CORE_SCALAR_BITCAST64:
+        case XR_CORE_OP_CORE_INTEGER_CONVERT:
+        case XR_CORE_OP_CORE_STRING_FROM_SCALAR:
         case XR_CORE_OP_CORE_STRING_CONCAT:
+        case XR_CORE_OP_CORE_SEQUENCE_LENGTH:
+        case XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE:
         case XR_CORE_OP_CORE_ADD_I64:
         case XR_CORE_OP_CORE_SUB_I64:
         case XR_CORE_OP_CORE_MUL_I64:
@@ -44,6 +44,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_LOGICAL_NOT:
         case XR_CORE_OP_CORE_LOGICAL_AND:
         case XR_CORE_OP_CORE_LOGICAL_OR:
+        case XR_CORE_OP_CORE_COMPARE_F64:
         case XR_CORE_OP_CORE_COMPARE_I64:
         case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
@@ -72,6 +73,12 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_PROVIDER_CALL:
         case XR_CORE_OP_CORE_OUTPUT_GROUP:
+        case XR_CORE_OP_CORE_ATOMIC_CONSTRUCT:
+        case XR_CORE_OP_CORE_ATOMIC_LOAD:
+        case XR_CORE_OP_CORE_ATOMIC_EXCHANGE:
+        case XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE:
+        case XR_CORE_OP_CORE_ATOMIC_UPDATE:
+        case XR_CORE_OP_CORE_ARRAY_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
@@ -92,7 +99,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_PLACE_PROJECT:
         case XR_CORE_OP_CORE_PLACE_TAKE:
         case XR_CORE_OP_CORE_CLASS_CONSTRUCT:
-        case XR_CORE_OP_CORE_CLASS_SHARE:
+        case XR_CORE_OP_CORE_OWNER_ALIAS:
         case XR_CORE_OP_CORE_CLASS_FIELD_LOAD:
         case XR_CORE_OP_CORE_CLASS_FIELD_PLACE:
         case XR_CORE_OP_CORE_PLACE_EXCHANGE:
@@ -100,13 +107,6 @@ static bool operation_is_supported(uint16_t operation_id) {
         default:
             return false;
     }
-}
-
-static void hash_u16(XrSHA256Context *context, uint16_t value) {
-    uint8_t bytes[2];
-    bytes[0] = (uint8_t) value;
-    bytes[1] = (uint8_t) (value >> 8u);
-    xr_sha256_update(context, bytes, sizeof(bytes));
 }
 
 static void hash_u32(XrSHA256Context *context, uint32_t value) {
@@ -135,7 +135,7 @@ static XrFingerprint hash_text(const char *domain, const void *bytes, size_t siz
 }
 
 XrBackendId xr_backend_compute_id(void) {
-    const uint8_t backend_version[] = {1u, 0u, 0u, 0u};
+    const uint8_t backend_version[] = {XR_AOT_BACKEND_VERSION, 0u, 0u, 0u};
     return hash_text(XR_AOT_BACKEND_NAME, backend_version, sizeof(backend_version));
 }
 
@@ -147,39 +147,6 @@ XrOptimizationPolicyId xr_backend_compute_optimization_policy_id(const XrBackend
     bytes[3] = (uint8_t) (options->schema_version >> 24u);
     bytes[4] = options->optimization_policy;
     return hash_text("xray:aot:optimization-policy:v1", bytes, sizeof(bytes));
-}
-
-static void free_instruction(XrBackendInstruction *instruction) {
-    xr_free(instruction->successors);
-    xr_free(instruction->operands);
-    memset(instruction, 0, sizeof(*instruction));
-}
-
-static void free_function(XrBackendFunction *function) {
-    if (!function)
-        return;
-    for (uint32_t block = 0; block < function->block_count; ++block) {
-        XrBackendBlock *row = &function->blocks[block];
-        for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction)
-            free_instruction(&row->instructions[instruction]);
-        xr_free(row->instructions);
-        xr_free(row->argument_types);
-        xr_free(row->argument_categories);
-        xr_free(row->argument_ownerships);
-        xr_free(row->argument_ids);
-    }
-    xr_free(function->value_representations);
-    for (uint32_t safepoint = 0; safepoint < function->coroutine_safepoint_count; ++safepoint)
-        xr_free(function->coroutine_safepoints[safepoint].live_value_ids);
-    xr_free(function->coroutine_safepoints);
-    xr_free(function->coroutine_states);
-    xr_free(function->value_types);
-    xr_free(function->value_categories);
-    xr_free(function->value_ownerships);
-    xr_free(function->blocks);
-    xr_free(function->parameter_types);
-    xr_free(function->parameter_modes);
-    memset(function, 0, sizeof(*function));
 }
 
 void xr_backend_set_diagnostic(XrBackendDiagnostic *diagnostic, XrBackendStatus status,
@@ -197,6 +164,24 @@ void xr_backend_set_diagnostic(XrBackendDiagnostic *diagnostic, XrBackendStatus 
 bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representation_out) {
     uint8_t representation = XR_BACKEND_VALUE_VOID;
     switch (type_id) {
+        case XR_CORE_TYPE_I8:
+            representation = XR_BACKEND_VALUE_I8;
+            break;
+        case XR_CORE_TYPE_U8:
+            representation = XR_BACKEND_VALUE_U8;
+            break;
+        case XR_CORE_TYPE_I16:
+            representation = XR_BACKEND_VALUE_I16;
+            break;
+        case XR_CORE_TYPE_I32:
+            representation = XR_BACKEND_VALUE_I32;
+            break;
+        case XR_CORE_TYPE_F64:
+            representation = XR_BACKEND_VALUE_F64;
+            break;
+        case XR_CORE_TYPE_U64:
+            representation = XR_BACKEND_VALUE_U64;
+            break;
         case XR_CORE_TYPE_VOID:
             representation = XR_BACKEND_VALUE_VOID;
             break;
@@ -245,7 +230,7 @@ bool xr_backend_representation_for_program_type(const XrValidatedProgram *progra
                                                 uint16_t type_id,
                                                 uint8_t *representation_out) {
     const XrValidatedType *type = xr_validated_program_type(program, type_id);
-    if (type && type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+    if (type && xr_program_type_kind_is_reference_record(type->kind)) {
         if (representation_out)
             *representation_out = XR_BACKEND_VALUE_CLASS_HANDLE;
         return true;
@@ -264,12 +249,55 @@ static bool class_graph_is_acyclic(const XrValidatedProgram *program, uint32_t i
     for (uint32_t field = 0u; field < type->field_count; ++field) {
         const XrValidatedType *child =
             xr_validated_program_type(program, type->field_types[field]);
-        if (!child || child->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
+        if (!child)
             continue;
         uint32_t child_index = child->type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
         if (child_index >= program->type_count ||
             !class_graph_is_acyclic(program, child_index, state))
             return false;
+    }
+    for (uint32_t variant = 0u; variant < type->variant_count; ++variant) {
+        const XrValidatedVariant *row = &type->variants[variant];
+        for (uint32_t field = 0u; field < row->payload_count; ++field) {
+            const XrValidatedType *child =
+                xr_validated_program_type(program, row->payload_types[field]);
+            if (child && !class_graph_is_acyclic(
+                             program, child->type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, state))
+                return false;
+        }
+    }
+    if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
+        for (uint32_t f = 0u; f < program->function_count; ++f) {
+            const XrValidatedFunction *function = &program->functions[f];
+            for (uint32_t b = 0u; b < function->block_count; ++b) {
+                const XrValidatedBlock *block = &function->blocks[b];
+                for (uint32_t i = 0u; i < block->instruction_count; ++i) {
+                    const XrValidatedInstruction *op = &block->instructions[i];
+                    if (op->operation_id != XR_CORE_OP_CORE_CALLABLE_PACK ||
+                        op->result_type_id != type->type_id || op->operand_count == 0u)
+                        continue;
+                    const XrValidatedFunction *target =
+                        &program->functions[op->immediate.function_id];
+                    const XrValidatedType *child =
+                        xr_validated_program_type(program, target->parameter_types[0]);
+                    if (child &&
+                        !class_graph_is_acyclic(
+                            program, child->type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, state))
+                        return false;
+                }
+            }
+        }
+    } else if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL &&
+               type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE) {
+        for (uint32_t conformance = 0u; conformance < program->conformance_count; ++conformance) {
+            const XrValidatedConformance *row = &program->conformances[conformance];
+            const XrValidatedType *child =
+                xr_validated_program_type(program, row->implementor_type_id);
+            if (row->interface_id == type->interface_id && child &&
+                !class_graph_is_acyclic(program, child->type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE,
+                                        state))
+                return false;
+        }
     }
     state[index] = 2u;
     return true;
@@ -281,19 +309,9 @@ static XrBackendStatus class_storage_status(const XrValidatedProgram *program) {
     bool has_class = false;
     for (uint32_t index = 0u; index < program->type_count; ++index) {
         const XrValidatedType *type = &program->types[index];
-        if (type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
+        if (!xr_program_type_kind_is_reference_record(type->kind))
             continue;
         has_class = true;
-        for (uint32_t field = 0u; field < type->field_count; ++field) {
-            uint16_t field_type_id = type->field_types[field];
-            if (xr_validated_program_type_ownership(program, field_type_id) !=
-                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
-                continue;
-            const XrValidatedType *field_type =
-                xr_validated_program_type(program, field_type_id);
-            if (!field_type || field_type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
-                return XR_BACKEND_UNSUPPORTED_OPERATION;
-        }
     }
     if (!has_class)
         return XR_BACKEND_OK;
@@ -302,7 +320,7 @@ static XrBackendStatus class_storage_status(const XrValidatedProgram *program) {
         return XR_BACKEND_OUT_OF_MEMORY;
     bool acyclic = true;
     for (uint32_t index = 0u; acyclic && index < program->type_count; ++index)
-        if (program->types[index].kind == XR_CORE_IR_TYPE_CLASS_REFERENCE)
+        if (xr_program_type_kind_is_reference_record(program->types[index].kind))
             acyclic = class_graph_is_acyclic(program, index, state);
     xr_free(state);
     return acyclic ? XR_BACKEND_OK : XR_BACKEND_UNSUPPORTED_OPERATION;
@@ -325,249 +343,13 @@ static bool options_valid(const XrBackendOptions *options) {
            options->max_instructions != 0u && options->max_values != 0u;
 }
 
-static bool copy_u32_array(const uint32_t *source, uint32_t count, uint32_t **destination) {
-    *destination = NULL;
-    if (count == 0u)
-        return true;
-    if ((size_t) count > SIZE_MAX / sizeof(uint32_t))
-        return false;
-    uint32_t *copy = xr_malloc((size_t) count * sizeof(*copy));
-    if (!copy)
-        return false;
-    memcpy(copy, source, (size_t) count * sizeof(*copy));
-    *destination = copy;
-    return true;
-}
-
-static bool copy_u16_array(const uint16_t *source, uint32_t count, uint16_t **destination) {
-    *destination = NULL;
-    if (count == 0u)
-        return true;
-    if ((size_t) count > SIZE_MAX / sizeof(uint16_t))
-        return false;
-    uint16_t *copy = xr_malloc((size_t) count * sizeof(*copy));
-    if (!copy)
-        return false;
-    memcpy(copy, source, (size_t) count * sizeof(*copy));
-    *destination = copy;
-    return true;
-}
-
-static bool copy_mode_array(const XrParamMode *source, uint32_t count, XrParamMode **destination) {
-    *destination = NULL;
-    if (count == 0u)
-        return true;
-    XrParamMode *copy = xr_malloc((size_t) count * sizeof(*copy));
-    if (!copy)
-        return false;
-    memcpy(copy, source, (size_t) count * sizeof(*copy));
-    *destination = copy;
-    return true;
-}
-
-static bool copy_category_array(const XrCoreIrValueCategory *source, uint32_t count,
-                                XrCoreIrValueCategory **destination) {
-    *destination = NULL;
-    if (count == 0u)
-        return true;
-    XrCoreIrValueCategory *copy = xr_malloc((size_t) count * sizeof(*copy));
-    if (!copy)
-        return false;
-    memcpy(copy, source, (size_t) count * sizeof(*copy));
-    *destination = copy;
-    return true;
-}
-
-static bool copy_ownership_array(const XrCoreIrOwnershipDisposition *source, uint32_t count,
-                                 XrCoreIrOwnershipDisposition **destination) {
-    *destination = NULL;
-    if (count == 0u)
-        return true;
-    XrCoreIrOwnershipDisposition *copy = xr_malloc((size_t) count * sizeof(*copy));
-    if (!copy)
-        return false;
-    memcpy(copy, source, (size_t) count * sizeof(*copy));
-    *destination = copy;
-    return true;
-}
-
-static bool lower_instruction(const XrValidatedInstruction *source,
-                              XrBackendInstruction *destination) {
-    destination->operation_id = source->operation_id;
-    destination->result_type_id = source->result_type_id;
-    destination->result_category = source->result_category;
-    destination->result_ownership = source->result_ownership;
-    destination->result_id = source->result_id;
-    destination->operand_count = source->operand_count;
-    destination->immediate_kind = source->immediate_kind;
-    memcpy(&destination->immediate, &source->immediate, sizeof(destination->immediate));
-    destination->successor_count = source->successor_count;
-    return copy_u32_array(source->operands, source->operand_count, &destination->operands) &&
-           copy_u32_array(source->successors, source->successor_count, &destination->successors);
-}
-
-static bool lower_block(const XrValidatedBlock *source, XrBackendBlock *destination) {
-    destination->argument_count = source->argument_count;
-    destination->instruction_count = source->instruction_count;
-    if (!copy_u32_array(source->argument_ids, source->argument_count, &destination->argument_ids) ||
-        !copy_u16_array(source->argument_types, source->argument_count,
-                        &destination->argument_types) ||
-        !copy_category_array(source->argument_categories, source->argument_count,
-                             &destination->argument_categories) ||
-        !copy_ownership_array(source->argument_ownerships, source->argument_count,
-                              &destination->argument_ownerships))
-        return false;
-    if (source->instruction_count == 0u)
-        return true;
-    if ((size_t) source->instruction_count > SIZE_MAX / sizeof(*destination->instructions))
-        return false;
-    destination->instructions =
-        xr_calloc(source->instruction_count, sizeof(*destination->instructions));
-    if (!destination->instructions)
-        return false;
-    for (uint32_t index = 0; index < source->instruction_count; ++index) {
-        if (!lower_instruction(&source->instructions[index], &destination->instructions[index]))
-            return false;
-    }
-    return true;
-}
-
-static bool lower_function(const XrValidatedProgram *program,
-                           const XrValidatedFunction *source,
-                           XrBackendFunction *destination) {
-    destination->parameter_count = source->parameter_count;
-    destination->result_type_id = source->result_type_id;
-    destination->result_ownership = source->result_ownership;
-    destination->error_type_id = source->error_type_id;
-    destination->panic_type_id = source->panic_type_id;
-    destination->effect_mask = source->effect_mask;
-    destination->capability_mask = source->capability_mask;
-    destination->entry_block = source->entry_block;
-    destination->block_count = source->block_count;
-    destination->value_count = source->value_count;
-    destination->coroutine_state_count = source->coroutine_state_count;
-    destination->coroutine_safepoint_count = source->coroutine_safepoint_count;
-    destination->flags = source->flags;
-    if (!copy_u16_array(source->parameter_types, source->parameter_count,
-                        &destination->parameter_types) ||
-        !copy_mode_array(source->parameter_modes, source->parameter_count,
-                         &destination->parameter_modes) ||
-        !copy_u16_array(source->value_types, source->value_count, &destination->value_types) ||
-        !copy_category_array(source->value_categories, source->value_count,
-                             &destination->value_categories) ||
-        !copy_ownership_array(source->value_ownerships, source->value_count,
-                              &destination->value_ownerships))
-        return false;
-    if (source->coroutine_state_count != 0u) {
-        destination->coroutine_states =
-            xr_calloc(source->coroutine_state_count, sizeof(*destination->coroutine_states));
-        if (!destination->coroutine_states)
-            return false;
-        for (uint32_t state = 0; state < source->coroutine_state_count; ++state)
-            destination->coroutine_states[state].continuation_block =
-                source->coroutine_states[state].continuation_block;
-    }
-    if (source->coroutine_safepoint_count != 0u) {
-        destination->coroutine_safepoints = xr_calloc(source->coroutine_safepoint_count,
-                                                      sizeof(*destination->coroutine_safepoints));
-        if (!destination->coroutine_safepoints)
-            return false;
-        for (uint32_t safepoint = 0; safepoint < source->coroutine_safepoint_count; ++safepoint) {
-            destination->coroutine_safepoints[safepoint].resume_state_id =
-                source->coroutine_safepoints[safepoint].resume_state_id;
-            destination->coroutine_safepoints[safepoint].live_value_count =
-                source->coroutine_safepoints[safepoint].live_value_count;
-            if (!copy_u32_array(source->coroutine_safepoints[safepoint].live_value_ids,
-                                source->coroutine_safepoints[safepoint].live_value_count,
-                                &destination->coroutine_safepoints[safepoint].live_value_ids))
-                return false;
-        }
-    }
-    if (source->value_count != 0u) {
-        if ((size_t) source->value_count > SIZE_MAX / sizeof(*destination->value_representations))
-            return false;
-        destination->value_representations =
-            xr_calloc(source->value_count, sizeof(*destination->value_representations));
-        if (!destination->value_representations)
-            return false;
-        for (uint32_t value = 0; value < source->value_count; ++value) {
-            if (!xr_backend_representation_for_program_type(
-                    program, source->value_types[value],
-                    &destination->value_representations[value]))
-                return false;
-        }
-    }
-    if (source->block_count == 0u)
-        return false;
-    if ((size_t) source->block_count > SIZE_MAX / sizeof(*destination->blocks))
-        return false;
-    destination->blocks = xr_calloc(source->block_count, sizeof(*destination->blocks));
-    if (!destination->blocks)
-        return false;
-    for (uint32_t block = 0; block < source->block_count; ++block) {
-        if (!lower_block(&source->blocks[block], &destination->blocks[block]))
-            return false;
-    }
-    return true;
-}
-
-static void hash_immediate(XrSHA256Context *context, const XrBackendInstruction *instruction) {
-    switch (instruction->immediate_kind) {
-        case XR_CORE_IR_IMMEDIATE_NONE:
-            return;
-        case XR_CORE_IR_IMMEDIATE_I64:
-            hash_u64(context, (uint64_t) instruction->immediate.i64);
-            return;
-        case XR_CORE_IR_IMMEDIATE_U32:
-            hash_u32(context, instruction->immediate.u32);
-            return;
-        case XR_CORE_IR_IMMEDIATE_BOOL:
-            hash_u32(context, instruction->immediate.boolean ? 1u : 0u);
-            return;
-        case XR_CORE_IR_IMMEDIATE_CONSTANT:
-            hash_u32(context, instruction->immediate.constant_id);
-            return;
-        case XR_CORE_IR_IMMEDIATE_FUNCTION:
-            hash_u32(context, instruction->immediate.function_id);
-            return;
-        case XR_CORE_IR_IMMEDIATE_MODULE_SLOT:
-            hash_u32(context, instruction->immediate.module_slot.module_index);
-            hash_u32(context, instruction->immediate.module_slot.slot_index);
-            return;
-        case XR_CORE_IR_IMMEDIATE_FIELD:
-            hash_u32(context, instruction->immediate.field_ordinal);
-            return;
-        case XR_CORE_IR_IMMEDIATE_VARIANT:
-            hash_u32(context, instruction->immediate.variant_ordinal);
-            return;
-        case XR_CORE_IR_IMMEDIATE_VARIANT_FIELD:
-            hash_u32(context, instruction->immediate.variant_field.variant_ordinal);
-            hash_u32(context, instruction->immediate.variant_field.field_ordinal);
-            return;
-        case XR_CORE_IR_IMMEDIATE_TYPE:
-            hash_u16(context, instruction->immediate.type_id);
-            return;
-        case XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION:
-            hash_u32(context, instruction->immediate.provider_operation.requirement_index);
-            hash_u32(context, instruction->immediate.provider_operation.operation_index);
-            return;
-        case XR_CORE_IR_IMMEDIATE_COROUTINE_CALL:
-            hash_u32(context, instruction->immediate.coroutine_call.function_id);
-            hash_u32(context, instruction->immediate.coroutine_call.safepoint_id);
-            return;
-        case XR_CORE_IR_IMMEDIATE_COROUTINE_SUSPEND:
-            hash_u32(context, instruction->immediate.coroutine_suspend.safepoint_id);
-            hash_u16(context, instruction->immediate.coroutine_suspend.request_kind);
-            hash_u16(context, instruction->immediate.coroutine_suspend.request_operand_count);
-            return;
-    }
-}
-
+/* Program identity already binds the immutable logical graph. The realization
+ * digest binds only backend policy, exact machine facts and its bounded scan. */
 void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *digest_out) {
     XrSHA256Context context;
     xr_sha256_init(&context);
-    xr_sha256_update(&context, (const uint8_t *) "xray:backend-ir:v1",
-                     strlen("xray:backend-ir:v1"));
+    const char domain[] = "xray:aot:realization:v2";
+    xr_sha256_update(&context, (const uint8_t *) domain, sizeof(domain));
     xr_sha256_update(&context, ir->execution_id.bytes, sizeof(ir->execution_id.bytes));
     xr_sha256_update(&context, ir->backend_id.bytes, sizeof(ir->backend_id.bytes));
     xr_sha256_update(&context, ir->optimization_policy_id.bytes,
@@ -577,87 +359,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
     hash_u32(&context, ir->architecture);
     hash_u32(&context, ir->native_abi);
     hash_u32(&context, ir->endianness);
-    hash_u32(&context, ir->entry_function);
-    hash_u32(&context, ir->constant_count);
-    for (uint32_t constant = 0; constant < ir->constant_count; ++constant) {
-        const XrValidatedConstant *value = &ir->constants[constant];
-        hash_u16(&context, value->type_id);
-        hash_u32(&context, (uint32_t) value->kind);
-        if (value->kind == XR_CORE_IR_CONSTANT_I64) {
-            hash_u64(&context, (uint64_t) value->value.i64);
-        } else if (value->kind == XR_CORE_IR_CONSTANT_BOOL) {
-            hash_u32(&context, value->value.boolean ? 1u : 0u);
-        } else if (value->kind == XR_CORE_IR_CONSTANT_STRING) {
-            hash_u32(&context, value->value.string.size);
-            if (value->value.string.size != 0u)
-                xr_sha256_update(&context, value->value.string.bytes, value->value.string.size);
-        } else if (value->kind == XR_CORE_IR_CONSTANT_RUNE) {
-            hash_u32(&context, value->value.rune);
-        }
-    }
-    hash_u32(&context, ir->function_count);
-    for (uint32_t function = 0; function < ir->function_count; ++function) {
-        const XrBackendFunction *fn = &ir->functions[function];
-        hash_u32(&context, fn->parameter_count);
-        for (uint32_t parameter = 0; parameter < fn->parameter_count; ++parameter) {
-            hash_u16(&context, fn->parameter_types[parameter]);
-            hash_u32(&context, (uint32_t) fn->parameter_modes[parameter]);
-        }
-        hash_u16(&context, fn->result_type_id);
-        hash_u32(&context, (uint32_t) fn->result_ownership);
-        hash_u16(&context, fn->error_type_id);
-        hash_u16(&context, fn->panic_type_id);
-        hash_u32(&context, fn->effect_mask);
-        hash_u32(&context, fn->capability_mask);
-        hash_u32(&context, fn->entry_block);
-        hash_u32(&context, fn->flags);
-        hash_u32(&context, fn->value_count);
-        for (uint32_t value = 0; value < fn->value_count; ++value) {
-            hash_u16(&context, fn->value_types[value]);
-            hash_u32(&context, (uint32_t) fn->value_categories[value]);
-            hash_u32(&context, (uint32_t) fn->value_ownerships[value]);
-            hash_u16(&context, fn->value_representations[value]);
-        }
-        hash_u32(&context, fn->coroutine_state_count);
-        for (uint32_t state = 0; state < fn->coroutine_state_count; ++state)
-            hash_u32(&context, fn->coroutine_states[state].continuation_block);
-        hash_u32(&context, fn->coroutine_safepoint_count);
-        for (uint32_t safepoint = 0; safepoint < fn->coroutine_safepoint_count; ++safepoint) {
-            const XrBackendCoroutineSafepoint *point = &fn->coroutine_safepoints[safepoint];
-            hash_u32(&context, point->resume_state_id);
-            hash_u32(&context, point->live_value_count);
-            for (uint32_t live = 0; live < point->live_value_count; ++live)
-                hash_u32(&context, point->live_value_ids[live]);
-        }
-        hash_u32(&context, fn->block_count);
-        for (uint32_t block = 0; block < fn->block_count; ++block) {
-            const XrBackendBlock *row = &fn->blocks[block];
-            hash_u32(&context, row->argument_count);
-            for (uint32_t argument = 0; argument < row->argument_count; ++argument) {
-                hash_u32(&context, row->argument_ids[argument]);
-                hash_u16(&context, row->argument_types[argument]);
-                hash_u32(&context, (uint32_t) row->argument_categories[argument]);
-                hash_u32(&context, (uint32_t) row->argument_ownerships[argument]);
-            }
-            hash_u32(&context, row->instruction_count);
-            for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction) {
-                const XrBackendInstruction *op = &row->instructions[instruction];
-                hash_u16(&context, op->operation_id);
-                hash_u16(&context, op->result_type_id);
-                hash_u32(&context, (uint32_t) op->result_category);
-                hash_u32(&context, (uint32_t) op->result_ownership);
-                hash_u32(&context, op->result_id);
-                hash_u32(&context, op->operand_count);
-                for (uint32_t operand = 0; operand < op->operand_count; ++operand)
-                    hash_u32(&context, op->operands[operand]);
-                hash_u32(&context, (uint32_t) op->immediate_kind);
-                hash_immediate(&context, op);
-                hash_u32(&context, op->successor_count);
-                for (uint32_t successor = 0; successor < op->successor_count; ++successor)
-                    hash_u32(&context, op->successors[successor]);
-            }
-        }
-    }
+    hash_u64(&context, (uint64_t) ir->instruction_count);
     xr_sha256_final(&context, digest_out->bytes);
 }
 
@@ -671,10 +373,6 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
         !xr_target_profile_verify(profile, NULL, 0)) {
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INVALID_INPUT;
-    }
-    if (program->module_count != 0u) {
-        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION, 0u, 0u, 0u, 0u);
-        return XR_BACKEND_UNSUPPORTED_OPERATION;
     }
     XrBackendStatus class_status = class_storage_status(program);
     if (class_status != XR_BACKEND_OK) {
@@ -700,45 +398,16 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
     ir->backend_id = xr_backend_compute_id();
     ir->optimization_policy_id = xr_backend_compute_optimization_policy_id(options);
     ir->options = *options;
-    ir->function_count = program->function_count;
-    ir->entry_function = program->entry_function;
     ir->pointer_width = machine ? (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8)) : 0u;
     ir->operating_system = machine ? machine->operating_system : 0u;
     ir->architecture = machine ? machine->architecture : 0u;
     ir->native_abi = machine ? machine->native_abi : 0u;
     ir->endianness = machine ? (uint16_t) machine->data_layout.endian : 0u;
-    ir->constant_count = program->constant_count;
     if (program->function_count > options->max_functions ||
         (ir->pointer_width != 32u && ir->pointer_width != 64u)) {
         xr_backend_ir_free(ir);
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_RESOURCE_LIMIT;
-    }
-    if (program->constant_count != 0u) {
-        if ((size_t) program->constant_count > SIZE_MAX / sizeof(*ir->constants)) {
-            xr_backend_ir_free(ir);
-            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
-            return XR_BACKEND_RESOURCE_LIMIT;
-        }
-        ir->constants = xr_malloc((size_t) program->constant_count * sizeof(*ir->constants));
-        if (!ir->constants) {
-            xr_backend_ir_free(ir);
-            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
-            return XR_BACKEND_OUT_OF_MEMORY;
-        }
-        memcpy(ir->constants, program->constants,
-               (size_t) program->constant_count * sizeof(*ir->constants));
-    }
-    if ((size_t) program->function_count > SIZE_MAX / sizeof(*ir->functions)) {
-        xr_backend_ir_free(ir);
-        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_RESOURCE_LIMIT, 0u, 0u, 0u, 0u);
-        return XR_BACKEND_RESOURCE_LIMIT;
-    }
-    ir->functions = xr_calloc(program->function_count, sizeof(*ir->functions));
-    if (!ir->functions) {
-        xr_backend_ir_free(ir);
-        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_OUT_OF_MEMORY, 0u, 0u, 0u, 0u);
-        return XR_BACKEND_OUT_OF_MEMORY;
     }
     uint64_t blocks = 0u;
     uint64_t instructions = 0u;
@@ -759,7 +428,7 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
                     xr_validated_program_type(program, operation->result_type_id);
                 bool deferred_class_copy = operation_id == XR_CORE_OP_CORE_OWNER_COPY &&
                                            result_type &&
-                                           result_type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE;
+                                           xr_program_type_kind_is_reference_record(result_type->kind);
                 if (!operation_is_supported(operation_id) || deferred_class_copy) {
                     xr_backend_ir_free(ir);
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION,
@@ -769,22 +438,16 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
             }
         }
         if (blocks > options->max_blocks || instructions > options->max_instructions ||
-            values > options->max_values ||
-            !lower_function(program, source, &ir->functions[function])) {
+            values > options->max_values) {
             xr_backend_ir_free(ir);
-            XrBackendStatus status = blocks > options->max_blocks ||
-                                             instructions > options->max_instructions ||
-                                             values > options->max_values
-                                         ? XR_BACKEND_RESOURCE_LIMIT
-                                         : XR_BACKEND_OUT_OF_MEMORY;
+            XrBackendStatus status = XR_BACKEND_RESOURCE_LIMIT;
             xr_backend_set_diagnostic(diagnostic_out, status, 0u, function, 0u, 0u);
             return status;
         }
     }
     ir->instruction_count = (size_t) instructions;
     xr_backend_compute_lowering_digest(ir, &ir->lowering_digest);
-    bool verified = xr_backend_ir_verify(ir, diagnostic_out) &&
-                    xr_backend_ir_translation_validate(ir, diagnostic_out);
+    bool verified = xr_backend_ir_verify(ir, diagnostic_out);
     if (!verified) {
         XrBackendStatus status =
             diagnostic_out ? diagnostic_out->status : XR_BACKEND_INVARIANT_REJECTED;
@@ -801,10 +464,6 @@ void xr_backend_ir_free(XrBackendIR *ir) {
         return;
     if (atomic_fetch_sub_explicit(&ir->references, 1u, memory_order_acq_rel) != 1u)
         return;
-    for (uint32_t function = 0; function < ir->function_count; ++function)
-        free_function(&ir->functions[function]);
-    xr_free(ir->functions);
-    xr_free(ir->constants);
     xr_target_profile_free(ir->profile);
     xr_validated_program_free(ir->program);
     xr_free(ir);
@@ -837,77 +496,6 @@ size_t xr_backend_ir_instruction_count(const XrBackendIR *ir) {
     return ir ? ir->instruction_count : 0u;
 }
 
-bool xr_backend_execution_create(XrExecutionId execution_id,
-                                 const XrBackendNativeDescriptor *descriptor,
-                                 XrBackendExecution **execution_out) {
-    if (execution_out)
-        *execution_out = NULL;
-    if (!descriptor || !execution_out ||
-        descriptor->schema_version != XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION ||
-        descriptor->reserved32 != 0u || descriptor->frame_size == 0u || !descriptor->initialize ||
-        !descriptor->step || !descriptor->cancel || !descriptor->drop ||
-        !xr_fingerprint_equal(descriptor->execution_id, execution_id))
-        return false;
-    XrBackendExecution *execution = xr_calloc(1u, sizeof(*execution));
-    if (!execution)
-        return false;
-    execution->frame = xr_calloc(1u, descriptor->frame_size);
-    if (!execution->frame) {
-        xr_free(execution);
-        return false;
-    }
-    descriptor->initialize(execution->frame);
-    execution->step = descriptor->step;
-    execution->cancel = descriptor->cancel;
-    execution->drop = descriptor->drop;
-    execution->last.kind = XR_BACKEND_EXECUTION_INVALID;
-    *execution_out = execution;
-    return true;
-}
-
-static XrBackendExecutionOutcome backend_execution_outcome(XrBackendExecution *execution,
-                                                           XrBackendNativeOutcome native) {
-    XrBackendExecutionOutcome result = {
-        .kind = native.kind <= XR_BACKEND_EXECUTION_TRAP
-                    ? (XrBackendExecutionOutcomeKind) native.kind
-                : native.kind == UINT32_C(3) ? XR_BACKEND_EXECUTION_CANCELLED
-                                             : XR_BACKEND_EXECUTION_INVALID,
-        .value = native.value,
-        .state_id = native.state_id,
-        .safepoint_id = native.safepoint_id,
-        .suspension = native.suspension,
-    };
-    if (execution)
-        execution->last = result;
-    return result;
-}
-
-XrBackendExecutionOutcome xr_backend_execution_step(XrBackendExecution *execution) {
-    if (!execution || execution->finished)
-        return (XrBackendExecutionOutcome) {.kind = XR_BACKEND_EXECUTION_INVALID};
-    execution->last = backend_execution_outcome(execution, execution->step(execution->frame));
-    if (execution->last.kind != XR_BACKEND_EXECUTION_SUSPENDED) {
-        execution->finished = true;
-    }
-    return execution->last;
-}
-
-XrBackendExecutionOutcome xr_backend_execution_cancel(XrBackendExecution *execution) {
-    if (!execution || execution->finished || execution->last.kind != XR_BACKEND_EXECUTION_SUSPENDED)
-        return (XrBackendExecutionOutcome) {.kind = XR_BACKEND_EXECUTION_INVALID};
-    execution->last = backend_execution_outcome(execution, execution->cancel(execution->frame));
-    execution->finished = true;
-    return execution->last;
-}
-
-void xr_backend_execution_free(XrBackendExecution *execution) {
-    if (!execution)
-        return;
-    execution->drop(execution->frame);
-    xr_free(execution->frame);
-    xr_free(execution);
-}
-
 const char *xr_backend_status_name(XrBackendStatus status) {
     switch (status) {
         case XR_BACKEND_OK:
@@ -922,8 +510,8 @@ const char *xr_backend_status_name(XrBackendStatus status) {
             return "out-of-memory";
         case XR_BACKEND_INVARIANT_REJECTED:
             return "invariant-rejected";
-        case XR_BACKEND_TRANSLATION_REJECTED:
-            return "translation-rejected";
+        case XR_BACKEND_BINDING_REJECTED:
+            return "binding-rejected";
         case XR_BACKEND_EMISSION_REJECTED:
             return "emission-rejected";
         case XR_BACKEND_TOOLCHAIN_REJECTED:

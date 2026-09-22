@@ -151,6 +151,52 @@ Representation obligations cover exactly the executable function closure rebuilt
 from the admitted program modules. Without a program partition every function
 remains live. Both collection and independent coverage verification apply that
 same scope to operands and returns; cold functions need no physical adapters.
+Prepare installs function identities and ABI declarations before computing its
+existing whole-program callable closure. Executable value, boundary, allocation,
+closure and transfer plans are projected only after that closure is known. All
+module initializers, explicit native exports, shared-library exports and resolved
+callable edges retain their existing root responsibilities. Cold functions keep
+their semantic identity and declaration ABI, but acquire no legacy body plans.
+Typed export/link/entry manifests freeze a boolean external-entry fact in each
+SemanticPlan function. TargetPlan and AOT callable reachability consume that
+same fact. Prepare and independent AOT verification reject a missing or changed
+fact relative to the typed source manifest. An ordinary source export alone
+does not become a hosted-program root. Shared-library export policy remains
+separate. Entry selection changes the plan fingerprint without changing the
+function's stable semantic ID.
+Callable verification rederives reachability even when there are no link
+dependency rows. A forged dead-body marker cannot suppress executable coverage
+or make a diagnostic dump succeed. The dump counts retained TargetPlan storage
+without reconstructing unused legacy values or representation adapters.
+ABI retirement enumerates semantic call targets before the admitted TargetPlan
+call rows. A caller outside the current execution families still consumes its
+callee ABI even when it has no TargetPlan call row. Imported inbound calls use
+stable callee identity; local calls use their owning module and function identity.
+Each consumer must have a covered caller and one exact target call before the
+old ABI can disappear. An unmigrated source-export caller continues to require
+its existing callee ABI.
+The scalar cutover mutation test preserves this admission boundary, and a real
+three-module native program independently prints library initialization before
+42 while its unused text.translate body has no physical plan or generated body.
+Static call targets and argument offsets are derived once inside each callable
+analysis, before function-value sets and effects converge. Their derivation
+retains the existing identity checks; the analysis owns and destroys these
+facts, and every build or verifier invocation derives them afresh. No result
+survives a caller mutation. Allocation failure clears partial analysis storage
+without traversing an absent value table or publishing successful reachability.
+Within one synchronous analysis batch, call resolution checks the common
+TargetPlan content once before classifying each function's coverage. Its private
+admission object never leaves that invocation. Covered typed calls retain all
+exact call checks; only admitted uncovered bodies use the private existing body
+resolver. Standalone queries admit their inputs independently. A failed batch
+clears every function's output, including earlier resolved functions, and
+mutations of call targets or re-signed ownership rows are checked again on the
+next invocation. No persistent admission flag or callback escapes.
+Imported class constructor edges resolve through the existing module import
+binding, including shared-slot reads. The constructor's owning module supplies
+its child function and implicit receiver offset. Ordinary native fresh storage
+returns retain their owned dynamic root whether the declaration is nullable or
+non-null; this changes no public value layout or calling convention.
 Tagged call results use the shared temporary carrier proof and frozen result
 ownership across ordinary, tail, builtin and receiver call forms. Independent TargetPlan
 admission continues to reject forged identity, calling convention, ownership
@@ -160,6 +206,30 @@ prefers native scalars. Return edges likewise reuse the definition's carrier
 after selecting native scalar ABI storage. The duplicate return-producer list
 and its redundant leaf-aggregate branch are removed; return type, ownership,
 aggregate layout and physical ABI admission remain required.
+By-value reference parameters preserve their exact tagged carrier and declared
+borrowed or owned contract, including imported and nullable class types. Builder
+and independent verifier derive the parameter rows from the frozen reference
+contract; native scalars, borrowed views and exact aggregates remain separate.
+Representation consumes the admitted carrier and checks its module, function,
+parameter slot and ownership instead of reconstructing a local class declaration.
+The duplicate class parameter storage oracle is removed; String consumers keep
+their exact type check while sharing the same parameter storage proof. Array
+element layout and field access still require their own authority. In particular,
+a nullable parameter does not authorize dereference, and an imported class does
+not acquire a local declaration index. Owned and borrowed nullable/non-null
+parameter cases retain the re-signed hostile ownership and slot checks.
+Field-store shape and operand ownership checks are shared by local and imported
+class receivers. An ordinary imported receiver must bind its exact function
+parameter, have a non-null class type, and name one frozen non-generic declaration
+in the program module set. Carrier admission cannot invent a local class index
+or accept a missing declaration. Field selection remains the typed frontend's
+layout fact, and stored values still require their independent storage proof.
+The regression admits the valid program and rejects the same receiver when its
+declaration module is absent, even after TargetPlan admission succeeds; mutated
+receiver consumption, stored-value borrowing and operation effects also fail.
+Source-export ABI seeding first joins the caller's semantic module and function
+to its unique program TargetPlan function before reading module-local operation
+indexes. Equal numeric indexes in another module cannot select its call record.
 String slicing uses the same call-result carrier proof; its receiver and bounds
 retain their independently checked String/i64 contract. The duplicate slice
 receiver and result producer paths are removed.
@@ -430,13 +500,21 @@ the exact method, type, ownership, receiver identity, native-Rune binding, and
 dedicated call row; refinement re-proves that binding, and CEmission projects
 the frozen receiver into the immutable recipe. CGen consumes that recipe without
 selector, live type, arity, producer-shape, or generic-method fallback.
-For exact `rune.toString()`, the owned one-rune String result accepts only two
-producer authorities: the exact prior `String.runes()` iterator result or the
-current function's unique required Rune parameter. The latter is frozen by its
-function range, ordinal, value, exact Rune type, read mode, trivial ownership,
-and shared transfer. SemanticPlan, TargetPlan, refinement, and CEmission all
-consume that same producer proof; arbitrary Rune SSA values and generic method
-dispatch remain unauthorized.
+For exact `rune.toString()`, every exact canonical Rune SSA value uses the
+same borrowed scalar receiver and owned one-rune String result. Construction,
+parameter binding, iteration and phi selection do not create separate receiver
+families. The semantic graph independently verifies definitions, function
+membership and parameter contracts; the method proof retains exact type,
+selector identity, operand borrow, return ownership and completeness. Target
+storage, refinement and immutable C recipes retain their independent checks.
+Native Rune construction validates the tagged runtime result before extracting
+its scalar payload; invalid code points cannot become an unchecked native value.
+The strict generated-native fixture checks ASCII, supplementary Unicode,
+branch merging, concatenation, negative values, both surrogate boundaries,
+one-past-maximum and a 64-bit value whose low bits name a valid scalar.
+
+verification-test: test_xi_rune_values_native
+
 For exact `rune.isWhitespace()`, schema 30 owns the trivial native-bool result,
 its single native-Rune recipe operand, and fixed `xrt_rune_is_whitespace`
 helper. The semantic receiver must be the unique exact
@@ -459,7 +537,16 @@ tail call identity, and fixed `xrt_string_slice_range` recipe. Refinement owns
 the two exact tagged-call scalar adapters, while CGen projects the recipe bounds
 to native i64 and preserves pending-error polling. No selector, live type,
 arity, `nth`, one-argument slice form, or generic method path can substitute for
-that authority.
+that authority. A source call omitting the end bound is normalized by the
+frontend to the already evaluated receiver's rune length before the call is
+frozen. Receiver and explicit argument evaluation remain once and ordered;
+there is no second backend method family or default-argument fallback. The
+lowering test checks shared SSA receiver identity, and the native encoding
+fixture checks supplementary Unicode, an empty suffix, and a chained call
+result. Slice receiver identity is independent of the producer opcode: the
+semantic graph verifies each producer, while the slice judgement checks the
+unique local String definition and Target/refinement retain exact carrier and
+borrow authority. Malformed parameter contracts remain rejected.
 An AOT cross-execution transfer row binds its site and payload to exactly one
 representation authority. A TargetPlan value binding and a legacy value row
 are mutually exclusive; the only accepted legacy rows are the independently
@@ -537,8 +624,20 @@ element there would need an element ownership and drop contract no row states.
 The three carriers ask one shared judgement that takes which of them is asking
 as its parameter, so the wide two cannot silently inherit the narrow one's
 requirement again. None of the three authorizes an owned or moved Array
-parameter, a ref result, a SOURCE_EXPORT parameter or result, or another
-container.
+parameter, a ref result, a SOURCE_EXPORT parameter, or another container.
+
+Owned SOURCE_EXPORT results reuse these reference carriers across independently
+frozen modules. Each side proves the existing exact String, Array, or structural
+reference shape and the same stable type ID, a complete owned return with no
+parameter forwarding or alias, and a unique imported callee. Plan-local type
+ordinals may differ. Imported arrays use the same dynamic temporary and element
+layout as local returns; the String-only imported target scan is replaced by
+one resolver shared by the existing String and reference storage collectors.
+The independent verifier rederives the result type, fresh owner, dynamic root,
+slot and call return ownership, including after call and plan digests are
+recomputed. This adds no opcode, runtime algorithm, schema field, or library
+symbol exception. The real three-module native fixture retains the independent
+output `library ready\n42\n` while storing and observing an imported array.
 
 The same generation binds two exact `string` bindings, one on each side of a
 direct-local call. A String is immutable and shared and carries nothing but the
@@ -587,6 +686,13 @@ authorize a `ref` or moved String parameter, a SOURCE_EXPORT String parameter,
 an optional String, a shared read of any other container this generation has not
 bound, or a String reached through a slice receiver.
 
+Tuple field reads and structural object reads share the managed-field result
+proof. Each retains its own receiver shape and generated operation effects,
+while the frozen ordinal, exact child type and borrowed result authorize one
+dynamic carrier. Target storage uses the existing managed-field family. Wrong
+ordinals, types, ownership and evidence remain rejected. The structural native
+fixture returns three strings in a tuple and concatenates their selected fields.
+
 Representation selection keeps every reference-capable container -- `Array<T>`
 and `string` alike -- in the tagged carrier at every boundary it crosses:
 parameter, argument, call result, and function return. That is one judgement
@@ -610,6 +716,9 @@ verification-test: test_prelude_init
 verification-test: test_xi_emit
 verification-test: test_xi_native_array_native
 verification-test: test_xr_aot_refinement
+verification-test: test_xaot_module_ref_native
+verification-test: test_xaot_entry_closure_native
+verification-test: test_xaot_callable_allocations
 verification-test: test_stdlib_generators_content_stable
 verification-test: test_xi_structural_array_native
 verification-test: test_xr_program_process_provider_aot_native
@@ -638,6 +747,53 @@ signature-mode tests include a renamed declaration, while the native array
 program exercises value comparison, element mutation, a real mutable provider
 call, and the subsequent place load. Rehashed wrong argument identity, mode,
 ownership, addressability, and callee representation remain rejected.
+
+Native yieldable calls consume the same fresh-result storage proof for direct
+and namespace imports. Registry result types and complete owned provenance bind
+String, Array, or generated native-storage carriers, including declared nullable
+native storage. Result and callee-use refinement both require that exact proof;
+the call's coroutine state remains the suspension authority. Rehashed missing
+ownership, result slot, suspension flag, and wrong machine representation are
+rejected for both array import forms and nullable native results. This result
+contract does not itself provide a scheduler or native execution implementation.
+
+Source provider wrappers resolve their native storage bridge from the canonical
+stdlib module identity and exact registry wrapper name. A backend display or
+emission name, including a module-name hash suffix, cannot grant or remove that
+bridge. C emission retains exact field name, tagged layout and storage type
+checks after the shared registry lookup.
+
+A native tagged Bool result uses the Bool extractor and an explicit uint8_t
+conversion for its C local; it does not inherit the int64_t extraction ABI.
+Closure declarations whose shared-slot publication has no executable consumer
+use the same elision decision for declaration, predeclaration and retain/release.
+The additional elision requires no captures and rejects control, phi or other
+value uses, preserving live callable and coroutine frame behavior.
+
+Nullable class fields retain the tagged value lane for every payload kind,
+including containers. Local field declarations and inherited field metadata
+share the same lane selection, and generated field drop plans must agree with
+the resulting layout; removing nullability must not silently change only one
+of these consumers.
+
+An owned source-export class result may be nullable when both modules agree on
+nullability, stable type identity and the dependency's frozen class declaration.
+The whole-result ownership and non-aliasing requirements remain unchanged;
+non-null receiver and construction proofs still require their non-null shape.
+Local constructor arguments reuse the existing tagged call boundary, including
+the callee's exact owned or borrowed lane, instead of restricting that boundary
+to native-storage parameters. Field stores consume the stored value's proved
+scalar or reference carrier; receiver identity and consuming ownership remain
+independently checked.
+
+Source-class field reads separate operation shape from declaration lookup.
+An imported receiver must name exactly one frozen class in the validated module
+set; a local-only lookup still requires a local declaration index. Readers and
+writers share the external declaration lookup. Field evidence, borrowed results
+and unique result definitions remain mandatory. String consumers check the
+exact String type and reuse the definition's carrier instead of maintaining a
+second list of accepted producers. Variant tests produce the same native Bool
+representation as other predicates while their nullable input remains tagged.
 
 The retired numeric getpid Xi fixture no longer requires the deleted leaf
 owner. The existing native-direct fixture checks function-token elision along
@@ -708,6 +864,37 @@ different semantic fingerprint fails closed. CGen selects the projection by
 the module already bound to the function; it cannot fall back to partition
 zero or recover ownership from a module name.
 
+Every recipe lookup uses that same module scope, including literal payloads,
+generated rule facts, call operands and aggregate layouts. Target function
+indexes are global and must be resolved to their owning semantic function
+before comparison with a module-local index. A return or borrowed argument
+observed through an incoming call uses the caller's value identity; the
+callee signature uses the callee's identity. Scalar-ref projections derive
+the owner from the exact call and storage function, and aggregate projections
+derive it from their storage or accept the explicit verified semantic owner.
+The refinement assertion test covers colliding literal, function, argument,
+value and type indexes across two modules, both choices of entry module,
+different tuple extents and rejection of a foreign scalar-ref storage slot.
+Scalar-ref refinement uses the same partition join for parameter, address,
+load/store, and call operands. It does not require a single-module target.
+The defining local-address recipe consumes verified pointer storage and its
+exact borrowed source; retained cold addresses do not need a legacy call row.
+The existing source-export pointer-ref recipe keeps its additional pointer
+level and remains distinct. A two-module source program mutates two local
+integers through ref parameters and independently prints 6 under native AOT;
+re-signed foreign-module storage bindings are rejected.
+Generated rule projection likewise starts from admitted executable calls.
+A retained cold Array.push has no call recipe; making it executable requires
+rebuilding the target. The Target verifier still rejects missing and duplicate
+live calls even after their enclosing plan fingerprint is recomputed. The
+generated builder and independent verifier retain all exact element, storage,
+operand order and ownership obligations for each admitted call.
+Concatenation recipes use the same independently reconstructed executable
+module closure. Retained cold values keep their verified physical storage
+rows, but carry no executable concatenation recipe. A reachable concatenation
+still requires every exact operand, carrier and ownership row; missing live
+authority is never treated as a cold operation.
+
 The exact static String UTF-8 decoder family has a distinct Target call kind
 and convention. The Target row is admitted only from the sealed semantic
 judgement for `fromUtf8` or `fromUtf8Lossy`, and the result storage is one owned
@@ -717,6 +904,14 @@ only through the const-read ABI judgement: machine kind, size, alignment,
 ownership, and every layout fact except that one const detail must match.
 Representation refinement then materializes the frozen Slice as the portable
 `xr_span_t` view rather than treating an `UNBOX` adapter as a generic pointer.
+Conversely, an explicit `BOX` adapter keeps its semantic Slice type but has
+the tagged `XrValue` carrier. Native type defaults cannot override an explicit
+boxing boundary. Exact adapter provenance, source authority and output fields
+remain independently verified.
+Return edges do not overwrite the definition's carrier with the function's
+result ABI. Value production and explicit boundary conversion retain their
+separate responsibilities, including aggregate results. Error publication is
+an exit on its own channel, not a normal result that needs a value-storage row.
 No selector-only decoder, mutable argument boundary, nested-const erasure,
 dynamic String method, or legacy pointer adapter is authorized.
 
@@ -1070,6 +1265,14 @@ emission rather than falling back to compiler-host layout.
   borrowed copy results, false array-element lanes and mismatched call
   ownership fail closed. Native fixtures cover ordinary direct-local calls;
   this does not grant unproved coroutine, host-result or artifact boundaries.
+  The Target verifier owns complete copy-call coverage of the executable
+  closure, including rejection of missing or duplicate rows. C emission
+  requires that verified target and projects its admitted call rows, checking
+  each exact semantic copy and storage lane. It does not reconstruct another
+  closure from all retained semantic bodies: an unreachable array or structural
+  copy has no executable call row. Making that body an initializer invalidates
+  the target until its call obligations are rebuilt. Unverified targets and
+  mismatched C storage remain rejected.
 - T19: `NumberParseError` is the sole scalar-text parse failure ABI. Its
   builtin global index is 30, its enum layout ID is 3802613823, and member
   indices zero and one name `InvalidSyntax` and `OutOfRange`. Semantic

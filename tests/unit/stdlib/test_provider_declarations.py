@@ -5,6 +5,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 
@@ -39,8 +40,8 @@ class ProviderDeclarationTests(unittest.TestCase):
         from stdlibgen import parse_defs
         inventory = declaration_inventory(parse_defs(ROOT))
         self.assertEqual(153, inventory["leaf_count"])
-        self.assertEqual(7, sum(row["declared"] for row in inventory["leaves"]))
-        self.assertEqual(7, sum(row["admitted"] for row in inventory["leaves"]))
+        self.assertEqual(11, sum(row["declared"] for row in inventory["leaves"]))
+        self.assertEqual(11, sum(row["admitted"] for row in inventory["leaves"]))
         generated = json.loads((ROOT / "stdlib/provider_inventory.generated.json").read_text())
         self.assertEqual(json.loads(json.dumps(inventory)), generated)
 
@@ -79,6 +80,47 @@ class ProviderDeclarationTests(unittest.TestCase):
                       admission_reasons(declaration))
         with self.assertRaisesRegex(SystemExit, "every logical parameter"):
             parse(parameters=("i64",))
+
+    def test_typed_ownership_is_recursive_and_not_inferred_from_host(self):
+        props = {**properties(), "provider_adapter": "typed", "provider_result_owner": "owned",
+                 "provider_parameter_modes": "in", "provider_parameter_owners": "borrow"}
+        declaration = parse(props, ("(i64, string)?",), "resource<mem.__BufferStorage>")
+        self.assertFalse(admission_reasons(declaration))
+        for logical in (replace(declaration.logical, result_owner="trivial"),
+                        replace(declaration.logical, parameters=(replace(
+                            declaration.logical.parameters[0], owner="trivial"),)),
+                        replace(declaration.logical, parameters=(replace(
+                            declaration.logical.parameters[0], mode="move"),))):
+            with self.subTest(logical=logical):
+                self.assertIn("typed-signature-ownership-mismatch",
+                              admission_reasons(replace(declaration, logical=logical)))
+        too_large = replace(declaration.logical, result_type="(" + ",".join(
+            ["resource<mem.__BufferStorage>"] * 4) + ")")
+        self.assertIn("logical-signature-exceeds-transport-bound",
+                      admission_reasons(replace(declaration, logical=too_large)))
+
+    def test_explicit_provider_error_contract_publishes_analyzer_fact(self):
+        from stdlibgen import parse_defs
+        props = {"signature": "(): i64", "doc": "probe", "vm": "sample_probe",
+                 "argc": 0, "arg_spec": "", "visibility": "internal", **properties()}
+        with tempfile.TemporaryDirectory(prefix="xray-provider-error.") as tmp:
+            root = Path(tmp)
+            definitions = root / "stdlib" / "defs"
+            definitions.mkdir(parents=True)
+            for effect in (None, "nothrow", "may-error"):
+                current = dict(props)
+                if effect is not None:
+                    current["effect"] = effect
+                text = "module sample {\n  fn __probe {\n" + "".join(
+                    f"    {key}: {json.dumps(value)}\n" for key, value in current.items()) + "  }\n}\n"
+                (definitions / "core.def").write_text(text, encoding="utf-8")
+                if effect == "may-error":
+                    with self.assertRaisesRegex(SystemExit, "contradicts effect"):
+                        parse_defs(root)
+                else:
+                    entries = parse_defs(root)
+                    self.assertEqual(1, len(entries))
+                    self.assertEqual("nothrow", entries[0].effect)
 
     def test_set_order_is_canonical_but_duplicates_are_rejected(self):
         self.assertEqual(parse().logical.declaration_sha256(),

@@ -127,6 +127,8 @@ static bool cg_direct_ref_param_noescape(XiCgenCtx *ctx, const XiFunc *target, u
                                          uint8_t depth);
 static bool cg_static_direct_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v);
+static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                        const XiValue *v);
 static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 static bool cg_unused_call_result_emits_statement(XiCgenCtx *ctx, const XiFunc *f,
                                                   const XiValue *v);
@@ -2200,7 +2202,7 @@ static bool cg_shared_static_function_ownership_is_noop(XiCgenCtx *ctx, const Xi
     if (!ctx || !v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
         return false;
     const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
-    if (arg && cg_static_direct_function_closure_is_elided(ctx, current, arg))
+    if (arg && cg_shared_static_function_closure_is_elided(ctx, current, arg))
         return true;
     if (!arg || arg->op != XI_GET_SHARED)
         return false;
@@ -2553,6 +2555,14 @@ static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const Xi
         const XiBlock *blk = current->blocks[bi];
         if (!blk)
             continue;
+        if (blk->control == v)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == v)
+                    return false;
+            }
+        }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *user = blk->values[vi];
             if (!user)
@@ -2561,8 +2571,7 @@ static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const Xi
                 if (user->args[ai] != v)
                     continue;
                 if (user->op == XI_SET_SHARED && ai == 0 &&
-                    cg_shared_static_function_slot_can_elide(ctx, current, (int) user->aux_int,
-                                                             target)) {
+                    cg_shared_static_function_set_is_elided(ctx, current, user)) {
                     saw_store = true;
                     continue;
                 }
@@ -2572,7 +2581,7 @@ static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const Xi
             }
         }
     }
-    return saw_store;
+    return saw_store && target->ncaptures == 0;
 }
 
 static XaotLeafAggregateTargetStatus

@@ -61,13 +61,13 @@ static void xr_h2_record_lifecycle(void *context, const XrReferenceLifecycleEven
         log->events[log->count++] = *event;
 }
 
-static XrValidatedProgram *build_class_reference_program_with_alias(uint16_t alias_operation) {
+static XrValidatedProgram *build_class_reference_program_with_alias(uint16_t alias_operation, bool record) {
     uint16_t fields[] = {XR_CORE_TYPE_I64};
     XrCoreIrTypeInput type = {
         .key = fixture_key("aot-class:type"),
         .local_id = XR_H2_CLASS_TYPE,
-        .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
-        .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+        .kind = record ? XR_CORE_IR_TYPE_RECORD_REFERENCE : XR_CORE_IR_TYPE_CLASS_REFERENCE,
+        .nominal_kind = record ? XR_CORE_IR_NOMINAL_NONE : XR_CORE_IR_NOMINAL_CLASS,
         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
         .field_types = fields,
@@ -175,11 +175,11 @@ static XrValidatedProgram *build_class_reference_program_with_alias(uint16_t ali
 }
 
 static XrValidatedProgram *build_class_reference_program(void) {
-    return build_class_reference_program_with_alias(XR_CORE_OP_CORE_CLASS_SHARE);
+    return build_class_reference_program_with_alias(XR_CORE_OP_CORE_OWNER_ALIAS, false);
 }
 
 static XrValidatedProgram *build_class_reference_copy_program(void) {
-    return build_class_reference_program_with_alias(XR_CORE_OP_CORE_OWNER_COPY);
+    return build_class_reference_program_with_alias(XR_CORE_OP_CORE_OWNER_COPY, false);
 }
 
 static XrValidatedProgram *build_class_ref_coroutine_program(void) {
@@ -235,15 +235,15 @@ static XrValidatedProgram *build_class_ref_coroutine_program(void) {
     return validate_program(&type, 1u, NULL, 0u, functions, 3u);
 }
 
-static XrBackendInstruction *find_class_ref_coroutine_operation(XrBackendFunction *function,
-                                                                uint16_t operation,
-                                                                uint32_t ordinal) {
+static XrValidatedInstruction *find_class_ref_coroutine_operation(XrValidatedFunction *function,
+                                                                  uint16_t operation,
+                                                                  uint32_t ordinal) {
     uint32_t found = 0u;
-    XrBackendInstruction *result = NULL;
+    XrValidatedInstruction *result = NULL;
     for (uint32_t block = 0u; block < function->block_count; ++block) {
         for (uint32_t instruction = 0u;
              instruction < function->blocks[block].instruction_count; ++instruction) {
-            XrBackendInstruction *candidate = &function->blocks[block].instructions[instruction];
+            XrValidatedInstruction *candidate = &function->blocks[block].instructions[instruction];
             if (candidate->operation_id != operation || found++ != ordinal)
                 continue;
             result = candidate;
@@ -261,9 +261,9 @@ static uint32_t count_c_fragment(const char *text, const char *fragment) {
     return count;
 }
 
-static XrBackendFunction *find_class_ref_coroutine_parent(XrBackendIR *ir) {
-    for (uint32_t function = 0u; function < ir->function_count; ++function) {
-        XrBackendFunction *candidate = &ir->functions[function];
+static XrValidatedFunction *find_class_ref_coroutine_parent(XrBackendIR *ir) {
+    for (uint32_t function = 0u; function < ir->program->function_count; ++function) {
+        XrValidatedFunction *candidate = &ir->program->functions[function];
         if (find_class_ref_coroutine_operation(
                 candidate, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED, 0u))
             return candidate;
@@ -277,16 +277,16 @@ static void test_class_ref_coroutine_frame_root(void) {
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
-    XrBackendFunction *parent = find_class_ref_coroutine_parent(ir);
+    XrValidatedFunction *parent = find_class_ref_coroutine_parent(ir);
     REQUIRE(parent != NULL);
-    XrBackendInstruction *left = find_class_ref_coroutine_operation(
-        parent, XR_CORE_OP_CORE_CLASS_FIELD_PLACE, 0u);
-    XrBackendInstruction *right = find_class_ref_coroutine_operation(
-        parent, XR_CORE_OP_CORE_CLASS_FIELD_PLACE, 1u);
-    XrBackendInstruction *call = find_class_ref_coroutine_operation(
-        parent, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED, 0u);
+    XrValidatedInstruction *left =
+        find_class_ref_coroutine_operation(parent, XR_CORE_OP_CORE_CLASS_FIELD_PLACE, 0u);
+    XrValidatedInstruction *right =
+        find_class_ref_coroutine_operation(parent, XR_CORE_OP_CORE_CLASS_FIELD_PLACE, 1u);
+    XrValidatedInstruction *call =
+        find_class_ref_coroutine_operation(parent, XR_CORE_OP_CORE_COROUTINE_CALL_SEALED, 0u);
     REQUIRE(left && right && call && parent->coroutine_safepoint_count == 1u);
-    XrBackendCoroutineSafepoint *point = &parent->coroutine_safepoints[0];
+    XrValidatedCoroutineSafepoint *point = &parent->coroutine_safepoints[0];
     REQUIRE(point->live_value_count == 1u && call->operand_count == 4u);
     uint32_t owner = point->live_value_ids[0];
     REQUIRE(left->operands[0] == owner && right->operands[0] == owner);
@@ -346,14 +346,11 @@ static void test_class_ref_coroutine_frame_root(void) {
 
     uint16_t saved_result_type = right->result_type_id;
     uint16_t saved_value_type = parent->value_types[right->result_id];
-    uint8_t saved_representation = parent->value_representations[right->result_id];
     right->result_type_id = XR_CORE_TYPE_BOOL;
     parent->value_types[right->result_id] = XR_CORE_TYPE_BOOL;
-    parent->value_representations[right->result_id] = XR_BACKEND_VALUE_BOOL_U8;
     require_coroutine_backend_rejected(ir, "class ref field type");
     right->result_type_id = saved_result_type;
     parent->value_types[right->result_id] = saved_value_type;
-    parent->value_representations[right->result_id] = saved_representation;
     require_coroutine_backend_restored(ir);
 
     uint32_t saved_root = right->operands[0];
@@ -449,6 +446,164 @@ static XrValidatedProgram *build_nested_class_reference_program(void) {
     return validate_program(types, 2u, &constant, 1u, &function, 1u);
 }
 
+static XrValidatedProgram *build_compound_owned_drop_program(void) {
+    uint16_t leaf_fields[] = {XR_CORE_TYPE_STRING};
+    uint16_t aggregate_fields[] = {64u, XR_CORE_TYPE_STRING};
+    uint16_t payload = 65u, root_field = 66u;
+    XrCoreIrVariantInput variants[] = {{.payload_types = &payload, .payload_count = 1u}, {0}};
+    XrCoreIrTypeInput types[] = {
+        {.key = fixture_key("drop:leaf"),
+         .local_id = 64u,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = leaf_fields,
+         .field_count = 1u},
+        {.key = fixture_key("drop:aggregate"),
+         .local_id = 65u,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = aggregate_fields,
+         .field_count = 2u},
+        {.key = fixture_key("drop:variant"),
+         .local_id = 66u,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .variants = variants,
+         .variant_count = 2u},
+        {.key = fixture_key("drop:root"),
+         .local_id = 67u,
+         .kind = XR_CORE_IR_TYPE_CLASS_REFERENCE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_CLASS,
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .field_types = &root_field,
+         .field_count = 1u},
+    };
+    XrCoreIrConstantInput text = {
+        .key = fixture_key("drop:text"),
+        .type_id = XR_CORE_TYPE_STRING,
+        .kind = XR_CORE_IR_CONSTANT_STRING,
+        .value.string = {.bytes = (const uint8_t *) "kept", .size = 4u},
+    };
+    XrCoreIrKey first = fixture_key("drop:first"), second = fixture_key("drop:second"),
+                leaf = fixture_key("drop:leaf:value"),
+                aggregate = fixture_key("drop:aggregate:value"),
+                variant = fixture_key("drop:variant:value"), root = fixture_key("drop:root:value"),
+                alias = fixture_key("drop:alias");
+    XrCoreIrKey fields[] = {leaf, second};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_STRING,
+         .result = first,
+         .result_type_id = XR_CORE_TYPE_STRING,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = text.key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_STRING,
+         .result = second,
+         .result_type_id = XR_CORE_TYPE_STRING,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = text.key},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = leaf,
+         .result_type_id = 64u,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = &first,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = aggregate,
+         .result_type_id = 65u,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = fields,
+         .operand_count = 2u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+         .result = variant,
+         .result_type_id = 66u,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = &aggregate,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT},
+        {.operation_id = XR_CORE_OP_CORE_CLASS_CONSTRUCT,
+         .result = root,
+         .result_type_id = 67u,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = &variant,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_ALIAS,
+         .result = alias,
+         .result_type_id = 67u,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = &root,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = &root, .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP, .operands = &alias, .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN},
+    };
+    XrCoreIrBlockInput block = {.key = fixture_key("drop:block"),
+                                .instructions = instructions,
+                                .instruction_count =
+                                    sizeof(instructions) / sizeof(instructions[0])};
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("drop:entry"),
+        .entry_block = block.key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_program(types, 4u, &text, 1u, &function, 1u);
+}
+
+static void write_compound_owned_drop_fixture(const char *path, const XrTargetProfile *profile) {
+    XrValidatedProgram *program = build_compound_owned_drop_program();
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    FILE *output = fopen(path, "wb");
+    REQUIRE(output != NULL);
+    REQUIRE(fputs("#include <stdlib.h>\n#include <stdio.h>\n"
+                  "#ifdef _WIN32\n#include <io.h>\n#include <fcntl.h>\n#endif\n"
+                  "static size_t attempts, live, fail_at;\n"
+                  "static void *observe_alloc(size_t size) {\n"
+                  "    if (++attempts == fail_at) return NULL;\n"
+                  "    void *value = malloc(size); if (value) ++live; return value;\n}\n"
+                  "static void observe_free(void *value) {\n"
+                  "    if (value) { --live; free(value); }\n}\n"
+                  "#define malloc observe_alloc\n#define free observe_free\n",
+                  output) >= 0);
+    REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
+    REQUIRE(fprintf(output,
+                    "#undef malloc\n#undef free\n"
+                    "static unsigned events[10], count;\n"
+                    "static void observe_event(void *opaque, const XrAotLifecycleEvent *event) {\n"
+                    "    (void)opaque; if (count < 10) events[count] = event->kind; ++count;\n}\n"
+                    "int main(void) {\n"
+                    "#ifdef _WIN32\n    (void)_setmode(_fileno(stdout), _O_BINARY);\n#endif\n"
+                    "    static const unsigned expected[10] = {1,1,2,7,7,8,7,8,9,9};\n"
+                    "    for (size_t failure = 0; failure <= 4; ++failure) {\n"
+                    "        attempts = live = 0; count = 0; fail_at = failure;\n"
+                    "        XrAotContext context = {.lifecycle_event = observe_event};\n"
+                    "        XrAotOutcome result = xr_aot_fn_%u(&context);\n"
+                    "        if (!failure) {\n"
+                    "            if (result.kind != 0 || attempts != 4 || live != 0 || "
+                    "context.allocations || count != 10) return 10;\n"
+                    "            for (unsigned i = 0; i < 10; ++i) "
+                    "if (events[i] != expected[i]) return 11;\n"
+                    "        } else if (result.kind != 4 || attempts != failure) return 12;\n"
+                    "        xr_aot_context_destroy(&context);\n"
+                    "        if (live != 0 || context.allocations) return 13;\n"
+                    "    }\n"
+                    "    puts(\"owned-drop-native: PASS\"); return 0;\n}\n",
+                    xr_validated_program_entry_function(program)) > 0);
+    REQUIRE(fclose(output) == 0);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_validated_program_free(program);
+}
+
 static void require_class_field_finalization_lowering(const XrTargetProfile *profile) {
     XrValidatedProgram *program = build_nested_class_reference_program();
     XrH2LifecycleLog log = {0};
@@ -528,7 +683,7 @@ static bool append_c_string_literal(FILE *output, const char *text) {
 }
 
 static bool append_class_native_harness(FILE *output, uint32_t entry_function,
-                                        uint16_t class_type_id) {
+                                        uint16_t class_type_id, bool publish) {
     if (fprintf(output,
                 "\n#include <stdio.h>\n"
                "typedef struct XrH2NativeLog { XrAotLifecycleEvent events[9]; "
@@ -569,8 +724,12 @@ static bool append_class_native_harness(FILE *output, uint32_t entry_function,
                "log.events[3].old_i64 != INT64_C(7) || "
                "log.events[3].replacement_i64 != INT64_C(42)) return 15;\n"
                "    xr_aot_context_destroy(&context);\n"
-               "    puts(",
-                entry_function, class_type_id) <= 0 ||
+               "",
+                entry_function, class_type_id) <= 0)
+        return false;
+    if (!publish)
+        return fprintf(output, "    return 0;\n}\n") > 0;
+    if (fputs("    puts(", output) == EOF ||
         !append_c_string_literal(output, XR_H2_AOT_NATIVE_RECORD))
         return false;
     return fprintf(output,
@@ -590,8 +749,9 @@ static void require_native_record_c_literal_escaping(void) {
     REQUIRE(fclose(output) == 0);
 }
 
-static bool write_class_native_source(const char *path) {
-    XrValidatedProgram *program = build_class_reference_program();
+static bool write_class_native_source(const char *path, bool record) {
+    XrValidatedProgram *program =
+        build_class_reference_program_with_alias(XR_CORE_OP_CORE_OWNER_ALIAS, record);
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     XrBackendIR *ir = profile ? build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE) : NULL;
@@ -603,7 +763,7 @@ static bool write_class_native_source(const char *path) {
         written = fwrite(generated.bytes, 1u, generated.size, output) == generated.size &&
                   append_class_native_harness(output,
                                               xr_validated_program_entry_function(program),
-                                              program->types[0].type_id);
+                                              program->types[0].type_id, !record);
         bool closed = fclose(output) == 0;
         written = written && closed;
     } else {
@@ -700,7 +860,7 @@ static bool run_class_generated_c_native(void) {
                           "%s -o %s >%s 2>&1",
                           compiler, source, executable, compile_log);
 #endif
-    bool source_written = write_class_native_source(source);
+    bool source_written = write_class_native_source(source, false);
     int compile_status = source_written && length > 0 && (size_t) length < sizeof(command)
                              ? system(command)
                              : -1;

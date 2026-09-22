@@ -388,10 +388,8 @@ static bool verify_execution(XrValidatedProgram *program, XrTargetProfile *profi
     XrInstance *instance = NULL;
     if (!ok || xr_execution_instance_create(&input, &instance, &diagnostic) != XR_EXECUTION_OK)
         return false;
-    for (uint8_t policy = XR_VM_DECODE_BASELINE_VIEW; ok && policy <= XR_VM_DECODE_FIXED_ROWS;
-         ++policy) {
+    if (ok) {
         XrVmCodeOptions options = xr_vm_code_default_options();
-        options.decode_policy = policy;
         XrVmCode *code = NULL;
         XrVmCodeDiagnostic code_diagnostic = {0};
         ok = xr_vm_code_build(program, profile, &options, &code, &code_diagnostic) == XR_VM_CODE_OK;
@@ -422,17 +420,16 @@ int main(int argc, char **argv) {
     XrBackendDiagnostic diagnostic = {0};
     XrBackendIR *ir = NULL;
     XrGeneratedC generated = {0}, repeated = {0};
-    bool ok = program && profile && has_exact_producers(program) &&
-              verify_execution(program, profile) &&
-              xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK &&
-              xr_backend_ir_verify(ir, &diagnostic) &&
-              xr_backend_ir_translation_validate(ir, &diagnostic) &&
-              xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK &&
-              xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) == XR_BACKEND_OK &&
-              generated.size == repeated.size &&
-              memcmp(generated.bytes, repeated.bytes, generated.size) == 0 &&
-              write_bytes(argv[2], generated.bytes, generated.size) &&
-              write_facts(argv[4], program, &generated);
+    bool ok =
+        program && profile && has_exact_producers(program) && verify_execution(program, profile) &&
+        xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK &&
+        xr_backend_ir_verify(ir, &diagnostic) && xr_backend_ir_binding_verify(ir, &diagnostic) &&
+        xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK &&
+        xr_backend_ir_emit_c(ir, false, &repeated, &diagnostic) == XR_BACKEND_OK &&
+        generated.size == repeated.size &&
+        memcmp(generated.bytes, repeated.bytes, generated.size) == 0 &&
+        write_bytes(argv[2], generated.bytes, generated.size) &&
+        write_facts(argv[4], program, &generated);
     if (!ok)
         fprintf(stderr, "allocation fixture generation failed; backend status=%u\n",
                 (unsigned) diagnostic.status);

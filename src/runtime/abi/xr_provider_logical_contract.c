@@ -70,7 +70,9 @@ XR_FUNCDEF bool xr_provider_logical_contract_equal(const XrProviderLogicalContra
            left_size == right_size && memcmp(left_bytes, right_bytes, left_size) == 0;
 }
 
-static bool type_size(const uint8_t *bytes, uint8_t available, uint8_t *size_out) {
+static bool type_size(const uint8_t *bytes, uint8_t available, uint8_t *size_out,
+                      bool *resource_out) {
+    bool resource = false;
     uint16_t pending = 1u;
     uint8_t offset = 0u;
     while (pending != 0u) {
@@ -83,6 +85,13 @@ static bool type_size(const uint8_t *bytes, uint8_t available, uint8_t *size_out
             case XR_PROVIDER_TYPE_BOOL:
             case XR_PROVIDER_TYPE_I64:
             case XR_PROVIDER_TYPE_BYTES:
+                break;
+            case XR_PROVIDER_TYPE_RESOURCE:
+                if ((uint32_t) available - offset < XR_STABLE_ID_BYTES ||
+                    all_zero(bytes + offset, XR_STABLE_ID_BYTES))
+                    return false;
+                offset += XR_STABLE_ID_BYTES;
+                resource = true;
                 break;
             case XR_PROVIDER_TYPE_OPTIONAL:
                 ++pending;
@@ -98,6 +107,7 @@ static bool type_size(const uint8_t *bytes, uint8_t available, uint8_t *size_out
         if (pending > available - offset)
             return false;
     }
+    if (resource_out) *resource_out = resource;
     *size_out = offset;
     return true;
 }
@@ -111,7 +121,7 @@ XR_FUNCDEF bool xr_provider_logical_contract_type(const XrProviderLogicalContrac
     uint8_t offset = 0u;
     for (uint8_t current = 0u; current <= index; ++current) {
         uint8_t size = 0u;
-        if (!type_size(contract->types + offset, contract->type_byte_count - offset, &size))
+        if (!type_size(contract->types + offset, contract->type_byte_count - offset, &size, NULL))
             return false;
         if (current == index) {
             *out = (XrProviderLogicalTypeView) {contract->types + offset, size};
@@ -138,7 +148,7 @@ static bool type_child(XrProviderLogicalTypeView parent, uint8_t index,
     }
     for (uint8_t current = 0u; current <= index; ++current) {
         uint8_t size = 0u;
-        if (!type_size(parent.bytes + offset, parent.size - offset, &size))
+        if (!type_size(parent.bytes + offset, parent.size - offset, &size, NULL))
             return false;
         if (current == index) {
             *out = (XrProviderLogicalTypeView) {parent.bytes + offset, size};
@@ -160,6 +170,15 @@ static int compare_resource_values(const XrProviderLogicalResourceTransition *le
     if (order != 0)
         return order;
     return left->path_count < right->path_count ? -1 : left->path_count > right->path_count;
+}
+
+XR_FUNCDEF bool xr_provider_logical_resource_type_id(XrProviderLogicalTypeView type,
+                                                     XrStableId *out) {
+    if (!out || !type.bytes || type.size != 1u + XR_STABLE_ID_BYTES ||
+        type.bytes[0] != XR_PROVIDER_TYPE_RESOURCE || all_zero(type.bytes + 1u, XR_STABLE_ID_BYTES))
+        return false;
+    memcpy(out->bytes, type.bytes + 1u, XR_STABLE_ID_BYTES);
+    return true;
 }
 
 static bool resource_valid(const XrProviderLogicalContract *contract,
@@ -194,7 +213,11 @@ static bool resource_valid(const XrProviderLogicalContract *contract,
     for (uint8_t depth = 0u; depth < resource->path_count; ++depth)
         if (!type_child(type, resource->path[depth], &type))
             return false;
-    return type.size == 1u && type.bytes[0] == XR_PROVIDER_TYPE_I64;
+    if (type.size == 1u && type.bytes[0] == XR_PROVIDER_TYPE_I64)
+        return true;
+    XrStableId identity;
+    return xr_provider_logical_resource_type_id(type, &identity) &&
+           memcmp(identity.bytes, resource->resource_id.bytes, XR_STABLE_ID_BYTES) == 0;
 }
 
 static bool ownership_valid(uint8_t owner) {
@@ -231,6 +254,19 @@ XR_FUNCDEF bool xr_provider_logical_contract_verify(const XrProviderLogicalContr
         !all_zero(contract->types + contract->type_byte_count,
                   XR_PROVIDER_LOGICAL_MAX_TYPE_BYTES - contract->type_byte_count))
         return false;
+    for (uint8_t index = 0u; index < contract->parameter_count + 2u; ++index) {
+        XrProviderLogicalTypeView type = {0};
+        uint8_t size = 0u;
+        bool resource = false;
+        if (!xr_provider_logical_contract_type(contract, index, &type) ||
+            !type_size(type.bytes, type.size, &size, &resource) || size != type.size)
+            return false;
+        uint8_t owner = index < contract->parameter_count ? contract->parameter_owners[index]
+                           : index == contract->parameter_count ? contract->result_owner
+                                                               : contract->error_owner;
+        if (resource && owner == XR_PROVIDER_OWNER_TRIVIAL)
+            return false;
+    }
     XrProviderLogicalTypeView error = {0};
     if (!xr_provider_logical_contract_type(contract, contract->parameter_count + 1u, &error) ||
         error.bytes + error.size != contract->types + contract->type_byte_count)

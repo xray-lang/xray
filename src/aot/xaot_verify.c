@@ -32,6 +32,7 @@
 #include "../shared/xr_derive_flags.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
@@ -290,6 +291,8 @@ static bool verify_target_machine_value_rep(const XaotBundle *bundle, const XiFu
         return false;
     if (machine->kind == XR_MACHINE_REP_ENUM_ORDINAL)
         out->flags = XAOT_VALUE_FLAG_ENUM;
+    else if (machine->kind == XR_MACHINE_REP_VIEW)
+        out->flags = XAOT_VALUE_FLAG_SLICE;
     return true;
 }
 
@@ -3792,9 +3795,17 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
         for (uint32_t j = i + 1; j < ev->ndecls; j++) {
             const XgDeclSummary *other = &ev->decls[j];
             if (other->module_id == decl->module_id &&
-                other->source_node_id == decl->source_node_id)
+                other->source_node_id == decl->source_node_id) {
+                if (getenv("XRAY_AOT_REFINE_TRACE"))
+                    fprintf(stderr,
+                            "[aot-verify] duplicate declaration source module=%u node=%u "
+                            "decl=%u/%u kind=%u/%u name=%u/%u span=%u/%u\n",
+                            decl->module_id, decl->source_node_id, decl->decl_id, other->decl_id,
+                            (unsigned) decl->kind, (unsigned) other->kind, decl->name_id,
+                            other->name_id, decl->source_span_id, other->source_span_id);
                 return set_error(errbuf, errbuf_len,
                                  "AOT global evidence declaration source identity is duplicated");
+            }
             if (decl->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN &&
                 other->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN &&
                 other->module_id == decl->module_id && other->name_id == decl->name_id)
@@ -7567,6 +7578,18 @@ XR_FUNC bool xaot_verify_global_evidence_plan(const XaotBundle *bundle, char *er
     return true;
 }
 
+/* Callable plans are independently replayed before executable coverage.
+ * Function identities and ABIs remain checked even when no entry can
+ * execute their bodies; only physical body obligations are excluded. */
+static bool
+verify_body_function_is_excluded(const XaotBundle *bundle,
+                                 const XrCProgramDirectI64EmissionBinding *program_scope,
+                                 const XiFunc *func) {
+    const XaotFuncPlan *plan = xaot_bundle_find_func_plan(bundle, func);
+    return verify_program_function_is_excluded(program_scope, func) ||
+           (bundle->has_callable_reachability && plan && !plan->reachable);
+}
+
 static bool
 verify_func_values_have_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
                                         const XrCProgramDirectI64EmissionBinding *program_scope,
@@ -7576,7 +7599,7 @@ verify_func_values_have_plans_recursive(const XaotBundle *bundle, const XiFunc *
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT value verifier");
-    if (verify_program_function_is_excluded(program_scope, func)) {
+    if (verify_body_function_is_excluded(bundle, program_scope, func)) {
         for (ci = 0; ci < func->nchildren; ci++) {
             if (!verify_func_values_have_plans_recursive(bundle, func->children[ci], program_scope,
                                                          errbuf, errbuf_len))
@@ -7632,9 +7655,30 @@ verify_func_values_have_plans_recursive(const XaotBundle *bundle, const XiFunc *
                     return set_error(errbuf, errbuf_len,
                                      "Xi unmigrated value has no AOT value plan");
             }
-            if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
+            if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy)) {
+                const XiValue *value = blk->values[vi];
+                if (getenv("XRAY_AOT_REFINE_TRACE")) {
+                    const XaotValuePlan *source =
+                        xaot_bundle_find_value_plan(bundle, value->args[0]);
+                    fprintf(stderr,
+                            "[aot-verify] inexact adapter function=%s value=%u op=%s "
+                            "plan=%u:%u c-type=%s source=%u:%s source-plan=%u:%u "
+                            "source-type-exact=%u source-c-type=%s source-flags=%u\n",
+                            func->name ? func->name : "<anonymous>", value->id,
+                            xi_generated_op_name(value->op),
+                            legacy ? (unsigned) legacy->rep.kind : UINT32_MAX,
+                            legacy ? (unsigned) legacy->rep.rep : UINT32_MAX,
+                            legacy && legacy->rep.c_type ? legacy->rep.c_type : "none",
+                            value->args[0]->id, xi_generated_op_name(value->args[0]->op),
+                            source ? (unsigned) source->rep.kind : UINT32_MAX,
+                            source ? (unsigned) source->rep.rep : UINT32_MAX,
+                            source && source->rep.type == value->args[0]->type ? 1u : 0u,
+                            source && source->rep.c_type ? source->rep.c_type : "none",
+                            source ? source->rep.flags : UINT32_MAX);
+                }
                 return set_error(errbuf, errbuf_len,
                                  "Xi value representation adapter row is inexact");
+            }
         }
     }
 
@@ -7664,6 +7708,14 @@ static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, 
     uint16_t pi;
     if (!plan || !plan->func)
         return set_error(errbuf, errbuf_len, "AOT function plan has no Xi function");
+    const XrSemanticFunctionRecord *function_contract = xr_semantic_plan_function(
+        plan->func->semantic_plan, plan->func->semantic_plan_function_index);
+    bool external_entry =
+        plan->func->export_plan || plan->func->link_plan || plan->func->entry_plan;
+    if ((function_contract && function_contract->is_external_entry != (uint8_t) external_entry) ||
+        (!function_contract && external_entry))
+        return set_error(errbuf, errbuf_len,
+                         "AOT external entry differs from its frozen function contract");
     if (plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN) {
         if (!verify_target_owned_abi_is_empty(&plan->abi))
             return set_error(errbuf, errbuf_len,
@@ -7797,7 +7849,7 @@ static bool verify_func_extern_calls(const XaotBundle *bundle, const XiFunc *fun
                                      char *errbuf, size_t errbuf_len) {
     if (!func)
         return true;
-    if (verify_program_function_is_excluded(program_scope, func)) {
+    if (verify_body_function_is_excluded(bundle, program_scope, func)) {
         for (uint16_t child = 0; child < func->nchildren; child++) {
             if (!verify_func_extern_calls(bundle, func->children[child], program_scope, errbuf,
                                           errbuf_len))
@@ -8043,7 +8095,7 @@ verify_func_boundaries_recursive(const XaotBundle *bundle, const XiFunc *func,
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT boundary verifier");
-    if (verify_program_function_is_excluded(program_scope, func)) {
+    if (verify_body_function_is_excluded(bundle, program_scope, func)) {
         for (ci = 0; ci < func->nchildren; ci++) {
             if (!verify_func_boundaries_recursive(bundle, func->children[ci], program_scope, errbuf,
                                                   errbuf_len))
@@ -8102,7 +8154,7 @@ verify_func_closure_plans_recursive(const XaotBundle *bundle, const XiFunc *func
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT closure verifier");
-    if (verify_program_function_is_excluded(program_scope, func)) {
+    if (verify_body_function_is_excluded(bundle, program_scope, func)) {
         for (ci = 0; ci < func->nchildren; ci++) {
             if (!verify_func_closure_plans_recursive(bundle, func->children[ci], program_scope,
                                                      out_count, errbuf, errbuf_len))
@@ -8145,7 +8197,7 @@ verify_func_stack_allocations_recursive(const XaotBundle *bundle, const XiFunc *
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT allocation verifier");
-    if (verify_program_function_is_excluded(program_scope, func)) {
+    if (verify_body_function_is_excluded(bundle, program_scope, func)) {
         for (ci = 0; ci < func->nchildren; ci++) {
             if (!verify_func_stack_allocations_recursive(bundle, func->children[ci], program_scope,
                                                          errbuf, errbuf_len))
@@ -8216,7 +8268,7 @@ verify_func_transfer_plans_recursive(const XaotBundle *bundle, const XiFunc *fun
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT transfer verifier");
-    if (verify_program_function_is_excluded(program_scope, func)) {
+    if (verify_body_function_is_excluded(bundle, program_scope, func)) {
         for (ci = 0; ci < func->nchildren; ci++) {
             if (!verify_func_transfer_plans_recursive(bundle, func->children[ci], program_scope,
                                                       out_count, errbuf, errbuf_len))
@@ -8317,7 +8369,7 @@ static bool verify_fixed_bytes_plans(const XaotBundle *bundle, char *errbuf, siz
     uint32_t candidates = 0;
     for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
         const XiFunc *func = bundle->func_plans[fi].func;
-        if (!func)
+        if (!func || verify_body_function_is_excluded(bundle, NULL, func))
             continue;
         for (uint32_t bi = 0; bi < func->nblocks; bi++) {
             const XiBlock *block = func->blocks[bi];

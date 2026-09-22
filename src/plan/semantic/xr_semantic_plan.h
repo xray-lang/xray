@@ -404,6 +404,9 @@ typedef struct XrSemanticFunctionRecord {
      * is still not one itself. This says the body contains the operations, and
      * it is what decides the shape of the function's own C boundary. */
     uint8_t carries_coroutine_ops;
+    /* A typed export, link or entry manifest can enter this function without
+     * a call in the source graph. This execution fact does not change its ID. */
+    uint8_t is_external_entry;
 } XrSemanticFunctionRecord;
 
 typedef struct XrSemanticParameterRecord {

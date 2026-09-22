@@ -2,7 +2,7 @@
   "schema": "xray-program-format-schema/3",
   "format": {
     "major": 3,
-    "minor": 2,
+    "minor": 9,
     "magic_hex": "585250524f470d0a",
     "program_id_domain": "xray-program-id-v3"
   },
@@ -28,16 +28,26 @@
       "9:TargetAbi",
       "10:TargetEndian",
       "12:string",
-      "13:rune"
+      "13:rune",
+      "14:i8",
+      "15:u8",
+      "16:i16",
+      "17:i32",
+      "18:u64",
+      "19:f64"
     ],
-    "dynamic_type_base": 16,
+    "dynamic_type_base": 32,
     "dynamic_kinds": [
       "aggregate",
       "variant",
       "view",
       "callable",
       "existential",
-      "class-reference"
+      "class-reference",
+      "array",
+      "atomic",
+      "record-reference",
+      "provider-resource"
     ],
     "ownership_kinds": [
       "0:trivial",
@@ -48,8 +58,8 @@
       "1:explicit",
       "2:forbidden"
     ],
-    "builtin_ownership": "void, bool, i64, u32, u16, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune are trivial with trivial copy; string is affine with explicit copy; panic-info is affine with forbidden copy",
-    "constant_shape": "ascending unique (TypeId, kind, value) rows; kinds are 1:i64 2:bool 3:string 4:rune; string rows carry a minimal-ULEB128 byte length followed by valid UTF-8 bytes ordered by unsigned byte lexicographic order; rune rows carry one Unicode scalar value",
+    "builtin_ownership": "void, bool, i8, i16, i32, i64, u8, u16, u32, u64, f64, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune are trivial with trivial copy; string is affine with explicit copy; panic-info is affine with forbidden copy",
+    "constant_shape": "ascending unique (TypeId, kind, value) rows; kinds are 1:i64 2:bool 3:string 4:rune; string rows carry a minimal-ULEB128 byte length followed by valid UTF-8 bytes ordered by unsigned byte lexicographic order; rune rows carry one Unicode scalar value; kind 5:f64 carries the exact unsigned 64-bit IEEE-754 bit pattern in minimal ULEB128, ordered by unsigned bits without NaN or signed-zero normalization",
     "identity_order": "ascending-semantic-key",
     "aggregate_shape": "declaration-ordered-field-type-ids",
     "class_reference_shape": "declaration-ordered-field-type-ids; nominal CLASS is implied by the type kind; physical object layout and lifetime representation are forbidden",
@@ -60,8 +70,13 @@
     "callable_dispatch": "indirect direct/invoke borrow an affine callable value (owned or non-owner) without consuming it and use its SignatureId as the sole visible contract; target identity and optional capture representation remain executor-private",
     "existential_shape": "ordered-(InterfaceId,InterfaceUseKind); READ is trivial-copy snapshot, REF/MOVE/OWNED_STORAGE are affine and copy-forbidden, CONSTRAINT_BOUND is non-runtime",
     "nominal_kind": "aggregate/variant rows carry NONE/STRUCT/ENUM; class-reference rows imply CLASS; conformance implementor kind must match",
-    "recursive_value_shape": "reject by-value aggregate/variant cycles; class-reference field edges terminate by-value cycle traversal",
-    "physical_layout": "forbidden"
+    "recursive_value_shape": "reject by-value aggregate/variant cycles; class-reference and record-reference fields and array elements terminate by-value cycle traversal",
+    "physical_layout": "forbidden",
+    "array_shape": "one element TypeId; heap-owned dynamic container is affine; copy is explicit unless its element copy is forbidden; length, capacity and physical layout are not type identity",
+    "display_name_shape": "after each dynamic shape: bounded UTF-8 type display name followed by declaration-ordered variant display names; each name is minimal-ULEB128 byte length plus bytes; zero means absent; no NUL or ASCII control bytes; names never act as lookup identities",
+    "atomic_shape": "one scalar element TypeId (i64, f64 or bool); affine with explicit identity-preserving copy; synchronized storage and reference counts are executor-private",
+    "record_reference_shape": "ordered-field-type-ids; non-nominal affine reference root with explicit or forbidden copy; source semantic key includes exact field names, readonly contracts and child type identities; physical layout and lifetime representation are forbidden",
+    "provider_resource_shape": "16-byte nonzero stable resource identity preceded by minimal-ULEB128 length 16; non-nominal affine provider resource with forbidden copy; handles, addresses, physical layout and finalizers are executor-private"
   },
   "value_system": {
     "function_parameter_contract": "ordered-(TypeId,ParamMode) plus declaration-owned receiver marker; receiver occupies parameter slot 0 and source parameter ordinals exclude it",
@@ -91,7 +106,7 @@
     "provider_operation_immediate_contract": "dense (ProviderRequirementIndex,OperationIndex) resolving an exact canonical imports row; every requirement operation is referenced by at least one provider-backed CoreSpec operation and no operation may reference an undeclared provider requirement",
     "coroutine_call_immediate_contract": "dense (FunctionId,SafepointId) naming one sealed child coroutine and one caller-local logical suspension point; it carries no executor frame or slot layout",
     "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; reborrow_read creates a scoped non-owning READ carrier for the same interface, conformance and payload; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
-    "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
+    "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects business errors and propagates declared typed PanicInfo with caller-owner cleanup, and invoke transfers through explicit typed continuations",
     "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
     "coroutine_state_contract": "function-local dense states; state zero names entry and every nonzero state names one continuation block",
     "coroutine_safepoint_contract": "function-local dense safepoints name one nonzero resume state and a sorted unique exact live-across ValueId set",
@@ -163,6 +178,7 @@
     "coroutine_states_per_function": 1048576,
     "coroutine_safepoints_per_function": 1048576,
     "live_values_per_safepoint": 65536,
-    "module_slots": 1048576
+    "module_slots": 1048576,
+    "diagnostic_name_bytes": 4096
   }
 }

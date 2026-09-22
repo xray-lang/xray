@@ -161,8 +161,10 @@ static void xr_construct_init_types(XrConstructFixture *fixture, XrProgramConstr
                                                : XR_CORE_IR_INTERFACE_EXISTENTIAL_READ;
     }
     // An unselected owned-storage alternative makes the inhabited i64 case move-only.
-    fixture->variants[0] = (XrCoreIrVariantInput) {fixture->scalar_fields, 1u};
-    fixture->variants[1] = (XrCoreIrVariantInput) {fixture->token_fields, 1u};
+    fixture->variants[0] = (XrCoreIrVariantInput) {.payload_types = fixture->scalar_fields,
+                                                 .payload_count = 1u};
+    fixture->variants[1] = (XrCoreIrVariantInput) {.payload_types = fixture->token_fields,
+                                                 .payload_count = 1u};
     fixture->types[5].kind = XR_CORE_IR_TYPE_VARIANT;
     fixture->types[5].ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
     fixture->types[5].copy_contract = XR_CORE_IR_COPY_FORBIDDEN;

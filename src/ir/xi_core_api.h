@@ -52,7 +52,7 @@ XR_FUNC bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src
 XR_FUNC const XiValue *xi_err_check_producer(const XiFunc *f, const XiValue *check);
 
 XR_FUNC XiBlock *xi_block_new(XiFunc *f);
-XR_FUNC void xi_block_add_pred(XiBlock *blk, XiBlock *pred);
+XR_FUNC bool xi_block_add_pred(XiBlock *blk, XiBlock *pred);
 XR_FUNC bool xi_block_ensure_value_capacity(XiBlock *blk, uint32_t min_cap);
 
 XR_FUNC XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,

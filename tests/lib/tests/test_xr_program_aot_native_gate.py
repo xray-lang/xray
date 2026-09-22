@@ -1,6 +1,8 @@
 """Pure-Python tests for the canonical-program native-AOT residue gate."""
 
 import unittest
+import subprocess
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -16,6 +18,45 @@ gate = load_module(
 
 
 class NativeAotGateTest(unittest.TestCase):
+    def test_exact_error_diagnostic_rejects_missing_changed_and_truncated_payload(self):
+        expected = b'[Uncaught Error] Failure.Failed("detail")\n'
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "native.exe"
+            executable.write_bytes(b"fixture")
+            for actual in (expected, b"", expected[:-1], expected.replace(b"detail", b"other")):
+                with self.subTest(actual=actual), mock.patch.object(gate.sys, "argv", [
+                    "gate", "--executable", str(executable), "--expected-exit", "1",
+                    "--expected-stderr-hex", expected.hex(),
+                ]), mock.patch.object(gate.subprocess, "run", return_value=
+                    subprocess.CompletedProcess([], 1, b"", actual)), mock.patch.object(
+                    gate, "load_symbol_inventory", return_value=("main", "")
+                ), mock.patch.object(gate.sys, "stderr", mock.Mock()):
+                    self.assertEqual(gate.main(), 0 if actual == expected else 1)
+
+    def test_compiler_families_reject_decorated_defined_symbols(self):
+        forbidden = (
+            "xr_program_validate", "xr_program_write", "xr_program_decode",
+            "xr_backend_ir_build", "xr_vm_execute", "xvm_run", "xaot_build",
+            "xr_target_plan_build", "xr_core_ir_new", "xi_lower_program",
+            "xi_pipeline_run", "xi_cgen_emit",
+        )
+        decorations = ("", "_", "__imp_", "__imp__", "$unwind$", "?")
+        for symbol in forbidden:
+            for decoration in decorations:
+                with self.subTest(symbol=symbol, decoration=decoration):
+                    self.assertIsNotNone(gate.forbidden_symbol_family(
+                        "main\n" + decoration + symbol + "\nxr_clean\n"))
+
+    def test_source_symbol_substrings_do_not_grant_compiler_identity(self):
+        symbols = ("xray_xaot_net_tls_8432_modinit",
+                   "xrt_shared_xray_xaot_net_tls_8432",
+                   "$unwind$xray_xaot_net_tls_8432_modinit",
+                   "fixture_xr_program_validate_user_function",
+                   "_user_xi_cgen_emit_wrapper")
+        self.assertIsNone(gate.forbidden_symbol_family("\n".join(symbols)))
+        self.assertIsNotNone(gate.forbidden_symbol_family(
+            "\n".join(symbols) + "\n_XAOT_BUILD\n"))
+
     def test_exit_status_matches_portable_generated_main_on_every_host(self):
         self.assertEqual(gate.expected_process_exit(477, windows=True), 221)
         self.assertEqual(gate.expected_process_exit(477, windows=False), 221)

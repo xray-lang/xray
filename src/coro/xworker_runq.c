@@ -105,7 +105,7 @@ static void runq_batch_append(XrCoroutine **first, XrCoroutine **last, XrCorouti
 
 static void runq_enqueue_at(XrRunQueue *rq, XrCoroutine *coro, int64_t submit_time) {
     atomic_store_explicit(&coro->submit_time, submit_time, memory_order_relaxed);
-    if (!xr_steal_queue_push(&rq->deque, coro)) {
+    if (!xr_steal_queue_push(&rq->deque, coro, submit_time)) {
         // Deque full: overflow to linked list.
         coro->sched_link = NULL;
         if (rq->overflow_last)
@@ -227,8 +227,8 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, b
     XR_DCHECK(worker != NULL, "enqueue_runq_or_inject: NULL worker");
     XR_DCHECK(coro != NULL, "enqueue_runq_or_inject: NULL coro");
     prepare_scheduled_coro(worker, coro);
-
-    if (xr_steal_queue_push(&worker->p.runq.deque, coro)) {
+    int64_t submit_time = atomic_load_explicit(&coro->submit_time, memory_order_relaxed);
+    if (xr_steal_queue_push(&worker->p.runq.deque, coro, submit_time)) {
         return true;
     }
 
@@ -244,7 +244,7 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, b
         runq_spill_oldest_batch(&worker->p.runq, XR_RUNQ_SPILL_BATCH, &spill_first, &spill_last);
     if (spill_count > 0) {
         xr_proc_local_runq_dec(&worker->p, spill_count);
-        if (xr_steal_queue_push(&worker->p.runq.deque, coro)) {
+        if (xr_steal_queue_push(&worker->p.runq.deque, coro, submit_time)) {
             if (count_spill) {
                 xr_sched_metric_add(runtime, &runtime->sched_stats.inject_spill_count,
                                     (uint64_t) spill_count);
@@ -423,7 +423,8 @@ static void runq_push_stolen(XrRunQueue *dst, XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "runq_push_stolen: NULL coro");
     XR_DCHECK(coro->sched_link == NULL, "runq_push_stolen: linked stolen coro");
 
-    if (xr_steal_queue_push(&dst->deque, coro))
+    int64_t submit_time = atomic_load_explicit(&coro->submit_time, memory_order_relaxed);
+    if (xr_steal_queue_push(&dst->deque, coro, submit_time))
         return;
 
     coro->sched_link = NULL;

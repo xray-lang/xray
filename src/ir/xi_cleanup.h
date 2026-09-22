@@ -20,6 +20,24 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct XgGlobalEvidence;
+struct XrVMRuntime;
+
+/* Query the declared edge of an already-verified function. */
+XR_FUNC bool xi_value_has_panic_continuation(const XiFunc *function, const XiValue *point);
+
+/* A malformed graph or allocation failure conservatively reports an active
+ * region. Callers must never bypass a handler when its extent is uncertain. */
+XR_FUNC bool xi_try_region_reaches_point(const XiFunc *function, const XiValue *registration,
+                                          const XiValue *point);
+
+/* Expose call and primitive panic results as typed Xi continuations
+ * after import and call resolution. Explicit ownership frontiers precede the
+ * failure points, and cloned lexical cleanup retains its ordered obligations. */
+XR_FUNC bool xi_normalize_panic_exits(XiFunc *root, const struct XgGlobalEvidence *evidence,
+                                      struct XrVMRuntime *isolate, char *error,
+                                      size_t error_size);
+
 typedef enum XiCleanupBoundaryKind {
     XI_CLEANUP_BOUNDARY_INVALID = 0,
     XI_CLEANUP_BOUNDARY_CLOSED = 1,

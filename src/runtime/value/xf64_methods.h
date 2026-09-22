@@ -33,7 +33,7 @@
 extern "C" {
 #endif
 
-/* f64.toString() -> shortest round-trip string. Allocates.
+/* f64.toString() -> human-display string with 15 significant digits. Allocates.
  * Guarantees a decimal point so 0.0.toString() == "0.0", not "0". */
 static inline XrValue xr_f64_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {

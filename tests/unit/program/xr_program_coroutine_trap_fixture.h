@@ -55,13 +55,13 @@ enum {
 
 typedef struct XrProgramCoroutineTrapBody {
     const char *scope;
-    XrCoreIrInstructionInput instructions[4][16];
-    XrCoreIrKey operands[4][40];
-    uint32_t operand_counts[4];
-    XrCoreIrValueInput arguments[4][4];
-    XrCoreIrKey argument_keys[4][4];
-    XrCoreIrBlockInput blocks[4];
-    XrCoreIrKey successors[3];
+    XrCoreIrInstructionInput instructions[6][16];
+    XrCoreIrKey operands[6][40];
+    uint32_t operand_counts[6];
+    XrCoreIrValueInput arguments[6][4];
+    XrCoreIrKey argument_keys[6][4];
+    XrCoreIrBlockInput blocks[6];
+    XrCoreIrKey successors[5];
     XrCoreIrKey live[2];
     XrCoreIrCoroutineStateInput states[2];
     XrCoreIrCoroutineSafepointInput safepoint;
@@ -91,8 +91,9 @@ static void xr_program_coroutine_trap_body_init(XrProgramCoroutineTrapBody *body
                                                 uint32_t block_count) {
     memset(body, 0, sizeof(*body));
     body->scope = scope;
-    const char *names[] = {"entry", "normal", "cancel", "trap"};
-    for (uint32_t block = 0u; block < 4u; ++block) {
+    const char *names[] = {"entry", "normal", "cancel", "trap", "error", "panic"};
+    assert(block_count <= 6u);
+    for (uint32_t block = 0u; block < 6u; ++block) {
         body->blocks[block].key = xr_program_coroutine_trap_key(scope, names[block]);
         body->blocks[block].instructions = body->instructions[block];
         if (block != 0u)
@@ -128,7 +129,7 @@ static XrCoreIrInstructionInput *xr_program_coroutine_trap_emit(XrProgramCorouti
                                                                 const char *result, uint16_t type,
                                                                 const XrCoreIrKey *operands,
                                                                 uint32_t count) {
-    assert(block < 4u && body->blocks[block].instruction_count < 16u);
+    assert(block < 6u && body->blocks[block].instruction_count < 16u);
     assert(count <= 40u - body->operand_counts[block]);
     XrCoreIrInstructionInput *instruction =
         &body->instructions[block][body->blocks[block].instruction_count++];

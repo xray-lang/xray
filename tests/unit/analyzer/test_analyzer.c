@@ -4091,6 +4091,37 @@ TEST(cycle_candidate_marks_recursive_tree_types) {
     xa_analyzer_free(a);
 }
 
+TEST(analyzer_error_effect_preserves_calls_under_type_expressions) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "enum WrappedError { Failed }\n"
+                         "fn fail() -> i64 { throw WrappedError.Failed }\n"
+                         "fn safe() -> i64 { return 1 }\n"
+                         "fn viaCast() -> u8 { return fail() as u8 }\n"
+                         "fn viaTest() -> bool { return fail() is i64 }\n"
+                         "fn viaSafe() -> u8 { return safe() as u8 }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_type_expressions.xr", program);
+    const char *names[] = {"viaCast", "viaTest", "viaSafe"};
+    for (unsigned index = 0u; index < 3u; ++index) {
+        const XaEffectSummary *summary = analyzer_function_effect_summary(a, names[index]);
+        ASSERT(summary != NULL);
+        ASSERT(summary->error_set_completeness == XA_EFFECT_COMPLETE);
+        ASSERT(effect_summary_has_enum_named(a, summary, "WrappedError") == (index != 2u));
+        AstNode *function = program->as.program.statements[index + 3u];
+        AstNode *expression =
+            function->as.function_decl.body->as.block.statements[0]->as.return_stmt.values[0];
+        AstNode *call = index == 1u ? expression->as.is_expr.expr : expression->as.as_expr.expr;
+        XaCallErrorEffectFact fact = {0};
+        ASSERT(xa_analyzer_get_call_error_effect(a, call, &fact));
+        ASSERT(fact.completeness == XA_EFFECT_COMPLETE && fact.unknown_reasons == XA_UNKNOWN_NONE);
+        ASSERT(fact.throw_effect == (index == 2u ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW));
+    }
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -8213,6 +8244,7 @@ int main(void) {
     RUN_TEST(cycle_candidate_follows_inherited_fields);
     RUN_TEST(cycle_candidate_marks_recursive_tree_types);
     RUN_TEST(analyzer_error_effect_handles_recursive_function_expr_cycles);
+    RUN_TEST(analyzer_error_effect_preserves_calls_under_type_expressions);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_xrd_signatures_fail_closed_without_typed_contracts);

@@ -1,5 +1,5 @@
 {
-  "schema": "xray-w7-wave4-exit-gate/1",
+  "schema": "xray-w7-wave4-exit-gate/2",
   "status": "READY_W7_WAVE4",
   "owner_tasks": [
     293,
@@ -20,7 +20,8 @@
         "indirect-call-valid",
         "indirect-call-rejects-fallible-signature",
         "indirect-call-trap-continuation-valid",
-        "indirect-call-rejects-lost-trap-owner"
+        "indirect-call-rejects-lost-trap-owner",
+        "indirect-call-rejects-suspending-signature"
       ]
     },
     {
@@ -30,9 +31,10 @@
       "kat_validator": "indirect-invoke",
       "kats": [
         "indirect-invoke-valid",
-        "indirect-invoke-rejects-infallible-signature",
         "indirect-invoke-provider-trap-continuation",
-        "indirect-invoke-rejects-lost-trap-owner"
+        "indirect-invoke-rejects-lost-trap-owner",
+        "indirect-invoke-rejects-infallible-signature",
+        "indirect-invoke-rejects-suspending-signature"
       ]
     },
     {
@@ -293,16 +295,17 @@
       }
     ]
   },
-  "three_channel_differential_entry": {
+  "independent_execution_entry": {
     "entry_script": "scripts/run_xr_program_wave4_differential.py",
     "command": "ctest --test-dir build --output-on-failure -R ^(test_xi_pipeline|test_xr_program_imported_callable|test_xr_program_vm|test_xr_program_aot|test_xr_program_aot_callable|test_xr_program_aot_existential|test_xr_program_source_aot_native|test_xr_program_imported_callable_native)$",
     "channels": [
       {
-        "id": "source-reference",
+        "id": "source-independent-expectations",
         "path": "tests/unit/ir/test_xi_pipeline.c",
         "tokens": [
-          "xr_reference_evaluate",
-          "reference.value.as.i64"
+          "PIPELINE_TEST_REQUIRE(vm.value.as.i64 == 478)",
+          "PIPELINE_TEST_REQUIRE(identity_log.finalizes == identity_log.constructs)",
+          "PIPELINE_TEST_REQUIRE(identity_log.reclaims == identity_log.constructs)"
         ]
       },
       {
@@ -310,14 +313,14 @@
         "path": "tests/unit/ir/test_xi_pipeline.c",
         "tokens": [
           "xr_vm_code_execute",
-          "vm.value.as.i64 == reference.value.as.i64"
+          "vm.value.as.i64 == 478"
         ]
       },
       {
-        "id": "source-aot-translation",
+        "id": "source-aot-program-binding",
         "path": "tests/unit/ir/test_xi_pipeline.c",
         "tokens": [
-          "xr_backend_ir_translation_validate",
+          "xr_backend_ir_binding_verify",
           "xr_backend_ir_emit_c"
         ]
       },

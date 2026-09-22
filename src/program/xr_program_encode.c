@@ -139,6 +139,8 @@ static int constant_value_compare(const XrCoreIrConstantInput *left,
         return left->kind < right->kind ? -1 : 1;
     if (left->kind == XR_CORE_IR_CONSTANT_I64 && left->value.i64 != right->value.i64)
         return left->value.i64 < right->value.i64 ? -1 : 1;
+    if (left->kind == XR_CORE_IR_CONSTANT_F64 && left->value.f64_bits != right->value.f64_bits)
+        return left->value.f64_bits < right->value.f64_bits ? -1 : 1;
     if (left->kind == XR_CORE_IR_CONSTANT_BOOL && left->value.boolean != right->value.boolean)
         return left->value.boolean ? 1 : -1;
     if (left->kind == XR_CORE_IR_CONSTANT_STRING)
@@ -244,6 +246,32 @@ static bool function_id(const FunctionRef *functions, uint32_t count, XrCoreIrKe
         }
     }
     return false;
+}
+
+/* Use the wire writer's ordering for compiler-to-host function bindings. */
+XrProgramBuildStatus xr_program_function_ids_from_keys(const XrCoreIrProgram *program,
+                                                       const XrCoreIrKey *keys, uint32_t count,
+                                                       uint32_t *ids) {
+    if (!program || (count && (!keys || !ids)))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (!count)
+        return XR_PROGRAM_BUILD_OK;
+    for (uint32_t index = 0u; index < count; ++index)
+        ids[index] = UINT32_MAX;
+    uint32_t function_count = 0u;
+    FunctionRef *functions = collect_functions(program, &function_count);
+    if (!functions)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    bool valid = true;
+    for (uint32_t index = 0u; index < count && valid; ++index)
+        valid = function_id(functions, function_count, keys[index], &ids[index]);
+    xr_free(functions);
+    if (!valid) {
+        for (uint32_t index = 0u; index < count; ++index)
+            ids[index] = UINT32_MAX;
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static SignatureView signature_from_function(const XrCoreIrFunction *function) {
@@ -515,12 +543,26 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
                         : type->kind == XR_CORE_IR_TYPE_CALLABLE ? XR_PROGRAM_TYPE_KIND_CALLABLE
                         : type->kind == XR_CORE_IR_TYPE_EXISTENTIAL
                             ? XR_PROGRAM_TYPE_KIND_EXISTENTIAL
-                            : XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE;
+                        : type->kind == XR_CORE_IR_TYPE_ATOMIC ? XR_PROGRAM_TYPE_KIND_ATOMIC
+                        : type->kind == XR_CORE_IR_TYPE_ARRAY ? XR_PROGRAM_TYPE_KIND_ARRAY
+                            : type->kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE
+                                  ? XR_PROGRAM_TYPE_KIND_PROVIDER_RESOURCE
+                            : type->kind == XR_CORE_IR_TYPE_RECORD_REFERENCE
+                                  ? XR_PROGRAM_TYPE_KIND_RECORD_REFERENCE
+                                  : XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE;
         buffer_put_uvar(buffer, kind);
         buffer_put_uvar(buffer, type->ownership);
         buffer_put_uvar(buffer, type->copy_contract);
         buffer_put_bytes(buffer, type->key.bytes, sizeof(type->key.bytes));
-        if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE) {
+        if (type->kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE) {
+            buffer_put_uvar(buffer, XR_STABLE_ID_BYTES);
+            buffer_put_bytes(buffer, type->resource_id.bytes, XR_STABLE_ID_BYTES);
+        } else if (type->kind == XR_CORE_IR_TYPE_ATOMIC) {
+            buffer_put_uvar(buffer, type->atomic_element_type);
+        } else if (type->kind == XR_CORE_IR_TYPE_ARRAY) {
+            buffer_put_uvar(buffer, type->array_element_type);
+        } else if ((type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+                    type->kind == XR_CORE_IR_TYPE_RECORD_REFERENCE)) {
             buffer_put_uvar(buffer, type->field_count);
             for (uint32_t field = 0; field < type->field_count; ++field)
                 buffer_put_uvar(buffer, type->field_types[field]);
@@ -552,6 +594,17 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
             buffer_put_uvar(buffer, id);
             buffer_put_uvar(buffer, type->interface_use_kind);
         }
+        size_t name_length = type->display_name ? strlen(type->display_name) : 0u;
+        buffer_put_uvar(buffer, name_length);
+        if (name_length)
+            buffer_put_bytes(buffer, type->display_name, name_length);
+        for (uint32_t variant = 0u; variant < type->variant_count; ++variant) {
+            const char *name = type->variants[variant].display_name;
+            name_length = name ? strlen(name) : 0u;
+            buffer_put_uvar(buffer, name_length);
+            if (name_length)
+                buffer_put_bytes(buffer, name, name_length);
+        }
     }
 }
 
@@ -568,6 +621,9 @@ static void encode_constants(ByteBuffer *buffer, const ConstantRef *constants, u
         buffer_put_uvar(buffer, constant->type_id);
         buffer_put_uvar(buffer, constant->kind);
         switch (constant->kind) {
+            case XR_CORE_IR_CONSTANT_F64:
+                buffer_put_uvar(buffer, constant->value.f64_bits);
+                break;
             case XR_CORE_IR_CONSTANT_I64:
                 buffer_put_svar(buffer, constant->value.i64);
                 break;

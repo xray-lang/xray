@@ -242,8 +242,115 @@ static void test_hostile_wire_is_atomic(void) {
           "reserved semantic data cannot obtain a logical fingerprint");
 }
 
+static void test_owned_resource_type(void) {
+    XrProviderLogicalContract contract = make_clock();
+    contract.effects = XR_PROVIDER_EFFECT_IO;
+    contract.result_owner = XR_PROVIDER_OWNER_OWNED;
+    contract.type_byte_count = 19u;
+    memset(contract.types, 0, sizeof(contract.types));
+    contract.types[0] = XR_PROVIDER_TYPE_OPTIONAL;
+    contract.types[1] = XR_PROVIDER_TYPE_RESOURCE;
+    for (uint8_t index = 0u; index < XR_STABLE_ID_BYTES; ++index)
+        contract.types[2u + index] = (uint8_t) (index + 1u);
+    contract.types[18] = XR_PROVIDER_TYPE_UNIT;
+    contract.resource_count = 1u;
+    contract.resources[0] = (XrProviderLogicalResourceTransition) {
+        .source = XR_PROVIDER_RESOURCE_RESULT, .action = XR_PROVIDER_RESOURCE_ACQUIRE,
+        .timing = XR_PROVIDER_RESOURCE_RESULT_PRESENT, .path_count = 1u,
+    };
+    memcpy(contract.resources[0].resource_id.bytes, contract.types + 2u, XR_STABLE_ID_BYTES);
+    static const uint8_t expected[] = {1,0,0,0,64,0,0,0,7,0,0,0,1,0,19,1,4,1,1,1,1,1,6,7,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,2,0,1,2,1,0};
+    static const uint8_t digest[] = {0x34,0x21,0x67,0xa2,0xb0,0x61,0xe7,0x66,0x68,0xaa,0xe8,0xa0,0x3e,0x55,0x05,0x9b,0x8e,0x7c,0x21,0x9b,0x95,0x01,0xf8,0xb0,0x30,0xbd,0x31,0xc3,0x4f,0xc0,0x13,0x3f};
+    uint8_t bytes[XR_PROVIDER_LOGICAL_MAX_ENCODED_BYTES];
+    size_t size = 0u;
+    XrFingerprint fingerprint;
+    CHECK(xr_provider_logical_contract_encode(&contract, bytes, sizeof(bytes), &size) &&
+          size == sizeof(expected) && memcmp(bytes, expected, size) == 0,
+          "resource identity and ownership have an independent exact wire");
+    CHECK(xr_provider_logical_contract_fingerprint(&contract, &fingerprint) &&
+          memcmp(fingerprint.bytes, digest, sizeof(digest)) == 0,
+          "resource fingerprint covers exact identity without target layout");
+    XrProviderLogicalContract decoded = {0};
+    CHECK(xr_provider_logical_contract_decode(expected, sizeof(expected), &decoded) &&
+          xr_provider_logical_contract_equal(&contract, &decoded), "resource wire roundtrip");
+    XrStableId id = {{0x55}}, untouched = id;
+    XrProviderLogicalTypeView leaf = {contract.types + 1u, 17u};
+    CHECK(xr_provider_logical_resource_type_id(leaf, &id) &&
+          memcmp(id.bytes, contract.resources[0].resource_id.bytes, XR_STABLE_ID_BYTES) == 0, "resource leaf identity extraction");
+    leaf.size = 16u;
+    id = untouched;
+    CHECK(!xr_provider_logical_resource_type_id(leaf, &id) && memcmp(id.bytes, untouched.bytes, XR_STABLE_ID_BYTES) == 0,
+          "truncated resource leaves the output unchanged");
+    for (size_t length = 0u; length < sizeof(expected); ++length) {
+        decoded = make_clock();
+        XrProviderLogicalContract before = decoded;
+        CHECK(!xr_provider_logical_contract_decode(expected, length, &decoded) &&
+              memcmp(&before, &decoded, sizeof(before)) == 0, "truncated resource wire is atomic");
+    }
+    XrProviderLogicalContract changed = contract;
+    changed.result_owner = XR_PROVIDER_OWNER_TRIVIAL;
+    CHECK(!xr_provider_logical_contract_verify(&changed), "resource payload is never trivial ownership");
+    changed = contract;
+    memset(changed.types + 2u, 0, XR_STABLE_ID_BYTES);
+    CHECK(!xr_provider_logical_contract_verify(&changed), "zero resource identity is invalid");
+    changed = contract;
+    changed.resources[0].resource_id.bytes[0] ^= 0x80u;
+    CHECK(!xr_provider_logical_contract_verify(&changed), "transition must match the resource leaf identity");
+    changed.types[2] ^= 0x80u;
+    CHECK(xr_provider_logical_contract_verify(&changed) &&
+          !xr_provider_logical_contract_equal(&contract, &changed), "different resource type is a distinct contract");
+    changed = contract;
+    changed.types[1] = 8u;
+    CHECK(!xr_provider_logical_contract_verify(&changed), "unknown type tokens remain rejected");
+    changed = contract;
+    changed.parameter_count = 1u;
+    changed.parameter_modes[0] = XR_PROVIDER_MODE_IN;
+    changed.parameter_owners[0] = XR_PROVIDER_OWNER_BORROWED;
+    changed.result_owner = XR_PROVIDER_OWNER_TRIVIAL;
+    memmove(changed.types, contract.types + 1u, 17u);
+    changed.types[17] = XR_PROVIDER_TYPE_BOOL;
+    changed.types[18] = XR_PROVIDER_TYPE_UNIT;
+    changed.resources[0].source = XR_PROVIDER_RESOURCE_PARAMETER;
+    changed.resources[0].action = XR_PROVIDER_RESOURCE_CONSUME;
+    changed.resources[0].timing = XR_PROVIDER_RESOURCE_CALL_ENTER;
+    changed.resources[0].path_count = 0u;
+    CHECK(xr_provider_logical_contract_verify(&changed),
+          "closing the external resource may borrow its still-live managed handle");
+    changed.parameter_owners[0] = XR_PROVIDER_OWNER_TRIVIAL;
+    CHECK(!xr_provider_logical_contract_verify(&changed), "managed input cannot masquerade as a scalar");
+    changed = contract;
+    memmove(changed.types + 4u, contract.types + 1u, 17u);
+    changed.types[1] = XR_PROVIDER_TYPE_TUPLE;
+    changed.types[2] = 2u;
+    changed.types[3] = XR_PROVIDER_TYPE_I64;
+    changed.types[21] = XR_PROVIDER_TYPE_UNIT;
+    changed.type_byte_count = 22u;
+    changed.resources[0].path_count = 2u;
+    changed.resources[0].path[1] = 1u;
+    CHECK(xr_provider_logical_contract_verify(&changed), "nested resource paths cross exact tuple children");
+    changed.resources[0].path[1] = 2u;
+    CHECK(!xr_provider_logical_contract_verify(&changed), "nested resource paths cannot escape tuple arity");
+    for (size_t offset = 0u; offset < sizeof(expected); ++offset) {
+        memcpy(bytes, expected, sizeof(expected));
+        bytes[offset] ^= 0x80u;
+        decoded = make_clock();
+        XrProviderLogicalContract before = decoded;
+        if (!xr_provider_logical_contract_decode(bytes, sizeof(expected), &decoded))
+            CHECK(memcmp(&before, &decoded, sizeof(before)) == 0, "hostile resource mutations publish no partial contract");
+        else {
+            uint8_t again[XR_PROVIDER_LOGICAL_MAX_ENCODED_BYTES];
+            size_t again_size = 0u;
+            CHECK(xr_provider_logical_contract_encode(&decoded, again, sizeof(again), &again_size) &&
+                  again_size == sizeof(expected) && memcmp(bytes, again, again_size) == 0,
+                  "valid mutated resource contracts have exact canonical bytes");
+        }
+    }
+
+}
+
 int main(void) {
     test_wire_known_answer();
+    test_owned_resource_type();
     test_semantic_identity_mutations();
     test_absence_and_equality();
     test_resource_paths_and_exits();

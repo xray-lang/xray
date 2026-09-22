@@ -39,6 +39,11 @@ typedef struct XrEnumCtor {
 /* Runtime ADT enum value. It shares only the object header + klass prefix with
  * XrObjectInstance; tag and payload are enum-owned inline storage, not generic
  * instance fields. */
+/* MSVC diagnoses the standard C flexible array member as extension C4200. */
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4200)
+#endif
 typedef struct XrEnumAggregateValue {
     XrObjHeader hdr;
     struct XrClass *klass;  // enum_type->enum_class, builtin_kind XR_BK_ADT_ENUM
@@ -47,6 +52,9 @@ typedef struct XrEnumAggregateValue {
     uint32_t payload_count;
     XrValue payloads[];
 } XrEnumAggregateValue;
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 // Enum type/namespace metadata (immutable at runtime).
 // GC tag is XR_TENUM_TYPE; it is not a user-visible wrapper class.

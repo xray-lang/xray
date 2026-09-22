@@ -42,20 +42,20 @@ GO_ERR = '[Uncaught Error in go coroutine] GoErr.Failed("in-go")'
 # An elided root spawns nothing, so it runs on the native stack with no main
 # coroutine -- the shape that regressed. The scheduled variant (a `go` forces a
 # main coroutine) takes the other finalization path, so both stay covered.
-ELIDED = '''enum TopErr { Failed(reason: string) }
+ELIDED = '''enum TopErr { Failed { reason: string } }
 
 fn run() {
-    throw TopErr.Failed("top-level")
+    throw TopErr.Failed { reason: "top-level" }
 }
 
 print("before")
 run()
 '''
 
-SCHEDULED = '''enum TopErr { Failed(reason: string) }
+SCHEDULED = '''enum TopErr { Failed { reason: string } }
 
 fn run() {
-    throw TopErr.Failed("top-level")
+    throw TopErr.Failed { reason: "top-level" }
 }
 
 go fn() { }()
@@ -63,10 +63,10 @@ print("before")
 run()
 '''
 
-CAUGHT = '''enum TopErr { Failed(reason: string) }
+CAUGHT = '''enum TopErr { Failed { reason: string } }
 
 fn run() {
-    throw TopErr.Failed("top-level")
+    throw TopErr.Failed { reason: "top-level" }
 }
 
 try { run() } catch (e) { print("caught") }
@@ -75,35 +75,35 @@ try { run() } catch (e) { print("caught") }
 # No Task handle and no enclosing scope, so nothing is left to observe the
 # error. Both backends must report it, and both exit 0 -- the spawning program
 # itself completed normally.
-IN_GO = '''enum GoErr { Failed(reason: string) }
+IN_GO = '''enum GoErr { Failed { reason: string } }
 
 print("before")
-go fn() { throw GoErr.Failed("in-go") }()
+go fn() { throw GoErr.Failed { reason: "in-go" } }()
 '''
 
 # The two shapes that must stay SILENT. Both reach the same finalization path
 # with the same error, and only the observer differs -- they are what keeps the
 # report from being written as an unconditional print.
 #   (a) a Task handle: the error is delivered to whoever awaits it.
-OBSERVED = '''enum GoErr { Failed(reason: string) }
+OBSERVED = '''enum GoErr { Failed { reason: string } }
 
 fn fail() -> i64 {
-    throw GoErr.Failed("observed")
+    throw GoErr.Failed { reason: "observed" }
     return 0
 }
 
 var task = go fail()
 match (task.awaitResult()) {
-    TaskResult.Failed(err) -> print("caught")
+    TaskResult.Failed { error: err } -> print("caught")
     _ -> print("unexpected")
 }
 '''
 
 #   (b) a parent scope: the scope collects the terminal state at scope exit.
-SCOPED = '''enum GoErr { Failed(reason: string) }
+SCOPED = '''enum GoErr { Failed { reason: string } }
 
 fn fail() {
-    throw GoErr.Failed("scoped")
+    throw GoErr.Failed { reason: "scoped" }
 }
 
 scope {
@@ -136,18 +136,23 @@ class Recorder:
                      f"want {want_rc}")
         elif got_out != want_out:
             self.bad(f"FAIL: {label} - stdout '{got_out}', want '{want_out}'")
-        elif want_err not in got_err:
-            self.bad(f"FAIL: {label} - stderr does not contain '{want_err}'",
+        elif (want_err and want_err not in got_err) or (not want_err and result.stderr):
+            self.bad(f"FAIL: {label} - stderr violates required diagnostic {want_err!r}",
                      f"  actual stderr: '{got_err}'")
         else:
             self.ok(label)
 
 
-def build_native(xray: Path, source: Path, out: Path,
+def build_native(rec: Recorder, xray: Path, source: Path, out: Path,
                  timeout: float | None) -> Path | None:
     result = proc.run([xray, "build", "--native", source, "-o", out],
                       timeout=timeout)
-    return out if result.ok and os.access(out, os.X_OK) else None
+    if not result.ok or not os.access(out, os.X_OK):
+        rec.bad(f"FAIL: aot {source.stem} - native build failed (exit {result.returncode})",
+                result.stdout.decode("utf-8", "replace"),
+                result.stderr.decode("utf-8", "replace"))
+        return None
+    return out
 
 
 def main(argv: list[str]) -> int:
@@ -180,53 +185,26 @@ def main(argv: list[str]) -> int:
         rec.check("vm scoped go coroutine stays silent", 0, "after", "",
                   vm["scoped"])
 
-        # The native toolchain is optional in this gate: when no provider is
-        # READY the AOT leg is skipped rather than failed.
-        elided_native = build_native(xray, sources["elided"],
-                                     ws.path(platform.exe_name("elided_native")),
-                                     timeout)
-        if elided_native is None:
-            print("SKIP: aot legs - no native toolchain provider available")
-        else:
-            rec.check("aot elided root reports uncaught error", 1, "before",
-                      TOP_ERR, proc.run([elided_native], timeout=timeout))
-
-            go_native = build_native(xray, sources["in_go"],
-                                     ws.path(platform.exe_name("in_go_native")),
-                                     timeout)
-            if go_native is None:
-                rec.bad("FAIL: aot dropped go coroutine - native build failed")
-            else:
-                aot_go = proc.run([go_native], timeout=timeout)
-                rec.check("aot dropped go coroutine reports uncaught error", 0,
-                          "before", GO_ERR, aot_go)
-                # Byte-for-byte, not just "both contain the message": the whole
-                # point of routing AOT through its own printer is that the
-                # wording cannot drift.
-                if vm["in_go"].stderr == aot_go.stderr:
+        # A compiler rejection is a failed case, never evidence of toolchain absence.
+        for name, label, status, output, diagnostic in (
+            ("elided", "elided root reports uncaught error", 1, "before", TOP_ERR),
+            ("in_go", "dropped go coroutine reports uncaught error", 0, "before", GO_ERR),
+            ("observed", "awaited go coroutine stays silent", 0, "caught", ""),
+            ("scoped", "scoped go coroutine stays silent", 0, "after", ""),
+        ):
+            native = build_native(rec, xray, sources[name],
+                                  ws.path(platform.exe_name(f"{name}_native")), timeout)
+            if native is None:
+                continue
+            executed = proc.run([native], timeout=timeout)
+            rec.check(f"aot {label}", status, output, diagnostic, executed)
+            if name == "in_go":
+                if vm[name].stderr == executed.stderr:
                     rec.ok("vm and aot stderr are byte-identical")
                 else:
                     rec.bad("FAIL: vm and aot stderr differ",
-                            f"  vm:  {vm['in_go'].stderr!r}",
-                            f"  aot: {aot_go.stderr!r}")
-
-            observed_native = build_native(
-                xray, sources["observed"],
-                ws.path(platform.exe_name("observed_native")), timeout)
-            if observed_native is None:
-                rec.bad("FAIL: aot awaited go coroutine - native build failed")
-            else:
-                rec.check("aot awaited go coroutine stays silent", 0, "caught",
-                          "", proc.run([observed_native], timeout=timeout))
-
-            scoped_native = build_native(
-                xray, sources["scoped"],
-                ws.path(platform.exe_name("scoped_native")), timeout)
-            if scoped_native is None:
-                rec.bad("FAIL: aot scoped go coroutine - native build failed")
-            else:
-                rec.check("aot scoped go coroutine stays silent", 0, "after", "",
-                          proc.run([scoped_native], timeout=timeout))
+                            f"  vm:  {vm[name].stderr!r}",
+                            f"  aot: {executed.stderr!r}")
 
     print("----------------------------------------")
     print(f"Uncaught error diagnostics: {rec.passed} passed, {rec.failed} failed")

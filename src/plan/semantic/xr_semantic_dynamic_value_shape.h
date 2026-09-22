@@ -12,6 +12,7 @@
 #define XR_SEMANTIC_DYNAMIC_VALUE_SHAPE_H
 
 #include "../../ir/xi.h"
+#include "../../shared/xr_obj_header.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "xr_semantic_class_shape.h"
@@ -662,7 +663,10 @@ xr_semantic_structural_allocation_is_exact(const XrSemanticPlan *plan,
         !xr_semantic_source_structural_shape_is_exact(plan, operation->result_type) ||
         !xr_semantic_dynamic_value_carrier_type_is_exact(type) ||
         !xr_semantic_dynamic_value_common_is_exact(plan, operation) ||
-        operation->operand_count != 0 || operation->semantic_immediate != type->child_count ||
+        operation->operand_count != 0 ||
+        (operation->semantic_immediate & XI_OBJECT_AUX_FIELD_MASK) != type->child_count ||
+        ((uint64_t) operation->semantic_immediate >> XI_OBJECT_AUX_STORAGE_SHIFT) >
+            XR_OBJ_STORAGE_TRANSFER ||
         operation->metadata_count != type->child_count || !metadata ||
         operation->metadata_begin > metadata_count ||
         operation->metadata_count > metadata_count - operation->metadata_begin ||

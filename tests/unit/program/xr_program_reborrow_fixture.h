@@ -8,6 +8,7 @@
 
 typedef enum XrProgramReborrowFixtureMutation {
     XR_REBORROW_FIXTURE_VALID = 0,
+    XR_REBORROW_FIXTURE_RETURN_OWNER,
     XR_REBORROW_FIXTURE_VALID_LOOP,
     XR_REBORROW_FIXTURE_SOURCE_READ,
     XR_REBORROW_FIXTURE_INTERFACE_MISMATCH,
@@ -473,12 +474,57 @@ xr_program_reborrow_fixture_write_mutated(XrProgramReborrowFixtureMutation mutat
         .flags = XR_PROGRAM_FUNCTION_ENTRY,
     };
 
+    uint16_t payload_field = XR_CORE_TYPE_STRING;
+    XrCoreIrKey payload_key = xr_reborrow_fixture_key("reborrow:value:payload");
+    XrCoreIrKey payload_read = xr_reborrow_fixture_key("reborrow:value:payload-read");
+    XrCoreIrInstructionInput payload_method[] = {
+        method_instructions[0],
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT, .result = payload_read,
+         .result_type_id = XR_CORE_TYPE_STRING, .operands = &method_receiver, .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD, .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_SEQUENCE_LENGTH, .result = method_result,
+         .result_type_id = XR_CORE_TYPE_I64, .operands = &payload_read, .operand_count = 1u},
+        method_instructions[2],
+    };
+    if (mutation == XR_REBORROW_FIXTURE_RETURN_OWNER) {
+        types[0].ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+        types[0].copy_contract = XR_CORE_IR_COPY_EXPLICIT;
+        types[0].field_types = &payload_field;
+        types[0].field_count = 1u;
+        method_block.instructions = payload_method;
+        method_block.instruction_count = XR_COUNTOF(payload_method);
+        entry_instructions[3] = entry_instructions[2];
+        entry_instructions[3].result_ownership = XR_CORE_IR_OWNER;
+        entry_instructions[2] = entry_instructions[1];
+        entry_instructions[2].result_ownership = XR_CORE_IR_OWNER;
+        entry_instructions[2].operands = &payload_key;
+        entry_instructions[2].operand_count = 1u;
+        entry_instructions[1] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CONSTANT_STRING, .result = payload_key,
+            .result_type_id = XR_CORE_TYPE_STRING, .result_ownership = XR_CORE_IR_OWNER,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT, .immediate.key = payload_key};
+        entry_instructions[4] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_RETURN, .operands = &owned, .operand_count = 1u};
+        entry_blocks[0].instruction_count = 5u;
+        entry.block_count = 1u;
+        entry.result_type_id = XR_REBORROW_FIXTURE_OWNED_TYPE;
+        entry.result_ownership = XR_CORE_IR_OWNER;
+        entry.effect_mask = 0u;
+        helper_arguments[0].type_id = XR_REBORROW_FIXTURE_OWNED_TYPE;
+        helper_parameter_types[0] = XR_REBORROW_FIXTURE_OWNED_TYPE;
+        helper_instructions[1] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_CALL_WITNESS_DIRECT, .result = helper_result,
+            .result_type_id = XR_CORE_TYPE_I64, .operands = &helper_argument, .operand_count = 1u,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_U32, .immediate.u32 = 0u};
+        helper.effect_mask = XR_CORE_EFFECT_CALL;
+    }
     XrCoreIrConstantInput constant = {
         .key = constant_key,
         .type_id = XR_CORE_TYPE_I64,
         .kind = XR_CORE_IR_CONSTANT_I64,
         .value.i64 = 42,
     };
+    static const uint8_t payload_text[] = "012345678901234567890123456789012345678901";
     XrCoreIrConstantInput constants[] = {
         constant,
         {
@@ -487,12 +533,14 @@ xr_program_reborrow_fixture_write_mutated(XrProgramReborrowFixtureMutation mutat
             .kind = XR_CORE_IR_CONSTANT_BOOL,
             .value.boolean = false,
         },
+        {.key = payload_key, .type_id = XR_CORE_TYPE_STRING, .kind = XR_CORE_IR_CONSTANT_STRING,
+         .value.string = {.bytes = payload_text, .size = sizeof(payload_text) - 1u}},
     };
     XrCoreIrFunctionInput functions[] = {method, helper, entry};
     XrCoreIrModuleInput module = {
         .key = xr_reborrow_fixture_key("reborrow:module"),
         .constants = constants,
-        .constant_count = 2u,
+        .constant_count = mutation == XR_REBORROW_FIXTURE_RETURN_OWNER ? 3u : 2u,
         .functions = functions,
         .function_count = 3u,
     };

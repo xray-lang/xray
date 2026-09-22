@@ -23,6 +23,7 @@ typedef enum XrStdlibProviderAdapter {
     XR_STDLIB_PROVIDER_I64_UNARY_STATUS_OUT = 3,
     XR_STDLIB_PROVIDER_OPTIONAL_I64_PAIR_PIPE_CREATE = 4,
     XR_STDLIB_PROVIDER_BOOL_I64_PIPE_CLOSE = 5,
+    XR_STDLIB_PROVIDER_TYPED = 6,
 } XrStdlibProviderAdapter;
 
 typedef struct XrStdlibProviderDescriptor {

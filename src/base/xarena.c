@@ -24,6 +24,13 @@
 
 #define XR_ARENA_MAX_CACHED_SEGMENTS 8
 
+struct XrArenaSegment {
+    struct XrArenaSegment *next;
+    size_t size;
+    size_t capacity;
+    char data[];
+};
+
 typedef struct {
     XrArenaSegment *segments;
     int count;

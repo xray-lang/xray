@@ -36,12 +36,7 @@
 #define XR_ARENA_SEGMENT_SIZE (64 * 1024)
 #define XR_ARENA_ALIGNMENT 8
 
-typedef struct XrArenaSegment {
-    struct XrArenaSegment *next;
-    size_t size;
-    size_t capacity;
-    char data[];
-} XrArenaSegment;
+typedef struct XrArenaSegment XrArenaSegment;
 
 typedef struct XrArena {
     XrArenaSegment *head;

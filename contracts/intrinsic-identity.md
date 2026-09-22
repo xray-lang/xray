@@ -67,10 +67,22 @@ core numeric operations, without reassigning the existing registry.
 15. A private non-yieldable native leaf is not an ordinary source call merely
     because its declaration is private. SemanticPlan admits it only when the
     canonical stdlib module identity, frozen native definition, selector,
-    arity, argument modes, scalar-or-Unit result, and non-yieldable effects all
+    arity, argument modes, admitted result, and non-yieldable effects all
     agree. TargetPlan independently rebuilds the same registry span and emits
     the one stable native target identity. A source wrapper, a same-spelled
     declaration, or a yieldable native member cannot inherit this authority.
+    Results are scalar/Unit without ownership transfer, or an exact generated
+    native storage class with a declared fresh result and complete owned
+    provenance. Nullable and non-null storage results use that same ownership
+    rule; their nullability must match the declared signature and canonical
+    type key exactly. Source classes and arbitrary tagged results acquire no
+    native authority from this rule.
+    A generated AOT link define configures the declared shim; it is not a
+    conditional binding and does not exclude an otherwise exact call. The
+    driver must retain the registry's define and runtime link requirements,
+    including its disabled-feature behavior. Conditional VM bindings remain
+    outside the non-yieldable direct family. Call admission alone neither
+    enables a target feature nor proves native execution or link availability.
 16. `string.fromUtf8` and `string.fromUtf8Lossy` are sealed static String
     calls. Their frozen method-symbol identities, selectors, builtin String
     namespace producer, exact `Array<u8>` or `Slice<u8>` input, and owned String
@@ -88,6 +100,8 @@ core numeric operations, without reassigning the existing registry.
     identity — they are private native leaves, not compiler-owned operations.
     The `FREESTANDING` flag records which of the 35 emit without libm and is
     the only authority the freestanding profile consults for a math member.
+
+verification-test: test_target_plan
 
 ## Digest anchors
 

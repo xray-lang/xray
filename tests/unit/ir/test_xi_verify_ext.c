@@ -37,6 +37,11 @@ static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 10, .frozen = true};
 static XrType stub_error = {.kind = XR_KIND_ERROR, .id = 12, .frozen = true};
 static XrType stub_unknown = {.kind = XR_KIND_UNKNOWN, .id = 17, .frozen = true};
+static XrType stub_panic = {.kind = XR_KIND_INSTANCE,
+                            .id = 20,
+                            .frozen = true,
+                            .scalar_rep = XR_SCALAR_REP_NONE,
+                            .instance = {.class_name = "PanicInfo"}};
 static XrType stub_class = {.kind = XR_KIND_INSTANCE, .id = 18, .frozen = true};
 static XrType stub_struct = {
     .kind = XR_KIND_INSTANCE, .id = 19, .frozen = true, .is_value_type = true};
@@ -119,6 +124,178 @@ static bool verify_stage_fail(const XiFunc *f, XiStage stage) {
     if (ok)
         return false;
     return err[0] != '\0';
+}
+
+static XiValue *make_panic_catch(XiFunc *function) {
+    XiBlock *handler = xi_block_new(function);
+    if (!handler)
+        return NULL;
+    handler->sealed = true;
+    XiValue *registration = xi_value_new(function, function->entry, XI_TRY, &stub_unit, 0);
+    XiValue *caught = xi_value_new(function, handler, XI_CATCH, &stub_panic, 0);
+    XiValue *normal_result = xi_const_int(function, function->entry, 42, &stub_int);
+    XiValue *panic_result = xi_const_int(function, handler, 13, &stub_int);
+    if (!registration || !caught || !normal_result || !panic_result)
+        return NULL;
+    registration->aux = handler;
+    registration->aux_int = -1;
+    caught->aux = registration;
+    xi_block_add_pred(handler, function->entry);
+    xi_block_set_return(function->entry, normal_result);
+    xi_block_set_return(handler, panic_result);
+    return caught;
+}
+
+TEST(panic_catch_requires_exact_payload_type) {
+    XiFunc *function = make_func("panic_payload_type");
+    ASSERT(function != NULL);
+    XiValue *caught = make_panic_catch(function);
+    ASSERT(caught != NULL && verify_ok(function));
+    XrType nullable = stub_panic;
+    nullable.is_nullable = true;
+    XrType declaration = stub_panic;
+    declaration.kind = XR_KIND_CLASS;
+    XrType wrong_name = stub_panic;
+    wrong_name.instance.class_name = "DifferentPayload";
+    XrType value_type = stub_panic;
+    value_type.is_value_type = true;
+    XrType *invalid[] = {&stub_unknown, &stub_int, &nullable, &declaration, &wrong_name, &value_type};
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        caught->type = invalid[index];
+        char error[256] = {0};
+        ASSERT(!xi_verify(function, error, sizeof(error)));
+        ASSERT(strstr(error, "exact PanicInfo payload") != NULL);
+    }
+    caught->type = &stub_panic;
+    ASSERT(verify_ok(function));
+    xi_func_free(function);
+}
+
+TEST(panic_catch_requires_unique_local_registration) {
+    XiFunc *function = make_func("panic_payload_registration");
+    XiFunc *foreign = make_func("foreign_panic_payload_registration");
+    ASSERT(function != NULL && foreign != NULL);
+    XiValue *caught = make_panic_catch(function);
+    XiValue *foreign_caught = make_panic_catch(foreign);
+    ASSERT(caught != NULL && foreign_caught != NULL && verify_ok(function));
+    XiValue *registration = (XiValue *) caught->aux;
+    void *invalid[] = {NULL, (void *) (uintptr_t) 1u, foreign_caught->aux,
+                       function->entry->control};
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        caught->aux = invalid[index];
+        char error[256] = {0};
+        ASSERT(!xi_verify(function, error, sizeof(error)));
+        ASSERT(strstr(error, "exact local handler registration") != NULL);
+    }
+    caught->aux = registration;
+    registration->aux = function->entry;
+    ASSERT(verify_fail(function));
+    registration->aux = caught->block;
+    ASSERT(verify_ok(function));
+    XiValue *duplicate = xi_value_new(function, caught->block, XI_CATCH, &stub_panic, 0);
+    ASSERT(duplicate != NULL);
+    duplicate->aux = registration;
+    char error[256] = {0};
+    ASSERT(!xi_verify(function, error, sizeof(error)));
+    ASSERT(strstr(error, "multiple payload definitions") != NULL);
+    xi_func_free(foreign);
+    xi_func_free(function);
+}
+
+TEST(call_panic_catch_requires_unique_exact_producer) {
+    XiFunc *function = make_func("call_panic_receiver");
+    ASSERT(function != NULL);
+    XiBlock *normal = xi_block_new(function);
+    XiBlock *error = xi_block_new(function);
+    XiBlock *panic = xi_block_new(function);
+    ASSERT(normal && error && panic);
+    normal->sealed = error->sealed = panic->sealed = true;
+    panic->exit_reason = XI_EXIT_REASON_PANIC;
+    XiValue *callee = xi_value_new(function, function->entry, XI_CLOSURE_NEW, &stub_func, 0u);
+    XiValue *call = xi_value_new(function, function->entry, XI_CALL, &stub_int, 1u);
+    XiValue *check = xi_value_new(function, function->entry, XI_ERR_CHECK, &stub_bool, 0u);
+    XiValue *caught = xi_value_new(function, panic, XI_CATCH, &stub_panic, 0u);
+    ASSERT(callee && call && check && caught);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_MAY_THROW;
+    check->error_producer = call;
+    xi_block_set_if(function->entry, check, error, normal);
+    xi_block_add_pred(panic, function->entry);
+    caught->aux = call;
+    caught->aux_int = XI_CATCH_AUX_POINT_PANIC;
+    xi_block_set_return(normal, xi_const_int(function, normal, 42, &stub_int));
+    xi_block_set_return(error, xi_const_int(function, error, 7, &stub_int));
+    xi_block_set_return(panic, xi_const_int(function, panic, 13, &stub_int));
+    ASSERT(verify_ok(function));
+    void *invalid[] = {NULL, (void *) (uintptr_t) 1u, callee, check};
+    for (size_t i = 0u; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        caught->aux = invalid[i];
+        ASSERT(verify_fail(function));
+    }
+    caught->aux = call;
+    caught->aux_int = 0;
+    ASSERT(verify_fail(function));
+    caught->aux_int = XI_CATCH_AUX_POINT_PANIC;
+    panic->preds[0] = normal;
+    ASSERT(verify_fail(function));
+    panic->preds[0] = function->entry;
+    ASSERT(verify_ok(function));
+    panic->exit_reason = XI_EXIT_REASON_NONE;
+    ASSERT(verify_fail(function));
+    panic->exit_reason = XI_EXIT_REASON_PANIC;
+    normal->exit_reason = XI_EXIT_REASON_PANIC;
+    ASSERT(verify_fail(function));
+    normal->exit_reason = XI_EXIT_REASON_NONE;
+    function->entry->exit_reason = XI_EXIT_REASON_PANIC;
+    ASSERT(verify_fail(function));
+    function->entry->exit_reason = XI_EXIT_REASON_NONE;
+    panic->exit_reason = UINT8_MAX;
+    ASSERT(verify_fail(function));
+    panic->exit_reason = XI_EXIT_REASON_PANIC;
+    ASSERT(verify_ok(function));
+    XiValue *duplicate = xi_value_new(function, normal, XI_CATCH, &stub_panic, 0u);
+    ASSERT(duplicate != NULL);
+    duplicate->aux = call;
+    duplicate->aux_int = XI_CATCH_AUX_POINT_PANIC;
+    ASSERT(verify_fail(function));
+    xi_func_free(function);
+}
+
+TEST(panic_only_call_requires_isolated_normal_continuation) {
+    XiFunc *function = make_func("panic_only_receiver");
+    ASSERT(function != NULL);
+    XiBlock *point = xi_block_new(function);
+    XiBlock *normal = xi_block_new(function);
+    XiBlock *panic = xi_block_new(function);
+    ASSERT(point && normal && panic);
+    point->sealed = normal->sealed = panic->sealed = true;
+    XiValue *callee = xi_value_new(function, function->entry, XI_CLOSURE_NEW, &stub_func, 0u);
+    XiValue *call = xi_value_new(function, point, XI_CALL, &stub_int, 1u);
+    XiValue *caught = xi_value_new(function, panic, XI_CATCH, &stub_panic, 0u);
+    ASSERT(callee && call && caught);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_MAY_THROW;
+    xi_block_set_jump(function->entry, point);
+    xi_block_set_jump(point, normal);
+    ASSERT(xi_block_add_pred(panic, point));
+    panic->exit_reason = XI_EXIT_REASON_PANIC;
+    caught->aux = call;
+    caught->aux_int = XI_CATCH_AUX_POINT_PANIC;
+    xi_block_set_return(normal, call);
+    xi_block_set_return(panic, xi_const_int(function, panic, 13, &stub_int));
+    ASSERT(verify_ok(function));
+    ASSERT(xi_const_int(function, point, 7, &stub_int) != NULL);
+    ASSERT(verify_fail(function));
+    --point->nvalues;
+    ASSERT(verify_ok(function));
+    point->succs[0] = NULL;
+    ASSERT(verify_fail(function));
+    point->succs[0] = normal;
+    caught->aux = callee;
+    ASSERT(verify_fail(function));
+    caught->aux = call;
+    ASSERT(verify_ok(function));
+    xi_func_free(function);
 }
 
 static XiValue *make_owned_assertion(XiFunc *f, char *source_file) {
@@ -2624,7 +2801,7 @@ static XiFunc *make_lowered_source_panic_coro(void) {
     end_try->flags |= XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(body, result);
 
-    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_unit, 0);
+    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_panic, 0);
     XiValue *handler_yield = xi_value_new(f, handler, XI_YIELD, &stub_unit, 0);
     XiValue *handler_result = xi_const_int(f, handler, 2, &stub_int);
     if (!caught || !handler_yield || !handler_result) {
@@ -2838,7 +3015,7 @@ TEST(coro_lower_accepts_frame_backed_static_cleanup_region) {
     end_try->flags |= XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(body, result);
 
-    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_unit, 0);
+    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_panic, 0);
     XiValue *handler_result = xi_const_int(f, handler, 2, &stub_int);
     ASSERT(caught != NULL && handler_result != NULL);
     caught->aux = try_op;
@@ -2874,7 +3051,7 @@ TEST(coro_lower_rebinds_post_suspend_static_cleanup_predecessor) {
     xi_block_add_pred(handler, f->entry);
     xi_block_set_return(f->entry, post_suspend_value);
 
-    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_unit, 0);
+    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_panic, 0);
     ASSERT(caught != NULL);
     caught->aux = try_op;
     caught->flags |= XI_FLAG_SIDE_EFFECT;
@@ -3373,6 +3550,10 @@ TEST(coro_lower_analyzes_local_callees_before_callers) {
 /* ========== Main ========== */
 
 int main(void) {
+    run_panic_catch_requires_exact_payload_type();
+    run_panic_catch_requires_unique_local_registration();
+    run_call_panic_catch_requires_unique_exact_producer();
+    run_panic_only_call_requires_isolated_normal_continuation();
     printf("=== Xi Extended Verifier Tests ===\n\n");
     test_filter = getenv("XRAY_TEST_FILTER");
 

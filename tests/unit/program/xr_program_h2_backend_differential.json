@@ -8,32 +8,88 @@
     "drop-events"
   ],
   "operations": [
-    {"stable_id": 142, "spelling": "core.class.construct"},
-    {"stable_id": 143, "spelling": "core.class.share"},
-    {"stable_id": 144, "spelling": "core.class.field_load"},
-    {"stable_id": 145, "spelling": "core.class.field_place"},
-    {"stable_id": 146, "spelling": "core.place.exchange"}
+    {
+      "stable_id": 142,
+      "spelling": "core.class.construct"
+    },
+    {
+      "stable_id": 143,
+      "spelling": "core.owner.alias"
+    },
+    {
+      "stable_id": 144,
+      "spelling": "core.class.field_load"
+    },
+    {
+      "stable_id": 145,
+      "spelling": "core.class.field_place"
+    },
+    {
+      "stable_id": 146,
+      "spelling": "core.place.exchange"
+    }
   ],
   "oracle": {
     "scenario": "class-alias-mutation-lifecycle",
-    "outcome": {"kind": "return"},
-    "value": {"kind": "i64", "data": 42},
-    "identities": {"constructed": "class-0", "shared": "class-0"},
+    "outcome": {
+      "kind": "return"
+    },
+    "value": {
+      "kind": "i64",
+      "data": 42
+    },
+    "identities": {
+      "constructed": "class-0",
+      "shared": "class-0"
+    },
     "events": [
-      {"kind": "class-construct", "identity": "class-0"},
-      {"kind": "class-share", "identity": "class-0", "related": "class-0"},
-      {"kind": "class-field-place", "identity": "class-0", "field": 0},
+      {
+        "kind": "class-construct",
+        "identity": "class-0"
+      },
+      {
+        "kind": "class-share",
+        "identity": "class-0",
+        "related": "class-0"
+      },
+      {
+        "kind": "class-field-place",
+        "identity": "class-0",
+        "field": 0
+      },
       {
         "kind": "place-exchange",
         "type": "i64",
-        "old": {"value": 7, "identity": "none"},
-        "replacement": {"value": 42, "identity": "none"}
+        "old": {
+          "value": 7,
+          "identity": "none"
+        },
+        "replacement": {
+          "value": 42,
+          "identity": "none"
+        }
       },
-      {"kind": "class-field-load", "identity": "class-0", "field": 0},
-      {"kind": "owner-drop", "identity": "class-0"},
-      {"kind": "owner-drop", "identity": "class-0"},
-      {"kind": "class-finalize", "identity": "class-0"},
-      {"kind": "class-reclaim", "identity": "class-0"}
+      {
+        "kind": "class-field-load",
+        "identity": "class-0",
+        "field": 0
+      },
+      {
+        "kind": "owner-drop",
+        "identity": "class-0"
+      },
+      {
+        "kind": "owner-drop",
+        "identity": "class-0"
+      },
+      {
+        "kind": "class-finalize",
+        "identity": "class-0"
+      },
+      {
+        "kind": "class-reclaim",
+        "identity": "class-0"
+      }
     ]
   },
   "reference_evidence": {
@@ -95,35 +151,17 @@
       "pending_witness": null,
       "active_command": {
         "binary": "vm",
-        "arguments": ["--h2-class-differential", "baseline"],
+        "arguments": [
+          "--h2-class-differential",
+          "baseline"
+        ],
         "route": "vm-baseline-view"
       },
       "active_evidence": {
         "source": "tests/unit/vm/test_xr_program_vm.c",
         "function": "test_class_reference_semantics_differential",
         "ordered_tokens": [
-          "XR_VM_DECODE_BASELINE_VIEW",
-          "XR_VM_OUTCOME_RETURN",
-          "XR_VM_VALUE_I64",
-          "h2-class-differential"
-        ]
-      }
-    },
-    {
-      "id": "vm-fixed",
-      "coverage_key": "vm",
-      "state": "execute",
-      "pending_witness": null,
-      "active_command": {
-        "binary": "vm",
-        "arguments": ["--h2-class-differential", "fixed"],
-        "route": "vm-fixed-rows"
-      },
-      "active_evidence": {
-        "source": "tests/unit/vm/test_xr_program_vm.c",
-        "function": "test_class_reference_semantics_differential",
-        "ordered_tokens": [
-          "XR_VM_DECODE_FIXED_ROWS",
+          "execute_class_alias_vm",
           "XR_VM_OUTCOME_RETURN",
           "XR_VM_VALUE_I64",
           "h2-class-differential"
@@ -137,7 +175,10 @@
       "pending_witness": null,
       "active_command": {
         "binary": "aot",
-        "arguments": ["--h2-class-differential", "backend-ir"],
+        "arguments": [
+          "--h2-class-differential",
+          "backend-ir"
+        ],
         "route": "aot-backendir"
       },
       "active_evidence": {
@@ -158,7 +199,10 @@
       "pending_witness": null,
       "active_command": {
         "binary": "aot",
-        "arguments": ["--h2-class-differential", "generated-c-native"],
+        "arguments": [
+          "--h2-class-differential",
+          "generated-c-native"
+        ],
         "route": "aot-generated-c-strict-native-host-run"
       },
       "active_evidence": {

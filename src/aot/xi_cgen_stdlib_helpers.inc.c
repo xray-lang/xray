@@ -147,6 +147,14 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         cg_semantic_operation_for_value(ctx, function, value);
     const XrStdlibDefEntry *entry = NULL;
     XrStableId native_identity = {{0}};
+    /* Scalar calls already carry their own frozen target family and exact
+     * refinement. The tagged native-direct family must not claim them merely
+     * because both families use the generated shim registry. */
+    if (operation && operation->function == function->semantic_plan_function_index &&
+        operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+        xr_semantic_native_direct_scalar_call_shape_is_exact(authority->semantic_plan, operation,
+                                                              &entry) && entry == candidate)
+        return CG_NATIVE_DIRECT_EMISSION_UNCOVERED;
     if (!operation || operation->function != function->semantic_plan_function_index ||
         !xr_semantic_native_direct_call_shape_is_exact(authority->semantic_plan, operation, &entry,
                                                        &native_identity) ||
@@ -264,7 +272,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         call->result_register_rep != result->register_rep ||
         call->result_memory_rep != result->memory_rep || !result_register || !result_memory)
         goto invalid;
-    if (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NULLABLE_NATIVE) {
+    if (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NATIVE) {
         uint32_t slot_count = 0;
         const XrTargetSlotRecord *slots = xr_target_plan_slots(authority->target_plan, &slot_count);
         const XrTargetSlotRecord *slot =

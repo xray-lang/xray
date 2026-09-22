@@ -88,6 +88,12 @@ XR_FUNC void xr_validated_program_free(XrValidatedProgram *program);
 XR_FUNC XrProgramId xr_validated_program_id(const XrValidatedProgram *program);
 XR_FUNC uint32_t xr_validated_program_function_count(const XrValidatedProgram *program);
 XR_FUNC uint32_t xr_validated_program_entry_function(const XrValidatedProgram *program);
+/* Optional names borrow the retained Program. They are display data only;
+ * type/variant admission and dispatch always use the numeric identities. */
+XR_FUNC const char *xr_validated_program_type_display_name(const XrValidatedProgram *program,
+                                                          uint16_t type_id);
+XR_FUNC const char *xr_validated_program_variant_display_name(const XrValidatedProgram *program,
+                                                             uint16_t type_id, uint32_t variant);
 XR_FUNC uint64_t xr_validated_program_verifier_work(const XrValidatedProgram *program);
 XR_FUNC uint32_t
 xr_validated_program_provider_requirement_count(const XrValidatedProgram *program);

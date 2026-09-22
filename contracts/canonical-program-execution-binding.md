@@ -45,6 +45,42 @@ pointer width/alignment/endianness to the explicit target machine facts. Every
 ordinary operation must permit that machine's operating system. Validation
 does not infer the selected target from the compiler host.
 
+Resource lifetime pins share the instance's one-shot ticket allocator with
+execution leases, but carry a distinct ticket kind. Only a valid execution
+lease can acquire a resource pin, including while finishing an in-flight
+operation during drain. A resource pin grants no execution or provider-call
+authority and cannot be released as an execution lease. Copied pins may release
+the ticket only once, including concurrent release attempts.
+
+The last execution lease still triggers drained module-state cleanup even when
+resources remain pinned. State-owned resources can therefore finalize and
+release their pins without a retention cycle. Retirement waits for all resource
+pins as well as execution leases and active state cleanup. Provider binding
+owners must preserve code/context through this retirement boundary. The
+resource owner releases its pin only after its finalizer has returned; this
+mechanism does not itself establish a resource's logical type or binding.
+
+Failed ticket allocation leaves the destination empty and preserves every
+existing execution lease, resource pin and state owner. Successful table growth
+may move storage; no caller retains a pointer into the ticket table across it.
+Allocation injection covers first acquisition and active/draining resource-pin
+growth, followed by actual state cleanup, retirement and physical reclamation.
+
+An executor-private resource owner adopts a non-null payload and non-failing
+destructor only after matching an admitted Program resource TypeId and the
+provider's stable resource identity. Failed admission or allocation leaves the
+payload caller-owned and publishes no owner. Adoption alone does not establish
+a provider operation's authority. No payload address, destructor or owner layout
+enters Program or its semantic identity.
+
+Borrow requires the exact resource identity and a live lease from the owner's
+instance, even when another instance has the same ExecutionId. The caller keeps
+the affine owner and lease alive throughout use and excludes concurrent free.
+Free clears its owner slot before invoking the destructor, so reentrant cleanup
+of that slot is empty; the resource pin remains live until the destructor has
+returned. Failed allocation of either ticket growth or the payload owner must
+preserve every earlier ticket and leave no allocation or pin behind.
+
 Coroutine execution keeps the generation lease pinned while suspended. Resume and cancellation
 are distinct operations on that same execution: cancellation is valid only at a verified
 safepoint, follows the Program-owned cancel successor, recursively cancels an active sealed child,
@@ -59,6 +95,12 @@ and scoped `READ` existential reborrows are admitted only when the Program safep
 owner exactly once; ambiguous projections, missing owners, and duplicate owner paths remain
 rejected. Disposing a frame is not an implicit cancellation operation, and no error, panic, or
 trap outcome aliases cancellation.
+
+VM ordinary invokes and child-coroutine completion share typed outcome selection
+and parallel edge scratch. The dispatch loop publishes every selected edge once;
+there is no child-only pre-materialized edge path. A child frame is released only
+after its selected payload has entered the shared execution-tree scratch. This
+does not change Program admission or permit undeclared error or panic channels.
 
 A suspended outcome carries one Program-owned typed readiness request rather
 than asking either executor to wait internally. Cooperative yield has no
@@ -87,8 +129,9 @@ lease cannot be released while any nested or concurrent provider call is in flig
 Program/profile accessors return retained references so a racing release cannot invalidate a
 borrowed pointer.
 
-The generation protocol is ACTIVE -> DRAINING -> RETIRED. DRAINING rejects new pins; RETIRED
-requires zero pins; a successor is created only from a retired instance at generation + 1. The
+The generation protocol is ACTIVE -> DRAINING -> RETIRED. DRAINING rejects new execution leases;
+RETIRED requires zero leases and resource pins and no active state cleanup. A successor is
+created only from a retired instance at generation + 1. The
 execution authority owns retained program/profile references and copied provider bindings. The
 pre-existing language object allocation type is named `XrObjectInstance`; `XrInstance` has one
 meaning only.
@@ -180,9 +223,10 @@ Module place immediates resolve the declaration owner and exact type. Only its
 initializer may consume a first-publication value. Const restrictions survive
 SSA aliases and reject mutable REF calls and interface borrowing, while module take cannot pretend to
 have local storage origin. The scalar and owned-string fixtures join complete
-allocation-failure injection. VM and native code construction still reject the
-module-bearing fixtures until actual instance storage and initialization are
-activated; these refusals are not successful module program execution.
+allocation-failure injection. VM and native code execute module initializers
+and keep their mutable slots in the execution instance. First publication,
+repeated entry, independent instances and failed initialization have distinct
+state transitions; a failed initializer is never replayed.
 The writer refines conditional place traps from a proved local or class-field
 storage root. Module and unknown origins retain trap cleanup; projected cleanup
 instructions use their original source identities before operand remapping.
@@ -204,29 +248,37 @@ programs are immediately complete.
 Concurrent publication and visibility, failure persistence, abandoned publishers,
 drain and instance isolation have direct execution tests. The diamond module
 fixture is shared with the independent Program admission and allocation tests.
-This state protocol does not yet establish initializer execution by VM or AOT,
-module value ownership, or the complete source-program module closure.
+VM and native initializers use that protocol and retain suspended publication
+authority. Unhandled error and panic retain their original channels at the initialization
+boundary. The instance owns a typed error graph before published module slots are cleared in
+reverse actual publication order; cleanup of those slots does not destroy the failure owner.
+Source cleanup continuations execute before boundary publication. Provider output refusal
+follows the explicit trap cleanup, runs remaining defer statements and retains trap 7 through
+repeated failed entries. An owned class error sharing the last published slot retains its
+identity and its surviving reference after that slot is cleared. Its final observer lease
+prevents instance retirement; releasing that lease finalizes and physically reclaims the error
+exactly once. A panic edge closes local aliases and publishes PanicInfo exactly once. Repeated
+failed entries observe the same error storage without initialization or cleanup replay.
+These obligations apply independently to VM and generated native execution;
+local fixture success does not establish complete language or safety coverage.
 
 ## Digest anchors
 
 anchor-sha256: src/plan/target/xr_target_profile.h d21c09134a6469510fddfe0e10e961448fe47d79086f223e0b48fb5ff01e31eb
 anchor-sha256: src/plan/target/xr_target_profile.c 7b5cfb5d561174bd1b2e4c834efe4290d3297a00a97a847ea4c83ead36e0f3ac
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 45c0cd1a438551071bd767e0a966e5950a03b809cbfbad7cbfeab3ed0f020c26
-anchor-sha256: src/plan/target/xr_target_verify.c 6a58af2b4a6270625b6260177e5bf2cfbceb273b5d07c9d19dd16dd575e58966
-anchor-sha256: src/execution/xr_execution.h 6fc7e15c2399cec032850567a0211e319448e8eb5f3b46d7d467ce341bed06a0
-anchor-sha256: src/execution/xr_execution.c f88863d22e7486d06a7cf4b89f62f74d0b9f08ae495e93de268edb4dceab197a
+anchor-sha256: src/plan/target/xr_target_verify.c 89e5cc6db3ca18508cf5e019d5f80bc18f61b52b285e5e832d714b087ab1e833
 anchor-sha256: src/execution/xr_execution_identity.h 5783c870cd0d642c6d60983e24efcd183edbfbb63380ffae3254e5617af5fd51
 anchor-sha256: src/execution/xr_execution_identity.c 2b6c5b11049212bf0993b0bc95718004db2c4e51e7d08ee7ee75e960c368a5d1
 anchor-sha256: src/execution/xr_boundary_materialization.h 337225749c98d6b0ae0ddce921c1e27b71765dc023ddfef2deb273fef45c8482
 anchor-sha256: src/execution/xr_boundary_materialization.c d822157b7d686cd315434b08a730d04a61fba6018a3decbed566f45dfee45f22
 anchor-sha256: src/program/xr_program_verify.h 0da4b3d5b59668a6e865bb7c1e20185049cfdbbb653c553418bee63d49119080
-anchor-sha256: src/program/xr_program_verify.c 0c71f8d8e65deaaa1fa93f10ef5951c3c846cb51356afd6d4239eb41635bde8e
+anchor-sha256: src/program/xr_program_verify.c 3953f286e82f398efd34403ff79823b93f6866fd38da12eb78e2d38636f55c55
 anchor-sha256: src/program/xr_validated_program_internal.h 79f0dadd2cca8ba1519a1a9521e23d136658b4b0e1c181dc37ab004225981622
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h 6f59e9d8d7d5f48035db68c7bc4e32722a5c8bd09d573a5031bd87f7adffcf01
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c 8c68657d160545bbfc3fafb6b54e347e9a0dbc959122e71d1763b1b5866443bf
 anchor-sha256: src/runtime/class/xinstance.h 5a19d7f36bf25723bf9f9c4cb47f60ed0d1abf3d4a7903f281af8d3132b62a97
 anchor-sha256: tests/unit/plan/test_target_profile.c e54b53070db66b309a07673c57fb1112781b19cd8eecacacb496fefb04079da6
-anchor-sha256: tests/unit/execution/test_xr_execution.c 3398ffec7eb161515088b7c55829de82518243b099ec2535122214931af234b7
 anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 177583c0f785168d4693a33d035ce52c04c6bfd37eeb4de7dacf0843aeffb601
 anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c fa3d630a996a22e1d515a11f73f75f515906cb5ce6afad00c6e2b183486fd858
 anchor-sha256: scripts/check_xr_execution_contracts.py 88b35a547b5f56febd0ccd625761dd47b18242c00f9fca858c616884c090234d
@@ -247,16 +299,61 @@ anchor-sha256: src/program/xr_program_decode.c 32492c36d80ae7d9ec314e2962c2c0070
 anchor-sha256: src/program/xr_program_schema_gen.h c5e4be2fae115853d7b787ecfd79d481365fef5f96a7552fbb34148b0ddcc6d6
 anchor-sha256: xisa/program/schema.json c089ea8ab82f94fab0b3dcf6d47ec0a8e72a2e559a1a204e1e1f4279360779e5
 anchor-sha256: tools/programgen/programgen.py 109e1615e854eeaf1bf8b0074ffad9b31cf10e1f30e34f1665a758434577ecfd
-anchor-sha256: tests/unit/program/test_xr_program.c dfebc57b8136e3acc705943778fc5f0adf0d59a4921be42c039dad8b11f75918
+anchor-sha256: tests/unit/program/test_xr_program.c 1afdb7e94b66c6565243c1fbc402a54f05e28e90c9b551006f36648854e60553
 anchor-sha256: tests/unit/program/test_xr_program_provider_requirements.c 0368d273bc7c783ff9c8e72f65e38cee49b2575af94c5a0bec03ec9a33390abf
 anchor-sha256: tests/unit/program/xr_program_provider_fixture.h 9a7116c1fdcad29ea945a8e7b651e24490f35fd52f5f3aaab5367e755e8affea
 anchor-sha256: contracts/canonical-program/xrprogram-format-v3.md d5e309e84b12d981f98abd29ad69dcd1d41777646b00567461cf47cf67619fe3
 anchor-sha256: contracts/canonical-program/xrprogram-format-coverage.json 9633c26afefadc473cc9c72657be2f904addea029a41b84a05ccffcc5bdd0fb4
-anchor-sha256: contracts/canonical-program/xrprogram-semantic-coverage.json 303eb2d493121da2c8683b62e5e8584294840520b886a3a914e2465aaabc5b02
+anchor-sha256: contracts/canonical-program/xrprogram-semantic-coverage.json 82637526ad66bee68aca8ade9d4bda5097d12e7e03c77dd04768ffba4a7c1578
 anchor-sha256: tests/unit/execution/test_provider_logical_admission.c e18fa4f1c8dec8f96e4c5be777f639ce5b85b8258801a3355bbd4f54327facec
 anchor-sha256: scripts/canonical_program_test_profile.py 20343ab8152f7b1f5bdf1cf465df9520fe8e780ed337f50399fdd7d8f4511df2
 anchor-sha256: tests/lib/tests/test_canonical_program_test_profile.py a6ceb30eaaec443cd7c0f40a976735ae776caa8cd8a137a7174f1720416b9d6e
-anchor-sha256: tests/unit/program/xr_program_module_fixture.h a4d61a7bf2022a37b022fad75cb964a8541ab851e828ddcff2daa83e418c4b5a
+anchor-sha256: tests/unit/program/xr_program_module_fixture.h 68d57ccdc6cb4f92f1571b3215cf437b7f0cdcd3ce7b5d3f4007f01978aedac0
 
 anchor-sha256: tests/unit/program/xr_program_module_slot_checks.inc.c b9c8ddd8b3bb766b9005c425ec5b6254ac1c8a1f9fe4a804412005c25b983f97
 anchor-sha256: tests/unit/program/xr_program_module_operation_checks.inc.c 36f2868fa98762aed8c55a71aee8a2a092c6207021547b2efb01a66ee2e73ef3
+
+A failed module initialization remains sticky and retains its original scalar PanicInfo cause
+on the PANIC channel. VM `panic_value` and native presence/code are by-value observations with
+no dynamic owner or frame pointer. Typed ERROR observations instead borrow an instance-owned
+failure graph protected by their observer lease. Native descriptor schema 6 carries both kinds
+through the generated-to-host boundary; schemas 4 and 5 are rejected before creating a frame.
+Cancellation, resource failure and a typed error cannot be reported as panic merely because
+initialization failed. Native host error pointers are backend-private and expire when the
+observing execution is freed; ordinary entry errors belong to that execution's frame.
+
+The execution instance header, implementation and lifecycle test are guarded by
+the following assertion fixtures in place of whole-source digest locks. Other
+listed anchors retain their current protection until their own replacements
+are qualified. Independent Program/ExecutionId vectors, provider admission,
+concurrent lease/pin use, state publication and fault-injected allocation
+cleanup execute against the canonical production runtime.
+
+verification-test: test_xr_execution
+verification-test: test_xr_execution_allocations
+
+Provider call admission recursively matches declared logical parameter/result
+types to Program types, including exact resource identities inside tuple and
+optional values. It does not maintain a list of function-specific signatures.
+The typed C entry takes borrowed context, input-pack and result-pack pointers
+and returns a signed 32-bit status. Physical pointer lifetime flags remain
+BORROWS; owned logical results are expressed by the logical contract, not by
+pretending the status return slot is an owned pointer.
+
+The synchronous typed boundary pins the lease through invocation, validation,
+adoption and refusal cleanup. Resource arguments borrow a same-instance owner;
+successful results acquire an owner before publication. Invalid type/identity,
+duplicate owners and borrowed-input aliases are rejected without leaking or
+destroying the input. Failed callbacks must describe allocated results for
+cleanup. Allocation failure reports resource exhaustion, distinct from stale
+authority. Instance acquisition returns an execution status; its consumers
+must compare success explicitly and preserve an available memory-failure channel.
+
+verification-test: test_xr_typed_provider
+verification-test: test_xr_typed_provider_allocations
+
+verification-test: test_xr_typed_provider_local_native
+verification-test: test_xr_typed_provider_module_native
+
+verification-test: test_xr_typed_provider_local_native_allocations
+verification-test: test_xr_typed_provider_module_native_allocations

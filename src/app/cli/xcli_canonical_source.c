@@ -62,6 +62,7 @@ static bool request_valid(const XrCliCanonicalSourceRequest *request) {
         request->entry_source_path[0] == '\0' || (!function_entry && !initializer_entry) ||
         (function_entry && (!request->entry_function || request->entry_function[0] == '\0')) ||
         (initializer_entry && request->entry_function != NULL) ||
+        request->discover_tests > 1u ||
         !fingerprint_present(request->semantic_profile_fingerprint))
         return false;
     for (size_t index = 0u; index < sizeof(request->reserved8); ++index)
@@ -157,6 +158,9 @@ xr_cli_canonical_source_build(const XrCliCanonicalSourceRequest *request,
                 .source_content_fingerprint = source_fingerprint,
             },
         .source_profile = request->source_profile,
+        .discover_tests = request->discover_tests,
+        .discover_exports = request->source_profile == XR_PROGRAM_SOURCE_PROFILE_NATIVE_RELEASE ||
+                            request->source_profile == XR_PROGRAM_SOURCE_PROFILE_FREESTANDING,
         .semantic_profile_fingerprint = request->semantic_profile_fingerprint,
     };
     XrProgramSourceDiagnostic build_diagnostic;

@@ -4714,7 +4714,7 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
 
     if (callee && callee->op == XI_GET_SHARED) {
         int slot = (int) callee->aux_int;
-        if (slot >= 0 && slot < ctx->shared_cap)
+        if (!cd && slot >= 0 && slot < ctx->shared_cap)
             cd = ctx->shared_class[slot];
         /* Slot-held classes are lowered by the module init function, so
          * resolve the constructor child there (falling back to the current
@@ -4730,7 +4730,7 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
     } else if (callee && callee->op == XI_CLASS_CREATE && callee->aux) {
         cd = (const XiClassData *) callee->aux;
         target = cg_find_constructor(f, cd);
-    } else if (callee && callee->op == XI_IMPORT_REF && callee->aux) {
+    } else if (!cd && callee && callee->op == XI_IMPORT_REF && callee->aux) {
         for (int i = 0; i < ctx->nimports; i++) {
             const CgImportEntry *imp = &ctx->imports[i];
             const XiFunc *ctor = imp->target_func;

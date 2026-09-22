@@ -8,22 +8,21 @@
  * xr_backend_ir.h - Private AOT realization of a validated XrProgram
  *
  * KEY CONCEPT:
- *   XrBackendIR is a disposable target realization. It copies verified
- *   program structure and adds physical C representation choices, but it
- *   cannot infer or replace language semantics.
+ *   XrBackendIR retains one immutable validated program and its exact target
+ *   profile. Emission reads that program directly and selects physical C
+ *   representations without copying or rewriting the logical graph.
  */
 
 #ifndef XR_BACKEND_IR_H
 #define XR_BACKEND_IR_H
 
-#include "../../execution/xr_execution_identity.h"
+#include "../../execution/xr_native_descriptor.h"
 
-#define XR_BACKEND_IR_SCHEMA_VERSION UINT32_C(1)
-#define XR_BACKEND_NATIVE_DESCRIPTOR_SCHEMA_VERSION UINT32_C(3)
+#define XR_BACKEND_IR_SCHEMA_VERSION UINT32_C(3)
 #define XR_AOT_TOOLCHAIN_SCHEMA_VERSION UINT32_C(1)
 #define XR_NATIVE_ARTIFACT_SCHEMA_VERSION UINT32_C(1)
 #define XR_AOT_BACKEND_NAME "xray-c11-aot"
-#define XR_AOT_BACKEND_VERSION UINT32_C(1)
+#define XR_AOT_BACKEND_VERSION UINT32_C(19)
 
 typedef XrFingerprint XrBackendId;
 typedef XrFingerprint XrOptimizationPolicyId;
@@ -53,7 +52,7 @@ typedef enum XrBackendStatus {
     XR_BACKEND_RESOURCE_LIMIT,
     XR_BACKEND_OUT_OF_MEMORY,
     XR_BACKEND_INVARIANT_REJECTED,
-    XR_BACKEND_TRANSLATION_REJECTED,
+    XR_BACKEND_BINDING_REJECTED,
     XR_BACKEND_EMISSION_REJECTED,
     XR_BACKEND_TOOLCHAIN_REJECTED,
     XR_BACKEND_ARTIFACT_REJECTED,
@@ -69,54 +68,21 @@ typedef struct XrBackendDiagnostic {
 } XrBackendDiagnostic;
 
 typedef struct XrBackendIR XrBackendIR;
-typedef struct XrBackendExecution XrBackendExecution;
 
-typedef enum XrBackendExecutionOutcomeKind {
-    XR_BACKEND_EXECUTION_RETURN = 0,
-    XR_BACKEND_EXECUTION_SUSPENDED,
-    XR_BACKEND_EXECUTION_TRAP,
-    XR_BACKEND_EXECUTION_CANCELLED,
-    XR_BACKEND_EXECUTION_INVALID,
-} XrBackendExecutionOutcomeKind;
-
-typedef struct XrBackendExecutionOutcome {
-    XrBackendExecutionOutcomeKind kind;
-    int64_t value;
-    uint32_t state_id;
-    uint32_t safepoint_id;
-    XrSuspensionRequest suspension;
-} XrBackendExecutionOutcome;
-
-typedef struct XrBackendNativeOutcome {
-    uint32_t kind;
-    int64_t value;
-    uint32_t state_id;
-    uint32_t safepoint_id;
-    XrSuspensionRequest suspension;
-} XrBackendNativeOutcome;
-
-// Backend-private adapter for a generated or loaded native step.
-// Owns frame lifecycle and exact-generation authority only.
-// CoreSpec semantics remain exclusively in generated native code.
-typedef XrBackendNativeOutcome (*XrBackendNativeStep)(void *frame);
-typedef XrBackendNativeOutcome (*XrBackendNativeCancel)(void *frame);
-typedef void (*XrBackendNativeInitialize)(void *frame);
-typedef void (*XrBackendNativeDrop)(void *frame);
-
-typedef struct XrBackendNativeDescriptor {
-    uint32_t schema_version;
-    uint32_t reserved32;
-    XrExecutionId execution_id;
-    size_t frame_size;
-    XrBackendNativeInitialize initialize;
-    XrBackendNativeStep step;
-    XrBackendNativeCancel cancel;
-    XrBackendNativeDrop drop;
-} XrBackendNativeDescriptor;
+/* Borrowed only for one emission; function IDs belong to the retained Program. */
+typedef struct XrBackendCExport {
+    uint32_t function_id;
+    const char *symbol;
+    uint8_t hidden;
+    uint8_t header;
+    uint8_t reserved8[2];
+} XrBackendCExport;
 
 typedef struct XrGeneratedC {
     char *bytes;
     size_t size;
+    char *header_bytes;
+    size_t header_size;
     XrExecutionId execution_id;
     XrBackendId backend_id;
     XrOptimizationPolicyId optimization_policy_id;
@@ -180,8 +146,8 @@ XR_FUNC XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
 XR_FUNC void xr_backend_ir_free(XrBackendIR *ir);
 XR_FUNC XrBackendIR *xr_backend_ir_retain(const XrBackendIR *ir);
 XR_FUNC bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic_out);
-XR_FUNC bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
-                                                XrBackendDiagnostic *diagnostic_out);
+XR_FUNC bool xr_backend_ir_binding_verify(const XrBackendIR *ir,
+                                          XrBackendDiagnostic *diagnostic_out);
 XR_FUNC XrExecutionId xr_backend_ir_execution_id(const XrBackendIR *ir);
 XR_FUNC XrBackendId xr_backend_ir_backend_id(const XrBackendIR *ir);
 XR_FUNC XrOptimizationPolicyId xr_backend_ir_optimization_policy_id(const XrBackendIR *ir);
@@ -190,13 +156,12 @@ XR_FUNC size_t xr_backend_ir_instruction_count(const XrBackendIR *ir);
 XR_FUNC XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main,
                                              XrGeneratedC *generated_out,
                                              XrBackendDiagnostic *diagnostic_out);
+XR_FUNC XrBackendStatus xr_backend_ir_emit_c_exports(const XrBackendIR *ir, bool standalone_main,
+                                                     const XrBackendCExport *exports,
+                                                     uint32_t export_count,
+                                                     XrGeneratedC *generated_out,
+                                                     XrBackendDiagnostic *diagnostic_out);
 XR_FUNC void xr_generated_c_free(XrGeneratedC *generated);
-XR_FUNC bool xr_backend_execution_create(XrExecutionId execution_id,
-                                         const XrBackendNativeDescriptor *descriptor,
-                                         XrBackendExecution **execution_out);
-XR_FUNC XrBackendExecutionOutcome xr_backend_execution_step(XrBackendExecution *execution);
-XR_FUNC XrBackendExecutionOutcome xr_backend_execution_cancel(XrBackendExecution *execution);
-XR_FUNC void xr_backend_execution_free(XrBackendExecution *execution);
 
 XR_FUNC bool xr_aot_toolchain_binding_build(const XrAotToolchainInput *input,
                                             XrAotToolchainBinding *binding_out);

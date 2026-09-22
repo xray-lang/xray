@@ -72,10 +72,10 @@ static inline void xr_park_futex_wake(_Atomic int *addr) {
 #include <windows.h>
 static inline void xr_park_futex_wait(_Atomic int *addr, int expected, uint32_t timeout_us) {
     DWORD ms = (timeout_us == 0) ? INFINITE : (timeout_us / 1000);
-    WaitOnAddress(addr, &expected, sizeof(int), ms);
+    WaitOnAddress((volatile void *) addr, &expected, sizeof(int), ms);
 }
 static inline void xr_park_futex_wake(_Atomic int *addr) {
-    WakeByAddressSingle(addr);
+    WakeByAddressSingle((void *) addr);
 }
 #endif  // Forward declarations
 struct XrProc;

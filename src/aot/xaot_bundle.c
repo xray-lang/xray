@@ -9,6 +9,7 @@
  */
 
 #include "xaot_bundle.h"
+#include "xaot_callable.h"
 #include "../module/xnative_package.h"
 #include "xaot_struct_name.h"
 #include "refine/xr_aot_representation_refinement.h"
@@ -460,16 +461,21 @@ static bool xaot_module_semantic_authority_matches(const XiModule *module,
         return xi_program_semantic_plan_verify_detached_leaf_authority(module->init, semantic, NULL,
                                                                        0);
     const XrSemanticPlan *live_semantic = module->init->semantic_plan;
+    if (!live_semantic || !xr_semantic_plan_is_frozen(live_semantic) ||
+        !xr_semantic_plan_is_verified(live_semantic) || !xr_semantic_plan_is_frozen(semantic) ||
+        !xr_semantic_plan_is_verified(semantic) ||
+        !xr_fingerprint_equal(xr_semantic_plan_fingerprint(live_semantic),
+                              xr_semantic_plan_fingerprint(semantic)))
+        return false;
+    /* Different partitions cannot match. Reject them before scanning their
+     * complete entity tables; matching fingerprints still require both unique
+     * module identities and the complete source provenance below. */
     const XrSemanticEntityRecord *live_entity =
         xr_semantic_plan_unique_module_entity(live_semantic);
     const XrSemanticEntityRecord *candidate_entity =
         xr_semantic_plan_unique_module_entity(semantic);
-    if (!live_semantic || !xr_semantic_plan_is_frozen(live_semantic) ||
-        !xr_semantic_plan_is_verified(live_semantic) || !xr_semantic_plan_is_frozen(semantic) ||
-        !xr_semantic_plan_is_verified(semantic) || !live_entity || !candidate_entity ||
-        !xr_stable_id_equal(live_entity->id, candidate_entity->id) ||
-        !xr_fingerprint_equal(xr_semantic_plan_fingerprint(live_semantic),
-                              xr_semantic_plan_fingerprint(semantic)))
+    if (!live_entity || !candidate_entity ||
+        !xr_stable_id_equal(live_entity->id, candidate_entity->id))
         return false;
 
     const XrSemanticProgramProvenance *candidate_program =
@@ -766,9 +772,31 @@ static bool bundle_representation_materialization_verify(
         valid = roots[i] && refinements[i] && xaot_bundle_program_semantic_for_module(bundle, i);
         views[i] = xr_aot_refinement_plan_view(refinements[i]);
     }
-    if (valid)
+    if (valid) {
+        uint32_t failed_module = 0u;
+        XrAotRefinementDiagnostic diagnostic = {0};
         valid = xr_aot_representation_materialization_verify_modules(
-            views, roots, bundle->nmodules, bundle->program_target_plan, policy, NULL, NULL);
+            views, roots, bundle->nmodules, bundle->program_target_plan, policy, &failed_module,
+            &diagnostic);
+        if (!valid && getenv("XRAY_AOT_REFINE_TRACE")) {
+            const XiModule *module =
+                failed_module < bundle->nmodules ? bundle->modules[failed_module] : NULL;
+            const XrSemanticPlan *semantic =
+                module && module->init ? module->init->semantic_plan : NULL;
+            const XrSemanticOperationRecord *operation =
+                semantic ? xr_semantic_plan_operation(semantic, diagnostic.semantic_operation)
+                         : NULL;
+            fprintf(stderr,
+                    "[aot-refine] materialization module=%u:%s issue=%s record=%u value=%u "
+                    "operation=%u:%s source=%s:%u\n",
+                    failed_module, module && module->name ? module->name : "?",
+                    xr_aot_refinement_issue_name(diagnostic.issue), diagnostic.record_index,
+                    diagnostic.semantic_value, diagnostic.semantic_operation,
+                    operation ? xi_generated_op_name(operation->opcode) : "?",
+                    operation && operation->source_file ? operation->source_file : "?",
+                    operation ? operation->source_start_line : 0u);
+        }
+    }
     xr_free(roots);
     xr_free(views);
     if (!valid)
@@ -7764,14 +7792,17 @@ static bool dump_validate_function_authority(const XaotBundle *bundle,
     if (!semantic_function || func->next_value_id < semantic_function->value_count)
         return false;
 
+    bool executable = !bundle->has_callable_reachability || function_plan->reachable;
     for (uint32_t value_id = 0; value_id < semantic_function->value_count; value_id++) {
         uint32_t matches = 0;
         const XiValue *value = dump_func_value_by_id(func, value_id, &matches);
         XaotDumpValueAuthority authority;
-        if (!value && matches == 0) {
-            /* SemanticPlan freezes dense source identities before Xi DCE.  A
-             * removed SSA value has no legacy row to consume; an immutable
-             * TargetPlan binding, when present, is still counted below. */
+        if ((!value && matches == 0) || (!executable && matches <= 1u)) {
+            /* Retained semantic storage remains counted after Xi DCE or
+             * exclusion
+             * from the executable closure. Neither case creates
+             * a legacy body row
+             * merely for the diagnostic projection. */
             uint32_t semantic_value = semantic_function->value_begin + value_id;
             if (xr_target_plan_value_rep_for_module(target_plan, partition, semantic_value))
                 target_count++;
@@ -7785,8 +7816,8 @@ static bool dump_validate_function_authority(const XaotBundle *bundle,
         else
             legacy_count++;
     }
-    for (uint32_t value_id = semantic_function->value_count; value_id < func->next_value_id;
-         value_id++) {
+    for (uint32_t value_id = semantic_function->value_count;
+         executable && value_id < func->next_value_id; value_id++) {
         uint32_t matches = 0;
         const XiValue *value = dump_func_value_by_id(func, value_id, &matches);
         const XaotValuePlan *adapter = NULL;
@@ -7827,6 +7858,8 @@ static bool dump_validate_value_authorities(const XaotBundle *bundle) {
     if (bundle->nfunc_plans == 0)
         return bundle->nmodules == 0 && bundle->nvalue_plans == 0;
     if (!bundle->func_plans || !bundle->program_target_plan)
+        return false;
+    if (bundle->has_callable_reachability && !xaot_callable_plans_verify(bundle, NULL, 0))
         return false;
 
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
@@ -8492,6 +8525,8 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             snprintf(prefix, sizeof(prefix), "  param %u", (unsigned) pi);
             dump_slot(out, prefix, &abi->params[pi]);
         }
+        if (bundle->has_callable_reachability && !plan->reachable)
+            continue;
         for (uint32_t value_id = 0; value_id < semantic_function->value_count; value_id++) {
             const XiValue *value = dump_func_value_by_id(func, value_id, NULL);
             XaotDumpValueAuthority authority;

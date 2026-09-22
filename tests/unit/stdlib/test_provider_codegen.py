@@ -4,6 +4,7 @@
 from dataclasses import replace
 from pathlib import Path
 import sys
+import hashlib
 from types import SimpleNamespace
 import unittest
 
@@ -12,6 +13,7 @@ sys.path.insert(0, str(ROOT / "tools/stdlibgen"))
 from provider_codegen import (admitted_entries, emit_provider_aot_sources, emit_provider_bindings, emit_provider_descriptors, emit_provider_keys,
                               logical_bytes, logical_fingerprint)
 from stdlibgen import parse_defs
+from provider_types import logical_type, native_resource_id, resolve_native_types
 
 
 class ProviderCodegenTests(unittest.TestCase):
@@ -68,13 +70,13 @@ class ProviderCodegenTests(unittest.TestCase):
                               host=replace(self.clock.host, adapter="i64-nullary-i64",
                                            header="shared/xr_os_core.h", symbol="xr_os_core_getpid"))
         entry = SimpleNamespace(symbol="sample.__probe", provider_declaration=declaration)
-        self.assertEqual(8, len(admitted_entries([*self.entries, entry])))
+        self.assertEqual(12, len(admitted_entries([*self.entries, entry])))
         generated = emit_provider_descriptors([*self.entries, entry])
         self.assertIn('"xray.runtime.provider-operation.v1/environment/probe"', generated)
         self.assertIn('"xr_os_core_getpid"', generated)
         self.assertIn("XR_STDLIB_PROVIDER_I64_NULLARY_I64", generated)
         native = emit_provider_aot_sources([*self.entries, entry])
-        self.assertIn("XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 8u", native)
+        self.assertIn("XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 12u", native)
         self.assertEqual(native, emit_provider_aot_sources(list(reversed([*self.entries, entry]))))
 
     def test_aot_uses_shared_typed_host_bodies(self):
@@ -101,6 +103,57 @@ class ProviderCodegenTests(unittest.TestCase):
         generated = emit_provider_descriptors([])
         self.assertIn("{0}", generated)
         self.assertIn("XR_STDLIB_PROVIDER_DESCRIPTOR_COUNT 0u", generated)
+
+    def test_storage_identity_and_recursive_wire_have_independent_framing(self):
+        framed = (b"xray-stdlib-resource-v1\0\x03\0\0\0\0\0\0\0mem"
+                  b"\x0f\0\0\0\0\0\0\0__BufferStorage")
+        identity = hashlib.sha256(framed).digest()[:16]
+        self.assertEqual(identity, native_resource_id("mem", "__BufferStorage"))
+        self.assertNotEqual(identity, native_resource_id("other", "__BufferStorage"))
+        encoded, affine = logical_type("(i64, (bool, resource<mem.__BufferStorage>)?)")
+        self.assertEqual(b"\x05\x02\x03\x06\x05\x02\x02\x07" + identity, encoded)
+        self.assertTrue(affine)
+        self.assertEqual((b"\x06\x05\x02\x03\x02", False), logical_type("(i64, bool)?"))
+
+    def test_storage_declarations_have_exact_ownership_and_error_authority(self):
+        storage = {entry.name: entry for entry in self.entries
+                   if entry.module == "mem" and entry.provider_declaration}
+        self.assertEqual({"__alloc", "__allocZeroed", "__allocAligned", "__bufferLength"},
+                         set(storage))
+        for name, entry in storage.items():
+            declaration = entry.provider_declaration
+            self.assertEqual("nothrow", entry.effect)
+            self.assertEqual("typed", declaration.host.adapter)
+            self.assertEqual("none", declaration.logical.error)
+            if name == "__bufferLength":
+                self.assertEqual("borrow", declaration.logical.parameters[0].owner)
+                self.assertEqual("resource<mem.__BufferStorage>",
+                                 declaration.logical.parameters[0].type)
+                self.assertEqual("trivial", declaration.logical.result_owner)
+            else:
+                self.assertEqual("owned", declaration.logical.result_owner)
+                self.assertEqual("resource<mem.__BufferStorage>", declaration.logical.result_type)
+                self.assertEqual(2 if name == "__allocAligned" else 1,
+                                 len(declaration.logical.parameters))
+
+    def test_recursive_types_fail_closed_at_transport_boundaries(self):
+        for spelling in ("unknown", "resource<mem.Missing", "(i64,)", "(i64,,bool)",
+                         "i64" + "?" * 33, "(" + ",".join(["i64"] * 63) + ")"):
+            with self.subTest(spelling=spelling), self.assertRaises(ValueError):
+                logical_type(spelling)
+        self.assertEqual("(resource<mem.__BufferStorage>, Missing)?",
+                         resolve_native_types("(__BufferStorage, Missing)?", "mem",
+                                              {"__BufferStorage"}))
+
+    def test_resource_macro_collision_does_not_alias_nominal_identity(self):
+        storage = next(entry.provider_declaration for entry in self.entries
+                       if entry.module == "mem" and entry.name == "__alloc")
+        changed = replace(storage, operation="xray.runtime.provider-operation.v1/sample/case",
+                          logical=replace(storage.logical,
+                                          result_type="resource<mem.__bufferstorage>"))
+        entry = SimpleNamespace(symbol="sample.__case", provider_declaration=changed)
+        with self.assertRaisesRegex(ValueError, "colliding C macro names"):
+            emit_provider_keys([*self.entries, entry])
 
 
 if __name__ == "__main__":

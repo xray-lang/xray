@@ -22,6 +22,7 @@
 #include "../runtime/xray_debug.h"
 #include <string.h>
 #include "xworker.h"
+#include "xasync.h"
 #include "xchannel.h"
 #include "xchannel_ops.h"
 #include "xblock.h"
@@ -939,6 +940,7 @@ void xr_coro_free(XrCoroutine *coro) {
     if (!coro)
         return;
 
+    xr_async_detach_coro(coro);
     coro_detach_timer_before_free(coro);
     xr_task_cancel_await_waiters(coro);
     if (coro->ext)
@@ -988,6 +990,8 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "recycle_local: coro not done");
     XR_DCHECK(!coro->heap || !coro->heap->is_collecting,
               "recycle_local: collector active during recycle");
+
+    xr_async_detach_coro(coro);
 
     // Timer nodes are intrusive wheel entries. Reuse is safe only after the
     // owner wheel has physically unlinked any active/zombie node.

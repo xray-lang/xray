@@ -68,7 +68,7 @@ TEST(steal_queue_push_pop_single) {
     XrStealQueue q;
     xr_steal_queue_init(&q, 16);
 
-    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(1)));
+    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(1), 0));
     ASSERT_EQ_INT(xr_steal_queue_size(&q), 1);
     ASSERT_FALSE(xr_steal_queue_empty(&q));
 
@@ -84,9 +84,9 @@ TEST(steal_queue_push_pop_lifo) {
     xr_steal_queue_init(&q, 16);
 
     // Push 1, 2, 3
-    xr_steal_queue_push(&q, MOCK_CORO(1));
-    xr_steal_queue_push(&q, MOCK_CORO(2));
-    xr_steal_queue_push(&q, MOCK_CORO(3));
+    xr_steal_queue_push(&q, MOCK_CORO(1), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(2), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(3), 0);
     ASSERT_EQ_INT(xr_steal_queue_size(&q), 3);
 
     // Pop should be LIFO: 3, 2, 1
@@ -113,7 +113,7 @@ TEST(steal_queue_steal_single) {
     XrStealQueue q;
     xr_steal_queue_init(&q, 16);
 
-    xr_steal_queue_push(&q, MOCK_CORO(1));
+    xr_steal_queue_push(&q, MOCK_CORO(1), 0);
     ASSERT_STEAL_SUCCESS(&q, MOCK_CORO(1));
     ASSERT_TRUE(xr_steal_queue_empty(&q));
 
@@ -125,9 +125,9 @@ TEST(steal_queue_steal_fifo) {
     xr_steal_queue_init(&q, 16);
 
     // Push 1, 2, 3
-    xr_steal_queue_push(&q, MOCK_CORO(1));
-    xr_steal_queue_push(&q, MOCK_CORO(2));
-    xr_steal_queue_push(&q, MOCK_CORO(3));
+    xr_steal_queue_push(&q, MOCK_CORO(1), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(2), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(3), 0);
 
     // Steal should be FIFO: 1, 2, 3
     ASSERT_STEAL_SUCCESS(&q, MOCK_CORO(1));
@@ -155,8 +155,8 @@ TEST(steal_queue_steal_status_success_empty) {
     ASSERT_EQ_INT(xr_steal_queue_steal_status(&q, &stolen), XR_STEAL_QUEUE_EMPTY);
     ASSERT_NULL(stolen);
 
-    xr_steal_queue_push(&q, MOCK_CORO(1));
-    xr_steal_queue_push(&q, MOCK_CORO(2));
+    xr_steal_queue_push(&q, MOCK_CORO(1), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(2), 0);
     ASSERT_EQ_INT(xr_steal_queue_steal_status(&q, &stolen), XR_STEAL_QUEUE_SUCCESS);
     ASSERT_EQ_PTR(stolen, MOCK_CORO(1));
     ASSERT_STEAL_SUCCESS(&q, MOCK_CORO(2));
@@ -172,10 +172,10 @@ TEST(steal_queue_mixed_ops) {
     xr_steal_queue_init(&q, 16);
 
     // Push 1, 2, 3, 4
-    xr_steal_queue_push(&q, MOCK_CORO(1));
-    xr_steal_queue_push(&q, MOCK_CORO(2));
-    xr_steal_queue_push(&q, MOCK_CORO(3));
-    xr_steal_queue_push(&q, MOCK_CORO(4));
+    xr_steal_queue_push(&q, MOCK_CORO(1), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(2), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(3), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(4), 0);
 
     // Steal from head: gets 1
     ASSERT_STEAL_SUCCESS(&q, MOCK_CORO(1));
@@ -199,17 +199,17 @@ TEST(steal_queue_full) {
     xr_steal_queue_init(&q, 4);
 
     // Fill up
-    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(1)));
-    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(2)));
-    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(3)));
-    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(4)));
+    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(1), 0));
+    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(2), 0));
+    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(3), 0));
+    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(4), 0));
 
     // Should be full
-    ASSERT_FALSE(xr_steal_queue_push(&q, MOCK_CORO(5)));
+    ASSERT_FALSE(xr_steal_queue_push(&q, MOCK_CORO(5), 0));
 
     // Pop one, then push should work
     xr_steal_queue_pop(&q);
-    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(5)));
+    ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(5), 0));
 
     xr_steal_queue_destroy(&q);
 }
@@ -220,9 +220,9 @@ TEST(steal_queue_snapshot) {
     XrStealQueue q;
     xr_steal_queue_init(&q, 16);
 
-    xr_steal_queue_push(&q, MOCK_CORO(10));
-    xr_steal_queue_push(&q, MOCK_CORO(20));
-    xr_steal_queue_push(&q, MOCK_CORO(30));
+    xr_steal_queue_push(&q, MOCK_CORO(10), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(20), 0);
+    xr_steal_queue_push(&q, MOCK_CORO(30), 0);
 
     struct XrCoroutine *buf[8];
     int count = xr_steal_queue_snapshot(&q, buf, 8);
@@ -234,10 +234,37 @@ TEST(steal_queue_snapshot) {
     xr_steal_queue_destroy(&q);
 }
 
+TEST(steal_queue_time_hint_survives_ring_reuse) {
+    XrStealQueue q;
+    ASSERT_TRUE(xr_steal_queue_init(&q, 2));
+    int64_t time = -1;
+    ASSERT_FALSE(xr_steal_queue_peek_time(NULL, &time));
+    ASSERT_FALSE(xr_steal_queue_peek_time(&q, NULL));
+    ASSERT_FALSE(xr_steal_queue_peek_time(&q, &time));
+    ASSERT_EQ_INT(time, -1);
+    /* Mock addresses are deliberately not readable. A time query must only
+     * touch queue-owned
+     * data even after the ring reuses an earlier slot. */
+    for (int i = 1; i <= 128; i++) {
+        ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(1), i * 2));
+        ASSERT_TRUE(xr_steal_queue_push(&q, MOCK_CORO(2), i * 2 + 1));
+        ASSERT_FALSE(xr_steal_queue_push(&q, MOCK_CORO(3), -99));
+        ASSERT_TRUE(xr_steal_queue_peek_time(&q, &time));
+        ASSERT_EQ_INT(time, i * 2);
+        ASSERT_STEAL_SUCCESS(&q, MOCK_CORO(1));
+        ASSERT_TRUE(xr_steal_queue_peek_time(&q, &time));
+        ASSERT_EQ_INT(time, i * 2 + 1);
+        ASSERT_EQ_PTR(xr_steal_queue_pop(&q), MOCK_CORO(2));
+        ASSERT_FALSE(xr_steal_queue_peek_time(&q, &time));
+    }
+    xr_steal_queue_destroy(&q);
+    ASSERT_FALSE(xr_steal_queue_peek_time(&q, &time));
+}
+
 /* ========== NULL Safety ========== */
 
 TEST(steal_queue_null_safety) {
-    ASSERT_FALSE(xr_steal_queue_push(NULL, MOCK_CORO(1)));
+    ASSERT_FALSE(xr_steal_queue_push(NULL, MOCK_CORO(1), 0));
     ASSERT_NULL(xr_steal_queue_pop(NULL));
     ASSERT_STEAL_EMPTY(NULL);
     struct XrCoroutine *stolen = MOCK_CORO(1);
@@ -278,6 +305,7 @@ RUN_TEST(steal_queue_full);
 
 RUN_TEST_SUITE("StealQueue - Snapshot");
 RUN_TEST(steal_queue_snapshot);
+RUN_TEST(steal_queue_time_hint_survives_ring_reuse);
 
 RUN_TEST_SUITE("StealQueue - NULL Safety");
 RUN_TEST(steal_queue_null_safety);

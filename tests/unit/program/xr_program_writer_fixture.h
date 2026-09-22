@@ -25,7 +25,7 @@ static XrProgramBuildStatus xr_test_write_program_artifact(const XrProgramFromXi
                                                            size_t diagnostic_size) {
     XrValidatedProgram *program = NULL;
     XrProgramBuildStatus status =
-        xr_program_write_from_xi(input, artifact, &program, diagnostic, diagnostic_size);
+        xr_program_write_from_xi(input, artifact, &program, NULL, diagnostic, diagnostic_size);
     size_t size = 0u;
     const uint8_t *bytes = xr_validated_program_bytes(program, &size);
     bool valid = status == XR_PROGRAM_BUILD_OK

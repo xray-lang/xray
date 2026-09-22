@@ -432,14 +432,25 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
             if (!source) {
                 xr_log_warning("module_graph", "embedded stdlib source missing: %s",
                                spec->authority.namespace_id ? spec->authority.namespace_id : "?");
-                continue;
+                if (out_err) {
+                    char buf[1024];
+                    snprintf(buf, sizeof(buf), "embedded stdlib source missing: %s",
+                             spec->authority.namespace_id ? spec->authority.namespace_id : "?");
+                    *out_err = xr_strdup(buf);
+                }
+                return -1;
             }
         } else if (!is_memory_entry) {
             owned_source = xr_file_read_all(spec->source_path, "r", NULL);
             source = owned_source;
             if (!source) {
                 xr_log_warning("module_graph", "cannot read: %s", spec->source_path);
-                continue;
+                if (out_err) {
+                    char buf[1024];
+                    snprintf(buf, sizeof(buf), "cannot read module: %s", spec->source_path);
+                    *out_err = xr_strdup(buf);
+                }
+                return -1;
             }
         }
 

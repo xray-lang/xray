@@ -308,7 +308,6 @@ def build_case_binary(
         except OSError:
             pass
         env = os.environ.copy()
-        env.setdefault("XRAY_AOT_FAST_TEST_BUILD", "1")
         if kind == "aot":
             cmd = [
                 config.xray, "build", "--native", "-O", config.aot_opt,

@@ -1369,12 +1369,10 @@ static void worker_scan_steal_candidates(XrWorker *worker, XrRuntime *runtime,
                 continue;
             }
 
-            XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq.deque);
-
+            int64_t oldest_submit = 0;
+            bool has_time = xr_steal_queue_peek_time(&victim->p.runq.deque, &oldest_submit);
             int64_t freshness = worker_steal_freshness_ms(worker, runtime, victim_len);
-            int64_t oldest_submit =
-                oldest ? atomic_load_explicit(&oldest->submit_time, memory_order_relaxed) : 0;
-            if (oldest && freshness > 0) {
+            if (has_time && freshness > 0) {
                 int64_t age = steal_now - oldest_submit;
                 if (age < freshness) {
                     int64_t delay = freshness - age;
@@ -1386,7 +1384,7 @@ static void worker_scan_steal_candidates(XrWorker *worker, XrRuntime *runtime,
                 }
             }
 
-            int64_t submit_time = oldest ? oldest_submit : steal_now;
+            int64_t submit_time = has_time ? oldest_submit : steal_now;
             if (steal_choice_should_replace(choice, victim_len, submit_time)) {
                 choice->worker_id = i;
                 choice->victim_len = victim_len;

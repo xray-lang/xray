@@ -4,6 +4,8 @@
 #include "core/xr_core_spec_gen.h"
 #include "ir/xi.h"
 
+#define XR_PROGRAM_XI_INTEGER_RESULT_TYPE UINT16_C(65534)
+
 typedef struct XrProgramXiProjectionRow {
     uint16_t xi_operation;
     uint16_t result_type_id;
@@ -30,6 +32,13 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
     },
     {
         XI_CONST,
+        XR_CORE_TYPE_F64,
+        XR_CORE_OP_CORE_CONSTANT_F64,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_CONSTANT,
+    },
+    {
+        XI_CONST,
         XR_CORE_TYPE_BOOL,
         XR_CORE_OP_CORE_CONSTANT_BOOL,
         UINT32_C(0),
@@ -50,32 +59,46 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         XR_PROGRAM_XI_PROJECTION_CONSTANT,
     },
     {
+        XI_CONST,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_CONSTANT_I64,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_CONSTANT,
+    },
+    {
         XI_ADD,
-        XR_CORE_TYPE_I64,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
         XR_CORE_OP_CORE_ADD_I64,
         UINT32_C(1),
-        XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC,
+        XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING,
     },
     {
         XI_SUB,
-        XR_CORE_TYPE_I64,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
         XR_CORE_OP_CORE_SUB_I64,
         UINT32_C(1),
-        XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC,
+        XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING,
     },
     {
         XI_MUL,
-        XR_CORE_TYPE_I64,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
         XR_CORE_OP_CORE_MUL_I64,
         UINT32_C(1),
-        XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC,
+        XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING,
     },
     {
         XI_DIV,
-        XR_CORE_TYPE_I64,
-        XR_CORE_OP_CORE_DIV_I64,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_DIVMOD,
         UINT32_C(0),
-        XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC,
+        XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD,
+    },
+    {
+        XI_MOD,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_DIVMOD,
+        UINT32_C(1),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD,
     },
     {
         XI_NOT,
@@ -339,9 +362,107 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
     {
         XI_CONVERT,
         XR_CORE_TYPE_STRING,
-        XR_CORE_OP_CORE_STRING_FROM_I64,
+        XR_CORE_OP_CORE_STRING_FROM_SCALAR,
         UINT32_C(0),
-        XR_PROGRAM_XI_PROJECTION_STRING_FROM_I64,
+        XR_PROGRAM_XI_PROJECTION_STRING_FROM_SCALAR,
+    },
+    {
+        XI_CONVERT,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_NARROW_I8,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_NARROW_U8,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_NARROW_I16,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_NARROW_U16,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_NARROW_I32,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_NARROW_U32,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_WIDEN_I8,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_WIDEN_U8,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_WIDEN_I16,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_WIDEN_U16,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_WIDEN_I32,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_WIDEN_U32,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_CONVERT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT,
+    },
+    {
+        XI_LEN,
+        XR_CORE_TYPE_I64,
+        XR_CORE_OP_CORE_SEQUENCE_LENGTH,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_SEQUENCE_LENGTH,
     },
 };
 
@@ -413,10 +534,15 @@ bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,
          index < sizeof(xr_program_xi_projection_rows) / sizeof(xr_program_xi_projection_rows[0]);
          ++index) {
         const XrProgramXiProjectionRow *row = &xr_program_xi_projection_rows[index];
-        if (row->xi_operation != xi_operation ||
-            (row->result_type_id != XR_PROGRAM_XI_ANY_RESULT_TYPE &&
-             row->result_type_id != result_type_id))
+        if (row->xi_operation != xi_operation)
             continue;
+        if (row->result_type_id == XR_PROGRAM_XI_INTEGER_RESULT_TYPE) {
+            if (!xr_core_spec_integer_type(result_type_id))
+                continue;
+        } else if (row->result_type_id != XR_PROGRAM_XI_ANY_RESULT_TYPE &&
+                   row->result_type_id != result_type_id) {
+            continue;
+        }
         projection_out->core_operation_id = row->core_operation_id;
         projection_out->result_type_id = result_type_id;
         projection_out->immediate_u32 = row->immediate_u32;

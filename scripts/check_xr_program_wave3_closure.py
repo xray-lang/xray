@@ -170,7 +170,7 @@ def validate(root: Path) -> None:
         "out_panic",
         ".kind == 2",
         ".kind == 3",
-        "xr_backend_ir_translation_validate",
+        "xr_backend_ir_binding_verify",
     ):
         require(token in aot_test, f"Wave 3 AOT evidence is absent: {token}")
 

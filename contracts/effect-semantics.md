@@ -11,6 +11,15 @@ every other product dimension.  This makes post-monomorphization and embedded
 source re-analysis idempotent: an earlier conservative allocation, scheduler,
 generator, or task-spawn conclusion cannot survive after the typed body has
 been re-proven otherwise.
+Anonymous functions and module initializers publish their completed body
+effect through the same node-owned fact table. TypedProgram copies that table
+into its immutable snapshot; later analyzer mutations cannot change a published
+body conclusion. Xi validates the saved throw, completeness, and unknown-reason
+fields against the interned effect before attaching the existing sidecars.
+The initializer's completed analysis walk supplies this fact together with its
+call-site facts; lowering does not repeat effect inference or guess an error
+type from a call spelling. A complete escaping-error component remains usable
+when another effect dimension is incomplete.
 Task 254 makes mutable-capture cell and weak-field memory effects explicit Xi
 operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
@@ -44,7 +53,7 @@ the corresponding read boundary only when caller and callee machine rows have
 the same kind, size, alignment, ownership, and layout detail after removing
 that one top-level const bit. The schema also retains the
 exact three-operand `String.slice(start, end)` identity only when its receiver
-is a unique frozen required String parameter or exact String literal and its
+is a unique frozen String definition in the same function and its
 two ordered bounds are exact native i64 values. Its owned return provenance,
 tail flag, operand ownership, and fixed selector identity are all frozen; later
 phases cannot reconstruct this authority from selector, live type, or arity.

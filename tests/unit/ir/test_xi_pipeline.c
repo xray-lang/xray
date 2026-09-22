@@ -34,7 +34,6 @@
 #include "../../../src/program/xr_program_from_xi.h"
 #include "../../../src/program/xr_program_xi_projection_gen.h"
 #include "../../../src/program/xr_program_verify.h"
-#include "../../../src/program/xr_reference_evaluator.h"
 #include "../../../src/program/xr_validated_program_internal.h"
 #include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
@@ -1437,13 +1436,15 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
         {XI_CONST, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_CONSTANT_BOOL, 0u,
          XR_PROGRAM_XI_PROJECTION_CONSTANT},
         {XI_ADD, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_ADD_I64, 1u,
-         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
+         XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING},
         {XI_SUB, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_SUB_I64, 1u,
-         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
+         XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING},
         {XI_MUL, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_MUL_I64, 1u,
-         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
-        {XI_DIV, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_DIV_I64, 0u,
-         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
+         XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING},
+        {XI_DIV, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_INTEGER_DIVMOD, 0u,
+         XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD},
+        {XI_MOD, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_INTEGER_DIVMOD, 1u,
+         XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD},
         {XI_EQ, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 0u,
          XR_PROGRAM_XI_PROJECTION_COMPARE},
         {XI_NE, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 1u,
@@ -1515,14 +1516,43 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
         PIPELINE_TEST_REQUIRE(capabilities == operation->capability_mask);
     }
 
+    const uint16_t integer_types[] = {
+        XR_CORE_TYPE_I8, XR_CORE_TYPE_U8, XR_CORE_TYPE_I16, XR_CORE_TYPE_U16,
+        XR_CORE_TYPE_I32, XR_CORE_TYPE_U32, XR_CORE_TYPE_I64, XR_CORE_TYPE_U64,
+    };
+    for (size_t index = 0u; index < sizeof(integer_types) / sizeof(integer_types[0]); ++index) {
+        XrProgramXiProjection projection = {0};
+        PIPELINE_TEST_REQUIRE(xr_program_xi_projection(XI_ADD, integer_types[index], &projection));
+        PIPELINE_TEST_REQUIRE(projection.kind == XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING);
+        PIPELINE_TEST_REQUIRE(projection.core_operation_id == XR_CORE_OP_CORE_ADD_I64);
+        PIPELINE_TEST_REQUIRE(projection.result_type_id == integer_types[index]);
+        PIPELINE_TEST_REQUIRE(projection.immediate_u32 == 1u);
+        for (uint32_t remainder = 0u; remainder < 2u; ++remainder) {
+            PIPELINE_TEST_REQUIRE(xr_program_xi_projection(
+                remainder ? XI_MOD : XI_DIV, integer_types[index], &projection));
+            PIPELINE_TEST_REQUIRE(projection.kind == XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD);
+            PIPELINE_TEST_REQUIRE(projection.core_operation_id == XR_CORE_OP_CORE_INTEGER_DIVMOD);
+            PIPELINE_TEST_REQUIRE(projection.result_type_id == integer_types[index]);
+            PIPELINE_TEST_REQUIRE(projection.immediate_u32 == remainder);
+        }
+    }
+
     XrProgramXiProjection rejected = {0};
     PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_ADD, XR_CORE_TYPE_BOOL, &rejected));
-    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_MOD, XR_CORE_TYPE_I64, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_SUB, XR_CORE_TYPE_STRING, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_MUL, XR_CORE_TYPE_RUNE, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_CONST, XR_CORE_TYPE_VOID, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_CONVERT, XR_CORE_TYPE_BOOL, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_ADD, UINT16_C(65534), &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_DIV, XR_CORE_TYPE_BOOL, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_MOD, XR_CORE_TYPE_STRING, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_DIV, UINT16_C(65534), &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(UINT16_MAX, XR_CORE_TYPE_I64, &rejected));
     PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_ADD, XR_CORE_TYPE_I64, NULL));
-    PIPELINE_TEST_REQUIRE(!xr_program_xi_value_is_materialized(XI_MOD));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_value_is_materialized(UINT16_MAX));
     uint32_t effects = 0u;
     uint32_t capabilities = 0u;
-    PIPELINE_TEST_REQUIRE(!xr_program_xi_operation_contract(XI_MOD, &effects, &capabilities));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_operation_contract(UINT16_MAX, &effects, &capabilities));
     PIPELINE_TEST_REQUIRE(!xr_program_xi_operation_contract(XI_ADD, NULL, &capabilities));
     PIPELINE_TEST_REQUIRE(!xr_program_xi_operation_contract(XI_ADD, &effects, NULL));
 }
@@ -1586,7 +1616,7 @@ static bool validated_program_has_owned_storage_class_share(const XrValidatedPro
                 const XrValidatedInstruction *share = &block->instructions[instruction_index - 1u];
                 const XrValidatedType *concrete =
                     xr_validated_program_type(program, share->result_type_id);
-                if (share->operation_id == XR_CORE_OP_CORE_CLASS_SHARE && concrete &&
+                if (share->operation_id == XR_CORE_OP_CORE_OWNER_ALIAS && concrete &&
                     concrete->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE &&
                     share->result_id != XR_PROGRAM_LOCATION_NONE &&
                     share->result_ownership == XR_CORE_IR_OWNER &&
@@ -1608,18 +1638,16 @@ typedef struct XiPipelineClassIdentityLog {
     bool teardown_cleanup;
 } XiPipelineClassIdentityLog;
 
-static void record_pipeline_class_identity(void *context,
-                                           const XrReferenceLifecycleEvent *event) {
+static void record_pipeline_class_identity(void *context, const XrVmLifecycleEvent *event) {
     XiPipelineClassIdentityLog *log = context;
-    log->constructs += event->kind == XR_REFERENCE_EVENT_CLASS_CONSTRUCT;
-    log->shares += event->kind == XR_REFERENCE_EVENT_CLASS_SHARE;
-    log->copies += event->kind == XR_REFERENCE_EVENT_CLASS_COPY;
-    log->finalizes += event->kind == XR_REFERENCE_EVENT_CLASS_FINALIZE;
-    log->reclaims += event->kind == XR_REFERENCE_EVENT_CLASS_RECLAIM;
-    if (event->kind == XR_REFERENCE_EVENT_CLASS_SHARE &&
-        event->identity != event->related_identity)
+    log->constructs += event->kind == XR_VM_EVENT_CLASS_CONSTRUCT;
+    log->shares += event->kind == XR_VM_EVENT_CLASS_SHARE;
+    log->copies += event->kind == XR_VM_EVENT_CLASS_COPY;
+    log->finalizes += event->kind == XR_VM_EVENT_CLASS_FINALIZE;
+    log->reclaims += event->kind == XR_VM_EVENT_CLASS_RECLAIM;
+    if (event->kind == XR_VM_EVENT_CLASS_SHARE && event->identity != event->related_identity)
         log->identity_changed = true;
-    if (event->origin == XR_REFERENCE_EVENT_ORIGIN_DOMAIN_TEARDOWN)
+    if (event->origin == XR_VM_EVENT_ORIGIN_DOMAIN_TEARDOWN)
         log->teardown_cleanup = true;
 }
 
@@ -1857,7 +1885,7 @@ static bool xi_pipeline_hostile_lexical_error_regions_are_fail_closed(
 
 static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
     XiFunc *edge_function, XiFunc *entry_function, const XrProgramFromXiInput *input,
-    int64_t expected_result) {
+    XrTargetProfile *profile, int64_t expected_result) {
     if (!edge_function || !entry_function || !input || edge_function->nparams != 3u ||
         !edge_function->params || !edge_function->params[1] || !edge_function->params[2])
         return false;
@@ -1965,11 +1993,42 @@ static bool xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
                 verify_diagnostic.location.block_id, verify_diagnostic.location.instruction_id,
                 verify_diagnostic.location.value_id);
     if (valid) {
-        XrReferenceOutcome reference = xr_reference_evaluate(
-            validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
-        valid = reference.kind == XR_REFERENCE_OUTCOME_RETURN &&
-                reference.value.kind == XR_REFERENCE_VALUE_I64 &&
-                reference.value.as.i64 == expected_result;
+        XiProgramProviderBindings bindings;
+        xi_program_build_provider_bindings(profile, &bindings);
+        XrExecutionBindingInput execution_input = {
+            .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+            .program = validated,
+            .profile = profile,
+            .providers = bindings.count ? bindings.providers : NULL,
+            .provider_count = bindings.count,
+            .generation = 1u,
+        };
+        XrInstance *instance = NULL;
+        XrVmCode *code = NULL;
+        XrExecutionDiagnostic execution_diagnostic;
+        XrVmCodeDiagnostic code_diagnostic;
+        valid =
+            xr_execution_instance_create(&execution_input, &instance, &execution_diagnostic) ==
+                XR_EXECUTION_OK &&
+            xr_vm_code_build(validated, profile, NULL, &code, &code_diagnostic) == XR_VM_CODE_OK;
+        if (valid) {
+            XrVmOutcome outcome = xr_vm_code_execute(
+                code, instance, xr_validated_program_entry_function(validated), NULL, 0u);
+            valid = outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_I64 &&
+                    outcome.value.as.i64 == expected_result;
+        }
+        xr_vm_code_free(code);
+        if (instance) {
+            valid = (xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                     XR_EXECUTION_OK) &&
+                    valid;
+            valid = (xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                     XR_EXECUTION_OK) &&
+                    valid;
+            valid =
+                (xr_execution_instance_free(&instance, &execution_diagnostic) == XR_EXECUTION_OK) &&
+                valid;
+        }
     }
     xr_validated_program_free(validated);
     xr_program_artifact_free(&candidate);
@@ -2045,7 +2104,7 @@ fail:
     return false;
 }
 
-TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
+TEST(e2e_program_cooperative_yield_closes_source_vm_and_aot) {
     XiCanonicalProgramTestFixture fixture = {0};
     PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
         &fixture, "xi-program-cooperative-yield", "Coro.yield()\n"));
@@ -2074,6 +2133,7 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
         .entry_function = entry,
         .global_evidence = &fixture.evidence,
         .semantic_profile_fingerprint = semantic_profile.bytes,
+        .module_graph = fixture.source.graph,
     };
     char diagnostic[512] = {0};
     XrProgramArtifact artifact = {0};
@@ -2113,27 +2173,6 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
                                                        &execution_diagnostic) == XR_EXECUTION_OK);
 
-    XrReferenceExecution *reference = NULL;
-    PIPELINE_TEST_REQUIRE(
-        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference));
-    XrReferenceOutcome reference_yield = xr_reference_execution_step(reference);
-    PIPELINE_TEST_REQUIRE(reference_yield.kind == XR_REFERENCE_OUTCOME_SUSPENDED &&
-                          reference_yield.safepoint_id == 0u && reference_yield.state_id == 1u);
-    XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
-    PIPELINE_TEST_REQUIRE(reference_return.kind == XR_REFERENCE_OUTCOME_RETURN &&
-                          reference_return.value.kind == XR_REFERENCE_VALUE_VOID &&
-                          reference_return.state_id == 1u);
-    xr_reference_execution_free(reference);
-
-    XrReferenceExecution *reference_cancel = NULL;
-    PIPELINE_TEST_REQUIRE(
-        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference_cancel));
-    PIPELINE_TEST_REQUIRE(xr_reference_execution_step(reference_cancel).kind ==
-                          XR_REFERENCE_OUTCOME_SUSPENDED);
-    PIPELINE_TEST_REQUIRE(xr_reference_execution_cancel(reference_cancel).kind ==
-                          XR_REFERENCE_OUTCOME_CANCELLED);
-    xr_reference_execution_free(reference_cancel);
-
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_vm_code_build(validated, fixture.profile, NULL, &vm_code,
@@ -2142,14 +2181,24 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(
         xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
     XrVmOutcome vm_yield = xr_vm_execution_step(vm_execution);
-    PIPELINE_TEST_REQUIRE(vm_yield.kind == XR_VM_OUTCOME_SUSPENDED &&
-                          vm_yield.safepoint_id == reference_yield.safepoint_id &&
-                          vm_yield.state_id == reference_yield.state_id);
+    PIPELINE_TEST_REQUIRE(vm_yield.kind == XR_VM_OUTCOME_SUSPENDED && vm_yield.safepoint_id == 0u &&
+                          vm_yield.state_id == 1u);
     XrVmOutcome vm_return = xr_vm_execution_step(vm_execution);
     PIPELINE_TEST_REQUIRE(vm_return.kind == XR_VM_OUTCOME_RETURN &&
-                          vm_return.value.kind == XR_VM_VALUE_VOID &&
-                          vm_return.state_id == reference_return.state_id);
+                          vm_return.value.kind == XR_VM_VALUE_VOID && vm_return.state_id == 1u);
     xr_vm_execution_free(vm_execution);
+    PIPELINE_TEST_REQUIRE(
+        xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
+    PIPELINE_TEST_REQUIRE(xr_vm_execution_step(vm_execution).kind == XR_VM_OUTCOME_RETURN);
+    xr_vm_execution_free(vm_execution);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
+                                                       &execution_diagnostic) == XR_EXECUTION_OK);
     XrVmExecution *vm_cancel = NULL;
     PIPELINE_TEST_REQUIRE(
         xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_cancel));
@@ -2164,7 +2213,7 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
                                               &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC generated_again = {0};
     XrBackendStatus emit_status =
@@ -2215,7 +2264,7 @@ TEST(e2e_program_cooperative_yield_closes_source_reference_vm_and_aot) {
     xi_canonical_program_test_fixture_cleanup(&fixture);
 }
 
-TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
+TEST(e2e_program_sealed_coroutine_call_closes_source_vm_and_aot) {
     static const char source[] = "fn child(value: i64) -> i64 {\n"
                                  "  Coro.yield()\n"
                                  "  return value\n"
@@ -2332,27 +2381,6 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
                                                        &execution_diagnostic) == XR_EXECUTION_OK);
 
-    XrReferenceExecution *reference = NULL;
-    PIPELINE_TEST_REQUIRE(
-        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference));
-    XrReferenceOutcome reference_suspend = xr_reference_execution_step(reference);
-    PIPELINE_TEST_REQUIRE(reference_suspend.kind == XR_REFERENCE_OUTCOME_SUSPENDED &&
-                          reference_suspend.safepoint_id == 0u && reference_suspend.state_id == 1u);
-    XrReferenceOutcome reference_return = xr_reference_execution_step(reference);
-    PIPELINE_TEST_REQUIRE(reference_return.kind == XR_REFERENCE_OUTCOME_RETURN &&
-                          reference_return.value.kind == XR_REFERENCE_VALUE_I64 &&
-                          reference_return.value.as.i64 == 7 && reference_return.state_id == 1u);
-    xr_reference_execution_free(reference);
-
-    XrReferenceExecution *reference_cancel = NULL;
-    PIPELINE_TEST_REQUIRE(
-        xr_reference_execution_create(instance, entry_function, NULL, 0u, NULL, &reference_cancel));
-    PIPELINE_TEST_REQUIRE(xr_reference_execution_step(reference_cancel).kind ==
-                          XR_REFERENCE_OUTCOME_SUSPENDED);
-    PIPELINE_TEST_REQUIRE(xr_reference_execution_cancel(reference_cancel).kind ==
-                          XR_REFERENCE_OUTCOME_CANCELLED);
-    xr_reference_execution_free(reference_cancel);
-
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
     PIPELINE_TEST_REQUIRE(xr_vm_code_build(validated, fixture.profile, NULL, &vm_code,
@@ -2362,13 +2390,11 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
         xr_vm_execution_create(vm_code, instance, entry_function, NULL, 0u, &vm_execution));
     XrVmOutcome vm_suspend = xr_vm_execution_step(vm_execution);
     PIPELINE_TEST_REQUIRE(vm_suspend.kind == XR_VM_OUTCOME_SUSPENDED &&
-                          vm_suspend.safepoint_id == reference_suspend.safepoint_id &&
-                          vm_suspend.state_id == reference_suspend.state_id);
+                          vm_suspend.safepoint_id == 0u && vm_suspend.state_id == 1u);
     XrVmOutcome vm_return = xr_vm_execution_step(vm_execution);
     PIPELINE_TEST_REQUIRE(vm_return.kind == XR_VM_OUTCOME_RETURN &&
-                          vm_return.value.kind == XR_VM_VALUE_I64 &&
-                          vm_return.value.as.i64 == reference_return.value.as.i64 &&
-                          vm_return.state_id == reference_return.state_id);
+                          vm_return.value.kind == XR_VM_VALUE_I64 && vm_return.value.as.i64 == 7 &&
+                          vm_return.state_id == 1u);
     xr_vm_execution_free(vm_execution);
     XrVmExecution *vm_cancel = NULL;
     PIPELINE_TEST_REQUIRE(
@@ -2384,7 +2410,7 @@ TEST(e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
                                               &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     XrGeneratedC generated_again = {0};
     XrBackendStatus emit_status =
@@ -2513,12 +2539,6 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     PIPELINE_TEST_REQUIRE(machine != NULL);
     uint16_t expected_pointer_bits = (uint16_t) (machine->data_layout.pointer.size * 8u);
     PIPELINE_TEST_REQUIRE(expected_pointer_bits == 32u || expected_pointer_bits == 64u);
-    XrReferenceProfile profile = {.pointer_width = expected_pointer_bits};
-    XrReferenceOutcome reference = xr_reference_evaluate(
-        validated, xr_validated_program_entry_function(validated), NULL, 0u, &profile, NULL);
-    PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
-    PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_U16);
-    PIPELINE_TEST_REQUIRE(reference.value.as.u16 == expected_pointer_bits);
 
     XrExecutionBindingInput execution_input = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -2563,7 +2583,7 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
                                               &backend_ir, &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
                           XR_BACKEND_OK);
@@ -2675,19 +2695,7 @@ TEST(e2e_program_target_os_member_equality_is_executable) {
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(fixture.profile);
     PIPELINE_TEST_REQUIRE(machine != NULL);
     bool expected = machine->operating_system == XR_TARGET_OS_MACOS;
-    XrReferenceProfile profile = {
-        .pointer_width = (uint16_t) (machine->data_layout.pointer.size * 8u),
-        .operating_system = machine->operating_system,
-        .architecture = machine->architecture,
-        .native_abi = machine->native_abi,
-        .endianness = machine->data_layout.endian,
-    };
     uint32_t entry_function = xr_validated_program_entry_function(validated);
-    XrReferenceOutcome reference =
-        xr_reference_evaluate(validated, entry_function, NULL, 0u, &profile, NULL);
-    PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
-    PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_BOOL);
-    PIPELINE_TEST_REQUIRE(reference.value.as.boolean == expected);
 
     XrExecutionBindingInput execution_input = {
         .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -3177,6 +3185,7 @@ TEST(e2e_program_move_direct_signatures_are_published_before_bodies) {
     const XiFunc *module_roots[2] = {fixture.pipelines[0].ir, fixture.pipelines[1].ir};
     XrProgramFromXiInput input = {
         .module_roots = module_roots,
+        .module_graph = fixture.graph,
         .module_count = 2u,
         .entry_function = entry,
         .global_evidence = &fixture.evidence,
@@ -3508,10 +3517,15 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         "}\n"
         "fn read_class(value: ReadClass) -> i64 {\n"
         "  var erased: ReadValue = value\n"
-        "  return erased.read()\n"
+        "  if (!is_read_class(erased)) { return 1000 }\n"
+        "  var projected = project_read_class(erased)\n"
+        "  if (projected != null) { return projected.read() }\n"
+        "  return 2000\n"
         "}\n"
         "fn read_struct(value: ReadStruct) -> i64 {\n"
         "  var erased: ReadValue = value\n"
+        "  if (is_read_class(erased)) { return 3000 }\n"
+        "  if (project_read_class(erased) != null) { return 4000 }\n"
         "  return erased.read()\n"
         "}\n"
         "fn read_enum(value: ReadEnum) -> i64 {\n"
@@ -4020,7 +4034,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         &sibling_error_regions_artifact));
     xr_program_artifact_free(&sibling_error_regions_artifact);
     PIPELINE_TEST_REQUIRE(xi_pipeline_same_successor_edges_keep_distinct_phi_arguments(
-        edge_choice_function, edge_choice_entry_function, &producer_input, 16));
+        edge_choice_function, edge_choice_entry_function, &producer_input, profile, 16));
 
     uint32_t saved_read_enum_effect_id = read_enum_target->analyzer_effect_id;
     bool saved_read_enum_effect_complete = read_enum_target->analyzer_effect_complete;
@@ -4029,6 +4043,14 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     read_enum_target->analyzer_effect_complete = false;
     read_enum_target->error_effect_nothrow = false;
     XrProgramArtifact missing_read_enum_effect_artifact = {0};
+    PIPELINE_TEST_REQUIRE(
+        xr_test_write_program_artifact(&producer_input, &missing_read_enum_effect_artifact,
+                                       producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(missing_read_enum_effect_artifact.bytes == NULL);
+    read_enum_target->analyzer_effect_id = UINT32_MAX;
+    read_enum_target->analyzer_effect_complete = saved_read_enum_effect_complete;
+    read_enum_target->error_effect_nothrow = saved_read_enum_nothrow;
     PIPELINE_TEST_REQUIRE(
         xr_test_write_program_artifact(&producer_input, &missing_read_enum_effect_artifact,
                                        producer_diagnostic, sizeof(producer_diagnostic)) ==
@@ -4751,7 +4773,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_ADD_I64,
         XR_CORE_OP_CORE_SUB_I64,
         XR_CORE_OP_CORE_MUL_I64,
-        XR_CORE_OP_CORE_DIV_I64,
+        XR_CORE_OP_CORE_INTEGER_DIVMOD,
         XR_CORE_OP_CORE_COMPARE_I64,
         XR_CORE_OP_CORE_BLOCK_ARGUMENT,
         XR_CORE_OP_CORE_BRANCH,
@@ -4774,7 +4796,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE,
         XR_CORE_OP_CORE_OWNER_DROP,
         XR_CORE_OP_CORE_EXISTENTIAL_PACK,
-        XR_CORE_OP_CORE_CLASS_SHARE,
+        XR_CORE_OP_CORE_EXISTENTIAL_TEST,
+        XR_CORE_OP_CORE_EXISTENTIAL_PROJECT,
+        XR_CORE_OP_CORE_OWNER_ALIAS,
         XR_CORE_OP_CORE_CALL_WITNESS_DIRECT,
         XR_CORE_OP_CORE_CALL_WITNESS_INVOKE,
     };
@@ -4797,23 +4821,6 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(
         validated_program_operation_count(validated, XR_CORE_OP_CORE_OWNER_DROP) >= 6u);
     XiPipelineClassIdentityLog identity_log = {0};
-    XrReferenceProviderBinding reference_binding = {
-        .lifecycle_context = &identity_log,
-        .lifecycle_event = record_pipeline_class_identity,
-    };
-    XrReferenceOutcome reference = xr_reference_evaluate_bound(
-        validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL,
-        &reference_binding);
-    PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
-    PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 478);
-    PIPELINE_TEST_REQUIRE(identity_log.constructs == 2u);
-    PIPELINE_TEST_REQUIRE(identity_log.shares >= 1u);
-    PIPELINE_TEST_REQUIRE(identity_log.copies == 0u);
-    PIPELINE_TEST_REQUIRE(identity_log.finalizes == identity_log.constructs);
-    PIPELINE_TEST_REQUIRE(identity_log.reclaims == identity_log.constructs);
-    PIPELINE_TEST_REQUIRE(!identity_log.identity_changed && !identity_log.teardown_cleanup);
-
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);
     XrExecutionBindingInput execution_input = {
@@ -4832,7 +4839,11 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
 
     XrVmCode *vm_code = NULL;
     XrVmCodeDiagnostic vm_diagnostic;
-    XrVmCodeStatus vm_status = xr_vm_code_build(validated, profile, NULL, &vm_code, &vm_diagnostic);
+    XrVmCodeOptions vm_options = xr_vm_code_default_options();
+    vm_options.lifecycle_context = &identity_log;
+    vm_options.lifecycle_event = record_pipeline_class_identity;
+    XrVmCodeStatus vm_status =
+        xr_vm_code_build(validated, profile, &vm_options, &vm_code, &vm_diagnostic);
     if (vm_status != XR_VM_CODE_OK)
         fprintf(stderr,
                 "program VM code build failed: status=%d operation=%u function=%u block=%u "
@@ -4845,7 +4856,14 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                         xr_validated_program_entry_function(validated), NULL, 0u);
     PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(vm.value.kind == XR_VM_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(vm.value.as.i64 == reference.value.as.i64);
+    PIPELINE_TEST_REQUIRE(vm.value.as.i64 == 478);
+    PIPELINE_TEST_REQUIRE(identity_log.constructs == 2u);
+    PIPELINE_TEST_REQUIRE(identity_log.shares >= 1u);
+    PIPELINE_TEST_REQUIRE(identity_log.copies == 0u);
+    PIPELINE_TEST_REQUIRE(identity_log.finalizes == identity_log.constructs);
+    PIPELINE_TEST_REQUIRE(identity_log.reclaims == identity_log.constructs);
+    PIPELINE_TEST_REQUIRE(!identity_log.identity_changed && !identity_log.teardown_cleanup);
+
     xr_vm_code_free(vm_code);
 
     XrBackendIR *backend_ir = NULL;
@@ -4854,7 +4872,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, profile, &backend_options, &backend_ir,
                                               &backend_diagnostic) == XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
-    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_binding_verify(backend_ir, &backend_diagnostic));
     XrGeneratedC generated = {0};
     PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
                           XR_BACKEND_OK);
@@ -5110,8 +5128,8 @@ int main(int argc, char **argv) {
      * block nor silently change a canonical native
      * artifact. */
     if (g_source_aot_output_path || canonical_only) {
-        run_e2e_program_cooperative_yield_closes_source_reference_vm_and_aot();
-        run_e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot();
+        run_e2e_program_cooperative_yield_closes_source_vm_and_aot();
+        run_e2e_program_sealed_coroutine_call_closes_source_vm_and_aot();
         run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
         run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
         teardown();
@@ -5247,8 +5265,8 @@ int main(int argc, char **argv) {
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
-    run_e2e_program_cooperative_yield_closes_source_reference_vm_and_aot();
-    run_e2e_program_sealed_coroutine_call_closes_source_reference_vm_and_aot();
+    run_e2e_program_cooperative_yield_closes_source_vm_and_aot();
+    run_e2e_program_sealed_coroutine_call_closes_source_vm_and_aot();
     run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
     run_e2e_program_target_os_member_equality_is_executable();
     run_e2e_program_target_query_closes_interface_slot_contract();

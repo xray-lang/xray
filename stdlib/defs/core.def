@@ -2,7 +2,6 @@ module time {
   fn __realtimeNanos {
     signature: "(): i64"
     doc: "Nanoseconds since the Unix epoch on the wall clock"
-    effect: "nothrow"
     vm: "time_realtimeNanos"
     aot: "xrt_time_realtime_nanos"
     argc: 0
@@ -35,7 +34,6 @@ module time {
   fn __monotonicNanos {
     signature: "(): i64"
     doc: "Nanoseconds on the runtime monotonic clock"
-    effect: "nothrow"
     vm: "time_monotonicNanos"
     aot: "xrt_time_monotonic_nanos"
     argc: 0
@@ -68,7 +66,6 @@ module time {
   fn __cpuNanos {
     signature: "(): i64"
     doc: "Nanoseconds of process CPU time consumed"
-    effect: "nothrow"
     vm: "time_cpuNanos"
     aot: "xrt_time_cpu_nanos"
     argc: 0
@@ -101,7 +98,6 @@ module time {
   fn __utcOffsetAt {
     signature: "(seconds: i64): i64"
     doc: "Minutes east of UTC at a Unix timestamp in seconds"
-    effect: "nothrow"
     vm: "time_utcOffsetAt"
     aot: "xrt_time_utc_offset_at"
     argc: 1
@@ -911,7 +907,6 @@ module os {
   fn __getpid {
     signature: "(): i64"
     doc: "Get process ID"
-    effect: "nothrow"
     allocation: "no_heap"
     vm: "os_getpid"
     aot: "xrt_os_getpid"
@@ -1484,6 +1479,8 @@ module mem {
     native_body_expr: "xr_buffer_native_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
     builtin_kind: "XR_BK_BUFFER"
+    source_wrapper: "Buffer"
+    source_storage_field: "_storage"
   }
 
   fn __fence {
@@ -1559,6 +1556,25 @@ module mem {
     layer: "core"
     allocation: "may_heap"
     return_ownership: "fresh"
+    provider_contract: "xray.runtime.provider.v1/byte-storage"
+    provider_operation: "xray.runtime.provider-operation.v1/byte-storage/allocate"
+    provider_parameter_modes: "in"
+    provider_parameter_owners: "trivial"
+    provider_result_owner: "owned"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: "[]"
+    provider_effects: "managed-allocation"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "typed"
+    provider_host_header: "execution/xr_byte_storage_provider.h"
+    provider_host_symbol: "xr_byte_storage_allocate"
   }
 
   fn __allocZeroed {
@@ -1573,6 +1589,25 @@ module mem {
     layer: "core"
     allocation: "may_heap"
     return_ownership: "fresh"
+    provider_contract: "xray.runtime.provider.v1/byte-storage"
+    provider_operation: "xray.runtime.provider-operation.v1/byte-storage/allocate-zeroed"
+    provider_parameter_modes: "in"
+    provider_parameter_owners: "trivial"
+    provider_result_owner: "owned"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: "[]"
+    provider_effects: "managed-allocation"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "typed"
+    provider_host_header: "execution/xr_byte_storage_provider.h"
+    provider_host_symbol: "xr_byte_storage_allocate_zeroed"
   }
 
   fn __allocAligned {
@@ -1587,6 +1622,25 @@ module mem {
     layer: "core"
     allocation: "may_heap"
     return_ownership: "fresh"
+    provider_contract: "xray.runtime.provider.v1/byte-storage"
+    provider_operation: "xray.runtime.provider-operation.v1/byte-storage/allocate-aligned"
+    provider_parameter_modes: "in,in"
+    provider_parameter_owners: "trivial,trivial"
+    provider_result_owner: "owned"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: "[]"
+    provider_effects: "managed-allocation"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "typed"
+    provider_host_header: "execution/xr_byte_storage_provider.h"
+    provider_host_symbol: "xr_byte_storage_allocate_aligned"
   }
 
   fn __bufferLength {
@@ -1600,6 +1654,25 @@ module mem {
     link_object: false
     layer: "runtime"
     allocation: "no_heap"
+    provider_contract: "xray.runtime.provider.v1/byte-storage"
+    provider_operation: "xray.runtime.provider-operation.v1/byte-storage/length"
+    provider_parameter_modes: "in"
+    provider_parameter_owners: "borrow"
+    provider_result_owner: "trivial"
+    provider_error: "none"
+    provider_panic: "none"
+    provider_suspend: "never"
+    provider_refusal: "trap"
+    provider_resources: "[]"
+    provider_effects: "none"
+    provider_threads: "any"
+    provider_reentry: "allowed"
+    provider_callbacks: "none"
+    provider_platforms: "linux,macos,windows"
+    provider_profiles: "hosted"
+    provider_adapter: "typed"
+    provider_host_header: "execution/xr_byte_storage_provider.h"
+    provider_host_symbol: "xr_byte_storage_length"
   }
 
   fn __bufferAsBytes {

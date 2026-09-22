@@ -55,6 +55,7 @@ from pathlib import Path
 
 from provider_declarations import (ProviderDeclaration, admission_reasons, declaration_inventory,
                                    parse_provider_declaration)
+from provider_types import resolve_native_types
 from provider_codegen import (emit_provider_aot_sources, emit_provider_bindings,
                               emit_provider_descriptors, emit_provider_keys)
 
@@ -830,7 +831,9 @@ def validate_source_provider_bridges(
             raise SystemExit(f"{provider.symbol}: source provider wrapper requires {path}")
         text = path.read_text(encoding="utf-8")
         class_re = re.compile(
-            rf"^\s*export\s+final\s+class\s+{re.escape(provider.source_wrapper)}\s*\{{",
+            rf"^\s*export\s+final\s+class\s+{re.escape(provider.source_wrapper)}"
+            r"(?:\s+implements\s+[A-Za-z_][A-Za-z0-9_]*"
+            r"(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)?\s*\{",
             re.MULTILINE,
         )
         matches = list(class_re.finditer(text))
@@ -1291,6 +1294,10 @@ def parse_def_metadata(
             )
             suspension_kind = str(props.get("suspension_kind", ""))
             effect = str(props.get("effect", ""))
+            if provider_declaration and provider_declaration.logical.error == "none":
+                if effect and effect != "nothrow":
+                    raise SystemExit(f"{current_module}.{current_name}: provider error contract contradicts effect")
+                effect = "nothrow"
             if provider_declaration and (visibility != "internal" or semantic_intrinsic
                                          or suspension_kind):
                 raise SystemExit(
@@ -1765,6 +1772,22 @@ def parse_def_metadata(
         provider_wrappers[key] = entry.name
 
     validate_source_provider_bridges(root, entries, native_classes)
+    # Resolve logical resource types only after every native declaration exists.
+    # This reuses the completed registry, not a second source scan.
+    for index, entry in enumerate(entries):
+        declaration = entry.provider_declaration
+        if not declaration or declaration.host.adapter != "typed":
+            continue
+        names = {row.name for row in native_classes if row.module == entry.module and row.is_internal}
+        logical = declaration.logical
+        logical = dataclasses.replace(logical,
+            parameters=tuple(dataclasses.replace(parameter,
+                type=resolve_native_types(parameter.type, entry.module, names))
+                for parameter in logical.parameters),
+            result_type=resolve_native_types(logical.result_type, entry.module, names))
+        entries[index] = dataclasses.replace(entry,
+            provider_declaration=dataclasses.replace(declaration, logical=logical))
+
 
     def inherit(entry, owner: str):
         if entry.visibility:
@@ -2534,6 +2557,7 @@ def emit_defs_header(
             "",
             "#include <stdbool.h>",
             "#include <math.h>",
+            "#include <stddef.h>",
             "#include <stdint.h>",
             '#include "../base/xentry_plan.h"',
             "",

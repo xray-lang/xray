@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 70u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 75u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -28,15 +28,24 @@ static void test_registry_identity_and_lookup(void) {
         CHECK(operation->operation_class != NULL);
         CHECK(operation->feature != NULL);
         CHECK(operation->spec_oracle_status == XR_CORE_COVERAGE_COMPLETE);
+        bool pending_element_place =
+            operation->stable_id == XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE;
         CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
-        uint8_t execution_status =
-            operation->stable_id == 152u || operation->stable_id == 153u
-                ? XR_CORE_COVERAGE_NOT_YET_ACTIVE
-                : XR_CORE_COVERAGE_COMPLETE;
-        CHECK(operation->evaluator_status == execution_status);
-        CHECK(operation->vm_status == execution_status);
-        CHECK(operation->aot_status == execution_status);
+        uint8_t evaluator_status = operation->stable_id == 152u || operation->stable_id == 153u
+                                       ? XR_CORE_COVERAGE_NOT_YET_ACTIVE
+                                       : XR_CORE_COVERAGE_COMPLETE;
+        if (pending_element_place || operation->stable_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT ||
+            operation->stable_id == XR_CORE_OP_CORE_OWNER_ALIAS ||
+            operation->stable_id == XR_CORE_OP_CORE_SEQUENCE_LENGTH ||
+            operation->stable_id == XR_CORE_OP_CORE_INTEGER_CONVERT ||
+            operation->stable_id == XR_CORE_OP_CORE_INTEGER_DIVMOD ||
+            operation->stable_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
+            operation->stable_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT)
+            evaluator_status = XR_CORE_COVERAGE_NOT_APPLICABLE;
+        CHECK(operation->evaluator_status == evaluator_status);
+        CHECK(operation->vm_status == XR_CORE_COVERAGE_COMPLETE);
+        CHECK(operation->aot_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(xr_core_spec_operation_by_id(operation->stable_id) == operation);
         CHECK(xr_core_spec_operation_by_spelling(operation->spelling) == operation);
         if (index > 0u)
@@ -51,6 +60,28 @@ static void test_registry_identity_and_lookup(void) {
     CHECK(xr_core_spec_feature_active(XR_CORE_FEATURE_CORE_BASE));
     CHECK(!xr_core_spec_feature_active(0u));
     CHECK(!xr_core_spec_feature_active(UINT16_MAX));
+    CHECK(xr_core_spec_panic_operand_prefix(XR_CORE_OP_CORE_ASSERT_CONDITION) == 1u);
+    CHECK(xr_core_spec_panic_operand_prefix(XR_CORE_OP_CORE_INTEGER_DIVMOD) == 2u);
+    CHECK(XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE == 158u);
+    CHECK(xr_core_spec_panic_operand_prefix(XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE) == 2u);
+    CHECK(xr_core_spec_panic_operand_prefix(XR_CORE_OP_CORE_CALL_SEALED_DIRECT) == 0u);
+    CHECK(xr_core_spec_panic_operand_prefix(XR_CORE_OP_CORE_CONSTANT_I64) == 0u);
+    CHECK(xr_core_spec_panic_operand_prefix(UINT16_MAX) == 0u);
+    const uint16_t refusal_operations[] = {
+        XR_CORE_OP_CORE_PROVIDER_CALL, XR_CORE_OP_CORE_OUTPUT_GROUP,
+        XR_CORE_OP_CORE_CALL_SEALED_DIRECT, XR_CORE_OP_CORE_CALL_SEALED_INVOKE,
+        XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT, XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE,
+        XR_CORE_OP_CORE_CALL_WITNESS_DIRECT, XR_CORE_OP_CORE_CALL_WITNESS_INVOKE,
+        XR_CORE_OP_CORE_COROUTINE_CALL_SEALED, XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT,
+    };
+    for (uint32_t operation = 0u; operation < XR_CORE_SPEC_OPERATION_COUNT; ++operation) {
+        const XrCoreOperationSpec *row = &xr_core_operation_specs[operation];
+        bool expected = false;
+        for (size_t index = 0u; index < sizeof(refusal_operations) / sizeof(refusal_operations[0]);
+             ++index)
+            expected |= row->stable_id == refusal_operations[index];
+        CHECK(row->has_trap_continuation == expected);
+    }
 }
 
 static void check_target_query(uint16_t operation_id, uint8_t result_type, uint32_t capability_mask,
@@ -135,7 +166,10 @@ static void test_operation_metadata(void) {
     CHECK(call->effect_mask == UINT32_C(4));
 
     CHECK(indirect_call != NULL);
-    CHECK(indirect_call->successor_mask == (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_TRAP));
+    CHECK(indirect_call->successor_mask ==
+          (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_PANIC | XR_CORE_SUCCESSOR_TRAP));
+    CHECK(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT)->successor_mask ==
+          (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_PANIC | XR_CORE_SUCCESSOR_TRAP));
 
     CHECK(target != NULL);
     CHECK(target->result_type == XR_CORE_TYPE_U16);
@@ -167,6 +201,12 @@ static void test_operation_metadata(void) {
     CHECK(variant->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
     CHECK(variant->effect_mask == UINT32_C(1));
 
+    const XrCoreOperationSpec *output = xr_core_spec_operation_by_id(XR_CORE_OP_CORE_OUTPUT_GROUP);
+    CHECK(output != NULL);
+    CHECK(output->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
+    CHECK(output->successor_mask == (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_TRAP));
+    CHECK(output->effect_mask ==
+          (XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_PROVIDER_CALL));
     CHECK(provider != NULL);
     CHECK(provider->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
     CHECK(provider->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
@@ -189,7 +229,8 @@ static void test_operation_metadata(void) {
     CHECK(strcmp(coroutine_call->operation_class, "coroutine-call-terminator") == 0);
     CHECK(coroutine_call->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
     CHECK(coroutine_call->result_type == XR_CORE_TYPE_VOID);
-    CHECK(coroutine_call->successor_mask == (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_TRAP |
+    CHECK(coroutine_call->successor_mask == (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_ERROR |
+                                             XR_CORE_SUCCESSOR_PANIC | XR_CORE_SUCCESSOR_TRAP |
                                              XR_CORE_SUCCESSOR_CANCEL | XR_CORE_SUCCESSOR_SUSPEND));
     CHECK(coroutine_call->effect_mask ==
           (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND));
@@ -202,7 +243,8 @@ static void test_operation_metadata(void) {
     CHECK(indirect_coroutine_call->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
     CHECK(indirect_coroutine_call->result_type == XR_CORE_TYPE_VOID);
     CHECK(indirect_coroutine_call->successor_mask ==
-          (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_TRAP | XR_CORE_SUCCESSOR_CANCEL |
+          (XR_CORE_SUCCESSOR_NORMAL | XR_CORE_SUCCESSOR_ERROR | XR_CORE_SUCCESSOR_PANIC |
+           XR_CORE_SUCCESSOR_TRAP | XR_CORE_SUCCESSOR_CANCEL |
            XR_CORE_SUCCESSOR_SUSPEND));
     CHECK(indirect_coroutine_call->effect_mask ==
           (XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_CANCEL | XR_CORE_EFFECT_SUSPEND));
@@ -252,7 +294,35 @@ static void test_module_place_metadata(void) {
     }
 }
 
+static void test_exact_integer_types(void) {
+    static const struct {
+        uint16_t type_id;
+        uint8_t width;
+        bool is_signed;
+    } expected[] = {
+        {XR_CORE_TYPE_I8, 8u, true}, {XR_CORE_TYPE_U8, 8u, false},
+        {XR_CORE_TYPE_I16, 16u, true}, {XR_CORE_TYPE_U16, 16u, false},
+        {XR_CORE_TYPE_I32, 32u, true}, {XR_CORE_TYPE_U32, 32u, false},
+        {XR_CORE_TYPE_I64, 64u, true}, {XR_CORE_TYPE_U64, 64u, false},
+    };
+    for (size_t index = 0u; index < sizeof(expected) / sizeof(expected[0]); ++index) {
+        const XrCoreIntegerType *integer = xr_core_spec_integer_type(expected[index].type_id);
+        CHECK(integer != NULL);
+        if (integer) {
+            CHECK(integer->type_id == expected[index].type_id);
+            CHECK(integer->width == expected[index].width);
+            CHECK(integer->is_signed == expected[index].is_signed);
+        }
+    }
+    CHECK(xr_core_spec_integer_type(XR_CORE_TYPE_BOOL) == NULL);
+    CHECK(xr_core_spec_integer_type(XR_CORE_TYPE_RUNE) == NULL);
+    CHECK(xr_core_spec_integer_type(XR_CORE_TYPE_TARGET_OS) == NULL);
+    CHECK(xr_core_spec_integer_type(XR_CORE_TYPE_TYPE_VARIABLE) == NULL);
+    CHECK(xr_core_spec_integer_type(UINT16_MAX) == NULL);
+}
+
 int main(void) {
+    test_exact_integer_types();
     test_registry_identity_and_lookup();
     test_operation_metadata();
     test_module_place_metadata();

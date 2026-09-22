@@ -141,8 +141,11 @@ def validate_sources(registry: dict[str, Any], sources: dict[Path, str]) -> None
         evaluator_active = row["coverage"]["evaluator"]["status"] == "COMPLETE"
         require(verifier_case == verifier_active,
                 f"verifier lifecycle disagrees with registry for {row['spelling']}")
-        require(evaluator_case == evaluator_active,
-                f"evaluator lifecycle disagrees with registry for {row['spelling']}")
+        # An explicitly non-normative local model may still cover an older
+        # subset. Its switch arm cannot prove current full-operation coverage.
+        if row["coverage"]["evaluator"]["status"] != "NOT_APPLICABLE":
+            require(evaluator_case == evaluator_active,
+                    f"evaluator lifecycle disagrees with registry for {row['spelling']}")
         require(token in test, f"positive test has no operation token for {row['spelling']}")
     require("spec->verifier_status != XR_CORE_COVERAGE_COMPLETE" in verifier and
             "decoder_status !=" in verifier,
@@ -208,6 +211,17 @@ def self_test(root: Path) -> None:
             "unmodeled reference operation was reported as covered")
     require(coverage["operations"][0]["positive_kat"] is not None,
             "independent Program admission KAT disappeared with the local model")
+    local_sources = {path: (root / path).read_text(encoding="utf-8")
+                     for path in (VERIFIER, EVALUATOR, TEST, MODULE_TEST)}
+    validate_sources(unmodeled, local_sources)
+    missing_model = copy.deepcopy(registry)
+    missing_model["operations"][0]["coverage"]["evaluator"]["status"] = "NOT_YET_ACTIVE"
+    try:
+        validate_sources(missing_model, local_sources)
+    except GateError:
+        pass
+    else:
+        raise GateError("inactive evaluator operation with a live implementation was accepted")
     verifier = (root / VERIFIER).read_text(encoding="utf-8")
     first = enum_token(registry["operations"][0]["spelling"])
     mutated = verifier.replace(f"case {first}:", "case XR_CORE_OP_MISSING:", 1)

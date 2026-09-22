@@ -93,20 +93,12 @@ xr_semantic_string_slice_receiver_has_prior_identity(const XrSemanticPlan *plan,
         const XrSemanticOperationRecord *source = xr_semantic_plan_operation(plan, i);
         if (!source || source->result_value != receiver->value)
             continue;
-        if (source->function != slice->function || source->result_type != receiver->type ||
-            source->opcode != XI_CONST || source->operand_count != 0 ||
-            source->allocation_key != NULL ||
-            source->constant >= xr_semantic_plan_constant_count(plan) ||
-            source->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
-            source->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
-            source->return_complete != 1)
-            return false;
-        XrStableId zero = {{0}};
-        const XrSemanticConstantRecord *constant =
-            xr_semantic_plan_constant(plan, source->constant);
-        if (!xr_stable_id_equal(source->allocation_id, zero) || !constant ||
-            constant->kind != XR_SEM_CONST_STRING || !constant->string ||
-            constant->type != receiver->type)
+        /* The semantic graph verifies the producer's own contract. Slicing
+         * only requires
+         * its exact local String identity; storage and borrow
+         * authority remain
+         * independently checked by the target projection. */
+        if (source->function != slice->function || source->result_type != receiver->type)
             return false;
         matches++;
     }

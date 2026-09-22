@@ -12,16 +12,16 @@ typedef struct XrCEmissionRuleLocation {
     uint32_t element_value;
 } XrCEmissionRuleLocation;
 
-static XrCEmissionRuleMatch xr_c_emission_rule_locate(
-    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
-    XrCEmissionRuleLocation *out) {
-    if (!target_plan || !binding || !out)
+static XrCEmissionRuleMatch xr_c_emission_rule_locate(const XrCEmissionModuleScope *scope,
+                                                      const XrTargetValueRepRecord *binding,
+                                                      XrCEmissionRuleLocation *out) {
+    if (!scope->target || !binding || !out)
         return XR_C_EMISSION_RULE_MALFORMED;
     memset(out, 0, sizeof(*out));
     out->receiver_value = UINT32_MAX;
     out->element_value = UINT32_MAX;
 
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticPlan *semantic = scope->semantic;
     if (!semantic)
         return XR_C_EMISSION_RULE_MALFORMED;
     const XrSemanticOperationRecord *operation = NULL;
@@ -91,9 +91,9 @@ static XrCEmissionRuleMatch xr_c_emission_rule_locate(
         xr_semantic_array_member_owned_reference_type_is_exact(semantic, element_type);
 
     uint32_t layout_count = 0;
-    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(target_plan, &layout_count);
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(scope->target, &layout_count);
     const XrTargetLayoutRecord *layout = NULL;
-    for (uint32_t i = 0; layouts && receiver && i < layout_count; i++) {
+    for (uint32_t i = scope->layout_begin; layouts && receiver && i < scope->layout_end; i++) {
         if (layouts[i].semantic_type != receiver->type)
             continue;
         if (layout) {
@@ -108,19 +108,20 @@ static XrCEmissionRuleMatch xr_c_emission_rule_locate(
     }
 
     uint32_t call_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &call_count);
     const XrTargetCallRecord *call = NULL;
-    for (uint32_t i = 0; calls && i < call_count; i++) {
+    for (uint32_t i = scope->call_begin; calls && i < scope->call_end; i++) {
         if (calls[i].semantic_operation != operation_index)
             continue;
-        if (call) {
-            call = NULL;
-            break;
-        }
+        if (call)
+            return XR_C_EMISSION_RULE_MALFORMED;
         call = &calls[i];
     }
+    /* Target verification owns executable call coverage. Retained cold bodies
+     * have no admitted call to project; duplicate or malformed live rows still
+     * fail before any generated recipe can be used. */
     if (!call)
-        return XR_C_EMISSION_RULE_EXACT;
+        return XR_C_EMISSION_RULE_NOT_APPLICABLE;
     facts->call_convention = call->calling_convention;
     facts->target_kind = call->target_kind;
     facts->call_storage = call->array_element_storage;
@@ -128,7 +129,7 @@ static XrCEmissionRuleMatch xr_c_emission_rule_locate(
 
     uint32_t argument_count = 0;
     const XrTargetCallArgumentRecord *arguments =
-        xr_target_plan_call_arguments(target_plan, &argument_count);
+        xr_target_plan_call_arguments(scope->target, &argument_count);
     bool argument_range = arguments && call->argument_begin <= argument_count &&
                           call->argument_count <= argument_count - call->argument_begin;
     if (!argument_range || call->argument_count != 2 || !receiver || !element)
@@ -138,9 +139,9 @@ static XrCEmissionRuleMatch xr_c_emission_rule_locate(
     const XrTargetCallArgumentRecord *ordered[2] = {receiver_argument, element_argument};
     for (uint16_t i = 0; i < 2; i++) {
         const XrTargetMachineRepRecord *register_rep =
-            xr_target_plan_machine_rep(target_plan, ordered[i]->register_rep);
+            xr_target_plan_machine_rep(scope->target, ordered[i]->register_rep);
         const XrTargetMachineRepRecord *memory_rep =
-            xr_target_plan_machine_rep(target_plan, ordered[i]->memory_rep);
+            xr_target_plan_machine_rep(scope->target, ordered[i]->memory_rep);
         facts->argument_ownership[i] = ordered[i]->ownership;
         facts->argument_storage[i] = ordered[i]->array_element_storage;
         facts->caller_register_kind[i] = register_rep ? register_rep->kind : UINT16_MAX;

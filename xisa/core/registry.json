@@ -16,12 +16,20 @@
     {
       "stable_id": 2,
       "name": "i64",
-      "description": "Exactly 64-bit two's-complement signed integer semantics."
+      "description": "Exactly 64-bit two's-complement signed integer semantics.",
+      "integer": {
+        "width": 64,
+        "signed": true
+      }
     },
     {
       "stable_id": 3,
       "name": "u32",
-      "description": "Exactly 32-bit unsigned integer semantics."
+      "description": "Exactly 32-bit unsigned integer semantics.",
+      "integer": {
+        "width": 32,
+        "signed": false
+      }
     },
     {
       "stable_id": 4,
@@ -36,7 +44,11 @@
     {
       "stable_id": 6,
       "name": "u16",
-      "description": "Exactly 16-bit unsigned integer semantics."
+      "description": "Exactly 16-bit unsigned integer semantics.",
+      "integer": {
+        "width": 16,
+        "signed": false
+      }
     },
     {
       "stable_id": 7,
@@ -72,6 +84,56 @@
       "stable_id": 13,
       "name": "rune",
       "description": "Exactly one Unicode scalar value in [0, 0x10FFFF] excluding the surrogate range [0xD800, 0xDFFF]."
+    },
+    {
+      "stable_id": 14,
+      "name": "i8",
+      "description": "Exactly 8-bit two's-complement signed integer semantics.",
+      "integer": {
+        "width": 8,
+        "signed": true
+      }
+    },
+    {
+      "stable_id": 15,
+      "name": "u8",
+      "description": "Exactly 8-bit unsigned integer semantics.",
+      "integer": {
+        "width": 8,
+        "signed": false
+      }
+    },
+    {
+      "stable_id": 16,
+      "name": "i16",
+      "description": "Exactly 16-bit two's-complement signed integer semantics.",
+      "integer": {
+        "width": 16,
+        "signed": true
+      }
+    },
+    {
+      "stable_id": 17,
+      "name": "i32",
+      "description": "Exactly 32-bit two's-complement signed integer semantics.",
+      "integer": {
+        "width": 32,
+        "signed": true
+      }
+    },
+    {
+      "stable_id": 18,
+      "name": "u64",
+      "description": "Exactly 64-bit unsigned integer semantics.",
+      "integer": {
+        "width": 64,
+        "signed": false
+      }
+    },
+    {
+      "stable_id": 19,
+      "name": "f64",
+      "description": "IEEE-754 binary64 value; constant identity preserves all 64 bits, including signed zero and NaN payloads."
     }
   ],
   "effects": [
@@ -228,6 +290,11 @@
       "stable_id": 139,
       "spelling": "core.provider.call.i64.nullary",
       "reason": "Retired by the atomic cutover to the single Program-typed core.provider.call operation; never decode as an alias."
+    },
+    {
+      "stable_id": 150,
+      "spelling": "core.string.from_i64",
+      "reason": "Replaced by the single typed scalar display conversion; the integer-only operation has no decoder alias or execution fallback."
     }
   ],
   "operations": [
@@ -1860,7 +1927,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": false,
+        "panic": true,
         "trap": true,
         "cancel": false,
         "suspend": false
@@ -1884,7 +1951,7 @@
       "materialization": "executor-private-callable-dispatch",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the packed closed non-suspending target trace under a callable signature without suspend/cancel effects or coroutine-suspension capability; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
+        "allowed_trace": "Declared typed PanicInfo propagates to the caller with its live owners released on exit; the packed closed non-suspending target trace under a callable signature without suspend/cancel effects or coroutine-suspension capability; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "indirect-call",
       "coverage": {
@@ -2014,7 +2081,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": false,
+        "panic": true,
         "trap": true,
         "cancel": false,
         "suspend": false
@@ -2038,7 +2105,7 @@
       "materialization": "executor-private-witness-dispatch",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the exact conformance slot target trace under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
+        "allowed_trace": "Declared typed PanicInfo propagates to the caller with its live owners released on exit; the exact conformance slot target trace under the same CoreSpec; a provider-call-failed hard trap either escapes or transfers every declared live value to the sole explicit trap continuation; an explicit provider-failed continuation enters a separate reason-preserving subgraph: ordinary edges retain trap 7, every explicit exit publishes trap 7, and no ordinary edge from another reason domain enters its blocks; cleanup subgraphs cannot suspend"
       },
       "kat_validator": "witness-call",
       "coverage": {
@@ -4089,11 +4156,12 @@
       "type_rule": {
         "operands": [
           "bool",
+          "optional-message:string",
           "panic-edge-values..."
         ],
         "result": "void",
         "immediates": {
-          "failure_kind": "assertion-failure-kind"
+          "failure_control": "condition-false(1) optionally OR message-present(256); all other bits rejected"
         }
       },
       "evaluation_order": "left-to-right",
@@ -4115,6 +4183,7 @@
       "ownership": {
         "operands": [
           "borrow-condition",
+          "borrow-optional-message",
           "panic-edge-preserve..."
         ],
         "result": "implicit-owned-panic-info on failure only"
@@ -4123,7 +4192,7 @@
       "materialization": "typed-condition-assertion-with-optional-explicit-panic-continuation",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "true falls through in the current block; false creates the declared panic-info failure and either escapes or transfers it with every declared live value to the sole panic continuation"
+        "allowed_trace": "Operands evaluate left-to-right. True falls through and retains input ownership. False copies the optional immutable message into its owned panic-info and either escapes or transfers it with every declared live value to the sole panic continuation. Message copy failure is a resource limit and cleans live owners. The message remains valid through cleanup, suspension, instance failure publication and the observing outcome lifetime."
       },
       "kat_validator": "assert-condition",
       "coverage": {
@@ -4140,7 +4209,7 @@
           "task": 297
         },
         "evaluator": {
-          "status": "COMPLETE",
+          "status": "NOT_APPLICABLE",
           "task": 297
         },
         "vm": {
@@ -4317,6 +4386,8 @@
           "P...",
           "suspend-edge-values...",
           "cancel-edge-values...",
+          "error-edge-values...",
+          "panic-edge-values...",
           "trap-edge-values..."
         ],
         "result": "void",
@@ -4328,8 +4399,8 @@
       "evaluation_order": "left-to-right",
       "successors": {
         "normal": true,
-        "error": false,
-        "panic": false,
+        "error": true,
+        "panic": true,
         "trap": true,
         "cancel": true,
         "suspend": true
@@ -4356,7 +4427,7 @@
       "materialization": "logical-child-coroutine-control",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends; it takes the normal continuation after return, the cancel continuation after child cancellation, or its optional provider-failed continuation on trap 7 from child step or cancellation cleanup; each continuation has a separate operand segment and only the selected segment transfers its owners; normal, cancellation and provider-failed continuation domains have distinct blocks; ordinary edges preserve the selected reason, every explicit cleanup exit preserves that reason, and only an exact provider-refusal edge may change cancellation into trap 7; cleanup subgraphs cannot suspend"
+        "allowed_trace": "the parent suspends at the named safepoint whenever the sealed child suspends; it takes the normal continuation after return, the cancel continuation after child cancellation, or its optional provider-failed continuation on trap 7 from child step or cancellation cleanup; each continuation has a separate operand segment and only the selected segment transfers its owners; normal, cancellation and provider-failed continuation domains have distinct blocks; ordinary edges preserve the selected reason, every explicit cleanup exit preserves that reason, and only an exact provider-refusal edge may change cancellation into trap 7; cleanup subgraphs cannot suspend Successors and explicit operand segments are ordered normal, cancel, declared error, declared panic, optional provider-failed trap. Declared typed outcomes contribute an implicit first block argument with exact payload type and ownership; the other failure inputs must belong to the safepoint live set. Only the selected continuation receives its owners, after the child releases its local owners; typed outcomes preserve the surrounding cleanup reason and cannot alias cancellation."
       },
       "kat_validator": "coroutine-call",
       "coverage": {
@@ -4373,7 +4444,7 @@
           "task": 297
         },
         "evaluator": {
-          "status": "COMPLETE",
+          "status": "NOT_APPLICABLE",
           "task": 297
         },
         "vm": {
@@ -4478,6 +4549,8 @@
           "P...",
           "suspend-edge-values...",
           "cancel-edge-values...",
+          "error-edge-values...",
+          "panic-edge-values...",
           "trap-edge-values..."
         ],
         "result": "void",
@@ -4488,8 +4561,8 @@
       "evaluation_order": "left-to-right",
       "successors": {
         "normal": true,
-        "error": false,
-        "panic": false,
+        "error": true,
+        "panic": true,
         "trap": true,
         "cancel": true,
         "suspend": true
@@ -4517,7 +4590,7 @@
       "materialization": "logical-dynamic-child-coroutine-control",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "the frame-stable callable carrier selects one target admitted by its exact closed target set; a non-suspending target completes synchronously, while a suspending target resumes the same private child execution until return, cancellation, or provider-failed trap; continuation ownership and reason domains are identical to a sealed coroutine call"
+        "allowed_trace": "the frame-stable callable carrier selects one target admitted by its exact closed target set; a non-suspending target completes synchronously, while a suspending target resumes the same private child execution until return, cancellation, or provider-failed trap; continuation ownership and reason domains are identical to a sealed coroutine call Successors and explicit operand segments are ordered normal, cancel, declared error, declared panic, optional provider-failed trap. Declared typed outcomes contribute an implicit first block argument with exact payload type and ownership; the other failure inputs must belong to the safepoint live set. Only the selected continuation receives its owners, after the child releases its local owners; typed outcomes preserve the surrounding cleanup reason and cannot alias cancellation."
       },
       "kat_validator": "coroutine-indirect-call",
       "coverage": {
@@ -4534,7 +4607,7 @@
           "task": 297
         },
         "evaluator": {
-          "status": "COMPLETE",
+          "status": "NOT_APPLICABLE",
           "task": 297
         },
         "vm": {
@@ -4584,7 +4657,7 @@
       "materialization": "logical-class-reference",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one fresh class identity whose fields equal the declaration-ordered operands; every affine field owner transfers exactly once"
+        "allowed_trace": "one fresh class identity whose fields equal the declaration-ordered operands; every affine field owner transfers exactly once; reference storage admits exact nominal class-reference or non-nominal record-reference shapes with the same field and root ownership obligations"
       },
       "kat_validator": "class-construct",
       "coverage": {
@@ -4616,15 +4689,15 @@
     },
     {
       "stable_id": 143,
-      "spelling": "core.class.share",
-      "class": "class-reference",
+      "spelling": "core.owner.alias",
+      "class": "ownership",
       "feature": "core.base",
       "epoch": 1,
       "type_rule": {
         "operands": [
-          "C"
+          "T"
         ],
-        "result": "C",
+        "result": "T",
         "immediates": {}
       },
       "evaluation_order": "left-to-right",
@@ -4643,17 +4716,17 @@
       "capability_requirements": [],
       "ownership": {
         "operands": [
-          "borrow-class-owner-or-rooted-borrow"
+          "borrow-identity-owner-or-rooted-borrow"
         ],
-        "result": "same-referent-class-owner"
+        "result": "same-referent-owner"
       },
       "profile_dependency": "none",
-      "materialization": "logical-class-alias",
+      "materialization": "logical-reference-alias",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one independent logical owner that preserves the exact referent identity without consuming the source"
+        "allowed_trace": "One independent logical owner of a class reference or array that preserves the exact mutable referent identity without consuming the source; immutable values and unrooted borrows are rejected.; reference storage admits exact nominal class-reference or non-nominal record-reference shapes with the same field and root ownership obligations"
       },
-      "kat_validator": "class-share",
+      "kat_validator": "owner-alias",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",
@@ -4668,7 +4741,7 @@
           "task": 297
         },
         "evaluator": {
-          "status": "COMPLETE",
+          "status": "NOT_APPLICABLE",
           "task": 297
         },
         "vm": {
@@ -4720,7 +4793,7 @@
       "materialization": "logical-class-field-read",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one declaration-ordinal field snapshot or rooted borrow from the same class referent"
+        "allowed_trace": "one declaration-ordinal field snapshot or rooted borrow from the same class referent; reference storage admits exact nominal class-reference or non-nominal record-reference shapes with the same field and root ownership obligations"
       },
       "kat_validator": "class-field-load",
       "coverage": {
@@ -4789,7 +4862,7 @@
       "materialization": "logical-class-field-place",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one verifier-confined place rooted in the receiver and aliasing its declaration-ordinal field"
+        "allowed_trace": "one verifier-confined place rooted in the receiver and aliasing its declaration-ordinal field; reference storage admits exact nominal class-reference or non-nominal record-reference shapes with the same field and root ownership obligations"
       },
       "kat_validator": "class-field-place",
       "coverage": {
@@ -4896,17 +4969,27 @@
       "epoch": 1,
       "type_rule": {
         "operands": [
-          "T..."
+          "T...",
+          "trap-edge-values..."
         ],
         "result": "void",
         "immediates": {
-          "provider_operation": "program-provider-requirement-operation-index"
+          "provider_operation": "program-provider-requirement-operation-index",
+          "trap": "optional-provider-call-failed"
         },
         "operand_domain": [
+          "i8",
+          "u8",
+          "i16",
+          "u16",
+          "i32",
+          "u32",
           "i64",
+          "u64",
           "bool",
           "string",
-          "rune"
+          "rune",
+          "f64"
         ]
       },
       "evaluation_order": "left-to-right",
@@ -4914,7 +4997,7 @@
         "normal": true,
         "error": false,
         "panic": false,
-        "trap": false,
+        "trap": true,
         "cancel": false,
         "suspend": false
       },
@@ -4931,7 +5014,8 @@
       ],
       "ownership": {
         "operands": [
-          "borrow-value..."
+          "borrow-value...",
+          "trap-edge-preserve..."
         ],
         "result": "none"
       },
@@ -4939,76 +5023,9 @@
       "materialization": "atomic-typed-line-output-trampoline",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "one exact output-write provider event: operands rendered left to right in canonical display form (i64 signed decimal, bool true/false, string UTF-8 bytes verbatim, rune UTF-8 encoding) joined by one space byte and followed by one line-feed byte; provider failure normalizes to trap 7"
+        "allowed_trace": "one exact output-write provider event: operands rendered left to right in canonical display form (fixed-width integer signed/unsigned decimal without narrowing, f64 using the existing human-display rule of 15 significant decimal digits with .0 appended when no decimal point or exponent appears (including signed zero), bool true/false, string UTF-8 bytes verbatim, rune UTF-8 encoding) joined by one space byte and followed by one line-feed byte; provider failure normalizes to trap 7; the display prefix borrows its values on normal fallthrough; an optional sole trap continuation receives the explicit operand suffix, transfers every live owner exactly once and preserves trap 7 through the remaining cleanup graph, which cannot suspend or recover to an ordinary return"
       },
       "kat_validator": "output-group",
-      "coverage": {
-        "spec_oracle": {
-          "status": "COMPLETE",
-          "task": 295
-        },
-        "decoder": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "verifier": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "evaluator": {
-          "status": "COMPLETE",
-          "task": 297
-        },
-        "vm": {
-          "status": "COMPLETE",
-          "task": 299
-        },
-        "aot": {
-          "status": "COMPLETE",
-          "task": 300
-        }
-      }
-    },
-    {
-      "stable_id": 150,
-      "spelling": "core.string.from_i64",
-      "class": "string",
-      "feature": "core.base",
-      "epoch": 1,
-      "type_rule": {
-        "operands": [
-          "i64"
-        ],
-        "result": "string",
-        "immediates": {}
-      },
-      "evaluation_order": "left-to-right",
-      "successors": {
-        "normal": true,
-        "error": false,
-        "panic": false,
-        "trap": false,
-        "cancel": false,
-        "suspend": false
-      },
-      "arithmetic": {
-        "kind": "none"
-      },
-      "effects": [],
-      "capability_requirements": [],
-      "ownership": {
-        "operands": [
-          "borrow-value"
-        ],
-        "result": "owned-value"
-      },
-      "profile_dependency": "none",
-      "materialization": "immutable-managed-text",
-      "determinism": {
-        "kind": "deterministic",
-        "allowed_trace": "one fresh owner holding the canonical signed decimal representation of the operand, identical to its output display form"
-      },
-      "kat_validator": "scalar-oracle",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",
@@ -5162,11 +5179,11 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 300
         }
       }
@@ -5233,11 +5250,1037 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 154,
+      "spelling": "core.integer.convert",
+      "class": "conversion",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T"
+        ],
+        "result": "R",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "integer-conversion",
+        "source": "exact fixed-width integer",
+        "target": "exact fixed-width integer",
+        "overflow": "modulo-target-width",
+        "interpretation": "source signedness before conversion; target two's-complement signedness after conversion"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "One exact result with the target integer TypeId; invalid source or target types are rejected before execution."
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 155,
+      "spelling": "core.integer.divmod",
+      "class": "arithmetic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T",
+          "T",
+          "panic-edge-values..."
+        ],
+        "result": "T",
+        "immediates": {
+          "operation": [
+            "quotient",
+            "remainder"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "integer-division-remainder",
+        "types": "exact fixed-width integers of one common type",
+        "rounding": "trunc-toward-zero",
+        "overflow": "modulo-result-width",
+        "remainder_sign": "dividend",
+        "zero_failure": "panic: E0420 for quotient, E0421 for remainder"
+      },
+      "effects": [
+        "panic"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value",
+          "panic-edge-preserve..."
+        ],
+        "result": "owned-value on success; implicit-owned-panic-info on failure"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "One exact quotient/remainder, or one panic carrying code420/421 and the declared preserved values; no result is published on the panic path."
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 156,
+      "spelling": "core.sequence.length",
+      "class": "sequence",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T"
+        ],
+        "result": "i64",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "cached-logical-sequence-length",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "One nonnegative i64 logical sequence length: Unicode scalar count for immutable UTF-8 strings, element count for arrays. Reading length is O(1); construction and copy maintain the count. No allocation, provider call, owner transfer, normalization or grapheme segmentation occurs."
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 157,
+      "spelling": "core.array.construct",
+      "class": "aggregate",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "A",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "copy-trivial-value-or-transfer-affine-owner"
+        ],
+        "result": "owner",
+        "preconditions": [
+          "every-element-has-the-exact-array-element-type-and-ownership",
+          "every-operand-is-available-before-use",
+          "each-affine-owner-is-transferred-exactly-once"
+        ],
+        "postconditions": [
+          "only-affine-operands-become-consumed",
+          "trivial-operands-remain-available",
+          "copy-contract-does-not-turn-transfer-into-implicit-copy"
+        ]
+      },
+      "profile_dependency": "none",
+      "materialization": "owned-dynamic-sequence",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "One fresh affine array containing the ordered operands, including the empty sequence. Affine elements transfer exactly once; trivial values remain available. Allocation failure publishes no array and consumes no input owner."
+      },
+      "kat_validator": "array-construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 158,
+      "spelling": "core.sequence.element_place",
+      "class": "place",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "i64",
+          "panic-edge-values..."
+        ],
+        "result": "T",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "panic"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-rooted-sequence",
+          "borrow-index",
+          "panic-edge-preserve..."
+        ],
+        "result": "non-owning-element-place",
+        "preconditions": [
+          "sequence-element-type-exactly-matches-result-type",
+          "source-storage-has-a-live-root",
+          "result-cannot-gain-write-permission"
+        ],
+        "postconditions": [
+          "normal-result-aliases-exactly-one-existing-element",
+          "source-owner-is-not-transferred",
+          "bounds-failure-publishes-no-place-and-preserves-cleanup-owners"
+        ]
+      },
+      "profile_dependency": "none",
+      "materialization": "checked-rooted-element-place",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "For an array, fixed array or borrowed sequence view, evaluate source then signed i64 index. Admit exactly 0 <= index < logical length; negative indices are not end-relative. Success returns a non-owning place with the exact element type, original storage identity and write permission no stronger than the source. Failure publishes the language index-out-of-bounds panic, no place and no memory access, then follows the optional exact panic continuation or escapes. Construction does not allocate, copy or transfer an owner. Storage invalidation or root destruction while the place is live is forbidden. Slice-range normalization is a separate operation."
+      },
+      "kat_validator": "sequence-element-place",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 159,
+      "spelling": "core.atomic.construct",
+      "class": "atomic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T"
+        ],
+        "result": "A",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-trivial-value"
+        ],
+        "result": "owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "synchronized-scalar-identity",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Create one fresh synchronized identity with exactly the declared scalar element value. The result is affine with identity-preserving explicit copy; no operand is consumed. Allocation failure publishes no handle and preserves input owners. Physical storage and reference counts are private to the executor."
+      },
+      "kat_validator": "atomic-construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 160,
+      "spelling": "core.atomic.load",
+      "class": "atomic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A"
+        ],
+        "result": "T",
+        "immediates": {
+          "ordering": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-rooted-atomic"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "synchronized-scalar-identity",
+      "determinism": {
+        "kind": "linearizable",
+        "allowed_trace": "Borrow a live Atomic identity and return one scalar value observed by a single atomic load. Ordering is 0:Relaxed, 1:Acquire, 2:Release, 3:AcquireRelease, 4:SeqCst; load maps Release to Relaxed and AcquireRelease to Acquire. Other encodings are rejected. Concurrent observations must admit a C11 linearization consistent with the selected ordering; the handle is neither copied nor consumed."
+      },
+      "kat_validator": "atomic-load",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 161,
+      "spelling": "core.atomic.exchange",
+      "class": "atomic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "T"
+        ],
+        "result": "T",
+        "immediates": {
+          "ordering": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-rooted-atomic",
+          "borrow-trivial-value"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "synchronized-scalar-identity",
+      "determinism": {
+        "kind": "linearizable",
+        "allowed_trace": "Borrow a live Atomic identity, atomically replace its exact scalar element, and return the actual previous value. Ordering is 0:Relaxed, 1:Acquire, 2:Release, 3:AcquireRelease, 4:SeqCst; other encodings are rejected. All aliases observe the same synchronized identity. Concurrent exchanges admit a C11 linearization consistent with the selected ordering. No allocation, deep copy or ownership transfer occurs."
+      },
+      "kat_validator": "atomic-exchange",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 162,
+      "spelling": "core.atomic.compare_exchange",
+      "class": "atomic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "T",
+          "T"
+        ],
+        "result": "T",
+        "immediates": {
+          "ordering": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-rooted-atomic",
+          "borrow-trivial-value",
+          "borrow-trivial-value"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "synchronized-scalar-identity",
+      "determinism": {
+        "kind": "linearizable",
+        "allowed_trace": "Strong atomic compare-exchange on a live synchronized identity: compare exact scalar bits with expected, replace with desired only on equality, and return the actual previous scalar. No spurious failure. Success uses ordering 0:Relaxed, 1:Acquire, 2:Release, 3:AcquireRelease, 4:SeqCst; failure uses Relaxed. Other encodings are rejected. No allocation or ownership transfer occurs; concurrent calls admit a C11 linearization. The source success flag is derived by exact scalar equality against expected."
+      },
+      "kat_validator": "atomic-compare-exchange",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 163,
+      "spelling": "core.atomic.update",
+      "class": "atomic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "T"
+        ],
+        "result": "T",
+        "immediates": {
+          "control": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-rooted-atomic",
+          "borrow-trivial-value"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "synchronized-scalar-identity",
+      "determinism": {
+        "kind": "linearizable",
+        "allowed_trace": "Linearizable synchronized scalar update, returning the actual old value. Control encodes mode*8+ordering: mode 0 adds, 1 subtracts, 2 XORs; ordering 0..4 denotes Relaxed, Acquire, Release, AcquireRelease, SeqCst. Other bits are rejected. i64 add/sub wrap modulo 2^64; bool only permits XOR with an exact bool operand. No allocation or ownership transfer occurs. All aliases observe one identity and concurrent operations admit a C11 linearization."
+      },
+      "kat_validator": "atomic-update",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 164,
+      "spelling": "core.constant.f64",
+      "class": "constant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "f64",
+        "immediates": {
+          "bits": "16-lowercase-hex-digits"
+        }
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "binary64-constant",
+        "width": 64
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one exact IEEE-754 binary64 bit pattern"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 165,
+      "spelling": "core.compare.f64",
+      "class": "comparison",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "f64",
+          "f64"
+        ],
+        "result": "bool",
+        "immediates": {
+          "predicate": [
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "binary64-compare",
+        "width": 64,
+        "nan": "unordered: only ne is true",
+        "zero": "positive and negative zero compare equal"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one canonical bool"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 166,
+      "spelling": "core.scalar.bitcast64",
+      "class": "conversion",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T"
+        ],
+        "result": "R",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Reinterpret exactly one non-owning i64, u64 or f64 scalar as i64, u64 or f64 without numerical conversion. Preserve all 64 representation bits, including signed zero and NaN payloads; no allocation, normalization, arithmetic, trapping or ownership transfer. Reject every other source or result type before execution."
+      },
+      "kat_validator": "scalar-bitcast64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 167,
+      "spelling": "core.string.from_scalar",
+      "class": "string",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T"
+        ],
+        "result": "string",
+        "immediates": {},
+        "operand_domain": [
+          "i8",
+          "u8",
+          "i16",
+          "u16",
+          "i32",
+          "u32",
+          "i64",
+          "u64",
+          "f64",
+          "bool",
+          "rune"
+        ]
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "immutable-managed-text",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "One fresh immutable string owner containing the exact canonical display bytes of one fixed-width integer, f64, bool or rune scalar, identical to the corresponding typed output operand. No numerical conversion or operand consumption; allocation failure publishes no owner. String operands use the existing ownership-preserving string operations instead."
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
           "task": 300
         }
       }

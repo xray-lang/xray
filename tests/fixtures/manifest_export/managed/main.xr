@@ -1,3 +1,3 @@
 export fn length(value: string) -> i32 {
-    return value.length as i32
+    return len(value) as i32
 }

@@ -61,31 +61,13 @@ static void assert_generated_provider_execution(XrValidatedProgram *program,
                   XR_EXECUTION_OK);
     ASSERT_NOT_NULL(instance);
     uint32_t entry = xr_validated_program_entry_function(program);
-    XrExecutionLease lease = {0};
-    ASSERT_TRUE(xr_execution_instance_acquire(instance, &lease));
-    XrReferenceProviderBinding reference_binding = {
-        .context = &lease,
-        .call_i64_nullary = reference_clock_provider_call,
-        .call_i64_unary = reference_clock_provider_call_unary,
-        .call_optional_i64_pair_nullary = reference_pipe_provider_call,
-        .call_bool_i64_unary = reference_pipe_close_provider_call,
-    };
-    XrReferenceOutcome reference =
-        xr_reference_evaluate_bound(program, entry, NULL, 0u, NULL, NULL, &reference_binding);
-    ASSERT_EQ_INT(reference.kind, XR_REFERENCE_OUTCOME_RETURN);
-    ASSERT_EQ_INT(reference.value.kind, XR_REFERENCE_VALUE_I64);
-    ASSERT_EQ_INT(reference.value.as.i64, 1);
-    xr_reference_outcome_dispose(&reference);
-    ASSERT_TRUE(xr_execution_lease_release(&lease));
-    const XrVmDecodePolicy policies[] = {XR_VM_DECODE_BASELINE_VIEW, XR_VM_DECODE_FIXED_ROWS};
-    for (uint32_t index = 0u; index < sizeof(policies) / sizeof(policies[0]); ++index) {
+
+    {
         XrVmCodeOptions options = xr_vm_code_default_options();
-        options.decode_policy = policies[index];
         XrVmCodeDiagnostic vm_diagnostic;
         XrVmCode *code = NULL;
         ASSERT_EQ_INT(xr_vm_code_build(program, profile, &options, &code, &vm_diagnostic),
                       XR_VM_CODE_OK);
-        ASSERT_EQ_INT(xr_vm_code_decode_policy(code), policies[index]);
         XrVmOutcome outcome = xr_vm_code_execute(code, instance, entry, NULL, 0u);
         ASSERT_EQ_INT(outcome.kind, XR_VM_OUTCOME_RETURN);
         ASSERT_EQ_INT(outcome.value.kind, XR_VM_VALUE_I64);
@@ -131,12 +113,11 @@ static void assert_process_provider_name_is_not_authority(void) {
     XrProgramSourceDiagnostic diagnostic = {0};
     assert_source_build_ok(&fixture.input, &product, &diagnostic);
     ASSERT_EQ_UINT(xr_validated_program_provider_requirement_count(product.program), 0u);
-    uint32_t entry = xr_validated_program_entry_function(product.program);
-    XrReferenceOutcome result = xr_reference_evaluate(product.program, entry, NULL, 0u, NULL, NULL);
-    ASSERT_EQ_INT(result.kind, XR_REFERENCE_OUTCOME_RETURN);
-    ASSERT_EQ_INT(result.value.kind, XR_REFERENCE_VALUE_I64);
-    ASSERT_EQ_INT(result.value.as.i64, 37);
-    xr_reference_outcome_dispose(&result);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    assert_detached_program_i64_result(product.program, profile, 37);
+    xr_target_profile_free(profile);
     xr_program_source_product_free(&product);
     source_build_fixture_free(&fixture);
 }
@@ -191,7 +172,7 @@ static void assert_process_provider_source(XrSourceFixtureId fixture_id) {
     ASSERT_EQ_UINT(generated.size, repeated.size);
     ASSERT_EQ_INT(memcmp(generated.bytes, repeated.bytes, generated.size), 0);
     ASSERT_NOT_NULL(strstr(generated.bytes, "xr_os_core_getpid()"));
-    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_i64_nullary"));
+    ASSERT_NOT_NULL(strstr(generated.bytes, "xr_aot_host_typed"));
     ASSERT_NULL(strstr(generated.bytes, "xrt_os_getpid"));
     const char *output_path = source_fixture_output_path(fixture_id);
     if (output_path) {

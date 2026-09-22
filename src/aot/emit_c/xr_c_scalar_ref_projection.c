@@ -102,14 +102,19 @@ static const XrSemanticOperationRecord *unique_result_operation(
 static bool scalar_ref_semantic_rows(const XrTargetPlan *plan,
                                      const XrTargetCallArgumentRecord *argument,
                                      XrCScalarRefProjection *out) {
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
     uint32_t call_count = 0, slot_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
     const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
     const XrTargetCallRecord *call =
         argument && argument->call < call_count ? &calls[argument->call] : NULL;
-    const XrSemanticFunctionRecord *function =
-        call && semantic ? xr_semantic_plan_function(semantic, call->callee_function) : NULL;
+    const XrSemanticPlan *semantic = NULL;
+    uint32_t callee_function = XR_SEMANTIC_INDEX_NONE;
+    if (!call ||
+        !xr_target_plan_function_semantic_binding(plan, call->callee_function, &semantic,
+                                                  &callee_function) ||
+        xr_target_plan_module_for_function(plan, call->caller_function, NULL) != semantic)
+        return false;
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(semantic, callee_function);
     const XrSemanticParameterRecord *parameter =
         argument && semantic
             ? xr_semantic_plan_parameter(semantic, argument->callee_parameter)
@@ -119,12 +124,12 @@ static bool scalar_ref_semantic_rows(const XrTargetPlan *plan,
     const XrSemanticOperationRecord *address =
         argument ? unique_result_operation(semantic, argument->semantic_value) : NULL;
     const XrSemanticOperandRecord *source = NULL;
-    if (!semantic || !argument || !out || !call || !function || !parameter || !type ||
-        !address || parameter->function != call->callee_function ||
-        parameter->ordinal != argument->ordinal || parameter->mode != XR_PARAM_REF ||
-        type->kind != XR_KIND_INT || type->scalar_rep != XR_NATIVE_I64 ||
-        type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
-        type->flags != 0 || type->builtin_type != XR_TID_NULL ||
+    if (!semantic || !argument || !out || !call || !function || !parameter || !type || !address ||
+        parameter->function != callee_function || parameter->ordinal != argument->ordinal ||
+        parameter->mode != XR_PARAM_REF || type->kind != XR_KIND_INT ||
+        type->scalar_rep != XR_NATIVE_I64 || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 || type->flags != 0 ||
+        type->builtin_type != XR_TID_NULL ||
         !xr_semantic_ref_argument_local_addr_is_exact(semantic, address, parameter->type,
                                                       &source) ||
         argument->caller_slot >= slot_count ||
@@ -132,7 +137,7 @@ static bool scalar_ref_semantic_rows(const XrTargetPlan *plan,
         return false;
     out->source_value = source->value;
     memset(&out->function_abi, 0, sizeof(out->function_abi));
-    out->function_abi.semantic_function = call->callee_function;
+    out->function_abi.semantic_function = callee_function;
     out->function_abi.semantic_value = parameter->value;
     out->function_abi.ordinal = (uint16_t) (argument->ordinal + 1u);
     out->function_abi.parameter_count = function->parameter_count;
@@ -157,7 +162,8 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_argument(
     const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
     const XrTargetCallRecord *call =
         argument && calls && argument->call < call_count ? &calls[argument->call] : NULL;
-    const XrSemanticPlan *semantic = plan ? xr_target_plan_semantic_plan(plan) : NULL;
+    const XrSemanticPlan *semantic =
+        call ? xr_target_plan_module_for_function(plan, call->callee_function, NULL) : NULL;
     const XrSemanticParameterRecord *parameter =
         argument && semantic
             ? xr_semantic_plan_parameter(semantic, argument->callee_parameter)
@@ -195,10 +201,20 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_address(
     uint32_t argument_count = 0;
     const XrTargetCallArgumentRecord *arguments =
         xr_target_plan_call_arguments(plan, &argument_count);
+    uint32_t slot_count = 0, call_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    if (binding->slot == XR_SEMANTIC_INDEX_NONE)
+        return XR_C_SCALAR_REF_NOT_THIS_FAMILY;
+    if (!slots || binding->slot >= slot_count)
+        return XR_C_SCALAR_REF_MALFORMED;
+    const XrTargetSlotRecord *slot = &slots[binding->slot];
     bool matched = false;
     XrCScalarRefProjection projection = {0};
     for (uint32_t i = 0; arguments && i < argument_count; i++) {
-        if (arguments[i].semantic_value != binding->semantic_value)
+        if (arguments[i].semantic_value != binding->semantic_value || !calls ||
+            arguments[i].call >= call_count ||
+            calls[arguments[i].call].caller_function != slot->function)
             continue;
         XrCScalarRefProjection candidate = {0};
         XrCScalarRefProjectionStatus status =
@@ -213,6 +229,9 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_address(
     }
     if (!matched)
         return XR_C_SCALAR_REF_NOT_THIS_FAMILY;
+    if (slot->semantic_value != binding->semantic_value ||
+        slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep)
+        return XR_C_SCALAR_REF_MALFORMED;
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =

@@ -17,12 +17,13 @@
 
 #include "xr_program.h"
 #include "xr_program_verify.h"
+#include "../module/xnative_package.h"
 
 struct XrCompilerSession;
 struct XrModuleIdentityAuthority;
 struct XrModuleResolver;
 
-#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(5)
+#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(8)
 #define XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES UINT32_C(1024)
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE 512u
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE 4096u
@@ -76,8 +77,17 @@ typedef struct XrProgramSourceBuildInput {
     const char *entry_source_path;
     const struct XrModuleIdentityAuthority *entry_authority;
     XrProgramSourceEntryIdentity entry;
+    /* Additional named functions anywhere in the authoritative import graph.
+     * Duplicate declarations, missing modules and stale source hashes reject.
+     * The request order affects only returned IDs, never canonical bytes. */
+    const XrProgramSourceEntryIdentity *retained_entries;
+    uint32_t retained_entry_count;
     uint8_t source_profile;
-    uint8_t reserved8[7];
+    /* Retain top-level test declarations from the entry module in source order. */
+    uint8_t discover_tests;
+    /* Retain manifest C exports from the authoritative entry module. */
+    uint8_t discover_exports;
+    uint8_t reserved8[5];
     XrFingerprint semantic_profile_fingerprint;
 } XrProgramSourceBuildInput;
 
@@ -124,9 +134,38 @@ typedef struct XrProgramSourceDiagnostic {
     char message[XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE];
 } XrProgramSourceDiagnostic;
 
+typedef enum XrProgramSourceTestKind {
+    XR_PROGRAM_TEST_NONE = 0,
+    XR_PROGRAM_TEST_CASE,
+    XR_PROGRAM_TEST_SKIP,
+    XR_PROGRAM_TEST_BEFORE_EACH,
+    XR_PROGRAM_TEST_AFTER_EACH,
+    XR_PROGRAM_TEST_BEFORE_ALL,
+    XR_PROGRAM_TEST_AFTER_ALL,
+} XrProgramSourceTestKind;
+
+typedef struct XrProgramSourceTestEntry {
+    char *name;
+    uint32_t function_id;
+    XrProgramSourceTestKind kind;
+    uint32_t timeout_seconds;
+} XrProgramSourceTestEntry;
+
 typedef struct XrProgramSourceProduct {
     XrProgramArtifact artifact;
     XrValidatedProgram *program;
+    /* Exact Program-local IDs in retained_entries request order. Owned by this
+     * product,
+     * independent of source buffers and the compiler session. */
+    uint32_t *retained_function_ids;
+    uint32_t retained_function_count;
+    /* Owned metadata; it never borrows syntax, Xi or compiler-session storage. */
+    XrProgramSourceTestEntry *tests;
+    uint32_t test_entry_count;
+    /* Detached manifest declarations and exact IDs in manifest order. */
+    XrCExportPlan *exports;
+    uint32_t *export_function_ids;
+    uint32_t export_count;
 } XrProgramSourceProduct;
 
 /* product_out must be zero-initialized or previously freed. On success it owns
@@ -134,9 +173,9 @@ typedef struct XrProgramSourceProduct {
  * compiler session, source graph, or the other's byte storage. The program is
  * transferred from the Xi writer under the default admission policy; request
  * limits can only tighten that budget, and rejection releases both outputs. */
-XR_FUNC XrProgramSourceBuildStatus xr_program_source_build(
-    const XrProgramSourceBuildInput *input, XrProgramSourceProduct *product_out,
-    XrProgramSourceDiagnostic *diagnostic_out);
+XR_FUNC XrProgramSourceBuildStatus
+xr_program_source_build(const XrProgramSourceBuildInput *input, XrProgramSourceProduct *product_out,
+                        XrProgramSourceDiagnostic *diagnostic_out);
 XR_FUNC void xr_program_source_product_free(XrProgramSourceProduct *product);
 XR_FUNC const char *xr_program_source_build_status_name(XrProgramSourceBuildStatus status);
 

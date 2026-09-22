@@ -263,6 +263,25 @@ static void lower_cleanup_frontier(XiLower *l, XiCleanupScope *scope, uint16_t c
     xr_free(boundaries);
 }
 
+static XiValue *lower_panic_catch(XiLower *l, XiValue *registration, uint32_t line) {
+    XR_DCHECK(l && l->func && l->cur_block && registration,
+              "panic catch requires a live handler registration");
+    struct XrType *payload_type = xr_type_new_named_instance(l->isolate, "PanicInfo");
+    if (!payload_type || !payload_type->instance.class_name) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *caught = xi_value_new(l->func, l->cur_block, XI_CATCH, payload_type, 0);
+    if (!caught) {
+        l->had_error = true;
+        return NULL;
+    }
+    caught->aux = (void *) registration;
+    caught->flags |= XI_FLAG_SIDE_EFFECT;
+    caught->line = line;
+    return caught;
+}
+
 static void lower_cleanup_compile_panic_edges(XiLower *l, XiCleanupScope *scope) {
     if (!l || !scope)
         return;
@@ -278,16 +297,9 @@ static void lower_cleanup_compile_panic_edges(XiLower *l, XiCleanupScope *scope)
         l->cur_block = edge.block;
         l->dead_after_throw = false;
 
-        XiValue *caught =
-            xi_value_new(l->func, l->cur_block, XI_CATCH,
-                         xi_lower_type_or_any(l, NULL, "cleanup panic propagation",
-                                              edge.try_op ? (int) edge.try_op->line : 0),
-                         0);
+        XiValue *caught = lower_panic_catch(l, edge.try_op, edge.try_op->line);
         if (!caught)
             continue;
-        caught->aux = (void *) edge.try_op;
-        caught->flags |= XI_FLAG_SIDE_EFFECT;
-        caught->line = edge.try_op->line;
 
         lower_cleanup_frontier(l, scope, edge.frontier_count);
         if (l->cur_block) {
@@ -3140,15 +3152,10 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
         l->cur_block = panic_blk;
         l->dead_after_throw = false;
 
-        XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
-        if (catch_op) {
-            catch_op->aux = (void *) try_op;
-            catch_op->flags |= XI_FLAG_SIDE_EFFECT;
-            catch_op->line = (uint32_t) panic_clause->var_line;
-        }
+        XiValue *catch_op = lower_panic_catch(l, try_op, (uint32_t) panic_clause->var_line);
         if (panic_clause->var_name && catch_op) {
             int var_id = xi_lower_var_create(l, panic_clause->symbol_id, panic_clause->var_name,
-                                             l->type_any);
+                                             catch_op->type);
             xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
         }
         xi_lower_stmt(l, panic_clause->body);
@@ -4268,7 +4275,9 @@ XR_FUNC bool xi_lower_import_member_is_type_only(const XiLower *l, const ImportM
     if (!l || !l->analyzer || !l->analyzer->global_scope || !member || member->symbol_id == 0)
         return false;
     symbol = xa_scope_lookup_by_id(l->analyzer->global_scope, member->symbol_id);
-    return xa_symbol_is_type_alias(symbol);
+    return xa_symbol_is_type_alias(symbol) ||
+           (symbol && symbol->kind == XA_SYM_CLASS && symbol->links.type &&
+            symbol->links.type->kind == XR_KIND_INTERFACE);
 }
 
 /* Selective import: import { square, cube } from "./math_lib"
@@ -4325,9 +4334,6 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         if (xi_lower_import_member_is_type_only(l, m))
             continue;
         const char *local_name = m->alias ? m->alias : m->name;
-
-        if (xi_lower_import_member_is_type_only(l, m))
-            continue;
 
         /* Create XI_IMPORT_REF carrying module path and member name. The
          * value has the type the prescan gave the binding, so the store and

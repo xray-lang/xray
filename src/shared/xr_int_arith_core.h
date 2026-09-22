@@ -12,6 +12,7 @@
 #define XR_INT_ARITH_CORE_H
 
 #include "xr_semantic_owner_ids_gen.h"
+#include "xr_integer_division_core.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <limits.h>
@@ -176,21 +177,14 @@ typedef struct XrIntDivModResult {
 /* Value rule for a divisor the caller proved nonzero. */
 static inline int64_t xr_int_div_mod_apply(XrIntDivModKind kind, XrIntDivModProof proof, int64_t a,
                                            int64_t b) {
-    switch (kind) {
-        case XR_INT_DIV_MOD_DIV:
-            if (proof != XR_INT_DIV_MOD_PROOF_POSITIVE && b == -1)
-                return xr_i64_neg_wrap(a);
-            return a / b;
-        case XR_INT_DIV_MOD_MOD:
-            if (proof != XR_INT_DIV_MOD_PROOF_POSITIVE && b == -1)
-                return 0;
-            return a % b;
-        case XR_INT_DIV_MOD_DIV_U:
-            return (int64_t) ((uint64_t) a / (uint64_t) b);
-        case XR_INT_DIV_MOD_MOD_U:
-            return (int64_t) ((uint64_t) a % (uint64_t) b);
-    }
-    return 0;
+    if (kind < XR_INT_DIV_MOD_DIV || kind > XR_INT_DIV_MOD_MOD_U)
+        return 0;
+    bool is_signed = kind == XR_INT_DIV_MOD_DIV || kind == XR_INT_DIV_MOD_MOD;
+    bool remainder = kind == XR_INT_DIV_MOD_MOD || kind == XR_INT_DIV_MOD_MOD_U;
+    uint64_t bits = xr_integer_divmod_nonzero_bits((uint64_t) a, (uint64_t) b, 64u,
+                                                   is_signed, remainder,
+                                                   proof == XR_INT_DIV_MOD_PROOF_POSITIVE);
+    return xr_integer_signed_from_bits(bits);
 }
 
 /* Full rule including the divide-by-zero probe the backend must publish. */
