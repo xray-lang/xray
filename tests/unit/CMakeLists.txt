@@ -858,7 +858,7 @@ add_test(NAME test_xr_program_imported_callable_native
 set_tests_properties(test_xr_program_imported_callable_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;callable;multi-module;generated-c;native;task-301")
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
-add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+add_xray_bootstrap_unit_test(test_xi_cgen ir/test_xi_cgen.c)
 add_test(NAME test_xi_cgen_optional_injection
     COMMAND $<TARGET_FILE:test_xi_cgen> optional-injection-emission)
 add_test(NAME test_xi_cgen_optional_storage
@@ -982,7 +982,11 @@ add_xray_unit_test(test_xi_escape ir/test_xi_escape.c)
 add_xray_unit_test(test_xi_own ir/test_xi_own.c)
 add_xray_unit_test(test_xi_arc_verify ir/test_xi_arc_verify.c)
 add_xray_unit_test(test_xi_source_move_verify ir/test_xi_source_move_verify.c)
-add_xray_unit_test(test_semantic_plan plan/test_semantic_plan.c)
+add_xray_bootstrap_unit_test(test_semantic_plan plan/test_semantic_plan.c)
+add_test(NAME test_semantic_zero_operand_metadata
+    COMMAND $<TARGET_FILE:test_semantic_plan> zero-operand-metadata)
+set_tests_properties(test_semantic_zero_operand_metadata PROPERTIES
+    LABELS "semantic;memory-safety;metadata")
 add_test(NAME test_semantic_dependency_method_authority
     COMMAND $<TARGET_FILE:test_semantic_plan> source-dependency-method-authority)
 set_tests_properties(test_semantic_dependency_method_authority PROPERTIES

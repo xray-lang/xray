@@ -466,11 +466,17 @@ static XrSemanticPlan *build_probe_plan(void) {
     return build_probe_plan_with_entry(0u);
 }
 
-static XrSemanticPlan *build_string_builder_constructor_plan(void) {
+static XrSemanticPlan *build_string_builder_constructor_plan(uint32_t preceding_adds) {
     XiFunc *function = xi_func_new("string_builder_constructor_probe", &stub_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
+    /* Exercise metadata-only instructions both before any operand storage and
+     * exactly after the operand table's allocation boundaries. */
+    XiValue *zero = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(zero != NULL);
+    for (uint32_t index = 0; index < preceding_adds; ++index)
+        REQUIRE(xi_binary(function, entry, XI_ADD, &stub_int, zero, zero) != NULL);
     XiValue *builder = xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_string_builder, 0);
     REQUIRE(builder != NULL);
     builder->aux = (void *) "StringBuilder";
@@ -2888,7 +2894,7 @@ static void test_immutable_owned_snapshot(void) {
 }
 
 static void test_string_builder_constructor_allocation_authority(void) {
-    XrSemanticPlan *plan = build_string_builder_constructor_plan();
+    XrSemanticPlan *plan = build_string_builder_constructor_plan(0u);
     XrSemanticOperationRecord *constructor = find_operation(plan, XI_CALL_BUILTIN);
     REQUIRE(constructor != NULL && constructor->operand_count == 0 &&
             constructor->metadata_count == 1);
@@ -6862,7 +6868,26 @@ static void test_semantic_build_requires_typed_module_identity(void) {
                                                    "XR_SEM_0019");
 }
 
+static void test_zero_operand_metadata_at_storage_boundaries(void) {
+    const uint32_t counts[] = {0u, 8u, 16u, 32u};
+    for (size_t index = 0; index < sizeof(counts) / sizeof(counts[0]); ++index) {
+        XrSemanticPlan *plan = build_string_builder_constructor_plan(counts[index]);
+        XrSemanticOperationRecord *constructor = find_operation(plan, XI_CALL_BUILTIN);
+        REQUIRE(constructor != NULL && constructor->operand_count == 0u);
+        REQUIRE(constructor->operand_begin == counts[index] * 2u);
+        REQUIRE(constructor->metadata_count == 1u);
+        REQUIRE(constructor->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR);
+        xr_semantic_plan_free(plan);
+    }
+}
+
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "zero-operand-metadata") == 0) {
+        test_zero_operand_metadata_at_storage_boundaries();
+        puts("Zero-operand metadata storage boundary tests passed");
+        return 0;
+    }
+    test_zero_operand_metadata_at_storage_boundaries();
     if (argc == 2 && strcmp(argv[1], "external-entry") == 0) {
         test_external_entry_authority_roundtrip();
         test_coroutine_function_authority_roundtrip();

@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -147,42 +146,6 @@ def emit_sources(
     return "\n".join(out)
 
 
-def compile_bytecodes(
-    compiler: Path, root: Path, bytecode_dir: Path, entries: list[tuple[str, Path, bytes]]
-) -> None:
-    bytecode_dir.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    env["XRAY_STDLIB_PATH"] = str(root / "stdlib")
-    for name, path, _data in entries:
-        out_path = bytecode_staging_path(bytecode_dir, name)
-        proc = subprocess.run(
-            [
-                str(compiler),
-                "compile",
-                str(path),
-                "--output",
-                str(out_path),
-                "--format",
-                "bytecode",
-                "--stdlib-module",
-                name,
-            ],
-            cwd=str(root),
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="strict",
-        )
-        if proc.returncode != 0:
-            if proc.stdout:
-                sys.stderr.write(proc.stdout)
-            if proc.stderr:
-                sys.stderr.write(proc.stderr)
-            raise RuntimeError(f"failed to compile stdlib module '{name}' to bytecode")
-
-
 def emit_bytecodes(
     entries: list[tuple[str, Path, bytes]], bytecode_dir: Path | None, require_bytecode: bool
 ) -> str:
@@ -235,16 +198,28 @@ def emit_bytecodes(
     return "\n".join(out)
 
 
-def write_text(path: Path | None, content: str) -> None:
+def write_if_changed(path: Path | None, content: str) -> bool:
     if path is None:
-        return
+        return False
+    if path.is_file() and path.read_text(encoding="utf-8") == content:
+        return False
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    return True
 
 
 def self_test() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-stdlib-bytecode-staging-") as directory:
         root = Path(directory).resolve()
+        table = root / "embedded.inc"
+        assert write_if_changed(table, "first\n")
+        fixed_time = 1_700_000_000_000_000_000
+        os.utime(table, ns=(fixed_time, fixed_time))
+        assert not write_if_changed(table, "first\n")
+        assert table.stat().st_mtime_ns == fixed_time
+        assert write_if_changed(table, "second\n")
+        assert table.read_text(encoding="utf-8") == "second\n"
+        assert table.stat().st_mtime_ns != fixed_time
         bytecode_dir = root / "bytecode"
         bytecode_dir.mkdir()
         module_name = "core.format"
@@ -310,7 +285,6 @@ def main() -> int:
     parser.add_argument("--source-output", type=Path)
     parser.add_argument("--bytecode-output", type=Path)
     parser.add_argument("--bytecode-dir", type=Path)
-    parser.add_argument("--compiler", type=Path)
     parser.add_argument("--require-bytecode", action="store_true")
     # Modules this build can load that have no .xr source of their own. The
     # build owns this list because it owns which module TUs are compiled, and a
@@ -331,11 +305,6 @@ def main() -> int:
     bytecode_dir = args.bytecode_dir.resolve() if args.bytecode_dir else None
 
     try:
-        if args.compiler:
-            if bytecode_dir is None:
-                raise RuntimeError("--compiler requires --bytecode-dir")
-            compile_bytecodes(args.compiler.resolve(), root, bytecode_dir, entries)
-
         source_text = emit_sources(root, entries, args.native_only_module)
         bytecode_text = emit_bytecodes(entries, bytecode_dir, args.require_bytecode)
     except RuntimeError as exc:
@@ -343,9 +312,9 @@ def main() -> int:
         return 1
 
     if args.output:
-        write_text(args.output, source_text + bytecode_text)
-    write_text(args.source_output, source_text)
-    write_text(args.bytecode_output, bytecode_text)
+        write_if_changed(args.output, source_text + bytecode_text)
+    write_if_changed(args.source_output, source_text)
+    write_if_changed(args.bytecode_output, bytecode_text)
     if not args.output and not args.source_output and not args.bytecode_output:
         print("generate_stdlib_embedded.py: no output path provided", file=sys.stderr)
         return 1

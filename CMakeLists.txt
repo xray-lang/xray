@@ -2565,20 +2565,45 @@ else()
     target_sources(xray_core PRIVATE src/stdlib/xstdlib_vm_fastpath_stub.c)
 endif()
 
+set(XRAY_STDLIB_BYTECODE_OUTPUTS)
+foreach(XRAY_STDLIB_SOURCE IN LISTS XRAY_STDLIB_SCRIPT_SOURCES)
+    get_filename_component(XRAY_STDLIB_MODULE_DIR "${XRAY_STDLIB_SOURCE}" DIRECTORY)
+    get_filename_component(XRAY_STDLIB_MODULE "${XRAY_STDLIB_MODULE_DIR}" NAME)
+    string(REGEX REPLACE "[^A-Za-z0-9_]" "_" XRAY_STDLIB_STAGING_NAME "${XRAY_STDLIB_MODULE}")
+    string(REGEX REPLACE "^_+|_+$" "" XRAY_STDLIB_STAGING_NAME "${XRAY_STDLIB_STAGING_NAME}")
+    if(XRAY_STDLIB_STAGING_NAME STREQUAL "")
+        set(XRAY_STDLIB_STAGING_NAME "module")
+    endif()
+    set(XRAY_STDLIB_BYTECODE "${XRAY_STDLIB_BYTECODE_DIR}/${XRAY_STDLIB_STAGING_NAME}")
+    list(APPEND XRAY_STDLIB_BYTECODE_OUTPUTS "${XRAY_STDLIB_BYTECODE}")
+    add_custom_command(
+        OUTPUT "${XRAY_STDLIB_BYTECODE}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BYTECODE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E env "XRAY_STDLIB_PATH=${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
+                $<TARGET_FILE:xray_stdlib_bcgen> compile "${XRAY_STDLIB_SOURCE}"
+                --output "${XRAY_STDLIB_BYTECODE}" --format bytecode
+                --stdlib-module "${XRAY_STDLIB_MODULE}"
+        # Each compilation resolves imports from source. Until an exact import
+        # depfile exists, every selected module is a dependency of every output.
+        DEPENDS xray_stdlib_bcgen ${XRAY_STDLIB_SCRIPT_SOURCES}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Compiling embedded stdlib module ${XRAY_STDLIB_MODULE}"
+        VERBATIM
+    )
+endforeach()
+
 add_custom_command(
     OUTPUT ${XRAY_STDLIB_FINAL_BYTECODE_INC}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_FINAL_BYTECODE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BYTECODE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${XRAY_STDLIB_EMBED_GENERATOR}
             --root ${CMAKE_CURRENT_SOURCE_DIR}
-            --compiler $<TARGET_FILE:xray_stdlib_bcgen>
             --bytecode-dir ${XRAY_STDLIB_BYTECODE_DIR}
             --require-bytecode
             --bytecode-output ${XRAY_STDLIB_FINAL_BYTECODE_INC}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
-        xray_stdlib_bcgen
+        ${XRAY_STDLIB_BYTECODE_OUTPUTS}
         ${XRAY_STDLIB_EMBED_GENERATOR}
         ${XRAY_STDLIB_SCRIPT_SOURCES}
     COMMENT "Generating embedded stdlib bytecode table"

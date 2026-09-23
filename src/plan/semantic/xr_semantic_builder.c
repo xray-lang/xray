@@ -4361,18 +4361,21 @@ static bool semantic_array_member_reference_contract_exact(
 /* Validate the shared Array member shape before publishing its intrinsic. */
 static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx,
                                                const XrSemanticOperationRecord *record) {
-    if (!ctx || !record || record->operand_begin > ctx->plan->operand_count ||
+    if (!ctx || !ctx->plan || !record || record->opcode != XI_CALL_METHOD ||
+        record->operand_count == 0 || record->operand_begin > ctx->plan->operand_count ||
         record->operand_count > ctx->plan->operand_count - record->operand_begin ||
         record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count)
         return false;
     const XrArrayMemberShape *shape =
         xr_array_member_shape(ctx->plan->metadata[record->metadata_begin], record->operand_count);
+    if (!shape)
+        return false;
     const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
     const XrSemanticTypeRecord *receiver_type =
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
     const XrSemanticTypeRecord *result_type =
         record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type] : NULL;
-    if (!shape || !xr_semantic_array_type_row_is_exact(receiver_type) ||
+    if (!xr_semantic_array_type_row_is_exact(receiver_type) ||
         receiver_type->child_begin >= ctx->plan->type_child_count)
         return false;
     uint32_t element_type_index = ctx->plan->type_children[receiver_type->child_begin];

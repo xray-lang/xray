@@ -402,9 +402,18 @@ are both rejected. This records no machine-call adapter or new language limit.
 verification-test: test_semantic_plan
 verification-test: test_semantic_dependency_method_authority
 
+Array member classification checks the method opcode, nonempty operand span,
+and declared selector shape before reading a receiver. A zero-argument builtin
+constructor may carry metadata at an empty or full operand-table boundary; it
+must never acquire Array member authority or read a nonexistent operand. The
+storage-boundary regression preserves the existing operation and artifact
+identities rather than replacing fixed fingerprint expectations.
+
+verification-test: test_semantic_zero_operand_metadata
+
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 47ee39ca24a9504213c739915c436c514ca17c48d1f48d1ed9675bbadcba4255
+anchor-sha256: CMakeLists.txt b1c8ca9d099f8ce568f86a237723c2226a20e608d3499de0e33323531e5f2e80
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
@@ -434,7 +443,7 @@ anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 65d4414cddcc0217f8ead6640be987a4b4918a0c6fa283d2cda6245d086c5a16
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c b5a25c3cc85180de669fb9f51561d09dfbe627dd1a1222b834445ad9276f209f
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 812040061aa42a4f9353e9d269ccc23aec9cf3534813db0aa4c5d1f027544570
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h 15445afbdb7357fdafc243730f4df7ae93ad01546feceb260194223c0670a578
@@ -461,13 +470,13 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 97085f29b14fd95ab3f942fa67
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c cbc5cfc599653e3668f4b7dd6a81755baeb274b67a455e52155cc16205f68a23
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2b5667297212ffe1df19d87643c5045b1a6cfed11bc8683c
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 94f96f7462b343afb2a2eb8837cbb75e4f20b576b25af6db0298a2fb3edf2cf4
+anchor-sha256: tests/unit/plan/test_semantic_plan.c b9ef88ecf75777f9146180fbca884a68b66bc7fceb6ac56b385e79914d943aca
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c eec8355e8f44b033a8688ac38d6a37af3f49eb576e7f2766863a716df9772f33
 anchor-sha256: tests/unit/frontend/test_parser.c 83d2fcc57c562b0def2f589440f0f7991ed049680c4941c5b7ccd48e22f56eb1
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 090ebd1d78787598cf224d26de99d5384a98a0c79de15966e75d9e934402dc99
-anchor-sha256: tests/unit/CMakeLists.txt 458b4d783486fe54b85f79aee7d1c19c7a9b0b82942ccb47c5fa2c526086c4e6
+anchor-sha256: tests/unit/CMakeLists.txt d76acdbf176e3630aee06fcf1eb56d2b741478b807045ffe1030b8d8411b8753
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
 anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc
