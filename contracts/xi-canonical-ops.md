@@ -200,6 +200,10 @@ compatibility opcode, reserved hole, or second bounds owner.
     bodies remain owned by the Xi parent. Missing ordinary bodies, duplicate or
     invalid child bindings, and graphs below the Repped stage fail attachment
     before any ownership transfer.
+    A derived class publication may carry exactly one parent declaration
+    operand. Program elision requires the exact resolved parent class and
+    inherited field count; a runtime object or an unmatched declaration is
+    not an erasable parent carrier.
 
 25. A panic catch defines one nonnullable `PanicInfo` instance owner. Both
     source catches and compiler-emitted cleanup handlers retain this exact
@@ -225,6 +229,10 @@ compatibility opcode, reserved hole, or second bounds owner.
     The handler defines exactly one payload. Verification establishes pointer
     membership before reading the registration. Program projection consumes the typed result and must not
     recover its type or ownership from a backend's cleanup-edge inventory.
+    Explicit parent constructor and method calls use the same constructive
+    error-check decision as ordinary calls. A proven no-error parent call
+    has no business-error check; a possibly throwing parent call retains it.
+    This does not resolve its runtime receiver view or erase panic effects.
 
 ## Verification
 

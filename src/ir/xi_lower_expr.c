@@ -12009,7 +12009,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node, call);
+    lower_call_emit_err_check(l, call, node, NULL, method_type);
     if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
         return NULL;
     return call;

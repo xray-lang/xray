@@ -2104,6 +2104,151 @@ fail:
     return false;
 }
 
+static bool xi_pipeline_program_rejects_nominal_publication(const XrProgramFromXiInput *input) {
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    XrProgramBuildStatus status =
+        xr_test_write_program_artifact(input, &artifact, diagnostic, sizeof(diagnostic));
+    bool rejected = status != XR_PROGRAM_BUILD_OK && artifact.bytes == NULL && diagnostic[0];
+    xr_program_artifact_free(&artifact);
+    return rejected;
+}
+
+TEST(e2e_program_inherited_publication_requires_exact_parent) {
+    static const char source[] =
+        "class Base {\n  value: i64 = 1\n}\n"
+        "class Derived extends Base {\n  other: i64 = 2\n}\n"
+        "fn answer() -> i64 { return 42 }\n";
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-inherited-publication", source));
+    XiFunc *root = fixture.pipeline.ir;
+    XiValue *derived = NULL;
+    XiClassData *base = NULL;
+    for (uint32_t block_index = 0u; block_index < root->nblocks; ++block_index) {
+        XiBlock *block = root->blocks[block_index];
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            XiValue *value = block->values[value_index];
+            if (!value || value->op != XI_CLASS_CREATE || !value->aux)
+                continue;
+            if (value->nargs == 1u)
+                derived = value;
+            else
+                base = value->aux;
+        }
+    }
+    PIPELINE_TEST_REQUIRE(base != NULL && derived != NULL && derived->args != NULL);
+    XiClassData *schema = derived->aux;
+    PIPELINE_TEST_REQUIRE(schema->inherited_field_count == 1u);
+    XgClassSummary *row = NULL;
+    for (uint32_t index = 0u; index < fixture.evidence.nclasses; ++index)
+        if (fixture.evidence.classes[index].class_id == schema->xg_class_id)
+            row = &fixture.evidence.classes[index];
+    PIPELINE_TEST_REQUIRE(row != NULL && row->parent_class_id == base->xg_class_id);
+    XrCoreIrKey profile = xr_core_ir_key("inherited-publication", 21u);
+    const XiFunc *roots[] = {root};
+    XrProgramFromXiInput input = {
+        .module_roots = roots,
+        .module_count = 1u,
+        .entry_function = root,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = profile.bytes,
+        .module_graph = fixture.source.graph,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact baseline = {0};
+    XrProgramBuildStatus status =
+        xr_test_write_program_artifact(&input, &baseline, diagnostic, sizeof(diagnostic));
+    if (status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "inherited publication failed: %s\n", diagnostic);
+    PIPELINE_TEST_REQUIRE(status == XR_PROGRAM_BUILD_OK);
+
+    derived->nargs = 0u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
+    XiValue **saved_args = derived->args;
+    XiValue *extra_args[] = {saved_args[0], saved_args[0]};
+    derived->args = extra_args;
+    derived->nargs = 2u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
+    derived->nargs = 1u;
+    derived->args = saved_args;
+    XiValue *saved_parent = derived->args[0];
+    derived->args[0] = NULL;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
+    derived->args[0] = saved_parent;
+    row->parent_class_id = schema->xg_class_id;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
+    row->parent_class_id = XG_NO_ID;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
+    row->parent_class_id = base->xg_class_id;
+    schema->inherited_field_count = 0u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
+    schema->inherited_field_count = 1u;
+    base->needs_runtime_type = false;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
+    base->needs_runtime_type = true;
+    PIPELINE_TEST_REQUIRE(
+        xi_pipeline_program_write_has_status(&input, XR_PROGRAM_BUILD_OK, NULL, &baseline));
+    xr_program_artifact_free(&baseline);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
+}
+
+TEST(e2e_super_calls_preserve_exact_error_channel) {
+    static const struct {
+        const char *source;
+        bool may_error;
+    } cases[] = {
+        {"class Base { constructor() {} }\n"
+         "class Child extends Base { constructor() { super() } }\n", false},
+        {"enum Failure { Failed }\n"
+         "class Base { constructor() { throw Failure.Failed } }\n"
+         "class Child extends Base { constructor() { super() } }\n", true},
+        {"class Base { value() -> i64 { return 42 } }\n"
+         "class Child extends Base { override value() -> i64 { return super.value() } }\n",
+         false},
+        {"enum Failure { Failed }\n"
+         "class Base { value() -> i64 { throw Failure.Failed } }\n"
+         "class Child extends Base { override value() -> i64 { return super.value() } }\n",
+         true},
+    };
+    for (size_t case_index = 0u; case_index < sizeof(cases) / sizeof(cases[0]); ++case_index) {
+        XiCanonicalProgramTestFixture fixture = {0};
+        PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+            &fixture, "xi-super-error-channel", cases[case_index].source));
+        uint32_t calls = 0u;
+        const XiModule *module = fixture.pipeline.ir->module;
+        for (uint16_t function_index = 0u; function_index < module->nfuncs; ++function_index) {
+            const XiFunc *function = module->functions[function_index];
+            uint32_t super_calls = 0u;
+            uint32_t error_checks = 0u;
+            for (uint32_t block_index = 0u; function && block_index < function->nblocks;
+                 ++block_index) {
+                const XiBlock *block = function->blocks[block_index];
+                if (block->control && block->control->op == XI_ERR_CHECK)
+                    ++error_checks;
+                for (uint32_t value_index = 0u; value_index < block->nvalues; ++value_index) {
+                    const XiValue *value = block->values[value_index];
+                    if (value->op != XI_CALL_METHOD || (value->aux_int & 1) == 0)
+                        continue;
+                    PIPELINE_TEST_REQUIRE(value->nargs == 1u && value->args[0] != NULL);
+                    PIPELINE_TEST_REQUIRE(value->xg_callsite_id != XG_NO_ID);
+                    ++super_calls;
+                }
+            }
+            if (super_calls) {
+                PIPELINE_TEST_REQUIRE(super_calls == 1u);
+                if (error_checks != (cases[case_index].may_error ? 1u : 0u))
+                    fprintf(stderr, "super case %zu has %u error checks\n", case_index,
+                            error_checks);
+                PIPELINE_TEST_REQUIRE(error_checks == (cases[case_index].may_error ? 1u : 0u));
+                calls += super_calls;
+            }
+        }
+        PIPELINE_TEST_REQUIRE(calls == 1u);
+        xi_canonical_program_test_fixture_cleanup(&fixture);
+    }
+}
+
 TEST(e2e_program_cooperative_yield_closes_source_vm_and_aot) {
     XiCanonicalProgramTestFixture fixture = {0};
     PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
@@ -5128,6 +5273,8 @@ int main(int argc, char **argv) {
      * block nor silently change a canonical native
      * artifact. */
     if (g_source_aot_output_path || canonical_only) {
+        run_e2e_super_calls_preserve_exact_error_channel();
+        run_e2e_program_inherited_publication_requires_exact_parent();
         run_e2e_program_cooperative_yield_closes_source_vm_and_aot();
         run_e2e_program_sealed_coroutine_call_closes_source_vm_and_aot();
         run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
@@ -5265,6 +5412,8 @@ int main(int argc, char **argv) {
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
+    run_e2e_super_calls_preserve_exact_error_channel();
+    run_e2e_program_inherited_publication_requires_exact_parent();
     run_e2e_program_cooperative_yield_closes_source_vm_and_aot();
     run_e2e_program_sealed_coroutine_call_closes_source_vm_and_aot();
     run_e2e_program_target_pointer_bits_preserves_exact_source_identity();

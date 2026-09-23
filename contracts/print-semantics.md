@@ -70,7 +70,7 @@ capability boundary for grouped output.
 
 anchor-sha256: src/shared/xr_print_plan.h 3bf58c71e0872cd80f761f40cf772086181274a8742da5cc0401d97f868facee
 anchor-sha256: src/shared/xr_core_intrinsic_registry.c 97197195363f6f21f9eefaa6440373e369ab70569a02aa4fe4afba8cac3ce13c
-anchor-sha256: src/ir/xi_lower_expr.c c9358b70b12e357bfed72a4ffafb9dad807174bc1ee2456c0674ff3416ab4e5f
+anchor-sha256: src/ir/xi_lower_expr.c 1b6c61d0092a18546f17b2ad4989ff41137ee743020037334b4310d8564eab96
 anchor-sha256: src/ir/xi_emit_call.c f99706984af44243a0aa97651795f78f4247cbc45af1761ef4602f3aeb2180f8
 anchor-sha256: src/vm/xvm_dispatch_convert.inc.c b7b703389d77714d167f64f4f8f4fbe8e934da4428324e4a590e485e86aabb2a
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 465aad140562f09d026c02a0efedc196a67364f3876a44032a2ea9a6164609bb

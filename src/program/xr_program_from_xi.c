@@ -2624,6 +2624,10 @@ static uint16_t exact_atomic_scalar_operation(const XiValue *value) {
                                                        : XR_CORE_OP_CORE_ATOMIC_EXCHANGE;
 }
 
+static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *context,
+                                                       const XiFunc *function,
+                                                       const XiValue *source, uint32_t *slot_out);
+
 static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *context,
                                                    const XiFunc *function, const XiValue *value,
                                                    uint32_t depth) {
@@ -2651,6 +2655,11 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                 bool sealed_token = callee && !callee->has_receiver;
                 if (exact_atomic_scalar_operation(consumer) &&
                     argument == atomic_data_operand_count(consumer)) {
+                    elided = true;
+                    found = true;
+                } else if (argument == 0u && consumer->op == XI_CLASS_CREATE &&
+                           static_nominal_publication_source_is_exact(context, function,
+                                                                       consumer, NULL)) {
                     elided = true;
                     found = true;
                 } else if (argument == 0u &&
@@ -10168,7 +10177,8 @@ static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *c
     const XiModule *module = function ? function->module : NULL;
     if (!context || !context->source || !context->source->global_evidence || !function || !module ||
         module->init != function || !source || source->block == NULL ||
-        source->block->func != function || source->nargs != 0u || (!class_data && !enum_data) ||
+        source->block->func != function || (!class_data && !enum_data) ||
+        (enum_data && source->nargs != 0u) || (class_data && source->nargs > 1u) ||
         (class_data && class_data->xg_class_id == XG_NO_ID))
         return false;
     uint32_t module_index = UINT32_MAX;
@@ -10204,7 +10214,6 @@ static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *c
                           decl_row->kind == XG_DECL_CLASS && class_data->needs_runtime_type;
         if (!class_row || !decl_row || class_row->module_id != (XgModuleId) (module_index + 1u) ||
             decl_row->module_id != class_row->module_id || (!value_struct && !heap_class) ||
-            class_row->parent_class_id != XG_NO_ID ||
             class_row->class_id != class_data->xg_class_id ||
             skeleton != class_data->is_generic_skeleton ||
             monomorphized != class_data->is_monomorphized || (skeleton && monomorphized) ||
@@ -10214,6 +10223,23 @@ static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *c
              class_data->struct_layout->kind != XR_AGG_LAYOUT_STRUCT &&
              class_data->struct_layout->kind != XR_AGG_LAYOUT_PACKED_STRUCT))
             return false;
+        /* The base carrier describes inheritance; it is not module state.
+         * Require its resolved declaration identity instead of erasing an
+         * arbitrary operand of a class-creation instruction. */
+        if (class_row->parent_class_id == XG_NO_ID) {
+            if (source->nargs != 0u)
+                return false;
+        } else {
+            const XiClassData *parent = heap_class && source->nargs == 1u && source->args
+                ? resolved_class_carrier(context, function, source->args[0],
+                                         class_row->parent_class_id, NULL) : NULL;
+            const XgClassSummary *parent_row = parent
+                ? find_xg_class_by_id(context->source->global_evidence, parent->xg_class_id) : NULL;
+            if (!parent || !parent_row || parent_row->decl_kind != XG_DECL_CLASS ||
+                parent_row->class_id == class_row->class_id || !parent->needs_runtime_type ||
+                class_data->inherited_field_count != parent->instance_field_count)
+                return false;
+        }
     }
 
     uint32_t publication_slot = UINT32_MAX;
