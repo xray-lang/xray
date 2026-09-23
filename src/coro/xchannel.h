@@ -14,13 +14,13 @@
  *
  * CHANNEL INVARIANTS:
  *
- *   INVARIANT 1 (Buffer ring): For buffered channels, send_idx and
- *   recv_idx advance modulo buf_size. buf_count tracks the number of
- *   items in the buffer: 0 <= buf_count <= buf_size. A send blocks
- *   when buf_count == buf_size; a recv blocks when buf_count == 0.
+ *   INVARIANT 1 (Buffer ring): For buffered channels, write_index and
+ *   read_index advance modulo capacity. The buffer state owns the count
+ *   and index invariant. A send blocks when count == capacity; a recv
+ *   blocks when count == 0.
  *
  *   INVARIANT 2 (Unbuffered rendezvous): For unbuffered channels
- *   (buf_size == 0, buffer == NULL), send and recv must pair up.
+ *   (capacity == 0, buffer == NULL), send and recv must pair up.
  *   A sender blocks until a receiver arrives (or vice versa).
  *   The value is transferred directly from sender to receiver
  *   without intermediate storage.
@@ -38,7 +38,7 @@
  *   until the buffer is drained.
  *
  *   INVARIANT 5 (Lock discipline): All mutations to buffer state
- *   (buf_count, send_idx, recv_idx) and wait queues (sendq, recvq)
+ *   (count, write_index, read_index) and wait queues (sendq, recvq)
  *   must be performed under the channel mutex (XrAdaptiveMutex). The lock
  *   is held for short durations only (no blocking operations under
  *   lock). XrAdaptiveMutex is an adaptive 3-state lock (active spin -> yield
@@ -48,6 +48,8 @@
 
 #ifndef XCHANNEL_H
 #define XCHANNEL_H
+
+#include "../runtime/core/xr_channel_buffer.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -120,10 +122,7 @@ typedef struct XrChannel {
 
     /* === Buffer (ring buffer for buffered channels) === */
     XrValue *buffer;     // NULL for unbuffered
-    uint32_t buf_size;   // 0 for unbuffered
-    uint32_t buf_count;  // Current item count
-    uint32_t send_idx;   // Next write position
-    uint32_t recv_idx;   // Next read position
+    XrChannelBufferState buffer_state;
     _Atomic int kind;    // Runtime specialization hint, never part of user semantics
     _Atomic int worker_kind;
     uint64_t producer_worker_mask;
@@ -176,6 +175,25 @@ typedef struct XrChannel {
     /* Optional VM host binding for cross-backend channel operations. */
     struct XrVMRuntime *vm_host_isolate;
 } XrChannel;
+
+/* The channel lock covers both the shared FIFO state and these payload moves.
+ * Reserving or consuming a slot does not retain, copy or destroy its owner. */
+static inline bool xr_channel_buffer_push_value(XrChannel *channel, XrValue value) {
+    uint32_t slot;
+    if (!xr_channel_buffer_push(&channel->buffer_state, &slot))
+        return false;
+    channel->buffer[slot] = value;
+    return true;
+}
+
+static inline bool xr_channel_buffer_pop_value(XrChannel *channel, XrValue *value) {
+    uint32_t slot;
+    if (!value || !xr_channel_buffer_pop(&channel->buffer_state, &slot))
+        return false;
+    *value = channel->buffer[slot];
+    channel->buffer[slot] = xr_null();
+    return true;
+}
 
 static inline uint64_t xr_channel_worker_bit(int worker_id) {
     if (worker_id < 0 || worker_id >= 64)

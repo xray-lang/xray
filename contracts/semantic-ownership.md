@@ -125,9 +125,26 @@ VM only materializes the result and CGen emits the already-decided integer.
 Generated C may not ask the host compiler to rediscover target layout through
 `sizeof` or `_Alignof`, and invalid layout, query, or type inputs fail closed.
 
+Channel buffering has one value-independent FIFO state kernel. The runtime
+channel helpers, blocked-sender rotation, timer delivery and VM inline paths
+reserve and consume slots through that kernel while holding the existing
+channel lock. Payload adapters own their physical values and clear consumed
+slots; the kernel neither retains nor destroys messages and does not publish
+waiters or wakes. Graph traversal and abandoned-message cleanup enumerate only
+occupied slots through the same overflow-safe logical-index projection.
+
+The independent linear-queue model covers arbitrary typed message storage,
+empty/full and zero-capacity rings, wraparound, invalid state without mutation,
+and logical indexes near UINT32_MAX. Actual channel tests retain close/drain,
+transfer, waiter, timer and cancellation assertions. This responsibility move
+does not admit Channel types into canonical Program or establish its new
+scheduler/transport boundary.
+
 ## Verification
 
 verification-test: semantic_owner_inventory
 verification-test: semantic_owner_inventory_self_test
 verification-test: test_analyzer_strict_conditions
 verification-test: test_xr_program_bool_conditions_aot_native
+verification-test: test_channel_buffer
+verification-test: test_channel_close

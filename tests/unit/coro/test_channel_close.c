@@ -2362,9 +2362,46 @@ TEST(io_wait_token_tracks_netpoll_deadline_timeout) {
     close_fixture_cleanup(&f);
 }
 
+TEST(buffered_channel_wraps_and_drains_after_close) {
+    CloseFixture fixture;
+    ASSERT_TRUE(close_fixture_init(&fixture));
+    XrChannel *channel = xr_channel_new_vm(&fixture.isolate_storage, 3u);
+    ASSERT_NOT_NULL(channel);
+    for (int64_t turn = 0; turn < 257; ++turn) {
+        ASSERT_TRUE(xr_channel_try_send(channel, xr_int(turn * 3)));
+        ASSERT_TRUE(xr_channel_try_send(channel, xr_int(turn * 3 + 1)));
+        ASSERT_TRUE(xr_channel_try_send(channel, xr_int(turn * 3 + 2)));
+        ASSERT_FALSE(xr_channel_try_send(channel, xr_int(-1)));
+        for (int64_t offset = 0; offset < 3; ++offset) {
+            bool ok = false;
+            XrValue value = xr_channel_try_recv(channel, &ok);
+            ASSERT_TRUE(ok);
+            ASSERT_EQ_INT(XR_TO_INT(value), turn * 3 + offset);
+        }
+    }
+    ASSERT_TRUE(xr_channel_try_send(channel, xr_int(41)));
+    ASSERT_TRUE(xr_channel_try_send(channel, xr_int(42)));
+    xr_channel_close(channel);
+    ASSERT_FALSE(xr_channel_try_send(channel, xr_int(43)));
+    for (int64_t expected = 41; expected <= 42; ++expected) {
+        bool ok = false;
+        XrValue value = xr_channel_try_recv(channel, &ok);
+        ASSERT_TRUE(ok);
+        ASSERT_EQ_INT(XR_TO_INT(value), expected);
+    }
+    bool ok = true;
+    ASSERT_TRUE(XR_IS_NULL(xr_channel_try_recv(channel, &ok)));
+    ASSERT_FALSE(ok);
+    ASSERT_EQ_UINT(channel->buffer_state.count, 0u);
+    xr_channel_destroy(channel);
+    xr_sysheap_free_shared(channel, sizeof(XrChannel) + 3u * sizeof(XrValue));
+    close_fixture_cleanup(&fixture);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
+RUN_TEST(buffered_channel_wraps_and_drains_after_close);
 RUN_TEST(channel_close_wakes_select_waiter_without_caller_fanout);
 RUN_TEST(channel_close_batches_select_waiter_wakes);
 RUN_TEST(select_block_probes_already_closed_channel_without_ext);

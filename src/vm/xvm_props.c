@@ -381,7 +381,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     if (xr_value_is_channel(obj)) {
         XrChannel *ch = xr_value_to_channel(obj);
         if (prop_symbol == SYMBOL_CAPACITY) {
-            base[a] = xr_int((xr_Integer) ch->buf_size);
+            base[a] = xr_int((xr_Integer) ch->buffer_state.capacity);
         } else if (prop_symbol == SYMBOL_IS_CLOSED) {
             base[a] = xr_bool(xr_channel_is_closed(ch));
         } else {

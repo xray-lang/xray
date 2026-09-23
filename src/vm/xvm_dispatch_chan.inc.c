@@ -77,7 +77,7 @@ vmcase(OP_CHAN_SEND) {
         if (!xr_value_is_channel(_chv))
             break;
         XrChannel *_ch = xr_value_to_channel(_chv);
-        if (_ch->buf_size == 0 || atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
+        if (_ch->buffer_state.capacity == 0 || atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
             break;
         XrRuntime *_rt = (XrRuntime *) isolate->vm.scheduler;
         if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
@@ -103,14 +103,13 @@ vmcase(OP_CHAN_SEND) {
         if (!xr_amutex_trylock(&_ch->lock))
             break;
         if (XR_UNLIKELY(atomic_load_explicit(&_ch->closed, memory_order_relaxed) ||
-                        _ch->recvq.first != NULL || _ch->buf_count >= _ch->buf_size ||
+                        _ch->recvq.first != NULL || _ch->buffer_state.count >= _ch->buffer_state.capacity ||
                         xr_channel_select_waiter_mask(_ch) != 0)) {
             xr_amutex_unlock(&_ch->lock);
             break;
         }
-        _ch->buffer[_ch->send_idx] = _v;
-        _ch->send_idx = _ch->send_idx + 1 >= _ch->buf_size ? 0 : _ch->send_idx + 1;
-        _ch->buf_count++;
+        XR_CHECK(xr_channel_buffer_push_value(_ch, _v),
+                 "buffered send requires the locked free slot");
         xr_amutex_unlock(&_ch->lock);
         base[GETARG_A(i)] = xr_null();
         if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_READY_CHANNEL_REDUCTION_COST) <= 0) && _rt) {
@@ -135,21 +134,20 @@ vmcase(OP_CHAN_RECV) {
         if (!xr_value_is_channel(_chv))
             break;
         XrChannel *_ch = xr_value_to_channel(_chv);
-        if (_ch->buf_size == 0 || atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
+        if (_ch->buffer_state.capacity == 0 || atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
             break;
         XrRuntime *_rt = (XrRuntime *) isolate->vm.scheduler;
         if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
             break;
         if (!xr_amutex_trylock(&_ch->lock))
             break;
-        if (XR_UNLIKELY(_ch->sendq.first != NULL || _ch->buf_count == 0)) {
+        if (XR_UNLIKELY(_ch->sendq.first != NULL || _ch->buffer_state.count == 0)) {
             xr_amutex_unlock(&_ch->lock);
             break;
         }
-        XrValue _v = _ch->buffer[_ch->recv_idx];
-        _ch->buffer[_ch->recv_idx] = xr_null();
-        _ch->recv_idx = _ch->recv_idx + 1 >= _ch->buf_size ? 0 : _ch->recv_idx + 1;
-        _ch->buf_count--;
+        XrValue _v;
+        XR_CHECK(xr_channel_buffer_pop_value(_ch, &_v),
+                 "buffered receive requires the locked occupied slot");
         xr_amutex_unlock(&_ch->lock);
         _v = xr_chan_take_recv(isolate, _v, _cur);
         base[GETARG_A(i)] = _v;

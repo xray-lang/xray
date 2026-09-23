@@ -2300,7 +2300,12 @@ set_tests_properties(test_async_pool test_async_allocations PROPERTIES
     LABELS "unit;runtime;async;ownership")
 add_xray_unit_test(test_scheduler_runq coro/test_scheduler_runq.c)
 add_xray_unit_test(test_timer_wheel coro/test_timer_wheel.c)
-add_xray_unit_test(test_channel_close coro/test_channel_close.c)
+add_executable(test_channel_buffer runtime/test_channel_buffer.c)
+target_include_directories(test_channel_buffer PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_channel_buffer COMMAND $<TARGET_FILE:test_channel_buffer>)
+set_tests_properties(test_channel_buffer PROPERTIES LABELS "unit;runtime;channel;shared-core")
+# This scheduler fixture consumes runtime state, not stage-2 stdlib overlays.
+add_xray_bootstrap_unit_test(test_channel_close coro/test_channel_close.c)
 add_xray_unit_test(test_scope_wait coro/test_scope_wait.c)
 add_xray_unit_test(test_work_queue_wait coro/test_work_queue_wait.c)
 add_xray_unit_test(test_result_group coro/test_result_group.c)

@@ -3644,14 +3644,14 @@ XrValue xr_aot_chan_length(const XrAotContext *ctx, XrValue channel_value) {
     (void) ctx;
     if (!xr_value_is_channel(channel_value))
         return XR_FROM_INT(0);
-    return XR_FROM_INT((int64_t) xr_value_to_channel(channel_value)->buf_count);
+    return XR_FROM_INT((int64_t) xr_value_to_channel(channel_value)->buffer_state.count);
 }
 
 XrValue xr_aot_chan_capacity(const XrAotContext *ctx, XrValue channel_value) {
     (void) ctx;
     if (!xr_value_is_channel(channel_value))
         return XR_FROM_INT(0);
-    return XR_FROM_INT((int64_t) xr_value_to_channel(channel_value)->buf_size);
+    return XR_FROM_INT((int64_t) xr_value_to_channel(channel_value)->buffer_state.capacity);
 }
 
 XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value) {

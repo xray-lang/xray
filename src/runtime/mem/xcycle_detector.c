@@ -81,10 +81,12 @@ static void detector_visit_children(XrObjHeader *obj, XrObjGraphVisitor visitor,
     switch (obj->type) {
         case XR_TCHANNEL: {
             XrChannel *ch = (XrChannel *) obj;
-            if (!ch->buffer || ch->buf_size == 0)
+            if (!ch->buffer || ch->buffer_state.capacity == 0)
                 break;
-            for (uint32_t i = 0; i < ch->buf_count; i++) {
-                XrValue v = ch->buffer[(ch->recv_idx + i) % ch->buf_size];
+            for (uint32_t i = 0; i < ch->buffer_state.count; i++) {
+                uint32_t index = xr_channel_buffer_slot(&ch->buffer_state, i);
+                XR_CHECK(index != UINT32_MAX, "channel graph scan requires valid FIFO state");
+                XrValue v = ch->buffer[index];
                 if (XR_IS_PTR(v) && !XR_IS_STRING(v)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)

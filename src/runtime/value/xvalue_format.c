@@ -460,8 +460,8 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TCHANNEL: {
             XrChannel *ch = (XrChannel *) gc;
             char buf[64];
-            int n = snprintf(buf, sizeof(buf), "Channel(cap=%u, count=%u)", ch->buf_size,
-                             ch->buf_count);
+            int n = snprintf(buf, sizeof(buf), "Channel(cap=%u, count=%u)", ch->buffer_state.capacity,
+                             ch->buffer_state.count);
             xr_strbuf_append_cstr(sb, buf, (size_t) n);
             break;
         }

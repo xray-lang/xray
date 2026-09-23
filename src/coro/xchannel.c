@@ -144,12 +144,6 @@ static void channel_lock_after_failed_try(XrChannel *ch) {
     }
 }
 
-// Ring buffer index advance: conditional increment is faster than modulo division
-// on ARM64 (~1-2 cycles vs ~10 cycles for SDIV+MSUB)
-static inline uint32_t chan_advance_idx(uint32_t idx, uint32_t buf_size) {
-    return (++idx >= buf_size) ? 0 : idx;
-}
-
 static inline bool channel_single_worker(uint64_t mask) {
     return mask != 0 && (mask & (mask - 1)) == 0;
 }
@@ -157,7 +151,7 @@ static inline bool channel_single_worker(uint64_t mask) {
 static XrChannelKind channel_infer_worker_kind(XrChannel *ch) {
     if (!ch)
         return XR_CHAN_GENERIC;
-    if (ch->buf_size == 0)
+    if (ch->buffer_state.capacity == 0)
         return XR_CHAN_RENDEZVOUS;
 
     uint64_t producers = ch->producer_worker_mask;
@@ -209,7 +203,7 @@ static XrChannelKind channel_wake_kind_for_stats(XrChannel *ch) {
 static XrChannelKind channel_infer_role_kind(XrChannel *ch) {
     if (!ch)
         return XR_CHAN_GENERIC;
-    if (ch->buf_size == 0)
+    if (ch->buffer_state.capacity == 0)
         return XR_CHAN_RENDEZVOUS;
 
     if (ch->producer_coro_id < 0 || ch->consumer_coro_id < 0)
@@ -701,10 +695,9 @@ void xr_obj_destroy_channel(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     if (ch->buffer) {
         // Release prepared values never consumed by a receiver: transit graphs
         // and promoted shared strings/handles both own a channel-side ref.
-        for (uint32_t i = 0; i < ch->buf_count; i++) {
-            uint32_t idx = ch->recv_idx + i;
-            if (ch->buf_size > 0 && idx >= ch->buf_size)
-                idx -= ch->buf_size;
+        for (uint32_t i = 0; i < ch->buffer_state.count; i++) {
+            uint32_t idx = xr_channel_buffer_slot(&ch->buffer_state, i);
+            XR_CHECK(idx != UINT32_MAX, "channel buffer traversal requires valid FIFO state");
             xr_chan_abandon_send_core(channel_core(ch), ch->buffer[idx]);
         }
         if (!channel_buffer_is_inline(ch)) {
@@ -738,13 +731,13 @@ XrChannel *xr_channel_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32_t bu
 
     // xr_sysheap_alloc_shared already memset(0) the entire allocation.
     // All fields default to 0/NULL/false which is correct for:
-    //   buffer(NULL), buf_size(0), buf_count(0), send_idx(0), recv_idx(0),
+    //   buffer(NULL), buffer_state(0),
     //   sendq(NULL,NULL), recvq(NULL,NULL), closed(0), lock(UNLOCKED=0),
     //   is_timer(0), timer_*(0), elem_tid(0).
     // Only set non-zero fields.
     if (buffer_size > 0) {
         ch->buffer = (XrValue *) (ch + 1);
-        ch->buf_size = buffer_size;
+        ch->buffer_state.capacity = buffer_size;
     }
     XrChannelKind initial_kind = buffer_size == 0 ? XR_CHAN_RENDEZVOUS : XR_CHAN_GENERIC;
     atomic_init(&ch->kind, (int) initial_kind);
@@ -798,8 +791,8 @@ static void timer_channel_deliver(XrChannel *ch) {
             chan_try_deliver_recv(receiver);
         } else {
             // No receiver waiting: leave value in buffer for later recv
-            ch->buffer[0] = xr_int(now);
-            ch->buf_count = 1;
+            XR_CHECK(xr_channel_buffer_push_value(ch, xr_int(now)),
+                     "timer channel requires an empty buffer");
         }
         atomic_store_explicit(&ch->timer_fired, true, memory_order_release);
     }
@@ -852,10 +845,10 @@ XrChannel *xr_channel_new_timer(XrRuntimeCore *core, XrRuntime *scheduler, int64
     // Inline single-element buffer
     ch->buffer = (XrValue *) (ch + 1);
     ch->buffer[0] = xr_null();
-    ch->buf_size = 1;
-    ch->buf_count = 0;
-    ch->send_idx = 0;
-    ch->recv_idx = 0;
+    ch->buffer_state.capacity = 1;
+    ch->buffer_state.count = 0;
+    ch->buffer_state.write_index = 0;
+    ch->buffer_state.read_index = 0;
     atomic_init(&ch->kind, (int) XR_CHAN_GENERIC);
     atomic_init(&ch->worker_kind, (int) XR_CHAN_GENERIC);
     ch->producer_coro_id = -1;
@@ -1121,7 +1114,7 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v, XrCoroutine *produ
 static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *consumer) {
     XrCoroutine *sender = NULL;
     while ((sender = xr_waitq_dequeue(&ch->sendq)) != NULL) {
-        if (ch->buf_size > 0 && ch->buf_count == 0) {
+        if (ch->buffer_state.capacity > 0 && ch->buffer_state.count == 0) {
             waitq_enqueue_front(&ch->sendq, sender);
             return false;
         }
@@ -1134,14 +1127,13 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *co
         return false;
     channel_note_participant_locked(ch, consumer, false);
     XrValue direct_val;
-    if (ch->buf_size == 0) {
+    if (ch->buffer_state.capacity == 0) {
         direct_val = sender->ext->send_value;
     } else {
-        direct_val = ch->buffer[ch->recv_idx];
-        ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
-        ch->buffer[ch->send_idx] = sender->ext->send_value;
-        ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
-        // buf_count unchanged: take one, put one.
+        XR_CHECK(xr_channel_buffer_pop_value(ch, &direct_val),
+                 "waiting sender requires a buffered value");
+        XR_CHECK(xr_channel_buffer_push_value(ch, sender->ext->send_value),
+                 "buffer rotation must preserve available capacity");
     }
     CHANNEL_METRIC_INC(ch, chan_recv_direct_count);
     CHANNEL_METRIC_INC(ch, chan_sendq_dequeue_count);
@@ -1155,26 +1147,16 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *co
 
 // Buffer push: returns true if written. Lock remains held.
 static inline bool chan_buffer_push(XrChannel *ch, XrValue v) {
-    if (ch->buf_size == 0 || ch->buf_count >= ch->buf_size)
+    if (!xr_channel_buffer_push_value(ch, v))
         return false;
-    XR_DCHECK(ch->send_idx < ch->buf_size, "chan_buffer_push: send_idx OOR");
-    ch->buffer[ch->send_idx] = v;
-    ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
-    ch->buf_count++;
-    XR_DCHECK(ch->buf_count <= ch->buf_size, "chan_buffer_push: overflow");
     CHANNEL_METRIC_INC(ch, chan_send_buffer_count);
     return true;
 }
 
 // Buffer pop: returns true if read. Lock remains held.
 static inline bool chan_buffer_pop(XrChannel *ch, XrValue *out) {
-    if (ch->buf_size == 0 || ch->buf_count == 0)
+    if (!xr_channel_buffer_pop_value(ch, out))
         return false;
-    XR_DCHECK(ch->recv_idx < ch->buf_size, "chan_buffer_pop: recv_idx OOR");
-    *out = ch->buffer[ch->recv_idx];
-    ch->buffer[ch->recv_idx] = xr_null();  // Help GC.
-    ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
-    ch->buf_count--;
     CHANNEL_METRIC_INC(ch, chan_recv_buffer_count);
     return true;
 }
@@ -1556,7 +1538,7 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro, in
 
     // Trylock fast path: for buffered channels with buffer space and no waiters.
     // Avoids spin contention under high concurrency (e.g. 20 coros on 1 channel).
-    if (ch->buf_size > 0) {
+    if (ch->buffer_state.capacity > 0) {
         CHANNEL_METRIC_INC(ch, chan_buffer_fast_try_count);
         if (channel_trylock_observed(ch)) {
             if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && !ch->recvq.first &&
@@ -1653,7 +1635,7 @@ XrChanResult xr_channel_recv_slot(XrChannel *ch, XrValue *out, XrCoroutine *coro
 
     // Trylock fast path: for buffered channels with data and no waiting senders.
     // Avoids spin contention under high concurrency.
-    if (ch->buf_size > 0) {
+    if (ch->buffer_state.capacity > 0) {
         CHANNEL_METRIC_INC(ch, chan_buffer_fast_try_count);
         if (channel_trylock_observed(ch)) {
             if (!ch->sendq.first && chan_buffer_pop(ch, out)) {

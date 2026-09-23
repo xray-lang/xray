@@ -992,7 +992,7 @@ vmcase(OP_LEN) {
         vmbreak;
     }
     if (xr_value_is_channel(value)) {
-        R(a) = xr_int((xr_Integer) xr_value_to_channel(value)->buf_count);
+        R(a) = xr_int((xr_Integer) xr_value_to_channel(value)->buffer_state.count);
         vmbreak;
     }
     if (xr_value_is_work_queue(value)) {

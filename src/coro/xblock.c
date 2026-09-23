@@ -999,7 +999,7 @@ static int coro_select_recv_case_status(XrChannel *ch) {
         return XR_RESUME_OK;
 
     xr_channel_lock_observed(ch);
-    bool ready = ch->buf_count > 0 || ch->sendq.first != NULL;
+    bool ready = ch->buffer_state.count > 0 || ch->sendq.first != NULL;
     bool closed = !ready && atomic_load_explicit(&ch->closed, memory_order_relaxed);
     xr_amutex_unlock(&ch->lock);
     if (ready)
