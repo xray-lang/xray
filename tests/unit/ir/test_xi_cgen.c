@@ -2356,6 +2356,27 @@ TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
                  "mutation rejection must name the missing exact identity");
     test_aot_plan_free(&rejected_plan);
     adapter->backend_origin = XI_BACKEND_VALUE_REP_UNBOX;
+    TestAotPlan valid_plan;
+    TEST_REQUIRE(test_aot_plan_try_prepare(&valid_plan, mutation_modules, 1, 0),
+                 "tagged span box must admit its exact native unbox");
+    XaotValuePlan *boxed_plan =
+        (XaotValuePlan *) xaot_bundle_find_value_plan(&valid_plan.bundle, box);
+    const XaotValuePlan *unboxed_plan =
+        xaot_bundle_find_value_plan(&valid_plan.bundle, adapter);
+    TEST_REQUIRE(boxed_plan && unboxed_plan && boxed_plan->rep.kind == XAOT_VALUE_TAGGED &&
+                     xaot_value_plan_is_exact_rep_adapter(&valid_plan.bundle, unboxed_plan),
+                 "span unbox must consume the frozen tagged carrier");
+    XaotValueRep saved_rep = boxed_plan->rep;
+    boxed_plan->rep = xaot_value_rep_for_value(source);
+    TEST_REQUIRE(!xaot_value_plan_is_exact_rep_adapter(&valid_plan.bundle, unboxed_plan),
+                 "an unboxed span cannot masquerade as an UNBOX input");
+    char verify_error[256] = {0};
+    TEST_REQUIRE(!xaot_verify_bundle(&valid_plan.bundle, verify_error, sizeof(verify_error)),
+                 "independent verification must reject the forged span carrier");
+    boxed_plan->rep = saved_rep;
+    TEST_REQUIRE(xaot_verify_bundle(&valid_plan.bundle, verify_error, sizeof(verify_error)),
+                 "restoring the tagged carrier must restore verification");
+    test_aot_plan_free(&valid_plan);
     mutation_module->init = NULL;
     xi_module_free(mutation_module);
 

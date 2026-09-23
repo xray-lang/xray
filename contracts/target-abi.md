@@ -315,6 +315,12 @@ both UTF-8 conversions against an independent output expectation. The same
 fixture reads a string byte view through a direct Slice parameter and checks its
 length and first byte. A native view parameter preserves the two-word value;
 only a tagged parameter boundary removes the borrowed wrapper.
+The remaining Slice representation adapter checks the actual input carrier:
+BOX consumes the native span, and UNBOX consumes its tagged value. A native
+span cannot stand in for an UNBOX input. The representation mutation gate
+checks both the adapter classifier and independent bundle verification, while
+the generated-C gate still proves that an exact inverse pair needs no local
+conversion or allocation.
 The fixture also forwards an Array reference through an ordinary function,
 modifies its first byte, and observes that change through both UTF-8 conversions.
 It constructs both Some and None, mutates the projected array, and reads length
@@ -712,6 +718,7 @@ Cleanup addresses remain bound to the exact resulting value and ownership.
 
 verification-test: test_xi_unsigned_text_native
 verification-test: test_xi_encoding_slice_native
+verification-test: test_xi_cgen_span_box_carrier
 verification-test: test_prelude_init
 verification-test: test_xi_emit
 verification-test: test_xi_native_array_native
@@ -1324,7 +1331,7 @@ anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de0
 anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759eb00fd65b40b648f0fc7c661
 anchor-sha256: src/aot/xaot_prepare.c 450a6a387ef4aad2ed27e85d281c06aaa6ff3f184e80f491d6c7b8960e61ed3f
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
-anchor-sha256: src/aot/xaot_bundle.c b0553d66d8417543a54aa2bdbc8154f5ff3f707d0c674802293175861a16a9cc
+anchor-sha256: src/aot/xaot_bundle.c 22a955023d50d374c684299decf272258ff987908dbbf7afc50ad433c4ce98c4
 anchor-sha256: src/aot/xaot_verify.c bae55927291480a94df6a52cef43a5e8c918be9bc5c6a7e04d70488525afa26b
 anchor-sha256: src/aot/refine/xr_aot_refinement.h 5d275c7ba1f9d1bcee80ab1f98cf0507b7ee5a148d9a39119ba2901026da1231
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 70e4123e133582d987dba0c2b1936eb4a65edc0a1898b2079ab11bcd22ba7851

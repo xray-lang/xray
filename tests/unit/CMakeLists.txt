@@ -859,6 +859,11 @@ set_tests_properties(test_xr_program_imported_callable_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;callable;multi-module;generated-c;native;task-301")
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_bootstrap_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+add_test(NAME test_xi_cgen_span_box_carrier
+    COMMAND ${CMAKE_COMMAND} -E env XRAY_TEST_FILTER=cgen_rep_identical_span_box
+        $<TARGET_FILE:test_xi_cgen>)
+set_tests_properties(test_xi_cgen_span_box_carrier PROPERTIES
+    LABELS "aot;cgen;ownership;representation")
 add_test(NAME test_xi_cgen_optional_injection
     COMMAND $<TARGET_FILE:test_xi_cgen> optional-injection-emission)
 add_test(NAME test_xi_cgen_optional_storage

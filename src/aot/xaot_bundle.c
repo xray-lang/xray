@@ -5540,6 +5540,9 @@ static bool rep_adapter_exact_non_scalar_legacy_source(const XaotValuePlan *sour
     if (!source || source->func != function || source->value != value || !value || !value->type ||
         value->type->is_nullable)
         return false;
+    if (value->type->kind == XR_KIND_SLICE && adapter_op == XI_UNBOX)
+        return rep_adapter_fields_are_exact(&source->rep, XAOT_VALUE_TAGGED, XAOT_REP_TAGGED,
+                                            value->type, "XrValue", 0);
     if (value->type->kind == XR_KIND_SLICE)
         return rep_adapter_fields_are_exact(&source->rep, XAOT_VALUE_AGGREGATE, XAOT_REP_SLICE,
                                             value->type, "xr_span_t", XAOT_VALUE_FLAG_SLICE);
