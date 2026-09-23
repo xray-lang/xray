@@ -134,7 +134,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
-`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。类的抽象约束通过接口表达，同名同签名方法自动覆写，不需要成员修饰符。
+`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。`override` 在类实例方法声明中作为上下文修饰符，实际覆写必须显式标记；类的抽象约束通过接口表达。
 
 #### 1.5.3 错误处理
 
@@ -616,7 +616,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
-`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. Interfaces express abstract contracts, and methods with the same name and signature override automatically without member modifiers.
+`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. `override` is a contextual modifier on class instance methods and is required for actual overrides. Interfaces express abstract contracts.
 
 #### 1.5.3 Error Handling
 

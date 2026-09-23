@@ -7332,10 +7332,10 @@ TEST(global_evidence_verifier_rederives_link_dependency_plans) {
 TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     setup_parser_session();
     const char *source = "class GrandChild extends Child {\n"
-                         "    speak() -> string { return \"grand\" }\n"
+                         "    override speak() -> string { return \"grand\" }\n"
                          "}\n"
                          "class Child extends Base {\n"
-                         "    speak() -> string { return \"child\" }\n"
+                         "    override speak() -> string { return \"child\" }\n"
                          "}\n"
                          "class Base {\n"
                          "    speak() -> string { return \"base\" }\n"
@@ -9948,7 +9948,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
                          "    speak(sound: string) -> string { return \"animal:\" + sound }\n"
                          "}\n"
                          "class Dog extends Animal {\n"
-                         "    speak(sound: string) -> string { return \"dog:\" + sound }\n"
+                         "    override speak(sound: string) -> string { return \"dog:\" + sound }\n"
                          "    relay() -> string { return this.speak(\"relay\") }\n"
                          "}\n"
                          "fn callDog() -> string {\n"

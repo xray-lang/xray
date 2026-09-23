@@ -30,19 +30,19 @@ class Dog extends Animal {
         super(n)
         this.breed = b
     }
-    species() -> string { return "dog" }
+    override species() -> string { return "dog" }
 }
 
 class Cat extends Animal {
     constructor(n: string) { super(n) }
-    species() -> string { return "cat" }
+    override species() -> string { return "cat" }
 }
 
 class Puppy extends Dog {
     constructor(n: string) {
         super(n, "Mixed")
     }
-    species() -> string { return "puppy" }
+    override species() -> string { return "puppy" }
 }
 
 // ===== Direct subclass satisfies upper bound =====

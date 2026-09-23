@@ -9,6 +9,6 @@ export class Base {
 export class Sub extends Base {
     s: i64
     constructor() { super(); this.s = 2 }
-    tag() -> string { return "sub" }
+    override tag() -> string { return "sub" }
     own() -> i64 { return this.s }
 }

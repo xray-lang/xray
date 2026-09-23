@@ -1,0 +1,2 @@
+--> 3:5 E0374
+method 'Child.value' overrides an inherited method and must declare override

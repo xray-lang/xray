@@ -38,6 +38,7 @@
 #include "frontend/parser/xast.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
+#include "xmalloc.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -86,6 +87,21 @@ static bool contains(const char *haystack, const char *needle) {
 /* ====================================================================== */
 /* Tests                                                                   */
 /* ====================================================================== */
+
+TEST(override_modifier_round_trip) {
+    setup();
+    const char *source = "class Base { ref update() {} }\n"
+                         "class Child extends Base { protected override ref update() {} }\n";
+    char *first = parse_and_format(source);
+    ASSERT_NOT_NULL(first);
+    ASSERT_TRUE(contains(first, "protected override ref update()"));
+    char *second = parse_and_format(first);
+    ASSERT_NOT_NULL(second);
+    ASSERT_STR_EQ(first, second);
+    xr_free(first);
+    xr_free(second);
+    teardown();
+}
 
 TEST(leading_line_comment_preserved) {
     setup();
@@ -206,6 +222,7 @@ TEST(reexport_format_preserves_module_identity_kind) {
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Formatter comment fidelity (L-06 / F)");
+RUN_TEST(override_modifier_round_trip);
 RUN_TEST(leading_line_comment_preserved);
 RUN_TEST(trailing_line_comment_preserved);
 RUN_TEST(trailing_comment_does_not_steal_next_line_leading);

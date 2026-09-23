@@ -239,7 +239,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
-`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. Interfaces express abstract contracts, and methods with the same name and signature override automatically without member modifiers.
+`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. `override` is a contextual modifier on class instance methods and is required for actual overrides. Interfaces express abstract contracts.
 
 #### 1.5.3 Error Handling
 
@@ -3185,12 +3185,12 @@ ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
-> **About default public visibility and automatic overrides**:
+> **About default public visibility and explicit overrides**:
 >
 > - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
 > - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
-> - Overrides are inferred by the compiler: a subclass instance method overrides a non-private parent-chain instance method when name and signature match exactly.
-> - Interfaces express abstract contracts, same-name same-signature methods override automatically, and same-name different-signature methods or member hiding are compile errors.
+> - Every actual override must declare `override`. The compiler independently checks the non-private parent-chain target, signature and receiver contract; a missing marker, absent target or mismatch is an error.
+> - Implementing an interface alone does not require `override`. Same-name different-signature methods and member hiding remain compile errors.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
 
@@ -3227,7 +3227,7 @@ class Dog extends Animal {
         super(name)                    // **must** be the first statement (derived classes only)
     }
 
-    speak() -> string {                  // same name and signature: automatic override
+    override speak() -> string {         // Explicit parent method override
         return "woof"
     }
 }
@@ -3236,7 +3236,7 @@ class Dog extends Animal {
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
 - `this` must not be accessed before `super(...)`.
-- **Overriding requires no keyword**—any subclass instance method with the same name and signature automatically overrides the parent.
+- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility, `override`, then optional `ref`/`move`.
 - Same-name different-signature methods are not overloads or hiding; rename the method or use default arguments / named factories.
 - A `final class` cannot be inherited.
 - `super.method()` invokes the shadowed parent method from inside an override.
@@ -3248,6 +3248,7 @@ class Dog extends Animal {
 | (none) | field/method | Default public—externally visible |
 | `private` | field/method | Accessible only inside the declaring class (including other instances of the same class); subclass and external access report `E0377` |
 | `protected` | field/method | Accessible inside the declaring class and its subclasses; external access reports `E0377` |
+| `override` | class instance method | Requires a matching non-private inherited signature and receiver contract; cannot narrow visibility to private |
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
 | `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
 | `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
@@ -3403,7 +3404,7 @@ Rules:
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
-Inheritance with automatic override:
+Inheritance with explicit override:
 
 ```xray
 class Animal {
@@ -3414,7 +3415,7 @@ class Animal {
 
 class Dog extends Animal {
     constructor(name: string) { super(name) }
-    speak() -> string { return "woof" }   // same name/signature: auto-override
+    override speak() -> string { return "woof" }
 }
 
 fn main() {

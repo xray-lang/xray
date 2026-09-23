@@ -4,6 +4,6 @@ class Base {
 }
 
 class Child extends Base {
-    write(value: ref i64) {
+    override write(value: ref i64) {
     }
 }

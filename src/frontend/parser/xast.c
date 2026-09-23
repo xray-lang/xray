@@ -1113,6 +1113,7 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, XrPara
     node->as.method_decl.return_type = return_type;
     node->as.method_decl.body = body;
     node->as.method_decl.is_constructor = is_constructor;
+    node->as.method_decl.is_override = false;
     node->as.method_decl.is_static = is_static;
     node->as.method_decl.is_private = is_private;
     node->as.method_decl.is_getter = is_getter;

@@ -1252,6 +1252,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 clone_borrow_origins(src->borrow_origins, src->borrow_origin_count);
             dst->body = xr_ast_clone_ctx(src->body, map, mc, clone_ctx);
             dst->is_constructor = src->is_constructor;
+            dst->is_override = src->is_override;
             dst->is_static = src->is_static;
             dst->is_private = src->is_private;
             dst->is_protected = src->is_protected;

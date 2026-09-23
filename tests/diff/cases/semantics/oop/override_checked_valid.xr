@@ -6,7 +6,7 @@ class Animal {
 }
 
 class Dog extends Animal {
-    speak(sound: string) -> string {
+    override speak(sound: string) -> string {
         return "dog:" + sound
     }
 }

@@ -872,14 +872,15 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_name(s, "name", n->as.method_decl.name);
             sig_add(s,
                     " ctor=%d static=%d priv=%d prot=%d get=%d set=%d sctor=%d var=%d op=%d/%u"
-                    " req=%d recv=%u",
+                    " req=%d recv=%u override=%d",
                     n->as.method_decl.is_constructor ? 1 : 0, n->as.method_decl.is_static ? 1 : 0,
                     n->as.method_decl.is_private ? 1 : 0, n->as.method_decl.is_protected ? 1 : 0,
                     n->as.method_decl.is_getter ? 1 : 0, n->as.method_decl.is_setter ? 1 : 0,
                     n->as.method_decl.is_static_constructor ? 1 : 0,
                     n->as.method_decl.is_variadic ? 1 : 0, n->as.method_decl.is_operator ? 1 : 0,
                     (unsigned) n->as.method_decl.op_type, n->as.method_decl.required_count,
-                    (unsigned) n->as.method_decl.receiver_mode);
+                    (unsigned) n->as.method_decl.receiver_mode,
+                    n->as.method_decl.is_override ? 1 : 0);
             sig_params(s, n->as.method_decl.params, n->as.method_decl.param_count);
             sig_generic_params(s, n->as.method_decl.type_params,
                                n->as.method_decl.type_param_count);

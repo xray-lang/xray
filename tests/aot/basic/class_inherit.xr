@@ -16,7 +16,7 @@ class Rect extends Shape {
         this.w = w
         this.h = h
     }
-    area() -> i64 {
+    override area() -> i64 {
         return this.w * this.h
     }
 }

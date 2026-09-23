@@ -10171,7 +10171,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
                       "    area() -> i64 {\n"
                       "        return this.w * this.h\n"
                       "    }\n"
-                      "    kind_plus() -> i64 {\n"
+                      "    override kind_plus() -> i64 {\n"
                       "        return this.kind + this.w\n"
                       "    }\n"
                       "    score_with_area() -> i64 {\n"

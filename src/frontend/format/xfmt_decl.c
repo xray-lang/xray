@@ -463,6 +463,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "private ");
         if (m->is_protected)
             xfmt_write_str(ctx, "protected ");
+        if (m->is_override)
+            xfmt_write_str(ctx, "override ");
         if (m->is_static)
             xfmt_write_str(ctx, "static ");
         else if (!m->is_constructor && m->receiver_mode == XR_PARAM_REF)

@@ -499,9 +499,11 @@ TEST(ast_clone_named_enum_record_nodes) {
     AstNode method = {.type = AST_METHOD_DECL, .line = 3};
     method.as.method_decl.name = "inspect";
     method.as.method_decl.receiver_mode = XR_PARAM_MOVE;
+    method.as.method_decl.is_override = true;
     AstNode *method_clone = xr_ast_clone(&method, NULL, 0);
     ASSERT(method_clone != NULL && method_clone->type == AST_METHOD_DECL);
     ASSERT(method_clone->as.method_decl.receiver_mode == XR_PARAM_MOVE);
+    ASSERT(method_clone->as.method_decl.is_override);
 
     free(construct_clone->as.enum_construct.variant_path->as.enum_access.enum_name);
     free(construct_clone->as.enum_construct.variant_path->as.enum_access.member_name);

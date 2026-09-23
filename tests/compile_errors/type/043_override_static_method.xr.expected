@@ -1,2 +1,2 @@
---> 8:5
-'override' was removed
+--> 8:14
+override applies only to instance methods

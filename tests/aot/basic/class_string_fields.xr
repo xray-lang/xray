@@ -18,7 +18,7 @@ class Dog extends Animal {
         super(name)
         this.breed = breed
     }
-    speak() -> string {
+    override speak() -> string {
         return "Dog: " + this.name + " (" + this.breed + ")"
     }
     parent_speak() -> string {

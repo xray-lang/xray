@@ -28,11 +28,11 @@ class Rectangle extends Shape {
         this.height = h
     }
 
-    describe() -> string {        // 调用父类方法并扩展
+    override describe() -> string {        // 调用父类方法并扩展
         return super.describe() + " (${this.width}x${this.height})"
     }
 
-    area() -> i64 {        return this.width * this.height
+    override area() -> i64 {        return this.width * this.height
     }
 }
 
@@ -67,10 +67,10 @@ class B extends A {
         this.extra = e
     }
 
-    getValue() -> i64 {        return super.getValue() + this.extra
+    override getValue() -> i64 {        return super.getValue() + this.extra
     }
 
-    describe() -> string {        return super.describe() + ",B:${this.extra}"
+    override describe() -> string {        return super.describe() + ",B:${this.extra}"
     }
 }
 
@@ -82,10 +82,10 @@ class C extends B {
         this.more = m
     }
 
-    getValue() -> i64 {        return super.getValue() + this.more
+    override getValue() -> i64 {        return super.getValue() + this.more
     }
 
-    describe() -> string {        return super.describe() + ",C:${this.more}"
+    override describe() -> string {        return super.describe() + ",C:${this.more}"
     }
 }
 
@@ -121,7 +121,7 @@ class FileLogger extends Logger {
         this.file = file
     }
 
-    log(msg: string) -> string {        return super.log(msg) + " -> " + this.file    }
+    override log(msg: string) -> string {        return super.log(msg) + " -> " + this.file    }
 
     // warn 继承自父类，但会调用子类的 log
 }

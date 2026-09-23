@@ -524,13 +524,52 @@ TEST(invalid_loop_label_recovers_without_revisiting_tokens) {
     teardown();
 }
 
+TEST(override_modifier_has_exact_declaration_scope) {
+    static const char *const rejected[] = {
+        "class A { override static value() {} }",
+        "class A { override static constructor() {} }",
+        "class A { override constructor() {} }",
+        "class A { override value: i64 }",
+        "class A { override override value() {} }",
+        "struct A { override value() {} }",
+        "enum A { One; override value() {} }",
+        "interface A { override value() }",
+    };
+    for (unsigned i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
+        setup();
+        Parser parser;
+        DiagSink sink;
+        XrArena *arena = NULL;
+        parse_recoverable(rejected[i], &parser, &sink, 0, &arena);
+        ASSERT_TRUE(parser.had_error != 0);
+        ASSERT_TRUE(sink.count > 0);
+        release_arena(arena);
+        teardown();
+    }
+    setup();
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("class A { protected override ref value() {} }\n"
+                                     "var override = 42\n",
+                                     &parser, &sink, 0, &arena);
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(parser.had_error, 0);
+    MethodDeclNode *method = &ast->as.program.statements[0]->as.class_decl.methods[0]->as.method_decl;
+    ASSERT_TRUE(method->is_override);
+    ASSERT_TRUE(method->is_protected);
+    ASSERT_EQ_INT(method->receiver_mode, XR_PARAM_REF);
+    release_arena(arena);
+    teardown();
+}
+
 TEST(removed_oop_member_modifier_drops_invalid_member) {
     setup();
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
     AstNode *ast = parse_recoverable("class Shape {\n"
-                                     "    override bad() { return 1; }\n"
+                                     "    final bad() { return 1; }\n"
                                      "    abstract gone() { return 2; }\n"
                                      "    virtual nope() { return 3; }\n"
                                      "    ok() -> i64 { return 4; }\n"
@@ -637,6 +676,7 @@ RUN_TEST(deep_expression_reports_error_instead_of_crashing);
 RUN_TEST(removed_match_arrow_recovers_without_null_assignment_lhs);
 RUN_TEST(malformed_type_list_recovers_without_unbounded_growth);
 RUN_TEST(invalid_loop_label_recovers_without_revisiting_tokens);
+RUN_TEST(override_modifier_has_exact_declaration_scope);
 RUN_TEST(removed_oop_member_modifier_drops_invalid_member);
 RUN_TEST(removed_top_level_oop_modifier_drops_invalid_class);
 RUN_TEST(malformed_namespace_struct_literal_does_not_invent_field_or_hide_sibling);

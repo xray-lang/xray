@@ -657,6 +657,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_const = false;
     bool is_flexible = false;
     bool is_weak = false;
+    bool is_override = false;
     XrParamMode receiver_mode = XR_PARAM_READ;
 
     if (current_is_removed_public_modifier(parser)) {
@@ -667,11 +668,6 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     for (;;) {
         const char *removed_name = NULL;
-        if (xr_parser_check_name(parser, "override")) {
-            return reject_removed_member_modifier(
-                parser, is_method_out,
-                "'override' was removed; overrides are inferred by exact method signature");
-        }
         if (xr_parser_check_name(parser, "abstract")) {
             return reject_removed_member_modifier(
                 parser, is_method_out, "'abstract' was removed; use an interface for contracts");
@@ -695,6 +691,9 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         is_protected = true;
     }
 
+    if (xr_parser_match_name(parser, "override"))
+        is_override = true;
+
     if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
         receiver_mode = XR_PARAM_REF;
     } else if (xr_parser_match(parser, TK_MOVE) || xr_parser_match_name(parser, "move")) {
@@ -702,6 +701,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     }
 
     if (xr_parser_match(parser, TK_STATIC)) {
+        if (is_override)
+            xr_parser_error_at_previous(parser, "override applies only to instance methods");
         if (receiver_mode != XR_PARAM_READ)
             xr_parser_error_at_previous(parser, "static methods cannot declare a receiver mode");
         is_static = true;
@@ -744,6 +745,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         AstNode *method = xr_parse_operator_method(parser, is_private, is_static);
         if (method) {
             method->as.method_decl.receiver_mode = receiver_mode;
+            method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_protected = is_protected;
             method->as.method_decl.attributes = attributes;
             method->as.method_decl.attr_count = attr_count;
@@ -762,6 +764,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     if (xr_parser_match(parser, TK_CONSTRUCTOR)) {
         // 'constructor' keyword
         is_constructor = true;
+        if (is_override)
+            xr_parser_error_at_previous(parser, "constructors cannot declare override");
         if (is_protected) {
             xr_parser_error_at_previous(
                 parser,
@@ -795,6 +799,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             if (method->as.method_decl.is_constructor && receiver_mode != XR_PARAM_READ)
                 xr_parser_error(parser, "constructors cannot declare a receiver mode");
             method->as.method_decl.receiver_mode = receiver_mode;
+            method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_protected = is_protected;
             if (method->as.method_decl.is_constructor && attr_count > 0) {
                 xr_parser_error(parser, "method attributes cannot annotate a constructor");
@@ -807,6 +812,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     } else {
         // Field: has type annotation or initializer
         *is_method_out = false;
+        if (is_override) {
+            xr_parser_error(parser, "override applies only to instance methods");
+            return NULL;
+        }
 
         if (receiver_mode != XR_PARAM_READ) {
             xr_parser_error(parser, "receiver mode applies only to instance methods");

@@ -4256,6 +4256,8 @@ skip_layout:
             }
             XaSymbol *method_sym = xa_symbol_new(md->name, XA_SYM_METHOD);
             method_sym->location.line = method->line;
+            method_sym->location.column = method->column;
+            method_sym->is_override = md->is_override;
             method_sym->is_static = md->is_static;
             method_sym->is_private = md->is_private;
             method_sym->is_protected = md->is_protected;
@@ -4936,8 +4938,6 @@ static void validate_method_override_graph(XaAnalyzer *analyzer, XrClassInfo *in
             continue;
         if (strcmp(method->name, "constructor") == 0)
             continue;
-        if (!info->base)
-            continue;
         XaSymbol *parent_field = find_parent_field_by_name(info, method->name);
         if (parent_field)
             report_inherited_member_conflict(analyzer, info, method, "method", parent_field,
@@ -4947,12 +4947,32 @@ static void validate_method_override_graph(XaAnalyzer *analyzer, XrClassInfo *in
         if (target) {
             if (symbol_has_param_defaults(method))
                 report_default_arg_override_conflict(analyzer, info, method, target);
-            method->is_override = true;
+            if (!method->is_override || method->is_private) {
+                char msg[512];
+                snprintf(msg, sizeof(msg),
+                         "method '%s.%s' overrides an inherited method and must declare override "
+                         "without private visibility", info->name, method->name);
+                XrLocation loc = method->location;
+                if (!loc.file)
+                    loc.file = analyzer->current_file;
+                xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_OVERRIDE_MISMATCH, msg, &loc);
+            }
             continue;
         }
         if (name_match)
             report_method_hiding_conflict(analyzer, info, method,
                                           find_parent_method_by_name(info, method->name, false));
+        else if (method->is_override) {
+            char msg[512];
+            snprintf(msg, sizeof(msg), "override method '%s.%s' has no matching inherited method",
+                     info->name, method->name);
+            XrLocation loc = method->location;
+            if (!loc.file)
+                loc.file = analyzer->current_file;
+            xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_OVERRIDE_MISMATCH, msg, &loc);
+        }
     }
 }
 
@@ -5106,7 +5126,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         }
     }
 
-    // Pass 2: Validate inferred override graph now that parent links exist.
+    // Pass 2: Validate declared overrides now that parent links exist.
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
         if (!sym)

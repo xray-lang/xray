@@ -10,11 +10,11 @@ class Animal {
 }
 class Dog extends Animal {
     constructor(n: string) { super(n) }
-    speak() -> string { return "bark" }
+    override speak() -> string { return "bark" }
 }
 class Cat extends Animal {
     constructor(n: string) { super(n) }
-    speak() -> string { return "meow" }
+    override speak() -> string { return "meow" }
 }
 
 fn describe(a: Animal) -> string {

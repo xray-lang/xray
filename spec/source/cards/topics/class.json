@@ -28,7 +28,7 @@
       "bullets": [
         "`constructor()` is called through `ClassName(...)`",
         "`extends` enables single inheritance",
-        "overrides are inferred automatically when a subclass method has the same name and signature",
+        "actual overrides require `override` and a matching inherited method signature and receiver contract",
         "`final class` prevents inheritance",
         "method overloads and member hiding are compile errors",
         "`static` declares class-level methods or fields",

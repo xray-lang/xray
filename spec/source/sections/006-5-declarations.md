@@ -417,12 +417,12 @@ ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
-> **关于默认公开可见性和自动覆写**：
+> **关于默认公开可见性和显式覆写**：
 >
 > - 公开是**默认可见性**——所有未带 `private` / `protected` 的字段/方法都是公开的；语言没有 `public` 修饰符。
 > - 可见性受**编译期强制**：从类外访问 `private` / `protected` 成员、或从非子类访问 `protected` 成员，均报 `E0377`。
-> - 覆写由编译器自动推导：子类实例方法与父类链中非私有实例方法同名同签时即为覆写。
-> - 用户不可写 `override` / `abstract` / `final method`；同名不同签、字段/方法隐藏、静态方法隐藏均为编译错误。
+> - 实际覆写必须声明 `override`：编译器独立验证父类链中非私有实例方法的名称、签名和 receiver 权限；漏标、无对应目标或合同不匹配均拒绝。
+> - 单纯实现接口方法不写 `override`。不支持 `abstract` / `final method`；同名不同签、字段/方法隐藏、静态方法隐藏均为编译错误。
 >
 > 标准库和回归测试一致采用"省略默认修饰符"风格。
 
@@ -459,7 +459,7 @@ class Dog extends Animal {
         super(name)                    // **必须**首语句（仅限派生类）
     }
 
-    speak() -> string {                  // 同名同签：自动覆写
+    override speak() -> string {         // 显式覆写父方法
         return "woof"
     }
 }
@@ -468,7 +468,7 @@ class Dog extends Animal {
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
 - 不能在 `super(...)` 之前访问 `this`。
-- **重写父类方法不需要任何关键字**——只要子类出现同名同签实例方法即自动重写。
+- **覆写父类方法必须写 `override`**；该修饰符只用于类实例方法，不用于字段、构造器、静态方法、struct 或 enum。顺序为可选可见性、`override`、可选 `ref`/`move`。
 - 同名不同签不是重载，也不是隐藏；必须改名或使用默认参数 / 命名工厂。
 - 父类标 `final class` 则不可继承。
 - `super.method()` 可在重写的方法体内调用被屏蔽的父类方法。
@@ -480,6 +480,7 @@ class Dog extends Animal {
 | （无） | 字段/方法 | 默认 public——公开可见 |
 | `private` | 字段/方法 | 仅声明类内部可访问（含同类其它实例）；子类与外部访问均报 `E0377` |
 | `protected` | 字段/方法 | 声明类及其子类内部可访问；外部访问报 `E0377` |
+| `override` | 类实例方法 | 必须匹配非私有父方法的签名与 receiver 权限；不可降低为 private |
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
 | `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
 | `final` | 类声明前缀 | `final class C` 禁止继承；`final` 不用于字段或方法 |
@@ -635,7 +636,7 @@ fn main() {
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 
-继承与自动覆写：
+继承与显式覆写：
 
 ```xray
 class Animal {
@@ -646,7 +647,7 @@ class Animal {
 
 class Dog extends Animal {
     constructor(name: string) { super(name) }
-    speak() -> string { return "woof" }   // 同名同签：自动覆写
+    override speak() -> string { return "woof" }
 }
 
 fn main() {
@@ -1586,12 +1587,12 @@ ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
-> **About default public visibility and automatic overrides**:
+> **About default public visibility and explicit overrides**:
 >
 > - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
 > - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
-> - Overrides are inferred by the compiler: a subclass instance method overrides a non-private parent-chain instance method when name and signature match exactly.
-> - Interfaces express abstract contracts, same-name same-signature methods override automatically, and same-name different-signature methods or member hiding are compile errors.
+> - Every actual override must declare `override`. The compiler independently checks the non-private parent-chain target, signature and receiver contract; a missing marker, absent target or mismatch is an error.
+> - Implementing an interface alone does not require `override`. Same-name different-signature methods and member hiding remain compile errors.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
 
@@ -1628,7 +1629,7 @@ class Dog extends Animal {
         super(name)                    // **must** be the first statement (derived classes only)
     }
 
-    speak() -> string {                  // same name and signature: automatic override
+    override speak() -> string {         // Explicit parent method override
         return "woof"
     }
 }
@@ -1637,7 +1638,7 @@ class Dog extends Animal {
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
 - `this` must not be accessed before `super(...)`.
-- **Overriding requires no keyword**—any subclass instance method with the same name and signature automatically overrides the parent.
+- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility, `override`, then optional `ref`/`move`.
 - Same-name different-signature methods are not overloads or hiding; rename the method or use default arguments / named factories.
 - A `final class` cannot be inherited.
 - `super.method()` invokes the shadowed parent method from inside an override.
@@ -1649,6 +1650,7 @@ class Dog extends Animal {
 | (none) | field/method | Default public—externally visible |
 | `private` | field/method | Accessible only inside the declaring class (including other instances of the same class); subclass and external access report `E0377` |
 | `protected` | field/method | Accessible inside the declaring class and its subclasses; external access reports `E0377` |
+| `override` | class instance method | Requires a matching non-private inherited signature and receiver contract; cannot narrow visibility to private |
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
 | `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
 | `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
@@ -1804,7 +1806,7 @@ Rules:
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
-Inheritance with automatic override:
+Inheritance with explicit override:
 
 ```xray
 class Animal {
@@ -1815,7 +1817,7 @@ class Animal {
 
 class Dog extends Animal {
     constructor(name: string) { super(name) }
-    speak() -> string { return "woof" }   // same name/signature: auto-override
+    override speak() -> string { return "woof" }
 }
 
 fn main() {

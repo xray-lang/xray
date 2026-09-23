@@ -24,7 +24,7 @@ class Rect extends Shape {
         return this.w * this.h
     }
 
-    kind_plus() -> i64 {
+    override kind_plus() -> i64 {
         return this.kind + this.w
     }
 }

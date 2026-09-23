@@ -148,3 +148,16 @@ verification-test: test_analyzer_strict_conditions
 verification-test: test_xr_program_bool_conditions_aot_native
 verification-test: test_channel_buffer
 verification-test: test_channel_close
+
+Class method override intent is explicit source authority. The contextual
+`override` modifier survives AST identity, monomorphization and formatting;
+the analyzer resolves the parent target independently and rejects missing or
+spurious markers, signature/receiver mismatches and private overrides. It
+never manufactures the declaration bit from a matching signature. Interface
+implementation alone has no override obligation. This modifier is absent
+from callable types and does not authorize a new dispatch or ownership path.
+
+verification-test: test_analyzer
+verification-test: test_parser_recoverable
+verification-test: test_formatter_comments
+verification-test: test_mono

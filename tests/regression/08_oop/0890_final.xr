@@ -39,7 +39,7 @@ class Base {
 
 class Child extends Base {
     // Can override non-final method
-    normal() -> string {
+    override normal() -> string {
         return "normal from Child"
     }
 }
@@ -74,7 +74,7 @@ final class Cat extends Animal {
         super(name)
     }
 
-    speak() -> string {
+    override speak() -> string {
         return this.name + " meows"
     }
 }

@@ -167,6 +167,7 @@ typedef struct MethodDeclNode {
     int borrow_origin_count;
     AstNode *body;
     bool is_constructor;
+    bool is_override;
     bool is_static;
     bool is_private;
     bool is_protected;

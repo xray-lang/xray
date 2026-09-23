@@ -4191,7 +4191,7 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "  failVirtual() { throw MethodErr.Boom }\n"
                          "}\n"
                          "class ChildThrower extends BaseThrower {\n"
-                         "  failVirtual() { throw OtherMethodErr.Boom }\n"
+                         "  override failVirtual() { throw OtherMethodErr.Boom }\n"
                          "}\n"
                          "class InterfaceThrower implements EffectRunner {\n"
                          "  failEffect() { throw OtherMethodErr.Boom }\n"
@@ -8153,6 +8153,7 @@ TEST(builtin_datetime_type_methods_not_from_native_defs) {
 
 #include "xa_builtin_enum_checks.inc.c"
 #include "xa_condition_checks.inc.c"
+#include "xa_override_checks.inc.c"
 
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
@@ -8168,6 +8169,8 @@ int main(int argc, char **argv) {
         teardown_pool();
         return tests_failed ? 1 : 0;
     }
+
+    RUN_TEST(analyzer_override_requires_declaration_and_matching_target);
 
     printf("Type tests:\n");
     RUN_TEST(type_primitives);

@@ -15,7 +15,7 @@ class DogBench extends AnimalBench {
         super(seed)
     }
 
-    score(x: i64) -> i64 {
+    override score(x: i64) -> i64 {
         return this.seed + x * 2
     }
 }
@@ -25,7 +25,7 @@ class CatBench extends AnimalBench {
         super(seed)
     }
 
-    score(x: i64) -> i64 {
+    override score(x: i64) -> i64 {
         return this.seed + x * 3
     }
 }

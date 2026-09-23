@@ -1,0 +1,4 @@
+class Base { value() -> i64 { return 1 } }
+class Child extends Base {
+    value() -> i64 { return 2 }
+}
