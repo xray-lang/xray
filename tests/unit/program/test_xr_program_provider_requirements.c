@@ -58,7 +58,16 @@ static void check_mutation(const XrProgramArtifact *artifact, size_t offset, uin
     XrProgramDiagnostic diagnostic = {0};
     CHECK(xr_program_validate(bytes, artifact->size, NULL, &program, &diagnostic) == expected);
     CHECK(program == NULL);
+    if (diagnostic.kind != kind)
+        fprintf(stderr, "Provider mutation offset=%zu value=%u: diagnostic=%u expected=%u\n",
+                offset, (unsigned) value, (unsigned) diagnostic.kind, (unsigned) kind);
     CHECK(diagnostic.kind == kind);
+    if (kind == XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE) {
+        CHECK(diagnostic.location.section_id == XR_PROGRAM_SECTION_CODE);
+        CHECK(diagnostic.location.function_id == 0u);
+        CHECK(diagnostic.location.block_id == 0u);
+        CHECK(diagnostic.location.instruction_id == 0u);
+    }
     xr_validated_program_free(program);
     xr_free(bytes);
 }
@@ -109,11 +118,13 @@ static void test_hostile_logical_contracts(void) {
         {20u, XR_PROVIDER_CALLBACK_SYNCHRONOUS},
         {22u, XR_PROVIDER_TYPE_BOOL},
     };
+    /* These rows decode as logical contracts, but disagree with the exact
+     * synchronous i64 call. Per-operation checking precedes import-use closure. */
     for (size_t index = 0u; index < sizeof(valid_but_unadmitted) / sizeof(valid_but_unadmitted[0]);
          ++index) {
         check_mutation(&artifact, offset + valid_but_unadmitted[index].field,
                        valid_but_unadmitted[index].value, XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
-                       XR_PROGRAM_DIAGNOSTIC_PROVIDER_REQUIREMENT);
+                       XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
     }
     const uint8_t malformed_fields[] = {0u, 8u, 12u, 16u, 17u, 18u, 19u, 20u, 21u, 22u};
     for (size_t index = 0u; index < sizeof(malformed_fields); ++index) {
