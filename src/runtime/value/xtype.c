@@ -2712,6 +2712,9 @@ bool xr_type_equals(XrType *a, XrType *b) {
 XrType *xr_type_filter(XrVMRuntime *X, XrType *type, XrTypeKind kind) {
     if (!type)
         return NULL;
+    /* Nullability decorates the base kind instead of adding a union member. */
+    if (kind == XR_KIND_NULL && (type->is_nullable || xr_type_intrinsically_includes_null(type)))
+        return xr_type_new_null(X);
     if (XR_TYPE_IS_UNION(type))
         return xr_type_union_filter(type, kind);
     if (type->kind == kind)

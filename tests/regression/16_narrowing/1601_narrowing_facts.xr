@@ -33,9 +33,9 @@ fn test_n4_null_literal_on_left() {
 }
 
 @test
-fn test_n4_truthiness() {
+fn test_n4_explicit_presence() {
     var a: string? = "hello"
-    if (a) {
+    if (a != null) {
         assertEqual(len(a), 5)
     }
 }

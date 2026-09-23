@@ -80,7 +80,7 @@ XR_FUNC XrValue xr_send_result_value(XrVMRuntime *isolate, uint32_t member_index
  *   - 0.0 (float)
  *
  * Empty strings, collections, and other heap objects are not implicitly falsy.
- * User conditions must be bool or nullable presence (T?) checked via ISNULL.
+ * Source conditions must be bool; nullable presence uses an explicit comparison.
  */
 static inline bool vm_is_truthy(XrValue value) {
     XrTruthyCoreKind kind = XR_TRUTHY_CORE_OBJECT;

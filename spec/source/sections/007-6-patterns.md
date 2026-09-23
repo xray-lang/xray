@@ -135,7 +135,7 @@ match (x) {
 }
 ```
 
-- 守卫表达式必须是 `bool` 或 `T?` 存在性检查（见 §2.3.3），与 `if` / `while` 条件规则一致。
+- 守卫表达式必须是 `bool`，nullable 值须显式比较（见 §2.3.3），与 `if` / `while` 条件规则一致。
 - 失败时继续尝试下一分支。
 
 ### 6.6 多值模式
@@ -330,7 +330,7 @@ match (x) {
 }
 ```
 
-- The guard must be `bool` or nullable presence `T?` (see §2.3.3), identical to `if` / `while` condition rules.
+- The guard must be `bool`; nullable values require an explicit comparison (see §2.3.3), identical to `if` / `while` condition rules.
 - On guard failure, matching falls through to the next arm.
 
 ### 6.6 Multi-value Patterns

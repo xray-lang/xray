@@ -18,6 +18,7 @@
   "sections": [
     {
       "heading": "if / else",
+      "markdown": "Every control-flow condition must have type `bool`. Nullable presence is written explicitly as `value != null`; integers, strings and objects have no implicit condition conversion.",
       "fences": [
         "stmt-if"
       ]

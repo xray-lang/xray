@@ -43,6 +43,18 @@ in `xr_truthy_core_eval`. Removing a declared production binding, changing its
 stable ID marker, or reviving a private truthiness decision fails the owner
 ratchet.
 
+Source control-flow admission requires a non-nullable `bool` in every `if`,
+`while`, `for`, conditional expression and match guard. Nullable presence must
+be expressed as an explicit comparison; an omitted `for` condition remains
+legal. The frontend no longer publishes a bare-variable truthiness narrowing
+rule or helper. Explicit null tests preserve the null branch and join it with
+the non-null branch; a nullable type's null projection is not `never`.
+The shared source producer rejects invalid conditions before publishing a
+Program. Independent VM and native expectations cover explicit presence,
+short-circuiting, loops, conditional values and match guards after compiler
+teardown. The lower-level shared representation kernel does not grant source
+condition admission.
+
 `shared.assertion` owns the typed `xi.assertion` plan, action-channel
 classification, failure schema, renderer, and target bindings. VM and AOT
 consume that plan directly; retired condition/equality opcodes and source-name
@@ -117,3 +129,5 @@ Generated C may not ask the host compiler to rediscover target layout through
 
 verification-test: semantic_owner_inventory
 verification-test: semantic_owner_inventory_self_test
+verification-test: test_analyzer_strict_conditions
+verification-test: test_xr_program_bool_conditions_aot_native

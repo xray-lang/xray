@@ -182,10 +182,10 @@ fn test_explicit_bool_condition() {
 fn test_nullable_presence_condition() {
     var s: string? = null
     var result = ""
-    if (s) { result = "present" } else { result = "absent" }
+    if (s != null) { result = "present" } else { result = "absent" }
     assertEqual(result, "absent")
     var empty: string? = ""
-    if (empty) { result = "present" } else { result = "absent" }
+    if (empty != null) { result = "present" } else { result = "absent" }
     assertEqual(result, "present")
 }
 

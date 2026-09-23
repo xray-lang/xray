@@ -40,7 +40,7 @@ order: 025
 | **struct** | 值类型类（见 §5.4） |
 | **TCO** | Tail-Call Optimization：尾调用优化 |
 | **trait** | Rust 术语；xray 用 `interface` |
-| **condition expression** | 控制流条件：必须是 `bool` 或 `T?` 存在性（`T != bool`）；见 §2.3.3 |
+| **condition expression** | 控制流条件：必须是 `bool`，nullable 值须显式比较；见 §2.3.3 |
 | **grapheme cluster** | 用户感知字符，可能由多个 Unicode scalar 组成；`len(string)` / rune 迭代按 Unicode scalar，不按 grapheme cluster |
 | **union** | 联合类型 `A \| B` |
 | **Unicode scalar value** | 合法 Unicode 码位，范围 `U+0000..U+10FFFF` 且不包含 surrogate 区间 `U+D800..U+DFFF` |
@@ -86,7 +86,7 @@ order: 025
 | **struct** | Value-type class (see §5.4) |
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
-| **condition expression** | Control-flow condition: must be `bool` or nullable presence `T?` (`T != bool`); see §2.3.3 |
+| **condition expression** | Control-flow condition: must be `bool`; nullable values require an explicit comparison; see §2.3.3 |
 | **grapheme cluster** | User-perceived character that may contain multiple Unicode scalars; `len(string)` and rune iteration operate on Unicode scalars, not grapheme clusters |
 | **union** | Union type `A \| B` |
 | **Unicode scalar value** | Legal Unicode code point in `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF` |

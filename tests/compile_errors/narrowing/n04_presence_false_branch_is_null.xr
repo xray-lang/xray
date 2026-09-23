@@ -1,0 +1,12 @@
+// Spec §2.13 N-4: the false branch of an explicit presence test is null.
+// Reading the string there must still reject after implicit conditions are removed.
+fn main() {
+    var a: string? = "abc"
+    if (a != null) {
+        print(len(a))
+    } else {
+        print(len(a))
+    }
+}
+
+main()

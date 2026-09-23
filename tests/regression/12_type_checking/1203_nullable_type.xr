@@ -96,9 +96,9 @@ fn test_nullable_param() {
 
 @test
 fn test_nullable_return() {
-    fn findIndex(arr: Array<i64>, target: i64) -> i64? {
+    fn findIndex(arr: Array<i64>, needle: i64) -> i64? {
         for (var i = 0; i < len(arr); i++) {
-            if (arr[i] == target) {
+            if (arr[i] == needle) {
                 return i
             }
         }
@@ -141,15 +141,15 @@ fn test_nested_nullable() {
 @test
 fn test_nullable_presence_string() {
     var s: string? = null
-    if (s) {
+    if (s != null) {
         assert(false)
     }
     var empty: string? = ""
-    if (empty) {
+    if (empty != null) {
         assertEqual(len(empty), 0)
     }
     var hello: string? = "hello"
-    if (hello) {
+    if (hello != null) {
         assertEqual(len(hello), 5)
     }
 }
@@ -157,15 +157,15 @@ fn test_nullable_presence_string() {
 @test
 fn test_nullable_presence_number() {
     var n: i64? = null
-    if (n) {
+    if (n != null) {
         assert(false)
     }
     var zero: i64? = 0
-    if (zero) {
+    if (zero != null) {
         assertEqual(zero + 1, 1)
     }
     var forty: i64? = 42
-    if (forty) {
+    if (forty != null) {
         assertEqual(forty + 1, 43)
     }
 }

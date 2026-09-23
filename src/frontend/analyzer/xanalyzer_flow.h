@@ -169,6 +169,5 @@ XR_FUNC void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *e
 XR_FUNC XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool assume_true);
-XR_FUNC XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true);
 
 #endif  // XANALYZER_FLOW_H

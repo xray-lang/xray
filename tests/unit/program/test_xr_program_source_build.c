@@ -1041,6 +1041,51 @@ static void assert_retained_root_native(const XrProgramSourceProduct *product,
     xr_backend_ir_free(ir);
 }
 
+TEST(source_owner_explicit_bool_conditions_execute) {
+    static const char source[] =
+        "fn amount(present: bool) -> i64? { if (present) { return 0 }; return null }\n"
+        "fn answer() -> i64 {\n"
+        " var absent = amount(false)\n var zero = amount(true)\n var score: i64 = 0\n"
+        " if (zero != null) { score += 1 }\n if (absent == null) { score += 2 }\n"
+        " if (absent != null && absent > 0) { return -1 }\n"
+        " var selected = zero != null ? zero : 99\n"
+        " if (zero == null || zero != 0) { return -2 }\n"
+        " for (var index = 0; index < 2; index++) { score += 4 }\n"
+        " while (score < 13) { score += 1 }\n"
+        " for (var index = 0; ; index++) { break }\n"
+        " var extra = match (score) { value if (value == 13) -> 29\n _ -> 0 }\n"
+        " return score + selected + extra\n}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    assert_detached_program_i64_result(product.program, profile, 42);
+    assert_aot_fixture_backend_contract(product.program, profile, XR_SOURCE_FIXTURE_BOOL_CONDITIONS);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_bare_nullable_condition_has_no_product) {
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture,
+        "fn probe(value: i64?) -> i64 { if (value) { return 1 }; return 0 }\n"
+        "fn answer() -> i64 { return probe(null) }\n", NULL));
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    ASSERT_EQ_INT(xr_program_source_build(&fixture.input, &product, &diagnostic),
+                  XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED);
+    ASSERT_EQ_UINT(diagnostic.underlying_status, XR_ERR_ANALYZE_CONDITION_TYPE);
+    ASSERT_NULL(product.program);
+    ASSERT_NULL(product.artifact.bytes);
+    source_build_fixture_free(&fixture);
+}
+
 TEST(source_owner_manifest_exports_retain_exact_detached_roots) {
     static const char source[] =
         "import \"./library\"\n"

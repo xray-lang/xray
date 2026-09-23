@@ -751,7 +751,7 @@ Literals default to `f64`.
 | Condition type | Allowed | Meaning |
 |---|---|---|
 | `bool` | yes | direct boolean test |
-| `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
+| `T?` with `T != bool` | compile error | write `value != null` to test presence explicitly |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
 | `i64` / `f64` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
 
@@ -762,7 +762,7 @@ var ok = true
 if (ok) { }
 
 var user: User? = findUser()
-if (user) {              // presence: null check only
+if (user != null) {      // explicit presence check
     print(user.name)     // user is narrowed to User here
 }
 
@@ -1478,7 +1478,7 @@ fn show(u: User) {
 
 | Condition form | True branch | False branch |
 |--|--|--|
-| `x` | remove `null` | no fact (`0` / `""` / `false` are falsy too) |
+| `x: bool` | no type-narrowing fact | no type-narrowing fact |
 | `!e` | false fact of `e` | true fact of `e` |
 | `(e)` | true fact of `e` | false fact of `e` |
 | `x == null` / `null == x` | keep only `null` | remove `null` |
@@ -2463,7 +2463,7 @@ if (x > 0) {
 
 **Constraints**:
 - The condition **must** be parenthesized (unlike Go/Rust).
-- The condition must be `bool` or nullable presence `T?` (`T != bool`); bare `bool?`, `i64`, `string`, collections, etc. are compile errors (see §2.3.3).
+- The condition must be `bool`; every nullable `T?`, bare `i64`, `string`, collection, etc. is a compile error. Test presence explicitly with `value != null` (see §2.3.3).
 - Branch bodies must be blocks `{...}`; **no** single-statement-without-braces form.
 - `if` is not an expression; for an expression form use the ternary `? :` or `match`.
 
@@ -4079,7 +4079,7 @@ match (x) {
 }
 ```
 
-- The guard must be `bool` or nullable presence `T?` (see §2.3.3), identical to `if` / `while` condition rules.
+- The guard must be `bool`; nullable values require an explicit comparison (see §2.3.3), identical to `if` / `while` condition rules.
 - On guard failure, matching falls through to the next arm.
 
 ### 6.6 Multi-value Patterns
@@ -7463,7 +7463,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 |--|--|--|
 | Static typing | Optional in TS | **Mandatory**; schema-less data explicitly uses `JSON.Value` / `JSON.Object` |
 | Numerics | Single `number` (double) | `i64`, `f64`, `BigInt` strictly distinguished |
-| Conditions | truthy / falsy | conditions must be `bool`, or nullable `T?` presence; i64/string have no truthy conversion |
+| Conditions | truthy / falsy | conditions must be `bool`; nullable presence requires `value != null`; i64/string have no truthy conversion |
 | Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric i64↔f64, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
 | Objects | dynamic fields | `{...}` creates an exact structural object; dynamic keys use `Map` / `JSON.Object` |
@@ -7553,7 +7553,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **struct** | Value-type class (see §5.4) |
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
-| **condition expression** | Control-flow condition: must be `bool` or nullable presence `T?` (`T != bool`); see §2.3.3 |
+| **condition expression** | Control-flow condition: must be `bool`; nullable values require an explicit comparison; see §2.3.3 |
 | **grapheme cluster** | User-perceived character that may contain multiple Unicode scalars; `len(string)` and rune iteration operate on Unicode scalars, not grapheme clusters |
 | **union** | Union type `A \| B` |
 | **Unicode scalar value** | Legal Unicode code point in `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF` |

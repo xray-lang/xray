@@ -166,7 +166,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 条件类型 | 是否允许 | 语义 |
 |---|---|---|
 | `bool` | 允许 | 直接布尔判断 |
-| `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
+| `T?` 且 `T != bool` | 编译错误 | 显式写 `value != null` 检查存在性 |
 | `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
 | `i64` / `f64` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
 
@@ -177,7 +177,7 @@ var ok = true
 if (ok) { }
 
 var user: User? = findUser()
-if (user) {              // 存在性：仅检查 null
+if (user != null) {      // 显式存在性检查
     print(user.name)     // 此分支 user 窄化为 User
 }
 
@@ -877,7 +877,7 @@ fn show(u: User) {
 
 | 条件形态 | true 分支 | false 分支 |
 |--|--|--|
-| `x` | 去掉 `null` | 无事实（`0` / `""` / `false` 同样为假）|
+| `x: bool` | 无类型窄化事实 | 无类型窄化事实 |
 | `!e` | `e` 的 false 事实 | `e` 的 true 事实 |
 | `(e)` | `e` 的 true 事实 | `e` 的 false 事实 |
 | `x == null` / `null == x` | 只保留 `null` | 去掉 `null` |
@@ -1302,7 +1302,7 @@ Literals default to `f64`.
 | Condition type | Allowed | Meaning |
 |---|---|---|
 | `bool` | yes | direct boolean test |
-| `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
+| `T?` with `T != bool` | compile error | write `value != null` to test presence explicitly |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
 | `i64` / `f64` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
 
@@ -1313,7 +1313,7 @@ var ok = true
 if (ok) { }
 
 var user: User? = findUser()
-if (user) {              // presence: null check only
+if (user != null) {      // explicit presence check
     print(user.name)     // user is narrowed to User here
 }
 
@@ -2029,7 +2029,7 @@ fn show(u: User) {
 
 | Condition form | True branch | False branch |
 |--|--|--|
-| `x` | remove `null` | no fact (`0` / `""` / `false` are falsy too) |
+| `x: bool` | no type-narrowing fact | no type-narrowing fact |
 | `!e` | false fact of `e` | true fact of `e` |
 | `(e)` | true fact of `e` | false fact of `e` |
 | `x == null` / `null == x` | keep only `null` | remove `null` |

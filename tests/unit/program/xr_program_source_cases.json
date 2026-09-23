@@ -1,6 +1,8 @@
 {
   "schema": 2,
   "cases": [
+    {"name": "source_owner_explicit_bool_conditions_execute", "fixture": {"id": "bool_conditions", "expected_exit": 42, "labels": ["conditions", "language", "nullable"], "backends": {"vm": "execute", "aot": "execute"}}},
+    {"name": "source_owner_bare_nullable_condition_has_no_product", "fixture": null},
     {"name": "source_owner_atomic_ordering_preserves_exact_controls", "fixture": null},
     {"name": "source_owner_rejects_invalid_manifest_roots_without_partial_product", "fixture": null},
     {"name": "source_owner_manifest_exports_retain_exact_detached_roots", "fixture": {"id": "manifest_exports", "expected_exit": 0, "labels": ["module-graph", "retained-roots", "instance", "export"], "backends": {"vm": "execute", "aot": "execute"}}},

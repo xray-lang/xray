@@ -803,7 +803,8 @@ TEST(narrow_by_null) {
     XrType *is_null = xa_narrow_by_null_check(nullable_int, true, true);
     // When narrowing nullable to null, we get the null type
     ASSERT(is_null != NULL);
-    ASSERT(XR_TYPE_IS_NULL(is_null) || XR_TYPE_IS_NEVER(is_null));
+    ASSERT(XR_TYPE_IS_NULL(is_null));
+    ASSERT(xr_type_equals(xr_type_union(NULL, is_null, t_int), nullable_int));
 
     // x != null && true -> int (non-null part)
     XrType *not_null = xa_narrow_by_null_check(nullable_int, false, true);
@@ -8151,13 +8152,22 @@ TEST(builtin_datetime_type_methods_not_from_native_defs) {
 // ============================================================================
 
 #include "xa_builtin_enum_checks.inc.c"
+#include "xa_condition_checks.inc.c"
 
-int main(void) {
+int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
     printf("Running analyzer unit tests...\n\n");
 
     // Setup type pool (required for type allocation)
     setup_pool();
+
+    RUN_TEST(analyzer_conditions_require_plain_bool);
+    RUN_TEST(analyzer_explicit_presence_narrows_and_for_condition_is_optional);
+    RUN_TEST(narrow_by_null);
+    if (argc == 2 && strcmp(argv[1], "strict-conditions") == 0) {
+        teardown_pool();
+        return tests_failed ? 1 : 0;
+    }
 
     printf("Type tests:\n");
     RUN_TEST(type_primitives);
@@ -8266,7 +8276,6 @@ int main(void) {
     RUN_TEST(flow_binding_use_join_and_reassignment);
     RUN_TEST(flow_cache);
     RUN_TEST(narrow_by_typeof);
-    RUN_TEST(narrow_by_null);
 
     printf("\nAdditional type tests:\n");
     RUN_TEST(type_class_instance);

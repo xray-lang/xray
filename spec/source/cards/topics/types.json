@@ -21,6 +21,7 @@
     },
     {
       "heading": "Explicit conditions",
+      "markdown": "Conditions accept only non-nullable `bool`. Use `value != null` for presence, or `flag == true` / `flag ?? false` for nullable booleans. Explicit comparisons preserve branch narrowing.",
       "fences": [
         "types-explicit-conditions"
       ]

@@ -548,7 +548,9 @@ add_test(NAME test_frontend_architecture
 # analyzer/ — Type inference, type checking
 # ============================================================================
 
-add_xray_unit_test(test_analyzer analyzer/test_analyzer.c)
+add_xray_bootstrap_unit_test(test_analyzer analyzer/test_analyzer.c)
+add_test(NAME test_analyzer_strict_conditions COMMAND $<TARGET_FILE:test_analyzer> strict-conditions)
+set_tests_properties(test_analyzer_strict_conditions PROPERTIES LABELS "analyzer;conditions;language")
 add_xray_unit_test(test_effect_db analyzer/test_effect_db.c)
 add_xray_unit_test(test_xrd_effect_metadata analyzer/test_xrd_effect_metadata.c)
 add_xray_bootstrap_unit_test(test_mono analyzer/test_mono.c)

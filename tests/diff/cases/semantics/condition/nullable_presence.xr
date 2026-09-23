@@ -1,27 +1,27 @@
 // anchor: nullable-presence-condition
 var s: string? = null
-if (s) {
+if (s != null) {
     print("present")
 } else {
     print("absent")
 }
 
 var empty: string? = ""
-if (empty) {
+if (empty != null) {
     print("empty-but-present")
 } else {
     print("absent2")
 }
 
 var n: i64? = 0
-if (n) {
+if (n != null) {
     print("zero-but-present")
 } else {
     print("absent3")
 }
 
 var absent: i64? = null
-if (absent) {
+if (absent != null) {
     print("bad")
 } else {
     print("absent4")

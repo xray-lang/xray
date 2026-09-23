@@ -179,7 +179,7 @@ static bool flow_expr_is_subject(const AstNode *node, const char *var_name) {
 }
 
 // Apply type narrowing based on condition expression
-// Analyzes common patterns: x != null, x == null, typeOf(x) == Type.xxx, truthiness
+// Analyzes explicit comparisons and type tests.
 static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, XrType *base_type,
                                          bool assume_true) {
     if (!expr || !var_name || !base_type)
@@ -187,14 +187,6 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
 
     AstNode *node = (AstNode *) expr;
     AstNodeType type = node->type;
-
-    // Pattern: x (truthiness check - variable used directly as condition)
-    if (type == AST_VARIABLE) {
-        if (flow_expr_is_subject(node, var_name)) {
-            return xa_narrow_by_truthiness(base_type, assume_true);
-        }
-        return base_type;
-    }
 
     // Pattern: (e) — grouping is transparent to narrowing (spec §2.13 N-4).
     if (type == AST_GROUPING) {
@@ -797,21 +789,6 @@ XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool assume_tr
         return xr_type_filter(NULL, type, XR_KIND_NULL);
     } else {
         return xr_type_non_nullable(NULL, type);
-    }
-}
-
-// Narrow by truthiness
-XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true) {
-    if (!type)
-        return type;
-
-    if (assume_true) {
-        // Truthy: exclude null, undefined
-        return xr_type_non_nullable(NULL, type);
-    } else {
-        // Falsy: could be null, 0, "", false
-        // Can't narrow much here without more context
-        return type;
     }
 }
 

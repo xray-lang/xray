@@ -884,13 +884,6 @@ static bool xa_type_is_plain_bool(XrType *type) {
     return type && XR_TYPE_IS_BOOL(type) && !type->is_nullable;
 }
 
-static bool xa_type_is_nullable_non_bool(XrType *type) {
-    if (!type || !type->is_nullable || XR_TYPE_IS_UNKNOWN(type))
-        return false;
-    XrType *base = xr_type_non_nullable(NULL, type);
-    return base && !XR_TYPE_IS_BOOL(base);
-}
-
 static bool xa_class_info_same_identity(struct XrClassInfo *a, struct XrClassInfo *b) {
     if (!a || !b)
         return false;
@@ -949,9 +942,6 @@ XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType 
         return;
     if (xa_type_is_plain_bool(cond_type))
         return;
-    if (xa_type_is_nullable_non_bool(cond_type))
-        return;
-
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[384];
     if (cond_type->is_nullable && XR_TYPE_IS_BOOL(cond_type)) {
@@ -962,7 +952,7 @@ XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType 
         snprintf(msg, sizeof(msg), "'null' cannot be used as a condition");
     } else {
         snprintf(msg, sizeof(msg),
-                 "condition requires 'bool' or nullable presence (T?), got '%s'; use an explicit "
+                 "condition requires 'bool', got '%s'; use an explicit "
                  "comparison",
                  xr_type_to_string(cond_type));
     }

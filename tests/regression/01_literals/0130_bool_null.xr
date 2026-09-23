@@ -90,19 +90,19 @@ fn test_explicit_bool_condition() {
 @test
 fn test_nullable_presence_condition() {
     var s: string? = null
-    if (s) {
+    if (s != null) {
         assert(false)
     } else {
         assert(true)
     }
     var empty: string? = ""
-    if (empty) {
+    if (empty != null) {
         assert(true)
     } else {
         assert(false)
     }
     var zero: i64? = 0
-    if (zero) {
+    if (zero != null) {
         assert(true)
     } else {
         assert(false)
