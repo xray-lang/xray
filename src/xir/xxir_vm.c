@@ -248,7 +248,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_DIV_I64: case XR_XIR_REM_I64: {
         int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        XrXirRunStatus status = xr_xir_scalar_arithmetic((XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
+        XrXirRunStatus status = xr_xir_integer_arithmetic((XrXirIntegerFormat) {64, true}, (XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
         if (status != XR_XIR_RUN_OK) return status;
         break;
     }

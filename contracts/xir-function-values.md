@@ -6,7 +6,7 @@ explicit ownership operations. It conveys no Sendable or no_suspend proof.
 Constructing a value checks the full signature and existing module import,
 visibility and initializer restrictions. Describing a type never grants access.
 
-Program sealing owns a verified signature table. Boxed value ABI 6, call ABI 9
+Program sealing owns a verified signature table. Boxed value ABI 6, call ABI 10
 and Program ABI 5 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
@@ -96,7 +96,7 @@ can clean up. No borrowed environment survives independently of its owner.
 
 Last-reference destruction drains nested immutable environments without host
 recursion or allocation. stop/free revokes entry but not escaped value lifetime.
-Value6/Call9/Program5 and schema4/semantic11 replace earlier contracts.
+Value6/Call10/Program5 and schema4/semantic11 replace earlier contracts.
 Strong-cycle reclamation, full callable contracts and concurrency remain open;
 this contract never substitutes snapshot capture for shared mutable bindings.
 
@@ -121,4 +121,4 @@ the FUNCTION_REF capture prefix go through ordinary Checked validation,
 specialization and recheck. No source/AST retry occurs during instantiation.
 
 This producer adds no wire opcode or ABI revision: it consumes the current
-schema4/semantic11 and Value6/Call9/Program5 environment contract.
+schema4/semantic11 and Value6/Call10/Program5 environment contract.

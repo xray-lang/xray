@@ -200,7 +200,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
     case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
     case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
-        append(buffer, "    status = xr_xir_scalar_arithmetic((XrXirArithmetic) %d, xr_xir_scalar_load(frame, %uu), "
+        append(buffer, "    status = xr_xir_integer_arithmetic((XrXirIntegerFormat) {64, true}, (XrXirArithmetic) %d, xr_xir_scalar_load(frame, %uu), "
                "xr_xir_scalar_load(frame, %uu), &temporary);\n"
                "    if (status != XR_XIR_RUN_OK) goto xr_done;\n"
                "    xr_xir_scalar_store(frame, %uu, temporary);\n",
@@ -461,7 +461,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
     case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
     case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
-        append(buffer, "        if (xr_xir_scalar_arithmetic((XrXirArithmetic) %d, xr_xir_scalar_load(state->frame, %uu), "
+        append(buffer, "        if (xr_xir_integer_arithmetic((XrXirIntegerFormat) {64, true}, (XrXirArithmetic) %d, xr_xir_scalar_load(state->frame, %uu), "
                "xr_xir_scalar_load(state->frame, %uu), &temporary) != XR_XIR_RUN_OK)\n"
                "            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
                "{XR_XIR_I64, 0, XR_XIR_CALL_DIVIDE_BY_ZERO}};\n"
@@ -666,7 +666,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 9u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 10u, \"XIR call ABI\");\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 6u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"

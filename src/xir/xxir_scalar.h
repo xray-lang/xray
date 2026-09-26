@@ -49,8 +49,17 @@ typedef enum XrXirArithmetic {
     XR_XIR_ARITH_ADD, XR_XIR_ARITH_SUB, XR_XIR_ARITH_MUL, XR_XIR_ARITH_DIV, XR_XIR_ARITH_REM,
     XR_XIR_ARITH_AND, XR_XIR_ARITH_OR, XR_XIR_ARITH_XOR, XR_XIR_ARITH_SHL, XR_XIR_ARITH_SHR
 } XrXirArithmetic;
-XR_FUNC XrXirRunStatus xr_xir_scalar_arithmetic(XrXirArithmetic operation,
-    int64_t left, int64_t right, int64_t *result);
+typedef struct XrXirIntegerFormat {
+    uint32_t bits;
+    bool is_signed;
+} XrXirIntegerFormat;
+/* Width and signedness describe canonical payloads, not wire type admission. */
+XR_FUNC XrXirRunStatus xr_xir_integer_arithmetic(XrXirIntegerFormat format,
+    XrXirArithmetic operation, int64_t left, int64_t right, int64_t *result);
+XR_FUNC XrXirRunStatus xr_xir_integer_compare(XrXirIntegerFormat format,
+    int64_t left, int64_t right, int *result);
+XR_FUNC XrXirRunStatus xr_xir_integer_convert(XrXirIntegerFormat source,
+    XrXirIntegerFormat target, int64_t value, int64_t *result);
 
 static inline bool xr_xir_scalar_step(XrXirRunContext *context) {
     if (!context->steps)

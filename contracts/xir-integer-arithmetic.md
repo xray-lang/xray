@@ -1,4 +1,33 @@
-# XIR i64 arithmetic and relational contract
+# XIR integer arithmetic and relational contract
+
+The allocation-free integer runtime takes an explicit width (8, 16, 32 or 64)
+and signedness, independently of wire type admission. Signed payloads are sign
+extended; unsigned payloads are zero extended, except u64 uses all 64 payload
+bits. Noncanonical inputs and invalid widths reject before arithmetic. Failed
+operations return a status and clear the numeric output to zero.
+
+Add/subtract/multiply and bitwise operations reduce modulo the declared width.
+Signed division truncates toward zero and every signed MIN/-1 wraps to MIN;
+the corresponding remainder is zero. Unsigned division, remainder and ordering
+interpret all bits as unsigned, including the upper half of u64. Comparison
+returns -1, 0 or 1 without subtracting operands. Explicit conversion first
+validates the source payload, then reduces its mathematical integer value modulo
+the target width and reconstructs the target signedness. It grants no implicit
+source conversion or generic constraint evidence.
+
+The existing language shift rule remains modulo 64 for every fixed width,
+including negative counts. A narrow left shift truncates to its result width;
+a narrow right shift beyond that width becomes zero or signed -1. In particular,
+u8(1) shifted left by 8 is zero, while a count of 64 is identity. Signed right
+shift extends the sign, unsigned right shift fills with zero. The runtime never
+executes a signed overflowing operation or a host shift by 64.
+
+This runtime foundation does not yet admit narrow/unsigned XIR types, source
+literal contexts, widening, casts, typed output or containers. Existing i64 VM
+and generated-native arithmetic uses the same width-aware runtime with explicit
+{64, signed}. The old arithmetic entry point is removed; Call ABI 10 rejects
+old native entries. Value6/Program5 and Checked schema4/semantic11 are unchanged
+because their payload and i64 semantics have not changed.
 
 The concrete i64 source family follows the language integer contract: +, -, *,
 unary negation, ++ and -- wrap modulo 2^64 in every build configuration. This
@@ -38,9 +67,9 @@ contract; all other admitted compound operators require i64. Const/read bindings
 member/index targets and unsupported type pairs reject. These use the same operators
 and typed places; no wrapping/shift flags or alternate implementation is retained.
 
-Checked schema is 4; semantic contract is 11 and call ABI is 9. Old semantic
+Checked schema is 4; semantic contract is 11 and call ABI is 10. Old semantic
 packets and call entries reject before execution, without an old reader/adapter.
-Value ABI 6 and Program ABI 5 follow the owned function-value boundary. Compiler-generated C binds call ABI 9.
+Value ABI 6 and Program ABI 5 follow the owned function-value boundary. Compiler-generated C binds call ABI 10.
 The scalar leaf and resumable entry paths, packet consumer and source producer
 must all use this same contract. Wider numeric families remain unqualified.
 

@@ -189,7 +189,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 `&` `|` `^` `~` `<<` `>>`
 
 - 仅作用于整数类型。
-- 移位计数取模 64（与 C 不同：xray 总是定义的）。
+- 所有定宽整数的移位计数取模 64，包括负数计数。结果保留左操作数类型：窄整数左移后按位宽截断；有效计数达到或超过其位宽时，右移结果为零或有符号负数的 -1。例如 `u8` 值 1 左移 8 位为 0，左移 64 位为 1。
 - `>>` 是**算术右移**（保留符号位）。无符号类型使用对应的 exact 类型（`u8` / `u16` / `u32` / `u64`）。
 - bool 不参与位运算（用 `&&` `||`）。
 - `rune` 不参与位运算；需要码点时显式写 `i64(c)`。
@@ -866,7 +866,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 `&` `|` `^` `~` `<<` `>>`
 
 - Apply only to integer types.
-- Shift counts are taken modulo 64 (unlike C: always defined in xray).
+- Shift counts for every fixed-width integer are taken modulo 64, including negative counts. The result keeps the left operand's type: narrow left shifts truncate to that width; right shifts by an effective count at least that width produce zero or -1 for signed negative values. For example, a u8 value of 1 shifted left by 8 is 0, and shifted left by 64 is 1.
 - `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding exact type (`u8`, `u16`, `u32`, or `u64`).
 - `bool` does not participate in bitwise operations (use `&&` `||`).
 - `rune` does not participate in bitwise operations; use `i64(c)` explicitly when the code point is needed.

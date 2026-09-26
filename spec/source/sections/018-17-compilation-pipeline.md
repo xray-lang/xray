@@ -234,7 +234,7 @@ for(init; condition; step)初始化一次，循环初始化绑定只在该循环
 除数为零产生独立DIVIDE_BY_ZERO fault，没有结果并逆序清理所有帧；初始化中失败保持粘滞，
 已初始化实例的普通调用失败允许后续调用。生成C在宿主/和%之前检查特殊对，不执行有符号溢出。
 一元负号降为零减操作数，其他运算经同一Checked→Lowered→共享标量运行时。
-当前Checked schema 4/语义合同11、Call ABI 9、Value6/Program5按§17.16替换旧版本，无reader或适配路径。
+当前Checked schema 4/语义合同11、Call ABI 10、Value6/Program5按§17.16替换旧版本，无reader或适配路径。
 具体i64能力不能通过实例化补给普通泛型；其他数值族与显式checked/saturating库方法尚未接通。
 
 ### 17.15 XIR i64位运算
@@ -245,7 +245,7 @@ for(init; condition; step)初始化一次，循环初始化绑定只在该循环
 操作数从左到右各求值一次，位运算拒绝bool/string/Atomic及未约束T。变量复合赋值先读左值，
 再求右侧，计算后写回并返回新值；右侧即使修改同一变量也不能改变已读取的快照，失败不写回。
 +=另准入string拼接及快照，其余复合运算要求i64；const/read、成员与索引目标暂不准入。
-当前Checked schema4/语义合同11、Call9/Value6/Program5遵循§17.16，无旧包或ABI适配。其他整数宽度和转换仍未准入。
+当前Checked schema4/语义合同11、Call10/Value6/Program5遵循§17.16，无旧包或ABI适配。其他整数宽度和转换仍未准入。
 
 ### 17.16 XIR拥有式函数值与间接调用
 
@@ -278,7 +278,7 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 全局槽必须闭合。特化重新生成闭合规范类型表，并重映射参数、结果、指令、显式实参和槽，
 随后复验。Lowered和不可变Program拒绝全部残留开放签名，包括未使用条目。
 结构替换与匹配消耗工作量和元数据预算，最多允许128层活动结构替换。
-唯一Checked schema4/语义合同11、Program ABI5原子替代旧版本；Value6/Call9保持当前协议。
+唯一Checked schema4/语义合同11、Program ABI5原子替代旧版本；Value6/Call10保持当前协议。
 捕获、其他mode、效应承诺、类型推断及成员见证继续按各自合同和门独立接通。
 
 ### 17.18 XIR 拥有式不可变捕获环境
@@ -289,7 +289,7 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 
 间接调用仍发布同一可恢复 CALL action，携带借用的函数值；唯一帧驱动器把环境前缀和显式实参复制到新帧。在新帧完成拥有前，调用方帧继续保活环境；挂起、抛出、取消和返回沿用统一清理。宿主函数调用入口同样保留捕获和实参，再释放前次结果。实例 stop/free 撤销执行准入，但外逃环境和值仍可读取、复制和释放。
 
-该内部合同不把 var 变成按值捕获，也不授予 Sendable、noescape 或 no_suspend。普通 var 的共享 cell、循环回收及源码闭包生产入口须分别接通并验收；内部构造通过不代表源码闭包完成。Value ABI 6、Call ABI 9、Program ABI 5、Checked schema4/语义合同11为唯一现行版本，旧版本拒绝。
+该内部合同不把 var 变成按值捕获，也不授予 Sendable、noescape 或 no_suspend。普通 var 的共享 cell、循环回收及源码闭包生产入口须分别接通并验收；内部构造通过不代表源码闭包完成。Value ABI 6、Call ABI 10、Program ABI 5、Checked schema4/语义合同11为唯一现行版本，旧版本拒绝。
 
 ### 17.19 XIR 共享捕获 cell
 
@@ -297,7 +297,11 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 
 普通var捕获保留同一共享存储身份，所有别名看到相同更新；读取结果自身仍具有值语义。cell RC始终原子，但内容访问只获当前Instance单宿主线程准入，不授予跨worker或原子换值承诺。cell内函数与捕获的cell必须属于同一实例值域，不能经cell绕过函数能力的实例隔离。最后引用释放使用现有无分配工作链处理内容，不递归销毁环境。强环仍可能形成，可在保留owner时显式断环；不可达强环回收保持OPEN，不引入收集器，也不据此声称所有合法图无泄漏。
 
-当前唯一版本为Value6/Call9/Program5、Checked schema4/语义11，无旧版本读取或ABI适配。源码var不得以快照冒充共享cell。
+当前唯一版本为Value6/Call10/Program5、Checked schema4/语义11，无旧版本读取或ABI适配。源码var不得以快照冒充共享cell。
+### 17.20 定宽整数运行时基础
+
+统一无分配整数核心显式接收8/16/32/64位和符号；有符号payload符号扩展，无符号payload零扩展，u64保留全部64位。非规范payload和非法宽度拒绝。算术、比较、显式转换及§3.3.2移位遵循§2.3.1；失败返回状态并将数值输出清零。当前i64的VM与native路径均使用该核心，旧入口已删除，Call ABI10拒绝旧native条目。Checked schema4/语义11和Value6/Program5保持不变。本节仅确认运行时基础，窄整数/无符号的XIR类型、源码上下文、提升、cast、输出和容器接入仍OPEN。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -398,7 +402,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 6 and call ABI 9 replace the initial scalar boundary without aliases.
+Value ABI 6 and call ABI 10 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -608,7 +612,7 @@ INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result a
 unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
 after an arithmetic fault in an initialized instance. Generated C guards special pairs
 before host / or % and never executes signed overflow. Negation lowers to zero minus
-the operand. Current Checked schema 4 / semantic contract 11, Call ABI 9, Value6 and Program5 follow
+the operand. Current Checked schema 4 / semantic contract 11, Call ABI 10, Value6 and Program5 follow
 §17.16 without a compatibility reader or adapter.
 Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
 and explicit checked/saturating library methods remain outside this admitted subset.
@@ -626,7 +630,7 @@ compound assignments read the old value before evaluating the RHS, compute, stor
 and return the new value; an RHS assignment cannot change that earlier snapshot.
 Failure skips the store. String += also admits owned concat snapshots; other compound
 operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema4 / semantic contract11
-and Call9/Value6/Program5 follow §17.16 without compatibility paths. Other
+and Call10/Value6/Program5 follow §17.16 without compatibility paths. Other
 integer widths and conversions are not yet admitted.
 
 ### 17.16 XIR Owned Function Values and Indirect Calls
@@ -657,7 +661,7 @@ host-thread driver admits calls only in the originating instance. Another instan
 or Program rejects coincident numeric IDs. Cross-instance transfer and concurrent
 admission still require implementation and qualification.
 
-The unique packet is schema4/semantic11 with Value6/Call9/Program5; old versions reject
+The unique packet is schema4/semantic11 with Value6/Call10/Program5; old versions reject
 without readers, boxed adapters or alternate execution. Source/packet validation,
 independent VM/native expectations, suspension/cancellation, escaped results, code
 leases and individual allocation failures are covered by machine contracts. This
@@ -691,7 +695,7 @@ Construction obtains a logical copy of every captured value and publishes no par
 
 An indirect call publishes the same resumable CALL action with a borrowed function value. The sole frame driver copies the environment prefix and explicit arguments into the new frame while the caller still owns the environment. Suspension, throw, cancellation and return use the existing cleanup path. Host function entry likewise retains captures and arguments before releasing a previous result. Instance stop/free revokes execution admission while escaped environments remain readable, copyable and releasable.
 
-This internal contract does not turn var captures into copies or grant Sendable, noescape or no_suspend. Shared mutable cells, cycle reclamation and the source closure producer require separate implementation and qualification. Internal construction does not certify source closures. Value ABI 6, Call ABI 9, Program ABI 5 and Checked schema4/semantic contract11 are the sole current versions; predecessors are rejected.
+This internal contract does not turn var captures into copies or grant Sendable, noescape or no_suspend. Shared mutable cells, cycle reclamation and the source closure producer require separate implementation and qualification. Internal construction does not certify source closures. Value ABI 6, Call ABI 10, Program ABI 5 and Checked schema4/semantic contract11 are the sole current versions; predecessors are rejected.
 
 ### 17.19 XIR shared capture cells
 
@@ -699,5 +703,9 @@ An internal cell type is `0x40000000 | element type`. Elements are non-unit ordi
 
 Ordinary var captures retain one shared storage identity; every alias observes updates while read results keep value semantics. Cell RC is atomic, but content access only has the current instance's single-host-thread admission, not a cross-worker or atomic-update promise. Function contents and captured cells belong to the same instance value domain, so cells cannot bypass callable instance isolation. Last-reference release queues contents on the existing allocation-free destruction worklist, without recursive environment destruction. Strong cycles remain possible and can be explicitly broken while an owner remains. Unreachable strong-cycle reclamation stays OPEN; this introduces no collector or universal leak-freedom claim.
 
-The unique versions are Value6/Call9/Program5 and Checked schema4/semantic11, without old readers or ABI adapters. Source var capture must not substitute snapshots for shared cells.
+The unique versions are Value6/Call10/Program5 and Checked schema4/semantic11, without old readers or ABI adapters. Source var capture must not substitute snapshots for shared cells.
+### 17.20 Fixed-width integer runtime foundation
+
+The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and Call ABI10 rejects old native entries. Checked schema4/semantic11 and Value6/Program5 stay unchanged. This qualifies only the runtime foundation: narrow/unsigned XIR types, source contexts, widening, casts, output and containers remain OPEN.
+
 <!-- /xr-spec:en -->
