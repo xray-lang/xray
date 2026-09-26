@@ -673,7 +673,8 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "}\n"
         "static XrValue xrt_runtime_enum_new(const char *enum_name, const char *member_name, "
         "int64_t member_index) {\n"
-        "    return xrt_enum_box_new(0, enum_name, member_name, member_index);\n"
+        "    if (member_index < 0 || (uint64_t)member_index > UINT32_MAX) return XR_NULL_VAL;\n"
+        "    return xrt_enum_box_new(0, enum_name, member_name, (uint32_t)member_index);\n"
         "}\n"
         "static int64_t xrt_runtime_enum_ordinal(XrValue value, int64_t fallback) {\n"
         "    uint32_t ordinal = 0;\n"
@@ -791,7 +792,8 @@ static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiMod
             continue;
         fprintf(out, "%sXrValue ",
                 cg_func_forward_linkage(ctx, modules[m]->init,
-                                        modules[m]->name ? modules[m]->name : "mod", false));
+                                        modules[m]->name ? modules[m]->name : "mod",
+                                        modules[m] != ctx->module));
         emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
         fprintf(out, "(xrt_closure_t *_cl);\n");
     }
@@ -954,10 +956,10 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
                 emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                                   modules[m]->init, "_aot_frame_new");
                 fprintf(out, "();\n");
-                fprintf(out, "    xr_aot_run_main(rt, &");
+                fprintf(out, "    xr_aot_run_main(rt, ");
                 emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                                   modules[m]->init, "_aot_desc");
-                fprintf(out, ", _entry_frame);\n");
+                fprintf(out, "(), _entry_frame);\n");
                 cg_emit_main_pending_error_return(out, entry_needs_runtime,
                                                   cg_can_report_uncaught_error(ctx));
             } else {
@@ -1178,9 +1180,9 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             fprintf(body, "    void *_entry_frame = ");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_frame_new");
             fprintf(body, "();\n");
-            fprintf(body, "    xr_aot_run_main(rt, &");
+            fprintf(body, "    xr_aot_run_main(rt, ");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_desc");
-            fprintf(body, ", _entry_frame);\n");
+            fprintf(body, "(), _entry_frame);\n");
             cg_emit_main_pending_error_return(body, entry_needs_runtime,
                                               cg_can_report_uncaught_error(ctx));
         } else {

@@ -1647,6 +1647,10 @@ static void test_driver_module_ref_uses_verified_address_storage(void) {
                                          "    var stopped = 0\n"
                                          "    var value = adjust(ref full, ref stopped)\n"
                                          "    return full + stopped + value\n"
+                                         "}\n"
+                                         "export fn identity(value: i64) -> i64 { return value }\n"
+                                         "export fn snapshot(values: Slice<i64>) -> Array<i64> {\n"
+                                         "    return copy(values)\n"
                                          "}\n"));
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
@@ -1654,7 +1658,14 @@ static void test_driver_module_ref_uses_verified_address_storage(void) {
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     const char *entries[] = {
         "import { deliver } from \"./library\"\nprint(42)\n",
-        "import { deliver } from \"./library\"\nprint(deliver())\n",
+        "import { deliver, identity, snapshot } from \"./library\"\n"
+        "fn optional(value: i64) -> i64? { return value }\n"
+        "var value = optional(40)\n"
+        "print(deliver())\nprint(identity(value!))\n"
+        "var values = [4, 5]\n"
+        "var copied = snapshot(values[:])\n"
+        "values[0] = 99\n"
+        "print(copied[0] + copied[1])\n",
     };
     for (unsigned i = 0; i < 2u; ++i) {
         ASSERT_TRUE(write_file_text(entry, entries[i]));

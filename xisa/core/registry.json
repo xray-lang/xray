@@ -134,6 +134,11 @@
       "stable_id": 19,
       "name": "f64",
       "description": "IEEE-754 binary64 value; constant identity preserves all 64 bits, including signed zero and NaN payloads."
+    },
+    {
+      "stable_id": 20,
+      "name": "string-builder",
+      "description": "Unique mutable managed text builder; affine owner with forbidden copy, borrowed mutation and independent immutable string snapshots. Physical storage is executor-private."
     }
   ],
   "effects": [
@@ -6258,6 +6263,837 @@
         "allowed_trace": "One fresh immutable string owner containing the exact canonical display bytes of one fixed-width integer, f64, bool or rune scalar, identical to the corresponding typed output operand. No numerical conversion or operand consumption; allocation failure publishes no owner. String operands use the existing ownership-preserving string operations instead."
       },
       "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 168,
+      "spelling": "core.channel.construct",
+      "class": "channel",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64"
+        ],
+        "result": "A",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-trivial-value"
+        ],
+        "result": "owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "synchronized-channel-identity",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Create one fresh, open, empty channel with the exact declared element type and capacity in [0, UINT32_MAX]. Zero capacity denotes rendezvous. Negative or larger i64 capacity and allocation failure report resource-limit, publish no handle and leave inputs unchanged. Explicit handle copy preserves identity independently of message copy; physical storage is executor-private."
+      },
+      "kat_validator": "channel-construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 169,
+      "spelling": "core.channel.is_closed",
+      "class": "channel",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A"
+        ],
+        "result": "bool",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-owner-or-rooted-borrow"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "synchronized-channel-identity",
+      "determinism": {
+        "kind": "linearizable",
+        "allowed_trace": "Read one linearizable snapshot of the exact channel closed flag through a live owner or rooted borrow. Return bool without consuming or changing the channel identity."
+      },
+      "kat_validator": "channel-is-closed",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 170,
+      "spelling": "core.integer.bitwise",
+      "class": "conversion",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "T",
+        "immediates": {
+          "operation": [
+            "and",
+            "or",
+            "xor",
+            "not",
+            "shift-left",
+            "shift-right"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "integer-bitwise",
+        "types": "exact fixed-width integers; bitwise operands share type; shift count any exact integer",
+        "shift_count": "modulo-64",
+        "left_shift": "wrap-to-result-width",
+        "right_shift": "sign-extend signed left; zero-extend unsigned left"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value..."
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "One exact integer result; no effects, allocation, failure or suspension."
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 171,
+      "spelling": "core.string.slice",
+      "class": "text",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "string",
+          "i64",
+          "i64",
+          "panic-edge-values..."
+        ],
+        "result": "string",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "panic"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value",
+          "borrow-value",
+          "panic-edge-preserve..."
+        ],
+        "result": "owned-value on success; implicit-owned-panic-info on failure"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Fresh independent UTF-8 string for valid half-open Unicode scalar ordinal range; invalid range publishes panic430 and preserved owners; allocation failure publishes no result."
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 172,
+      "spelling": "core.array.allocate_default",
+      "class": "aggregate",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64",
+          "panic-edge-values..."
+        ],
+        "result": "A",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "panic"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "panic-edge-preserve..."
+        ],
+        "result": "owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "owned-dynamic-sequence",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Fresh array of runtime length with exact default scalar elements. Negative length publishes panic452. Count, byte budget or allocation failure publishes no result; partial storage is reclaimed."
+      },
+      "kat_validator": "array-allocate-default",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 173,
+      "spelling": "core.string_builder.construct",
+      "class": "text",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "string-builder",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "owned-mutable-text",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Fresh unique empty mutable text owner; no shared instance state."
+      },
+      "kat_validator": "string-builder-construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 174,
+      "spelling": "core.string_builder.append",
+      "class": "text",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "string-builder",
+          "T"
+        ],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Exclusive initialized receiver place; exact scalar text append commits only on success; resource failure preserves content, capacity and scalar count."
+      },
+      "kat_validator": "string-builder-append",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 175,
+      "spelling": "core.string_builder.clear",
+      "class": "text",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "string-builder"
+        ],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-place-mut"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Exclusive initialized receiver place; clear content and scalar count, retaining buffer capacity; no allocation."
+      },
+      "kat_validator": "string-builder-clear",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 176,
+      "spelling": "core.string_builder.length",
+      "class": "text",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "string-builder"
+        ],
+        "result": "i64",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Borrowed rooted receiver; return Unicode scalar count without mutation or consumption."
+      },
+      "kat_validator": "string-builder-length",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 177,
+      "spelling": "core.string_builder.snapshot",
+      "class": "text",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "string-builder"
+        ],
+        "result": "string",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Borrowed rooted receiver; fresh independent immutable string owner; resource failure publishes no result."
+      },
+      "kat_validator": "string-builder-snapshot",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 178,
+      "spelling": "core.bytes.timing_safe_equal",
+      "class": "comparison",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "A"
+        ],
+        "result": "bool",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Exactly two rooted Array<u8> values; preserve both inputs and owners; no allocation; public lengths and strides; accumulate all differences through min(lengths) without content-dependent early exit."
+      },
+      "kat_validator": "bytes-timing-safe-equal",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_APPLICABLE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 179,
+      "spelling": "core.array.append",
+      "class": "aggregate",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "T"
+        ],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "trap": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "result": "non-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "mutate-dynamic-sequence",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "Exclusive initialized receiver place and exact element type. Success appends one element and transfers its owner once without changing array identity. Resource failure leaves length, initialized elements, backing and input ownership unchanged."
+      },
+      "kat_validator": "array-append",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

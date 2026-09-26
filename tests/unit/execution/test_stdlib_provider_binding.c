@@ -34,7 +34,8 @@ static bool binding(const char *symbol, XrProviderOperationBinding *out) {
         uint32_t behavior = 0u;
         if (!xr_stdlib_provider_operation_binding(descriptor, out, &behavior))
             break;
-        CHECK(behavior == (XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT),
+        CHECK(behavior == (strcmp(symbol, "crypto.__fillRandomBytes") == 0 ? XR_PROVIDER_BEHAVIOR_THREAD_SAFE :
+                          (XR_PROVIDER_BEHAVIOR_THREAD_SAFE | XR_PROVIDER_BEHAVIOR_REENTRANT)),
               "binding behaviors match the declared host contract");
         return true;
     }
@@ -150,7 +151,31 @@ static void forged_descriptor(void) {
           "caller-authored descriptors cannot select host code or publish outputs");
 }
 
+static void entropy_bytes(void) {
+    XrProviderOperationBinding operation;
+    if (!binding("crypto.__fillRandomBytes", &operation)) return;
+    CHECK(operation.trampoline_kind == XR_PROVIDER_TRAMPOLINE_TYPED, "entropy uses typed byte views");
+    unsigned char bytes[66] = {0};
+    bytes[0] = 0x5au; bytes[65] = 0xa5u;
+    XrProviderValuePack arguments = {.count = 1u, .nodes = {{.token = XR_PROVIDER_TYPE_U8_ARRAY}}};
+    arguments.nodes[0].as.u8_array.data = bytes + 1u;
+    arguments.nodes[0].as.u8_array.size = 64u;
+    XrProviderValuePack result = {0};
+    CHECK(operation.entry.typed(NULL, &arguments, &result) == XR_PROVIDER_CALL_OK &&
+          result.count == 1u && result.nodes[0].token == XR_PROVIDER_TYPE_UNIT,
+          "declared entropy binding fills a bounded view with the real CSPRNG");
+    CHECK(bytes[0] == 0x5au && bytes[65] == 0xa5u, "entropy preserves guard bytes");
+    result = (XrProviderValuePack){0};
+    arguments.nodes[0].as.u8_array.data = NULL;
+    CHECK(operation.entry.typed(NULL, &arguments, &result) == XR_PROVIDER_CALL_FAILED && !result.count,
+          "nonempty null view is refused without output");
+    arguments.nodes[0].as.u8_array.size = 0u;
+    CHECK(operation.entry.typed(NULL, &arguments, &result) == XR_PROVIDER_CALL_OK && result.count == 1u,
+          "empty entropy view succeeds");
+}
+
 int main(void) {
+    entropy_bytes();
     scalar_queries();
     pipe_lifetime();
     forged_descriptor();

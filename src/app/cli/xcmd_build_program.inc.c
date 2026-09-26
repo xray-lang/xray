@@ -7,6 +7,13 @@
  * xcmd_build_program.inc.c - Physical compilation of validated Program output
  */
 
+static const char *const program_native_runtime_units[] = {"time", "pipe", "random"};
+enum {
+    XR_PROGRAM_NATIVE_RUNTIME_COUNT = sizeof(program_native_runtime_units) / sizeof(program_native_runtime_units[0]),
+    XR_PROGRAM_NATIVE_OBJECT_COUNT = XR_PROGRAM_NATIVE_RUNTIME_COUNT + 1u,
+    XR_PROGRAM_NATIVE_COMMAND_COUNT = XR_PROGRAM_NATIVE_OBJECT_COUNT + 1u
+};
+
 typedef struct XrCliProgramNativeBuild {
     const XrCliInvocation *inv;
     const XrToolchainSelection *plan;
@@ -16,8 +23,8 @@ typedef struct XrCliProgramNativeBuild {
     const char *sysroot;
     bool dry_run;
     bool dump;
-    XrFingerprint commands[4];
-    XrFingerprint objects[3];
+    XrFingerprint commands[XR_PROGRAM_NATIVE_COMMAND_COUNT];
+    XrFingerprint objects[XR_PROGRAM_NATIVE_OBJECT_COUNT];
 } XrCliProgramNativeBuild;
 
 static bool program_native_command(XrCliProgramNativeBuild *build, XaotCliLinkCommand *command,
@@ -105,20 +112,24 @@ static bool program_native_compile(XrCliProgramNativeBuild *build, const char *s
     return true;
 }
 
-static bool program_native_link(XrCliProgramNativeBuild *build, char objects[3][1400],
+static bool program_native_link(XrCliProgramNativeBuild *build, char objects[XR_PROGRAM_NATIVE_OBJECT_COUNT][1400],
                                 const char *output, char *error, size_t error_size) {
     XaotCliLinkCommand command = {0};
     XrToolchainArgSink sink = xaot_cli_command_sink(&command);
     if (!xaot_cli_add_provider_driver_prefix(&command, build->plan, build->target, error,
                                              error_size))
         return false;
-    for (unsigned index = 0u; index < 3u; ++index)
+    for (unsigned index = 0u; index < XR_PROGRAM_NATIVE_OBJECT_COUNT; ++index)
         if (!xaot_cli_link_add_arg(&command, objects[index], error, error_size))
             return false;
     if (!xtc_command_emit_link_output(build->plan->provider, output, &sink, error, error_size) ||
         !xtc_command_emit_sysroot(build->plan->provider, build->sysroot, &sink, error,
                                   error_size) ||
         !xtc_command_emit_link(build->plan, build->target, &build->link, &sink, error, error_size))
+        return false;
+    if (build->target->os == XR_TOOLCHAIN_TARGET_OS_WINDOWS &&
+        !xtc_command_emit_system_library(build->plan->provider, build->target, "bcrypt", &sink,
+                                         error, error_size))
         return false;
     /* The compiler driver appends .exe to extensionless /Fe paths. The linker
      * must produce the exact path that artifact verification will consume. */
@@ -136,7 +147,7 @@ static bool program_native_link(XrCliProgramNativeBuild *build, char objects[3][
             !xaot_cli_link_add_arg(&command, "/PDBALTPATH:%_PDB%", error, error_size))
             return false;
     }
-    return program_native_command(build, &command, 3u, error, error_size);
+    return program_native_command(build, &command, XR_PROGRAM_NATIVE_OBJECT_COUNT, error, error_size);
 }
 
 static bool program_native_seal(XrCliProgramNativeBuild *build, const XrGeneratedC *generated,
@@ -205,7 +216,8 @@ static bool program_native_seal(XrCliProgramNativeBuild *build, const XrGenerate
 static int program_native_build(XrCliProgramNativeBuild *build, const XrGeneratedC *generated,
                                 const char *output) {
     char directory[1200] = {0}, source[1400] = {0}, binary[1400] = {0};
-    char objects[3][1400] = {{0}}, runtime[2][1400] = {{0}}, error[512] = {0};
+    char objects[XR_PROGRAM_NATIVE_OBJECT_COUNT][1400] = {{0}};
+    char runtime[XR_PROGRAM_NATIVE_RUNTIME_COUNT][1400] = {{0}}, error[512] = {0};
     int result = XR_CLI_EXIT_FAIL;
     if (xr_temp_dir_create("xray-program", directory, sizeof(directory)) != 0)
         return result;
@@ -220,13 +232,12 @@ static int program_native_build(XrCliProgramNativeBuild *build, const XrGenerate
         goto cleanup;
     }
     const bool windows = build->target->os == XR_TOOLCHAIN_TARGET_OS_WINDOWS;
-    const char *units[] = {"time", "pipe"};
-    for (unsigned index = 0u; index < 3u; ++index)
+    for (unsigned index = 0u; index < XR_PROGRAM_NATIVE_OBJECT_COUNT; ++index)
         snprintf(objects[index], sizeof(objects[index]), "%s/unit%u.obj", directory, index);
-    for (unsigned index = 0u; index < 2u; ++index) {
+    for (unsigned index = 0u; index < XR_PROGRAM_NATIVE_RUNTIME_COUNT; ++index) {
         int length = snprintf(runtime[index], sizeof(runtime[index]), "%s/../os/%s/%s_%s.c",
                               build->plan->private_aot_include, windows ? "win" : "unix",
-                              units[index], windows ? "win" : "unix");
+                              program_native_runtime_units[index], windows ? "win" : "unix");
         if (length < 0 || (size_t) length >= sizeof(runtime[index]))
             goto cleanup;
     }
@@ -234,7 +245,7 @@ static int program_native_build(XrCliProgramNativeBuild *build, const XrGenerate
             0 ||
         !program_native_compile(build, source, objects[0], 0u, error, sizeof(error)))
         goto cleanup;
-    for (unsigned index = 0u; index < 2u; ++index)
+    for (unsigned index = 0u; index < XR_PROGRAM_NATIVE_RUNTIME_COUNT; ++index)
         if (!program_native_compile(build, runtime[index], objects[index + 1u], index + 1u, error,
                                     sizeof(error)))
             goto cleanup;
@@ -265,7 +276,7 @@ cleanup:
         fprintf(stderr, "XR_BUILD_6006: canonical native build failed: %s\n", error);
     xr_fs_remove(source);
     xr_fs_remove(binary);
-    for (unsigned index = 0u; index < 3u; ++index)
+    for (unsigned index = 0u; index < XR_PROGRAM_NATIVE_OBJECT_COUNT; ++index)
         xr_fs_remove(objects[index]);
     XrDirIter *iterator = xr_dir_open(directory);
     XrDirEntry entry;

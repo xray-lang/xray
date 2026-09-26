@@ -26,7 +26,7 @@
 #define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
 /* Builtin rows are the CoreSpec runtime types below the dynamic base; the
  * registry meta type (11) is never a program type. */
-#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 19u
+#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 20u
 #define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(32)
 
 typedef enum XrProgramTypeKind {
@@ -58,6 +58,7 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_ATOMIC = 39,
     XR_PROGRAM_TYPE_KIND_RECORD_REFERENCE = 40,
     XR_PROGRAM_TYPE_KIND_PROVIDER_RESOURCE = 41,
+    XR_PROGRAM_TYPE_KIND_CHANNEL = 42,
 } XrProgramTypeKind;
 
 typedef struct XrCoreIrKey {
@@ -75,6 +76,7 @@ typedef enum XrCoreIrTypeKind {
     XR_CORE_IR_TYPE_ATOMIC = 8,
     XR_CORE_IR_TYPE_RECORD_REFERENCE = 9,
     XR_CORE_IR_TYPE_PROVIDER_RESOURCE = 10,
+    XR_CORE_IR_TYPE_CHANNEL = 11,
 } XrCoreIrTypeKind;
 
 /* Both logical kinds share identity-bearing field storage. Nominal conformance
@@ -137,11 +139,14 @@ typedef struct XrCoreIrTypeInput {
     XrCoreIrCopyContract copy_contract;
     const uint16_t *field_types;
     uint32_t field_count;
+    /* Exact nominal parent; void denotes a root. Forbidden on other kinds. */
+    uint16_t parent_type_id;
     const XrCoreIrVariantInput *variants;
     uint32_t variant_count;
     uint16_t view_element_type;
     uint16_t array_element_type;
     uint16_t atomic_element_type;
+    uint16_t channel_element_type;
     XrStableId resource_id;
     XrCoreIrViewCapability view_capability;
     const XrCoreIrCallableSignatureInput *callable_signature;

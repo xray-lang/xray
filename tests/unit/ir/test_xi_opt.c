@@ -21,6 +21,7 @@
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/base/xglobal_indices.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -200,6 +201,29 @@ static int pred_index(const XiBlock *blk, const XiBlock *pred) {
     } while (0)
 
 /* ========== Constant Folding Tests ========== */
+
+TEST(const_fold_builtin_ordering_member) {
+    for (int ordinal = -1; ordinal <= 5; ordinal++) {
+        for (int wrong_domain = 0; wrong_domain < 2; wrong_domain++) {
+            XiFunc *f = make_func("ordering", &stub_int);
+            XiValue *domain = xi_value_new(f, f->entry, XI_GET_BUILTIN, &stub_any, 0);
+            domain->aux_int = wrong_domain ? XR_GLOBAL_VAR_RECV : XR_GLOBAL_VAR_ORDERING;
+            XiValue *index = xi_const_int(f, f->entry, ordinal, &stub_int);
+            XiValue *member = xi_value_new(f, f->entry, XI_INDEX_GET, &stub_int, 2);
+            member->args[0] = domain;
+            member->args[1] = index;
+            member->aux_kind = XI_AUX_KIND_ENUM_CASE;
+            xi_block_set_return(f->entry, member);
+            xi_opt_const_fold(f);
+            if (!wrong_domain && ordinal >= 0 && ordinal < 5) {
+                REQUIRE(member->op == XI_CONST && member->aux_int == ordinal && member->nargs == 0);
+            } else {
+                REQUIRE(member->op == XI_INDEX_GET);
+            }
+            xi_func_free(f);
+        }
+    }
+}
 
 TEST(const_fold_int_add) {
     /* 3 + 4 -> 7 */
@@ -1116,6 +1140,31 @@ TEST(dce_removes_unused) {
     xi_func_free(f);
 }
 
+TEST(dce_keeps_declared_parameter_identity) {
+    XiFunc *f = make_func("unused_parameters", &stub_int);
+    XiBlock *blk = f->entry;
+    f->nparams = 1;
+    f->min_params = 0;
+    f->is_vararg = true;
+    f->params = (XiValue **) xr_calloc(2, sizeof(*f->params));
+    assert(f->params);
+    f->params[0] = xi_param(f, blk, 0, &stub_int);
+    f->params[1] = xi_param(f, blk, 1, &stub_int);
+    XiValue *dead = xi_const_int(f, blk, 17, &stub_int);
+    XiValue *result = xi_const_int(f, blk, 42, &stub_int);
+    xi_block_set_return(blk, result);
+    xi_opt_dce(f);
+    bool found[2] = {false, false};
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        assert(blk->values[i] != dead);
+        for (uint16_t p = 0; p < 2; p++)
+            found[p] |= blk->values[i] == f->params[p];
+    }
+    assert(found[0] && found[1]);
+    assert(f->params[0]->uses == 0 && f->params[1]->uses == 0);
+    xi_func_free(f);
+}
+
 TEST(dce_keeps_side_effects) {
     /* PRINT is side-effecting, should not be removed even with 0 uses */
     XiFunc *f = make_func("test", &stub_void);
@@ -1931,6 +1980,34 @@ TEST(select_rep_identity_copy_preserves_source_carrier) {
     xi_func_free(f);
 }
 
+TEST(select_rep_not_unboxes_tagged_bool_parameter) {
+    for (uint32_t native = 0; native < 2; native++) {
+        XiFunc *f = make_func("not_bool_parameter", &stub_bool);
+        XiBlock *block = f->entry;
+        XiValue *source = xi_param(f, block, 0, &stub_bool);
+        f->entry_type = 1;
+        f->min_params = native ? 1 : 0;
+        f->nparams = 1;
+        XiValue *negated = xi_unary(f, block, XI_NOT, &stub_bool, source);
+        REQUIRE(source && negated);
+        xi_block_set_return(block, negated);
+        XiRepPolicy policy = native ? xi_rep_policy_native_boundary()
+                                   : xi_rep_policy_tagged_boundary();
+        xi_opt_select_rep_with_policy(f, &policy);
+        REQUIRE(negated->rep == XR_REP_I64);
+        if (native) {
+            REQUIRE(source->rep == XR_REP_I64 && negated->args[0] == source);
+        } else {
+            REQUIRE(source->rep == XR_REP_TAGGED);
+            XiValue *adapter = negated->args[0];
+            REQUIRE(adapter && adapter->op == XI_UNBOX && adapter->rep == XR_REP_I64);
+            REQUIRE(adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
+            REQUIRE(adapter->nargs == 1 && adapter->args[0] == source);
+        }
+        xi_func_free(f);
+    }
+}
+
 TEST(select_rep_variant_test_uses_native_bool) {
     for (uint32_t ordinal = 0; ordinal < 2; ordinal++) {
         XiFunc *f = make_func("variant_test_bool", &stub_bool);
@@ -2521,6 +2598,31 @@ TEST(box_elim_box_of_unbox) {
     xi_func_free(f);
 }
 
+TEST(rep_cleanup_preserves_frozen_copy_source) {
+    XiFunc *f = make_func("frozen_copy", &stub_int);
+    XiValue *x = xi_param(f, f->entry, 0, &stub_int);
+    XiValue *copy = xi_value_new(f, f->entry, XI_COPY, &stub_int, 1);
+    assert(x && copy);
+    copy->args[0] = x;
+    xi_block_set_return(f->entry, copy);
+    f->stage = XI_STAGE_OPTIMIZED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_OPTIMIZED);
+    char error[256] = {0};
+    attach_fixture_module(f);
+    assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
+
+    XiRepPolicy policy = xi_rep_policy_tagged_boundary();
+    xi_opt_refresh_representations_with_policy(f, &policy);
+    XiValue *adapter = f->entry->control;
+    assert(adapter && adapter->op == XI_BOX && adapter->args[0] == copy);
+    assert(copy->op == XI_COPY && copy->args[0] == x);
+    bool present = false;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++)
+        present |= f->entry->values[i] == copy;
+    assert(present && "the adapter source must remain materialized after cleanup");
+    xi_func_free(f);
+}
+
 TEST(box_elim_preserves_frozen_semantic_operation_identity) {
     XiFunc *f = make_func("frozen_box_unbox", &stub_int);
     XiBlock *blk = f->entry;
@@ -2888,6 +2990,7 @@ TEST(jump_thread_keeps_ir_valid_when_dest_has_phi) {
 /* ========== Main ========== */
 
 int main(void) {
+    run_const_fold_builtin_ordering_member();
     printf("=== Xi Opt Unit Tests ===\n\n");
 
     (void) stub_null;
@@ -2938,6 +3041,7 @@ int main(void) {
 
     /* Dead code elimination */
     run_dce_removes_unused();
+    run_dce_keeps_declared_parameter_identity();
     run_dce_keeps_side_effects();
     run_codegen_opaque_blocks_constant_folding_and_fence_survives_dce();
     run_dce_cascading();
@@ -2968,6 +3072,7 @@ int main(void) {
     run_select_rep_enum_ordinal_requires_exact_native_witness();
     run_select_rep_unbox_param_for_arith();
     run_select_rep_identity_copy_preserves_source_carrier();
+    run_select_rep_not_unboxes_tagged_bool_parameter();
     run_select_rep_variant_test_uses_native_bool();
     run_select_rep_no_change_for_call();
     run_select_rep_arith_chain_stays_unboxed();
@@ -2993,6 +3098,7 @@ int main(void) {
     /* BOX/UNBOX peephole */
     run_box_elim_unbox_of_box();
     run_box_elim_box_of_unbox();
+    run_rep_cleanup_preserves_frozen_copy_source();
     run_box_elim_preserves_frozen_semantic_operation_identity();
     run_box_elim_preserves_backend_adapter_over_frozen_semantic_identity();
     run_box_elim_no_false_positive();

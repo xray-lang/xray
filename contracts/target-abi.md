@@ -710,6 +710,9 @@ Identity and owner forwarding share one storage closure, including mixed
 chains. A top-level const seal may preserve a reference carrier only when the
 canonical type key and every structural row agree except for adding constness;
 removing constness, changing child types, or widening to Optional is rejected.
+The same exact seal applies to an owned OWNER_FORWARD as to a borrowed identity
+COPY, including module constant publication; the consume ledger and independent
+result-slot ownership verification remain mandatory.
 Optional injection and projection use the same structural comparison while
 requiring their own nullable relation and payload ordinal. Coroutine primitive
 results retain their generated effects and owned tagged result contract with
@@ -719,6 +722,13 @@ Cleanup addresses remain bound to the exact resulting value and ownership.
 verification-test: test_xi_unsigned_text_native
 verification-test: test_xi_encoding_slice_native
 verification-test: test_xi_cgen_span_box_carrier
+verification-test: test_xi_cgen_multimodule
+verification-test: test_xi_cgen_concat_authority
+verification-test: test_xi_cgen_native_direct_authority
+verification-test: test_xi_cgen_executable_recipes
+verification-test: test_xi_cgen_module_struct_copy
+verification-test: test_xi_module_struct_copy_native
+verification-test: test_native_string_concat_authority
 verification-test: test_prelude_init
 verification-test: test_xi_emit
 verification-test: test_xi_native_array_native
@@ -726,6 +736,8 @@ verification-test: test_xr_aot_refinement
 verification-test: test_xaot_module_ref_native
 verification-test: test_xaot_entry_closure_native
 verification-test: test_xaot_callable_allocations
+verification-test: test_semantic_raw_slice
+verification-test: test_native_raw_slice
 verification-test: test_stdlib_generators_content_stable
 verification-test: test_xi_structural_array_native
 verification-test: test_xr_program_process_provider_aot_native
@@ -901,6 +913,10 @@ module closure. Retained cold values keep their verified physical storage
 rows, but carry no executable concatenation recipe. A reachable concatenation
 still requires every exact operand, carrier and ownership row; missing live
 authority is never treated as a cold operation.
+Executable concatenation is emitted as scoped portable C11 statements. The
+expression dispatcher rejects missing executable recipes and marks generation
+as failed; it cannot publish a successful body containing an abort placeholder
+or select a GNU statement-expression implementation.
 
 The exact static String UTF-8 decoder family has a distinct Target call kind
 and convention. The Target row is admitted only from the sealed semantic
@@ -1205,6 +1221,11 @@ emission rather than falling back to compiler-host layout.
   `READ` constructs a temporary box with independently retained payload lanes;
   a consuming parameter transfers the lanes without retaining. The bridge may
   change representation but cannot silently duplicate or discard ownership.
+A POD struct copied from a module slot into a local uses independent native
+value storage. Field updates must not mutate the module slot, allocate a managed
+local clone, or release the borrowed module value. Repeated calls are checked
+against independent output expectations and the unchanged module fields.
+
 - T14: a named value aggregate receives a native C spelling only when its
   ordered field names, source declaration, scalar field representations, and
   physical layout are all reconstructible from frozen SemanticPlan and
@@ -1362,7 +1383,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_shared_read_shape.h c82c3ac533b4e4b
 anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 0c35fd29c8d8cc53636354f04fac70e7ec29e565e2af8ec2ff5d0ec4cda78ab8
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af16c555c1a8145aea90fb7f1b50cd599420590f2cfbb96980f2
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h 1a00b5284afa69753c23258a7047a9f742fa4fc994bb380a767b38f819b01e19
-anchor-sha256: src/plan/semantic/xr_semantic_string_utf8_shape.h aa8a342b9578e749c5e812dc9d193220ac63d849e15085130a4279ead5c24056
+anchor-sha256: src/plan/semantic/xr_semantic_string_utf8_shape.h 0419d1483706c298acd9b0d66c16c364d9fec51f1909f7cba1114651f8504039
 anchor-sha256: src/plan/target/xr_target_call_abi_shape.h 158cf1b96a4668f648d4798d4db89d59215a3553c6ad47b15c24c073a22aecda
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 520152cb6e93b1cdd6639e094772a652905206e97bf15677ba753eecb4d075f6
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
@@ -1398,3 +1419,928 @@ anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed49623
 anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
 anchor-sha256: src/aot/xaot_driver.c c2abf8701a94321beada41f0fe97f8d4ceb25accd0a564a918b58f1a3f88677c
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 8137258328d858ab5109a184c159a5375077de2dd9301fc16e798ebfd69e99ba
+
+### Optional runtime receiver arguments
+
+A runtime receiver declaration has one registry identity and a required/maximum
+argument interval. The frozen operation records the actual operand count; both
+semantic verification and C emission require that count to fall in the declared
+interval and check each present argument against its declared type. Missing
+trailing arguments remain absent and are interpreted by the existing typed
+runtime helper; no null argument or duplicate declaration is synthesized.
+The v2 runtime-method identity binds both required and maximum counts. Earlier
+identities are not accepted for new plans.
+
+`string.indexOf(search: string, start?: i64) -> i64` is one READ, no-heap
+method with one required and two maximum arguments. Omitted start is zero.
+This restores authority for its existing retained build consumer; it does not
+claim canonical Program execution or permit deleting that consumer prematurely.
+
+### Channel references selected from managed fields
+
+An exact non-null Channel<T> type may be selected through an existing managed
+object or tuple field proof. The result borrows one tagged channel reference;
+the field ordinal and complete child type remain mandatory. This grants no
+allocation, send, receive, suspension or close authority. Array insertion keeps
+its existing explicit retain/consume lifecycle; the field read cannot consume
+the containing object's channel root. Channel type checks share one closed row
+predicate across allocation, insertion and field storage, including qualifiers,
+child type, canonical key and absence of user-class identity.
+
+### Imported class references selected from managed fields
+
+A non-null imported class instance is a managed field result when its exact
+external type carries a nonzero stable source-class identity and no local class
+index. Const qualification preserves that carrier. The field producer still
+proves its declaring class, field identity and borrowed result. This storage
+proof grants neither construction nor dispatch authority; any cross-module call
+must independently resolve the declaration and its parameter contract. A missing
+class identity, nullable widening, scalar geometry or owned field-read result
+remains rejected. Module-local numbering is never substituted for external
+class identity, and names alone grant no storage authority.
+
+### Consuming method receiver call ownership
+
+A resolved MOVE method invalidates the caller source owner. The call operand
+then follows the frozen callee ARC parameter contract: an owned receiver consumes
+the transferred owner, while a borrowed receiver borrows it and leaves cleanup
+with the caller. These actions are not interchangeable. READ/REF receivers remain
+borrowed. Exact receiver role, ordinal, type, access and source-class declaration
+are required independently; a matching selector cannot supply this authority.
+
+### String containment runtime method
+
+`string.contains(needle: string) -> bool` has exactly one required argument,
+a READ receiver and no heap allocation. Its stable method symbol and string
+receiver jointly select the declaration; Range and Array containment do not
+authorize this call. The result is an unowned scalar boolean. Missing, extra
+or non-string arguments remain rejected. The retained runtime dispatch uses
+the shared string containment core; this does not claim canonical migration.
+
+`string.startsWith(needle: string)` and `string.endsWith(needle: string)`
+share the same exact one-argument READ/no-heap boolean-result contract. Each
+binds its own stable symbol and the shared prefix/suffix core respectively.
+
+### Owned UTF-8 byte copy
+
+`string.copyBytes() -> Array<u8>` is a zero-argument READ method that may
+allocate. Stable symbol 254 and the exact string receiver select one registry
+row. Its result is an owned mutable, non-null byte array with exact u8 element
+identity. The caller releases the result, including when discarded; the input
+string is borrowed and remains unchanged. Selector-only emission is removed.
+
+### Array pop result transfer
+
+`Array<T>.pop() -> T?` is a zero-argument mutating method identified by the
+existing stable POP symbol. Its non-null mutable array receiver is borrowed.
+The result type preserves the exact element identity and adds only nullability.
+An empty array returns null; otherwise the last element owner moves out as the
+array shrinks, without retaining or releasing that element inside the array.
+The caller owns the returned reference, including discarded-result cleanup.
+Scalar optional results retain their typed nullable representation. No name-only
+permission or separate compatibility dispatch is admitted.
+
+Nullable u8 uses the same tagged null discriminant as nullable i64. Its non-null
+payload is zero-extended from one byte; the frozen scalar identity remains u8.
+Popping 0 or 255 must preserve that value, and popping an empty byte array must
+return null. This grants no authority to other unproved scalar widths.
+
+### Reverse string search runtime method
+
+`string.lastIndexOf(search: string) -> i64` binds stable symbol 39, an exact
+non-null string READ receiver and exactly one string argument. It allocates no
+heap storage and returns an unowned scalar byte offset, or -1 when absent. An
+empty search returns the input byte length. There is no optional start argument.
+Missing, extra or non-string arguments grant no method authority.
+
+### Declared local static method binding
+
+A static method call binds the exact class object read to its frozen declaration
+and the unique static-method function of that class. The class namespace is not
+a receiver parameter. Arguments begin at operand one and bind ordinary function
+parameters; return storage and ownership use the same existing call contracts.
+Instance methods, ambiguous members, mismatched arity and unrelated class objects
+do not establish static-call authority. No selector-only runtime exception is added.
+
+AOT global evidence re-derives a static call from the named class, exact method
+signature and unique static non-constructor declaration. Virtual hierarchy lookup
+continues to exclude static members. Native clone callbacks are emitted only in
+the class registration unit, using the same registration-reachability predicate;
+imported layouts alone do not require local callback definitions.
+
+Tagged tuple Array elements use the existing tuple ownership root and lane destructor.
+Authority requires the published tuple row, exact qualifiers and every ordered
+child canonical key. Array append consumes one root; erase or array destruction
+releases it. A kind-only tuple or detached type row supplies no authority.
+Tuple construction with this tagged contract binds owned dynamic storage, not
+an inline trivial aggregate slot. Construction authority also rederives the
+allocation identity, lane types and consuming operands; refinement independently
+checks that carrier before admitting tagged lane inputs.
+
+An exact tagged tuple result, including its nullable form, transfers one owned
+carrier across a direct-local boundary. Nullable injection preserves the same
+root without allocation and must match every payload child; it does not assign
+array element storage or admit tuple indexing as an Array boundary.
+
+A tuple value already bound by an exact tagged producer retains that slot when
+the aggregate collector visits its field graph. Array index results borrow the
+existing tuple root; field access rechecks exact index authority and the borrowed
+physical rows. No second inline slot or additional owner is introduced.
+
+Imported ordinary managed fields use the same borrowed tagged result carrier as
+local fields. Authority resolves the receiver against the unique frozen class
+and exact declared type in its dependency. Native storage fields require the
+source class owning stdlib namespace and one unique generated native storage
+declaration matching the complete type. Several source classes may hold the
+same native storage; wrapper count and field spelling do not select a carrier. The selector must
+match exactly one field in the owning frozen CLASS_CREATE declaration. Its
+metadata has four fixed header strings (class, parent, generic origin, display
+name), with absent optional names encoded as empty strings, followed by fields
+and then the declared methods. Symbol IDs are not field ordinals.
+Field layout, borrowed ownership and native consumer signatures remain exact.
+
+Local coroutine child state binding retains the resolved local function identity
+and its exact source-call opcode. Method syntax does not remove suspendability.
+The builder and verifier reprove the semantic target and function offset before
+accepting a local method child; result-slot, resume and caller-storage checks
+remain mandatory. This state binding does not authorize unresolved dependency
+methods or waive independent call-argument verification.
+
+Coroutine timer emission consumes the exact native suspension declaration from
+frozen import metadata and its NATIVE_YIELDABLE call target. Both live operands
+must map back to the frozen callee and argument values. The public sleep wrapper
+remains ordinary source code responsible for duration validation and capping;
+CGen no longer substitutes a timer by recognizing that public method spelling.
+Scalar-only frame tracing emits an explicit unused-visitor cast, retaining the
+same trace callback signature and strict generated-C warning checks.
+
+String replace and replaceAll dispatch bind their distinct stable method symbols
+through the receiver registry, exactly two String arguments, a READ receiver,
+and an owned String result. Returning the unchanged receiver retains its owner;
+no-match execution does not weaken the return ownership contract. Literal
+arguments are elided only when the exact runtime-method call emits them inline.
+
+The JSON namespace codec family owns both value and stringify dispatch. The
+reserved compiler-owned namespace, frozen selector, operand roles and owned
+result are independently verified. value returns JSON; stringify returns an
+exact nonnullable tagged String ownership root. The call identity uses the
+json-namespace-codec domain and includes the operation, result type and input
+value. The former value-only family name and identity domain are removed without
+aliases. Type-specific codec evidence remains mandatory at C emission; this
+family does not authorize arbitrary user classes with matching method names.
+
+Dependency method declaration resolution is shared by module validation,
+suspendability propagation and executable reachability. It binds the dependency
+module identity and fingerprint, unique method identity, receiver class identity,
+selector, receiver operand role/type, declaration arity and function range. A
+resolved declaration does not prove a closed dispatch domain. Choosing a direct
+body requires final-class or complete-graph authority; an open domain retains
+its dispatch obligation. Import adapters must separately bind every parameter,
+result ownership and suspension boundary before execution is admitted.
+
+Program-module local method sealing uses a proof derived from the complete
+frozen module set, including downstream modules that are absent from a caller's
+direct dependency vector. The transient reachability owner stores class offsets
+and seal bits alongside its function bitmap and frees them on every disposal or
+failed build. Both TargetPlan construction and independent verification query
+that same complete-graph property. A downstream parent edge or ambiguous class
+name prevents sealing; direct dependency absence alone grants no direct-call
+authority. Dependency-method execution adapters remain a separate obligation.
+
+Complete-graph proofs own each module identity and semantic fingerprint. Local
+method queries must bind the supplied module index to that exact frozen input.
+Dependency direct-body queries resolve the exact declaration and uniquely match
+the dependency snapshot in the proof before checking final or sealed dispatch.
+Wrong module positions, stale snapshots and downstream overrides cannot reuse a
+seal bit. A successful body query still requires the independent execution ABI
+adapter; it does not authorize parameter, result or suspension rows by itself.
+
+Dependency methods use a distinct SOURCE_METHOD call kind and convention. Their
+source_export ordinal is NONE; source_declaration_identity names the exact
+method, and source_callee_identity names its function. The former export-only
+identity field is renamed without an alias. Operand zero supplies receiver
+parameter zero; subsequent operand argument indexes exclude the receiver. The
+complete-graph direct-body proof is required in construction and verification.
+Cross-module argument slots belong to the caller and name exact dependency
+parameters, without inventing local callee slots. Result ownership and coroutine
+child state remain independently checked. Open dispatch without a verified table
+continues to reject execution.
+
+Native class construction consumes the resolved import's class identity. It does
+not scan unrelated imports for equal constructor pointers: implicit constructors
+and native leaves can both have null function pointers, which proves no identity.
+Removing that scan keeps native timer calls on their verified suspension path
+when another module imports a class without an explicit constructor.
+
+Cross-module nullable scalar returns preserve the exact semantic type identity
+and use the shared tagged nullable carrier. Both export and method calls bind a
+non-aliased result with no ownership transfer or return-parameter alias. The
+caller slot is dynamic and borrowed; it introduces no reference-count obligation.
+Construction and independent verification check these facts before admitting the
+call. The nullable storage and AOT refinement rules apply unchanged; a nullable
+managed reference cannot enter this scalar boundary.
+
+Nullable scalar Some injection requests tagged operand storage only after exact
+payload-to-nullable type/key agreement and the dynamic borrowed result slot are
+proved. Backend boxing has that explicit use-site obligation. Generated C keeps
+formal ABI parameters, including unused receivers, and marks them used with a
+void expression after declarations so strict providers accept the same ABI.
+
+Imported static calls use SOURCE_STATIC_METHOD target and calling-convention
+rows. The class export ordinal and identity bind the namespace, and the source
+callee identity binds its exact static function. Namespace operand zero is
+excluded from parameter transport. Arguments, results, suspension and caller
+slots follow the same independent checks as source function calls; no implicit
+receiver, virtual sealing proof, compatibility alias or name-only adapter exists.
+
+An exact owned nullable String returned by a source dependency receives the
+same tagged owner slot as a local nullable String result. Named imports and
+namespace calls bind the same return contract; null introduces no separate
+allocation or cleanup owner. The full nullable type identity remains required.
+
+Owned dependency results resolve their signature through one exact declaration
+query for exported functions, static methods and instance methods. The query
+binds the dependency snapshot and declaration kind; it does not authorize
+virtual dispatch. The call adapter retains its independent final/complete-graph
+proof. An owned class result binds matching caller/dependency type and class
+identities, a complete non-aliasing owned return, and one dynamic owned caller
+slot. No export ordinal is invented for instance methods.
+
+Atomic compare-exchange results use one owned tagged tuple carrier. Admission
+requires the canonical compare-exchange intrinsic on Atomic<i64/f64/bool>,
+matching expected and desired scalar operands, and exactly (T, bool) result
+lanes. Optional ordering is an existing folded Ordering scalar in the range 0..4; no new ordering or
+call convention is introduced. A different RMW intrinsic, nullable result,
+aliasing return, scalar mismatch or incomplete ownership cannot borrow this
+storage proof. Builder, verifier and representation refinement consume the
+same frozen operation signature independently of C emission.
+
+ARC conversion of a cleanup-return COPY to OWNER_FORWARD consumes and clears
+the COPY-only marker. OWNER_FORWARD remains a zero-immediate representation
+transfer; downstream consumers do not accept an obsolete COPY marker.
+
+Atomic<i64/f64/bool> fields use the same borrowed tagged field carrier as
+other managed runtime values. Their exact receiver element graph is checked;
+class field identity and borrowing remain independently verified.
+
+Canonical Atomic load/store/RMW lowering retains a tagged receiver and native
+scalar data/ordering operands. Representation selection must not insert a
+scalar BOX that the typed atomic helper bypasses. The independent use oracle
+continues to derive scalar storage from the frozen Target binding.
+
+Array members returning a fresh String (including join and toString) require
+RETURN_OWNED in both the common call check and the array-member-specific check.
+Receiver-alias and scalar results continue to require NONE. The verifier derives
+this distinction from the exact frozen member result contract, never from the
+ownership word claimed by the Target call. Recomputed call fingerprints do not
+authorize ownership substitutions.
+
+Tagged equality helpers return C bool with normalized truth, matching the
+frozen boolean result instead of relying on an implicit int64_t-to-byte store.
+Typed integer loads preserve the published element width after the existing
+bounds check. Numeric width kernels publish their normalized result using the
+immutable result slot C type. This changes neither the element range nor the
+logical widening operation.
+
+Builtin and imported native enum declaration namespaces use the same internal
+reference carrier as source enum declarations. Their frozen member table and
+nominal identity remain namespace metadata; the namespace itself is never an
+enum ordinal. Ordering normalization binds the prelude nominal owner, generated
+member registry, complete namespace table and selected runtime member symbol.
+A source enum with the same spelling does not acquire that normalization.
+
+Structural object fields accept exact managed Array index results and PHI
+carriers through the existing producer validators. An indexed receiver must
+prove Array<T>, its exact borrowed T result and its borrowed dynamic slot;
+a merge must prove the structural type and its PHI-role slot. Field ordinals
+and result types remain independently checked. This adds no opcode-only
+admission and changes neither field storage nor receiver ownership.
+
+An exact Optional reference projection also retains the proved structural
+payload carrier. Structural allocation remains non-null: nullable contexts
+are represented by the surrounding conversion, not by admitting nullable
+field-initialization receivers.
+
+A sealed direct-local spawn admits a managed argument's tagged carrier only
+after the exact callee/parameter join and independent producer storage proof.
+Field results and explicit ownership transfers use the same boundary. This
+does not authorize an unresolved callee, ref place, or unproved dynamic slot,
+nor change the transfer mode or ownership ledger.
+
+Move reference parameters require owned storage; a borrowed move parameter
+is invalid. Read parameters retain their declared borrowed/owned distinction.
+Coroutine descriptor accessors return one function-local static const descriptor,
+avoiding tentative const object declarations while keeping descriptor identity
+stable. All descriptor consumers use the accessor, including spawned threads,
+generators, module entry and cancellation cleanup. Numeric Array stores emit
+ordinary C11 block statements in both synchronous and coroutine functions.
+
+A synchronous spawn wrapper transfers each frozen owned parameter out of its
+frame before calling the callee and clears that frame slot. Cancellation before
+entry still releases the queued owner; cleanup after consumption sees an empty
+slot. A returned consumed owner must not receive a second alias retain. Task
+result publication continues to require proved transferable or shared storage;
+a local result is not implicitly copied or promoted by the runtime.
+
+Representation selection for an exact frozen native-direct leaf call uses the
+generated shim ABI: value arguments are tagged and call-bound ref places remain
+raw pointers. The general native-call preference cannot replace that signature.
+Materialization must contain the box required by the independently verified
+representation obligation; missing adapters remain a hard failure.
+
+Defaulted entry parameters explicitly freeze their missing-argument sentinel
+carrier on the parameter record. Such a parameter remains tagged until default
+selection; it cannot simultaneously be required, variadic or a read place.
+Representation obligations derive this fact from the frozen record rather than
+inferring a native scalar carrier from its declared non-null type.
+
+Method-table function addresses use the portable void-function-pointer storage
+type. This erased slot is never invoked directly: the dispatch consumer restores
+the exact result and parameter signature before the call. Hosted and freestanding
+runtime headers expose the same storage contract.
+
+An ordinary native call consumes scalar arguments in the verified machine ABI
+even when a structural field read produced a tagged carrier. That edge requires
+an explicit UNBOX obligation; the definition carrier cannot override the call
+ABI. Reference arguments retain their independently proved tagged storage.
+
+Direct spawn frame arguments preserve native scalar storage and retain tagged
+reference carriers. Representation selection and frozen spawn obligations agree
+on this boundary; scalar arguments do not acquire unused boxing adapters.
+
+A raw-pointer Slice constructor directly produces the native span view; it does
+not produce a tagged heap value or require an UNBOX adapter. Its portable C11
+helper evaluates pointer/count once and preserves caller-proved alignment and
+bounds assumptions without allocating or acquiring ownership.
+
+Slice.window applies the canonical window plan using a portable C helper. The
+registered shared adapter still decides bounds and offset; checked calls retain
+the same failure and proven calls retain the same admission assumption. The
+helper introduces no allocation, ownership transfer or independent range rule.
+
+Bundle admission verifies the immutable program TargetPlan contents once per
+admission and checks each module's membership independently. Modules do not own
+separate copies of that authority. Every admission still revalidates contents;
+no cached success may hide a corrupt plan or a missing later module.
+
+Raw Slice construction freezes its third operand as the borrowed lifetime root,
+the result element type, and the complete foreign-view evidence already proved
+by the frontend. The pointer may name a different pointee type: the unsafe
+caller proves reinterpretation validity. The count remains an integer, and the
+packed element storage, size and alignment must agree with the frozen scalar
+element whenever scalar VIEW storage is selected. Pointer/count storage is
+native; the owner keeps its independently verified carrier and is not consumed.
+
+Rune raw storage uses the target's u32 size and alignment, with Unicode validity
+remaining a value invariant. Hosted typed Array admission selects storage from
+the full element type identity, including bool and rune, rather than requiring
+those distinct kinds to carry an integer scalar representation.
+
+String display conversion admits exact null and unit-enum operands through their
+existing tagged display carriers. Concatenation recipes accept one or more
+operands, including a single interpolation expression; zero operands remain
+invalid. Every argument retains its frozen identity and representation. Explicit
+`string(...)` conversions do not restore implicit mixed-type `+` syntax.
+
+verification-test: test_xi_explicit_concat_native
+
+A module-slot read of an exact tagged tuple borrows its existing runtime root.
+It uses the same carrier as tuple construction and direct-call results, with
+no second inline aggregate binding. The read preserves frozen child geometry,
+borrowed ownership and a nonnegative module-slot identity.
+
+verification-test: test_xi_cgen_structural_root
+verification-test: test_xi_structural_root_native
+
+Representation refinement consumes the same generated source-provider field
+carrier authority as TargetPlan for private native storage. An imported class
+layout guard cannot suppress the defining module's runtime clone callback;
+layout and clone definitions have independent single-definition guards.
+
+verification-test: test_native_buffer_storage
+verification-test: test_xaot_native_storage_native
+
+### Copied spawn arguments and class identity
+
+A verified explicit-copy spawn transfer targets TRANSFERABLE storage. C emission
+applies that domain to the fresh cloned graph before passing it to the child
+frame, for tagged and native-pointer carriers alike. The original graph is not
+promoted. Returning the transferred owner through the Task result must pass the
+existing publication-domain check without an implicit copy or relaxed check.
+
+A top-level const qualifier preserves the exact declaration identity of an
+ordinary READ class parameter. Nullable receivers remain excluded from the
+non-null identity judgement. Ownership-root loss, class identity mismatch,
+wrong operand role and consume/borrow disagreement remain rejected.
+
+verification-test: test_xi_sync_go_native
+verification-test: test_target_class_argument_authority
+verification-test: test_xaot_transfer_plan
+
+### Local method ref-array storage
+
+Ordinary local calls, static methods and instance methods use the frozen local
+call operand shift when relating a ref argument to its parameter. The receiver
+slot cannot be admitted as an ordinary ref argument. Address, parameter and
+post-call borrowed-load storage retain their exact type, role, ownership,
+lifetime, escape, dynamic-root and raw-pointer slot requirements.
+
+Cold bodies retain the same storage proofs from semantic declaration rows when
+executable call rows are absent. Target construction and verification,
+representation refinement and C emission independently consume that authority.
+The native fixture mutates an array through a method's second explicit argument
+and separately compiles a cold method that reads the array after the ref call.
+
+verification-test: test_xi_method_ref_array_native
+
+### Optional scalar arguments at method and module boundaries
+
+A projected optional scalar has a tagged producer carrier, but a native method
+argument uses its verified scalar ABI. Representation refinement establishes
+that machine boundary before considering a reference carrier. A source-export
+argument represented by a backend adapter must first pass exact adapter
+provenance verification, then match the original semantic value and function.
+Ref arguments still require the exact addressable place and callee pointer ABI.
+
+verification-test: test_xi_optional_method_native
+
+### Array intrinsic allocation domain
+
+Verified typed Array capacity and filled constructors preserve NORMAL, SHARED
+or TRANSFER allocation storage through the existing array storage setter, just
+as ordinary Array allocation does. The constructor recipe, element lane and
+operand identities remain exact requirements. INHERIT is not a concrete
+allocation domain at this emission boundary and remains rejected.
+
+verification-test: test_xi_filled_array_native
+
+### Imported function ABI witnesses
+
+A source-export call identifies its callee through the frozen export and
+function identities as well as the export record's function index. Signature
+collection must consume these witnesses together with local callee indexes;
+otherwise a function called only from another module loses its complete ABI.
+The module-ref native regression includes a Slice parameter and an owned Array
+result. Scalar-element Slice parameters use the exact shared view-type contract,
+with parameter mode, ownership, transfer and slot identity still independently
+verified. Exact Array declarations state their tagged ABI even without an
+internal caller; the declared element type must exist. The regression expects
+6, 40 and 9, including a copied slice unaffected by source mutation.
+
+Nullable i64, u8, f64 and bool declarations use a tagged ABI carrying the null
+tag even when no internal caller supplies a signature witness. The declaration
+must retain its exact scalar shape without reference, class, enum or aggregate
+metadata. This extends declaration projection, not extern ABI inference.
+
+### Produced class field receivers
+
+A class value produced inside a function may be borrowed as a STORE_FIELD
+receiver when its definition independently proves tagged dynamic-value storage.
+The definition must belong to the same function and preserve the exact result
+value, result type and source class identity. The field write still requires its
+frozen field metadata, receiver borrow and stored-value consume contracts.
+The native regression returns an owned class, updates its field and prints 42.
+
+verification-test: test_xi_returned_class_native
+
+Hosted xrt_throw_error retains the non-returning contract of xrt_throw_exc in
+both its forward declaration and definition. A rejected time query therefore
+cannot reach the result read. Strict compilation of the generated datetime
+module checks the host compiler can establish that control-flow boundary.
+
+### Nullable string class fields
+
+An exact nullable String field result uses the same borrowed tagged carrier as
+a non-null String. It retains the existing nullable String row checks and the
+source-class field identity and receiver proof. RETAIN promotes the borrowed
+field result to an owning result; null has no reference to retain or release.
+The native regression checks null output and a retained string after the field
+is cleared and the source instance leaves scope.
+
+verification-test: test_xi_nullable_field_native
+
+Tagged scalar loads convert explicitly to the prepared scalar C storage type.
+The runtime integer extractor returns int64_t; a narrower tuple element keeps
+its proved C width instead of relying on an implicit narrowing assignment.
+The native tuple boundary regression includes a u8 projection.
+
+verification-test: test_native_tuple_boundary_authority
+
+Native integer bitwise results use the immutable C emission row's exact result
+width when consuming the shared int64_t owner adapter. Boolean normalization
+and tagged/BigInt boundaries keep their own proved carriers. Missing scalar
+result authority is rejected; CGen does not infer a width from a mutable type.
+The byte regression checks XOR/AND/OR over 128 and 127, yielding 255/0/255.
+
+verification-test: test_xi_byte_bitwise_native
+
+A declaration-owned function boundary may carry a named class value as XrValue
+without an internal caller witness. The frozen class declaration and matching
+nominal identity are required; nullable named instances retain the same carrier.
+Value aggregates, anonymous instances and unproved class identities are excluded.
+The external-field regression combines a Slice parameter with default class
+options so one missing declaration slot cannot erase the complete signature.
+
+verification-test: test_native_external_field_authority
+
+Exact String and nullable String declarations also publish their tagged carrier
+without internal call witnesses. Their existing frozen scalar/ownership shape
+checks remain mandatory. Slice-to-String and Slice-to-nullable-String exports
+exercise the complete declaration signature through strict C compilation.
+
+The corresponding imported-class declaration uses the existing exact external
+instance shape and its nonzero stable declaration identity, since a local class
+index cannot name a dependency's declaration. The nullable external form adds
+only nullability. An unused optional imported-class parameter remains part of
+its function's complete ABI alongside a Slice parameter.
+
+A synchronous resolved source-method call consumes prepared ABI arguments as
+named values even when its receiver uses a tagged carrier. Constant storage may
+not be elided merely because a dependency call row admits a value argument.
+The default-method branch regression covers omitted and supplied arguments on
+an imported receiver and requires strict generated-C compilation.
+
+verification-test: test_native_coroutine_method_authority
+
+A class receiver local may be omitted only when an active field cache consumes
+all its body uses through the ABI receiver. Control, phi, ownership and uncached
+uses retain the local; source-debug storage retains its guarded materialization.
+Hosted unit coroutine exports release their continuation without materializing
+an unused result local. Non-unit result ownership and conversion are unchanged.
+
+The exact String UTF-8 static decoder accepts ordinary call flags or those same
+flags plus TAIL. Tail position changes continuation behavior, not the frozen
+builtin identity, byte-source shape or owned String result. Other flag changes
+remain outside this family. Tail and non-tail decoder source cases compile
+through the static-method authority regression.
+
+verification-test: test_native_static_method_authority
+
+Prepared callable reachability governs generated function bodies, symbol-method
+table rows and their boxed adapters together. A cold method must not acquire an
+executable root solely because its class has a runtime type registration.
+Protocol calls that require such a method must be represented in the prepared
+closure before C emission; CGen cannot reconstruct missing physical body plans.
+
+verification-test: test_native_execution_closure_authority
+
+Builtin runtime method call lookup scopes semantic operation indexes to the
+verified owning module partition. Equal operation indexes in different modules
+are independent identities; duplicate rows within the selected partition remain
+an error. Partition bounds and singleton ownership must be exact before lookup.
+The execution-closure regression uses matching String.replace operation indexes
+in two dependency modules and compiles both calls through the shared program.
+
+Array element stores select the native scalar carrier proved by the element
+type before accepting a tagged definition carrier. A projected Optional scalar
+therefore requires an explicit unbox at the store; reference elements retain
+their proved tagged carrier. Integer, float, bool and String projection stores
+are exercised by strict generated-C compilation.
+
+verification-test: test_native_array_string_authority
+
+A class Array field load consumed by a frozen tagged append recipe remains a
+named value. Field-load elision may apply only when every emitted consumer
+reads the field directly; a legacy field optimization cannot remove a receiver
+required by an immutable recipe. The array authority regression covers a
+mutating method that appends a String to its own Array field.
+
+Source-exported class members retain boxed adapters for separate-module ABI
+consumers. With file-local linkage, an adapter needs an actual dispatch, symbol
+method, closure or other boxed use; source export visibility alone is not a
+consumer of a static C function.
+
+A reachable GO retains its frozen local closure body whether that body suspends
+or executes synchronously. Reachability follows the callee value to one closure
+producer, including a unique shared-slot store owned by the closure's lexical
+parent. This is an executable-body edge, not permission to emit a direct call:
+existing independent spawn type, slot-initialization, dominance, transfer and
+storage admission checks remain mandatory. Ordinary calls from the retained
+body continue through the same fixed point; unrelated closures stay cold.
+
+verification-test: test_native_go_managed_authority
+
+Coroutine declarations and statement emission apply the same proven static
+callee elision: a closure read used only by a resolved direct call does not
+leave an unused local or frame field when its statement is omitted.
+
+Yieldable registry callee tokens validate exact declared parameter and result
+signatures, including class and array arguments; a scalar-only parameter test
+cannot substitute for the declaration. Cross-module ref forwarding joins the
+proven caller address to the source export's WRITEBACK argument. A forwarded
+ref parameter retains its borrowed-place ABI just as a local address does;
+ordinary values do not become reference places through this rule.
+
+verification-test: test_native_leaf_representation
+
+UDP receive uses one nonblocking attempt in synchronous and coroutine drivers.
+An unavailable datagram returns a read-wait request with the remaining absolute
+deadline. Coroutine emission claims the frozen state and retains the pending
+handle through wait/resume and cancellation cleanup. Receive timeout produces
+integer -1, not null. Successful zero-length datagrams remain successful and
+update the sender identity. The runtime loopback gate covers these attempt and
+synchronous-driver results; generated coroutine execution remains a separate gate.
+
+verification-test: test_xrt_udp_retry
+
+A source-exported ref Array call may name a plain local address when the frozen
+dependency declaration proves the exact Array type, ref mode and borrowed
+ownership, and the caller proves stack origin, call-bounded lifetime and no
+escape. Target builder, verifier and refinement reconstruct that same join;
+the address carries no GC root. Selective source-export CALL and namespace
+CALL_METHOD preserve the same suspending child identity. Coroutine cleanup
+callbacks may ignore their context when they have no child/user cleanup, and
+retained return expressions use the existing portable C11 retain-identity helper.
+
+verification-test: test_target_plan
+
+Native registry signature validation is independent of call-family classification.
+Exact scalar-only yieldable calls remain admissible with a validated function
+throw-effect enum; ordinary native-direct calls still require a reference-capable
+argument or a fresh tagged result. Parameter and result identities remain exact.
+
+### Public Channel send authority (frozen contract; implementation incomplete)
+
+Public `Channel<T>.trySend(value: T)` is a non-suspending receiver call returning
+prelude `SendResult` (Sent, Full, Timeout, Closed). It is not the internal
+`XI_CHAN_TRY_SEND` readiness predicate, whose result is bool. No conversion of the
+public result to bool, selector-only admission, or backend fallback is permitted.
+
+Shared builtin receiver declaration identity must bind the method, exact Channel
+and element type, instantiated argument type, and exact prelude enum identity.
+Matching an enum spelling or member count alone grants no authority. Builder and
+independent verifier must reconstruct argument transfer, result representation,
+and ownership from those frozen facts. The existing builtin runtime-method
+mechanism is the integration point; do not add a parallel channel-only schema.
+
+Send uses the frozen transfer plan, including copy isolation and move consumption.
+The AOT-to-runtime bridge may materialize an owned string envelope and transfer
+that new envelope; this does not authorize replacing the source transfer mode
+for arbitrary managed values. Normal and coroutine drivers must account for the
+bridge owner, channel owner and source owner on Sent, Full, Closed and errors.
+SendResult has no payload; Recv<T> payload ownership is a separate contract and
+cannot be inferred from the internal receive scalar-slot family.
+
+The source gate below covers local and parameter Channel<string>, all public
+SendResult variants, copy(Array) with subsequent source mutation, and move(Array).
+Exact send admission, unit-enum member reads and top-level const READ Channel
+argument admission are implemented; receive and coroutine breadth remain open. Strict C compilation is only the first gate: VM and native execution must independently check status values,
+retained copy contents, close/full behavior and physical cleanup. Once all
+consumers use shared authority, remove superseded selector dispatch and the
+Channel.close special call family atomically, without aliases or compatibility
+paths. Existing gates remain required until their replacements pass.
+
+verification-test: test_native_channel_send_authority
+
+Unit enum values cross tagged runtime boundaries through ordinal extraction and
+immutable nominal sidecars. Reading a constructor pointer as an integer or
+boxing the ordinal as a plain integer is invalid. Unit declarations without
+module slots use the existing enum-plan mechanism with bundle-owned copied
+names. The verifier checks copied members against the detached Xi layout; its
+nominal owner string must also survive frontend destruction.
+
+verification-test: test_cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge
+
+Direct local reference-value arguments use the existing top-level const READ
+admission rule. Distinct frozen type indices do not alone reject that conversion.
+All nested type structure, transfer mode, argument role and ownership still have
+to match the declared parameter; REF and MOVE cannot discard const through it.
+Builder and independent verifier reconstruct the same admission.
+
+Prelude unit-enum member selection freezes a registry-bound namespace and a
+constant ordinal in the existing ENUM_CASE index operation. The shared exact
+judgement joins the namespace, result declaration identity and ordinal bound.
+NumberParseError and SendResult use this same member mechanism; typed error
+catch narrowing remains specific to NumberParseError. No selector-name fallback
+or enum-specific member opcode is introduced.
+
+### Public Channel receive authority (frozen contract; implementation incomplete)
+
+`Channel<T>.tryRecv()` is non-suspending and returns an owned prelude `Recv<T>`.
+The receiver is borrowed with READ admission; the call has no payload arguments
+and its transfer mode is SHARE. The result does not alias the Channel. Value
+transfers the removed element owner into the result; Empty, Timeout and Closed
+carry no element. Dropping the result releases an unconsumed payload exactly once.
+The internal readiness/slot operation is not authority for this public result.
+
+The existing runtime-method declaration must bind the stable method symbol,
+prelude nominal owner, member names/order/payload arities and the instantiated
+result child equal to the Channel element. User enums with the same spelling,
+nullable results, changed generic arguments and copy/move call flags are rejected.
+Both target builder and verifier consume this shared judgement. Native and VM
+execution still require independent content, close/empty and cleanup evidence.
+
+A match over public tryRecv uses the same owned enum call and ordinary payload
+match as a stored result. Lowering must not select the internal readiness/payload
+opcode from the method spelling or the shape of match arms. Internal select
+readiness remains separate; this removes a duplicate public execution chain.
+
+verification-test: test_cgen_descriptor_scalar_channel_try_recv_returns_recv_enum
+verification-test: test_cgen_channel_receive_payload_execution
+verification-test: test_native_channel_recv_authority
+
+Public `Channel<T>.isClosed` is the declared non-suspending bool property.
+It lowers to XI_CHAN_IS_CLOSED with an exact Channel receiver and no payload
+ownership or result owner. A runtime method row must not shadow that field;
+`ch.isClosed()` is invalid because the bool property is not callable. The old
+method registration and its source consumers are removed atomically.
+
+A suspending public Channel<T>.recv() returns owned prelude Recv<T> in a tagged
+result slot retained across suspension. The Channel receiver is borrowed; the
+result never aliases it. The call identity alone is insufficient: publication
+must also prove the exact prelude declaration, matching element parameter and
+owned return provenance, and bind that result before call materialization.
+
+verification-test: test_cgen_coro_syncs_helper_result_debug_source_vars
+verification-test: test_cgen_blocking_channel_rendezvous_result
+
+`Channel<T>.recvTimeout(i64)` uses the same owned Recv<T> result and suspension
+slot as recv(). The frozen method identity also requires exactly one signed i64
+timeout argument with the ordinary scalar call operand contract. Timeout and
+Closed carry no element; Value transfers the element owner. A wrong argument
+type, arity, method symbol or result provenance cannot acquire this authority.
+
+verification-test: test_cgen_channel_recv_timeout_execution
+verification-test: test_cgen_coro_unit_match_send_omits_void_phi
+
+### Task terminal observation results
+
+`Task<T>.awaitResult()` and `Task<T>.awaitTimeout(i64)` return owned nominal
+`TaskResult<T>` values through the existing builtin instance yieldable call
+family and suspension result slot. The frozen Task and TaskResult declarations
+must have the same single type argument. AwaitTimeout requires one exact signed
+i64 scalar deadline with the ordinary READ/SHARE call-operand contract. These
+operations borrow the runtime-owned Task handle; owning the returned enum does
+not create a local reference-count obligation for that handle. Timeout is a
+nonterminal observation and must leave the task available for later completion.
+Unknown symbols, counterfeit nominal identities, missing ownership, invalid
+argument contracts, or absent/duplicate frozen call targets are rejected.
+
+verification-test: test_cgen_task_await_timeout_then_complete
+verification-test: test_cgen_coro_await_timeout_passes_deadline
+
+### Task polling
+
+`Task<T>.poll()` is a non-suspending builtin runtime method with a borrowed
+Task receiver and an owned nominal TaskResult<T> result. The registry row uses
+the resolved ref receiver declaration, no arguments, stable symbol 145, and
+potential enum allocation. Receiver and result must share the exact payload
+parameter; nullable or counterfeit Task identities and missing owned return
+provenance are rejected. Poll observes Pending or a terminal result without
+creating an await suspension state.
+
+verification-test: test_cgen_task_poll_pending_and_complete
+
+### Runtime-owned Task parameters
+
+A direct-local READ Task<T> argument copies its runtime-owned tagged handle and
+publishes BORROW on both the argument and parameter. It creates no local RC
+credit. A ref Task<T> parameter borrows an exact addressable tagged cell through
+the existing RAW_PTR ref ABI with call-bound lifetime and no escape. Frozen
+Task identity and one payload type argument are required; arbitrary class names
+or unknown reference types cannot select this boundary. Declaration modes and
+source-level move/borrow validation remain independent of RC bookkeeping.
+
+### Task cancellation request
+
+`Task<T>.cancel()` is a non-suspending runtime method with the resolved ref
+receiver declaration, no arguments, stable symbol 142, and unit result. It
+borrows the runtime-owned Task handle and requests cancellation; it does not
+produce an owned heap value. The unit call result binds the existing VOID
+machine carrier. Terminal cancellation observation remains awaitResult/poll;
+cleanup that must finish before terminal publication is owned by the scheduler.
+The call retains its effect even when its unit result has no C storage.
+
+verification-test: test_cgen_task_cancel_blocked_execution
+verification-test: test_cgen_coro_task_status_uses_native_enum_status
+
+### Array endpoint removal
+
+`Array<T>.shift()` uses the same runtime-method family and nullable T result
+contract as pop, with stable symbol 50 and the declared ref receiver. Shift
+removes the first element and preserves the order of remaining elements. Empty
+arrays return null; managed elements transfer their existing owner into the
+nullable result. Result representation depends on instantiated T, including
+nested arrays. The former array.shift registry emission is replaced atomically.
+
+verification-test: test_cgen_array_shift_managed_execution
+verification-test: test_native_array_pop_authority
+verification-test: test_cgen_channel_closed_property_rejects_call
+
+A member access is callable only when its resolved type is callable. A plain
+bool, numeric, or container-valued field cannot be accepted as a method by
+reinterpreting its value type as a function return type. Builtin methods publish
+function signatures through their owned declaration or method registry.
+
+Direct-local reference value calls validate access against the resolved parameter
+mode: READ accepts ordinary access; owned MOVE accepts explicit move or a fresh
+ordinary argument. MOVE value arguments carry no addressable place, place
+origin, lifetime, or escape. Exact type/storage and matching consume ownership
+remain independently required in construction and verification.
+
+verification-test: test_cgen_direct_move_array_execution
+
+Nullable unit-enum return values carry null or the exact nominal enum ordinal in
+one tagged word, without an RC owner. Local and dependency calls use the same
+non-reference nullable storage family. Declaration identity, enum layout, unit
+member shape and caller/callee result identity remain required; ADT enum payloads
+and reference-bearing flags cannot acquire this representation.
+
+verification-test: test_cgen_nullable_unit_enum_execution
+verification-test: test_native_nullable_enum_authority
+
+Explicit copy of an exact non-null String borrows the source and returns an
+owned String of the identical type. It uses the existing owned copy call
+contract with no array element storage. Target, representation and C emission
+must agree on that absence; scalar copy does not authorize String ownership.
+
+verification-test: test_cgen_string_copy_execution
+verification-test: test_native_string_copy_authority
+
+### Borrowed Slice reference calls
+
+A resolved ref Slice<T> parameter borrows the caller's native span descriptor
+for the duration of the call. Its ABI addresses the existing xr_span_t carrier;
+it must not reinterpret that address as XrValue*, create an owned array, or
+extend the backing allocation's lifetime. READ Slice continues to pass the
+borrowed descriptor by value. Forwarding a ref parameter preserves the same
+place and call-bound, no-escape provenance.
+
+Target construction and independent verification must bind the exact scalar
+Slice element type, borrowed ref parameter, source descriptor slot and address.
+Representation refinement and C emission must reconstruct the same descriptor
+pointer ABI and load the native descriptor before element operations. Rebinding
+must obey source borrow analysis; accepting a ref call cannot authorize a view
+to outlive its backing owner. Native generated C remains portable C11.
+
+Implementation status: PARTIAL. The direct copyFrom witness compiles and runs;
+direct indexed mutation and ref forwarding still fail AOT representation.
+The full ref Slice contract remains open.
+
+verification-test: test_native_ref_slice_authority
+
+The direct ref Slice copyFrom witness now uses xr_span_t* consistently for its
+parameter value, call argument, local address and load; the loaded descriptor
+remains xr_span_t. Strict generated-C compilation and an executed backing-array
+copy witness qualify this path. Direct indexed mutation and forwarded ref calls
+remain separate open witnesses; this does not qualify all ref Slice execution.
+
+verification-test: test_cgen_ref_slice_copy_execution
+
+A source-export ref Array call preserves the caller-owned place across its
+return. A subsequent PLACE_LOAD borrows the exact Array carrier only when the
+dependency fingerprint, exported function, ref parameter identity, local address
+and already-bound caller storage agree. Independent TargetPlan verification
+reconstructs the same dependency proof; a missing producer is not inferred.
+
+verification-test: test_native_ref_array_authority
+
+The imported-ref-then-local-call and direct-index witnesses both compile with
+strict MSVC checks after the private scalar PSC family stopped claiming exported
+entries. These compilation witnesses do not qualify complete ref execution.
+
+Local class constructor arguments use the same semantic parameter admission
+and tagged carrier ownership checks as ordinary READ boundaries. Exact numeric
+type-row equality must not reject an admitted const-read qualification change.
+
+Channel length reads borrow an exact nonnullable managed Channel carrier already
+proved at its definition. Refinement admits the tagged dynamic operand and an
+i64 result; const qualification does not change the carrier or extend ownership.
+
+verification-test: test_native_channel_field_authority
+
+PHI incoming edges consume the representation independently proved for the
+merge definition, including nullable structural objects. The use-site oracle
+does not maintain a narrower duplicate producer roster; absent definition
+authority still rejects the edge.
+
+A nullable reference PHI may consume an exact null constant as its empty arm.
+The constant type, unique definition, function and consuming operand contract
+must match; arbitrary heterogeneous inputs and nonnullable results are refused.
+
+verification-test: test_semantic_nullable_reference_phi
+verification-test: test_native_structural_object_carrier_authority
+
+Cleanup-live LOCAL_ADDR borrows the independently proved storage of its local
+subject, including managed references. Its result retains a separate trivial,
+unrooted raw-pointer slot. Taking the address does not transfer subject ownership.
+
+A managed cleanup PLACE_LOAD joins the same-function cleanup-live address,
+identical subject type and exact borrow operand. It produces a borrowed tagged
+temporary; ordinary ref addresses do not enter this cleanup family.
+
+Channel receive and closed/timer queries consume the exact nonnullable Channel
+type and independently proved tagged definition carrier. Parameters and fields
+are not required to originate in a local CHAN_NEW/identity-copy chain.
+
+Owned closure storage shares one semantic rule across TargetPlan construction,
+verification and AOT. CLOSURE_NEW and STACK_ALLOC of CLOSURE_NEW preserve the
+canonical allocation identity and callable signature. Copied local captures
+join the lexical parent, ordinal, exact source/type and unique value definition;
+cells and forwarded captures require their own proof. LOAD_UPVAL of such a
+managed capture produces a borrowed tagged temporary.
+
+Scalar/ref-Slice projection preserves the callee function boundary category:
+suspending bodies are coroutine boundaries; captured, module-initializer and
+throwing bodies are tagged boundaries. The ref parameter retains its exact
+pointee pointer ABI independently of that function-level category.

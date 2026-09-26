@@ -14,7 +14,8 @@
 
 #include "xstrbuf.h"
 #include "../base/xchecks.h"
-#include "../base/xlog.h"
+#include "../shared/xr_strbuf_core.h"
+#include "../shared/xr_buffer_capacity_core.h"
 #include "object/xstring.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_float_fmt.h"
@@ -24,49 +25,26 @@
 
 /* ========== Internal Helper Functions ========== */
 
-// Calculate new capacity (doubling strategy)
-static size_t calc_new_capacity(size_t old_cap, size_t need) {
-    size_t new_cap = old_cap ? old_cap : XR_STRBUF_MIN_CAP;
-
-    while (new_cap < need) {
-        new_cap *= 2;
-        if (new_cap > XR_STRBUF_MAX_CAP) {
-            new_cap = XR_STRBUF_MAX_CAP;
-            break;
-        }
-    }
-
-    return new_cap;
-}
-
-// Expand buffer capacity
-static void strbuf_grow(XrStrBuf *sb, size_t need) {
-    size_t new_cap = calc_new_capacity(sb->capacity, need);
-
-    if (new_cap > XR_STRBUF_MAX_CAP) {
-        // Exceeds max capacity, error
-        xr_log_warning("strbuf", "string too long, exceeds max capacity %zu",
-                       (size_t) XR_STRBUF_MAX_CAP);
-        return;
-    }
-
-    char *new_data = (char *) xr_realloc(sb->data, new_cap);
-    if (!new_data) {
-        xr_log_warning("strbuf", "memory allocation failed");
-        return;
-    }
-
-    sb->data = new_data;
-    sb->capacity = new_cap;
+static bool strbuf_resize(XrStrBuf *sb, size_t capacity) {
+    if (capacity <= sb->capacity)
+        return true;
+    char *data = (char *) xr_realloc(sb->data, capacity);
+    if (!data)
+        return false;
+    sb->data = data;
+    sb->capacity = capacity;
+    return true;
 }
 
 /* ========== Create and Destroy ========== */
 
 XrStrBuf *xr_strbuf_new(XrVMRuntime *X, size_t init_cap) {
     XR_DCHECK(X != NULL, "strbuf_new: NULL isolate");
-    if (init_cap < XR_STRBUF_MIN_CAP) {
-        init_cap = XR_STRBUF_MIN_CAP;
-    }
+    size_t capacity = 0u;
+    if (!xr_buffer_capacity_plan(0u, 0u, init_cap ? init_cap : XR_STRBUF_MIN_CAP,
+                                       XR_STRBUF_MIN_CAP, XR_STRBUF_MAX_CAP, &capacity))
+        return NULL;
+    init_cap = capacity;
 
     XrStrBuf *sb = (XrStrBuf *) xr_malloc(sizeof(XrStrBuf));
     if (!sb)
@@ -97,59 +75,66 @@ void xr_strbuf_free(XrStrBuf *sb) {
 
 /* ========== Capacity Management ========== */
 
-void xr_strbuf_ensure(XrStrBuf *sb, size_t need) {
+bool xr_strbuf_ensure(XrStrBuf *sb, size_t need) {
     XR_DCHECK(sb != NULL, "strbuf_ensure: NULL strbuf");
-    size_t required = sb->length + need;
-
-    if (required > sb->capacity) {
-        strbuf_grow(sb, required);
-    }
+    size_t capacity = 0u;
+    return sb && (sb->capacity == 0u || sb->data) &&
+           xr_buffer_capacity_plan(sb->length, sb->capacity, need, XR_STRBUF_MIN_CAP,
+                                         XR_STRBUF_MAX_CAP, &capacity) &&
+           strbuf_resize(sb, capacity);
 }
 
-void xr_strbuf_reserve(XrStrBuf *sb, size_t cap) {
+bool xr_strbuf_reserve(XrStrBuf *sb, size_t cap) {
     XR_DCHECK(sb != NULL, "strbuf_reserve: NULL strbuf");
-    if (cap > sb->capacity) {
-        strbuf_grow(sb, cap);
-    }
+    size_t capacity = 0u;
+    return sb && (sb->capacity == 0u || sb->data) &&
+           xr_buffer_capacity_plan(0u, sb->capacity, cap, XR_STRBUF_MIN_CAP,
+                                         XR_STRBUF_MAX_CAP, &capacity) &&
+           strbuf_resize(sb, capacity);
 }
 
 /* ========== Append Operations ========== */
 
-void xr_strbuf_append_str(XrStrBuf *sb, XrString *s) {
-    if (!s || s->length == 0)
-        return;
-
-    xr_strbuf_ensure(sb, s->length);
-    memcpy(sb->data + sb->length, s->data, s->length);
-    sb->length += s->length;
-}
-
-void xr_strbuf_append_cstr(XrStrBuf *sb, const char *s, size_t len) {
-    if (!s || len == 0)
-        return;
-
-    xr_strbuf_ensure(sb, len);
-    memcpy(sb->data + sb->length, s, len);
+bool xr_strbuf_append_cstr(XrStrBuf *sb, const char *s, size_t len) {
+    if (!sb || (!s && len))
+        return false;
+    if (!len)
+        return true;
+    uintptr_t address = (uintptr_t) s, base = (uintptr_t) sb->data;
+    bool aliases = sb->data && address >= base && address - base < sb->length;
+    size_t offset = aliases ? (size_t) (address - base) : 0u;
+    if (aliases && len > sb->length - offset)
+        return false;
+    if (!xr_strbuf_ensure(sb, len))
+        return false;
+    if (aliases)
+        s = sb->data + offset;
+    memmove(sb->data + sb->length, s, len);
     sb->length += len;
+    return true;
 }
 
-void xr_strbuf_append_char(XrStrBuf *sb, char c) {
-    xr_strbuf_ensure(sb, 1);
+bool xr_strbuf_append_str(XrStrBuf *sb, XrString *s) {
+    return s && xr_strbuf_append_cstr(sb, s->data, s->length);
+}
+
+bool xr_strbuf_append_char(XrStrBuf *sb, char c) {
+    if (!xr_strbuf_ensure(sb, 1u))
+        return false;
     sb->data[sb->length++] = c;
+    return true;
 }
 
-void xr_strbuf_append_int(XrStrBuf *sb, int64_t val) {
+bool xr_strbuf_append_int(XrStrBuf *sb, int64_t val) {
     char buf[24];
     int len = xr_numeric_core_format_i64(buf, sizeof(buf), val);
-    if (len > 0)
-        xr_strbuf_append_cstr(sb, buf, (size_t) len);
+    return len > 0 && xr_strbuf_append_cstr(sb, buf, (size_t) len);
 }
 
-void xr_strbuf_append_float(XrStrBuf *sb, double val) {
+bool xr_strbuf_append_float(XrStrBuf *sb, double val) {
     char buf[64];
     int len = xr_format_float(buf, sizeof(buf), val);
-    if (len > 0)
-        xr_strbuf_append_cstr(sb, buf, (size_t) len);
+    return len > 0 && xr_strbuf_append_cstr(sb, buf, (size_t) len);
 }
 
 /* ========== Reset ========== */

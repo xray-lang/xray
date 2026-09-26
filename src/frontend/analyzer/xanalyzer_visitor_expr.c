@@ -252,7 +252,7 @@ static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object
         if (sym->kind == XA_SYM_ENUM && sym->name && strcmp(sym->name, enum_name) == 0)
             return true;
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-        if ((sym->kind == XA_SYM_TYPE_ALIAS || sym->kind == XA_SYM_IMPORT) && links &&
+        if ((sym->kind == XA_SYM_ENUM || sym->kind == XA_SYM_TYPE_ALIAS || sym->kind == XA_SYM_IMPORT) && links &&
             links->type && links->type->kind == XR_KIND_ENUM && links->type->enum_type.enum_name &&
             strcmp(links->type->enum_type.enum_name, enum_name) == 0)
             return true;
@@ -266,7 +266,7 @@ static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object
     if (sym->kind == XA_SYM_ENUM)
         return true;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    return (sym->kind == XA_SYM_TYPE_ALIAS || sym->kind == XA_SYM_IMPORT) && links && links->type &&
+    return (sym->kind == XA_SYM_ENUM || sym->kind == XA_SYM_TYPE_ALIAS || sym->kind == XA_SYM_IMPORT) && links && links->type &&
            links->type->kind == XR_KIND_ENUM && links->type->enum_type.enum_name &&
            strcmp(links->type->enum_type.enum_name, enum_name) == 0;
 }
@@ -274,9 +274,10 @@ static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object
 static bool xa_symbol_has_enum_schema(XaInferContext *ctx, XaSymbol *sym, const char *enum_name) {
     if (!ctx || !sym)
         return false;
-    if (sym->kind == XA_SYM_ENUM)
-        return !enum_name || (sym->name && strcmp(sym->name, enum_name) == 0);
-    if (sym->kind != XA_SYM_IMPORT)
+    if (sym->kind == XA_SYM_ENUM &&
+        (!enum_name || (sym->name && strcmp(sym->name, enum_name) == 0)))
+        return true;
+    if (sym->kind != XA_SYM_ENUM && sym->kind != XA_SYM_IMPORT)
         return false;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     return links && links->type && links->type->kind == XR_KIND_ENUM && links->enum_info &&
@@ -417,6 +418,10 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
             return xa_type_is_u8_slice_type(receiver) ? "Slice<u8>" : "Slice";
         case XA_BUILTIN_RECEIVER_RANGE:
             return "Range";
+        case XA_BUILTIN_RECEIVER_CHANNEL:
+            return "Channel";
+        case XA_BUILTIN_RECEIVER_TASK:
+            return "Task";
     }
     return "receiver";
 }
@@ -427,6 +432,12 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
     switch (kind) {
         case XA_BUILTIN_TYPE_NONE:
             return NULL;
+        case XA_BUILTIN_TYPE_TASK_RESULT_OF_RECEIVER_ELEM:
+            return xa_builtin_get_method_return_type(ctx->analyzer, receiver, "poll");
+        case XA_BUILTIN_TYPE_RECV_OF_RECEIVER_ELEM:
+            return xa_builtin_get_method_return_type(ctx->analyzer, receiver, "tryRecv");
+        case XA_BUILTIN_TYPE_SEND_RESULT:
+            return xa_builtin_get_method_return_type(ctx->analyzer, receiver, "trySend");
         case XA_BUILTIN_TYPE_BOOL:
             return xr_type_new_bool(X);
         case XA_BUILTIN_TYPE_INT:
@@ -5881,13 +5892,18 @@ XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node)
     return xa_scope_lookup(ctx->analyzer->current_scope, inner->as.variable.name);
 }
 
-static bool xa_boundary_arg_is_verified_move(XaInferContext *ctx, AstNode *arg_node) {
+XR_FUNC bool xa_boundary_arg_is_verified_move(XaInferContext *ctx, AstNode *arg_node) {
     XaSymbol *sym = xa_boundary_move_source_symbol(ctx, arg_node);
     XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
     if (!links || links->allocation_plan.exec_local_only || links->root_id == 0 ||
         links->root_alias != XA_ROOT_UNIQUE || links->value_capability == XA_CAP_UNKNOWN ||
         !links->ownership_candidate.complete || !links->final_move.complete ||
         !links->allocation_plan.complete)
+        return false;
+    MoveExprNode *move = &arg_node->as.move_expr;
+    if (move->move_evidence_id != links->ownership_candidate.id ||
+        move->move_root_id != links->root_id || move->move_source_symbol_id != sym->id ||
+        move->move_storage_plan_id != links->allocation_plan.id)
         return false;
     /* Boundary context is a compile-time constraint on the allocation
      * instance, not a runtime promotion. Re-solve materialization before Xi
@@ -5899,6 +5915,10 @@ static bool xa_boundary_arg_is_verified_move(XaInferContext *ctx, AstNode *arg_n
     links->allocation_plan.evidence |= XA_OWNERSHIP_EV_STORAGE | XA_OWNERSHIP_EV_TRANSFER;
     links->ownership_candidate.evidence |= XA_OWNERSHIP_EV_STORAGE | XA_OWNERSHIP_EV_TRANSFER;
     links->final_move.evidence |= XA_OWNERSHIP_EV_STORAGE | XA_OWNERSHIP_EV_TRANSFER;
+    /* Lowering consumes this generation's snapshot, not the binding's later
+     * state. Publish the solved boundary domain on both owned facts. */
+    move->move_storage_domain = XR_STORAGE_TRANSFERABLE;
+    move->move_evidence_bits = links->final_move.evidence;
     return true;
 }
 

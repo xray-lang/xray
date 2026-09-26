@@ -435,6 +435,191 @@ static inline bool xr_semantic_unit_enum_type_is_exact(const XrSemanticTypeRecor
            type->scalar_rep == XR_SCALAR_REP_NONE && (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
 }
 
+/* A nullable unit enum carries either null or its nominal ordinal. It has no
+ * payload owner; ADT enums and reference-bearing flags cannot use this shape. */
+static inline bool xr_semantic_nullable_unit_enum_type_is_exact(const XrSemanticTypeRecord *type) {
+    const uint8_t allowed = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST;
+    if (!type || (type->flags & XR_SEM_TYPE_NULLABLE) == 0 ||
+        (type->flags & (uint8_t) ~allowed) != 0)
+        return false;
+    XrSemanticTypeRecord payload = *type;
+    payload.flags &= (uint8_t) ~XR_SEM_TYPE_NULLABLE;
+    return xr_semantic_unit_enum_type_is_exact(&payload);
+}
+
+/* Join a validated enum record to the immutable prelude declaration.
+ * The semantic verifier separately proves canonical type and nominal layout
+ * consistency; this join proves that a user enum cannot impersonate a builtin. */
+static inline bool xr_semantic_builtin_enum_declaration_is_exact(
+    const XrSemanticTypeRecord *type, int builtin_index) {
+    const XrBuiltinEnumRow *row = xr_builtin_enum_registry_row(builtin_index);
+    bool unit = xr_builtin_enum_row_is_unit(row);
+    if (!row || !row->enum_name ||
+        (unit ? !xr_semantic_unit_enum_type_is_exact(type) || type->flags != 0
+              : !xr_semantic_adt_enum_type_is_exact(type) ||
+                    type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ||
+        type->enum_member_count != row->member_count ||
+        row->member_count > XR_BUILTIN_ENUM_MAX_MEMBERS)
+        return false;
+    char key[1024];
+    int length = snprintf(key, sizeof(key),
+                          "source-enum-v1:schema=%u:owner=7:prelude:name=%u:%s:members=%u",
+                          XR_SEMANTIC_SCHEMA_VERSION, (unsigned) strlen(row->enum_name),
+                          row->enum_name, row->member_count);
+    if (length <= 0 || (size_t) length >= sizeof(key))
+        return false;
+    for (uint32_t i = 0; i < row->member_count; i++) {
+        if (!row->members[i].name)
+            return false;
+        size_t remaining = sizeof(key) - (size_t) length;
+        int written = snprintf(key + length, remaining, ":m%u=%u:%s:payloads=%u", i,
+                               (unsigned) strlen(row->members[i].name), row->members[i].name,
+                               row->members[i].has_payload ? 1u : 0u);
+        if (written <= 0 || (size_t) written >= remaining)
+            return false;
+        length += written;
+    }
+    XrStableId identity;
+    XrFingerprint digest;
+    return strcmp(type->source_enum_key, key) == 0 &&
+           xr_stable_id_from_key(key, &identity, &digest) &&
+           xr_stable_id_equal(type->source_enum_identity, identity);
+}
+
+/* Member selection carries a frozen integer ordinal. The source spelling was
+ * consumed while binding; neither SemanticPlan nor AOT recovers the selected
+ * variant from a field-name string. */
+static inline bool xr_semantic_builtin_unit_enum_member_access_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t *namespace_value, uint32_t *member_index_value, uint32_t *member_index) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (namespace_value)
+        *namespace_value = XR_SEMANTIC_INDEX_NONE;
+    if (member_index_value)
+        *member_index_value = XR_SEMANTIC_INDEX_NONE;
+    if (member_index)
+        *member_index = UINT32_MAX;
+    if (!plan || !operation || !operands || operation->opcode != XI_INDEX_GET ||
+        operation->operand_count != 2 || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_ENUM_CASE ||
+        operation->semantic_immediate != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_INDEX_GET) ||
+        operation->flags != xi_generated_op_default_flags(XI_INDEX_GET) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_INDEX_GET) ||
+        operation->result_alias_operand != -1 ||
+        !xr_semantic_unit_enum_type_is_exact(
+            xr_semantic_plan_type(plan, operation->result_type)))
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticOperandRecord *index = receiver + 1;
+    const XrSemanticOperationRecord *receiver_definition =
+        xr_semantic_enum_value_definition(plan, receiver->value);
+    const XrSemanticOperationRecord *index_definition =
+        xr_semantic_enum_value_definition(plan, index->value);
+    const XrSemanticConstantRecord *constant =
+        index_definition && index_definition->constant != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_constant(plan, index_definition->constant)
+            : NULL;
+    const XrSemanticTypeRecord *index_type = xr_semantic_plan_type(plan, index->type);
+    if (!receiver_definition || !index_definition || !constant || !index_type ||
+        receiver->type != receiver_definition->result_type ||
+        index->type != index_definition->result_type ||
+        receiver_definition->function != operation->function ||
+        index_definition->function != operation->function ||
+        !xr_semantic_builtin_enum_namespace_is_exact(plan, receiver_definition) ||
+        !xr_semantic_builtin_enum_declaration_is_exact(
+            xr_semantic_plan_type(plan, operation->result_type),
+            (int) receiver_definition->semantic_immediate) ||
+        index_definition->opcode != XI_CONST || constant->kind != XR_SEM_CONST_INT ||
+        constant->integer < 0 || (uint64_t) constant->integer >=
+            xr_semantic_plan_type(plan, operation->result_type)->enum_member_count ||
+        index_type->kind != XR_KIND_INT || index_type->scalar_rep != XR_NATIVE_I64 ||
+        receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->flags != 0 || index->role != XR_SEM_OPERAND_VALUE || index->parameter != -1 ||
+        index->flags != 0)
+        return false;
+    if (namespace_value)
+        *namespace_value = receiver->value;
+    if (member_index_value)
+        *member_index_value = index->value;
+    if (member_index)
+        *member_index = (uint32_t) constant->integer;
+    return true;
+}
+
+/* Equality compares ordinals only after both operands name the same exact
+ * unit declaration. A tagged/nullable or different nominal enum is distinct. */
+static inline bool xr_semantic_unit_enum_equality_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    uint32_t count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &count);
+    const XrSemanticTypeRecord *result = operation
+        ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!operation || !operands || !result ||
+        (operation->opcode != XI_EQ && operation->opcode != XI_NE) ||
+        operation->operand_count != 2 || operation->operand_begin > count ||
+        operation->operand_count > count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->flags != xi_generated_op_default_flags(operation->opcode) ||
+        operation->result_alias_operand != -1 || result->kind != XR_KIND_BOOL ||
+        result->child_count != 0 || result->flags != 0)
+        return false;
+    const XrSemanticOperandRecord *left = operands + operation->operand_begin;
+    const XrSemanticOperandRecord *right = left + 1;
+    return left->type == right->type &&
+        xr_semantic_unit_enum_type_is_exact(xr_semantic_plan_type(plan, left->type)) &&
+        left->role == XR_SEM_OPERAND_VALUE && right->role == XR_SEM_OPERAND_VALUE &&
+        left->parameter == -1 && right->parameter == -1 && !left->flags && !right->flags;
+}
+
+/* A nullable unit enum compared with a value of the same unit enum. Exactly
+ * one side is nullable, and removing that nullability yields the other side's
+ * exact declaration: same nominal key and identity, layout and member count.
+ * Both sides are read in the tagged carrier that can hold null, so the member
+ * side's native ordinal reaches the comparison through its box adapter. */
+static inline bool xr_semantic_nullable_unit_enum_equality_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    uint32_t count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &count);
+    const XrSemanticTypeRecord *result = operation
+        ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!operation || !operands || !result ||
+        (operation->opcode != XI_EQ && operation->opcode != XI_NE) ||
+        operation->operand_count != 2 || operation->operand_begin > count ||
+        operation->operand_count > count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->semantic_immediate != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->effects != xi_generated_op_effects(operation->opcode) ||
+        operation->flags != xi_generated_op_default_flags(operation->opcode) ||
+        operation->result_alias_operand != -1 || result->kind != XR_KIND_BOOL ||
+        result->child_count != 0 || result->flags != 0)
+        return false;
+    const XrSemanticOperandRecord *left = operands + operation->operand_begin;
+    const XrSemanticOperandRecord *right = left + 1;
+    if (left->type == right->type || left->role != XR_SEM_OPERAND_VALUE ||
+        right->role != XR_SEM_OPERAND_VALUE || left->parameter != -1 ||
+        right->parameter != -1 || left->flags || right->flags)
+        return false;
+    const XrSemanticTypeRecord *left_type = xr_semantic_plan_type(plan, left->type);
+    const XrSemanticTypeRecord *right_type = xr_semantic_plan_type(plan, right->type);
+    bool left_nullable = xr_semantic_nullable_unit_enum_type_is_exact(left_type);
+    const XrSemanticTypeRecord *nullable = left_nullable ? left_type : right_type;
+    const XrSemanticTypeRecord *member = left_nullable ? right_type : left_type;
+    if (!xr_semantic_nullable_unit_enum_type_is_exact(nullable) ||
+        !xr_semantic_unit_enum_type_is_exact(member))
+        return false;
+    return strcmp(nullable->source_enum_key, member->source_enum_key) == 0 &&
+           xr_stable_id_equal(nullable->source_enum_identity, member->source_enum_identity) &&
+           nullable->enum_layout_id == member->enum_layout_id &&
+           nullable->enum_member_count == member->enum_member_count;
+}
+
 /* Whether the generated opcode table's result-void declaration governs where
  * this value is stored. The table is authority on the opcode, not on the type:
  * a unit enum still carries the ordinal a direct-local argument hands to its

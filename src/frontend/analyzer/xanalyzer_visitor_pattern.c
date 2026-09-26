@@ -455,9 +455,17 @@ XR_FUNC bool xa_resolve_enum_pattern_plans(XaInferContext *ctx, AstNode *pattern
         XaSymbol *symbol = enum_pattern_symbol(ctx, variant_path, slot_type, &ordinal);
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
         XaEnumInfo *info = links ? links->enum_info : NULL;
-        if (!symbol || !info || !info->is_payload_enum || !info->variants ||
-            ordinal >= info->variant_count)
+        if (!symbol || !info || !info->variants || ordinal >= info->variant_count)
             return true;
+        if (!info->is_payload_enum) {
+            /* Unit patterns are value comparisons. Publish the same resolved
+             * member and nominal result type as an ordinary member expression. */
+            XrType *saved_expected = ctx->expected_type;
+            ctx->expected_type = slot_type;
+            XrType *member_type = xa_visit_infer_expr(ctx, variant_path);
+            ctx->expected_type = saved_expected;
+            return member_type && member_type->kind != XR_KIND_ERROR;
+        }
         XaEnumVariantInfo *variant = &info->variants[ordinal];
         if (variant->payload_count != 0) {
             char message[224];

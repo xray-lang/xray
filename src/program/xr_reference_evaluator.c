@@ -3197,6 +3197,10 @@ xr_reference_evaluate_bound(const XrValidatedProgram *program, uint32_t function
     if (!program || program->module_count != 0u || function_id >= program->function_count || (argument_count != 0 && !arguments) ||
         selected.max_steps == 0 || selected.max_value_cells == 0 || selected.max_call_depth == 0)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
+    for (uint32_t index = 0u; index < program->type_count; ++index)
+        if (program->types[index].parent_type_id != XR_CORE_TYPE_VOID ||
+            program->types[index].kind == XR_CORE_IR_TYPE_CHANNEL)
+            return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     const XrValidatedFunction *function = &program->functions[function_id];
     EvalRuntimeValue *runtime_arguments =
         xr_calloc(argument_count ? argument_count : 1u, sizeof(EvalRuntimeValue));

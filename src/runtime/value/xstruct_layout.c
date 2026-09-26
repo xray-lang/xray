@@ -250,7 +250,8 @@ bool xr_type_has_static_layout(const XrTargetDataLayout *target_layout, const Xr
     if (!xr_target_data_layout_validate(target_layout) || !type || type->is_nullable)
         return false;
 
-    int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
+    int native = type->kind == XR_KIND_RUNE ? XR_NATIVE_U32
+                                           : xr_type_kind_to_native(type->kind, type->scalar_rep);
     if (native >= 0) {
         uint8_t size = xr_native_type_size(target_layout, (uint8_t) native);
         uint8_t align = xr_native_type_align(target_layout, (uint8_t) native);

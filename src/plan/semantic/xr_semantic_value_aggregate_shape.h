@@ -17,6 +17,7 @@
 #include "xr_semantic_string_shape.h"
 #include "xr_semantic_local_call_target_shape.h"
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct XrSemanticValueAggregateShape {
@@ -36,6 +37,54 @@ typedef struct XrSemanticManagedAggregateArgumentShape {
 } XrSemanticManagedAggregateArgumentShape;
 
 static inline int xr_semantic_aggregate_type_kind(const XrSemanticTypeRecord *type);
+
+/* A tagged tuple owns its lanes through the runtime tuple destructor. Match
+ * every child key against the published type graph before assigning that
+ * carrier; a kind tag alone does not prove the element layout. */
+static inline bool xr_semantic_tagged_tuple_type_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticTypeRecord *type) {
+    const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
+    XrStableId zero = {{0}};
+    if (!plan || !type || type->kind != XR_KIND_TUPLE ||
+        type->builtin_type != XR_TID_NULL || type->scalar_rep != XR_SCALAR_REP_NONE ||
+        (type->flags & ~(XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST)) != required ||
+        type->aggregate_extent != type->child_count || type->aggregate_align != 0 ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) || !type->canonical_key)
+        return false;
+    bool published = false;
+    for (uint32_t i = 0; i < xr_semantic_plan_type_count(plan); i++)
+        if (xr_semantic_plan_type(plan, i) == type)
+            published = true;
+    uint32_t count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &count);
+    if (!published || type->child_begin > count ||
+        type->child_count > count - type->child_begin || (type->child_count && !children))
+        return false;
+    char prefix[112];
+    int length = snprintf(prefix, sizeof(prefix),
+                          "type-v3:%u:0:%u:%u:%u:0:0:0:0:%u:0:[%u",
+                          (unsigned) XR_KIND_TUPLE, (unsigned) XR_TID_NULL,
+                          (unsigned) ((type->flags & XR_SEM_TYPE_NULLABLE) != 0),
+                          (unsigned) ((type->flags & XR_SEM_TYPE_CONST) != 0),
+                          (unsigned) XR_SCALAR_REP_NONE, (unsigned) type->child_count);
+    if (length <= 0 || (size_t) length >= sizeof(prefix) ||
+        strncmp(type->canonical_key, prefix, (size_t) length) != 0)
+        return false;
+    const char *cursor = type->canonical_key + length;
+    for (uint16_t i = 0; i < type->child_count; i++) {
+        const XrSemanticTypeRecord *child =
+            xr_semantic_plan_type(plan, children[type->child_begin + i]);
+        if (!child || child == type || !child->canonical_key || *cursor != ';')
+            return false;
+        size_t child_length = strlen(child->canonical_key);
+        if (strncmp(++cursor, child->canonical_key, child_length) != 0)
+            return false;
+        cursor += child_length;
+    }
+    return strcmp(cursor, "]") == 0;
+}
+
 
 static inline bool xr_semantic_source_structural_shape_is_exact_with_nullability(
     const XrSemanticPlan *plan, uint32_t semantic_type, bool allow_nullable) {
@@ -215,7 +264,8 @@ static inline bool xr_semantic_direct_local_managed_aggregate_argument_is_exact(
     uint32_t field_count = 0;
     uint32_t managed_field_count = 0;
     const XrSemanticTypeRecord *parameter_type = xr_semantic_plan_type(plan, parameter->type);
-    if (xr_semantic_aggregate_type_kind(parameter_type) != 1 ||
+    if (xr_semantic_tagged_tuple_type_is_exact(plan, parameter_type) ||
+        xr_semantic_aggregate_type_kind(parameter_type) != 1 ||
         !xr_semantic_managed_aggregate_field_graph(plan, parameter->type, stack, 0, &field_count,
                                                    &managed_field_count) ||
         managed_field_count == 0)
@@ -284,6 +334,8 @@ xr_semantic_direct_local_aggregate_result_is_exact(const XrSemanticPlan *plan,
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
            operation->return_complete == 1 && operation->return_provenance == XR_SEM_RETURN_OWNED &&
            callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED &&
+           !xr_semantic_tagged_tuple_type_is_exact(
+               plan, xr_semantic_plan_type(plan, operation->result_type)) &&
            xr_semantic_aggregate_type_kind(xr_semantic_plan_type(plan, operation->result_type)) ==
                1;
 }

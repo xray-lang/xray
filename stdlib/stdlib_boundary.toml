@@ -60,6 +60,26 @@ reason = "stateful-module-slot-identity"
 symbol = "cluster.join"
 reason = "canonical-source-method-dependency"
 
+# The cluster runtime generation, source state, and peer directory are mutable
+# module slots. A hosted fragment would read and write its own generated-C
+# image of them while `join` updates the VM module, so every entry that touches
+# that state stays on the canonical VM module with `join`.
+[[hosted_fragment_deferred]]
+symbol = "cluster.discover"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.nodes"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.self"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.stop"
+reason = "stateful-module-slot-identity"
+
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
 # by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.

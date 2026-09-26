@@ -484,6 +484,36 @@ static void test_arc_stack_alloc_not_released(void) {
 
 /* ========== Test: ARC insertion — returned value is a move (no dup) ========== */
 
+static void test_arc_repeated_aggregate_consumes(void) {
+    XrType *elements[3] = {&t_array, &t_array, &t_array};
+    for (uint16_t count = 2; count <= 3; count++) {
+        for (unsigned parameter = 0; parameter < 2; parameter++) {
+            XrType tuple = {.kind = XR_KIND_TUPLE, .id = 110, .frozen = true,
+                .tuple = {.element_types = elements, .element_count = count}};
+            XiFunc *f = make_func("repeated_aggregate_consumes", &tuple);
+            XiBlock *entry = f->entry;
+            XiValue *owner = parameter ? xi_param(f, entry, 0, &t_array)
+                                      : xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+            if (parameter)
+                set_single_param(f, owner);
+            XiValue *value = xi_value_new(f, entry, XI_TUPLE_NEW, &tuple, count);
+            for (uint16_t i = 0; i < count; i++)
+                value->args[i] = owner;
+            value->aux_int = count;
+            xi_block_set_return(entry, value);
+            xi_escape_analyze(f);
+            xi_arc_insert(f);
+            ASSERT_EQ(count_ops(f, XI_RETAIN), count - 1,
+                      "each repeated tuple field needs an independent owner");
+            ASSERT_EQ(count_ops(f, XI_RELEASE), 0,
+                      "the returned tuple receives all element owners");
+            XiArcVerifyReport report;
+            ASSERT_EQ(xi_arc_verify(f, &report), true, "repeated aggregate ARC verifies");
+            xi_func_free(f);
+        }
+    }
+}
+
 static void test_arc_return_gets_retain(void) {
     /* Returned array: the return is the single (last) consuming use, so it
      * is a MOVE — caller takes ownership. No dup, no drop (Perceus). */
@@ -2209,6 +2239,7 @@ int main(void) {
     test_index_set_container_no_escape();
     test_arc_no_escape_still_released_without_stack_rewrite();
     test_arc_stack_alloc_not_released();
+    test_arc_repeated_aggregate_consumes();
     test_arc_return_gets_retain();
     test_arc_heap_gets_retain_release();
     test_arc_elim_keeps_borrowed_single_consumer_retain();

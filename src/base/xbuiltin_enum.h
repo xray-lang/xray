@@ -60,4 +60,14 @@ static inline const XrBuiltinEnumRow *xr_builtin_enum_registry_row(int builtin_i
     return NULL;
 }
 
+static inline bool xr_builtin_enum_row_is_unit(const XrBuiltinEnumRow *row) {
+    if (!row || !row->member_count || row->member_count > XR_BUILTIN_ENUM_MAX_MEMBERS)
+        return false;
+    for (uint32_t i = 0; i < row->member_count; i++) {
+        if (!row->members[i].name || row->members[i].has_payload)
+            return false;
+    }
+    return true;
+}
+
 #endif  // XBUILTIN_ENUM_H

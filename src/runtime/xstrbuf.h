@@ -17,6 +17,7 @@
 #define XSTRBUF_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "../base/xdefs.h"
@@ -42,20 +43,22 @@ XR_FUNC void xr_strbuf_free(XrStrBuf *sb);
 
 /* ========== Capacity Management ========== */
 
-XR_FUNC void xr_strbuf_ensure(XrStrBuf *sb, size_t need);
-XR_FUNC void xr_strbuf_reserve(XrStrBuf *sb, size_t cap);
+XR_FUNC bool xr_strbuf_ensure(XrStrBuf *sb, size_t need);
+XR_FUNC bool xr_strbuf_reserve(XrStrBuf *sb, size_t cap);
+
+/* False leaves bytes, length and capacity unchanged. Callers must propagate failure. */
 
 /* ========== Append Operations ========== */
 
-XR_FUNC void xr_strbuf_append_str(XrStrBuf *sb, XrString *s);
-XR_FUNC void xr_strbuf_append_cstr(XrStrBuf *sb, const char *s, size_t len);
-XR_FUNC void xr_strbuf_append_char(XrStrBuf *sb, char c);
-XR_FUNC void xr_strbuf_append_int(XrStrBuf *sb, int64_t val);
-XR_FUNC void xr_strbuf_append_float(XrStrBuf *sb, double val);
+XR_FUNC bool xr_strbuf_append_str(XrStrBuf *sb, XrString *s);
+XR_FUNC bool xr_strbuf_append_cstr(XrStrBuf *sb, const char *s, size_t len);
+XR_FUNC bool xr_strbuf_append_char(XrStrBuf *sb, char c);
+XR_FUNC bool xr_strbuf_append_int(XrStrBuf *sb, int64_t val);
+XR_FUNC bool xr_strbuf_append_float(XrStrBuf *sb, double val);
 
 /* ========== Conversion and Reset ========== */
 
-// Convert to XrString and reset buffer (reusable after this)
+// Convert to XrString; reset only after successful conversion.
 XR_FUNC XrString *xr_strbuf_to_string(XrStrBuf *sb);
 
 XR_FUNC void xr_strbuf_reset(XrStrBuf *sb);

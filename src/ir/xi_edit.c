@@ -138,6 +138,7 @@ static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool in
     hash = hash_u64(hash, value->var_id);
     hash = hash_u64(hash, value->lowering_flags);
     hash = hash_u64(hash, value->initializes_module_slot);
+    hash = hash_u64(hash, value->array_default_construct);
     hash = hash_u64(hash, (uint64_t) value->conversion.kind);
     hash = hash_u64(hash, value->conversion.source_scalar_rep);
     hash = hash_u64(hash, value->conversion.target_scalar_rep);

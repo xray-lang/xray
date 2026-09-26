@@ -116,7 +116,10 @@ projection defined below; they never imply TargetPlan admission on their own.
    call transfers one struct argument. The canonical first KAT is
    `Pair{i64 left,i64 right} -> swap(Pair) -> Pair` plus a nullary `root` that
    makes the unique call.
-10. A source outside every bounded structural predicate is `UNSUPPORTED` and
+10. The two-module scalar family requires a private entry function; an exported
+    entry is outside that structural family, before any authority is claimed.
+    Its complete source graph still requires independent topology verification.
+    A source outside every bounded structural predicate is `UNSUPPORTED` and
     publishes no partial authority. Once a predicate has matched, incomplete
     module identity, source fingerprint, resolved call, source locator, type,
     effect, or ownership evidence is `INVALID`; allocation exhaustion is a
@@ -480,3 +483,37 @@ anchor-sha256: tests/unit/CMakeLists.txt e9ebc628328192213453a39c249039401fb1dd7
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
 anchor-sha256: src/aot/xaot_bundle.c 22a955023d50d374c684299decf272258ff987908dbbf7afc50ad433c4ce98c4
+
+Imported static methods bind a SOURCE_STATIC_METHOD_DEPENDENCY target. The
+receiver is a class namespace imported through an exact source-module member;
+it is not an instance or an implicit parameter. The row binds the dependency
+identity and fingerprint, exported class declaration and unique static function
+identity. Static lookup is confined to that declaration, with exact selector
+and arity. Module-set verification independently reconstructs the import,
+class export, function, parameter/result types and suspension facts. Argument
+zero follows the namespace operand. No class-name or selector-only fallback,
+instance dispatch seal, or compatibility alias authorizes this binding. A
+semantic binding alone grants no execution ABI authority.
+
+Enum namespace Xi descriptors retain an explicit declaration type, borrowed
+from the compilation type arena. Their SSA carrier uses the internal reference
+type on source, prelude and native-import paths. Canonical Program resolves the
+declaration through that descriptor and the exact Xglobal nominal contract;
+member layout, ordinal and typed-catch identity are independently checked.
+Missing declaration metadata or substituting the carrier type fails closed.
+No descriptor pointer is serialized into the immutable Program.
+
+A source enum namespace may feed an exact unit-member lookup or a verified
+static typed-catch token in its initializer while publishing one matching type
+slot. These metadata consumers do not create runtime module state. Other uses,
+multiple publications and mismatched declaration/slot identities fail closed.
+
+Structural object literals, including spread literals, construct a non-null
+payload even in a nullable context. Field initialization operates on that
+present payload; assignment and return conversion retain the destination's
+Optional contract. The allocation does not claim to produce null.
+
+Cross-execution move promotion updates the consumed node's storage-domain and
+evidence snapshot only after its candidate, root, source symbol and allocation
+plan identifiers match the current binding generation. Call and spawn boundaries
+share that operation; later rebinding cannot replace the consumed proof.

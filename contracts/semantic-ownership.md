@@ -161,3 +161,70 @@ verification-test: test_analyzer
 verification-test: test_parser_recoverable
 verification-test: test_formatter_comments
 verification-test: test_mono
+
+## Repeated consuming operands
+
+Each consuming operand transfers one ownership credit, even when several
+operands of one instruction reference the same SSA value. ARC must count
+operand multiplicity. An owned value dead after that instruction may transfer
+its existing credit to only one operand; every other consume requires a retain.
+A borrowed value requires a retain for every consume. Mutually exclusive CFG
+paths remain independent, and later uses still require the original owner.
+
+Canonical tuple construction publishes the ownership of its complete logical
+type. For copyable owning fields it uses the existing aggregate expansion: one
+explicit owner copy per field, then a consuming aggregate constructor. Repeated
+source fields therefore remain distinct owner credits in the validated Program.
+
+Public Channel send methods freeze the same payload transfer mode as internal
+send instructions. The sealed SEND, TRY_SEND and SEND_TIMEOUT method symbols
+identify this operand boundary on a non-null Channel receiver. Only operand 1
+carries that mode; the receiver and timeout retain SHARE. Operation and payload
+facts must agree before an execution consumer claims the call. Freezing these
+facts alone does not admit a method in TargetPlan or establish its runtime ABI.
+
+Prelude unit-enum identity is joined by the complete source declaration key and
+stable identity, including prelude ownership, ordered members and zero payloads.
+The semantic verifier remains responsible for canonical type/layout consistency.
+A same-named user enum, reordered declaration, nullable record or altered identity
+cannot stand in for the builtin SendResult declaration.
+
+verification-test: test_target_plan
+
+Runtime-managed Task/Coroutine parameters carry a borrowed semantic handle even
+when ARC reports no reference-counting responsibility. Semantic publication must
+preserve that borrow in both parameter and defining-operation records; it must
+not invent a callee-owned reference or force ARC retain/release on the handle.
+The declared READ/REF/MOVE mode and terminal-observation rules remain separate
+facts. User classes with the same name do not acquire runtime-managed identity.
+
+An exact frozen runtime-owned Task<T> handle is not a local RC-credit root in the
+ownership certificate. This applies to its parameters, loads and publications,
+not just its producing GO operation. Its reference-capable type and declared
+borrow still exist; task terminal observation and payload ownership are checked
+separately. The exemption requires the shared exact builtin Task type judgement;
+a user class spelling, unknown type or malformed generic record cannot select it.
+
+verification-test: test_semantic_runtime_task_ownership
+
+Task awaitResult and awaitTimeout publish fresh owned TaskResult enums at the
+Xi call boundary. Their runtime-owned Task receiver remains borrowed. ARC
+return provenance must be complete OWNED for these exact builtin methods,
+including timeout results; the receiver handle is not an RC owner of the enum.
+
+verification-test: test_cgen_task_await_timeout_then_complete
+verification-test: test_cgen_coro_await_timeout_passes_deadline
+
+Task.poll follows the same fresh owned TaskResult return contract without
+suspending. A pending enum owns no payload; a terminal success carries its
+result under the existing Task observation policy. The Task handle remains
+runtime-owned.
+
+verification-test: test_cgen_task_poll_pending_and_complete
+
+Null-coalescing expansion must give the null test and present-value branch
+distinct AST occurrences. Flow narrowing attached to the present branch must
+not overwrite the nullable type of the tested occurrence. Session-owned clones
+preserve binding identity while assigning independent node identity.
+
+verification-test: test_native_class_coalesce_authority

@@ -101,7 +101,8 @@ xr_semantic_string_utf8_static_call_is_exact(const XrSemanticPlan *plan,
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
         operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
         operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
-        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        (operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) &&
+         operation->flags != (xi_generated_op_default_flags(XI_CALL_METHOD) | XI_FLAG_TAIL)) ||
         operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
         operation->result_alias_operand != -1 ||

@@ -40,7 +40,7 @@ static inline XrValue xrt_crypto_timing_safe_equal_bytes(XrValue a_value, XrValu
         (a->length != 0 && !a->data) || (b->length != 0 && !b->data))
         return XR_FALSE_VAL;
     return XR_FROM_BOOL(xr_crypto_core_timing_safe_equal(
-        (const char *) a->data, (size_t) a->length, (const char *) b->data, (size_t) b->length));
+        a->data, (size_t) a->length, 1u, b->data, (size_t) b->length, 1u));
 }
 
 #endif  // XRT_CRYPTO_H

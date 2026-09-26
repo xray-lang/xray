@@ -5,7 +5,7 @@
   "execution_authority": "not-an-AOT-compiler-input",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@2",
-  "operation_count": 83,
+  "operation_count": 95,
   "operations": [
     {
       "stable_id": 1,
@@ -666,6 +666,102 @@
     {
       "stable_id": 167,
       "spelling": "core.string.from_scalar",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 168,
+      "spelling": "core.channel.construct",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 169,
+      "spelling": "core.channel.is_closed",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 170,
+      "spelling": "core.integer.bitwise",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 171,
+      "spelling": "core.string.slice",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 172,
+      "spelling": "core.array.allocate_default",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 173,
+      "spelling": "core.string_builder.construct",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 174,
+      "spelling": "core.string_builder.append",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 175,
+      "spelling": "core.string_builder.clear",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 176,
+      "spelling": "core.string_builder.length",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 177,
+      "spelling": "core.string_builder.snapshot",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 178,
+      "spelling": "core.bytes.timing_safe_equal",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "DIRECT_PROGRAM_BINDING"
+    },
+    {
+      "stable_id": 179,
+      "spelling": "core.array.append",
       "aot": "COMPLETE",
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",

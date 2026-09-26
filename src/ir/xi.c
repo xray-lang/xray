@@ -796,6 +796,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->xg_callable_capability_union = 0;
     v->xa_intrinsic_id = 0;
     v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_NONE;
+    v->array_default_construct = false;
     v->array_member_kind = XI_ARRAY_MEMBER_NONE;
     v->array_hof_kind = XI_ARRAY_HOF_NONE;
     v->array_element_storage = XR_ELEM_ANY;

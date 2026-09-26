@@ -236,6 +236,8 @@ static bool instruction_control_shape_valid(const XrBackendIR *ir,
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
         case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
         case XR_CORE_OP_CORE_ASSERT_CONDITION:
+        case XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT:
+        case XR_CORE_OP_CORE_STRING_SLICE:
         case XR_CORE_OP_CORE_INTEGER_DIVMOD:
             return successors <= 1u;
         case XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE:
@@ -430,6 +432,7 @@ static bool backend_operand_consumed(const XrBackendIR *ir, const XrValidatedFun
         case XR_CORE_OP_CORE_PLACE_STORE:
         case XR_CORE_OP_CORE_PLACE_INITIALIZE:
             return operand == 1u;
+        case XR_CORE_OP_CORE_ARRAY_APPEND:
         case XR_CORE_OP_CORE_PLACE_EXCHANGE:
             return operand == 1u;
         case XR_CORE_OP_CORE_CLASS_CONSTRUCT:
@@ -506,6 +509,8 @@ static bool backend_edge_segment(const BackendOwnerCheck *check,
                     (edge ? function->blocks[instruction->successors[0]].argument_count : 0u);
             break;
         case XR_CORE_OP_CORE_ASSERT_CONDITION:
+        case XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT:
+        case XR_CORE_OP_CORE_STRING_SLICE:
         case XR_CORE_OP_CORE_INTEGER_DIVMOD:
             start = xr_core_spec_panic_value_prefix(instruction->operation_id, instruction->immediate.u32);
             segment->implicit = 1u;
@@ -1066,6 +1071,32 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrValidatedFunc
                    instruction->result_category == XR_CORE_IR_VALUE &&
                    instruction->result_ownership == XR_CORE_IR_NON_OWNER;
         }
+        case XR_CORE_OP_CORE_INTEGER_BITWISE: {
+            uint32_t mode = instruction->immediate.u32;
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 && mode <= 5u &&
+                instruction->operand_count == (mode == 3u ? 1u : 2u) && instruction->successor_count == 0u &&
+                xr_core_spec_integer_type(instruction->result_type_id) &&
+                instruction->result_category == XR_CORE_IR_VALUE &&
+                instruction->result_ownership == XR_CORE_IR_NON_OWNER &&
+                function->value_types[instruction->operands[0]] == instruction->result_type_id &&
+                function->value_categories[instruction->operands[0]] == XR_CORE_IR_VALUE &&
+                (mode == 3u || (function->value_categories[instruction->operands[1]] == XR_CORE_IR_VALUE &&
+                 (mode < 4u ? function->value_types[instruction->operands[1]] == instruction->result_type_id
+                            : xr_core_spec_integer_type(function->value_types[instruction->operands[1]]) != NULL)));
+        }
+        case XR_CORE_OP_CORE_STRING_SLICE:
+            return instruction->operand_count >= 3u &&
+                instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                instruction->result_type_id == XR_CORE_TYPE_STRING &&
+                instruction->result_category == XR_CORE_IR_VALUE &&
+                instruction->result_ownership == XR_CORE_IR_OWNER &&
+                function->value_types[instruction->operands[0]] == XR_CORE_TYPE_STRING &&
+                function->value_types[instruction->operands[1]] == XR_CORE_TYPE_I64 &&
+                function->value_types[instruction->operands[2]] == XR_CORE_TYPE_I64 &&
+                function->value_categories[instruction->operands[0]] == XR_CORE_IR_VALUE &&
+                function->value_categories[instruction->operands[1]] == XR_CORE_IR_VALUE &&
+                function->value_categories[instruction->operands[2]] == XR_CORE_IR_VALUE &&
+                function->panic_type_id == XR_CORE_TYPE_PANIC_INFO;
         case XR_CORE_OP_CORE_INTEGER_CONVERT:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
                    instruction->operand_count == 1u &&
@@ -1086,6 +1117,92 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrValidatedFunc
                    instruction->result_category == XR_CORE_IR_PLACE &&
                    instruction->result_ownership == XR_CORE_IR_NON_OWNER &&
                    function->panic_type_id == XR_CORE_TYPE_PANIC_INFO;
+        }
+        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
+            return instruction->operand_count == 0u && instruction->successor_count == 0u &&
+                instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                instruction->result_type_id == XR_CORE_TYPE_STRING_BUILDER &&
+                instruction->result_category == XR_CORE_IR_VALUE && instruction->result_ownership == XR_CORE_IR_OWNER;
+        case XR_CORE_OP_CORE_ARRAY_APPEND: {
+            if (instruction->operand_count != 2u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_VOID ||
+                instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_category != XR_CORE_IR_VALUE ||
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER ||
+                function->value_categories[instruction->operands[0]] != XR_CORE_IR_PLACE ||
+                function->value_categories[instruction->operands[1]] != XR_CORE_IR_VALUE)
+                return false;
+            const XrValidatedType *array = xr_validated_program_type(ir->program,
+                function->value_types[instruction->operands[0]]);
+            return array && array->kind == XR_CORE_IR_TYPE_ARRAY &&
+                function->value_types[instruction->operands[1]] == array->array_element_type &&
+                function->value_ownerships[instruction->operands[1]] ==
+                    (xr_validated_program_type_ownership(ir->program, array->array_element_type) ==
+                        XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER);
+        }
+        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
+        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR: {
+            bool append = instruction->operation_id == XR_CORE_OP_CORE_STRING_BUILDER_APPEND;
+            if (instruction->operand_count != (append ? 2u : 1u) || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_VOID || instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_category != XR_CORE_IR_VALUE || instruction->result_ownership != XR_CORE_IR_NON_OWNER ||
+                function->value_types[instruction->operands[0]] != XR_CORE_TYPE_STRING_BUILDER ||
+                function->value_categories[instruction->operands[0]] != XR_CORE_IR_PLACE)
+                return false;
+            if (!append) return true;
+            uint16_t type = function->value_types[instruction->operands[1]];
+            return function->value_categories[instruction->operands[1]] == XR_CORE_IR_VALUE &&
+                (type == XR_CORE_TYPE_STRING || type == XR_CORE_TYPE_RUNE || type == XR_CORE_TYPE_I64 ||
+                 type == XR_CORE_TYPE_F64 || type == XR_CORE_TYPE_BOOL || type == XR_CORE_TYPE_VOID);
+        }
+        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
+        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT: {
+            bool snapshot = instruction->operation_id == XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT;
+            return instruction->operand_count == 1u && instruction->successor_count == 0u &&
+                instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                instruction->result_type_id == (snapshot ? XR_CORE_TYPE_STRING : XR_CORE_TYPE_I64) &&
+                instruction->result_category == XR_CORE_IR_VALUE &&
+                instruction->result_ownership == (snapshot ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER) &&
+                function->value_types[instruction->operands[0]] == XR_CORE_TYPE_STRING_BUILDER &&
+                function->value_categories[instruction->operands[0]] == XR_CORE_IR_VALUE;
+        }
+        case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL: {
+            if (instruction->operand_count != 2u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_BOOL ||
+                instruction->result_category != XR_CORE_IR_VALUE ||
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER) return false;
+            for (uint32_t i = 0u; i < 2u; ++i) {
+                uint32_t operand = instruction->operands[i];
+                const XrValidatedType *type = xr_validated_program_type(ir->program,
+                    function->value_types[operand]);
+                if (!type || type->kind != XR_CORE_IR_TYPE_ARRAY ||
+                    type->array_element_type != XR_CORE_TYPE_U8 ||
+                    function->value_categories[operand] != XR_CORE_IR_VALUE) return false;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_CHANNEL_CONSTRUCT: {
+            const XrValidatedType *type = xr_validated_program_type(ir->program, instruction->result_type_id);
+            return type && type->kind == XR_CORE_IR_TYPE_CHANNEL && instruction->operand_count == 1u &&
+                instruction->successor_count == 0u && instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                instruction->result_category == XR_CORE_IR_VALUE && instruction->result_ownership == XR_CORE_IR_OWNER &&
+                function->value_types[instruction->operands[0]] == XR_CORE_TYPE_I64 &&
+                function->value_categories[instruction->operands[0]] == XR_CORE_IR_VALUE &&
+                function->value_ownerships[instruction->operands[0]] == XR_CORE_IR_NON_OWNER;
+        }
+        case XR_CORE_OP_CORE_CHANNEL_IS_CLOSED: {
+            if (instruction->operand_count != 1u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE)
+                return false;
+            const XrValidatedType *type = xr_validated_program_type(ir->program,
+                function->value_types[instruction->operands[0]]);
+            return type && type->kind == XR_CORE_IR_TYPE_CHANNEL &&
+                instruction->result_type_id == XR_CORE_TYPE_BOOL &&
+                instruction->result_category == XR_CORE_IR_VALUE && instruction->result_ownership == XR_CORE_IR_NON_OWNER &&
+                function->value_categories[instruction->operands[0]] == XR_CORE_IR_VALUE;
         }
         case XR_CORE_OP_CORE_ATOMIC_CONSTRUCT: {
             const XrValidatedType *type = xr_validated_program_type(ir->program, instruction->result_type_id);
@@ -1120,6 +1237,17 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrValidatedFunc
                 (!compare || (function->value_types[instruction->operands[2]] == type->atomic_element_type &&
                     function->value_categories[instruction->operands[2]] == XR_CORE_IR_VALUE &&
                     function->value_ownerships[instruction->operands[2]] == XR_CORE_IR_NON_OWNER));
+        }
+        case XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT: {
+            const XrValidatedType *type = xr_validated_program_type(ir->program, instruction->result_type_id);
+            return type && type->kind == XR_CORE_IR_TYPE_ARRAY &&
+                (xr_core_spec_integer_type(type->array_element_type) || type->array_element_type == XR_CORE_TYPE_BOOL ||
+                 type->array_element_type == XR_CORE_TYPE_F64) && instruction->operand_count >= 1u &&
+                instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
+                instruction->result_category == XR_CORE_IR_VALUE && instruction->result_ownership == XR_CORE_IR_OWNER &&
+                function->value_types[instruction->operands[0]] == XR_CORE_TYPE_I64 &&
+                function->value_categories[instruction->operands[0]] == XR_CORE_IR_VALUE &&
+                function->panic_type_id == XR_CORE_TYPE_PANIC_INFO;
         }
         case XR_CORE_OP_CORE_ARRAY_CONSTRUCT: {
             const XrValidatedType *type = xr_validated_program_type(ir->program,

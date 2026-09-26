@@ -814,7 +814,8 @@ typedef struct XrAotContext {
  * into an otherwise no-heap binary. */
 typedef void (*XrtDestructor)(void *obj);
 typedef void (*XrtStoragePromoter)(void *obj, uint8_t storage_mode);
-typedef XrValue (*XrtMethodFn)(void);
+/* Erased storage only; invocation restores the exact function signature. */
+typedef void (*XrtMethodFn)(void);
 
 #ifdef XRT_IMPL
 XRT_INTERNAL uint16_t xrt_freestanding_type_count = 1;
@@ -1212,6 +1213,33 @@ typedef struct XRT_SPAN_ALIGN {
 #endif
     int64_t length;
 } xr_span_t;
+
+/* Apply only the range admitted by the shared window rule. */
+static inline xr_span_t xrt_span_apply_window(xr_span_t source, XrSliceWindowPlan plan,
+                                             bool bounds_proven) {
+    if (!bounds_proven && XR_UNLIKELY(!plan.admitted))
+        xrt_index_oob(plan.fault_operand, source.length);
+    XR_ASSUME(plan.admitted);
+    source.data = plan.advances ? (void *) ((uint8_t *) source.data + (size_t) plan.byte_offset)
+                                : source.data;
+    source.length = plan.length;
+    return source;
+}
+
+
+/* The caller proves bounds and alignment before constructing the borrowed view. */
+static inline xr_span_t xrt_span_from_ptr(const void *ptr, int64_t length,
+                                         uint16_t element_size, uint16_t alignment) {
+    xr_span_t span;
+    XR_ASSUME(element_size != 0 && alignment != 0);
+    XR_ASSUME(length >= 0 && (length == 0 ||
+              (ptr != NULL && (uintptr_t) ptr % alignment == 0 &&
+               (uint64_t) length <= UINTPTR_MAX / element_size)));
+    span.data = (void *) ptr;
+    span.length = length;
+    return span;
+}
+
 #undef XRT_SPAN_ALIGN
 
 _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length");
@@ -2132,8 +2160,8 @@ static inline int64_t xrt_compare_tagged_equal(XrCompareKind kind, XrValue a, Xr
     return xrt_compare_equal(kind, a.ptr == b.ptr && a.ext == b.ext);
 }
 
-static inline int64_t xrt_eq(XrValue a, XrValue b) {
-    return xrt_compare_tagged_equal(XR_COMPARE_EQ, a, b);
+static inline bool xrt_eq(XrValue a, XrValue b) {
+    return xrt_compare_tagged_equal(XR_COMPARE_EQ, a, b) != 0;
 }
 
 enum {

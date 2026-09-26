@@ -247,6 +247,7 @@ XR_FUNC void xa_finalize_function_return_ownership(XaInferContext *ctx);
 XR_FUNC bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node);
 XR_FUNC bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node);
 XR_FUNC XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node);
+XR_FUNC bool xa_boundary_arg_is_verified_move(XaInferContext *ctx, AstNode *arg_node);
 XR_FUNC bool xa_symbol_has_shared_provenance(const XaSymbol *sym);
 XR_FUNC bool xa_expr_yields_shared_provenance(XaInferContext *ctx, AstNode *expr, XrType *type);
 XR_FUNC void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,

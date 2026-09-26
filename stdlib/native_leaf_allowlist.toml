@@ -65,7 +65,7 @@ class = "security_provider_leaf"
 abi = "none; a hand-written constant-time comparison, not OpenSSL CRYPTO_memcmp(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "src/shared/xr_crypto_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. Both backends reject non-u8 and malformed array representations before calling it"
+provider = "src/shared/xr_byte_compare_core.h xr_crypto_core_timing_safe_equal, a static inline both backends call. It ORs the per-byte differences into a volatile accumulator so no branch can leak where the buffers diverge. Both backends reject non-u8 and malformed array representations before calling it"
 deletion_trigger = "when Xray can express a comparison the optimiser is forbidden to short-circuit; until the language can state that constraint, an Xray body would be free to return early on the first differing byte and would silently stop being constant-time"
 
 # ============================================================================

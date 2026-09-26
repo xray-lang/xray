@@ -57,7 +57,8 @@
 typedef void (*XrtDestructor)(void *obj);
 typedef void (*XrtStoragePromoter)(void *obj, uint8_t storage_mode);
 typedef void *(*XrtRuntimeClone)(void *obj);
-typedef XrValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
+/* Erased storage only; invocation restores the exact function signature. */
+typedef void (*XrtMethodFn)(void);
 
 /* Compiled hash() / operator == of a class that implements Hashable by hand,
  * in their typed body form — the same entry points and signatures the existing

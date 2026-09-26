@@ -4506,7 +4506,8 @@ static void emit_typed_array_load_value(FILE *out, const CgArrayElemInfo *info, 
     } else if (info->rep == XR_REP_RAWPTR) {
         fprintf(out, "(void *)");
     } else {
-        fprintf(out, "(int64_t)");
+        /* Preserve the published element width at the load boundary. */
+        fprintf(out, "(%s)", info->ctype);
     }
 }
 
@@ -5184,10 +5185,20 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
         return true;
     }
 
+    return false;
+}
+
+static bool emit_typed_array_index_set_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            const XiValue *v, const char *prefix) {
+    CgArrayElemInfo info;
+    if (!v || v->op != XI_INDEX_SET || v->nargs != 3 ||
+        !cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_MUTABLE) ||
+        info.rep == XR_REP_TAGGED)
+        return false;
     if (cg_array_index_access_bounds_proven(ctx, f, v)) {
         const XiValue *cached_origin = NULL;
         bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-        fprintf(out, "({ ");
+        fprintf(out, "    { ");
         if (use_cache) {
             emit_aot_hot_region_begin(out, "typed_array_raw_access");
             emit_typed_array_data_cache_ref(out, cached_origin);
@@ -5202,11 +5213,11 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
         emit_typed_array_store_value(ctx, out, &info, v->args[2]);
         if (use_cache)
             emit_aot_hot_region_end(out, "typed_array_raw_access");
-        fprintf(out, "; XR_NULL_VAL; })");
+        fprintf(out, "; }\n");
         return true;
     }
 
-    fprintf(out, "({ xrt_array_t *_a = ");
+    fprintf(out, "    { xrt_array_t *_a = ");
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -5218,7 +5229,7 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
             "XR_ASSUME(_a->data != NULL); ((%s*)_a->data)[_idx] = ",
             info.ctype);
     emit_typed_array_store_value(ctx, out, &info, v->args[2]);
-    fprintf(out, "; } else { xrt_index_oob(_idx, _a->length); } XR_NULL_VAL; })");
+    fprintf(out, "; } else { xrt_index_oob(_idx, _a->length); } }\n");
     return true;
 }
 
@@ -6148,6 +6159,12 @@ static bool cg_array_class_field_value_is_elided(XiCgenCtx *ctx, const XiFunc *f
                             continue;
                         return false;
                     case XI_CALL_METHOD: {
+                        /* Frozen tagged append recipes consume the named receiver.
+                         * Keep its load even when legacy field emitters can inline it. */
+                        XrCValueEmissionView recipe = {0};
+                        if (ai == 0 && cg_tagged_array_push_emission_view(ctx, f, v, &recipe) ==
+                                           CG_VALUE_EMISSION_FOUND)
+                            return false;
                         const char *method = (const char *) v->aux;
                         if (ai == 0 && ((method && (strcmp(method, "length") == 0 ||
                                                     strcmp(method, "push") == 0)) ||

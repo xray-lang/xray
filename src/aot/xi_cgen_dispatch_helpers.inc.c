@@ -728,6 +728,11 @@ static void xicgen_variant_project(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         emit_codegen_abort_expr(out);
         return;
     }
+    if (v->type && v->type->kind == XR_KIND_INT && v->type->scalar_rep != XR_NATIVE_I64) {
+        const char *ctype = cg_native_int_ctype(v->type->scalar_rep);
+        if (ctype)
+            fprintf(out, "(%s)", ctype);
+    }
     const char *suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     if (v->args[0]->type && v->args[0]->type->is_nullable) {
         XrType payload = *v->args[0]->type;
@@ -766,6 +771,14 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         else if (from_rep == XR_REP_PTR)
             fprintf(out, "p%u", (unsigned) v->aux_int);
         else {
+            if (getenv("XRAY_AOT_REFINE_TRACE")) {
+                XrCFunctionAbiEmissionView view = {0};
+                bool found = cg_func_param_abi_emission(ctx, f, param_idx, &view);
+                fprintf(stderr, "[span-param] function=%s index=%u source-rep=%u "
+                                "abi-found=%u abi-rep=%u ctype=%s\n",
+                        f->name ? f->name : "<anonymous>", param_idx, from_rep, found,
+                        view.rep, view.c_type ? view.c_type : "<none>");
+            }
             ctx->error = true;
             emit_codegen_abort_expr(out);
         }
@@ -4202,6 +4215,8 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                    cg_aot_stdlib_has_direct_member(ref->module_path, ref->member_name)) {
             fprintf(out, "XR_NULL_VAL /* builtin function: %s.%s */", ref->module_path,
                     ref->member_name);
+        } else if (cg_native_timer_import_is_exact(ctx, f, v)) {
+            fprintf(out, "XR_NULL_VAL /* resolved native timer declaration */");
         } else if (cg_emit_aot_stdlib_generated_constant_import_ref(ctx, out, v, ref)) {
             /* Resolved to a generated stdlib constant (path.sep, encoding.LE, ...). */
         } else if (cg_import_ref_has_verified_link_dependency(ctx, ref) &&
@@ -4482,7 +4497,8 @@ static void xicgen_emit_runtime_constructor(XiCgenCtx *ctx, FILE *out, const XiF
     const XiValue *argument = v->op == XI_CALL && v->nargs == 2 ? v->args[1] : NULL;
     uint32_t argument_id = UINT32_MAX;
     bool argument_exact = argument && cg_value_semantic_id(ctx, f, argument, &argument_id);
-    bool found = cg_value_emission_view(ctx, f, v, &emission) == CG_VALUE_EMISSION_FOUND &&
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, f, v, &emission);
+    bool found = status == CG_VALUE_EMISSION_FOUND &&
                  emission.rep == XR_C_VALUE_REP_TAGGED &&
                  emission.materialization == XR_C_VALUE_MATERIALIZATION_RUNTIME_CONSTRUCTOR &&
                  emission.recipe_symbol && emission.recipe_argument_value == UINT32_MAX;
@@ -4494,7 +4510,16 @@ static void xicgen_emit_runtime_constructor(XiCgenCtx *ctx, FILE *out, const XiF
     bool atomic_bool = found && strcmp(emission.recipe_symbol, "xr_aot_atomic_new_bool") == 0;
     if (!found || (!nullary && (!(atomic_i64 || atomic_f64 || atomic_bool) || !argument_exact ||
                                 emission.recipe_operand_value != argument_id))) {
-        fprintf(stderr, "[xi_cgen] ERROR: immutable runtime constructor recipe is missing\n");
+        const XaotFuncPlan *function_plan = xaot_bundle_find_func_plan(ctx->aot_bundle, f);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: immutable runtime constructor recipe is missing "
+                "function=%s value=%u status=%u rep=%u materialization=%u symbol=%s "
+                "operand=%u argument=%u reachable=%d\n",
+                f && f->name ? f->name : "?", v->id, (unsigned) status,
+                (unsigned) emission.rep, (unsigned) emission.materialization,
+                emission.recipe_symbol ? emission.recipe_symbol : "<none>",
+                emission.recipe_operand_value, emission.recipe_argument_value,
+                function_plan ? (int) function_plan->reachable : -1);
         emit_codegen_abort_expr(out);
         cg_ctx_set_error(ctx);
         return;
@@ -6280,12 +6305,12 @@ static void xicgen_go(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     result_copy_shared = (v->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0;
     fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
     if (ctx->freestanding_profile)
-        fprintf(out, "(xr_aot_spawn(%s, &", xicgen_aot_context_expr(ctx, f));
+        fprintf(out, "(xr_aot_spawn(%s, ", xicgen_aot_context_expr(ctx, f));
     else
-        fprintf(out, "(xrt_guard_task_spawn(), xr_aot_spawn(%s, &",
+        fprintf(out, "(xrt_guard_task_spawn(), xr_aot_spawn(%s, ",
                 xicgen_aot_context_expr(ctx, f));
     emit_fname_suffix(ctx, out, target_prefix, target, "_aot_desc");
-    fprintf(out, ", ");
+    fprintf(out, "(), ");
     emit_fname_suffix(ctx, out, target_prefix, target, "_aot_frame_new");
     fprintf(out, "(");
     emit_aot_frame_new_call_args(ctx, out, f, v->args[0], target, target_is_sync_go, v->args, 1,
@@ -6998,17 +7023,12 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, ")");
         return;
     }
-    fprintf(out, "({ const void *_p = ");
+    fprintf(out, "xrt_span_from_ptr(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-    fprintf(out, "; int64_t _n = ");
+    fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out,
-            "; /* caller-proven mem.slice raw view */ "
-            "XR_ASSUME(_n >= 0 && (_n == 0 || (_p != NULL && "
-            "((uintptr_t)_p %% UINT16_C(%u)) == 0 && "
-            "(uint64_t)_n <= UINTPTR_MAX / UINT16_C(%u)))); "
-            "(xr_span_t){.data = (void *)_p, .length = _n}; })",
-            (unsigned) alignment, (unsigned) elem_size);
+    fprintf(out, ", UINT16_C(%u), UINT16_C(%u))", (unsigned) elem_size,
+            (unsigned) alignment);
 }
 
 static bool xicgen_emit_buffer_materialize_fields(FILE *out, const XrAggregateLayout *layout,
@@ -9934,35 +9954,39 @@ static void xicgen_atomic(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     }
 }
 
-static bool xicgen_emit_channel_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                       const char *method, uint16_t nargs) {
+static bool xicgen_emit_channel_method(XiCgenCtx *ctx, FILE *out, const XiFunc *function,
+                                       const XiValue *v, const char *method, uint16_t nargs) {
     if (!v || v->nargs < 1 || !method || !xi_value_type_is_channel(v->args[0]))
         return false;
     bool is_try_send = strcmp(method, "trySend") == 0 && nargs == 1 && v->nargs >= 2;
     bool is_try_recv = strcmp(method, "tryRecv") == 0 && nargs == 0;
     bool is_close = strcmp(method, "close") == 0 && nargs == 0;
-    bool is_closed = strcmp(method, "isClosed") == 0 && nargs == 0;
-    if (!is_try_send && !is_try_recv && !is_close && !is_closed)
+    if (!is_try_send && !is_try_recv && !is_close)
         return false;
 
     const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        emit_load_conversion_prefix(ctx, out, v, XR_REP_TAGGED);
     if (is_try_send) {
         XrRep send_rep = v->nargs >= 2 ? cg_value_plan_storage_rep(ctx, v->args[1]) : XR_REP_TAGGED;
-        const char *helper = "xr_aot_chan_try_send_sync";
+        const char *helper = "xr_aot_chan_try_send_xrt";
         if (send_rep == XR_REP_I64)
-            helper = "xr_aot_chan_try_send_sync_i64";
+            helper = "xr_aot_chan_try_send_i64";
         else if (send_rep == XR_REP_F64)
-            helper = "xr_aot_chan_try_send_sync_f64";
-        fprintf(out, "%s(", helper);
+            helper = "xr_aot_chan_try_send_f64";
+        fprintf(out, "%s(%s, ", helper, cg_aot_context_expr(ctx, function));
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         if (send_rep == XR_REP_I64 || send_rep == XR_REP_F64) {
             emit_value_as_rep_ctx(ctx, out, v->args[1], send_rep);
         } else {
-            fprintf(out, "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx, ");
+            const XaotTransferPlan *transfer =
+                cg_required_transfer_plan(ctx, v, 0, v->args[1], "channel method");
+            if (!transfer) {
+                emit_codegen_abort_expr(out);
+                return true;
+            }
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-            fprintf(out, ")");
+            fprintf(out, ", %u", (unsigned) transfer->mode);
         }
         fprintf(out, ")");
     } else if (is_try_recv) {
@@ -9971,10 +9995,6 @@ static bool xicgen_emit_channel_method(XiCgenCtx *ctx, FILE *out, const XiValue 
         fprintf(out, "))");
     } else if (is_close) {
         fprintf(out, "xr_aot_chan_close_sync(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-    } else if (is_closed) {
-        fprintf(out, "xr_aot_chan_is_closed_sync(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     }
@@ -10496,7 +10516,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     if (xicgen_emit_freestanding_enum_to_string_method(ctx, out, v, method, nargs))
         return;
-    if (xicgen_emit_channel_method(ctx, out, v, method, nargs))
+    if (xicgen_emit_channel_method(ctx, out, f, v, method, nargs))
         return;
     /* The receiver tests below must stay builtin-only. Each branch emits a
      * direct call into the runtime C helper for the named type, so a user
@@ -10534,20 +10554,6 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                                                    : cg_method_sym(method);
     if (xicgen_emit_stringbuilder_method(ctx, out, f, v, method, nargs))
         return;
-    /* string.copyArray<u8>(): the VM dispatches this by name (no stable method-symbol
-     * id), so lower it directly to the runtime helper. Mirrors VM m_to_bytes. */
-    if (sym < 0 && method && strcmp(method, "copyBytes") == 0 && nargs == 0 && v->nargs >= 1) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        /* Allocates a byte array, so a result nobody consumes has to be
-         * released rather than cast away.  See xrt_method_0. */
-        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
-        fprintf(out, discarded ? "xrt_discard_owned(xrt_str_to_bytes(" : "xrt_str_to_bytes(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, discarded ? "))" : ")");
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
     if (xicgen_byte_slice_copy_method_drops_helper(ctx, v)) {
         xicgen_byte_slice_copy(ctx, out, f, v, NULL);
         return;
@@ -11449,7 +11455,8 @@ static void emit_class_native_sym_method_table(XiCgenCtx *ctx, FILE *out, const 
         if (ci >= module->init->nchildren || !module->init->children[ci])
             continue;
         const XiFunc *target = module->init->children[ci];
-        if (cg_func_needs_aot_coro_ctx(ctx, target) ||
+        if (!cg_func_body_is_reachable_from_roots(ctx, target, 0) ||
+            cg_func_needs_aot_coro_ctx(ctx, target) ||
             !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
             continue;
         if (rows == 0)
@@ -11648,6 +11655,18 @@ static bool cg_func_json_decode_needs_register_helper(XiCgenCtx *ctx, const XiFu
     return false;
 }
 
+/* Layout declarations and registration must agree on callback reachability. */
+static bool cg_class_needs_runtime_registration(XiCgenCtx *ctx, const XiModule *module,
+                                                const XiClassData *cd) {
+    if (!module || !cd)
+        return false;
+    return cg_func_json_decode_needs_register_helper(ctx, module->init, cd) ||
+           ((cd->derive_flags & XR_DERIVE_JSON) != 0 &&
+            (cd->instance_layout || cd->struct_layout)) ||
+           (cd->needs_runtime_type &&
+            cg_func_needs_class_native_type_register_helper(ctx, module->init, cd));
+}
+
 static void emit_class_native_type_register_helpers(XiCgenCtx *ctx, FILE *out, XiModule *module,
                                                     const char *prefix) {
     if (!module || !module->classes)
@@ -11656,18 +11675,7 @@ static void emit_class_native_type_register_helpers(XiCgenCtx *ctx, FILE *out, X
         const XiClassData *class_data = module->classes[ci];
         if (!class_data)
             continue;
-        /* A value aggregate has no runtime type identity, so the helper that
-         * registers one is dead output unless something actually reaches it:
-         * a typed JSON decode registering its lazy type id, a derived JSON
-         * schema that needs the type, or a construction site that requires a
-         * runtime type. */
-        bool by_decode = cg_func_json_decode_needs_register_helper(ctx, module->init, class_data);
-        bool by_schema = (class_data->derive_flags & XR_DERIVE_JSON) != 0 &&
-                         (class_data->instance_layout || class_data->struct_layout);
-        bool by_create =
-            class_data->needs_runtime_type &&
-            cg_func_needs_class_native_type_register_helper(ctx, module->init, class_data);
-        if (!by_decode && !by_schema && !by_create)
+        if (!cg_class_needs_runtime_registration(ctx, module, class_data))
             continue;
         emit_one_class_native_type_register_helper(ctx, out, class_data, prefix);
     }
@@ -12883,7 +12891,6 @@ XI_TO_C_TEMPLATE_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER)
 #undef XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER
 
 static void xicgen_numeric_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
-    (void) f;
     const char *adapter = cg_numeric_width_adapter_name(ctx);
     const char *kernel = v ? xi_to_c_template_width_numeric_kernel(v->op) : NULL;
     if (!adapter || !kernel || !kernel[0] || !v || v->nargs != 1 || !v->args[0] ||
@@ -12893,8 +12900,13 @@ static void xicgen_numeric_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_codegen_abort_expr(out);
         return;
     }
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, f, v, &emission);
     uint8_t scalar_rep = XR_SCALAR_REP_NONE;
-    if (cg_value_narrow_local_scalar_rep(ctx, v, 0, &scalar_rep)) {
+    if (status == CG_VALUE_EMISSION_FOUND && emission.c_type) {
+        /* Publish the normalized kernel result using the immutable slot type. */
+        fprintf(out, "(%s)", emission.c_type);
+    } else if (cg_value_narrow_local_scalar_rep(ctx, v, 0, &scalar_rep)) {
         /* The shared kernel has already normalized the value to this width. */
         fprintf(out, "(%s)", cg_native_int_ctype(scalar_rep));
     }
@@ -13472,16 +13484,11 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     const char *task_helper =
         xi_value_type_is_task(v->args[0]) ? cg_task_field_helper(field) : NULL;
     if (task_helper) {
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(");
-        else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(");
+        const char *suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
         fprintf(out, "%s(%s, ", task_helper, xicgen_aot_context_expr(ctx, f));
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
-        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-            cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-            fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
         return;
     }
     const char *thread_helper =
@@ -14036,14 +14043,15 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     if (v->aux_kind == XI_AUX_KIND_ENUM_CASE) {
         const XiValue *receiver = cg_unwrap_identity_value(v->args[0]);
         const XiValue *index = cg_unwrap_identity_value(v->args[1]);
-        if (receiver && receiver->op == XI_GET_BUILTIN &&
-            receiver->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR && index &&
+        if (receiver && receiver->op == XI_GET_BUILTIN && index &&
             index->op == XI_CONST && index->type && index->type->kind == XR_KIND_INT &&
-            index->aux_int >= 0 && index->aux_int < XR_NUMBER_PARSE_ERROR_MEMBER_COUNT &&
-            cg_number_parse_error_member_access_is_exact(ctx, f, v) &&
-            emit_static_number_parse_error_member_value_expr(ctx, out, v,
-                                                             (uint32_t) index->aux_int))
+            cg_builtin_unit_enum_member_access_is_exact(ctx, f, v)) {
+            const char *suffix = emit_conversion_prefix_ctx(
+                ctx, out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+            emit_vref(out, index);
+            emit_conversion_suffix(out, suffix);
             return;
+        }
         const XaotEnumPlan *enum_plan =
             ctx && ctx->aot_bundle && v->enum_metadata_owner
                 ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, v->enum_metadata_owner)
@@ -15180,29 +15188,21 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ", sizeof(%s))", elem.ctype);
         return;
     }
-    fprintf(out, "({ xr_span_t _src = ");
+    fprintf(out, "xrt_span_apply_window(");
     emit_span_ref_expr(out, v->args[0]);
-    fprintf(out, "; int64_t _start = ");
+    fprintf(out, ", %s(%s, (", adapter, proof);
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ").length, ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    if (unchecked_access)
-        fprintf(out, "; /* unchecked Slice.window access */ ");
-    fprintf(out, "; int64_t _count = ");
-    /* A count the plan already resolved is spelled as the literal it is, so the
-     * owner folds against a constant here exactly as it does in the VM. */
+    fprintf(out, ", ");
     if (has_fixed_count)
         fprintf(out, "INT64_C(%" PRId64 ")", fixed_count);
     else
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-    fprintf(out,
-            "; XrSliceWindowPlan _win = %s(%s, _src.length, _start, _count, _src.data, "
-            "sizeof(%s)); ",
-            adapter, proof, elem.ctype);
-    if (!bounds_proven)
-        fprintf(out, "if (XR_UNLIKELY(!_win.admitted)) "
-                     "xrt_index_oob(_win.fault_operand, _src.length); ");
-    fprintf(out, "XR_ASSUME(_win.admitted); xr_span_t _out = _src; _out.data = _win.advances ? "
-                 "(void *)((uint8_t *)_src.data + (size_t)_win.byte_offset) : _src.data; "
-                 "_out.length = _win.length; _out; })");
+    fprintf(out, ", (");
+    emit_span_ref_expr(out, v->args[0]);
+    fprintf(out, ").data, sizeof(%s)), %s)", elem.ctype,
+            bounds_proven ? "true" : "false");
 }
 
 static void xicgen_span_as_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

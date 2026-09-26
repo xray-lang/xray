@@ -74,7 +74,7 @@ typedef enum XrSemanticIntrinsicKind {
     XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE = 2,
     XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING = 3,
     XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING = 4,
-    XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE = 5,
+    XR_SEM_INTRINSIC_JSON_NAMESPACE_CODEC = 5,
     XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR = 6,
     XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL = 7,
     XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY = 8,
@@ -168,6 +168,8 @@ typedef enum XrSemanticCallTargetKind {
      * generated registry, rather than a backend symbol lookup, owns its exact
      * module/member/arity and tagged-value ABI. */
     XR_SEM_CALL_TARGET_NATIVE_DIRECT,
+    XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_LOCAL,
+    XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -227,6 +229,7 @@ typedef enum XrSemanticParameterFlag {
     XR_SEM_PARAMETER_VARIADIC = 1u << 1,
     XR_SEM_PARAMETER_RECEIVER_BORROWED = 1u << 2,
     XR_SEM_PARAMETER_READ_PLACE = 1u << 3,
+    XR_SEM_PARAMETER_DEFAULT_SENTINEL = 1u << 4,
 } XrSemanticParameterFlag;
 
 typedef enum XrSemanticCaptureSource {

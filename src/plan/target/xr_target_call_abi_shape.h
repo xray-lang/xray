@@ -31,10 +31,31 @@
 #define XR_TARGET_CALL_ABI_SHAPE_H
 
 #include "xr_target_plan.h"
+#include "../semantic/xr_semantic_local_call_target_shape.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
+/* A local coroutine child keeps the resolved declaration's opcode and exact
+ * function identity, including when source syntax uses a method receiver. */
+static inline bool
+xr_target_local_coroutine_call_is_exact(const XrSemanticPlan *semantic,
+                                        const XrTargetCallRecord *call,
+                                        const XrSemanticOperationRecord *operation,
+                                        uint32_t function_begin) {
+    if (!semantic || !call || !operation ||
+        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        call->callee_function < function_begin || operation->opcode == XI_TAIL_CALL)
+        return false;
+    const XrSemanticCallTargetRecord *target =
+        xr_semantic_plan_call_target(semantic, call->semantic_call_target);
+    return target && target->operation == call->semantic_operation &&
+           xr_semantic_plan_operation(semantic, target->operation) == operation &&
+           target->function == call->callee_function - function_begin &&
+           xr_semantic_call_target_names_local_function(
+               target, operation, (uint32_t) xr_semantic_plan_function_count(semantic));
+}
 
 static inline bool
 xr_target_machine_reps_have_same_call_abi_ignoring_detail(const XrTargetMachineRepRecord *caller,

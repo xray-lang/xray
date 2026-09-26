@@ -185,6 +185,16 @@ static inline XrValue xr_aot_bridge_xrt_to_runtime(const XrAotContext *ctx, XrVa
     return xr_aot_bridge_native_value_to_runtime(value);
 }
 
+/* Normal and resumable callers hand the same source transfer contract to the
+ * runtime. String normalization creates an independent interned envelope. */
+static inline XrValue xr_aot_chan_try_send_xrt(const XrAotContext *ctx, XrValue channel,
+                                             XrValue value, uint8_t transfer_mode) {
+    bool string_envelope = XR_IS_STR(value);
+    XrValue normalized = xr_aot_bridge_xrt_to_runtime(ctx, value);
+    return xr_aot_chan_try_send_transfer(ctx, channel, normalized,
+                                         string_envelope ? XR_TRANSFER_MOVE : transfer_mode);
+}
+
 static inline XrValue xr_aot_bridge_native_pointer_to_xrt(XrValue value) {
     if (value.tag != XR_TAG_PTR || !value.ptr)
         return value;

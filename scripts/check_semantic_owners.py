@@ -3956,8 +3956,12 @@ def verify(root: Path, write: bool) -> list[str]:
     # so canonical VM and generated native C share it without runtime headers.
     # 51: integer-division generalizes the existing int-arith quotient/remainder
     # rule to every exact width; int-arith delegates rather than duplicating it.
-    if len(actual) != 51:
-        errors.append(f"shared-core inventory must contain exactly 51 headers, found {len(actual)}")
+    # 52: integer-bitwise supplies exact-width operations to canonical executors.
+    # 53: buffer-capacity extracts the existing checked growth policy from strbuf.
+    # 54: byte-compare extracts crypto's one comparison body and supports public
+    # strides, so value cells and native byte arrays need no temporary copies.
+    if len(actual) != 54:
+        errors.append(f"shared-core inventory must contain exactly 54 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":

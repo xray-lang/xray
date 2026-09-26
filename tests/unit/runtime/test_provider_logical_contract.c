@@ -348,7 +348,45 @@ static void test_owned_resource_type(void) {
 
 }
 
+static void test_byte_array_contract(void) {
+    XrProviderLogicalContract contract = {
+        .schema_version = XR_PROVIDER_LOGICAL_SCHEMA_VERSION,
+        .platforms = XR_PROVIDER_PLATFORM_WINDOWS | XR_PROVIDER_PLATFORM_LINUX | XR_PROVIDER_PLATFORM_MACOS,
+        .runtime_profiles = XR_PROVIDER_LOGICAL_PROFILE_HOSTED,
+        .parameter_count = 1u, .type_byte_count = 3u,
+        .parameter_modes = {XR_PROVIDER_MODE_REF},
+        .parameter_owners = {XR_PROVIDER_OWNER_BORROWED},
+        .types = {8u, 1u, 1u},
+        .result_owner = XR_PROVIDER_OWNER_TRIVIAL, .error_owner = XR_PROVIDER_OWNER_TRIVIAL,
+        .threads = XR_PROVIDER_THREADS_ANY, .reentry = XR_PROVIDER_REENTRY_FORBIDDEN,
+        .callbacks = XR_PROVIDER_CALLBACK_NONE, .refusal = XR_PROVIDER_REFUSAL_TRAP,
+    };
+    CHECK(xr_provider_logical_contract_verify(&contract), "exact borrowed ref byte array contract");
+    XrProviderLogicalTypeView view = {0};
+    CHECK(xr_provider_logical_contract_type(&contract, 0u, &view) && view.size == 1u &&
+          view.bytes[0] == XR_PROVIDER_TYPE_U8_ARRAY, "independent byte-array token");
+    uint8_t wire[XR_PROVIDER_LOGICAL_MAX_ENCODED_BYTES];
+    size_t size = 0u;
+    XrProviderLogicalContract decoded = {0};
+    CHECK(xr_provider_logical_contract_encode(&contract, wire, sizeof(wire), &size) &&
+          xr_provider_logical_contract_decode(wire, size, &decoded) &&
+          xr_provider_logical_contract_equal(&contract, &decoded), "byte-array contract round trip");
+    XrFingerprint array_id, string_id;
+    CHECK(xr_provider_logical_contract_fingerprint(&contract, &array_id), "byte-array identity");
+    contract.types[0] = XR_PROVIDER_TYPE_BYTES;
+    CHECK(xr_provider_logical_contract_fingerprint(&contract, &string_id) &&
+          memcmp(array_id.bytes, string_id.bytes, sizeof(array_id.bytes)) != 0,
+          "byte array cannot alias string provider identity");
+    contract.types[0] = XR_PROVIDER_TYPE_U8_ARRAY;
+    contract.parameter_owners[0] = XR_PROVIDER_OWNER_TRIVIAL;
+    CHECK(!xr_provider_logical_contract_verify(&contract), "byte array cannot have trivial ownership");
+    contract.parameter_owners[0] = XR_PROVIDER_OWNER_BORROWED;
+    contract.types[0] = 9u;
+    CHECK(!xr_provider_logical_contract_verify(&contract), "unknown adjacent type token rejected");
+}
+
 int main(void) {
+    test_byte_array_contract();
     test_wire_known_answer();
     test_owned_resource_type();
     test_semantic_identity_mutations();

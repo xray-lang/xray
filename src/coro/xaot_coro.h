@@ -484,7 +484,6 @@ XR_FUNC XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue chan
                                            XrValue send_value);
 XR_FUNC XrValue xr_aot_chan_try_send_ready_transfer(const XrAotContext *ctx, XrValue channel_value,
                                                     XrValue send_value, uint8_t transfer_mode);
-XR_FUNC XrValue xr_aot_chan_try_send_sync(XrValue channel_value, XrValue send_value);
 
 static inline XrValue xr_aot_chan_try_send_i64(const XrAotContext *ctx, XrValue channel_value,
                                                int64_t send_value) {
@@ -494,14 +493,6 @@ static inline XrValue xr_aot_chan_try_send_i64(const XrAotContext *ctx, XrValue 
 static inline XrValue xr_aot_chan_try_send_f64(const XrAotContext *ctx, XrValue channel_value,
                                                double send_value) {
     return xr_aot_chan_try_send(ctx, channel_value, XR_FROM_FLOAT(send_value));
-}
-
-static inline XrValue xr_aot_chan_try_send_sync_i64(XrValue channel_value, int64_t send_value) {
-    return xr_aot_chan_try_send_sync(channel_value, XR_FROM_INT(send_value));
-}
-
-static inline XrValue xr_aot_chan_try_send_sync_f64(XrValue channel_value, double send_value) {
-    return xr_aot_chan_try_send_sync(channel_value, XR_FROM_FLOAT(send_value));
 }
 
 static inline XrValue xr_aot_chan_try_send_ready_i64(const XrAotContext *ctx, XrValue channel_value,

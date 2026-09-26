@@ -287,9 +287,22 @@ static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation
             return add_event(ctx, owner_index, operation_index, XR_OWN_EVENT_ALLOC, 1,
                              XR_OWN_OWNED_LOCAL);
         }
-        if (operation->parameter_ownership != XI_OWN_BORROWED)
-            return fail(ctx, "XR_OWN_3000",
-                        "reference parameter has no effective ownership contract");
+        if (operation->parameter_ownership != XI_OWN_BORROWED) {
+            const XrSemanticFunctionRecord *function =
+                xr_semantic_plan_function(ctx->plan, operation->function);
+            const XrSemanticTypeRecord *type =
+                xr_semantic_plan_type(ctx->plan, operation->result_type);
+            char detail[256];
+            snprintf(detail, sizeof(detail),
+                     "reference parameter has no effective ownership contract "
+                     "function=%s parameter=%lld type-kind=%u mode=%u ownership=%u",
+                     function && function->name ? function->name : "<unknown>",
+                     (long long) operation->semantic_immediate,
+                     type ? (unsigned) type->kind : UINT32_MAX,
+                     (unsigned) operation->parameter_mode,
+                     (unsigned) operation->parameter_ownership);
+            return fail(ctx, "XR_OWN_3000", detail);
+        }
         if (owner->initial_state == XR_OWN_UNINITIALIZED)
             owner->initial_state = XR_OWN_BORROWED;
         return add_event(ctx, owner_index, operation_index, XR_OWN_EVENT_BORROW, 0,

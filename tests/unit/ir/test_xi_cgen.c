@@ -32,6 +32,9 @@
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/ir/xi_value_query.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_builtin_runtime_method_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_dynamic_value_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_panic_info_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_native_leaf_shape.h"
@@ -73,7 +76,11 @@ static XrVMRuntime *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 static const char *g_test_filter = NULL;
+static const char *g_test_case = NULL;
+static bool g_list_cases = false;
+static unsigned g_listed_cases = 0;
 static const char *g_string_runes_c_output = NULL;
+static const char *g_channel_send_c_output;
 static const char *g_rune_to_string_c_output = NULL;
 static const char *g_structural_root_c_output = NULL;
 
@@ -107,8 +114,15 @@ typedef struct TestAotPlan {
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
+        if (g_test_case && strcmp(#name, g_test_case) != 0)                                         \
+            return;                                                                                \
         if (g_test_filter && !strstr(#name, g_test_filter))                                        \
             return;                                                                                \
+        if (g_list_cases) {                                                                         \
+            printf("CASE " #name "\n");                                                           \
+            g_listed_cases++;                                                                       \
+            return;                                                                                \
+        }                                                                                          \
         printf("--- " #name " ---\n");                                                             \
         test_##name();                                                                             \
         tests_passed++;                                                                            \
@@ -775,7 +789,7 @@ static bool test_aot_plan_build_emission_plans(TestAotPlan *plan) {
         XrCEmissionPlan *emission_plan = NULL;
         char error[512] = {0};
         if (!xr_c_emission_plan_build(
-                target_plan, xr_target_plan_semantic_plan(target_plan),
+                target_plan, xaot_bundle_program_semantic_for_module(&plan->bundle, i),
                 xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)), &emission_plan,
                 error, sizeof(error)) ||
             !xr_c_emission_plan_is_verified(emission_plan)) {
@@ -876,15 +890,25 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uin
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     if (!target_profile)
         return false;
-    XiModule *module = nmodules == 1u ? modules[0] : NULL;
+    const XrSemanticPlan **semantics = xr_calloc(nmodules, sizeof(*semantics));
+    if (!semantics) {
+        xr_target_profile_free(target_profile);
+        return false;
+    }
+    for (uint32_t i = 0; i < nmodules; i++)
+        semantics[i] = modules[i] && modules[i]->init ? modules[i]->init->semantic_plan : NULL;
     XrTargetPlan *target_plan = NULL;
     char target_error[512] = {0};
-    if (!module || !module->init || !module->init->semantic_plan ||
-        !xr_target_plan_build(module->init->semantic_plan, target_profile, &target_plan,
-                              target_error, sizeof(target_error)) ||
+    bool built = entry_module < nmodules &&
+                 xr_target_plan_build_program_module_set(semantics, nmodules,
+                                                         semantics[entry_module], target_profile,
+                                                         &target_plan, target_error,
+                                                         sizeof(target_error));
+    xr_free(semantics);
+    if (!built ||
         !xaot_bundle_set_program_target_plan(&plan->bundle, target_plan)) {
         fprintf(stderr, "  Program TargetPlan fixture error: %s\n",
-                target_error[0] ? target_error : "multi-module fixture lacks program authority");
+                target_error[0] ? target_error : "fixture lacks program authority");
         xr_target_plan_free(target_plan);
         xr_target_profile_free(target_profile);
         return false;
@@ -990,7 +1014,7 @@ static bool test_c_emission_registry_install(TestCEmissionRegistry *registry, Xi
         XrCEmissionPlan *emission_plan = NULL;
         char error[512] = {0};
         if (!target_plan || !xr_c_emission_plan_build(
-                                target_plan, xr_target_plan_semantic_plan(target_plan),
+                                target_plan, xaot_bundle_program_semantic_for_module(bundle, i),
                                 xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
                                 &emission_plan, error, sizeof(error))) {
             fprintf(stderr, "  C emission registry fixture error: %s\n",
@@ -2551,6 +2575,37 @@ TEST(cgen_returned_null_constant_emits_immediate_without_local) {
 }
 
 TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
+    const char *source =
+        "@noinline fn concat_literals(value: string) -> string {\n"
+        "    return \"left\" + value + \"right\"\n"
+        "}\n"
+        "print(concat_literals(\"middle\"))\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "source concat fixture has executable module authority");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "multi-part concat C generation failed");
+    TEST_REQUIRE(!had_error, "multi-part concat fixture should generate");
+    const char *fn = find_static_function_definition(code, "concat_literals");
+    TEST_REQUIRE(fn != NULL, "source concat-literal definition should be emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "source concat-literal function end emitted");
+    bool immediate = !contains_between(fn, fn_end, " = xr_str_lit(");
+    if (!immediate)
+        fprintf(stderr, "  Unexpected concat body:\n%.*s\n", (int) (fn_end - fn + 3), fn);
+    TEST_REQUIRE(immediate, "multi-part concat literals must not leave dead C locals");
+    TEST_REQUIRE(count_between(fn, fn_end, "xr_str_lit(") >= 2,
+                 "multi-part concat must retain both exact string literals at its use site");
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_str_concat_parts(3,"),
+                 "multi-part concat must retain the single-allocation helper");
+
+    printf("  Generated immediate multi-part concat literals %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_concat_without_executable_recipe_is_rejected) {
     XrType string_type = {
         .kind = XR_KIND_STRING, .id = 937, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XiFunc *ir = xi_func_new("manual_concat_literals", &string_type);
@@ -2570,21 +2625,8 @@ TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "multi-part concat C generation failed");
-    TEST_REQUIRE(!had_error, "multi-part concat fixture should generate");
-    const char *fn = find_static_function_definition(code, "manual_concat_literals");
-    TEST_REQUIRE(fn != NULL, "manual concat-literal definition should be emitted");
-    const char *fn_end = strstr(fn, "\n}\n");
-    TEST_REQUIRE(fn_end != NULL, "manual concat-literal function end emitted");
-    TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v0 = xr_str_lit(") &&
-                     !contains_between(fn, fn_end, "XrValue v1 = xr_str_lit("),
-                 "multi-part concat literals must not leave dead C locals");
-    TEST_REQUIRE(count_between(fn, fn_end, "xr_str_lit(") >= 2,
-                 "multi-part concat must retain both exact string literals at its use site");
-    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_str_concat_parts(2,"),
-                 "multi-part concat must retain the single-allocation helper");
-
-    printf("  Generated immediate multi-part concat literals %zu bytes of C code\n", strlen(code));
+    TEST_REQUIRE(code != NULL && had_error,
+                 "concat without executable authority must fail generation");
     xr_free(code);
     test_func_free(ir);
 }
@@ -3005,6 +3047,10 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
 }
 
 static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref, XiModule **out_module) {
+    static const XrLinkSymbolPlan link = {
+        .xray_name = "native_direct_managed_scalar",
+        .used = true,
+    };
     static XrClassInfo net_conn_class = {
         .name = "NetConn",
         .xg_class_id = 1901,
@@ -3052,6 +3098,8 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref, XiMod
     };
 
     XiFunc *function = xi_func_new("native_direct_managed_scalar", &bool_type);
+    if (function)
+        function->link_plan = &link;
     XiBlock *entry = function ? xi_block_new(function) : NULL;
     if (!function || !entry)
         return NULL;
@@ -3171,6 +3219,8 @@ static XiFunc *native_direct_fresh_result_fixture(XiValue **out_call) {
             },
     };
     XiFunc *function = xi_func_new("native_direct_fresh_result", &int_type);
+    if (function)
+        function->is_module_initializer = true;
     XiBlock *entry = function ? xi_block_new(function) : NULL;
     XiValue *port = function && entry ? xi_const_int(function, entry, 0, &int_type) : NULL;
     XiValue *address = function && entry ? xi_const_str(function, entry, "", &string_type) : NULL;
@@ -3253,6 +3303,19 @@ TEST(cgen_native_direct_fresh_result_is_single_owned_materialization) {
     TEST_REQUIRE(!contains(code, retain), "fresh provider result is not retained again");
     TEST_REQUIRE(count_substring(code, release) == 1,
                  "unused fresh provider result is released exactly once");
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_native_direct_unrooted_result_is_rejected) {
+    XiFunc *ir = native_direct_fresh_result_fixture(NULL);
+    TEST_REQUIRE(ir != NULL, "unrooted native-direct fixture allocated");
+    ir->is_module_initializer = false;
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "net", &had_error);
+    TEST_REQUIRE(code != NULL && had_error, "cold native call has no execution authority");
+    TEST_REQUIRE(!contains(code, "xrt_net_udp_bind("),
+                 "unrooted provider operation cannot be emitted");
     xr_free(code);
     test_func_free(ir);
 }
@@ -3454,6 +3517,8 @@ TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
         .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("string_runes_recipe", &unit_type);
+    if (ir)
+        ir->is_module_initializer = true;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "String.runes recipe fixture allocated");
     XiModule fixture_module = {
@@ -3502,7 +3567,10 @@ TEST(cgen_string_slice_range_consumes_immutable_emission_recipe) {
     XrType string_type = {
         .kind = XR_KIND_STRING, .id = 985, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType int_type = {.kind = XR_KIND_INT, .id = 986, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    const XrLinkSymbolPlan link = {.xray_name = "string_slice_range_recipe", .used = true};
     XiFunc *ir = xi_func_new("string_slice_range_recipe", &string_type);
+    if (ir)
+        ir->link_plan = &link;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "String range-slice recipe fixture allocated");
     entry->sealed = true;
@@ -3575,6 +3643,8 @@ TEST(cgen_iterator_rune_next_consumes_immutable_emission_recipe) {
         .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("iterator_rune_next_recipe", &unit_type);
+    if (ir)
+        ir->is_module_initializer = true;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "Iterator<rune>.next recipe fixture allocated");
     entry->sealed = true;
@@ -3629,6 +3699,8 @@ TEST(cgen_iterator_rune_nth_consumes_immutable_emission_recipe) {
         .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("iterator_rune_nth_recipe", &unit_type);
+    if (ir)
+        ir->is_module_initializer = true;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "Iterator<rune>.nth recipe fixture allocated");
     entry->sealed = true;
@@ -3686,6 +3758,8 @@ TEST(cgen_rune_to_uint32_consumes_immutable_emission_recipe) {
         .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("rune_to_uint32_recipe", &unit_type);
+    if (ir)
+        ir->is_module_initializer = true;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "rune.toUInt32 recipe fixture allocated");
     entry->sealed = true;
@@ -3744,6 +3818,8 @@ TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
         .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("rune_to_string_recipe", &unit_type);
+    if (ir)
+        ir->is_module_initializer = true;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "rune.toString recipe fixture allocated");
     XiModule fixture_module = {
@@ -3863,6 +3939,8 @@ TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
         .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("rune_is_whitespace_recipe", &unit_type);
+    if (ir)
+        ir->is_module_initializer = true;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "rune.isWhitespace recipe fixture allocated");
     entry->sealed = true;
@@ -4030,6 +4108,8 @@ TEST(cgen_native_array_arguments_share_generated_value_abi) {
     ref_callable.function.param_count = ref_callable.function.min_params = 1;
     ref_callable.function.return_type = &unit;
     XiFunc *ir = xi_func_new("native_array", &unit);
+    if (ir)
+        ir->is_module_initializer = true;
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry, "native array program allocated");
     entry->sealed = true;
@@ -5842,6 +5922,8 @@ TEST(cgen_string_literal) {
     test_func_free(ir);
 }
 
+static const char *g_explicit_concat_c_output = NULL;
+
 TEST(cgen_str_concat_uses_single_allocation_helper) {
 #define CHECK_CGEN_STR_CONCAT(cond, msg)                                                           \
     do {                                                                                           \
@@ -5852,7 +5934,7 @@ TEST(cgen_str_concat_uses_single_allocation_helper) {
     } while (0)
 
     const char *src = "enum Kind { Ready }\n"
-                      "var s = \"a\" + string(1) + \"b\" + string(2) + true + null + Kind.Ready\n"
+                      "var s = \"a\" + string(1) + \"b\" + string(2) + string(true) + string(null) + string(Kind.Ready)\n"
                       "print(s)\n"
                       "print(\"q\" + string(3))\n"
                       "print(\"${42}\")\n";
@@ -5860,10 +5942,19 @@ TEST(cgen_str_concat_uses_single_allocation_helper) {
     XiFunc *ir = compile_to_ir(src);
     CHECK_CGEN_STR_CONCAT(ir != NULL, "IR compilation failed");
 
-    char *code = generate_c(ir, "test");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    CHECK_CGEN_STR_CONCAT(!had_error, "concat generation must succeed");
     CHECK_CGEN_STR_CONCAT(code != NULL, "C code generation failed");
 
     size_t code_len = strlen(code);
+    if (g_explicit_concat_c_output) {
+        FILE *output = fopen(g_explicit_concat_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "explicit concat output opens");
+        TEST_REQUIRE(fwrite(code, 1, code_len, output) == code_len, "explicit concat output is complete");
+        TEST_REQUIRE(fclose(output) == 0, "explicit concat output closes");
+    }
+
     const char *code_end = code + code_len;
     size_t add_calls = count_between(code, code_end, "xrt_add(");
     size_t strbuf_new_calls = count_between(code, code_end, "xrt_strbuf_new()");
@@ -5993,8 +6084,10 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
                           "public(0)\n";
     const char *app_src = "print(0)\n";
 
-    XiFunc *lib_ir = compile_to_ir(lib_src);
-    XiFunc *app_ir = compile_to_ir(app_src);
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.run_optimize = false;
+    XiFunc *lib_ir = compile_to_ir_with_identity(lib_src, cfg, "cgen-library-test");
+    XiFunc *app_ir = compile_to_ir_with_identity(app_src, cfg, "cgen-application-test");
     assert(lib_ir != NULL && app_ir != NULL && "IR compilation failed");
     assert(lib_ir->module != NULL && app_ir->module != NULL && "module metadata required");
     lib_ir->module->name = "lib";
@@ -6011,7 +6104,10 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     assert(ctx != NULL);
-    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    TEST_REQUIRE(xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle), "program authority installed");
+    TEST_REQUIRE(xi_cgen_ctx_set_value_emission_plans(ctx, plan.emission_plans,
+                                                    plan.nemission_plans),
+                 "per-module C emission authorities installed");
     xi_cgen_resolve_module_imports(ctx, modules, 2);
 
     char *buf = NULL;
@@ -6062,8 +6158,10 @@ TEST(cgen_multimodule_branching_dispatcher_defers_to_native_inliner) {
                           "dispatch(0, 0)\n";
     const char *app_src = "print(0)\n";
 
-    XiFunc *lib_ir = compile_to_ir(lib_src);
-    XiFunc *app_ir = compile_to_ir(app_src);
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.run_optimize = false;
+    XiFunc *lib_ir = compile_to_ir_with_identity(lib_src, cfg, "cgen-library-test");
+    XiFunc *app_ir = compile_to_ir_with_identity(app_src, cfg, "cgen-application-test");
     TEST_REQUIRE(lib_ir != NULL && app_ir != NULL, "IR compilation failed");
     TEST_REQUIRE(lib_ir->module != NULL && app_ir->module != NULL, "module metadata required");
     lib_ir->module->name = "lib";
@@ -6079,7 +6177,10 @@ TEST(cgen_multimodule_branching_dispatcher_defers_to_native_inliner) {
     test_aot_plan_prepare(&plan, modules, 2, 1);
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     TEST_REQUIRE(ctx != NULL, "CGen context allocated");
-    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    TEST_REQUIRE(xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle), "program authority installed");
+    TEST_REQUIRE(xi_cgen_ctx_set_value_emission_plans(ctx, plan.emission_plans,
+                                                    plan.nemission_plans),
+                 "per-module C emission authorities installed");
     xi_cgen_resolve_module_imports(ctx, modules, 2);
 
     char *code = NULL;
@@ -6869,6 +6970,570 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
     test_func_free(ir);
 }
 
+TEST(cgen_task_poll_pending_and_complete) {
+    const char *source =
+        "fn task_done(task: Task<i64>) -> bool { return task.done }\n"
+        "fn task_poll(task: ref Task<i64>) -> TaskResult<i64> { return task.poll() }\n"
+        "fn worker(ch: Channel<i64>) -> i64 {\n"
+        "    var received = ch.recv()\n"
+        "    return match(received) { Recv.Value { value: v } -> v, _ -> -1 }\n"
+        "}\n"
+        "const ch = Channel<i64>(0)\n"
+        "var task = go worker(ch)\n"
+        "var first = task_poll(ref task)\n"
+        "print(match(first) { TaskResult.Pending -> -2, _ -> -4 })\n"
+        "print(task_done(task))\n"
+        "ch.send(42)\n"
+        "var second = task.awaitResult()\n"
+        "print(match(second) { TaskResult.Success { value: v } -> v, _ -> -5 })\n"
+        "var third = task_poll(ref task)\n"
+        "print(match(third) { TaskResult.Success { value: v } -> v, _ -> -6 })\n"
+        "print(task_done(task))\n"
+        "ch.close()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "task poll source compiles through coroutine lowering");
+    unsigned receives = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (op->opcode != XI_CALL_METHOD ||
+            op->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_POLL << 1))
+            continue;
+        receives++;
+        TEST_REQUIRE(xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "poll binds exact non-suspending runtime authority");
+        XrSemanticOperationRecord *mutable_op = (XrSemanticOperationRecord *)op;
+        XrSemanticOperationRecord saved = *op;
+        mutable_op->return_provenance = XR_SEM_RETURN_NONE;
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "poll rejects missing owned provenance");
+        *mutable_op = saved;
+        mutable_op->semantic_immediate = ((int64_t)XI_METHOD_SYMBOL_AWAIT_RESULT << 1);
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "poll rejects a suspending method identity");
+        *mutable_op = saved;
+        TEST_REQUIRE(xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "restored poll regains runtime authority");
+    }
+    TEST_REQUIRE(receives == 1, "fixture covers ref polling helper");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "task_poll", &had_error);
+    TEST_REQUIRE(code && !had_error, "task poll has complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "task poll output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "task poll output complete");
+        TEST_REQUIRE(fclose(output) == 0, "task poll output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_ref_slice_copy_execution) {
+    const char *source =
+        "fn fill(dst: ref Slice<u8>, src: Slice<u8>) { dst.copyFrom(src) }\n"
+        "fn run() {\n"
+        "    var a: Array<u8> = [1 as u8, 2 as u8]\n"
+        "    var b: Array<u8> = [9 as u8, 8 as u8]\n"
+        "    var dst: Slice<u8> = a[:]\n"
+        "    var src: Slice<u8> = b[:]\n"
+        "    fill(ref dst, src)\n"
+        "    print(a[0] as i64)\n"
+        "    print(a[1] as i64)\n"
+        "    print(b[0] as i64)\n"
+        "}\n"
+        "run()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "ref Slice copy compiles through the optimized pipeline");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "ref_slice", &had_error);
+    TEST_REQUIRE(code && !had_error, "ref Slice copy has complete frozen plans");
+    TEST_REQUIRE(contains(code, "xr_span_t *"), "ref Slice ABI addresses the native descriptor");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "ref Slice output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "ref Slice output complete");
+        TEST_REQUIRE(fclose(output) == 0, "ref Slice output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_string_copy_execution) {
+    const char *source =
+        "fn duplicate(s: string) -> string { return copy(s) }\n"
+        "fn run() {\n"
+        "    var source = \"hello\"\n"
+        "    var saved = duplicate(source)\n"
+        "    source = \"x\"\n"
+        "    print(saved)\n"
+        "    print(source)\n"
+        "    print(len(copy(\"\")))\n"
+        "}\n"
+        "run()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "String copy source compiles through the optimized pipeline");
+    unsigned copies = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (!xr_semantic_container_copy_is_exact(ir->semantic_plan, op, NULL, NULL))
+            continue;
+        copies++;
+        XrSemanticOperationRecord bad = *op;
+        bad.result_ownership = XI_GEN_RESULT_OWNERSHIP_NONE;
+        TEST_REQUIRE(!xr_semantic_container_copy_is_exact(ir->semantic_plan, &bad, NULL, NULL),
+                     "String copy cannot return an unowned result");
+        bad = *op;
+        bad.result_type = XR_SEMANTIC_INDEX_NONE;
+        TEST_REQUIRE(!xr_semantic_container_copy_is_exact(ir->semantic_plan, &bad, NULL, NULL),
+                     "String copy requires the exact source and result type");
+    }
+    TEST_REQUIRE(copies == 2, "fixture covers ordinary and empty String copies");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "string_copy", &had_error);
+    TEST_REQUIRE(code && !had_error, "String copy has complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "String copy output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "String copy output complete");
+        TEST_REQUIRE(fclose(output) == 0, "String copy output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_nullable_unit_enum_execution) {
+    const char *source =
+        "enum ProbeError { Bad, Worse }\n"
+        "fn query(flag: bool) -> ProbeError? {\n"
+        "    if (flag) { return ProbeError.Bad }\n"
+        "    return null\n"
+        "}\n"
+        "print(query(true) != null)\n"
+        "print(query(false) == null)\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "nullable unit enum compiles through the optimized pipeline");
+    unsigned nullable_enums = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_type_count(ir->semantic_plan); i++) {
+        const XrSemanticTypeRecord *type = xr_semantic_plan_type(ir->semantic_plan, i);
+        if (!xr_semantic_nullable_unit_enum_type_is_exact(type))
+            continue;
+        nullable_enums++;
+        XrSemanticTypeRecord bad = *type;
+        bad.flags |= XR_SEM_TYPE_REFERENCE_CAPABLE;
+        TEST_REQUIRE(!xr_semantic_nullable_unit_enum_type_is_exact(&bad),
+                     "nullable ordinal cannot carry a reference owner");
+        bad = *type;
+        bad.enum_flags &= (uint8_t) ~XR_SEM_ENUM_UNIT;
+        TEST_REQUIRE(!xr_semantic_nullable_unit_enum_type_is_exact(&bad),
+                     "payload enum cannot use nullable ordinal storage");
+        bad = *type;
+        memset(&bad.source_enum_identity, 0, sizeof(bad.source_enum_identity));
+        TEST_REQUIRE(!xr_semantic_nullable_unit_enum_type_is_exact(&bad),
+                     "nullable ordinal requires nominal declaration identity");
+    }
+    TEST_REQUIRE(nullable_enums != 0, "fixture exposes nullable enum storage authority");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "nullable_enum", &had_error);
+    TEST_REQUIRE(code && !had_error, "nullable enum calls have complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "nullable enum output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "nullable enum output complete");
+        TEST_REQUIRE(fclose(output) == 0, "nullable enum output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+/* A unit enum value has one native ordinal carrier; the tagged carriers it
+ * meets -- a nullable local, a narrowed projection and a class field -- are
+ * reached only through explicit adapters. Each comparison below exercises a
+ * different adapter direction against an independently known answer. */
+TEST(cgen_nullable_unit_enum_compare_execution) {
+    const char *source =
+        "enum ProbeError { Bad, Worse, Timeout }\n"
+        "class Holder {\n"
+        "    kind: ProbeError\n"
+        "    constructor() { this.kind = ProbeError.Worse }\n"
+        "}\n"
+        "fn query(flag: i64) -> ProbeError? {\n"
+        "    if (flag == 1) { return ProbeError.Timeout }\n"
+        "    if (flag == 2) { return ProbeError.Bad }\n"
+        "    return null\n"
+        "}\n"
+        "fn narrowed(flag: i64) -> bool {\n"
+        "    var e = query(flag)\n"
+        "    return e != null && e != ProbeError.Timeout\n"
+        "}\n"
+        "fn direct(flag: i64) -> bool {\n"
+        "    var e = query(flag)\n"
+        "    return e == ProbeError.Bad\n"
+        "}\n"
+        "fn run() {\n"
+        "    print(narrowed(0))\n"
+        "    print(narrowed(1))\n"
+        "    print(narrowed(2))\n"
+        "    print(direct(0))\n"
+        "    print(direct(1))\n"
+        "    print(direct(2))\n"
+        "    var holder = Holder()\n"
+        "    print(holder.kind == ProbeError.Worse)\n"
+        "    print(holder.kind == ProbeError.Bad)\n"
+        "}\n"
+        "run()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "nullable unit enum comparisons compile through the optimized pipeline");
+    unsigned mixed = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (!xr_semantic_nullable_unit_enum_equality_is_exact(ir->semantic_plan, op))
+            continue;
+        mixed++;
+        XrSemanticOperationRecord bad = *op;
+        bad.result_alias_operand = 0;
+        TEST_REQUIRE(!xr_semantic_nullable_unit_enum_equality_is_exact(ir->semantic_plan, &bad),
+                     "mixed enum comparison cannot alias an operand");
+        bad = *op;
+        bad.operand_count = 1;
+        TEST_REQUIRE(!xr_semantic_nullable_unit_enum_equality_is_exact(ir->semantic_plan, &bad),
+                     "mixed enum comparison requires exactly two operands");
+    }
+    TEST_REQUIRE(mixed == 1, "fixture exposes exactly the one un-narrowed nullable comparison");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "nullable_enum_compare", &had_error);
+    TEST_REQUIRE(code && !had_error, "nullable unit enum comparisons have complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "nullable enum comparison output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length,
+                     "nullable enum comparison output complete");
+        TEST_REQUIRE(fclose(output) == 0, "nullable enum comparison output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_direct_move_array_execution) {
+    const char *source =
+        "fn take(xs: move Array<string>) -> i64 {\n"
+        "    xs.push(\"end\")\n"
+        "    return len(xs)\n"
+        "}\n"
+        "fn run() {\n"
+        "    var xs = [\"first\", \"second\"]\n"
+        "    print(take(move xs))\n"
+        "    print(take([\"temporary\"]))\n"
+        "}\n"
+        "run()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "explicit and temporary move arguments compile");
+    unsigned moves = 0;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(ir->semantic_plan, &operand_count);
+    for (uint32_t i = 0; i < operand_count; i++) {
+        const XrSemanticOperandRecord *operand = &operands[i];
+        if (operand->role != XR_SEM_OPERAND_ARGUMENT || operand->parameter_mode != XR_PARAM_MOVE)
+            continue;
+        moves++;
+        TEST_REQUIRE(operand->ownership_action == XR_SEM_OPERAND_CONSUME,
+                     "move value arguments transfer an owner");
+    }
+    TEST_REQUIRE(moves == 2, "fixture preserves both explicit and temporary consuming calls");
+    const XrSemanticParameterRecord *parameter = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_parameter_count(ir->semantic_plan); i++) {
+        const XrSemanticParameterRecord *candidate = xr_semantic_plan_parameter(ir->semantic_plan, i);
+        if (candidate->mode == XR_PARAM_MOVE) {
+            parameter = candidate;
+            break;
+        }
+    }
+    TEST_REQUIRE(parameter != NULL, "fixture has the resolved consuming declaration");
+    for (uint32_t i = 0; i < operand_count; i++) {
+        if (operands[i].role != XR_SEM_OPERAND_ARGUMENT || operands[i].parameter_mode != XR_PARAM_MOVE)
+            continue;
+        XrSemanticOperandRecord bad = operands[i];
+        TEST_REQUIRE(xr_semantic_direct_local_reference_argument_access_is_exact(parameter, &bad),
+                     "resolved consuming declaration admits the source access");
+        bad.access = XR_CALL_ARG_REF;
+        TEST_REQUIRE(!xr_semantic_direct_local_reference_argument_access_is_exact(parameter, &bad),
+                     "consuming declaration rejects reference access");
+        bad = operands[i];
+        bad.flags |= XR_SEM_OPERAND_ADDRESSABLE;
+        TEST_REQUIRE(!xr_semantic_direct_local_reference_argument_access_is_exact(parameter, &bad),
+                     "consuming value cannot smuggle an addressable place");
+        XrSemanticParameterRecord borrowed = *parameter;
+        borrowed.ownership = XI_OWN_BORROWED;
+        TEST_REQUIRE(!xr_semantic_direct_local_reference_argument_access_is_exact(&borrowed, &operands[i]),
+                     "move value parameter cannot claim borrowed ownership");
+    }
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "direct_move", &had_error);
+    TEST_REQUIRE(code && !had_error, "move value calls have complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "move call output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "move call output complete");
+        TEST_REQUIRE(fclose(output) == 0, "move call output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_array_shift_managed_execution) {
+    const char *source =
+        "fn run() {\n"
+        "    var a: Array<Array<u8>> = [[7 as u8, 8 as u8], [9 as u8]]\n"
+        "    var first = a.shift()\n"
+        "    if (first != null) { print(first[0] as i64) }\n"
+        "    print(len(a))\n"
+        "    var second = a.shift()\n"
+        "    if (second != null) { print(second[0] as i64) }\n"
+        "    print(a.shift() == null)\n"
+        "    var strings: Array<string> = [\"hello\", \"ok\"]\n"
+        "    var text = strings.shift()\n"
+        "    if (text != null) { print(len(text)) }\n"
+        "    print(len(strings))\n"
+        "}\n"
+        "run()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "managed Array.shift source compiles through coroutine lowering");
+    unsigned shifts = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (op->opcode != XI_CALL_METHOD ||
+            op->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_SHIFT << 1))
+            continue;
+        shifts++;
+        TEST_REQUIRE(xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "shift binds exact nullable runtime authority");
+        XrSemanticOperationRecord *mutable_op = (XrSemanticOperationRecord *)op;
+        XrSemanticOperationRecord saved = *op;
+        mutable_op->return_provenance = XR_SEM_RETURN_NONE;
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "shift rejects missing managed result ownership");
+        *mutable_op = saved;
+        mutable_op->semantic_immediate = ((int64_t) XI_METHOD_SYMBOL_TRY_RECV << 1);
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "shift rejects another receiver method identity");
+        *mutable_op = saved;
+    }
+    TEST_REQUIRE(shifts == 4, "fixture covers nested, empty and string endpoint removal");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "array_shift", &had_error);
+    TEST_REQUIRE(code && !had_error, "managed Array.shift has complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "managed Array.shift output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "managed Array.shift output complete");
+        TEST_REQUIRE(fclose(output) == 0, "managed Array.shift output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_task_cancel_blocked_execution) {
+    const char *source =
+        "fn worker(ch: Channel<i64>) -> i64 {\n"
+        "    var received = ch.recv()\n"
+        "    return match(received) { Recv.Value { value: v } -> v, _ -> -1 }\n"
+        "}\n"
+        "const ch = Channel<i64>(0)\n"
+        "var task = go worker(ch)\n"
+        "var first = task.awaitTimeout(1)\n"
+        "print(match(first) { TaskResult.Timeout -> -2, _ -> -4 })\n"
+        "task.cancel()\n"
+        "var second = task.awaitResult()\n"
+        "print(match(second) { TaskResult.Cancelled -> 1, _ -> -5 })\n"
+        "print(task.done)\n"
+        "task.cancel()\n"
+        "ch.close()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "blocked task cancellation source compiles through coroutine lowering");
+    unsigned cancels = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (op->opcode != XI_CALL_METHOD ||
+            op->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_CANCEL << 1))
+            continue;
+        cancels++;
+        TEST_REQUIRE(xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "cancel binds exact unit runtime authority");
+        XrSemanticOperationRecord *mutable_op = (XrSemanticOperationRecord *)op;
+        XrSemanticOperationRecord saved = *op;
+        mutable_op->return_provenance = XR_SEM_RETURN_OWNED;
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "unit cancel rejects fabricated result ownership");
+        *mutable_op = saved;
+        mutable_op->semantic_immediate = ((int64_t) XI_METHOD_SYMBOL_POLL << 1);
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(ir->semantic_plan, op, NULL, NULL),
+                     "unit cancel rejects a result-bearing method identity");
+        *mutable_op = saved;
+    }
+    TEST_REQUIRE(cancels == 2, "fixture covers cancellation and repeated cancellation");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "task_cancel", &had_error);
+    TEST_REQUIRE(code && !had_error, "blocked task cancellation has complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "blocked task cancellation output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "blocked task cancellation output complete");
+        TEST_REQUIRE(fclose(output) == 0, "blocked task cancellation output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_task_await_timeout_then_complete) {
+    const char *source =
+        "fn worker(ch: Channel<i64>) -> i64 {\n"
+        "    var received = ch.recv()\n"
+        "    return match(received) { Recv.Value { value: v } -> v, _ -> -1 }\n"
+        "}\n"
+        "const ch = Channel<i64>(0)\n"
+        "var task = go worker(ch)\n"
+        "var first = task.awaitTimeout(1)\n"
+        "print(match(first) { TaskResult.Timeout -> -2, _ -> -4 })\n"
+        "ch.send(42)\n"
+        "var second = task.awaitResult()\n"
+        "print(match(second) { TaskResult.Success { value: v } -> v, _ -> -5 })\n"
+        "ch.close()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "timed task observation source compiles through coroutine lowering");
+    unsigned receives = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (op->opcode != XI_CALL_METHOD ||
+            op->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_AWAIT_TIMEOUT << 1))
+            continue;
+        receives++;
+        TEST_REQUIRE(xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "timed task observation has exact owning result and scalar deadline");
+        uint32_t count = 0;
+        XrSemanticOperandRecord *operands = (XrSemanticOperandRecord *)
+            xr_semantic_plan_operands(ir->semantic_plan, &count);
+        XrSemanticOperandRecord *deadline = &operands[op->operand_begin + 1];
+        XrSemanticOperandRecord saved = *deadline;
+        deadline->type = operands[op->operand_begin].type;
+        TEST_REQUIRE(!xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "timed task observation rejects non-i64 deadline");
+        *deadline = saved;
+        deadline->transfer_mode = XR_TRANSFER_MOVE;
+        TEST_REQUIRE(!xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "timed task observation rejects moved deadline contract");
+        *deadline = saved;
+        TEST_REQUIRE(xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "restored deadline restores authority");
+    }
+    TEST_REQUIRE(receives == 1, "fixture covers one timed task observation definition");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "task_timeout", &had_error);
+    TEST_REQUIRE(code && !had_error, "timed task observation has complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "timed task observation output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "timed task observation output complete");
+        TEST_REQUIRE(fclose(output) == 0, "timed task observation output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_channel_recv_timeout_execution) {
+    const char *source =
+        "fn receive(ch: Channel<i64>) -> i64 {\n"
+        "    var received = ch.recvTimeout(1)\n"
+        "    return match(received) {\n"
+        "        Recv.Value { value: v } -> v\n"
+        "        Recv.Timeout -> -2\n"
+        "        Recv.Closed -> -3\n"
+        "        _ -> -4\n"
+        "    }\n"
+        "}\n"
+        "const ch = Channel<i64>(1)\n"
+        "print(receive(ch))\n"
+        "ch.send(42)\n"
+        "print(receive(ch))\n"
+        "ch.close()\n"
+        "print(receive(ch))\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "timed receive source compiles through coroutine lowering");
+    unsigned receives = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (op->opcode != XI_CALL_METHOD ||
+            op->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_RECV_TIMEOUT << 1))
+            continue;
+        receives++;
+        TEST_REQUIRE(xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "timed receive has exact owning result and scalar deadline");
+        uint32_t count = 0;
+        XrSemanticOperandRecord *operands = (XrSemanticOperandRecord *)
+            xr_semantic_plan_operands(ir->semantic_plan, &count);
+        XrSemanticOperandRecord *deadline = &operands[op->operand_begin + 1];
+        XrSemanticOperandRecord saved = *deadline;
+        deadline->type = operands[op->operand_begin].type;
+        TEST_REQUIRE(!xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "timed receive rejects non-i64 deadline");
+        *deadline = saved;
+        deadline->transfer_mode = XR_TRANSFER_MOVE;
+        TEST_REQUIRE(!xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "timed receive rejects moved deadline contract");
+        *deadline = saved;
+        TEST_REQUIRE(xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "restored deadline restores authority");
+    }
+    TEST_REQUIRE(receives == 1, "fixture covers one timed receive definition");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "recv_timeout", &had_error);
+    TEST_REQUIRE(code && !had_error, "timed receive has complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "timed receive output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "timed receive output complete");
+        TEST_REQUIRE(fclose(output) == 0, "timed receive output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_blocking_channel_rendezvous_result) {
+    const char *source =
+        "fn receive(ch: Channel<i64>) -> i64 {\n"
+        "    var received = ch.recv()\n"
+        "    return match(received) { Recv.Value { value: v } -> v + 1, _ -> -1 }\n"
+        "}\n"
+        "const ch = Channel<i64>(0)\n"
+        "var task = go receive(ch)\n"
+        "ch.send(41)\n"
+        "print(await task)\n"
+        "ch.close()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(source, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir != NULL, "rendezvous source compiles through coroutine lowering");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "rendezvous", &had_error);
+    TEST_REQUIRE(code && !had_error, "rendezvous result has complete frozen plans");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "rendezvous output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "rendezvous output complete");
+        TEST_REQUIRE(fclose(output) == 0, "rendezvous output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
 TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
     const char *src = "fn produce() -> i64 {\n"
                       "    return 41\n"
@@ -6879,33 +7544,60 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
                       "    ch.send(result)\n"
                       "    var received = ch.recv()\n"
                       "    return match (received) {\n"
-                      "        Recv.Value(value) -> value + 1\n"
+                      "        Recv.Value { value: value } -> value + 1\n"
                       "        _ -> 0\n"
                       "    }\n"
                       "}\n"
                       "const ch: Channel<i64> = Channel(1)\n"
                       "var task = go worker(ch)\n"
-                      "print(await task)\n";
+                      "print(await task)\nch.close()\n";
 
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
     TEST_REQUIRE(ir->module != NULL, "pipeline should produce module metadata");
     ir->module->path = "debug_coro_helper_results.xr";
 
+    unsigned receives = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (op->opcode != XI_CALL_METHOD ||
+            op->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_RECV << 1))
+            continue;
+        receives++;
+        TEST_REQUIRE(xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, op),
+                     "blocking receive binds exact owned enum result");
+        XrSemanticOperationRecord changed = *op;
+        changed.return_provenance = XR_SEM_RETURN_NONE;
+        TEST_REQUIRE(!xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, &changed),
+                     "blocking receive rejects missing result ownership");
+        changed = *op;
+        changed.semantic_immediate = ((int64_t) XI_METHOD_SYMBOL_TRY_RECV << 1);
+        TEST_REQUIRE(!xr_semantic_yieldable_enum_result_is_exact(ir->semantic_plan, &changed),
+                     "nonblocking method cannot use blocking receive authority");
+    }
+    TEST_REQUIRE(receives == 1, "fixture covers one blocking receive");
+
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "C code generation failed");
     TEST_REQUIRE(!had_error, "coroutine helper debug source-var test should generate");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "blocking receive output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "blocking receive output complete");
+        TEST_REQUIRE(fclose(output) == 0, "blocking receive output closes");
+    }
     TEST_REQUIRE(contains(code, "_aot_resume"), "test source should emit coroutine resume bodies");
     TEST_REQUIRE(contains(code, "xr_aot_await_task"),
                  "test should exercise the await helper result path");
     TEST_REQUIRE(contains(code, "xr_aot_chan_recv_slot"),
                  "test should exercise the channel recv helper result path");
-    TEST_REQUIRE(contains(code, "XrValue result = XR_NULL_VAL;"),
+    TEST_REQUIRE(contains(code, "int64_t result = 0;"),
                  "await result source variable should get a debug local");
     TEST_REQUIRE(contains(code, "XrValue received = XR_NULL_VAL;"),
                  "recv result source variable should get a debug local");
-    TEST_REQUIRE(contains(code, "\n    result = v"),
+    TEST_REQUIRE(contains(code, "\n    result = (int64_t)v"),
                  "await helper result should be synchronized into the source debug local");
     TEST_REQUIRE(contains(code, "\n    received = v"),
                  "recv helper result should be synchronized into the source debug local");
@@ -6948,16 +7640,14 @@ TEST(cgen_for_loop) {
                       "print(sum)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) {
-        printf("  SKIP\n");
-        return;
-    }
+    TEST_REQUIRE(ir != NULL, "loop source must compile");
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
 
     assert(contains(code, "goto L") && "should have goto for loop");
-    assert(contains(code, "+") && "should have addition");
+    assert(contains(code, "xrt_int_wrap_eval(xr_i64_add_wrap,") &&
+           "loop arithmetic must use the shared integer wrap semantics");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -7671,7 +8361,7 @@ TEST(cgen_source_class_array_push_consumes_generated_emission_recipe) {
 TEST(cgen_string_copy_bytes_preserves_byte_storage_fast_path) {
     const char *src = "fn first(s: string) -> i64 {\n"
                       "    var bytes = s.copyBytes()\n"
-                      "    return i64(bytes[0])\n"
+                      "    return bytes[0] as i64\n"
                       "}\n"
                       "print(first(\"A\"))\n";
 
@@ -7682,8 +8372,10 @@ TEST(cgen_string_copy_bytes_preserves_byte_storage_fast_path) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "string.copyBytes typed byte path should generate");
-    assert(contains(code, "xrt_str_to_bytes(") &&
-           "string.copyBytes must use the owned UTF-8 byte bridge");
+    assert(contains(code, "xrt_method_0(") &&
+           "string.copyBytes must use the frozen runtime method authority");
+    assert(!contains(code, "xrt_str_to_bytes(") &&
+           "string.copyBytes must not retain selector-only helper emission");
     assert(contains(code, "((uint8_t*)_a->data)") &&
            "string.copyBytes indexing must preserve raw byte storage");
     assert(!contains(code, "((XrValue*)_a->data)") &&
@@ -7958,6 +8650,8 @@ TEST(cgen_byte_slice_native_load_elides_endian_box) {
     test_func_free(ir);
 }
 
+static const char *g_raw_slice_c_output;
+
 TEST(cgen_span_window_and_mem_slice_elide_boxed_operands) {
     const char *src = "import mem\n"
                       "fn rawWindowLength(source: Slice<u8>, start: i64, count: u32) -> i64 {\n"
@@ -7981,11 +8675,26 @@ TEST(cgen_span_window_and_mem_slice_elide_boxed_operands) {
     TEST_REQUIRE(raw_window != NULL, "rawWindowLength definition should be emitted");
     const char *raw_window_end = next_static_after(raw_window);
     TEST_REQUIRE(
-        contains_between(raw_window, raw_window_end, "/* caller-proven mem.slice raw view */"),
+        contains_between(raw_window, raw_window_end, "xrt_span_from_ptr("),
         "mem.slice must retain its caller-proven native lowering");
+    TEST_REQUIRE(contains_between(raw_window, raw_window_end, "xrt_span_apply_window("),
+                 "window applies the shared plan through a portable helper");
+    TEST_REQUIRE(!contains_between(raw_window, raw_window_end, "({ xr_span_t _src"),
+                 "window must not emit a GNU statement expression");
+    TEST_REQUIRE(!contains_between(raw_window, raw_window_end, "({ const void *_p"),
+                 "raw Slice construction must not emit a GNU statement expression");
     TEST_REQUIRE(!contains_between(raw_window, raw_window_end, "XR_FROM_INT("),
                  "span-window and mem.slice native operands must not retain boxes");
+    TEST_REQUIRE(!contains(code, "INT64_C(9223372036854775807)"),
+                 "full fixed-array slice bounds must not leave unused C locals");
 
+    if (g_raw_slice_c_output) {
+        FILE *output = fopen(g_raw_slice_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "raw Slice output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "raw Slice output is complete");
+        TEST_REQUIRE(fclose(output) == 0, "raw Slice output closes");
+    }
     printf("  Generated span-window/mem-slice native operands %zu bytes of C code\n", strlen(code));
     xr_free(code);
     test_func_free(ir);
@@ -8405,6 +9114,9 @@ TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
            "appendRange must lower appendFrom(Slice<u8>) through the stable owner adapter");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "appendFrom(Slice<u8> slice) must not keep dead ERR_CHECKs after proven native paths");
+
+    assert(count_between(fn, fn_end, " = xr_mkptr(xrt_byte_array_append_from_span_raw(") == 0 &&
+           "unused append result must execute without declaring a dead local");
 
     printf("  Generated Slice<u8> append-from-slice fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -9203,8 +9915,10 @@ TEST(cgen_static_method_call_elides_class_descriptor_receiver) {
                           "make()\n";
     const char *app_src = "print(0)\n";
 
-    XiFunc *lib_ir = compile_to_ir(lib_src);
-    XiFunc *app_ir = compile_to_ir(app_src);
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.run_optimize = false;
+    XiFunc *lib_ir = compile_to_ir_with_identity(lib_src, cfg, "cgen-library-test");
+    XiFunc *app_ir = compile_to_ir_with_identity(app_src, cfg, "cgen-application-test");
     TEST_REQUIRE(lib_ir && app_ir, "IR compilation succeeded");
     TEST_REQUIRE(lib_ir->module && app_ir->module, "module metadata available");
     lib_ir->module->name = "lib";
@@ -9220,7 +9934,10 @@ TEST(cgen_static_method_call_elides_class_descriptor_receiver) {
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     TEST_REQUIRE(ctx != NULL, "CGen context allocated");
-    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    TEST_REQUIRE(xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle), "program authority installed");
+    TEST_REQUIRE(xi_cgen_ctx_set_value_emission_plans(ctx, plan.emission_plans,
+                                                    plan.nemission_plans),
+                 "per-module C emission authorities installed");
     xi_cgen_resolve_module_imports(ctx, modules, 2);
 
     char *code = NULL;
@@ -9289,7 +10006,9 @@ TEST(cgen_map_class_static_factory_is_not_constructor) {
     test_func_free(ir);
 }
 
-TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
+static const char *g_module_struct_copy_c_output = NULL;
+
+TEST(cgen_module_struct_copy_preserves_value_semantics) {
     const char *src = "struct Cell {\n"
                       "    a: i64\n"
                       "    b: i64\n"
@@ -9308,7 +10027,9 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
                       "    }\n"
                       "    return sum + p.a + p.b\n"
                       "}\n"
-                      "print(run(10))\n";
+                      "print(run(10))\n"
+                      "print(run(10))\n"
+                      "print(cell.a, cell.b, cell.step)\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -9317,6 +10038,14 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "shared struct alias fast path should generate");
+    if (g_module_struct_copy_c_output) {
+        FILE *output = fopen(g_module_struct_copy_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "module struct fixture output opens");
+        TEST_REQUIRE(fwrite(code, 1, strlen(code), output) == strlen(code),
+                     "module struct fixture output is complete");
+        TEST_REQUIRE(fclose(output) == 0, "module struct fixture output closes");
+    }
+
 
     const char *fn = strstr(code, "static int64_t test_run_");
     assert(fn != NULL && "run declaration should exist");
@@ -9329,13 +10058,14 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
 
     assert((contains(code, "xr_aggregate_ref(") || contains(code, "xrt_aggregate_clone_bytes(")) &&
            "shared primitive struct must use native heap storage");
-    assert(count_between(fn_body, fn_end, "xrt_value_clone_for_coro(") > 0 &&
-           "mutable local struct copy should clone the shared slot value before mutation");
-    assert(count_between(fn_body, fn_end, ")->a") > 0 &&
-           count_between(fn_body, fn_end, ")->b") > 0 &&
-           "mutable local struct copy should still use native field storage");
-    assert(count_between(fn_body, fn_end, "xrt_release(") == 1 &&
-           "the mutable clone must be released exactly once without releasing the shared borrow");
+    TEST_REQUIRE(count_between(fn_body, fn_end, "xrt_value_clone_for_coro(") == 0,
+                 "POD local copies must use value assignment");
+    TEST_REQUIRE(contains_between(fn_body, fn_end, " = (*(xrt_struct_abi_") &&
+                 contains_between(fn_body, fn_end, ".a") &&
+                 contains_between(fn_body, fn_end, ".b"),
+                 "module value must be copied into named aggregate locals");
+    TEST_REQUIRE(count_between(fn_body, fn_end, "xrt_release(") == 0,
+                 "POD locals must not release the module borrow");
     assert(count_between(fn_body, fn_end, "xrt_map_get") == 0 &&
            count_between(fn_body, fn_end, "xrt_map_set") == 0 &&
            "shared struct hot path must not cross the map boundary");
@@ -13261,7 +13991,7 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
     const char *worker_trace_end = next_static_after(worker_trace);
     assert(!contains_between(worker_trace, worker_trace_end, "xr_aot_trace_frame_value") &&
            "worker scalar frame must not trace XrValue roots");
-    const char *worker_desc = strstr(code, "static const XrAotCoroDesc test_worker_1_aot_desc = {");
+    const char *worker_desc = strstr(code, "static const XrAotCoroDesc *test_worker_1_aot_desc(void) {");
     assert(worker_desc != NULL && "worker coroutine descriptor should be generated");
     const char *worker_desc_end = strstr(worker_desc, "};");
     assert(worker_desc_end != NULL && "worker coroutine descriptor should be closed");
@@ -13610,6 +14340,235 @@ TEST(cgen_coro_go_clones_tagged_args) {
     test_func_free(ir);
 }
 
+static const char *g_returned_class_c_output;
+
+TEST(cgen_returned_class_accepts_field_store) {
+    const char *source =
+        "class Parts {\n"
+        "    value: i64\n"
+        "    _enabled: bool\n"
+        "    constructor(value: i64) { this.value = value; this._enabled = true }\n"
+        "    enabled: bool { fn() { return this._enabled } }\n"
+        "}\n"
+        "fn create(value: i64) -> Parts { return Parts(value) }\n"
+        "fn update(value: i64) -> Parts {\n"
+        "    var parts = create(value)\n"
+        "    parts.value = parts.value + 2\n"
+        "    return parts\n"
+        "}\n"
+        "var parts = update(40)\n"
+        "if (parts.enabled) { print(parts.value) } else { print(0) }\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "returned class fixture must compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "returned_class", &had_error);
+    TEST_REQUIRE(code && !had_error, "returned class field store must emit verified C");
+    TEST_REQUIRE(strstr(code, "uint8_t _cf") != NULL, "boolean field cache must keep its C width");
+    if (g_returned_class_c_output) {
+        FILE *output = fopen(g_returned_class_c_output, "wb");
+        size_t size = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, size, output) == size && fclose(output) == 0,
+                     "returned class C fixture must be written completely");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_byte_bitwise_c_output;
+
+TEST(cgen_byte_bitwise_preserves_result_width) {
+    const char *source =
+        "fn bitops(values: Array<u8>) {\n"
+        "    print((values[0] ^ values[1]) as i64)\n"
+        "    print((values[0] & values[1]) as i64)\n"
+        "    print((values[0] | values[1]) as i64)\n"
+        "}\n"
+        "bitops([128 as u8, 127 as u8])\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "byte bitwise fixture must compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "byte_bitwise", &had_error);
+    TEST_REQUIRE(code && !had_error, "byte bitwise read must emit verified C");
+    if (g_byte_bitwise_c_output) {
+        FILE *output = fopen(g_byte_bitwise_c_output, "wb");
+        size_t size = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, size, output) == size && fclose(output) == 0,
+                     "byte bitwise C fixture must be written completely");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_default_bool_not_c_output;
+
+TEST(cgen_default_bool_not_uses_scalar_operand) {
+    const char *source =
+        "fn negate(value: bool = true) -> bool { return !value }\n"
+        "print(negate())\n"
+        "print(negate(false))\n"
+        "print(negate(true))\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "default boolean negation fixture must compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "default_bool_not", &had_error);
+    TEST_REQUIRE(code && !had_error, "default boolean negation read must emit verified C");
+    if (g_default_bool_not_c_output) {
+        FILE *output = fopen(g_default_bool_not_c_output, "wb");
+        size_t size = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, size, output) == size && fclose(output) == 0,
+                     "default boolean negation C fixture must be written completely");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_nullable_field_c_output;
+
+TEST(cgen_nullable_field_retains_optional_string) {
+    const char *source =
+        "class Holder {\n"
+        "    text: string?\n"
+        "    constructor(text: string?) { this.text = text }\n"
+        "    ref clear(text: string?) { this.text = text }\n"
+        "}\n"
+        "fn read(holder: Holder) -> string? { return holder.text }\n"
+        "fn echo(text: string?) -> string? { return text }\n"
+        "fn kept() -> string? {\n"
+        "    var holder = Holder(\"kept\")\n"
+        "    var result = read(holder)\n"
+        "    holder.clear(null)\n"
+        "    return result\n"
+        "}\n"
+        "print(read(Holder(null)) ?? (echo(\"empty\") ?? \"lost\"))\n"
+        "print(kept() ?? \"lost\")\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "nullable field fixture must compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "nullable_field", &had_error);
+    TEST_REQUIRE(code && !had_error, "nullable field read must emit verified C");
+    if (g_nullable_field_c_output) {
+        FILE *output = fopen(g_nullable_field_c_output, "wb");
+        size_t size = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, size, output) == size && fclose(output) == 0,
+                     "nullable field C fixture must be written completely");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_filled_array_c_output;
+
+TEST(cgen_returned_filled_array_preserves_storage_domain) {
+    const char *source =
+        "fn lengths() -> Array<i64> {\n"
+        "    var values = Array<i64>(30, 0)\n"
+        "    for (var i = 0; i < 30; i++) { values[i] = 5 }\n"
+        "    return values\n"
+        "}\n"
+        "var values = lengths()\n"
+        "print(values[0] + values[29])\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "returned filled Array source must compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "filled_array", &had_error);
+    TEST_REQUIRE(code && !had_error, "returned filled Array must emit verified C");
+    TEST_REQUIRE(strstr(code, "xrt_array_set_storage(xrt_array_new_filled_value(") != NULL,
+                 "filled allocation must preserve the transfer storage domain");
+    if (g_filled_array_c_output) {
+        FILE *output = fopen(g_filled_array_c_output, "wb");
+        size_t size = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, size, output) == size && fclose(output) == 0,
+                     "filled Array C fixture must be written completely");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_optional_method_c_output;
+
+TEST(cgen_optional_payload_method_uses_scalar_abi) {
+    const char *source =
+        "class Calculator {\n"
+        "    ref add(base: i64, value: i64) -> i64 { return base + value }\n"
+        "}\n"
+        "fn optional(value: i64) -> i64? { return value }\n"
+        "var calculator = Calculator()\n"
+        "var value = optional(40)\n"
+        "print(calculator.add(2, value!))\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "optional method source must compile");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "optional_method", &had_error);
+    TEST_REQUIRE(code && !had_error, "optional payload method must emit verified C");
+    if (g_optional_method_c_output) {
+        FILE *output = fopen(g_optional_method_c_output, "wb");
+        size_t size = strlen(code);
+        TEST_REQUIRE(output && fwrite(code, 1, size, output) == size && fclose(output) == 0,
+                     "optional method C fixture must be written completely");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_slice_copy_c_output;
+
+TEST(cgen_slice_copy_preserves_native_view_and_owned_result) {
+    const char *source =
+        "fn snapshot() -> Array<i64> {\n"
+        " var original = [10, 20, 30]\n"
+        " var result = copy(original[1:3])\n"
+        " original[1] = 99\n"
+        " return result\n"
+        "}\n"
+        "var saved = snapshot()\n"
+        "print(saved[0] + saved[1])\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "Slice copy source compiles");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "Slice copy has complete representation authority");
+    TEST_REQUIRE(contains(code, "xrt_span_to_owned_array("), "Slice copy creates a fresh Array");
+    if (g_slice_copy_c_output) {
+        FILE *output = fopen(g_slice_copy_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "Slice copy C output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "Slice copy C output complete");
+        TEST_REQUIRE(fclose(output) == 0, "Slice copy C output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_method_ref_array_c_output;
+
+TEST(cgen_method_ref_array_has_exact_local_address) {
+    const char *source =
+        "class Writer {\n"
+        "    ref fill(value: i64, xs: ref Array<i64>) { xs[0] = value }\n"
+        "    ref dormant() -> i64 { var local = [1, 2]; this.fill(40, ref local); return local[0] + local[1] }\n"
+        "}\n"
+        "var writer = Writer()\n"
+        "var xs = [1, 2]\n"
+        "writer.fill(40, ref xs)\n"
+        "print(xs[0] + xs[1])\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "method ref array source compiles");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "method ref array has representation authority");
+    if (g_method_ref_array_c_output) {
+        FILE *output = fopen(g_method_ref_array_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "method ref array C output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "method ref array C output complete");
+        TEST_REQUIRE(fclose(output) == 0, "method ref array C output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
+static const char *g_sync_go_c_output;
+
 TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
     const char *src = "fn compute(n: i64) -> i64 {\n"
                       "    return n * n\n"
@@ -13641,28 +14600,41 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
     assert(contains(code, "int64_t _raw_result = test_compute_") &&
            "sync go wrapper must call typed normal function bodies");
     assert(contains(code, "int64_t _raw_result = test_mutate_copy_") &&
-           "sync go wrapper must pass tagged params to typed normal functions");
-    assert(contains(code, "void * _raw_result = test_identity_copy_") &&
+           "sync go wrapper must preserve the declared scalar result with owned tagged params");
+    assert(contains(code, "XrValue _raw_result = test_identity_copy_") &&
            "sync go wrapper must support pointer results that alias frame params");
     assert(contains(code, "XrValue _result = XR_FROM_INT(_raw_result)") &&
            "sync go wrapper must box native scalar results for the coroutine ABI");
-    assert(contains(code, "XrValue _result = xr_mkptr(_raw_result, XR_TAG_ARRAY)") &&
-           "sync go wrapper must box native pointer results for the coroutine ABI");
-    assert(contains(code, "xrt_retain(_result)") &&
-           "sync go wrapper must retain a result that aliases an owned frame param");
-    assert(contains(code, "xrt_release(xr_mkptr(f->p0, XR_TAG_ARRAY))") &&
-           "sync go wrapper must release cloned pointer frame params after restoring the tag");
+    assert(contains(code, "XrValue _result = _raw_result") &&
+           "sync go wrapper must preserve the owned tagged result");
+    assert(contains(code, "XrValue _owned_arg0 = f->p0;") &&
+           contains(code, "f->p0 = XR_NULL_VAL;") &&
+           contains(code, "test_mutate_copy_2(NULL, _owned_arg0)") &&
+           "sync go wrapper must transfer consumed owners out of the frame before calling");
+    assert(!contains(code, "xrt_retain(_result)") &&
+           "a transferred return owner must not be retained as a frame alias");
+    assert(contains(code, "xrt_release(f->p0)") &&
+           "unstarted frames still release their owned arguments");
     assert(contains(code, ".release_count = 1,") &&
            "sync go wrapper descriptor must report cloned tagged param releases");
     assert(contains(code, "xr_aot_done(_result)") &&
            "sync go wrapper must complete through the AOT coroutine result ABI");
-    assert(contains(code, "xr_aot_trace_frame_value(visitor, xr_mkptr(f->p0, XR_TAG_ARRAY))") &&
+    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
            "sync go wrapper pointer params must remain traceable while queued");
-    assert(contains(code, "xrt_value_clone_for_coro(") &&
-           "sync go tagged arguments must still cross the coroutine clone boundary");
-    assert(contains(code, "_aot_desc, _child_frame_") &&
+    assert(contains(code, "xrt_value_set_storage(xrt_value_clone_for_coro(") &&
+           contains(code, "), XR_OBJ_STORAGE_TRANSFER)") &&
+           "copied go arguments must use the transfer domain frozen by the plan");
+    assert(contains(code, "_aot_desc(), _child_frame_") &&
            "go lowering must spawn sync wrappers through an AOT descriptor");
 
+    if (g_sync_go_c_output) {
+        FILE *output = fopen(g_sync_go_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "sync go C output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length,
+                     "sync go C output is complete");
+        TEST_REQUIRE(fclose(output) == 0, "sync go C output closes");
+    }
     printf("  Generated sync go wrapper %zu bytes of C code\n", strlen(code));
     xr_free(code);
     test_func_free(ir);
@@ -13947,7 +14919,7 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
 TEST(cgen_coro_unit_match_send_omits_void_phi) {
     const char *src = "fn recv_timeout_until_close(ch: Channel<i64>, done: Channel<i64>) {\n"
                       "    match (ch.recvTimeout(1)) {\n"
-                      "        Recv.Value(value) -> done.send(value)\n"
+                      "        Recv.Value { value: value } -> done.send(value)\n"
                       "        _ -> done.send(-1)\n"
                       "    }\n"
                       "}\n"
@@ -13972,10 +14944,76 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
     test_func_free(ir);
 }
 
+
+TEST(cgen_builtin_unit_enum_member_authority) {
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_module_graph_config(
+        "fn classify(r: SendResult) -> i64 { return match(r) { "
+        "SendResult.Sent -> 1, SendResult.Full -> 2, SendResult.Timeout -> 3, "
+        "SendResult.Closed -> 4 } }\n"
+        "var ch = Channel<i64>(1)\nprint(classify(ch.trySend(7)))\n"
+        "print(classify(ch.trySend(8)))\nch.close()\n"
+        "print(classify(ch.trySend(9)))\nprint(classify(SendResult.Timeout))\n", cfg);
+    TEST_REQUIRE(ir && ir->semantic_plan, "unit enum member fixture freezes semantic authority");
+    XrSemanticPlan *semantic = (XrSemanticPlan *) ir->semantic_plan;
+    uint32_t members = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->opcode != XI_INDEX_GET ||
+            operation->auxiliary_kind != XI_AUX_KIND_ENUM_CASE)
+            continue;
+        uint32_t namespace_value, index_value, ordinal;
+        TEST_REQUIRE(xr_semantic_builtin_unit_enum_member_access_is_exact(
+            semantic, operation, &namespace_value, &index_value, &ordinal),
+            "unit member joins exact namespace, declaration and ordinal");
+        TEST_REQUIRE(ordinal < 4, "public send result member ordinal is bounded");
+        members++;
+        XrSemanticOperationRecord *namespace_definition = (XrSemanticOperationRecord *)
+            xr_semantic_enum_value_definition(semantic, namespace_value);
+        const XrSemanticOperationRecord *index_definition =
+            xr_semantic_enum_value_definition(semantic, index_value);
+        XrSemanticConstantRecord *constant = (XrSemanticConstantRecord *)
+            xr_semantic_plan_constant(semantic, index_definition->constant);
+        int64_t saved = constant->integer;
+        constant->integer = 4;
+        TEST_REQUIRE(!xr_semantic_builtin_unit_enum_member_access_is_exact(
+            semantic, operation, NULL, NULL, NULL), "out-of-range member rejected");
+        constant->integer = -1;
+        TEST_REQUIRE(!xr_semantic_builtin_unit_enum_member_access_is_exact(
+            semantic, operation, NULL, NULL, NULL), "negative member rejected");
+        constant->integer = saved;
+        saved = namespace_definition->semantic_immediate;
+        namespace_definition->semantic_immediate = XR_GLOBAL_VAR_RECV;
+        TEST_REQUIRE(!xr_semantic_builtin_unit_enum_member_access_is_exact(
+            semantic, operation, NULL, NULL, NULL), "different namespace rejected");
+        namespace_definition->semantic_immediate = saved;
+        XrSemanticOperationRecord altered = *operation;
+        altered.result_type = namespace_definition->result_type;
+        TEST_REQUIRE(!xr_semantic_builtin_unit_enum_member_access_is_exact(
+            semantic, &altered, NULL, NULL, NULL), "namespace cannot replace member result type");
+    }
+    TEST_REQUIRE(members == 5, "all public send result members exercise frozen access");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "unit_members", &had_error);
+    TEST_REQUIRE(code && !had_error, "restored unit member authority generates C");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "unit enum output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "unit enum output complete");
+        TEST_REQUIRE(fclose(output) == 0, "unit enum output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
 TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
     const char *src = "const ch = Channel<i64>(1)\n"
                       "var ok = ch.trySend(42)\n"
-                      "print(ok)\n";
+                      "print(ok)\n"
+                      "print(ch.trySend(43))\n"
+                      "ch.close()\n"
+                      "print(ch.trySend(44))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -13984,15 +15022,26 @@ TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT scalar channel trySend should generate");
-    assert(contains(code, "xr_aot_chan_try_send_sync_i64(") &&
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "channel send output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "channel send output complete");
+        TEST_REQUIRE(fclose(output) == 0, "channel send output closes");
+    }
+    assert(contains(code, "xr_aot_chan_try_send_i64(") &&
            "descriptor-root channel trySend must use the typed synchronous AOT bridge");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "nonblocking trySend must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_send(ctx,") &&
            "scalar channel trySend must not re-box at the generated call site");
-    assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
-           "scalar channel trySend should not emit a dead boxed send operand");
-    const char *typed_try_send_call = strstr(code, "xr_aot_chan_try_send_sync_i64(");
+    assert(!contains(code, "XR_FROM_INT(INT64_C(42))") &&
+           "scalar send payload must remain unboxed; result storage may box independently");
+    assert(contains(code, "XR_TO_INT(xrt_enum_box_ordinal(xr_aot_chan_try_send_i64(") &&
+           "public send result must extract the enum ordinal, never the constructor pointer");
+    assert(contains(code, "xrt_enum_scalar_box(&_xenum_scalar_layout_") &&
+           "erased send result must preserve nominal enum identity");
+    const char *typed_try_send_call = strstr(code, "xr_aot_chan_try_send_i64(");
     assert(typed_try_send_call != NULL && "typed trySend call should exist");
     assert(
         !contains_between(typed_try_send_call, code + strlen(code), "xrt_value_clone_for_coro(") &&
@@ -14022,14 +15071,14 @@ TEST(cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT tagged channel trySend should generate");
-    const char *try_send_call = strstr(code, "xr_aot_chan_try_send_sync(");
+    const char *try_send_call = strstr(code, "xr_aot_chan_try_send_xrt(");
     assert(try_send_call != NULL &&
            "tagged channel trySend must use the synchronous tagged bridge");
     const char *try_send_end = strchr(try_send_call, ';');
     assert(try_send_end != NULL &&
            contains_between(try_send_call, try_send_end,
-                            "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx,") &&
-           "tagged channel trySend must normalize the AOT value into the runtime envelope");
+                            ", 2)") &&
+           "tagged channel trySend must pass MOVE to the common runtime envelope bridge");
     assert(!contains_between(try_send_call, try_send_end, "xrt_value_clone_for_coro(") &&
            "move trySend must not deep-copy the transferred value");
     assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
@@ -14757,7 +15806,7 @@ TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
 TEST(cgen_coro_await_timeout_passes_deadline) {
     const char *src = "fn worker(ch: Channel<i64>) -> i64 {\n"
                       "    match (ch.recv()) {\n"
-                      "        Recv.Value(value) -> { return value }\n"
+                      "        Recv.Value { value: value } -> { return value }\n"
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
@@ -15006,13 +16055,92 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
     test_func_free(ir);
 }
 
+TEST(cgen_channel_receive_payload_execution) {
+    const char *src = "fn receive_probe() {\n"
+        "var numbers = Channel<i64>(1)\n"
+        "print(match(numbers.tryRecv()) { Recv.Value { value: v } -> v, _ -> -1 })\n"
+        "numbers.trySend(42)\n"
+        "print(match(numbers.tryRecv()) { Recv.Value { value: v } -> v, _ -> -1 })\n"
+        "numbers.close()\n"
+        "print(match(numbers.tryRecv()) { Recv.Value { value: v } -> v, _ -> -2 })\n"
+        "var words = Channel<string>(1)\nwords.trySend(\"hello\")\n"
+        "print(match(words.tryRecv()) { Recv.Value { value: v } -> len(v), _ -> -1 })\n"
+        "var arrays = Channel<Array<i64>>(1)\nvar xs = [7, 8]\n"
+        "arrays.trySend(move xs)\n"
+        "print(match(arrays.tryRecv()) { Recv.Value { value: v } -> v[0] + v[1], _ -> -1 })\n"
+        "words.close()\narrays.close()\n}\nreceive_probe()\n";
+    XiFunc *ir = compile_to_ir_with_module_graph_config(src, xi_pipeline_aot_config());
+    TEST_REQUIRE(ir && ir->semantic_plan, "receive execution freezes shared authority");
+    unsigned receives = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        TEST_REQUIRE(op->opcode != XI_CHAN_TRY_RECV,
+                     "public match cannot select internal readiness lowering");
+        if (op->opcode == XI_CALL_METHOD &&
+            op->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_TRY_RECV << 1)) {
+            TEST_REQUIRE(xr_semantic_builtin_runtime_method_is_exact(
+                ir->semantic_plan, op, NULL, NULL), "each public receive keeps exact authority");
+            receives++;
+        }
+    }
+    TEST_REQUIRE(receives == 5, "all receive cases use the same shared call");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "receive_payload", &had_error);
+    TEST_REQUIRE(code && !had_error, "receive payload execution generates C");
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "receive output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "receive output complete");
+        TEST_REQUIRE(fclose(output) == 0, "receive output closes");
+    }
+    xr_free(code);
+    test_func_free(ir);
+}
+
 TEST(cgen_descriptor_scalar_channel_try_recv_returns_recv_enum) {
     const char *src = "const ch = Channel<i64>(1)\n"
                       "var recv = ch.tryRecv()\n"
                       "print(recv)\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiFunc *ir = compile_to_ir_with_module_graph_config(src, xi_pipeline_aot_config());
     assert(ir != NULL && "IR compilation failed");
+
+    const XrSemanticPlan *semantic = ir->semantic_plan;
+    unsigned receives = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(semantic, i);
+        if (op->opcode != XI_CALL_METHOD ||
+            op->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_TRY_RECV << 1))
+            continue;
+        receives++;
+        TEST_REQUIRE(xr_semantic_builtin_runtime_method_is_exact(semantic, op, NULL, NULL),
+                     "receive owns the exact prelude result and element identity");
+        XrSemanticOperationRecord changed = *op;
+        changed.transfer_mode = XR_TRANSFER_MOVE;
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(semantic, &changed, NULL, NULL),
+                     "receive rejects a consuming call flag");
+        changed = *op;
+        changed.return_provenance = XR_SEM_RETURN_NONE;
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(semantic, &changed, NULL, NULL),
+                     "receive cannot erase result ownership");
+        XrSemanticTypeRecord *result = (XrSemanticTypeRecord *)
+            xr_semantic_plan_type(semantic, op->result_type);
+        XrSemanticTypeRecord saved = *result;
+        result->flags |= XR_SEM_TYPE_NULLABLE;
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(semantic, op, NULL, NULL),
+                     "receive rejects nullable result");
+        *result = saved;
+        result->source_enum_key = "counterfeit";
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(semantic, op, NULL, NULL),
+                     "receive rejects counterfeit nominal declaration");
+        *result = saved;
+        result->child_count = 0;
+        TEST_REQUIRE(!xr_semantic_builtin_runtime_method_is_exact(semantic, op, NULL, NULL),
+                     "receive requires instantiated element");
+        *result = saved;
+    }
+    TEST_REQUIRE(receives == 1, "public receive retains one shared runtime call");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -15675,8 +16803,8 @@ TEST(cgen_channel_fields_use_aot_helpers) {
            "len(Channel) must read through the AOT channel helper");
     assert(contains(code, "xr_aot_chan_capacity(") &&
            "Channel.capacity must read through the AOT channel helper");
-    assert(contains(code, "xr_aot_chan_is_closed(") &&
-           "Channel.isClosed must read through the AOT channel helper");
+    assert(contains(code, "xr_aot_chan_is_closed_sync(") &&
+           "Synchronous Channel.isClosed must read through the AOT channel helper");
     assert(!contains(code, "xrt_map_get((xrt_map_t*)") &&
            "AOT Channel fields must not fall back to map property dispatch");
 
@@ -15685,10 +16813,15 @@ TEST(cgen_channel_fields_use_aot_helpers) {
     test_func_free(ir);
 }
 
+TEST(cgen_channel_closed_property_rejects_call) {
+    XiFunc *ir = compile_to_ir("var ch = Channel<i64>(1)\nprint(ch.isClosed())\n");
+    TEST_REQUIRE(ir == NULL, "bool Channel property cannot be called as a method");
+}
+
 TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
     const char *src = "fn recv_value(r: Recv<i64>) -> i64 {\n"
                       "    return match (r) {\n"
-                      "        Recv.Value(v) -> v\n"
+                      "        Recv.Value { value: v } -> v\n"
                       "        _ -> 0\n"
                       "    }\n"
                       "}\n"
@@ -15702,7 +16835,7 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
                       "}\n"
                       "fn close_and_check(ch: Channel<i64>) -> bool {\n"
                       "    ch.close()\n"
-                      "    return ch.isClosed()\n"
+                      "    return ch.isClosed\n"
                       "}\n"
                       "const ch = Channel<i64>(2)\n"
                       "var p = go producer(ch)\n"
@@ -15715,11 +16848,23 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
 
+    unsigned queries = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (op->opcode != XI_CHAN_IS_CLOSED)
+            continue;
+        queries++;
+        TEST_REQUIRE(op->operand_count == 1 &&
+                     xr_semantic_plan_type(ir->semantic_plan, op->result_type)->kind == XR_KIND_BOOL,
+                     "closed property lowers to a typed bool query");
+    }
+    TEST_REQUIRE(queries == 1, "sync-go fixture freezes its closed property query");
+
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT sync-go Channel nonblocking methods should generate");
-    assert(contains(code, "xr_aot_chan_try_send_sync_i64(") &&
+    assert(contains(code, "xr_aot_chan_try_send_i64(") &&
            "sync-go Channel.trySend should use the scalar sync AOT bridge");
     assert(contains(code, "xr_aot_chan_try_recv_sync(") &&
            "sync-go Channel.tryRecv should use the sync AOT bridge");
@@ -15730,6 +16875,13 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
     assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
            "Channel nonblocking methods must not fall back to dynamic method dispatch");
 
+    if (g_channel_send_c_output) {
+        FILE *output = fopen(g_channel_send_c_output, "wb");
+        TEST_REQUIRE(output != NULL, "sync-go output opens");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, output) == length, "sync-go output complete");
+        TEST_REQUIRE(fclose(output) == 0, "sync-go output closes");
+    }
     printf("  Generated sync-go channel method helpers %zu bytes of C code\n", strlen(code));
     xr_free(code);
     test_func_free(ir);
@@ -15738,7 +16890,7 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
 TEST(cgen_coro_task_status_uses_native_enum_status) {
     const char *src = "fn wait_for_value(ch: Channel<i64>) -> i64 {\n"
                       "    match (ch.recv()) {\n"
-                      "        Recv.Value(value) -> { return value }\n"
+                      "        Recv.Value { value: value } -> { return value }\n"
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
@@ -15867,9 +17019,32 @@ TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
 
     XrSemanticPlan *semantic = ir->semantic_plan;
     uint32_t const_objects = 0u;
+    uint32_t tuple_reads = 0u;
     for (uint32_t index = 0u; index < xr_semantic_plan_operation_count(semantic); ++index) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, index);
         const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, operation->result_type);
+        if (operation->opcode == XI_GET_SHARED && type && type->kind == XR_KIND_TUPLE) {
+            ++tuple_reads;
+            TEST_REQUIRE(xr_semantic_dynamic_value_is_exact(semantic, operation),
+                         "module tuple read retains exact tagged ownership");
+            XrSemanticOperationRecord *changed = (XrSemanticOperationRecord *) operation;
+            uint8_t ownership = changed->result_ownership;
+            changed->result_ownership = XI_GEN_RESULT_OWNERSHIP_OWNED;
+            TEST_REQUIRE(!xr_semantic_dynamic_value_is_exact(semantic, operation),
+                         "module tuple read cannot claim ownership");
+            changed->result_ownership = ownership;
+            int64_t slot = changed->semantic_immediate;
+            changed->semantic_immediate = -1;
+            TEST_REQUIRE(!xr_semantic_dynamic_value_is_exact(semantic, operation),
+                         "module tuple read cannot name a negative slot");
+            changed->semantic_immediate = slot;
+            XrSemanticTypeRecord *changed_type = (XrSemanticTypeRecord *) type;
+            uint32_t extent = changed_type->aggregate_extent;
+            changed_type->aggregate_extent = extent + 1u;
+            TEST_REQUIRE(!xr_semantic_dynamic_value_is_exact(semantic, operation),
+                         "module tuple read rejects stale field geometry");
+            changed_type->aggregate_extent = extent;
+        }
         if (operation->opcode == XI_OBJECT_NEW && type && type->kind == XR_KIND_STRUCT_OBJECT &&
             (type->flags & XR_SEM_TYPE_CONST) != 0u) {
             ++const_objects;
@@ -15890,6 +17065,7 @@ TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
             mutable_operation->semantic_immediate = saved;
         }
     }
+    TEST_REQUIRE(tuple_reads > 0u, "fixture reads a returned tuple through module storage");
     TEST_REQUIRE(const_objects == 1u, "exported constant retains its qualified object type");
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
@@ -15972,9 +17148,138 @@ TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
 int main(int argc, char **argv) {
     /* Keep the failing case visible when an always-on contract aborts under CTest. */
     setvbuf(stdout, NULL, _IONBF, 0);
+#if defined(XR_OS_WINDOWS)
+    /* CTest captures the failure directly; WER reporting adds no test evidence. */
+    _set_abort_behavior(0, _CALL_REPORTFAULT);
+#endif
     printf("=== Xi CGen Unit Tests ===\n\n");
     g_test_filter = getenv("XRAY_TEST_FILTER");
-    setup();
+    g_list_cases = argc == 2 && strcmp(argv[1], "--list-cases") == 0;
+    if ((argc == 3 || argc == 4) && strcmp(argv[1], "--case") == 0) {
+        g_test_case = argv[2];
+        if (argc == 4 &&
+            (strcmp(g_test_case, "cgen_builtin_unit_enum_member_authority") == 0 ||
+             strcmp(g_test_case, "cgen_channel_receive_payload_execution") == 0 ||
+             strcmp(g_test_case, "cgen_coro_syncs_helper_result_debug_source_vars") == 0 ||
+             strcmp(g_test_case, "cgen_task_poll_pending_and_complete") == 0 ||
+             strcmp(g_test_case, "cgen_ref_slice_copy_execution") == 0 ||
+             strcmp(g_test_case, "cgen_string_copy_execution") == 0 ||
+             strcmp(g_test_case, "cgen_nullable_unit_enum_execution") == 0 ||
+             strcmp(g_test_case, "cgen_nullable_unit_enum_compare_execution") == 0 ||
+             strcmp(g_test_case, "cgen_direct_move_array_execution") == 0 ||
+             strcmp(g_test_case, "cgen_array_shift_managed_execution") == 0 ||
+             strcmp(g_test_case, "cgen_task_cancel_blocked_execution") == 0 ||
+             strcmp(g_test_case, "cgen_task_await_timeout_then_complete") == 0 ||
+             strcmp(g_test_case, "cgen_channel_recv_timeout_execution") == 0 ||
+             strcmp(g_test_case, "cgen_blocking_channel_rendezvous_result") == 0 ||
+             strcmp(g_test_case, "cgen_sync_go_channel_try_methods_use_aot_helpers") == 0 ||
+             strcmp(g_test_case,
+                "cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge") == 0))
+            g_channel_send_c_output = argv[3];
+    }
+    if (g_list_cases || g_test_case)
+        g_test_filter = NULL;
+    if (!g_list_cases)
+        setup();
+    if (argc == 2 && strcmp(argv[1], "native-direct-authority") == 0) {
+        run_cgen_native_direct_fresh_result_is_single_owned_materialization();
+        run_cgen_native_direct_unrooted_result_is_rejected();
+        run_cgen_native_direct_fresh_result_authority_mutations_fail_closed();
+        run_cgen_native_direct_uses_verified_call_and_argument_view();
+        run_cgen_native_array_arguments_share_generated_value_abi();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "executable-recipes") == 0) {
+        run_cgen_string_runes_consumes_immutable_emission_recipe();
+        run_cgen_string_slice_range_consumes_immutable_emission_recipe();
+        run_cgen_iterator_rune_next_consumes_immutable_emission_recipe();
+        run_cgen_iterator_rune_nth_consumes_immutable_emission_recipe();
+        run_cgen_rune_to_uint32_consumes_immutable_emission_recipe();
+        run_cgen_rune_to_string_consumes_immutable_emission_recipe();
+        run_cgen_rune_is_whitespace_consumes_immutable_emission_recipe();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "concat-authority") == 0) {
+        run_cgen_str_concat_uses_single_allocation_helper();
+        run_cgen_multi_concat_string_constants_emit_immediate_without_locals();
+        run_cgen_concat_without_executable_recipe_is_rejected();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "raw-slice") == 0) {
+        g_raw_slice_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_span_window_and_mem_slice_elide_boxed_operands();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "returned-class") == 0) {
+        g_returned_class_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_returned_class_accepts_field_store();
+        return 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "byte-bitwise") == 0) {
+        g_byte_bitwise_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_byte_bitwise_preserves_result_width();
+        return 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "default-bool-not") == 0) {
+        g_default_bool_not_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_default_bool_not_uses_scalar_operand();
+        return 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "nullable-field") == 0) {
+        g_nullable_field_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_nullable_field_retains_optional_string();
+        return 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "filled-array") == 0) {
+        g_filled_array_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_returned_filled_array_preserves_storage_domain();
+        return 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "optional-method") == 0) {
+        g_optional_method_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_optional_payload_method_uses_scalar_abi();
+        return 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "slice-copy") == 0) {
+        g_slice_copy_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_slice_copy_preserves_native_view_and_owned_result();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "method-ref-array") == 0) {
+        g_method_ref_array_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_method_ref_array_has_exact_local_address();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "sync-go") == 0) {
+        g_sync_go_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_coro_go_sync_function_uses_wrapper_desc();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "channel-send") == 0) {
+        g_channel_send_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge();
+        run_cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope();
+        run_cgen_sync_go_channel_try_methods_use_aot_helpers();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "go-managed") == 0) {
+        run_cgen_coro_frame_params_use_typed_storage();
+        run_cgen_coro_go_clones_tagged_args();
+        run_cgen_coro_go_sync_function_uses_wrapper_desc();
+        run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();
+        run_cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame();
+        run_cgen_coro_sync_go_wrappers_only_for_go_targets();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
     if (argc == 2 && strcmp(argv[1], "closure-elision") == 0) {
         run_cgen_shared_static_function_retain_is_elided();
         run_cgen_coro_shared_static_function_retain_is_elided();
@@ -15987,6 +17292,11 @@ int main(int argc, char **argv) {
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "structural-array") == 0) {
         g_structural_array_c_output = argc == 3 ? argv[2] : NULL;
         run_cgen_structural_array_preserves_element_owners();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "copy-bytes") == 0) {
+        run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
         teardown();
         return tests_failed ? 1 : 0;
     }
@@ -16051,6 +17361,18 @@ int main(int argc, char **argv) {
         puts("Iterator<rune>.nth CGen recipe tests passed");
         return tests_failed > 0 ? 1 : 0;
     }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "explicit-concat") == 0) {
+        g_explicit_concat_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_str_concat_uses_single_allocation_helper();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "module-struct-copy") == 0) {
+        g_module_struct_copy_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_module_struct_copy_preserves_value_semantics();
+        teardown();
+        return tests_failed ? 1 : 0;
+    }
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "rune-values") == 0) {
         g_rune_values_c_output = argc == 3 ? argv[2] : NULL;
         run_cgen_rune_string_accepts_scalar_producers();
@@ -16092,6 +17414,7 @@ int main(int argc, char **argv) {
     run_cgen_optional_injection_preserves_none_and_some();
     run_cgen_optional_injection_storage();
     run_cgen_multi_concat_string_constants_emit_immediate_without_locals();
+    run_cgen_concat_without_executable_recipe_is_rejected();
     run_cgen_shared_string_constant_emits_immediate_without_local();
     run_cgen_unused_call_result_emits_effect_statement_without_local();
     run_cgen_unused_array_reserve_result_emits_effect_statement_without_local();
@@ -16100,6 +17423,7 @@ int main(int argc, char **argv) {
     run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
     run_cgen_panicinfo_constructor_token_emits_no_local();
     run_cgen_native_direct_fresh_result_is_single_owned_materialization();
+    run_cgen_native_direct_unrooted_result_is_rejected();
     run_cgen_native_direct_fresh_result_authority_mutations_fail_closed();
     run_cgen_native_direct_uses_verified_call_and_argument_view();
     run_cgen_native_array_arguments_share_generated_value_abi();
@@ -16177,6 +17501,17 @@ int main(int argc, char **argv) {
     run_cgen_struct_value_abi_uses_canonical_layout_typedef();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
+    run_cgen_task_poll_pending_and_complete();
+    run_cgen_ref_slice_copy_execution();
+    run_cgen_string_copy_execution();
+    run_cgen_nullable_unit_enum_execution();
+    run_cgen_nullable_unit_enum_compare_execution();
+    run_cgen_direct_move_array_execution();
+    run_cgen_array_shift_managed_execution();
+    run_cgen_task_cancel_blocked_execution();
+    run_cgen_task_await_timeout_then_complete();
+    run_cgen_channel_recv_timeout_execution();
+    run_cgen_blocking_channel_rendezvous_result();
     run_cgen_coro_syncs_helper_result_debug_source_vars();
     run_cgen_recursive();
     run_cgen_for_loop();
@@ -16236,7 +17571,7 @@ int main(int argc, char **argv) {
     run_cgen_fixed_array_index_ops_elide_boxed_operands();
     run_cgen_static_method_call_elides_class_descriptor_receiver();
     run_cgen_map_class_static_factory_is_not_constructor();
-    run_cgen_shared_struct_alias_elides_tagged_hot_locals();
+    run_cgen_module_struct_copy_preserves_value_semantics();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
     run_cgen_native_receiver_static_cleanup_borrows_without_closure_arc();
@@ -16325,6 +17660,12 @@ int main(int argc, char **argv) {
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_owner_forward_clears_moved_frame_root();
     run_cgen_coro_go_clones_tagged_args();
+    run_cgen_returned_class_accepts_field_store();
+    run_cgen_nullable_field_retains_optional_string();
+    run_cgen_returned_filled_array_preserves_storage_domain();
+    run_cgen_optional_payload_method_uses_scalar_abi();
+    run_cgen_slice_copy_preserves_native_view_and_owned_result();
+    run_cgen_method_ref_array_has_exact_local_address();
     run_cgen_coro_go_sync_function_uses_wrapper_desc();
     run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();
     run_cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame();
@@ -16334,6 +17675,7 @@ int main(int argc, char **argv) {
     run_cgen_coro_channel_send_copy_uses_transfer_helper();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_unit_match_send_omits_void_phi();
+    run_cgen_builtin_unit_enum_member_authority();
     run_cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge();
     run_cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope();
     run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
@@ -16349,6 +17691,7 @@ int main(int argc, char **argv) {
     run_cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge();
     run_cgen_coro_scalar_channel_recv_uses_tagged_slot();
     run_cgen_coro_channel_recv_null_check_keeps_tagged_slot();
+    run_cgen_channel_receive_payload_execution();
     run_cgen_descriptor_scalar_channel_try_recv_returns_recv_enum();
     run_cgen_descriptor_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
@@ -16366,6 +17709,7 @@ int main(int argc, char **argv) {
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
     run_cgen_coro_scope_exit_publishes_state_before_block();
     run_cgen_channel_fields_use_aot_helpers();
+    run_cgen_channel_closed_property_rejects_call();
     run_cgen_sync_go_channel_try_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
     run_cgen_runtime_constructors_use_verified_signatures();
@@ -16375,6 +17719,14 @@ int main(int argc, char **argv) {
 
     teardown();
 
+    if (g_list_cases) {
+        printf("Listed %u CGen cases\n", g_listed_cases);
+        return g_listed_cases == 0 ? 1 : 0;
+    }
     printf("\n=== %d/%d Xi CGen tests passed ===\n", tests_passed, tests_passed + tests_failed);
+    if (g_test_case && tests_passed + tests_failed != 1) {
+        fprintf(stderr, "Unknown or ambiguous CGen case: %s\n", g_test_case);
+        return 1;
+    }
     return tests_failed > 0 ? 1 : 0;
 }

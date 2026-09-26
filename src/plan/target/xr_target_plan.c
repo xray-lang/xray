@@ -314,7 +314,7 @@ static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *recor
     hash_u64(ctx, record->source_dependency);
     hash_u64(ctx, record->source_export);
     hash_u64(ctx, record->runtime_capabilities);
-    hash_id(ctx, record->source_export_identity);
+    hash_id(ctx, record->source_declaration_identity);
     hash_id(ctx, record->source_callee_identity);
     hash_id(ctx, record->native_callee_identity);
     hash_u64(ctx, record->result_value);
@@ -1177,7 +1177,9 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         bool direct_local = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
         bool program_direct = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT;
         bool channel_close = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
-        bool source_export = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+        bool source_export = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
+                             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_METHOD ||
+                             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_STATIC_METHOD;
         bool runtime_constructor =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNTIME_CONSTRUCTOR;
         bool string_byte_slice_view =
@@ -1207,8 +1209,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING;
         bool stringbuilder_clear =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR;
-        bool json_namespace_value =
-            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE;
+        bool json_namespace_codec =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_JSON_NAMESPACE_CODEC;
         bool array_member_scalar =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR;
         bool native_module_scalar =
@@ -1217,6 +1219,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE ||
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE;
         bool native_direct = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT;
+        bool builtin_yieldable = plan->calls[i].target_kind ==
+            XR_TARGET_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
         /* The construction is one of the rows that names a SemanticPlan call
          * target rather than a sealed builtin, so its target index must index
          * that table. */
@@ -1244,13 +1248,13 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              !iterator_rune_next && !iterator_rune_nth && !rune_to_uint32 && !rune_to_string &&
              !rune_is_whitespace && !string_slice_range && !string_utf8_static &&
              !stringbuilder_to_string && !stringbuilder_append_string && !stringbuilder_clear &&
-             !json_namespace_value && !array_member_scalar && !native_module_scalar &&
-             !native_yieldable && !native_direct && !source_class_constructor &&
+             !json_namespace_codec && !array_member_scalar && !native_module_scalar &&
+             !native_yieldable && !native_direct && !builtin_yieldable && !source_class_constructor &&
              !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof &&
              !panic_info_constructor && !scalar_copy && !container_copy && !map_entries_iterator &&
              !map_entry_iterator_has_next && !map_entry_iterator_next) ||
             plan->calls[i].semantic_operation >= xr_semantic_plan_operation_count(semantic) ||
-            ((direct_local || program_direct || source_export || native_yieldable ||
+            ((direct_local || program_direct || source_export || native_yieldable || builtin_yieldable ||
               native_direct || source_class_constructor) &&
              plan->calls[i].semantic_call_target >= xr_semantic_plan_call_target_count(semantic)) ||
             ((channel_close || runtime_constructor || string_byte_slice_view ||
@@ -1258,7 +1262,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
               stringbuilder_clear || string_runes || builtin_runtime_method ||
               iterator_rune_has_next || iterator_rune_next || iterator_rune_nth || rune_to_uint32 ||
               rune_to_string || rune_is_whitespace || string_slice_range || string_utf8_static ||
-              json_namespace_value || array_member_scalar || native_module_scalar ||
+              json_namespace_codec || array_member_scalar || native_module_scalar ||
               adt_enum_constructor || array_intrinsic || array_fill || array_hof ||
               panic_info_constructor || scalar_copy || container_copy || map_entries_iterator ||
               map_entry_iterator_has_next || map_entry_iterator_next) &&

@@ -1,7 +1,13 @@
+#include "../program/xr_program_byte_compare_fixture.h"
 /*
  * Task 300: private BackendIR and generated-C AOT over canonical XrProgram.
  */
 
+#include "../program/xr_program_array_default_fixture.h"
+#include "../program/xr_program_array_append_fixture.h"
+#include "../program/xr_program_string_slice_fixture.h"
+#include "../program/xr_program_string_builder_fixture.h"
+#include "../program/xr_program_channel_fixture.h"
 #include "../program/xr_program_atomic_fixture.h"
 #include "../program/xr_program_module_fixture.h"
 #include "../program/xr_program_f64_fixture.h"
@@ -3095,13 +3101,7 @@ static void write_array_alias_fixture(const char *path, const XrValidatedProgram
     REQUIRE(fclose(output) == 0);
 }
 
-static void write_owned_allocation_fixture(const char *path, const XrValidatedProgram *program,
-                                           const XrTargetProfile *profile, unsigned scenario) {
-    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
-    XrGeneratedC generated = {0};
-    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
-    FILE *output = fopen(path, "wb");
-    REQUIRE(output != NULL);
+static void write_allocation_probe(FILE *output) {
     REQUIRE(fputs("#include <stdlib.h>\n#include <stdio.h>\n"
                   "static void *records[128];\n"
                   "static size_t attempts, fail_at, live;\nstatic int bad_free;\n"
@@ -3116,6 +3116,16 @@ static void write_owned_allocation_fixture(const char *path, const XrValidatedPr
                   "    records[i] = NULL; --live; free(p); return;\n"
                   "  }\n  bad_free = 1;\n}\n"
                   "#define malloc observed_malloc\n#define free observed_free\n", output) >= 0);
+}
+
+static void write_owned_allocation_fixture(const char *path, const XrValidatedProgram *program,
+                                           const XrTargetProfile *profile, unsigned scenario) {
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    FILE *output = fopen(path, "wb");
+    REQUIRE(output != NULL);
+    write_allocation_probe(output);
     REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
     static const unsigned expected[] = {2u, 0u, 2u, 1u, 0u, 42u, 1u};
     char call[1024];
@@ -3450,6 +3460,249 @@ static void write_integer_divmod_fixture(const char *path) {
     xr_validated_program_free(program);
 }
 
+static void write_string_slice_fixture(const char *path) {
+    XrProgramArtifact artifact = {0};
+    REQUIRE(xr_program_string_slice_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_STRING_SLICE) != NULL);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    write_generated_fixture(path, program, profile, false);
+    FILE *output = fopen(path, "ab");
+    REQUIRE(output != NULL);
+    REQUIRE(fputs("\nint main(void) {\n"
+        "    XrAotContext context = {0}; XrAotString *value = NULL; XrAotPanicInfo panic = {0};\n"
+        "    const uint8_t expected[] = {0xc3,0xa9,0xe4,0xb8,0xad,0xf0,0x9f,0x99,0x82};\n"
+        "    XrAotOutcome result = xr_aot_fn_0(&context, 1, 4, &panic); value = (XrAotString *)result.pointer;\n"
+        "    if (result.kind != 0 || !value || value->size != sizeof(expected) ||\n"
+        "        memcmp(value->bytes, expected, sizeof(expected)) != 0) return 1;\n"
+        "    xr_aot_free(&context, value); value = NULL;\n"
+        "    result = xr_aot_fn_0(&context, 4, 4, &panic); value = (XrAotString *)result.pointer;\n"
+        "    if (result.kind != 0 || !value || value->size != 0) return 2;\n"
+        "    xr_aot_free(&context, value); value = NULL;\n"
+        "    result = xr_aot_fn_0(&context, -1, 4, &panic); value = (XrAotString *)result.pointer;\n"
+        "    if (result.kind != 3 || panic.code != 430 || value != NULL) return 3;\n"
+        "    xr_aot_context_destroy(&context);\n"
+        "    return 0;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void write_string_slice_allocation_fixture(const char *path) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_string_slice_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    FILE *output = fopen(path, "wb");
+    REQUIRE(output);
+    write_allocation_probe(output);
+    REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
+    REQUIRE(fputs(
+        "\n#undef malloc\n#undef free\nint main(void) {\n"
+        "  const uint8_t expected[] = {0xc3,0xa9,0xe4,0xb8,0xad,0xf0,0x9f,0x99,0x82};\n"
+        "  for (unsigned scenario = 0; scenario < 3; ++scenario) {\n"
+        "    int complete = 0;\n"
+        "    for (fail_at = 1; fail_at < 128; ++fail_at) {\n"
+        "      attempts = 0; XrAotContext context = {0}; XrAotPanicInfo panic = {0};\n"
+        "      XrAotOutcome result = xr_aot_fn_0(&context, scenario == 0 ? 1 : scenario == 1 ? 4 : -1, 4, &panic);\n"
+        "      if (attempts >= fail_at) {\n"
+        "        if (result.kind != 4 || result.pointer) return 1;\n"
+        "      } else if (scenario == 2) {\n"
+        "        if (result.kind != 3 || panic.code != 430 || result.pointer) return 2;\n"
+        "      } else {\n"
+        "        XrAotString *value = (XrAotString *)result.pointer;\n"
+        "        if (result.kind || !value || value->size != (scenario == 0 ? sizeof(expected) : 0)) return 3;\n"
+        "        if (value->size && memcmp(value->bytes, expected, sizeof(expected))) return 4;\n"
+        "        xr_aot_free(&context, value);\n"
+        "      }\n"
+        "      if (context.allocations || live || bad_free) return 5;\n"
+        "      xr_aot_context_destroy(&context);\n"
+        "      if (attempts < fail_at) {\n"
+        "        printf(\"native string slice allocation failures: scenario=%u points=%zu\\n\", scenario, fail_at - 1);\n"
+        "        complete = 1; break;\n"
+        "      }\n"
+        "    }\n"
+        "    if (!complete) return 6;\n"
+        "  }\n"
+        "  return 0;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void write_array_append_fixture(const char *path) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_array_append_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ARRAY_APPEND) != NULL);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    write_generated_fixture(path, program, profile, false);
+    FILE *output = fopen(path, "ab");
+    REQUIRE(output);
+    REQUIRE(fputs("\nint main(void) {\n"
+        " for (unsigned i = 0; i < 2; ++i) {\n"
+        "  XrAotContext context = {0};\n"
+        "  XrAotOutcome result = xr_aot_fn_0(&context, 42);\n"
+        "  if (result.kind != 0u || result.i64 != 9) return 1;\n"
+        "  if (context.allocations) return 2;\n"
+        "  xr_aot_context_destroy(&context);\n"
+        " }\n return 0;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+static void write_array_default_fixture(const char *path) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_array_default_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT) != NULL);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    write_generated_fixture(path, program, profile, false);
+    FILE *output = fopen(path, "ab");
+    REQUIRE(output);
+    REQUIRE(fputs("\nint main(void) {\n"
+        " XrAotContext context = {0}; XrAotPanicInfo panic = {0};\n"
+        " const int64_t counts[] = {3, 0, -1, INT64_MIN, INT64_MAX, 4};\n"
+        " for (unsigned i = 0; i < 6; ++i) {\n"
+        "  XrAotOutcome result = xr_aot_fn_0(&context, counts[i], &panic);\n"
+        "  if (result.kind != (counts[i] < 0 ? 3u : counts[i] == INT64_MAX ? 4u : 0u)) return 1;\n"
+        "  if (counts[i] < 0 && panic.code != 452) return 2;\n"
+        "  if (result.kind == 0 && result.i64 != counts[i]) return 3;\n"
+        "  if (context.allocations) return 4;\n"
+        " }\n xr_aot_context_destroy(&context); return 0;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+static void write_array_append_allocation_fixture(const char *path, bool managed) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_array_append_fixture_write(managed ? 100u : 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ARRAY_APPEND) != NULL);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    FILE *output = fopen(path, "wb");
+    REQUIRE(output);
+    write_allocation_probe(output);
+    REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
+    REQUIRE(fputs("\n#undef malloc\n#undef free\nint main(void) {\n"
+        " for (fail_at = 1; fail_at < 128; ++fail_at) {\n"
+        "  attempts = 0; XrAotContext context = {0};\n"
+        "  XrAotOutcome result = xr_aot_fn_0(&context, 42);\n"
+        "  if (attempts >= fail_at) { if (result.kind != 4 || result.pointer) return 1; }\n"
+        "  else if (result.kind || result.i64 != 9) return 2;\n"
+        "  if (context.allocations || live || bad_free) return 3;\n"
+        "  xr_aot_context_destroy(&context);\n"
+        "  if (attempts < fail_at) {\n"
+        "   printf(\"native array append allocation failure points=%zu\\n\", fail_at - 1);\n"
+        "   return 0;\n  }\n }\n return 4;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void write_array_default_allocation_fixture(const char *path) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_array_default_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT) != NULL);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    FILE *output = fopen(path, "wb");
+    REQUIRE(output);
+    write_allocation_probe(output);
+    REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
+    REQUIRE(fputs("\n#undef malloc\n#undef free\nint main(void) {\n"
+        " for (unsigned scenario = 0; scenario < 3; ++scenario) {\n"
+        "  int complete = 0; int64_t count = scenario == 0 ? 3 : scenario == 1 ? 0 : -1;\n"
+        "  for (fail_at = 1; fail_at < 128; ++fail_at) {\n"
+        "   attempts = 0; XrAotContext context = {0}; XrAotPanicInfo panic = {0};\n"
+        "   XrAotOutcome result = xr_aot_fn_0(&context, count, &panic);\n"
+        "   if (attempts >= fail_at) { if (result.kind != 4 || result.pointer) return 1; }\n"
+        "   else if (count < 0) { if (result.kind != 3 || panic.code != 452) return 2; }\n"
+        "   else if (result.kind || result.i64 != count) return 3;\n"
+        "   if (context.allocations || live || bad_free) return 4;\n"
+        "   xr_aot_context_destroy(&context);\n"
+        "   if (attempts < fail_at) {\n"
+        "    printf(\"native default array allocation failures: scenario=%u points=%zu\\n\", scenario, fail_at - 1);\n"
+        "    complete = 1; break;\n"
+        "   }\n"
+        "  }\n if (!complete) return 5;\n }\n return 0;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void write_integer_bitwise_fixture(const char *path) {
+    XrProgramArtifact artifact = {0};
+    REQUIRE(xr_program_integer_bitwise_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) ==
+            XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    for (uint32_t index = 0u; index < program->function_count; ++index)
+        REQUIRE(program->functions[index].blocks[0].instructions[1].operation_id ==
+                XR_CORE_OP_CORE_INTEGER_BITWISE);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    write_generated_fixture(path, program, profile, false);
+    FILE *output = fopen(path, "ab");
+    REQUIRE(output != NULL);
+    REQUIRE(fputs("\nint main(void) {\n"
+                  "    XrAotContext context = {0};\n"
+                  "    XrAotOutcome result;\n"
+                  "",
+                  output) >= 0);
+    unsigned case_id = 0u;
+#define XR_INTEGER_BITWISE_CASE(type, member, mode, left, right, expected) \
+    do { \
+        uint32_t function = xr_program_integer_bitwise_fixture_function(program, XR_CORE_TYPE_##type, mode); \
+        REQUIRE(function != UINT32_MAX); \
+        REQUIRE(fprintf(output, \
+            "    result = xr_aot_fn_%u(&context, %s, %s);\n" \
+            "    if (result.kind != 0 || result.%s != %s) return %u;\n", \
+            function, #left, #right, #member, #expected, ++case_id) > 0); \
+    } while (0);
+#include "../program/xr_program_integer_bitwise_cases.inc.c"
+#undef XR_INTEGER_BITWISE_CASE
+    REQUIRE(fputs("    return 0;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void write_coroutine_outcome_fixture(const char *path, uint32_t scenario) {
     REQUIRE(scenario < 8u);
     bool handled = scenario >= 4u;
@@ -3616,6 +3869,32 @@ static void write_element_place_fixture(const char *path, unsigned scenario, boo
     xr_validated_program_free(program);
 }
 
+static void test_channel_storage_lowering(void) {
+    for (int64_t capacity = 0; capacity <= 2; ++capacity) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        REQUIRE(xr_program_channel_fixture_write(capacity, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+        const XrValidatedInstruction *ops = program->functions[program->entry_function].blocks[0].instructions;
+        REQUIRE(ops[1].operation_id == XR_CORE_OP_CORE_CHANNEL_CONSTRUCT);
+        REQUIRE(ops[4].operation_id == XR_CORE_OP_CORE_CHANNEL_IS_CLOSED);
+        XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile != NULL);
+        XrBackendIR *ir = NULL;
+        XrBackendDiagnostic diagnostic = {0};
+        XrBackendOptions options = xr_backend_default_options();
+        REQUIRE(xr_backend_ir_build(program, profile, &options, &ir, &diagnostic) == XR_BACKEND_OK);
+        REQUIRE(xr_backend_ir_verify(ir, &diagnostic));
+        XrGeneratedC generated = {0};
+        REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+        xr_generated_c_free(&generated);
+        xr_backend_ir_free(ir);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 static void test_atomic_storage_lowering(void) {
     for (unsigned mode = 0u; mode <= 10u; ++mode) {
     XrProgramArtifact artifact = {0};
@@ -3652,13 +3931,116 @@ static void test_atomic_storage_lowering(void) {
     }
 }
 
+static void write_string_builder_fixture(const char *path, unsigned scenario) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE((scenario == 3u ? xr_program_string_builder_call_fixture_write(0u, &artifact) :
+        xr_program_string_builder_fixture_write(scenario ? 99u + scenario : 0u, &artifact)) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    XrBackendIR *ir = build_ir(program, profile, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, NULL) == XR_BACKEND_OK);
+    FILE *output = fopen(path, "wb");
+    REQUIRE(output);
+    write_allocation_probe(output);
+    REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
+    REQUIRE(fputs("\n#undef malloc\n#undef free\nint main(void) {\n"
+        " for (unsigned independent = 0; independent < 2; ++independent) {\n"
+        "  int complete = 0;\n"
+        "  for (fail_at = 1; fail_at < 128; ++fail_at) {\n"
+        "   attempts = 0; XrAotContext context = {0};\n", output) >= 0);
+    REQUIRE(fprintf(output, "   XrAotOutcome result = xr_aot_fn_%u(&context);\n", program->entry_function) > 0);
+    REQUIRE(fputs("   if (attempts >= fail_at) { if (result.kind != 4 || result.pointer) return 1; }\n"
+                  "   else {\n", output) >= 0);
+    if (scenario == 3u) {
+        REQUIRE(fputs("    if (result.kind || result.i64) return 2;\n", output) >= 0);
+    } else {
+        REQUIRE(fprintf(output,
+            "    const uint8_t expected[] = {65,0,195,169,240,159,152,128};\n"
+            "    XrAotString *value = (XrAotString *)result.pointer;\n"
+            "    if (result.kind || !value || value->size != %u || value->scalar_count != %u) return 2;\n"
+            "    for (size_t offset = 0; offset < value->size; offset += sizeof(expected))\n"
+            "     if (memcmp(value->bytes + offset, expected, sizeof(expected))) return 3;\n"
+            "    xr_aot_free(&context, value);\n",
+            scenario == 2u ? 0u : scenario == 1u ? 72u : 8u,
+            scenario == 2u ? 0u : scenario == 1u ? 36u : 4u) > 0);
+    }
+    REQUIRE(fputs("   }\n"
+        "   if (context.allocations || live || bad_free) return 4;\n"
+        "   xr_aot_context_destroy(&context);\n"
+        "   if (attempts < fail_at) {\n"
+        "    printf(\"native StringBuilder allocation failures: instance=%u points=%zu\\n\", independent, fail_at - 1);\n"
+        "    complete = 1; break;\n"
+        "   }\n"
+        "  }\n if (!complete) return 5;\n }\n return 0;\n}\n", output) >= 0);
+    REQUIRE(fclose(output) == 0);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void write_byte_compare_fixture(const char *path, unsigned scenario) {
+    XrProgramArtifact artifact = {0}; XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_byte_compare_fixture_write(scenario, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    write_generated_fixture(path, program, profile, false);
+    FILE *output = fopen(path, "ab"); REQUIRE(output != NULL);
+    REQUIRE(fprintf(output,
+        "\nint main(void) {\n"
+        "  for (unsigned repeat = 0; repeat < 2; ++repeat) {\n"
+        "    XrAotContext context = {0}; XrAotOutcome result = xr_aot_fn_0(&context);\n"
+        "    if (result.kind || result.boolean != %u || context.allocations) return 1;\n"
+        "    xr_aot_context_destroy(&context);\n"
+        "  }\n  return 0;\n}\n", scenario == 0u || scenario == 1u || scenario == 6u ? 1u : 0u) > 0);
+    REQUIRE(fclose(output) == 0);
+    xr_target_profile_free(profile); xr_validated_program_free(program);
+}
+
 int main(int argc, char **argv) {
+    if (argc == 3 && strncmp(argv[2], "byte-compare-", 13u) == 0) {
+        unsigned scenario = (unsigned)strtoul(argv[2] + 13u, NULL, 10);
+        REQUIRE(scenario < 9u); write_byte_compare_fixture(argv[1], scenario); return 0;
+    }
+
+    const XrCoreOperationSpec *byte_compare =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL);
+    REQUIRE(byte_compare && byte_compare->aot_status == XR_CORE_COVERAGE_COMPLETE &&
+            byte_compare->decoder_status == XR_CORE_COVERAGE_COMPLETE);
+    if (argc == 3 && strncmp(argv[2], "string-builder-", 15u) == 0) {
+        unsigned scenario = (unsigned)strtoul(argv[2] + 15u, NULL, 10);
+        REQUIRE(scenario <= 3u);
+        write_string_builder_fixture(argv[1], scenario);
+        return 0;
+    }
+    const uint16_t builder_operations[] = {
+        XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT,
+        XR_CORE_OP_CORE_STRING_BUILDER_APPEND,
+        XR_CORE_OP_CORE_STRING_BUILDER_CLEAR,
+        XR_CORE_OP_CORE_STRING_BUILDER_LENGTH,
+        XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT
+    };
+    for (size_t index = 0u; index < sizeof(builder_operations) /
+                                      sizeof(builder_operations[0]); ++index) {
+        const XrCoreOperationSpec *spec = xr_core_spec_operation_by_id(builder_operations[index]);
+        REQUIRE(spec != NULL);
+        REQUIRE(spec->aot_status == XR_CORE_COVERAGE_COMPLETE);
+    }
+
     if (argc == 3 && strcmp(argv[2], "record-reference") == 0) {
         REQUIRE(write_class_native_source(argv[1], true));
         return 0;
     }
-    if (argc == 1)
+    if (argc == 1) {
+        test_channel_storage_lowering();
         test_atomic_storage_lowering();
+    }
     if (argc == 3 && strncmp(argv[2], "element-loan-", 13u) == 0) {
         REQUIRE(strlen(argv[2]) == 14u && argv[2][13] >= '0' && argv[2][13] <= '4');
         write_element_place_fixture(argv[1], (unsigned)(argv[2][13] - '0'), true);
@@ -3678,6 +4060,38 @@ int main(int argc, char **argv) {
     }
     if (argc == 3 && strcmp(argv[2], "integer-divmod-cleanup") == 0) {
         write_integer_divmod_cleanup_fixture(argv[1]);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "string-slice-allocations") == 0) {
+        write_string_slice_allocation_fixture(argv[1]);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "array-default-allocations") == 0) {
+        write_array_default_allocation_fixture(argv[1]);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "array-append-managed-allocations") == 0) {
+        write_array_append_allocation_fixture(argv[1], true);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "array-append-allocations") == 0) {
+        write_array_append_allocation_fixture(argv[1], false);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "array-append") == 0) {
+        write_array_append_fixture(argv[1]);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "array-default") == 0) {
+        write_array_default_fixture(argv[1]);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "string-slice") == 0) {
+        write_string_slice_fixture(argv[1]);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "integer-bitwise") == 0) {
+        write_integer_bitwise_fixture(argv[1]);
         return 0;
     }
     if (argc == 3 && strcmp(argv[2], "integer-divmod") == 0) {

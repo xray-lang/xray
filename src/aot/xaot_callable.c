@@ -870,6 +870,20 @@ static bool callable_refresh_reachable_funcs(CallableAnalysis *a, bool *changed)
     return true;
 }
 
+static void callable_trace_reachability_edge(CallableAnalysis *a, const XiFunc *owner,
+                                             const XiFunc *target, const char *kind) {
+    if (!getenv("XRAY_AOT_REACH_TRACE"))
+        return;
+    int index = callable_func_index(a, target);
+    if (index < 0 || a->reachable_funcs[index])
+        return;
+    fprintf(stderr, "[callable-reach] kind=%s caller=%s caller-body=%u target=%s target-body=%u\n",
+            kind, owner && owner->name ? owner->name : "<root>",
+            owner ? (unsigned) owner->xg_body_func_id : UINT32_MAX,
+            target && target->name ? target->name : "?",
+            target ? (unsigned) target->xg_body_func_id : UINT32_MAX);
+}
+
 static bool callable_mark_reachable_func(CallableAnalysis *a, const XiFunc *func, bool *changed) {
     const XgGlobalEvidence *ev = a && a->bundle ? a->bundle->global_evidence_plan.evidence : NULL;
     int index = callable_func_index(a, func);
@@ -1052,6 +1066,7 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
         if ((record && record->is_external_entry) ||
             (func->is_generic_template &&
              xaot_callable_func_has_executable_body_plan(bundle, func))) {
+            callable_trace_reachability_edge(a, NULL, func, "entry-or-generic");
             if (!callable_mark_reachable_func(a, func, &changed))
                 return false;
         }
@@ -1094,6 +1109,7 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                      * function-value target sets below add the real edge. */
                     const CallableCallFacts *call_facts = callable_call_facts(a, func, call);
                     const XiFunc *direct = call_facts ? call_facts->direct : NULL;
+                    callable_trace_reachability_edge(a, func, direct, "direct");
                     if (direct && !callable_mark_reachable_func(a, direct, &changed))
                         return false;
                     const XiFunc *hof_target =
@@ -1107,6 +1123,8 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                             return false;
                         for (uint32_t ti = 0; ti < targets->count; ti++) {
                             const XiFunc *target = a->funcs[targets->items[ti]].func;
+                            callable_trace_reachability_edge(a, func, target,
+                                                            xi_generated_op_name(call->op));
                             if (!callable_mark_reachable_func(a, target, &changed))
                                 return false;
                         }
@@ -1117,6 +1135,8 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                             return false;
                         for (uint32_t ti = 0; ti < targets->count; ti++) {
                             const XiFunc *target = a->funcs[targets->items[ti]].func;
+                            callable_trace_reachability_edge(a, func, target,
+                                                            xi_generated_op_name(call->op));
                             if (!callable_mark_reachable_func(a, target, &changed))
                                 return false;
                         }
@@ -1126,6 +1146,8 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                     const CallableSet *targets = callable_value_set(a, func, call->args[0]);
                     for (uint32_t ti = 0; targets && ti < targets->count; ti++) {
                         const XiFunc *target = a->funcs[targets->items[ti]].func;
+                        callable_trace_reachability_edge(a, func, target,
+                                                        xi_generated_op_name(call->op));
                         if (!callable_mark_reachable_func(a, target, &changed))
                             return false;
                     }

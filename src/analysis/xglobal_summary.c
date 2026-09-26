@@ -13,6 +13,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xtype_ref.h"
+#include "../module/xmodule_resolver.h"
 #include "../shared/xobject_shape.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -6339,7 +6340,8 @@ static bool remap_index_start(uint32_t start, uint32_t base_count, uint32_t *out
 
 XR_FUNC bool xg_module_summary_identity_complete(const XgModuleSummary *module) {
     return module && module->module_id != XG_NO_ID && module->name_id != 0 &&
-           module->canonical_hash != 0 && module->source_hash != 0 && module->kind != 0;
+           module->canonical_hash != 0 && module->source_hash != 0 &&
+           module->kind <= XR_MOD_MEMORY;
 }
 
 XR_FUNC bool xg_module_summary_identity_matches(const XgModuleSummary *a,

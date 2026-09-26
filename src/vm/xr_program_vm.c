@@ -8,10 +8,16 @@
  * xr_program_vm.c - Generic CoreSpec dispatch over validated XrProgram
  */
 
+#include "../runtime/core/xr_array_append_storage.h"
 #include "../shared/xr_sync_core.h"
 #include "xr_program_vm.h"
 #include "../runtime/core/xr_text_kernel.h"
+#include "../runtime/core/xr_array_allocation_plan.h"
+#include "../runtime/core/xr_channel_storage.h"
+#include "../runtime/core/xr_string_builder_storage.h"
 #include "../shared/xr_integer_division_core.h"
+#include "../shared/xr_byte_compare_core.h"
+#include "../shared/xr_integer_bitwise_core.h"
 
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -145,6 +151,7 @@ typedef struct XrVmAggregateValue {
     uint32_t owner_count;
     XrVmValue *fields;
     uint32_t field_count;
+    uint32_t field_capacity;
 } XrVmAggregateValue;
 
 typedef struct XrVmAtomicValue {
@@ -152,6 +159,17 @@ typedef struct XrVmAtomicValue {
     uint16_t type_id;
     XrAtomicStorageCore *shared;
 } XrVmAtomicValue;
+
+typedef struct XrVmStringBuilderValue {
+    XrVmValueCell cell;
+    XrStringBuilderStorage text;
+} XrVmStringBuilderValue;
+
+typedef struct XrVmChannelValue {
+    XrVmValueCell cell;
+    uint16_t type_id;
+    XrChannelStorage *shared;
+} XrVmChannelValue;
 
 typedef struct XrVmResourceValue {
     XrVmValueCell cell;
@@ -258,6 +276,10 @@ static XrVmValueCell *vm_value_cell(XrVmValue value) {
             return (XrVmValueCell *) (void *) value.as.panic_info.message;
         case XR_VM_VALUE_RESOURCE:
             return (XrVmValueCell *) (void *) value.as.resource;
+        case XR_VM_VALUE_STRING_BUILDER:
+            return (XrVmValueCell *) (void *) value.as.string_builder;
+        case XR_VM_VALUE_CHANNEL:
+            return (XrVmValueCell *) (void *) value.as.channel_storage;
         case XR_VM_VALUE_ATOMIC:
             return (XrVmValueCell *) (void *) value.as.atomic_storage;
         case XR_VM_VALUE_AGGREGATE:
@@ -348,6 +370,8 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
             return value.kind == XR_VM_VALUE_PANIC_INFO;
+        case XR_CORE_TYPE_STRING_BUILDER:
+            return value.kind == XR_VM_VALUE_STRING_BUILDER && value.as.string_builder;
         case XR_CORE_TYPE_STRING:
             return value.kind == XR_VM_VALUE_STRING && value.as.string;
         case XR_CORE_TYPE_RUNE:
@@ -360,6 +384,11 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
                 const XrVmResourceValue *resource = value.as.resource;
                 return value.kind == XR_VM_VALUE_RESOURCE && resource && resource->owner &&
                        resource->type_id == type_id;
+            }
+            if (type->kind == XR_CORE_IR_TYPE_CHANNEL) {
+                const XrVmChannelValue *channel = value.as.channel_storage;
+                return value.kind == XR_VM_VALUE_CHANNEL && channel && channel->shared &&
+                       channel->type_id == type_id;
             }
             if (type->kind == XR_CORE_IR_TYPE_ATOMIC) {
                 const XrVmAtomicValue *atomic_value = value.as.atomic_storage;
@@ -429,17 +458,26 @@ static XrVmClassValue *allocate_class(XrVmContext *context, uint16_t type_id,
     return value;
 }
 
+static void *vm_array_backing_allocate(void *context, size_t size) {
+    (void) context;
+    return xr_malloc(size);
+}
+
 static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t type_id,
                                               uint32_t variant_ordinal, uint32_t field_count) {
     XrVmValueStorage *storage = context->storage;
-    if ((uint64_t) field_count >
-        (uint64_t) context->code->options.max_value_cells - storage->aggregate_cell_count)
+    uint32_t limit = context->code->options.max_value_cells;
+    if (storage->aggregate_cell_count > limit)
+        return NULL;
+    XrArrayAllocationPlan plan = xr_array_allocation_plan(
+        field_count, sizeof(XrVmValue), limit - (uint32_t) storage->aggregate_cell_count, SIZE_MAX);
+    if (plan.status != XR_ARRAY_ALLOCATION_OK)
         return NULL;
     XrVmAggregateValue *aggregate = xr_calloc(1u, sizeof(*aggregate));
     if (!aggregate)
         return NULL;
     if (field_count != 0u) {
-        aggregate->fields = xr_calloc(field_count, sizeof(XrVmValue));
+        aggregate->fields = xr_calloc(1u, plan.bytes);
         if (!aggregate->fields) {
             xr_free(aggregate);
             return NULL;
@@ -449,11 +487,44 @@ static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t typ
     aggregate->owner_count = 1u;
     aggregate->variant_ordinal = variant_ordinal;
     aggregate->field_count = field_count;
+    aggregate->field_capacity = field_count;
     vm_value_cell_link(storage, &aggregate->cell, XR_VM_VALUE_AGGREGATE, field_count);
     return aggregate;
 }
 
 /* Each string counts one cell plus its payload bytes against the VM budget. */
+static void *vm_builder_allocate(void *opaque, size_t size) {
+    XrVmContext *context = opaque;
+    if (context->storage->aggregate_cell_count > context->code->options.max_value_cells ||
+        size > context->code->options.max_value_cells - context->storage->aggregate_cell_count)
+        return NULL;
+    return xr_malloc(size);
+}
+
+static void vm_builder_release(void *opaque, void *pointer) {
+    (void) opaque;
+    xr_free(pointer);
+}
+
+static void release_string_builder_storage(XrVmStringBuilderValue *value) {
+    if (!value) return;
+    size_t capacity = value->text.capacity;
+    XrStringBuilderAllocator allocator = {NULL, NULL, vm_builder_release};
+    xr_string_builder_dispose(&value->text, &allocator);
+    if (value->cell.storage) {
+        value->cell.storage->aggregate_cell_count -= capacity;
+        value->cell.cell_count -= capacity;
+    }
+}
+
+static XrVmStringBuilderValue *allocate_string_builder(XrVmContext *context) {
+    if (context->storage->aggregate_cell_count >= context->code->options.max_value_cells)
+        return NULL;
+    XrVmStringBuilderValue *value = xr_calloc(1u, sizeof(*value));
+    if (value) vm_value_cell_link(context->storage, &value->cell, XR_VM_VALUE_STRING_BUILDER, 1u);
+    return value;
+}
+
 static XrVmStringValue *allocate_string(XrVmContext *context, size_t size) {
     XrVmValueStorage *storage = context->storage;
     if (size > XR_PROGRAM_CONSTANT_STRING_MAX_BYTES ||
@@ -530,6 +601,52 @@ static void release_atomic_storage(XrVmAtomicValue *value) {
     if (value->shared && xr_atomic_storage_release_core(value->shared) == XR_ATOMIC_STORAGE_RELEASE_LAST)
         xr_free(value->shared);
     value->shared = NULL;
+}
+
+static XrVmChannelValue *allocate_channel(XrVmContext *context, uint16_t type_id, int64_t capacity) {
+    if (capacity < 0 || (uint64_t) capacity > UINT32_MAX ||
+        (uint64_t) capacity > context->code->options.max_value_cells ||
+        context->storage->aggregate_cell_count >= context->code->options.max_value_cells)
+        return NULL;
+    XrVmChannelValue *value = xr_calloc(1u, sizeof(*value));
+    XrChannelStorage *shared = value ? xr_malloc(sizeof(*shared)) : NULL;
+    XrChannelMessageOwner *slots = shared && capacity ? xr_calloc((size_t) capacity, sizeof(*slots)) : NULL;
+    if (!shared || (capacity && !slots) || !xr_channel_storage_init(shared, slots, (uint32_t) capacity)) {
+        xr_free(slots);
+        xr_free(shared);
+        xr_free(value);
+        return NULL;
+    }
+    value->type_id = type_id;
+    value->shared = shared;
+    vm_value_cell_link(context->storage, &value->cell, XR_VM_VALUE_CHANNEL, 1u);
+    return value;
+}
+
+static XrVmChannelValue *retain_channel(XrVmContext *context, uint16_t type_id,
+                                       XrChannelStorage *shared) {
+    if (!shared || context->storage->aggregate_cell_count >= context->code->options.max_value_cells)
+        return NULL;
+    XrVmChannelValue *value = xr_calloc(1u, sizeof(*value));
+    if (!value)
+        return NULL;
+    if (!xr_channel_storage_retain(shared)) {
+        xr_free(value);
+        return NULL;
+    }
+    value->type_id = type_id;
+    value->shared = shared;
+    vm_value_cell_link(context->storage, &value->cell, XR_VM_VALUE_CHANNEL, 1u);
+    return value;
+}
+
+static void release_channel_storage(XrVmChannelValue *value) {
+    XrChannelStorage *shared = value->shared;
+    value->shared = NULL;
+    if (shared && xr_channel_storage_release(shared) == XR_CHANNEL_STORAGE_LAST_OWNER) {
+        xr_free(shared->slots);
+        xr_free(shared);
+    }
 }
 
 static XrVmCallableValue *allocate_callable(XrVmContext *context) {
@@ -645,6 +762,18 @@ static bool clone_vm_value(XrVmContext *context, XrVmValue source, uint16_t type
         *output = source;
         return true;
     }
+    if (type->kind == XR_CORE_IR_TYPE_CHANNEL) {
+        if (!value_matches_type(context->code->program, source, type_id))
+            return false;
+        const XrVmChannelValue *original = source.as.channel_storage;
+        XrVmChannelValue *copy = retain_channel(context, type_id, original->shared);
+        if (!copy)
+            return false;
+        output->kind = XR_VM_VALUE_CHANNEL;
+        output->as.channel_storage = copy;
+        return true;
+    }
+
     if (type->kind == XR_CORE_IR_TYPE_ATOMIC) {
         if (!value_matches_type(context->code->program, source, type_id))
             return false;
@@ -739,6 +868,10 @@ static void drop_vm_value(XrVmContext *context, XrVmValue *value, XrVmLifecycleE
         XrVmResourceValue *resource = (XrVmResourceValue *) (void *) value->as.resource;
         if (resource)
             xr_execution_resource_free(&resource->owner);
+    } else if (value->kind == XR_VM_VALUE_STRING_BUILDER) {
+        release_string_builder_storage((XrVmStringBuilderValue *) (void *) value->as.string_builder);
+    } else if (value->kind == XR_VM_VALUE_CHANNEL) {
+        release_channel_storage((XrVmChannelValue *) (void *) value->as.channel_storage);
     } else if (value->kind == XR_VM_VALUE_ATOMIC) {
         release_atomic_storage((XrVmAtomicValue *) (void *) value->as.atomic_storage);
     } else if (value->kind == XR_VM_VALUE_CLASS_REFERENCE) {
@@ -922,8 +1055,14 @@ static void vm_value_cell_unlink(XrVmValueCell *cell) {
 static void vm_value_cell_destroy(XrVmValueCell *cell) {
     vm_value_cell_unlink(cell);
     switch (cell->kind) {
+        case XR_VM_VALUE_STRING_BUILDER:
+            release_string_builder_storage((XrVmStringBuilderValue *) cell);
+            break;
         case XR_VM_VALUE_RESOURCE:
             xr_execution_resource_free(&((XrVmResourceValue *) cell)->owner);
+            break;
+        case XR_VM_VALUE_CHANNEL:
+            release_channel_storage((XrVmChannelValue *) cell);
             break;
         case XR_VM_VALUE_ATOMIC:
             release_atomic_storage((XrVmAtomicValue *) cell);
@@ -1612,6 +1751,13 @@ XrVmCodeStatus xr_vm_code_build(const XrValidatedProgram *program, const XrTarge
     }
     if (!vm_program_operations_active(program, diagnostic_out))
         return XR_VM_CODE_UNSUPPORTED_OPERATION;
+    for (uint32_t index = 0u; index < program->type_count; ++index) {
+        if (program->types[index].parent_type_id != XR_CORE_TYPE_VOID) {
+            if (diagnostic_out)
+                diagnostic_out->status = XR_VM_CODE_UNSUPPORTED_OPERATION;
+            return XR_VM_CODE_UNSUPPORTED_OPERATION;
+        }
+    }
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
         if (diagnostic_out)
@@ -2019,6 +2165,8 @@ static void vm_dispatch_instruction(XrVmDispatch *dispatch) {
         case XR_CORE_OP_CORE_DIV_I64:
         case XR_CORE_OP_CORE_SCALAR_BITCAST64:
         case XR_CORE_OP_CORE_INTEGER_CONVERT:
+        case XR_CORE_OP_CORE_STRING_SLICE:
+        case XR_CORE_OP_CORE_INTEGER_BITWISE:
         case XR_CORE_OP_CORE_INTEGER_DIVMOD:
             vm_dispatch_arithmetic(dispatch);
             return;
@@ -2087,11 +2235,23 @@ static void vm_dispatch_instruction(XrVmDispatch *dispatch) {
         case XR_CORE_OP_CORE_PLACE_EXCHANGE:
             vm_dispatch_place(dispatch);
             return;
+        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
+        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
+        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
+        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
+        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT:
+            vm_dispatch_string_builder(dispatch);
+            return;
+        case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL:
+        case XR_CORE_OP_CORE_CHANNEL_CONSTRUCT:
+        case XR_CORE_OP_CORE_CHANNEL_IS_CLOSED:
         case XR_CORE_OP_CORE_ATOMIC_CONSTRUCT:
         case XR_CORE_OP_CORE_ATOMIC_LOAD:
         case XR_CORE_OP_CORE_ATOMIC_EXCHANGE:
         case XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE:
         case XR_CORE_OP_CORE_ATOMIC_UPDATE:
+        case XR_CORE_OP_CORE_ARRAY_APPEND:
+        case XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT:
         case XR_CORE_OP_CORE_ARRAY_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:

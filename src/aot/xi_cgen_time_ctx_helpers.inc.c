@@ -17,12 +17,3 @@ static bool cg_value_is_module_import_ctx(const XiCgenCtx *ctx, const XiFunc *f,
         return false;
     return cg_shared_slot_is_module_import(ctx->module->init, (int) v->aux_int, module_name);
 }
-
-static bool cg_is_time_sleep_call_ctx(const XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs != 2)
-        return false;
-    const char *method = (const char *) v->aux;
-    if (!method || strcmp(method, "sleep") != 0)
-        return false;
-    return cg_value_is_module_import_ctx(ctx, f, v->args[0], "time");
-}

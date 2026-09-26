@@ -18,6 +18,9 @@
 #include "xstringbuilder.h"
 #include "xstring.h"
 #include "xvalue.h"
+#include "../xpanic_info.h"
+#include "../../xerror_codes.h"
+#include "../../../vm/xvm.h"
 #include "xisolate_api.h"
 #include "xclass_builder.h"
 #include "xclass_system.h"
@@ -27,30 +30,36 @@
 /* ========== Helpers ========== */
 
 // Convert XrValue to string and append to StringBuilder
-static void append_value(XrStringBuilder *sb, XrVMRuntime *iso, XrValue value) {
+static bool append_value(XrStringBuilder *sb, XrVMRuntime *iso, XrValue value) {
     (void) iso;
     if (XR_IS_STRING(value)) {
-        xr_stringbuilder_append_str(sb, XR_TO_STRING(value));
+        return xr_stringbuilder_append_str(sb, XR_TO_STRING(value));
     } else if (XR_IS_INT(value)) {
-        xr_stringbuilder_append_int(sb, XR_TO_INT(value));
+        return xr_stringbuilder_append_int(sb, XR_TO_INT(value));
     } else if (XR_IS_FLOAT(value)) {
-        xr_stringbuilder_append_float(sb, XR_TO_FLOAT(value));
+        return xr_stringbuilder_append_float(sb, XR_TO_FLOAT(value));
     } else if (XR_IS_RUNE(value)) {
         char buf[XR_UTF8_MAX_BYTES];
         int n = xr_utf8_encode(XR_TO_RUNE(value), buf);
-        if (n > 0)
-            xr_stringbuilder_append_cstr(sb, buf, (size_t) n);
+        return n > 0 && xr_stringbuilder_append_cstr(sb, buf, (size_t) n);
     } else if (XR_IS_BOOL(value)) {
         XrStrbufCoreSlice s =
             xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_BOOL, XR_TO_BOOL(value));
-        xr_stringbuilder_append_cstr(sb, s.data, s.len);
+        return xr_stringbuilder_append_cstr(sb, s.data, s.len);
     } else if (XR_IS_NULL(value)) {
         XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_NULL, false);
-        xr_stringbuilder_append_cstr(sb, s.data, s.len);
+        return xr_stringbuilder_append_cstr(sb, s.data, s.len);
     } else {
         XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_OBJECT, false);
-        xr_stringbuilder_append_cstr(sb, s.data, s.len);
+        return xr_stringbuilder_append_cstr(sb, s.data, s.len);
     }
+}
+
+static XrValue stringbuilder_allocation_failure(XrVMRuntime *isolate) {
+    XrValue panic = xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY,
+                                      "StringBuilder allocation failed");
+    xr_vm_throw_exception(isolate, panic);
+    return xr_null();
 }
 
 /* ========== Constructor ========== */
@@ -61,10 +70,11 @@ XrValue xr_builtin_stringbuilder_new(XrVMRuntime *isolate, XrValue self, XrValue
     XR_DCHECK(isolate != NULL, "stringbuilder_new: NULL isolate");
     XrStringBuilder *sb = xr_stringbuilder_new(NULL);
     if (!sb)
-        return xr_null();
+        return stringbuilder_allocation_failure(isolate);
 
-    if (argc > 0) {
-        append_value(sb, isolate, args[0]);
+    if (argc > 0 && !append_value(sb, isolate, args[0])) {
+        xr_stringbuilder_free(sb);
+        return stringbuilder_allocation_failure(isolate);
     }
 
     return xr_stringbuilder_value(sb);
@@ -80,7 +90,8 @@ XrValue xr_builtin_stringbuilder_append(XrVMRuntime *isolate, XrValue self, XrVa
         return xr_null();
 
     for (int i = 0; i < argc; i++) {
-        append_value(sb, isolate, args[i]);
+        if (!append_value(sb, isolate, args[i]))
+            return stringbuilder_allocation_failure(isolate);
     }
 
     return self;
@@ -96,9 +107,8 @@ XrValue xr_builtin_stringbuilder_toString(XrVMRuntime *isolate, XrValue self, Xr
         return xr_null();
 
     XrString *str = xr_stringbuilder_to_string(sb);
-    if (!str) {
-        return xr_string_value(xr_string_intern(isolate, "", 0, 0));
-    }
+    if (!str)
+        return stringbuilder_allocation_failure(isolate);
 
     return xr_string_value(str);
 }

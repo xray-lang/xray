@@ -27,9 +27,26 @@
  * reachable caller and the ordinary call family rejects them fail-closed. */
 typedef struct XrTargetProgramReachability {
     uint32_t module_count;
+    XrStableId *module_identities;
+    XrFingerprint *module_fingerprints;
     uint32_t *function_begins;
     uint8_t *functions;
+    uint32_t *class_begins;
+    uint8_t *sealed_classes;
 } XrTargetProgramReachability;
+
+XR_FUNC bool xr_target_program_class_is_sealed(const XrTargetProgramReachability *reachability,
+                                              uint32_t module, uint32_t source_class);
+XR_FUNC bool xr_target_program_call_binds_instance_method(
+    const XrTargetProgramReachability *reachability, uint32_t module,
+    const XrSemanticPlan *semantic, const XrSemanticCallTargetRecord *target);
+
+/* Returns a direct body only when the exact dependency belongs to this proof
+ * and its declaration has a final or completely sealed dispatch domain. */
+XR_FUNC const XrSemanticSourceMethodRecord *xr_target_program_direct_dependency_method(
+    const XrTargetProgramReachability *reachability, uint32_t caller_module,
+    const XrSemanticPlan *semantic, const XrSemanticCallTargetRecord *target,
+    const XrSemanticPlan *dependency);
 
 XR_FUNC bool xr_target_program_reachability_build(const XrSemanticPlan *const *modules,
                                                   uint32_t module_count,

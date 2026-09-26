@@ -25,6 +25,7 @@
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/frontend/analyzer/xanalyzer_mono.h"
+#include "../../../src/base/xglobal_indices.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi_import_resolve.h"
 #include "../../../src/module/xmodule_graph.h"
@@ -545,6 +546,19 @@ static void check_module_initialization_facts(XiFunc *func) {
     XiValue copied = {0};
     xi_value_copy_metadata(&copied, initializer);
     PIPELINE_TEST_REQUIRE(copied.initializes_module_slot);
+    copied.array_default_construct = true;
+    XiValue copied_array = {0};
+    xi_value_copy_metadata(&copied_array, &copied);
+    PIPELINE_TEST_REQUIRE(copied_array.array_default_construct);
+    XiEditFingerprint array_before = xi_edit_fingerprint(func);
+    initializer->array_default_construct = true;
+    XiEditFingerprint array_after = xi_edit_fingerprint(func);
+    PIPELINE_TEST_REQUIRE(array_before.values != array_after.values);
+    PIPELINE_TEST_REQUIRE(!xi_verify(func, error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(strstr(error, "invalid runtime-length array construction identity") != NULL);
+    initializer->array_default_construct = false;
+
+
 
     XiEditFingerprint before = xi_edit_fingerprint(func);
     initializer->initializes_module_slot = false;
@@ -2114,11 +2128,65 @@ static bool xi_pipeline_program_rejects_nominal_publication(const XrProgramFromX
     return rejected;
 }
 
+TEST(e2e_program_channel_types_preserve_exact_elements) {
+    static const char source[] =
+        "type Subscription = { label: string, notifications: Channel<i64> }\n"
+        "var subscriptions: Array<Subscription> = []\n"
+        "var notifications: Channel<string>? = null\n"
+        "fn answer() -> i64 { return len(subscriptions) }\n";
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-channel-types", source));
+    XiFunc *root = fixture.pipeline.ir;
+    const XiFunc *entry = NULL;
+    for (uint16_t i = 0u; i < root->module->nfuncs; ++i) {
+        const XiFunc *candidate = root->module->functions[i];
+        if (candidate && candidate->name && strcmp(candidate->name, "answer") == 0)
+            entry = candidate;
+    }
+    PIPELINE_TEST_REQUIRE(entry != NULL);
+    const XiFunc *roots[] = {root};
+    XrCoreIrKey profile = xr_core_ir_key("channel-types", 13u);
+    XrProgramFromXiInput input = {
+        .module_roots = roots, .module_count = 1u, .entry_function = entry,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = profile.bytes,
+        .module_graph = fixture.source.graph,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    XrProgramBuildStatus status = xr_test_write_program_artifact(
+        &input, &artifact, diagnostic, sizeof(diagnostic));
+    if (status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "channel type source failed: %s\n", diagnostic);
+    PIPELINE_TEST_REQUIRE(status == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *validated = NULL;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              NULL) == XR_PROGRAM_VERIFY_OK);
+    unsigned elements = 0u;
+    for (uint32_t i = 0u; i < validated->type_count; ++i) {
+        const XrValidatedType *type = &validated->types[i];
+        if (type->kind != XR_CORE_IR_TYPE_CHANNEL)
+            continue;
+        PIPELINE_TEST_REQUIRE(type->copy_contract == XR_CORE_IR_COPY_EXPLICIT);
+        if (type->channel_element_type == XR_CORE_TYPE_I64) elements |= 1u;
+        else if (type->channel_element_type == XR_CORE_TYPE_STRING) elements |= 2u;
+        else PIPELINE_TEST_REQUIRE(false);
+    }
+    PIPELINE_TEST_REQUIRE(elements == 3u);
+    PIPELINE_TEST_REQUIRE(validated->module_count == 1u);
+    PIPELINE_TEST_REQUIRE(validated->modules[0].slot_count == 2u);
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
+}
+
 TEST(e2e_program_inherited_publication_requires_exact_parent) {
     static const char source[] =
-        "class Base {\n  value: i64 = 1\n}\n"
-        "class Derived extends Base {\n  other: i64 = 2\n}\n"
-        "fn answer() -> i64 { return 42 }\n";
+        "class Root {\n  value: i64 = 1\n}\n"
+        "class Base extends Root {\n  label: string = \"base\"\n}\n"
+        "class Derived extends Base {\n  other: bool = true\n}\n"
+        "fn answer(value: Derived) -> i64 { return 42 }\n";
     XiCanonicalProgramTestFixture fixture = {0};
     PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
         &fixture, "xi-program-inherited-publication", source));
@@ -2131,15 +2199,16 @@ TEST(e2e_program_inherited_publication_requires_exact_parent) {
             XiValue *value = block->values[value_index];
             if (!value || value->op != XI_CLASS_CREATE || !value->aux)
                 continue;
-            if (value->nargs == 1u)
+            XiClassData *data = value->aux;
+            if (strcmp(data->class_name, "Derived") == 0)
                 derived = value;
-            else
+            else if (strcmp(data->class_name, "Base") == 0)
                 base = value->aux;
         }
     }
     PIPELINE_TEST_REQUIRE(base != NULL && derived != NULL && derived->args != NULL);
     XiClassData *schema = derived->aux;
-    PIPELINE_TEST_REQUIRE(schema->inherited_field_count == 1u);
+    PIPELINE_TEST_REQUIRE(schema->inherited_field_count == 2u);
     XgClassSummary *row = NULL;
     for (uint32_t index = 0u; index < fixture.evidence.nclasses; ++index)
         if (fixture.evidence.classes[index].class_id == schema->xg_class_id)
@@ -2147,10 +2216,17 @@ TEST(e2e_program_inherited_publication_requires_exact_parent) {
     PIPELINE_TEST_REQUIRE(row != NULL && row->parent_class_id == base->xg_class_id);
     XrCoreIrKey profile = xr_core_ir_key("inherited-publication", 21u);
     const XiFunc *roots[] = {root};
+    const XiFunc *retained = NULL;
+    for (uint16_t index = 0u; index < root->module->nfuncs; ++index) {
+        const XiFunc *candidate = root->module->functions[index];
+        if (candidate && candidate->name && strcmp(candidate->name, "answer") == 0)
+            retained = candidate;
+    }
+    PIPELINE_TEST_REQUIRE(retained != NULL);
     XrProgramFromXiInput input = {
         .module_roots = roots,
         .module_count = 1u,
-        .entry_function = root,
+        .entry_function = retained,
         .global_evidence = &fixture.evidence,
         .semantic_profile_fingerprint = profile.bytes,
         .module_graph = fixture.source.graph,
@@ -2162,6 +2238,39 @@ TEST(e2e_program_inherited_publication_requires_exact_parent) {
     if (status != XR_PROGRAM_BUILD_OK)
         fprintf(stderr, "inherited publication failed: %s\n", diagnostic);
     PIPELINE_TEST_REQUIRE(status == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *validated = NULL;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(baseline.bytes, baseline.size, NULL, &validated,
+                                              NULL) == XR_PROGRAM_VERIFY_OK);
+    uint32_t parent_relations = 0u;
+    for (uint32_t index = 0u; index < validated->type_count; ++index) {
+        const XrValidatedType *type = &validated->types[index];
+        if (type->parent_type_id == XR_CORE_TYPE_VOID)
+            continue;
+        const XrValidatedType *parent =
+            xr_validated_program_type(validated, type->parent_type_id);
+        if (!parent || parent->field_count + 1u != type->field_count)
+            fprintf(stderr, "source parent row type=%u parent=%u fields=%u/%u\n",
+                    type->type_id, type->parent_type_id, type->field_count,
+                    parent ? parent->field_count : UINT32_MAX);
+        PIPELINE_TEST_REQUIRE(parent && parent->field_count + 1u == type->field_count);
+        PIPELINE_TEST_REQUIRE(type->field_types[0] == XR_CORE_TYPE_I64);
+        if (type->field_count == 3u) {
+            PIPELINE_TEST_REQUIRE(type->field_types[1] == XR_CORE_TYPE_STRING);
+            PIPELINE_TEST_REQUIRE(type->field_types[2] == XR_CORE_TYPE_BOOL);
+        }
+        ++parent_relations;
+    }
+    PIPELINE_TEST_REQUIRE(parent_relations == 2u);
+    XrVmCode *vm_code = NULL;
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(validated, fixture.profile, NULL, &vm_code, NULL) ==
+                          XR_VM_CODE_UNSUPPORTED_OPERATION);
+    PIPELINE_TEST_REQUIRE(vm_code == NULL);
+    XrBackendIR *backend_ir = NULL;
+    XrBackendOptions backend_options = xr_backend_default_options();
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(validated, fixture.profile, &backend_options,
+                                              &backend_ir, NULL) == XR_BACKEND_UNSUPPORTED_OPERATION);
+    PIPELINE_TEST_REQUIRE(backend_ir == NULL);
+    xr_validated_program_free(validated);
 
     derived->nargs = 0u;
     PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
@@ -2183,7 +2292,7 @@ TEST(e2e_program_inherited_publication_requires_exact_parent) {
     row->parent_class_id = base->xg_class_id;
     schema->inherited_field_count = 0u;
     PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
-    schema->inherited_field_count = 1u;
+    schema->inherited_field_count = 2u;
     base->needs_runtime_type = false;
     PIPELINE_TEST_REQUIRE(xi_pipeline_program_rejects_nominal_publication(&input));
     base->needs_runtime_type = true;
@@ -2247,6 +2356,82 @@ TEST(e2e_super_calls_preserve_exact_error_channel) {
         PIPELINE_TEST_REQUIRE(calls == 1u);
         xi_canonical_program_test_fixture_cleanup(&fixture);
     }
+}
+
+TEST(e2e_program_prelude_enum_rejects_inconsistent_declarations) {
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-prelude-enum", "fn fail() -> i64 { throw CryptoError.InvalidLength }\n"
+        "try { fail() } catch (e: CryptoError) {}\n"));
+    XiFunc *entry = fixture.pipeline.ir;
+    XiValue *member = NULL;
+    for (uint16_t function = 0u; function < entry->module->nfuncs; ++function) {
+        XiFunc *owner = entry->module->functions[function];
+        for (uint32_t block = 0u; block < owner->nblocks; ++block)
+            for (uint32_t index = 0u; index < owner->blocks[block]->nvalues; ++index) {
+                XiValue *value = owner->blocks[block]->values[index];
+                PIPELINE_TEST_REQUIRE(value->op != XI_CONST ||
+                                      value->aux_kind != XI_AUX_KIND_ENUM_NAMESPACE);
+                if (value->op == XI_INDEX_GET && value->aux_kind == XI_AUX_KIND_ENUM_CASE)
+                    member = value;
+            }
+    }
+    /* A prelude unit enum member is a registry-slot case index; its declaration
+     * identity comes from the result type, never from the slot or the name. */
+    PIPELINE_TEST_REQUIRE(member && member->nargs == 2u && member->type &&
+                          member->type->kind == XR_KIND_ENUM);
+    XiValue *domain = member->args[0];
+    XiValue *case_ordinal = member->args[1];
+    PIPELINE_TEST_REQUIRE(domain->op == XI_GET_BUILTIN &&
+                          domain->aux_int == XR_GLOBAL_VAR_CRYPTO_ERROR &&
+                          case_ordinal->op == XI_CONST && case_ordinal->aux_int == 0);
+    XrEnumLayout *enum_layout = (XrEnumLayout *) member->type->enum_type.layout;
+    XrClassInfo *nominal = member->type->enum_type.nominal_ref;
+    PIPELINE_TEST_REQUIRE(nominal && enum_layout && enum_layout->variant_count == 1u);
+    XrCoreIrKey profile = xr_core_ir_key("prelude-enum-profile", 20u);
+    const XiFunc *roots[] = {entry};
+    XrProgramFromXiInput input = {.module_roots = roots, .module_count = 1u,
+        .entry_function = entry, .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = profile.bytes, .module_graph = fixture.source.graph};
+    XrProgramArtifact baseline = {0};
+    char diagnostic[512] = {0};
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(&input, &baseline, diagnostic,
+        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    uint32_t layout = enum_layout->layout_id;
+    int64_t ordinal = case_ordinal->aux_int, slot = domain->aux_int;
+    XgDeclId decl_id = nominal->xg_decl_id;
+    uint64_t key = nominal->xg_nominal_key;
+    XgModuleSummary *module = &fixture.evidence.modules[fixture.evidence.nmodules - 1u];
+    PIPELINE_TEST_REQUIRE(module->canonical_hash == xg_prelude_enum_module_canonical_hash());
+    uint64_t module_identity = module->canonical_hash;
+    for (uint32_t mutation = 0u; mutation < 7u; ++mutation) {
+        if (mutation == 0u) enum_layout->layout_id = 0u;
+        if (mutation == 1u) case_ordinal->aux_int = 1;
+        if (mutation == 2u) nominal->xg_decl_id = XG_NO_ID;
+        if (mutation == 3u) nominal->xg_nominal_key ^= 1u;
+        if (mutation == 4u) module->canonical_hash ^= 1u;
+        if (mutation == 5u) domain->aux_int = XR_GLOBAL_VAR_ORDERING;
+        if (mutation == 6u) member->aux_kind = XI_AUX_KIND_NONE;
+        XrProgramArtifact rejected = {0};
+        PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(&input, &rejected, diagnostic,
+            sizeof(diagnostic)) != XR_PROGRAM_BUILD_OK);
+        PIPELINE_TEST_REQUIRE(rejected.bytes == NULL && rejected.size == 0u);
+        enum_layout->layout_id = layout;
+        case_ordinal->aux_int = ordinal;
+        domain->aux_int = slot;
+        member->aux_kind = XI_AUX_KIND_ENUM_CASE;
+        nominal->xg_decl_id = decl_id;
+        nominal->xg_nominal_key = key;
+        module->canonical_hash = module_identity;
+    }
+    XrProgramArtifact restored = {0};
+    PIPELINE_TEST_REQUIRE(xr_test_write_program_artifact(&input, &restored, diagnostic,
+        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(restored.size == baseline.size &&
+        memcmp(restored.bytes, baseline.bytes, baseline.size) == 0);
+    xr_program_artifact_free(&restored);
+    xr_program_artifact_free(&baseline);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
 }
 
 TEST(e2e_program_cooperative_yield_closes_source_vm_and_aot) {
@@ -5273,7 +5458,9 @@ int main(int argc, char **argv) {
      * block nor silently change a canonical native
      * artifact. */
     if (g_source_aot_output_path || canonical_only) {
+        run_e2e_program_prelude_enum_rejects_inconsistent_declarations();
         run_e2e_super_calls_preserve_exact_error_channel();
+        run_e2e_program_channel_types_preserve_exact_elements();
         run_e2e_program_inherited_publication_requires_exact_parent();
         run_e2e_program_cooperative_yield_closes_source_vm_and_aot();
         run_e2e_program_sealed_coroutine_call_closes_source_vm_and_aot();
@@ -5373,6 +5560,8 @@ int main(int argc, char **argv) {
     /* Map literal */
     run_e2e_map_literal();
 
+    run_e2e_program_prelude_enum_rejects_inconsistent_declarations();
+
     /* Template string */
     run_e2e_template_string();
 
@@ -5413,6 +5602,7 @@ int main(int argc, char **argv) {
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
     run_e2e_super_calls_preserve_exact_error_channel();
+    run_e2e_program_channel_types_preserve_exact_elements();
     run_e2e_program_inherited_publication_requires_exact_parent();
     run_e2e_program_cooperative_yield_closes_source_vm_and_aot();
     run_e2e_program_sealed_coroutine_call_closes_source_vm_and_aot();

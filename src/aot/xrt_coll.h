@@ -38,6 +38,7 @@
 #include "../shared/xr_json_type.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_pod_slice_core.h"
+#include "../shared/xr_slice_window_core.h"
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <errno.h>
@@ -320,7 +321,7 @@ static inline void xrt_array_ensure_storage(xrt_array_t *a) {
     xrt_array_storage_promotion_lock_release();
 }
 
-static inline void xrt_throw_error(int code, const char *message);
+static inline _Noreturn void xrt_throw_error(int code, const char *message);
 
 static inline void xrt_array_check_store_or_abort(const xrt_array_t *a, XrValue val,
                                                   const char *where) {
@@ -548,7 +549,7 @@ static inline XrValue xrt_structured_error_value(int code, const char *message) 
     return exc;
 }
 
-static inline void xrt_throw_error(int code, const char *message) {
+static inline _Noreturn void xrt_throw_error(int code, const char *message) {
     xrt_throw_exc(xrt_structured_error_value(code, message));
 }
 
@@ -806,6 +807,33 @@ typedef struct XRT_SPAN_ALIGN {
 #endif
     int64_t length;
 } xr_span_t;
+
+/* Apply only the range admitted by the shared window rule. */
+static inline xr_span_t xrt_span_apply_window(xr_span_t source, XrSliceWindowPlan plan,
+                                             bool bounds_proven) {
+    if (!bounds_proven && XR_UNLIKELY(!plan.admitted))
+        xrt_index_oob(plan.fault_operand, source.length);
+    XR_ASSUME(plan.admitted);
+    source.data = plan.advances ? (void *) ((uint8_t *) source.data + (size_t) plan.byte_offset)
+                                : source.data;
+    source.length = plan.length;
+    return source;
+}
+
+
+/* The caller proves bounds and alignment before constructing the borrowed view. */
+static inline xr_span_t xrt_span_from_ptr(const void *ptr, int64_t length,
+                                         uint16_t element_size, uint16_t alignment) {
+    xr_span_t span;
+    XR_ASSUME(element_size != 0 && alignment != 0);
+    XR_ASSUME(length >= 0 && (length == 0 ||
+              (ptr != NULL && (uintptr_t) ptr % alignment == 0 &&
+               (uint64_t) length <= UINTPTR_MAX / element_size)));
+    span.data = (void *) ptr;
+    span.length = length;
+    return span;
+}
+
 #undef XRT_SPAN_ALIGN
 
 _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length");
@@ -7125,21 +7153,39 @@ static inline XrValue xrt_closure_call0(XrValue callback) {
     return ((xrt_closure_fn0_t) cl->callable->sync_entry)(cl);
 }
 
-#ifndef xrt_closure_stack_new
-#define xrt_closure_stack_new(callable_expr, nupvals_expr)                                         \
-    ({                                                                                             \
-        int _nupvals = (nupvals_expr);                                                             \
-        if (_nupvals < 0)                                                                          \
-            _nupvals = 0;                                                                          \
-        size_t _obj_size = xrt_closure_object_size(_nupvals);                                      \
-        XrObjHeader *_hdr = (XrObjHeader *) __builtin_alloca(sizeof(XrObjHeader) + _obj_size);     \
-        memset(_hdr, 0, sizeof(XrObjHeader) + _obj_size);                                          \
-        _hdr->extra = XR_OBJ_STORAGE_STACK;                                                        \
-        xrt_closure_t *_c = (xrt_closure_t *) ((char *) _hdr + sizeof(XrObjHeader));               \
-        xrt_closure_init(_c, (callable_expr), _nupvals);                                           \
-        xr_mkptr(_c, XR_TAG_CLOSURE);                                                              \
-    })
-#endif
+/* Frame storage for one non-escaping closure with a constant capture count:
+ * the object header immediately followed by the closure and its captures.
+ * The union members give the storage the alignment all three require, so a
+ * portable C11 declaration replaces a provider-specific stack allocation, and
+ * a closure built inside a loop reuses its one frame slot. */
+#define XRT_CLOSURE_STACK_FRAME(name, nupvals)                                                    \
+    union {                                                                                        \
+        XrObjHeader header;                                                                        \
+        XrValue value;                                                                             \
+        void *pointer;                                                                             \
+        unsigned char bytes[sizeof(XrObjHeader) + sizeof(xrt_closure_t) +                         \
+                            (size_t) (nupvals) * sizeof(XrValue)];                                 \
+    } name
+
+/* Initialize a non-escaping closure in storage declared by
+ * XRT_CLOSURE_STACK_FRAME. The header marks stack storage, so reference
+ * counting never frees the block; xrt_closure_stack_drop releases the
+ * captures at the end of the closure's scope. */
+static inline xrt_closure_t *xrt_closure_stack_init(void *frame, size_t frame_size,
+                                                    const XrAotCallableDesc *callable,
+                                                    int nupvals) {
+    size_t object_size = xrt_closure_object_size(nupvals);
+    if (XR_UNLIKELY(!frame || frame_size < sizeof(XrObjHeader) + object_size)) {
+        fprintf(stderr, "xrt_closure_stack_init: frame storage is too small\n");
+        abort();
+    }
+    memset(frame, 0, sizeof(XrObjHeader) + object_size);
+    XrObjHeader *header = (XrObjHeader *) frame;
+    header->extra = XR_OBJ_STORAGE_STACK;
+    xrt_closure_t *closure = (xrt_closure_t *) ((char *) frame + sizeof(XrObjHeader));
+    xrt_closure_init(closure, callable, nupvals);
+    return closure;
+}
 
 /* Release what a stack closure captured, at the end of its scope.
  *

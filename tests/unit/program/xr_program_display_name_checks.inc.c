@@ -47,7 +47,7 @@ static void test_display_names_roundtrip_and_wire(void) {
     CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) ==
           XR_PROGRAM_DECODE_OK);
     const XrProgramSectionView *section = &view.sections[XR_PROGRAM_SECTION_TYPES - 1u];
-    size_t row = (size_t) section->offset + 1u + 19u * 4u;
+    size_t row = (size_t) section->offset + 1u + 20u * 4u;
     const uint8_t expected[61] = {
         32u, 33u, 0u, 0u, 0xd7u, [36] = 3u, 2u, 1u, 2u, 0u,
         6u, 'T', 'o', 'p', 'E', 'r', 'r',

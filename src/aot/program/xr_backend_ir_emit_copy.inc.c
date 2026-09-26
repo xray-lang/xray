@@ -121,6 +121,7 @@ static bool emit_copy_array(CBuffer *buffer, const XrBackendIR *ir, const XrVali
             "    if (!copy.storage) return 0;\n"
             "    copy.storage->owners = 1u;\n"
             "    copy.storage->length = source->storage->length;\n"
+            "    copy.storage->capacity = (uint32_t)source->storage->length;\n"
             "    copy.storage->data = NULL;\n"
             "    if (source->storage->length > SIZE_MAX / sizeof(%s)) { xr_aot_free(xr_ctx, copy.storage); return 0; }\n"
             "    if (source->storage->length) {\n"
@@ -151,7 +152,10 @@ static bool emit_copy_type(CBuffer *buffer, const XrBackendIR *ir, const XrValid
                        "    XrAotType%u copy = *source;\n",
                        type->type_id, type->type_id, type->type_id, type->type_id))
         return false;
-    if (type->kind == XR_CORE_IR_TYPE_ATOMIC) {
+    if (type->kind == XR_CORE_IR_TYPE_CHANNEL) {
+        if (!append_text(buffer, "    if (!source->storage || !xr_channel_storage_retain(source->storage)) return 0;\n"))
+            return false;
+    } else if (type->kind == XR_CORE_IR_TYPE_ATOMIC) {
         if (!append_text(buffer, "    if (!source->storage || !xr_atomic_storage_retain_core(source->storage)) return 0;\n"))
             return false;
     } else if (type->kind == XR_CORE_IR_TYPE_ARRAY) {

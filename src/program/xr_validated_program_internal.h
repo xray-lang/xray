@@ -21,11 +21,13 @@ typedef struct XrValidatedType {
     XrCoreIrCopyContract copy_contract;
     uint16_t *field_types;
     uint32_t field_count;
+    uint16_t parent_type_id;
     XrValidatedVariant *variants;
     uint32_t variant_count;
     uint16_t view_element_type;
     uint16_t array_element_type;
     uint16_t atomic_element_type;
+    uint16_t channel_element_type;
     XrStableId resource_id;
     XrCoreIrViewCapability view_capability;
     uint32_t signature_id;

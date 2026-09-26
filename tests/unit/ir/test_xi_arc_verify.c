@@ -12,6 +12,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_arc_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -595,8 +596,24 @@ static void test_verifier_resource_failure_is_not_success(void) {
     xi_func_free(f);
 }
 
+static void test_cleanup_return_copy_becomes_canonical_owner_forward(void) {
+    XiFunc *f = make_func("cleanup_return_transfer", &t_array);
+    XiBlock *entry = f->blocks[0];
+    XiValue *array = rc_new(f, entry);
+    XiValue *copy = xi_value_new(f, entry, XI_COPY, &t_array, 1);
+    copy->args[0] = array;
+    copy->aux_int = XI_COPY_KIND_CLEANUP_RETURN;
+    xi_block_set_return(entry, copy);
+    xi_arc_insert(f);
+    ASSERT_TRUE(copy->op == XI_OWNER_FORWARD && copy->aux_int == 0,
+                "cleanup-return COPY marker is consumed by ARC normalization");
+    ASSERT_OK(f, "normalized cleanup return preserves ownership balance");
+    xi_func_free(f);
+}
+
 int main(void) {
     fprintf(stderr, "test_xi_arc_verify:\n");
+    test_cleanup_return_copy_becomes_canonical_owner_forward();
 
     test_incident1_phi_released_input();
     test_incident2_borrow_view_owner_released();

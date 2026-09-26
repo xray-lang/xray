@@ -169,6 +169,7 @@ static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
         case XA_BUILTIN_RECEIVER_RANGE:
+        case XA_BUILTIN_RECEIVER_CHANNEL:
             xlsp_type_label(type, buf, buf_size);
             return;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
@@ -204,6 +205,9 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
     switch (kind) {
         case XA_BUILTIN_TYPE_NONE:
             snprintf(buf, buf_size, "()");
+            break;
+        case XA_BUILTIN_TYPE_SEND_RESULT:
+            snprintf(buf, buf_size, "SendResult");
             break;
         case XA_BUILTIN_TYPE_BOOL:
             snprintf(buf, buf_size, "bool");

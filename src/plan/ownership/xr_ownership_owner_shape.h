@@ -20,6 +20,7 @@
 #define XR_OWNERSHIP_OWNER_SHAPE_H
 
 #include "../semantic/xr_semantic_plan.h"
+#include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_plan_internal.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
@@ -27,7 +28,8 @@
 
 static inline bool xr_ownership_type_is_root(const XrSemanticPlan *plan, uint32_t type_index) {
     return plan && type_index < plan->type_count &&
-           (plan->types[type_index].flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0;
+           (plan->types[type_index].flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0 &&
+           !xr_semantic_task_type_is_exact(plan, type_index);
 }
 
 /* True when the operation copies a `null` constant into a nullable reference.

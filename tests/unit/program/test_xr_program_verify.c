@@ -1,7 +1,13 @@
+#include "xr_program_byte_compare_fixture.h"
 /*
  * Task 297: XrProgram semantic verifier and independent reference evaluator.
  */
 
+#include "xr_program_string_builder_fixture.h"
+#include "xr_program_array_default_fixture.h"
+#include "xr_program_array_append_fixture.h"
+#include "xr_program_string_slice_fixture.h"
+#include "xr_program_channel_fixture.h"
 #include "xr_program_atomic_fixture.h"
 #include "xr_program_f64_fixture.h"
 #include <limits.h>
@@ -74,13 +80,21 @@ _Static_assert(XR_CORE_TYPE_TARGET_ENDIAN == 10, "TargetEndian stable type id dr
 _Static_assert(XR_CORE_TYPE_TYPE_VARIABLE == 11, "type-variable stable type id drifted");
 _Static_assert(XR_CORE_TYPE_STRING == 12, "string stable type id drifted");
 _Static_assert(XR_CORE_TYPE_RUNE == 13, "rune stable type id drifted");
-_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 19u, "runtime builtin row count drifted");
+_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 20u, "runtime builtin row count drifted");
 _Static_assert(XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE == 32u, "dynamic types overlap scalar ids");
 _Static_assert(XR_CORE_TYPE_I8 == 14u && XR_CORE_TYPE_U8 == 15u && XR_CORE_TYPE_I16 == 16u &&
                    XR_CORE_TYPE_I32 == 17u && XR_CORE_TYPE_U64 == 18u,
                "exact integer type ids drifted");
 
 _Static_assert(XR_CORE_TYPE_F64 == 19u, "f64 stable type id drifted");
+_Static_assert(XR_CORE_TYPE_STRING_BUILDER == 20u, "StringBuilder stable type id drifted");
+
+_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT == 173u, "StringBuilder operation identity drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_APPEND == 174u, "StringBuilder operation identity drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_CLEAR == 175u, "StringBuilder operation identity drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_LENGTH == 176u, "StringBuilder operation identity drifted");
+_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT == 177u, "StringBuilder operation identity drifted");
+_Static_assert(XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL == 178u, "Byte comparison operation identity drifted");
 
 static int failures = 0;
 
@@ -6945,6 +6959,102 @@ static void test_exact_integer_divmod_admission(void) {
     }
 }
 
+static void test_string_slice_admission(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_string_slice_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    CHECK(find_operation_offset(&artifact, XR_CORE_OP_CORE_STRING_SLICE) != SIZE_MAX);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+    for (unsigned mutation = 1u; mutation <= 4u; ++mutation) {
+        CHECK(xr_program_string_slice_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrProgramDiagnostic diagnostic;
+        program = NULL;
+        CHECK(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic) ==
+              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+        CHECK(program == NULL);
+        xr_program_artifact_free(&artifact);
+    }
+}
+static void test_array_append_admission(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_array_append_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    CHECK(find_operation_offset(&artifact, XR_CORE_OP_CORE_ARRAY_APPEND) != SIZE_MAX);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+    for (unsigned mutation = 1u; mutation <= 5u; ++mutation) {
+        XrProgramBuildStatus built = xr_program_array_append_fixture_write(mutation, &artifact);
+        if (mutation == 3u) {
+            CHECK(built == XR_PROGRAM_BUILD_INVALID_INPUT);
+            continue;
+        }
+        CHECK(built == XR_PROGRAM_BUILD_OK);
+        XrProgramDiagnostic diagnostic;
+        program = NULL;
+        CHECK(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic) ==
+              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+        CHECK(program == NULL);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_array_default_admission(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_array_default_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    CHECK(program != NULL);
+    CHECK(find_operation_offset(&artifact, XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT) != SIZE_MAX);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+    for (unsigned mutation = 1u; mutation <= 3u; ++mutation) {
+        CHECK(xr_program_array_default_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrProgramDiagnostic diagnostic;
+        program = NULL;
+        CHECK(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic) ==
+              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
+        CHECK(program == NULL);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_exact_integer_bitwise_admission(void) {
+    XrProgramArtifact artifact = {0};
+    CHECK(xr_program_integer_bitwise_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        CHECK(program->function_count == 48u);
+        for (uint32_t index = 0u; index < program->function_count; ++index) {
+            const XrValidatedFunction *function = &program->functions[index];
+            CHECK(function->blocks[0].instructions[1].operation_id == XR_CORE_OP_CORE_INTEGER_BITWISE);
+            CHECK(xr_program_integer_bitwise_fixture_function(
+                      program, function->result_type_id,
+                      function->blocks[0].instructions[1].immediate.u32) == index);
+        }
+        xr_validated_program_free(program);
+    }
+    size_t ownership_offset = find_operation_offset(&artifact, XR_CORE_OP_CORE_INTEGER_BITWISE);
+    CHECK(ownership_offset != SIZE_MAX);
+    if (ownership_offset != SIZE_MAX) {
+        for (unsigned field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact.bytes, artifact.size, &ownership_offset);
+        CHECK(artifact.bytes[ownership_offset] == XR_CORE_IR_NON_OWNER);
+        expect_mutated_verify(&artifact, ownership_offset, XR_CORE_IR_OWNER,
+                              XR_PROGRAM_VERIFY_SEMANTIC_REJECTED, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    }
+    xr_program_artifact_free(&artifact);
+    const unsigned mutations[] = {1u, 2u, 3u, 4u, 6u};
+    for (unsigned index = 0u; index < XR_COUNTOF(mutations); ++index) {
+        unsigned mutation = mutations[index];
+        CHECK(xr_program_integer_bitwise_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, mutation == 6u ? XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY
+                                                        : XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 static void test_panic_point_continuation_admission(void) {
     const uint16_t operations[] = {XR_CORE_OP_CORE_ASSERT_CONDITION, XR_CORE_OP_CORE_INTEGER_DIVMOD};
     for (unsigned index = 0u; index < 2u; ++index) {
@@ -7159,7 +7269,72 @@ static void test_assert_message_contract(void) {
     }
 }
 
+static void test_channel_operation_admission(void) {
+    for (unsigned mutation = 0u; mutation < 4u; ++mutation) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        CHECK(xr_program_channel_fixture_write(2, mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrProgramVerifyStatus status = xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL);
+        CHECK(mutation ? status != XR_PROGRAM_VERIFY_OK && program == NULL : status == XR_PROGRAM_VERIFY_OK && program != NULL);
+        if (program) {
+            const XrValidatedInstruction *ops = program->functions[program->entry_function].blocks[0].instructions;
+            CHECK(ops[1].operation_id == XR_CORE_OP_CORE_CHANNEL_CONSTRUCT);
+            CHECK(ops[4].operation_id == XR_CORE_OP_CORE_CHANNEL_IS_CLOSED);
+        }
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_string_builder_contracts(void) {
+    for (unsigned mutation = 0u; mutation < 3u; ++mutation) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        CHECK(xr_program_string_builder_call_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
+        XrProgramVerifyStatus status = xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL);
+        CHECK(mutation ? status != XR_PROGRAM_VERIFY_OK : status == XR_PROGRAM_VERIFY_OK);
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+    for (unsigned mutation = 0u; mutation <= 10u; ++mutation) {
+        XrProgramArtifact artifact = {0};
+        XrProgramBuildStatus built = xr_program_string_builder_fixture_write(mutation, &artifact);
+        XrValidatedProgram *program = NULL;
+        XrProgramDiagnostic diagnostic = {0};
+        XrProgramVerifyStatus status = XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED;
+        if (built == XR_PROGRAM_BUILD_OK)
+            status = xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic);
+        if (mutation == 0u) {
+            if (status != XR_PROGRAM_VERIFY_OK)
+                fprintf(stderr, "StringBuilder admission failed: build=%u verify=%u\n", built, status);
+            CHECK(built == XR_PROGRAM_BUILD_OK && status == XR_PROGRAM_VERIFY_OK && program != NULL);
+        } else {
+            CHECK(built != XR_PROGRAM_BUILD_OK || status != XR_PROGRAM_VERIFY_OK);
+            CHECK(program == NULL);
+        }
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 int main(void) {
+    for (unsigned scenario = 0u; scenario < 9u; ++scenario) {
+        XrProgramArtifact artifact = {0}; XrValidatedProgram *program = NULL;
+        CHECK(xr_program_byte_compare_fixture_write(scenario, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        CHECK(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+        xr_validated_program_free(program); xr_program_artifact_free(&artifact);
+    }
+    for (unsigned mutation = 0u; mutation <= 6u; ++mutation) {
+        XrProgramArtifact artifact = {0}; XrValidatedProgram *program = NULL;
+        XrProgramBuildStatus built = xr_program_byte_compare_fixture_write(1u, mutation, &artifact);
+        if (mutation == 3u) { CHECK(built == XR_PROGRAM_BUILD_INVALID_INPUT); continue; }
+        CHECK(built == XR_PROGRAM_BUILD_OK);
+        XrProgramVerifyStatus status = xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL);
+        CHECK(status == (mutation ? XR_PROGRAM_VERIFY_SEMANTIC_REJECTED : XR_PROGRAM_VERIFY_OK));
+        xr_validated_program_free(program); xr_program_artifact_free(&artifact);
+    }
+    test_string_builder_contracts();
+    test_channel_operation_admission();
     test_assert_message_contract();
     for (unsigned mutation = 0u; mutation < 6u; ++mutation) {
         XrProgramArtifact artifact = {0};
@@ -7184,6 +7359,10 @@ int main(void) {
     test_array_element_place_admission();
     test_panic_point_continuation_admission();
     test_exact_integer_divmod_admission();
+    test_exact_integer_bitwise_admission();
+    test_string_slice_admission();
+    test_array_append_admission();
+    test_array_default_admission();
     test_sequence_length();
     test_array_values();
     test_exact_integer_conversion_admission();

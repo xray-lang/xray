@@ -150,9 +150,10 @@ static bool emit_module_promotion_helper(CBuffer *buffer, const XrBackendIR *ir,
             if (!emit_module_value_promotion(buffer, ir, type->field_types[field], value))
                 return false;
         }
-    } else if (type->kind == XR_CORE_IR_TYPE_ATOMIC ||
+    } else if (type->kind == XR_CORE_IR_TYPE_CHANNEL ||
+               type->kind == XR_CORE_IR_TYPE_ATOMIC ||
                type->kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE) {
-        /* Atomic and provider storage are owned by their handles independently
+        /* Channel, atomic and provider storage are owned by their handles independently
          * of an allocation arena. Publishing transfers that same owner. */
     } else if (type->kind == XR_CORE_IR_TYPE_ARRAY) {
         if (!append_text(buffer,
@@ -220,11 +221,25 @@ static bool emit_module_promotion_helper(CBuffer *buffer, const XrBackendIR *ir,
     return append_text(buffer, "}\n\n");
 }
 
+static bool constructs_class_values(const XrBackendIR *ir) {
+    for (uint32_t f = 0u; f < ir->program->function_count; ++f) {
+        const XrValidatedFunction *function = &ir->program->functions[f];
+        for (uint32_t b = 0u; b < function->block_count; ++b) {
+            const XrValidatedBlock *block = &function->blocks[b];
+            for (uint32_t i = 0u; i < block->instruction_count; ++i)
+                if (block->instructions[i].operation_id == XR_CORE_OP_CORE_CLASS_CONSTRUCT)
+                    return true;
+        }
+    }
+    return false;
+}
+
 static bool emit_module_storage(CBuffer *buffer, const XrBackendIR *ir) {
     uint32_t slots = module_slot_count(ir);
     bool classes = has_class_reference_types(ir);
+    bool identity_helper = constructs_class_values(ir);
     if (!needs_failure_storage(ir))
-        return !classes ||
+        return !identity_helper ||
                append_text(buffer,
                    "static inline uint64_t xr_aot_next_class_identity(XrAotContext *context) {\n"
                    "    return ++context->next_class_identity;\n"
@@ -270,7 +285,7 @@ static bool emit_module_storage(CBuffer *buffer, const XrBackendIR *ir) {
         }
     if (!append_text(buffer, "};\n\n"))
         return false;
-    if (classes &&
+    if (identity_helper &&
         !append_text(buffer,
                      "static inline uint64_t xr_aot_next_class_identity(XrAotContext *context) {\n"
                      "    if (context->modules) return atomic_fetch_add_explicit(\n"
@@ -338,6 +353,13 @@ static bool emit_module_storage(CBuffer *buffer, const XrBackendIR *ir) {
                      "    destination->allocations = allocation;\n"
                      "    return 1;\n"
                      "}\n\n"))
+        return false;
+    if (has_string_builder_values(ir) && !append_format(buffer,
+            "void xr_aot_promote_%u(XrAotContext *destination, XrStringBuilderStorage *value) {\n"
+            "    if (!value) return;\n"
+            "    (void)xr_aot_transfer_allocation(destination, value);\n"
+            "    (void)xr_aot_transfer_allocation(destination, value->bytes);\n"
+            "}\n\n", XR_CORE_TYPE_STRING_BUILDER))
         return false;
     if (has_string_values(ir) &&
         !append_format(buffer,

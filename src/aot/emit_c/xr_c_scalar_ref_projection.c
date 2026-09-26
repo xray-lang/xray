@@ -12,9 +12,12 @@
 
 #include "../../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "../../plan/semantic/xr_semantic_plan.h"
+#include "../../plan/semantic/xr_semantic_range_slice_shape.h"
 #include "../../runtime/value/xtype.h"
 
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 static bool scalar_ref_target_rows(const XrTargetPlan *plan,
                                    const XrTargetCallArgumentRecord *argument,
@@ -36,6 +39,9 @@ static bool scalar_ref_target_rows(const XrTargetPlan *plan,
         argument ? xr_target_plan_machine_rep(plan, argument->callee_register_rep) : NULL;
     const XrTargetMachineRepRecord *callee_memory =
         argument ? xr_target_plan_machine_rep(plan, argument->callee_memory_rep) : NULL;
+    const bool view = callee_register && callee_register->kind == XR_MACHINE_REP_VIEW;
+    const uint16_t kind = view ? XR_MACHINE_REP_VIEW : XR_MACHINE_REP_I64;
+    const uint8_t ownership = view ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_TRIVIAL;
     if (!plan || !argument || !out || !call || !caller_slot || !callee_slot ||
         !caller_register || !caller_memory || !callee_register || !callee_memory ||
         call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
@@ -55,14 +61,14 @@ static bool scalar_ref_target_rows(const XrTargetPlan *plan,
         callee_slot->role != XR_TARGET_SLOT_PARAMETER ||
         argument->register_rep != argument->callee_register_rep ||
         argument->memory_rep != argument->callee_memory_rep ||
-        caller_register->kind != XR_MACHINE_REP_I64 ||
-        caller_memory->kind != XR_MACHINE_REP_I64 ||
-        callee_register->kind != XR_MACHINE_REP_I64 ||
-        callee_memory->kind != XR_MACHINE_REP_I64 ||
-        caller_register->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        caller_memory->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        callee_register->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        callee_memory->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        caller_register->kind != kind ||
+        caller_memory->kind != kind ||
+        callee_register->kind != kind ||
+        callee_memory->kind != kind ||
+        caller_register->ownership != ownership ||
+        caller_memory->ownership != ownership ||
+        callee_register->ownership != ownership ||
+        callee_memory->ownership != ownership)
         return false;
     memset(out, 0, sizeof(*out));
     out->semantic_call_value = call->result_value;
@@ -79,7 +85,7 @@ static bool scalar_ref_target_rows(const XrTargetPlan *plan,
     out->transfer_mode = argument->transfer_mode;
     out->flags = argument->flags;
     out->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    out->c_type = "int64_t *";
+    out->c_type = view ? "xr_span_t *" : "int64_t *";
     return true;
 }
 
@@ -126,30 +132,36 @@ static bool scalar_ref_semantic_rows(const XrTargetPlan *plan,
     const XrSemanticOperandRecord *source = NULL;
     if (!semantic || !argument || !out || !call || !function || !parameter || !type || !address ||
         parameter->function != callee_function || parameter->ordinal != argument->ordinal ||
-        parameter->mode != XR_PARAM_REF || type->kind != XR_KIND_INT ||
-        type->scalar_rep != XR_NATIVE_I64 || type->child_count != 0 ||
-        type->aggregate_extent != 0 || type->aggregate_align != 0 || type->flags != 0 ||
-        type->builtin_type != XR_TID_NULL ||
+        parameter->mode != XR_PARAM_REF ||
+        (!xr_semantic_slice_ref_parameter_is_exact(semantic, parameter) &&
+         (type->kind != XR_KIND_INT || type->scalar_rep != XR_NATIVE_I64 || type->child_count != 0 ||
+          type->aggregate_extent != 0 || type->aggregate_align != 0 || type->flags != 0 ||
+          type->builtin_type != XR_TID_NULL)) ||
         !xr_semantic_ref_argument_local_addr_is_exact(semantic, address, parameter->type,
                                                       &source) ||
         argument->caller_slot >= slot_count ||
         slots[argument->caller_slot].semantic_value != source->value)
         return false;
+    bool view = xr_semantic_slice_ref_parameter_is_exact(semantic, parameter);
     out->source_value = source->value;
     memset(&out->function_abi, 0, sizeof(out->function_abi));
     out->function_abi.semantic_function = callee_function;
     out->function_abi.semantic_value = parameter->value;
     out->function_abi.ordinal = (uint16_t) (argument->ordinal + 1u);
     out->function_abi.parameter_count = function->parameter_count;
-    out->function_abi.target_register_kind = XR_MACHINE_REP_I64;
-    out->function_abi.target_memory_kind = XR_MACHINE_REP_I64;
+    out->function_abi.target_register_kind = view ? XR_MACHINE_REP_VIEW : XR_MACHINE_REP_I64;
+    out->function_abi.target_memory_kind = view ? XR_MACHINE_REP_VIEW : XR_MACHINE_REP_I64;
     out->function_abi.slot_class = XR_C_ABI_SLOT_BORROWED_PLACE;
-    out->function_abi.boundary_kind = XR_C_ABI_BOUNDARY_NATIVE;
+    /* The boundary kind belongs to the whole signature, which the emission
+     * plan states once for every row of it. A borrowed place crosses as the
+     * same native pointer under every kind, so this row claims none and the
+     * view check requires the signature's own kind instead. */
+    out->function_abi.boundary_kind = XR_C_ABI_BOUNDARY_INVALID;
     out->function_abi.rep = XR_C_VALUE_REP_RAW_PTR;
-    out->function_abi.pointee_rep = XR_C_VALUE_REP_I64;
+    out->function_abi.pointee_rep = view ? XR_C_VALUE_REP_VIEW : XR_C_VALUE_REP_I64;
     out->function_abi.aggregate_class = XR_C_ABI_AGGREGATE_NONE;
-    out->function_abi.c_type = "int64_t *";
-    out->function_abi.pointee_c_type = "int64_t";
+    out->function_abi.c_type = view ? "xr_span_t *" : "int64_t *";
+    out->function_abi.pointee_c_type = view ? "xr_span_t" : "int64_t";
     return true;
 }
 
@@ -174,7 +186,9 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_argument(
      * REFERENCE/BORROW and use NONE as their element-storage discriminant for
      * source classes and StringBuilder; claiming those rows here would turn a
      * disjoint consumer family into a false malformed scalar projection. */
-    bool scalar_type_claim = type && type->kind == XR_KIND_INT && type->scalar_rep == XR_NATIVE_I64;
+    bool scalar_type_claim = type &&
+        ((type->kind == XR_KIND_INT && type->scalar_rep == XR_NATIVE_I64) ||
+         xr_semantic_slice_view_type_is_exact(semantic, parameter->type, NULL));
     bool claim = call &&
                  (call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
                   call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL) &&
@@ -184,10 +198,23 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_argument(
                  scalar_type_claim;
     if (!claim)
         return XR_C_SCALAR_REF_NOT_THIS_FAMILY;
-    if (!plan || !argument || !out ||
-        !scalar_ref_target_rows(plan, argument, &out->call_argument) ||
-        !scalar_ref_semantic_rows(plan, argument, out))
+    if (!plan || !argument || !out)
         return XR_C_SCALAR_REF_MALFORMED;
+    bool target_exact = scalar_ref_target_rows(plan, argument, &out->call_argument);
+    bool semantic_exact = target_exact && scalar_ref_semantic_rows(plan, argument, out);
+    if (!target_exact || !semantic_exact) {
+        if (getenv("XRAY_AOT_REFINE_TRACE")) {
+            const XrTargetMachineRepRecord *caller_rep = xr_target_plan_machine_rep(plan, argument->register_rep);
+            const XrTargetMachineRepRecord *callee_rep = xr_target_plan_machine_rep(plan, argument->callee_register_rep);
+            const XrSemanticOperationRecord *address = unique_result_operation(semantic, argument->semantic_value);
+            fprintf(stderr, "[c-ref-projection] target=%u semantic=%u call=%u value=%u "
+                    "caller-kind=%u callee-kind=%u address-op=%u parameter=%u\n",
+                    target_exact, semantic_exact, argument->call, argument->semantic_value,
+                    caller_rep ? caller_rep->kind : UINT16_MAX, callee_rep ? callee_rep->kind : UINT16_MAX,
+                    address ? address->opcode : UINT16_MAX, argument->callee_parameter);
+        }
+        return XR_C_SCALAR_REF_MALFORMED;
+    }
     return XR_C_SCALAR_REF_EXACT;
 }
 
@@ -267,6 +294,8 @@ static bool call_views_equal(const XrCCallArgumentEmissionView *a,
            strcmp(a->c_type, b->c_type) == 0;
 }
 
+/* Row fields a borrowed place fixes by itself. The signature-level boundary
+ * kind is checked separately against the signature's own row. */
 static bool abi_views_equal(const XrCFunctionAbiEmissionView *a,
                             const XrCFunctionAbiEmissionView *b) {
     return a && b && a->semantic_function == b->semantic_function &&
@@ -274,7 +303,7 @@ static bool abi_views_equal(const XrCFunctionAbiEmissionView *a,
            a->parameter_count == b->parameter_count &&
            a->target_register_kind == b->target_register_kind &&
            a->target_memory_kind == b->target_memory_kind &&
-           a->slot_class == b->slot_class && a->boundary_kind == b->boundary_kind &&
+           a->slot_class == b->slot_class &&
            a->rep == b->rep && a->pointee_rep == b->pointee_rep &&
            a->aggregate_class == b->aggregate_class && a->c_type && b->c_type &&
            strcmp(a->c_type, b->c_type) == 0 && a->pointee_c_type &&
@@ -298,15 +327,25 @@ XR_FUNC bool xr_c_scalar_ref_projection_views_are_exact(
         call = &call_arguments[i];
     }
     const XrCFunctionAbiEmissionView *abi = NULL;
+    const XrCFunctionAbiEmissionView *signature = NULL;
     for (uint32_t i = 0; function_abis && i < function_abi_count; i++) {
-        if (function_abis[i].semantic_function !=
-                projection->function_abi.semantic_function ||
-            function_abis[i].ordinal != projection->function_abi.ordinal)
+        if (function_abis[i].semantic_function != projection->function_abi.semantic_function)
+            continue;
+        if (function_abis[i].ordinal == 0u) {
+            if (signature)
+                return false;
+            signature = &function_abis[i];
+        }
+        if (function_abis[i].ordinal != projection->function_abi.ordinal)
             continue;
         if (abi)
             return false;
         abi = &function_abis[i];
     }
     return call_views_equal(&projection->call_argument, call) &&
-           abi_views_equal(&projection->function_abi, abi);
+           abi_views_equal(&projection->function_abi, abi) && signature &&
+           abi->boundary_kind == signature->boundary_kind &&
+           (abi->boundary_kind == XR_C_ABI_BOUNDARY_NATIVE ||
+            abi->boundary_kind == XR_C_ABI_BOUNDARY_TAGGED ||
+            abi->boundary_kind == XR_C_ABI_BOUNDARY_COROUTINE);
 }

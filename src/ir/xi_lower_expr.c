@@ -47,6 +47,9 @@
 
 #include "../module/xmodule_graph.h"
 #include "../runtime/class/xenum.h"
+#include "../runtime/xisolate_api.h"
+#include "../runtime/core/xr_runtime_core.h"
+#include "../base/xbuiltin_enum.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/object/xstring.h"
@@ -385,8 +388,10 @@ XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, const cha
     if (!l || !enum_sym || !enum_name)
         return NULL;
 
-    int builtin_idx = xi_lower_builtin_class_global_index(enum_name);
-    if (builtin_idx >= 0)
+    int builtin_idx = enum_sym->is_builtin
+                          ? xi_lower_builtin_class_global_index(enum_name) : -1;
+    const XrBuiltinEnumRow *prelude = xr_builtin_enum_registry_row(builtin_idx);
+    if (xr_builtin_enum_row_is_unit(prelude))
         return xi_lower_emit_builtin_class(l, enum_name, line);
 
     const char *module_path = xi_lower_export_module_for_symbol(l, enum_sym, enum_name);
@@ -394,8 +399,16 @@ XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, const cha
     const XaBuiltinEnum *native_decl =
         module_path ? xa_builtin_get_enum_type(module_path, enum_name) : NULL;
     XaEnumInfo *info = links ? links->enum_info : NULL;
-    if (native_decl && info && info->variant_count > 0) {
-        XrEnumType *runtime_type = xr_stdlib_enum_type_get(l->isolate, module_path, enum_name);
+    if ((native_decl || prelude) && info && info->variant_count > 0) {
+        XrEnumType *runtime_type = NULL;
+        if (prelude) {
+            XrValue builtin = xr_runtime_core_builtin(xr_isolate_get_runtime_core(l->isolate),
+                                                       builtin_idx);
+            if (XR_IS_ENUM_TYPE(builtin))
+                runtime_type = XR_TO_ENUM_TYPE(builtin);
+        } else {
+            runtime_type = xr_stdlib_enum_type_get(l->isolate, module_path, enum_name);
+        }
         XiEnumData *data = (XiEnumData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(*data));
         XiEnumMemberData *members = (XiEnumMemberData *) xi_func_arena_alloc(
             l->func, (uint32_t) (sizeof(*members) * info->variant_count));
@@ -404,21 +417,57 @@ XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, const cha
         memset(data, 0, sizeof(*data));
         memset(members, 0, sizeof(*members) * info->variant_count);
         data->name = arena_strdup(l->func, enum_name);
+        data->declaration_type = links->type;
         data->member_count = info->variant_count;
         data->is_adt = info->is_payload_enum;
-        data->layout_id = native_decl->layout_id;
+        data->layout_id = info->layout ? info->layout->layout_id : 0;
         data->runtime_type = runtime_type;
         data->members = members;
+        if (!data->name || links->type_param_count < 0 || links->type_param_count > UINT8_MAX)
+            return NULL;
+        data->type_param_count = (uint8_t) links->type_param_count;
+        if (data->type_param_count) {
+            if (!links->type_param_names)
+                return NULL;
+            data->type_param_names = xi_func_arena_alloc(l->func,
+                (uint32_t) (sizeof(*data->type_param_names) * data->type_param_count));
+            if (!data->type_param_names)
+                return NULL;
+            for (uint8_t parameter = 0u; parameter < data->type_param_count; ++parameter) {
+                data->type_param_names[parameter] = arena_strdup(l->func, links->type_param_names[parameter]);
+                if (!data->type_param_names[parameter])
+                    return NULL;
+            }
+        }
         for (uint32_t i = 0; i < info->variant_count; i++) {
             const XaEnumVariantInfo *variant = &info->variants[i];
             members[i].name = arena_strdup(l->func, variant->name);
+            if (!members[i].name)
+                return NULL;
             members[i].ordinal = variant->tag;
             members[i].payload_count = (int) variant->payload_count;
-            members[i].payload_types = variant->payload_types;
+            if (variant->payload_count) {
+                if (!variant->payload_types || !variant->payload_names)
+                    return NULL;
+                members[i].payload_types = xi_func_arena_alloc(l->func,
+                    (uint32_t) (sizeof(*members[i].payload_types) * variant->payload_count));
+                members[i].payload_names = xi_func_arena_alloc(l->func,
+                    (uint32_t) (sizeof(*members[i].payload_names) * variant->payload_count));
+                if (!members[i].payload_types || !members[i].payload_names)
+                    return NULL;
+                for (uint16_t field = 0u; field < variant->payload_count; ++field) {
+                    members[i].payload_types[field] = variant->payload_types[field];
+                    members[i].payload_names[field] = arena_strdup(l->func, variant->payload_names[field]);
+                    if (!members[i].payload_types[field] || !members[i].payload_names[field])
+                        return NULL;
+                }
+            }
             if (members[i].payload_count > data->max_payload)
                 data->max_payload = members[i].payload_count;
         }
-        XiValue *value = xi_value_new(l->func, l->cur_block, XI_CONST, links->type, 0);
+        /* A declaration namespace carries a member table, not an enum ordinal.
+         * Use the same internal reference carrier as a source enum declaration. */
+        XiValue *value = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
         if (!value)
             return NULL;
         value->aux = data;
@@ -2466,8 +2515,8 @@ static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const X
         struct XrType *result_type =
             sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
         if (enum_val->op == XI_GET_BUILTIN &&
-            enum_val->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR) {
-            *out = xi_lower_number_parse_error_member_access(l, enum_val, ma->name, result_type,
+            xr_builtin_enum_row_is_unit(xr_builtin_enum_registry_row((int) enum_val->aux_int))) {
+            *out = xi_lower_builtin_unit_enum_member_access(l, enum_val, ma->name, result_type,
                                                              (int) node->line);
             return true;
         }
@@ -2596,10 +2645,22 @@ static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
                                        struct XrType *result_type,
                                        XiSequenceEvidenceIds *sequence_ids) {
     MemberAccessNode *ma = &node->as.member_access;
-    if (obj && obj->op == XI_GET_BUILTIN && obj->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR &&
+    if (obj && obj->op == XI_GET_BUILTIN &&
+        xr_builtin_enum_row_is_unit(xr_builtin_enum_registry_row((int) obj->aux_int)) &&
         ma->name)
-        return xi_lower_number_parse_error_member_access(l, obj, ma->name, result_type,
+        return xi_lower_builtin_unit_enum_member_access(l, obj, ma->name, result_type,
                                                          (int) node->line);
+    /* A sealed Channel property reads shared state, not an object field. */
+    if (obj && obj->type && obj->type->kind == XR_KIND_CHANNEL &&
+        !obj->type->is_nullable && obj->type->container.element_type &&
+        result_type && result_type->kind == XR_KIND_BOOL && !result_type->is_nullable &&
+        ma->name && strcmp(ma->name, "isClosed") == 0) {
+        XiValue *closed = xi_value_new(l->func, l->cur_block, XI_CHAN_IS_CLOSED, result_type, 1u);
+        if (!closed) return NULL;
+        closed->args[0] = obj;
+        closed->line = (uint32_t) node->line;
+        return closed;
+    }
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v)
         return NULL;
@@ -4074,8 +4135,10 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
             return lower_array_literal_spread(l, node, result_type);
     }
 
-    /* Evaluate all elements first */
+    /* Evaluate and normalize every element before allocating its owner. */
     int n = count;
+    struct XrType *elem_type = xi_get_container_elem_type(result_type);
+    uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
     int alloc_n = n > 0 ? n : 1;
     XiValue **elem_vals =
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
@@ -4089,6 +4152,14 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
             l, arr->elements[i], elem_vals[i], xi_get_container_elem_type(result_type));
         if (!elem_vals[i])
             return NULL;
+        if (narrow_op) {
+            XiValue *narrow = xi_value_new(l->func, l->cur_block, narrow_op, elem_vals[i]->type, 1);
+            if (!narrow)
+                return NULL;
+            narrow->args[0] = elem_vals[i];
+            narrow->line = (uint32_t) node->line;
+            elem_vals[i] = narrow;
+        }
     }
 
     /* Create array: XI_ARRAY_NEW with element count as aux */
@@ -4101,19 +4172,9 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     arr_val->line = (uint32_t) node->line;
 
     /* Populate: INDEX_SET for each element */
-    struct XrType *elem_type = xi_get_container_elem_type(result_type);
-    uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
     for (int i = 0; i < n; i++) {
         XiValue *idx = xi_const_int(l->func, l->cur_block, i, l->type_int);
         XiValue *elem = elem_vals[i];
-        if (narrow_op) {
-            XiValue *narrow = xi_value_new(l->func, l->cur_block, narrow_op, elem->type, 1);
-            if (narrow) {
-                narrow->args[0] = elem;
-                narrow->line = (uint32_t) node->line;
-                elem = narrow;
-            }
-        }
         XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
         if (!set)
             break;
@@ -5454,6 +5515,25 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
                                          XiCallWriteback **out_writebacks, int line) {
     if (out_writebacks)
         *out_writebacks = NULL;
+    /* Formal nullable value slots require an explicit semantic injection
+     * before call ownership and target storage are frozen. REF slots retain
+     * their original place and cannot be satisfied by a converted temporary. */
+    if (call && arg_vals && n == call->arg_count && function_type &&
+        function_type->kind == XR_KIND_FUNCTION) {
+        for (int i = 0; i < n && i < function_type->function.param_count; i++) {
+            XrType *formal = xr_type_function_param_type(function_type, i);
+            XrParamMode mode = pmodes && i < pcount ? pmodes[i]
+                                                        : xr_type_function_param_mode(function_type, i);
+            AstNode *actual = call->arguments ? call->arguments[i] : NULL;
+            if (!formal || !formal->is_nullable || mode == XR_PARAM_REF || !actual ||
+                actual->type == AST_SPREAD_EXPR || !arg_vals[i] || !arg_vals[i]->type ||
+                !xr_type_assignable(formal, arg_vals[i]->type))
+                continue;
+            arg_vals[i] = xi_lower_inject_optional(l, actual, arg_vals[i], formal);
+            if (!arg_vals[i] || l->had_error)
+                return NULL;
+        }
+    }
     bool needs_plan = false;
     for (int i = 0; i < n && i < pcount; i++) {
         XrParamMode mode = pmodes ? pmodes[i] : XR_PARAM_READ;
@@ -10188,6 +10268,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             if (!v)
                 return NULL;
             v->args[0] = arg;
+            v->array_default_construct = !array_copy;
             if (array_copy)
                 v->aux = (void *) "array_copy_new";
             v->aux_int = xi_array_cfield_from_type(result_type);

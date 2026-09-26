@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 75u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 95u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -28,21 +28,49 @@ static void test_registry_identity_and_lookup(void) {
         CHECK(operation->operation_class != NULL);
         CHECK(operation->feature != NULL);
         CHECK(operation->spec_oracle_status == XR_CORE_COVERAGE_COMPLETE);
-        bool pending_element_place =
-            operation->stable_id == XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE;
         CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
-        uint8_t evaluator_status = operation->stable_id == 152u || operation->stable_id == 153u
-                                       ? XR_CORE_COVERAGE_NOT_YET_ACTIVE
-                                       : XR_CORE_COVERAGE_COMPLETE;
-        if (pending_element_place || operation->stable_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT ||
-            operation->stable_id == XR_CORE_OP_CORE_OWNER_ALIAS ||
-            operation->stable_id == XR_CORE_OP_CORE_SEQUENCE_LENGTH ||
-            operation->stable_id == XR_CORE_OP_CORE_INTEGER_CONVERT ||
-            operation->stable_id == XR_CORE_OP_CORE_INTEGER_DIVMOD ||
-            operation->stable_id == XR_CORE_OP_CORE_COROUTINE_CALL_SEALED ||
-            operation->stable_id == XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT)
+        uint8_t evaluator_status = XR_CORE_COVERAGE_COMPLETE;
+        switch (operation->stable_id) {
+        case XR_CORE_OP_CORE_PLACE_MODULE:
+        case XR_CORE_OP_CORE_PLACE_INITIALIZE:
+            evaluator_status = XR_CORE_COVERAGE_NOT_YET_ACTIVE;
+            break;
+        case XR_CORE_OP_CORE_ASSERT_CONDITION:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_SEALED:
+        case XR_CORE_OP_CORE_COROUTINE_CALL_INDIRECT:
+        case XR_CORE_OP_CORE_OWNER_ALIAS:
+        case XR_CORE_OP_CORE_INTEGER_CONVERT:
+        case XR_CORE_OP_CORE_INTEGER_DIVMOD:
+        case XR_CORE_OP_CORE_SEQUENCE_LENGTH:
+        case XR_CORE_OP_CORE_ARRAY_CONSTRUCT:
+        case XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE:
+        case XR_CORE_OP_CORE_ATOMIC_CONSTRUCT:
+        case XR_CORE_OP_CORE_ATOMIC_LOAD:
+        case XR_CORE_OP_CORE_ATOMIC_EXCHANGE:
+        case XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE:
+        case XR_CORE_OP_CORE_ATOMIC_UPDATE:
+        case XR_CORE_OP_CORE_CONSTANT_F64:
+        case XR_CORE_OP_CORE_COMPARE_F64:
+        case XR_CORE_OP_CORE_SCALAR_BITCAST64:
+        case XR_CORE_OP_CORE_STRING_FROM_SCALAR:
+        case XR_CORE_OP_CORE_CHANNEL_CONSTRUCT:
+        case XR_CORE_OP_CORE_CHANNEL_IS_CLOSED:
+        case XR_CORE_OP_CORE_INTEGER_BITWISE:
+        case XR_CORE_OP_CORE_STRING_SLICE:
+        case XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT:
+        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
+        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
+        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
+        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
+        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT:
+        case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL:
+        case XR_CORE_OP_CORE_ARRAY_APPEND:
             evaluator_status = XR_CORE_COVERAGE_NOT_APPLICABLE;
+            break;
+        default:
+            break;
+        }
         CHECK(operation->evaluator_status == evaluator_status);
         CHECK(operation->vm_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->aot_status == XR_CORE_COVERAGE_COMPLETE);

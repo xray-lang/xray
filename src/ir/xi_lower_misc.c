@@ -29,49 +29,26 @@
 #include "../runtime/class/xclass.h"
 #include "../runtime/object/xstring.h"
 #include "../base/xglobal_indices.h"
-#include "../base/xnumber_parse_error.h"
+#include "../base/xbuiltin_enum.h"
 
 #include <string.h>
 #include <stdio.h>
 
 /* ========== Enum Access ========== */
 
-/* Prelude enums have a single canonical XrEnumType bound
- * into a VM builtin slot; they are not per-module declarations.  Returns the
- * builtin global index, or -1 for ordinary user enums. */
-static int prelude_enum_builtin_index(const char *enum_name) {
-    if (!enum_name)
-        return -1;
-    if (strcmp(enum_name, "Ordering") == 0)
-        return XR_GLOBAL_VAR_ORDERING;
-    if (strcmp(enum_name, "Endian") == 0)
-        return XR_GLOBAL_VAR_ENDIAN;
-    if (strcmp(enum_name, "Recv") == 0)
-        return XR_GLOBAL_VAR_RECV;
-    if (strcmp(enum_name, "SendResult") == 0)
-        return XR_GLOBAL_VAR_SEND_RESULT;
-    if (strcmp(enum_name, "TaskResult") == 0)
-        return XR_GLOBAL_VAR_TASK_RESULT;
-    if (strcmp(enum_name, "TaskStatus") == 0)
-        return XR_GLOBAL_VAR_TASK_STATUS;
-    if (strcmp(enum_name, "Utf8Error") == 0)
-        return XR_GLOBAL_VAR_UTF8_ERROR;
-    if (strcmp(enum_name, XR_NUMBER_PARSE_ERROR_NAME) == 0)
-        return XR_GLOBAL_VAR_NUMBER_PARSE_ERROR;
-    if (strcmp(enum_name, "StringSliceError") == 0)
-        return XR_GLOBAL_VAR_STRING_SLICE_ERROR;
-    if (strcmp(enum_name, "CompressionError") == 0)
-        return XR_GLOBAL_VAR_COMPRESSION_ERROR;
-    if (strcmp(enum_name, "CryptoError") == 0)
-        return XR_GLOBAL_VAR_CRYPTO_ERROR;
-    return -1;
-}
-
-XR_FUNC XiValue *xi_lower_number_parse_error_member_access(XiLower *l, XiValue *enum_value,
+XR_FUNC XiValue *xi_lower_builtin_unit_enum_member_access(XiLower *l, XiValue *enum_value,
                                                            const char *member_name,
                                                            struct XrType *result_type, int line) {
-    int member_index = xr_number_parse_error_member_index(member_name);
-    if (!l || !enum_value || !result_type || member_index < 0)
+    const XrBuiltinEnumRow *row = enum_value && enum_value->op == XI_GET_BUILTIN
+        ? xr_builtin_enum_registry_row((int) enum_value->aux_int) : NULL;
+    if (!l || !result_type || !member_name || !xr_builtin_enum_row_is_unit(row))
+        return NULL;
+    int member_index = -1;
+    for (uint32_t i = 0; i < row->member_count; i++) {
+        if (strcmp(row->members[i].name, member_name) == 0)
+            member_index = (int) i;
+    }
+    if (member_index < 0)
         return NULL;
     XiValue *index = xi_const_int(l->func, l->cur_block, member_index, l->type_int);
     XiValue *value = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
@@ -209,27 +186,11 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
     EnumAccessNode *ea = &node->as.enum_access;
     XR_DCHECK(ea->enum_name != NULL, "enum access must have enum name");
 
-    /* Resolve the enum type value, then GETPROP for the member.  Prelude
-     * enums resolve to a shared builtin slot; user enums to the shared
-     * variable created by their declaration. */
-    XiValue *enum_val;
-    int builtin_idx = prelude_enum_builtin_index(ea->enum_name);
-    if (builtin_idx >= 0) {
-        enum_val = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, l->type_any, 0);
-        if (!enum_val)
-            return NULL;
-        enum_val->aux_int = builtin_idx;
-        enum_val->aux = (void *) arena_strdup(l->func, ea->enum_name);
-        enum_val->line = (uint32_t) node->line;
-    } else {
-        int var_id = xi_lower_var_create(l, 0, ea->enum_name, l->type_any);
-        enum_val = xi_lower_braun_read(l, var_id, l->cur_block);
-    }
-
+    XaSymbol *symbol = xa_analyzer_lookup(l->analyzer, ea->enum_name);
+    XiValue *enum_val = xi_lower_enum_namespace_value(l, symbol, ea->enum_name, (int) node->line);
+    if (!enum_val)
+        return NULL;
     struct XrType *result_type = xi_lower_node_type(l, node);
-    if (builtin_idx == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR)
-        return xi_lower_number_parse_error_member_access(l, enum_val, ea->member_name, result_type,
-                                                         (int) node->line);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v)
         return NULL;
@@ -417,6 +378,7 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     if (enum_data) {
         enum_data->layout_id = et && et->layout ? et->layout->layout_id : 0;
         enum_data->runtime_type = et;
+        enum_data->declaration_type = enum_links ? enum_links->type : NULL;
     }
 
     /* Store the detached enum descriptor, never the compiler-isolate runtime
@@ -719,7 +681,8 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     /* Spread entries force the dynamic merge path. */
     for (int i = 0; i < obj->count; i++) {
         if (obj->values[i] && obj->values[i]->type == AST_SPREAD_EXPR)
-            return xi_lower_object_literal_spread(l, node, xi_lower_node_type(l, node));
+            return xi_lower_object_literal_spread(
+                l, node, xr_type_non_nullable(l->isolate, xi_lower_node_type(l, node)));
     }
 
     int count = obj->count;
@@ -745,7 +708,9 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
             return NULL;
     }
 
-    struct XrType *result_type = xi_lower_node_type(l, node);
+    /* A literal constructs a present object. Nullable destinations inject that
+     * payload at their assignment boundary after its fields are initialized. */
+    struct XrType *result_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, node));
     bool canonical_object_shape = result_type && XR_TYPE_HAS_OBJECT_SHAPE(result_type) &&
                                   result_type->object.field_count > 0 &&
                                   result_type->object.field_names;

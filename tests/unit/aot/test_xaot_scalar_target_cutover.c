@@ -569,6 +569,31 @@ static void test_external_entry_contract_cannot_change_after_freeze(void) {
     cutover_bundle_free(&fixture);
 }
 
+static void test_bundle_admission_checks_later_module_membership(void) {
+    CutoverBundle fixture;
+    char error[512] = {0};
+    cutover_bundle_create(&fixture);
+    cutover_bundle_bind_all(&fixture);
+    REQUIRE(xaot_prepare_bundle(&fixture.bundle, NULL));
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+
+    fixture.bundle.nmodules = 2;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    REQUIRE(strstr(error, "absent from the program TargetPlan") != NULL);
+    fixture.module_ptrs[1] = NULL;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    REQUIRE(strstr(error, "absent from the program TargetPlan") != NULL);
+    fixture.bundle.nmodules = 1;
+    fixture.module_ptrs[1] = &fixture.modules[1].module;
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    fixture.modules[0].target_plan->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    REQUIRE(strstr(error, "TargetPlan is corrupt") != NULL);
+    fixture.modules[0].target_plan->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
+    cutover_bundle_free(&fixture);
+}
+
 static void test_plan_dump_records_exact_value_authority(void) {
     CutoverBundle fixture;
     cutover_bundle_create(&fixture);
@@ -1168,6 +1193,7 @@ static void test_slice_box_and_view_have_distinct_carriers(void) {
 }
 
 int main(void) {
+    test_bundle_admission_checks_later_module_membership();
     test_slice_box_and_view_have_distinct_carriers();
     test_missing_and_partial_module_plans_fail_before_prepare();
     test_single_program_prepare_has_no_scalar_legacy_rows();

@@ -54,6 +54,7 @@ typedef struct XiEnumMemberData {
 
 typedef struct XiEnumData {
     const char *name;
+    struct XrType *declaration_type; /* Borrowed from the Xi type arena, not the carrier type. */
     uint32_t member_count;
     bool is_adt;
     int max_payload;

@@ -34,11 +34,13 @@ typedef struct XrCoreIrType {
     XrCoreIrCopyContract copy_contract;
     uint16_t *field_types;
     uint32_t field_count;
+    uint16_t parent_type_id;
     XrCoreIrVariant *variants;
     uint32_t variant_count;
     uint16_t view_element_type;
     uint16_t array_element_type;
     uint16_t atomic_element_type;
+    uint16_t channel_element_type;
     XrStableId resource_id;
     XrCoreIrViewCapability view_capability;
     XrCoreIrCallableSignature callable_signature;

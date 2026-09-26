@@ -768,7 +768,7 @@ static void build_dynamic_fixture(DynamicFixtureMode mode,
             xr_semantic_plan_source_export(fixture->dependency_semantic, i);
         if (candidate && xr_stable_id_equal(
                              candidate->id,
-                             calls[0].source_export_identity)) {
+                             calls[0].source_declaration_identity)) {
             fixture->called_export = i;
             break;
         }

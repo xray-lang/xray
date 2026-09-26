@@ -827,8 +827,8 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                  "Channel has no '.%s' property, available methods: send(), recv(), "
-                 "recvOr(), trySend(), tryRecv(), sendTimeout(), recvTimeout(), close(), "
-                 "isClosed()",
+                 "recvOr(), trySend(), tryRecv(), sendTimeout(), recvTimeout(), close(); "
+                 "available properties: capacity, isClosed",
                  name ? name : "?");
     }
 

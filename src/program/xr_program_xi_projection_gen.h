@@ -37,6 +37,7 @@ typedef enum XrProgramXiProjectionKind {
     XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING = 25,
     XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD = 26,
     XR_PROGRAM_XI_PROJECTION_SEQUENCE_LENGTH = 27,
+    XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE = 28,
 } XrProgramXiProjectionKind;
 
 typedef enum XrProgramXiSemanticProjectionKind {

@@ -64,6 +64,7 @@ Xray's core differentiator. **If it compiles, it's concurrency-safe.**
 
 | File | Topics |
 |------|--------|
+| [crypto_entropy.xr](07-advanced/crypto_entropy.xr) | system entropy, byte arrays, hex strings, deterministic length assertion and typed output |
 | [generics.xr](07-advanced/generics.xr) | generic classes, nullable types, optional chaining |
 | [testing.xr](07-advanced/testing.xr) | @test, assertions, skip, timeout |
 | [borrow_span_examples.xr](07-advanced/borrow_span_examples.xr) | READ/ref/move parameters, copy/move, Slice, managed Buffer |

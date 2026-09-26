@@ -1042,3 +1042,24 @@ id = "encoding-formatting"
 canonical_cores = ["compression", "crypto", "value-format"]
 duplicate_sources = []
 disposition = "single-owner"
+
+[[core]]
+id = "integer-bitwise"
+header = "src/shared/xr_integer_bitwise_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "buffer-capacity"
+header = "src/shared/xr_buffer_capacity_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "byte-compare"
+header = "src/shared/xr_byte_compare_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]

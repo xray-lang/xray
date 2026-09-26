@@ -51,9 +51,10 @@ def logical_bytes(declaration: ProviderDeclaration) -> bytes:
     platforms = sum(PLATFORMS[platform] for platform in logical.platforms)
     result = bytearray(struct.pack("<III10B", 1, effects, platforms, 1,
                                   len(logical.parameters), len(types), len(logical.resources),
-                                  4 if logical.result_owner == "owned" else 1, 1, 1, 1, 1, 1))
+                                  4 if logical.result_owner == "owned" else 1, 1, 1,
+                                  2 if logical.reentry == "forbidden" else 1, 1, 1))
     for parameter in logical.parameters:
-        result.extend((1, 2 if parameter.owner == "borrow" else 1))
+        result.extend((2 if parameter.mode == "ref" else 1, 2 if parameter.owner == "borrow" else 1))
     result.extend(types)
     for resource in logical.resources:
         result.extend(stable_id(resource.resource))

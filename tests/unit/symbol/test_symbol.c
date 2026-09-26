@@ -174,6 +174,8 @@ TEST(symbol_builtin_lookup) {
     ASSERT_TRUE(size_id != SYMBOL_INVALID);
     ASSERT_EQ_INT(size_id, SYMBOL_SIZE);
     ASSERT_EQ_INT(xr_builtin_symbol_from_name("size"), SYMBOL_SIZE);
+    ASSERT_EQ_INT(xr_builtin_symbol_from_name("copyBytes"), SYMBOL_COPY_BYTES);
+    ASSERT_EQ_INT(xr_symbol_lookup_in_table(table, "copyBytes"), SYMBOL_COPY_BYTES);
     ASSERT_TRUE(push_id != SYMBOL_INVALID);
     ASSERT_EQ_INT(isnan_id, SYMBOL_ISNAN);
     ASSERT_EQ_INT(xr_builtin_symbol_from_name("isNaN"), SYMBOL_ISNAN);

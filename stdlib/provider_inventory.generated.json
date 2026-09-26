@@ -6,13 +6,49 @@
     {
       "symbol": "crypto.__fillRandomBytes",
       "signature": "(bytes: ref Array<u8>): ()",
-      "declared": false,
-      "admitted": false,
-      "blocking_reasons": [
-        "missing-provider-declaration"
-      ],
-      "declaration": null,
-      "logical_declaration_sha256": null,
+      "declared": true,
+      "admitted": true,
+      "blocking_reasons": [],
+      "declaration": {
+        "contract": "xray.runtime.provider.v1/entropy",
+        "operation": "xray.runtime.provider-operation.v1/entropy/fill-bytes",
+        "logical": {
+          "parameters": [
+            {
+              "type": "Array<u8>",
+              "mode": "ref",
+              "owner": "borrow"
+            }
+          ],
+          "result_type": "()",
+          "result_owner": "trivial",
+          "error": "none",
+          "panic": "none",
+          "suspend": "never",
+          "refusal": "trap",
+          "resources": [],
+          "effects": [
+            "io"
+          ],
+          "threads": "any",
+          "reentry": "forbidden",
+          "callbacks": "none",
+          "platforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "profiles": [
+            "hosted"
+          ]
+        },
+        "host": {
+          "adapter": "typed",
+          "header": "execution/xr_random_provider.h",
+          "symbol": "xr_random_provider_fill"
+        }
+      },
+      "logical_declaration_sha256": "fc774978138af40dc3f137983d877a19526ab3ca5cfae5f9c3b01dfe3a7f85c7",
       "binding": {
         "state": "NOT_VERIFIED",
         "reason": "requires-compiled-runtime-evidence"

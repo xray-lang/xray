@@ -3943,6 +3943,370 @@ TEST(source_owner_array_index_reads_and_replaces_elements) {
     xr_target_profile_free(profile);
 }
 
+TEST(source_owner_narrow_array_elements_precede_allocation) {
+    static const char source[] =
+        "const bytes: Array<u8> = [0, 255, 42]\n"
+        "var visits: i64 = 0\n"
+        "fn next() -> u8 { visits = visits + 1; return visits as u8 }\n"
+        "fn answer() -> i64 {\n"
+        "  var ordered: Array<u8> = [next(), next(), next()]\n"
+        "  const signed: Array<i8> = [-128, 127]\n"
+        "  assert(ordered[0] == 1 && ordered[1] == 2 && ordered[2] == 3)\n"
+        "  assert(visits == 3 && bytes[0] == 0 && bytes[1] == 255)\n"
+        "  assert(signed[0] == -128 && signed[1] == 127)\n"
+        "  return bytes[2] as i64\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_NARROW_ARRAY);
+        xr_program_source_product_free(&product);
+    }
+    source_build_fixture_free(&fixture);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_integer_bitwise_exact_width) {
+    static const char source[] =
+        "fn count() -> i64 { return 65 }\n"
+        "fn left() -> i8 { return -128 }\n"
+        "fn answer() -> i64 {\n"
+        "  var a: u8 = 255\n"
+        "  var b: i16 = -256\n"
+        "  var c: u32 = 4294967295\n"
+        "  var wide: u64 = 1\n"
+        "  var neg: i64 = -2\n"
+        "  assert((left() >> 7) == -1)\n"
+        "  assert((a >> 7) == 1 && (a << count()) == 254)\n"
+        "  assert((b | (42 as i16)) == -214)\n"
+        "  assert((c ^ (42 as u32)) == 4294967253)\n"
+        "  assert((~(0 as i32)) == -1)\n"
+        "  assert((wide << count()) == 2 && (wide << 64) == 1)\n"
+        "  assert((neg >> -1) == -1 && (neg >> 64) == -2)\n"
+        "  return (a & (42 as u8)) as i64\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_INTEGER_BITWISE);
+        xr_program_source_product_free(&product);
+    }
+    source_build_fixture_free(&fixture);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_array_append_preserves_class_identity) {
+    static const char source[] =
+        "class Holder {\n"
+        " value: i64\n"
+        " constructor(value: i64) { this.value = value }\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        " var rows: Array<Holder> = []\n"
+        " var original = Holder(19)\n"
+        " rows.push(original)\n"
+        " original.value = 42\n"
+        " return rows[0].value\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_ARRAY_APPEND_CLASS_IDENTITY);
+        xr_program_source_product_free(&product);
+    }
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_static_method_declarations) {
+    static const char source[] =
+        "class First { static value() -> i64 { return 19 } }\n"
+        "class Second { static value() -> i64 { return 23 } }\n"
+        "fn answer() -> i64 { return First.value() + Second.value() }\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_STATIC_METHOD_DECLARATIONS);
+        xr_program_source_product_free(&product);
+    }
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_tuple_array_elements) {
+    static const char source[] =
+        "fn answer() -> i64 {\n"
+        " var rows: Array<(string, string)> = []\n"
+        " var builder = StringBuilder()\n"
+        " builder.append(\"abcdefghijklmnopqrstu\")\n"
+        " rows.push((builder.toString(), builder.toString()))\n"
+        " builder.clear()\n"
+        " return len(rows[0].0) + len(rows[0].1)\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_TUPLE_ARRAY_ELEMENTS);
+        xr_program_source_product_free(&product);
+    }
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_repeated_tuple_elements) {
+    static const char source[] =
+        "fn duplicate(s: string) -> (string, string, string) { return (s, s, s) }\n"
+        "fn answer() -> i64 {\n"
+        " var builder = StringBuilder()\n"
+        " builder.append(\"abcdefghijklmn\")\n"
+        " var p = duplicate(builder.toString())\n"
+        " builder.clear()\n"
+        " return len(p.0) + len(p.1) + len(p.2)\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    if (product.program) {
+        ASSERT_GT(program_operation_count(product.program, XR_CORE_OP_CORE_OWNER_COPY), 0u);
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_REPEATED_TUPLE_ELEMENTS);
+        xr_program_source_product_free(&product);
+    }
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_byte_comparison) {
+    static const char source[] =
+        "import crypto\n"
+        "fn answer() -> i64 {\n"
+        " var a: Array<u8> = [0, 128, 255]\n"
+        " var b: Array<u8> = [0, 128, 255]\n"
+        " var changed: Array<u8> = [0, 129, 255]\n"
+        " var empty: Array<u8> = []\n"
+        " var shorter: Array<u8> = [0, 128]\n"
+        " assert(crypto.timingSafeEqualBytes(a, b))\n"
+        " assert(crypto.timingSafeEqualBytes(a, a))\n"
+        " assert(crypto.timingSafeEqualBytes(empty, empty))\n"
+        " assert(!crypto.timingSafeEqualBytes(a, changed))\n"
+        " assert(!crypto.timingSafeEqualBytes(a, shorter))\n"
+        " assert(!crypto.timingSafeEqualBytes(empty, a))\n"
+        " assert(!crypto.timingSafeEqualBytes(a, empty))\n"
+        " assert(a[0] == 0 && a[1] == 128 && a[2] == 255)\n"
+        " return 42\n"
+        "}\n"
+        ;
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0}; XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile, XR_SOURCE_FIXTURE_BYTE_COMPARISON);
+        xr_program_source_product_free(&product);
+    }
+    source_build_fixture_free(&fixture); xr_target_profile_free(profile);
+}
+
+TEST(source_owner_string_builder_snapshot) {
+    static const char source[] =
+        "fn answer() -> i64 {\n"
+        "  var text = StringBuilder()\n"
+        "  assert(text.toString() == \"\")\n"
+        "  text.append(\"A\").append(42).append(true).append(1.5)\n"
+        "  const saved = text.toString()\n"
+        "  assert(saved == \"A42true1.5\")\n"
+        "  text.clear().append(\"new\")\n"
+        "  assert(text.toString() == \"new\")\n"
+        "  assert(saved == \"A42true1.5\")\n"
+        "  text.clear()\n"
+        "  for (i in 0..3) { text.append(\"x\") }\n"
+        "  assert(text.toString() == \"xxx\")\n"
+        "  assert(make() == \"owned\")\n"
+        "  assert(make() == \"owned\")\n"
+        "  return 42\n"
+        "}\n"
+        "fn make() -> string {\n"
+        "  var text = StringBuilder()\n"
+        "  text.append(\"owned\")\n"
+        "  return text.toString()\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_STRING_BUILDER);
+        xr_program_source_product_free(&product);
+    }
+    source_build_fixture_free(&fixture);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_array_error_invoke) {
+    static const char source[] =
+        "fn make(n: i64) -> i64 {\n"
+        "  if (n < -1) { throw CryptoError.InvalidLength }\n"
+        "  var bytes = Array<u8>(n)\n"
+        "  return len(bytes)\n"
+        "}\n"
+        "fn answer() -> i64 {\n"
+        "  var result = make(32)\n"
+        "  try { result = make(-2) } catch (e: CryptoError) { result = result + 10 }\n"
+        "  return result\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_ARRAY_ERROR_INVOKE);
+        xr_program_source_product_free(&product);
+    }
+    source_build_fixture_free(&fixture);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_string_slice_scalar_range) {
+    static const char source[] =
+        "fn answer() -> i64 {\n"
+        "  const s = \"Aé中🙂\"\n"
+        "  assert(s.slice(1, 4) == \"é中🙂\")\n"
+        "  assert(s.slice(2) == \"中🙂\")\n"
+        "  assert(s.slice(4, 4) == \"\")\n"
+        "  return 42\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_STRING_SLICE);
+        xr_program_source_product_free(&product);
+    }
+    source_build_fixture_free(&fixture);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_array_runtime_length) {
+    static const char source[] =
+        "fn length() -> i64 { return 3 }\n"
+        "fn answer() -> i64 {\n"
+        "  var bytes = Array<u8>(length())\n"
+        "  assert(len(bytes) == 3 && bytes[0] == 0 && bytes[2] == 0)\n"
+        "  bytes[1] = 42\n"
+        "  var flags = Array<bool>(length())\n"
+        "  assert(!flags[1])\n"
+        "  var floats = Array<f64>(length())\n"
+        "  assert(floats[1] == 0.0)\n"
+        "  return bytes[1] as i64\n"
+        "}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    if (product.program) {
+        assert_detached_program_i64_result(product.program, profile, 42);
+        assert_aot_fixture_backend_contract(product.program, profile,
+                                            XR_SOURCE_FIXTURE_ARRAY_RUNTIME_LENGTH);
+        xr_program_source_product_free(&product);
+    }
+    source_build_fixture_free(&fixture);
+    xr_target_profile_free(profile);
+}
+
 TEST(source_owner_recursive_class_type_reservation_is_cycle_safe) {
     static const char source[] = "class Node {\n"
                                  "  next: Node?\n"
@@ -6445,6 +6809,15 @@ static void assert_builtin_panic_cleans_live_owners(uint32_t panic_code,
                                "var result: u8 = 85 % divisor\n"
                                "return first.value + second.value + (result as i64) - 1\n"
                              : "assert(ok)\nreturn first.value + second.value\n";
+    if (panic_code == 452u)
+        body = "var size: i64 = -1\nif (ok) { size = 2 }\n"
+               "var values = Array<u8>(size)\n"
+               "assert(len(values) == 2 && values[1] == 0)\n"
+               "return first.value + second.value\n";
+    if (panic_code == 430u)
+        body = "var end: i64 = 4\nif (ok) { end = 2 }\n"
+               "const source = \"abc\"\nconst result = source.slice(0, end)\n"
+               "assert(result == \"ab\")\nreturn first.value + second.value\n";
     if (message)
         body = "var message = \"assert \" + \"message\"\n"
                "assert(ok, message)\nreturn first.value + second.value\n";
@@ -6490,7 +6863,13 @@ static void assert_builtin_panic_cleans_live_owners(uint32_t panic_code,
         "fn checked(ok: bool) -> i64 {\n"
         "var first = Cell(20)\nvar second = Cell(22)\n%s%s}\n"
         "fn answer() -> i64 { return checked(false)%s }\n",
-        fallible && dispatch == 3u ? "enum DivisionFailure { Negative }\n"
+        fallible && panic_code == 452u ? "enum DivisionFailure { Negative }\n"
+                                     "fn quotient(divisor: i64) -> i64 {\n"
+                                     "if (divisor < 0) { throw DivisionFailure.Negative }\n"
+                                     "const label = \"own\"\n"
+                                     "var values = Array<u8>(divisor - 1)\n"
+                                     "return len(values) + len(label) + 38\n}\n"
+        : fallible && dispatch == 3u ? "enum DivisionFailure { Negative }\n"
                                      "interface Calculator { calculate(divisor: i64) -> i64 }\n"
                                      "struct Divider implements Calculator {\nvalue: i64\n"
                                      "calculate(divisor: i64) -> i64 {\n"
@@ -6539,6 +6918,8 @@ static void assert_builtin_panic_cleans_live_owners(uint32_t panic_code,
         program_operation_successor_count(product.program,
                                           panic_code == XR_ASSERTION_FAILURE_CONDITION_FALSE
                                               ? XR_CORE_OP_CORE_ASSERT_CONDITION
+                                              : panic_code == 452u ? XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT
+                                              : panic_code == 430u ? XR_CORE_OP_CORE_STRING_SLICE
                                               : XR_CORE_OP_CORE_INTEGER_DIVMOD,
                                           1u),
         1u);
@@ -6713,6 +7094,21 @@ TEST(source_owner_assertion_cleans_live_owners_before_panic) {
     assert_builtin_panic_cleans_live_owners(XR_ASSERTION_FAILURE_CONDITION_FALSE,
                                             XR_SOURCE_FIXTURE_ASSERTION_OWNER_CLEANUP, false, 0u,
                                             false);
+}
+
+TEST(source_owner_array_invoke_runs_conditional_defer) {
+    assert_builtin_panic_cleans_live_owners(452u, XR_SOURCE_FIXTURE_ARRAY_INVOKE_DEFER,
+                                            true, 5u, false);
+}
+
+TEST(source_owner_array_default_runs_conditional_defer) {
+    assert_builtin_panic_cleans_live_owners(452u, XR_SOURCE_FIXTURE_ARRAY_DEFAULT_DEFER,
+                                            true, 0u, false);
+}
+
+TEST(source_owner_string_slice_runs_conditional_defer) {
+    assert_builtin_panic_cleans_live_owners(430u, XR_SOURCE_FIXTURE_STRING_SLICE_DEFER,
+                                            true, 0u, false);
 }
 
 TEST(source_owner_integer_division_zero_cleans_live_owners) {
@@ -8401,6 +8797,129 @@ TEST(source_owner_reports_structured_analysis_failure) {
     ASSERT_NULL(product.artifact.bytes);
     ASSERT_NULL(product.program);
     source_build_fixture_free(&fixture);
+}
+
+TEST(source_owner_channel_module_storage_has_exact_types) {
+    static const char source[] =
+        "type Subscription = { label: string, notifications: Channel<i64> }\n"
+        "var subscriptions: Array<Subscription> = []\n"
+        "var notifications: Channel<string>? = null\n"
+        "fn answer() -> i64 {\n"
+        " assert(len(subscriptions) == 0)\n"
+        " assert(notifications == null)\n"
+        " return len(subscriptions)\n}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    ASSERT_EQ_UINT(product.program->module_count, 1u);
+    ASSERT_EQ_UINT(product.program->modules[0].slot_count, 2u);
+    source_build_fixture_free(&fixture);
+    assert_detached_program_i64_result(product.program, profile, 0);
+    assert_aot_fixture_backend_contract(product.program, profile, XR_SOURCE_FIXTURE_CHANNEL_MODULE_TYPES);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_imported_enum_catch_preserves_declaration_identity) {
+    static const char library_source[] =
+        "export enum Problem { Failed }\n"
+        "export fn fail() -> i64 { throw Problem.Failed }\n";
+    static const char source[] =
+        "import { Problem as ImportedProblem, fail } from \"./library\"\n"
+        "fn localFail() -> i64 { throw ImportedProblem.Failed }\n"
+        "fn answer() -> i64 {\n"
+        " var result = 0\n"
+        " try { result = fail() } catch (e: ImportedProblem) { result = 20 }\n"
+        " try { result = localFail() } catch (e: ImportedProblem) { result = result + 22 }\n"
+        " assert(result == 42)\n"
+        " return result\n}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, library_source));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    assert_detached_program_i64_result(product.program, profile, 42);
+    assert_aot_fixture_backend_contract(product.program, profile, XR_SOURCE_FIXTURE_IMPORTED_ENUM_CATCH);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_prelude_enum_catch_preserves_declaration_identity) {
+    static const char library_source[] =
+        "export fn fail() -> i64 { throw CryptoError.InvalidLength }\n";
+    static const char source[] =
+        "import { fail } from \"./library\"\n"
+        "fn localFail() -> i64 { throw CryptoError.InvalidLength }\n"
+        "fn answer() -> i64 {\n"
+        " var result = 0\n"
+        " try { result = fail() } catch (e: CryptoError) { result = 20 }\n"
+        " try { result = localFail() } catch (e: CryptoError) { result = result + 22 }\n"
+        " assert(result == 42)\n"
+        " return result\n}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, library_source));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    source_build_fixture_free(&fixture);
+    if (!product.program) {
+        xr_program_source_product_free(&product);
+        xr_target_profile_free(profile);
+        return;
+    }
+    assert_detached_program_i64_result(product.program, profile, 42);
+    assert_aot_fixture_backend_contract(product.program, profile, XR_SOURCE_FIXTURE_PRELUDE_ENUM_CATCH);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
+}
+
+TEST(source_owner_channel_handles_execute) {
+    static const char source[] =
+        "fn answer() -> i64 {\n"
+        " const channel = Channel<string>(2)\n"
+        " const alias = copy(channel)\n"
+        " assert(!alias.isClosed)\n"
+        " return 42\n}\n";
+    SourceBuildFixture fixture;
+    ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+    fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    XrProgramSourceProduct product = {0};
+    XrProgramSourceDiagnostic diagnostic;
+    assert_source_build_ok(&fixture.input, &product, &diagnostic);
+    ASSERT_EQ_UINT(product.program->module_count, 1u);
+    bool constructed = false, queried = false;
+    for (uint32_t f = 0u; f < product.program->function_count; ++f)
+        for (uint32_t b = 0u; b < product.program->functions[f].block_count; ++b)
+            for (uint32_t i = 0u; i < product.program->functions[f].blocks[b].instruction_count; ++i)
+            {
+                uint16_t operation = product.program->functions[f].blocks[b].instructions[i].operation_id;
+                constructed |= operation == XR_CORE_OP_CORE_CHANNEL_CONSTRUCT;
+                queried |= operation == XR_CORE_OP_CORE_CHANNEL_IS_CLOSED;
+            }
+    ASSERT_TRUE(constructed && queried);
+    source_build_fixture_free(&fixture);
+    assert_detached_program_i64_result(product.program, profile, 42);
+    assert_aot_fixture_backend_contract(product.program, profile, XR_SOURCE_FIXTURE_CHANNEL_HANDLES);
+    xr_program_source_product_free(&product);
+    xr_target_profile_free(profile);
 }
 
 TEST(source_owner_atomic_ordering_preserves_exact_controls) {

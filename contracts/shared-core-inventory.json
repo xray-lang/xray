@@ -222,6 +222,31 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_buffer_capacity_core.h",
+      "id": "buffer-capacity",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/runtime/core/xr_array_append_storage.h",
+        "src/runtime/core/xr_string_builder_storage.h",
+        "src/runtime/xstrbuf.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_buffer_capacity_plan"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/runtime/test_strbuf_allocations.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_byte_array_append_core.h",
       "id": "byte-array-append",
       "owner": "shared-kernel",
@@ -297,6 +322,35 @@
       "status": "production",
       "test_callers": [
         "tests/unit/stdlib/test_byte_array_repeat_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_byte_compare_core.h",
+      "id": "byte-compare",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "src/aot/xrt_crypto.h",
+        "src/shared/xr_crypto_core.h",
+        "src/vm/xr_program_vm.c",
+        "src/vm/xr_program_vm_dispatch.inc.c",
+        "stdlib/crypto/crypto.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_crypto_core_timing_safe_equal"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/runtime/test_byte_compare_core.c",
+        "tests/unit/stdlib/test_crypto.c"
       ]
     },
     {
@@ -539,7 +593,6 @@
         "src/module/xnative_package.c",
         "src/module/xpkg_client.c",
         "src/shared/xr_crypto_core.c",
-        "stdlib/crypto/crypto.c",
         "stdlib/crypto/crypto.h"
       ],
       "profiles": [
@@ -548,9 +601,7 @@
         "hosted"
       ],
       "representation": "native",
-      "signatures": [
-        "xr_crypto_core_timing_safe_equal"
-      ],
+      "signatures": [],
       "status": "production",
       "test_callers": [
         "tests/unit/stdlib/test_crypto.c"
@@ -768,14 +819,12 @@
     },
     {
       "contains_tagged_value": false,
-      "header": "src/shared/xr_integer_conversion_core.h",
-      "id": "integer-conversion",
+      "header": "src/shared/xr_integer_bitwise_core.h",
+      "id": "integer-bitwise",
       "owner": "shared-kernel",
       "production_callers": [
         "src/aot/program/xr_backend_ir_emit_c.c",
-        "src/shared/xr_int_arith_core.h",
-        "src/shared/xr_integer_division_core.h",
-        "src/shared/xr_numeric_conversion_core.h",
+        "src/vm/xr_program_vm.c",
         "src/vm/xr_program_vm_dispatch.inc.c"
       ],
       "profiles": [
@@ -786,9 +835,29 @@
       ],
       "representation": "native",
       "signatures": [
-        "xr_integer_convert_bits",
-        "xr_integer_signed_from_bits"
+        "xr_integer_bitwise_bits"
       ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_integer_conversion_core.h",
+      "id": "integer-conversion",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/shared/xr_integer_bitwise_core.h",
+        "src/shared/xr_integer_division_core.h",
+        "src/shared/xr_numeric_conversion_core.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [],
       "status": "production",
       "test_callers": []
     },
@@ -1444,7 +1513,8 @@
       "id": "string-buffer",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/runtime/object/builtins/xstringbuilder_builtins.c"
+        "src/runtime/object/builtins/xstringbuilder_builtins.c",
+        "src/runtime/xstrbuf.c"
       ],
       "profiles": [
         "vm",

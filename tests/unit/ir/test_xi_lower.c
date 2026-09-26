@@ -6,6 +6,8 @@
  * lowers to Xi IR, and verifies the dump output.
  */
 
+#include "../../../src/base/xbuiltin_enum.h"
+#include "../../../src/ir/xi_semantic_snapshot.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_effect.h"
@@ -111,6 +113,10 @@ static XiFunc *lower_source(const char *source) {
                 xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
     }
     xa_typed_program_free(typed.program);
+    if (func && !xi_semantic_snapshot_detach(func)) {
+        xi_func_free(func);
+        func = NULL;
+    }
     if (!func) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);
@@ -3295,6 +3301,11 @@ TEST(go_arg_transfer_modes) {
            "move at a go boundary must be encoded as MOVE transfer");
     assert(func_tree_has_op(move_ir, XI_SOURCE_MOVE) &&
            "move transfer should still consume source ownership");
+    XiValue *moved = func_tree_find_op(move_ir, XI_SOURCE_MOVE);
+    assert(moved->move_evidence_id != 0 && moved->move_storage_plan_id != 0 &&
+           moved->move_source_domain == XR_STORAGE_TRANSFERABLE &&
+           moved->move_target_domain == XR_STORAGE_TRANSFERABLE &&
+           "boundary move snapshot must retain the solved transferable generation");
     xi_func_free(move_ir);
 
     XiFunc *share_ir = lower_source("fn observe(ch: Channel<i64>) -> i64 { return 1 }\n"
@@ -4515,6 +4526,58 @@ TEST(class_decl_skip) {
     xi_func_free(f);
 }
 
+TEST(nullable_structural_literal_constructs_present_payload) {
+    const char *sources[] = {
+        "type Row = { name: string }\nvar row: Row? = { name: \"a\" }\n",
+        "type Row = { name: string }\nvar source: Row = { name: \"a\" }\n"
+        "var row: Row? = { ...source }\n"
+    };
+    for (unsigned test = 0; test < 2u; ++test) {
+        XiFunc *function = lower_source(sources[test]);
+        assert(function != NULL);
+        XiValue *allocation = func_tree_find_op(function, XI_OBJECT_NEW);
+        assert(allocation && allocation->type &&
+               allocation->type->kind == XR_KIND_STRUCT_OBJECT && !allocation->type->is_nullable);
+        for (uint32_t block = 0; block < function->nblocks; ++block) {
+            for (uint32_t index = 0; index < function->blocks[block]->nvalues; ++index) {
+                XiValue *value = function->blocks[block]->values[index];
+                if (value->op == XI_OBJECT_NEW)
+                    assert(value->type && !value->type->is_nullable);
+            }
+        }
+        xi_func_free(function);
+    }
+}
+
+TEST(builtin_enum_namespace_uses_reference_carrier) {
+    const char *sources[] = {"var error = CryptoError.InvalidLength\n",
+                             "var order = Ordering.Relaxed\n"};
+    const char *names[] = {"CryptoError", "Ordering"};
+    const char *members[] = {"InvalidLength", "Relaxed"};
+    for (unsigned test = 0; test < 2; ++test) {
+        XiFunc *function = lower_source(sources[test]);
+        assert(function != NULL);
+        XiValue *member = func_tree_find_op(function, XI_INDEX_GET);
+        assert(member && member->nargs == 2 && member->type &&
+               member->type->kind == XR_KIND_ENUM && member->aux_kind == XI_AUX_KIND_ENUM_CASE);
+        XiValue *declaration = member->args[0];
+        assert(declaration && declaration->op == XI_GET_BUILTIN &&
+               declaration->type && declaration->type->kind == XR_KIND_CLASS);
+        const XrBuiltinEnumRow *schema =
+            xr_builtin_enum_registry_row((int) declaration->aux_int);
+        assert(schema && xr_builtin_enum_row_is_unit(schema) &&
+               strcmp(schema->enum_name, names[test]) == 0);
+        XiValue *ordinal = member->args[1];
+        assert(ordinal && ordinal->op == XI_CONST && ordinal->aux_int >= 0 &&
+               (uint64_t) ordinal->aux_int < schema->member_count);
+        assert(strcmp(schema->members[ordinal->aux_int].name, members[test]) == 0);
+        assert(member->type->enum_type.layout &&
+               member->type->enum_type.layout->is_zero_payload &&
+               member->type->enum_type.layout_id != 0);
+        xi_func_free(function);
+    }
+}
+
 TEST(imported_enum_namespace_is_not_an_enum_value) {
     XiFunc *function = lower_source("import { CoroState as State } from Coro\n"
                                     "fn accepts(value: State) -> i64 { return 42 }\n");
@@ -4603,6 +4666,9 @@ TEST(canonical_effect_sidecars_reach_xi) {
 /* ========== Main ========== */
 
 int main(void) {
+#if defined(XR_OS_WINDOWS)
+    _set_abort_behavior(0, _CALL_REPORTFAULT);
+#endif
     printf("=== Xi Lower Unit Tests ===\n\n");
 
     setup();
@@ -4722,6 +4788,8 @@ int main(void) {
     run_enum_access();
     run_enum_record_syntax_lowers_to_exact_variant_operations();
     run_import_export_skip();
+    run_nullable_structural_literal_constructs_present_payload();
+    run_builtin_enum_namespace_uses_reference_carrier();
     run_imported_enum_namespace_is_not_an_enum_value();
     run_import_declarations_and_runtime_interface_values();
     run_nullable_class_fields_use_tagged_storage();

@@ -126,6 +126,22 @@ xr_semantic_type_is_const_read_admission(const XrSemanticTypeRecord *value_type,
            strcmp(value_tail, parameter_tail) == 0;
 }
 
+/* Adding only the outer const qualifier seals a reference binding without
+ * changing its carrier. Writable, nested, optional and value conversions are
+ * separate operations and cannot acquire authority through this judgement. */
+static inline bool xr_semantic_type_is_reference_const_seal(
+    const XrSemanticPlan *plan, uint32_t source_type, uint32_t result_type) {
+    const XrSemanticTypeRecord *from = xr_semantic_plan_type(plan, source_type);
+    const XrSemanticTypeRecord *to = xr_semantic_plan_type(plan, result_type);
+    return from && to && (from->flags & XR_SEM_TYPE_CONST) == 0 &&
+           (to->flags & XR_SEM_TYPE_CONST) != 0 &&
+           (from->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
+           (from->flags & (XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
+                           XR_SEM_TYPE_AGGREGATE_EXACT)) == 0 &&
+           xr_semantic_type_is_const_read_admission(from, to, XR_PARAM_READ) &&
+           xr_semantic_type_same_structure(plan, from, to);
+}
+
 /* Whether a value of `value_type` may be handed to a parameter of
  * `parameter_type` because the parameter only widens it to its nullable form.
  * The language admits this everywhere -- a definite value is a legal optional --
@@ -178,7 +194,7 @@ static inline bool xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecor
                (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE);
 }
 
-/* Nullable i64/f64/bool values use the tagged carrier for their whole
+/* Nullable u8/i64/f64/bool values use the tagged carrier for their whole
  * lifetime: the tag is the optional discriminant and the payload is the scalar.
  * Consequently the null spelling crosses this boundary without an adapter,
  * just like null crossing into a nullable reference. Keep this judgement
@@ -212,7 +228,8 @@ xr_semantic_null_inhabits_nullable_scalar_parameter(const XrSemanticTypeRecord *
         return false;
     switch ((XrTypeKind) parameter_type->kind) {
         case XR_KIND_INT:
-            return parameter_type->scalar_rep == XR_NATIVE_I64;
+            return parameter_type->scalar_rep == XR_NATIVE_I64 ||
+                   parameter_type->scalar_rep == XR_NATIVE_U8;
         case XR_KIND_FLOAT:
             return parameter_type->scalar_rep == XR_NATIVE_F64;
         case XR_KIND_BOOL:
@@ -222,7 +239,7 @@ xr_semantic_null_inhabits_nullable_scalar_parameter(const XrSemanticTypeRecord *
     }
 }
 
-/* Widening one exact i64/f64/bool payload into its nullable spelling boxes the
+/* Widening one exact u8/i64/f64/bool payload into its nullable spelling boxes the
  * scalar into the same tagged carrier used by every nullable scalar value. The
  * backend already freezes that ordinary call-boundary conversion; semantic
  * authority only has to prove that nullable is the sole type difference and
@@ -253,7 +270,8 @@ xr_semantic_type_is_nullable_scalar_widening(const XrSemanticTypeRecord *operand
         return false;
     switch ((XrTypeKind) parameter_type->kind) {
         case XR_KIND_INT:
-            if (parameter_type->scalar_rep != XR_NATIVE_I64)
+            if (parameter_type->scalar_rep != XR_NATIVE_I64 &&
+                parameter_type->scalar_rep != XR_NATIVE_U8)
                 return false;
             break;
         case XR_KIND_FLOAT:

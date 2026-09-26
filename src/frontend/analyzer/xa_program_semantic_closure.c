@@ -1128,7 +1128,7 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_scalar
             return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
     }
     const AstNode *exported_function = dependency_syntax->as.program.statements[0];
-    if (!import_node || !entry_function || !exported_function ||
+    if (!import_node || !entry_function || entry_function->is_exported || !exported_function ||
         exported_function->type != AST_FUNCTION_DECL || !exported_function->is_exported)
         return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
 

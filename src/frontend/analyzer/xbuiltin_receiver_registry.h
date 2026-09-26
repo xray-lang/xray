@@ -29,6 +29,8 @@ typedef enum {
     XA_BUILTIN_RECEIVER_U8_SLICE,
     XA_BUILTIN_RECEIVER_POD_SLICE,
     XA_BUILTIN_RECEIVER_RANGE,
+    XA_BUILTIN_RECEIVER_CHANNEL,
+    XA_BUILTIN_RECEIVER_TASK,
 } XaBuiltinReceiverKind;
 
 typedef enum {
@@ -61,6 +63,9 @@ typedef enum {
     XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM,
     XA_BUILTIN_TYPE_PTR_OF_RECEIVER_ELEM,
     XA_BUILTIN_TYPE_MUT_PTR_OF_RECEIVER_ELEM,
+    XA_BUILTIN_TYPE_SEND_RESULT,
+    XA_BUILTIN_TYPE_RECV_OF_RECEIVER_ELEM,
+    XA_BUILTIN_TYPE_TASK_RESULT_OF_RECEIVER_ELEM,
 } XaBuiltinMethodTypeKind;
 
 typedef enum {
@@ -329,7 +334,7 @@ xa_builtin_runtime_receiver_method_spec_is_valid(const XaBuiltinReceiverMethodSp
         spec->method_symbol == XI_METHOD_SYMBOL_INVALID || !spec->source_name ||
         spec->is_variadic || spec->param_count < 0 ||
         spec->param_count > XA_BUILTIN_RECEIVER_METHOD_MAX_PARAMS ||
-        spec->min_params != spec->param_count || !display ||
+        spec->min_params < 0 || spec->min_params > spec->param_count || !display ||
         strcmp(spec->source_name, display) != 0)
         return false;
     for (int i = spec->param_count; i < XA_BUILTIN_RECEIVER_METHOD_MAX_PARAMS; i++)
@@ -347,7 +352,8 @@ xa_builtin_runtime_receiver_method_by_symbol(const XrType *receiver, XiMethodSym
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (!xa_builtin_runtime_receiver_method_spec_is_valid(spec) ||
-            spec->method_symbol != symbol || spec->param_count != argument_count ||
+            spec->method_symbol != symbol || argument_count < spec->min_params ||
+            argument_count > spec->param_count ||
             !xa_builtin_receiver_matches_type(receiver, spec->receiver))
             continue;
         if (found)
@@ -434,6 +440,11 @@ static inline bool xa_builtin_receiver_matches_type(const XrType *receiver,
                    xa_builtin_type_is_pod_span_elem(receiver->container.element_type);
         case XA_BUILTIN_RECEIVER_RANGE:
             return xr_type_is_builtin_named_class(receiver, "Range");
+        case XA_BUILTIN_RECEIVER_TASK:
+            return xr_type_is_builtin_named_class(receiver, "Task") && !receiver->is_nullable;
+        case XA_BUILTIN_RECEIVER_CHANNEL:
+            return receiver && receiver->kind == XR_KIND_CHANNEL && !receiver->is_nullable &&
+                   receiver->container.element_type;
     }
     return false;
 }
@@ -527,6 +538,8 @@ xa_builtin_receiver_method_documentation_group(const XaBuiltinReceiverMethodSpec
         case XA_BUILTIN_RECEIVER_MAP:
             return XA_BUILTIN_DOC_GROUP_GENERAL;
         case XA_BUILTIN_RECEIVER_RANGE:
+        case XA_BUILTIN_RECEIVER_CHANNEL:
+        case XA_BUILTIN_RECEIVER_TASK:
             return XA_BUILTIN_DOC_GROUP_GENERAL;
     }
     return XA_BUILTIN_DOC_GROUP_GENERAL;

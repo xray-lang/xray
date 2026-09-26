@@ -63,10 +63,13 @@ static inline bool xr_semantic_array_type_row_is_exact(const XrSemanticTypeRecor
 static inline bool xr_semantic_direct_local_reference_parameter_is_exact(
     const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, bool *callee_owns) {
     if (!plan || !parameter || parameter->function >= xr_semantic_plan_function_count(plan) ||
-        parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_READ ||
+        parameter->value == XR_SEMANTIC_INDEX_NONE ||
+        (parameter->mode != XR_PARAM_READ && parameter->mode != XR_PARAM_MOVE) ||
+        (parameter->mode == XR_PARAM_MOVE && parameter->ownership != XI_OWN_OWNED) ||
         (parameter->ownership != XI_OWN_BORROWED && parameter->ownership != XI_OWN_OWNED) ||
         parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_VARIADIC)) != 0 ||
+        (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_VARIADIC |
+                              XR_SEM_PARAMETER_DEFAULT_SENTINEL)) != 0 ||
         parameter->reserved != 0 || parameter->type >= xr_semantic_plan_type_count(plan) ||
         (xr_semantic_plan_type(plan, parameter->type)->flags &
          (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
@@ -84,6 +87,21 @@ static inline bool xr_semantic_direct_local_reference_parameter_is_exact(
     if (callee_owns)
         *callee_owns = parameter->ownership == XI_OWN_OWNED;
     return true;
+}
+
+/* Value arguments carry no addressable place. Explicit move syntax and a fresh
+ * temporary both satisfy a consuming declaration; a read declaration accepts
+ * only ordinary access. Storage and ownership are checked by the caller. */
+static inline bool xr_semantic_direct_local_reference_argument_access_is_exact(
+    const XrSemanticParameterRecord *parameter, const XrSemanticOperandRecord *operand) {
+    return parameter && operand && parameter->mode == operand->parameter_mode &&
+           operand->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           operand->origin == XI_PLACE_ORIGIN_NONE &&
+           operand->lifetime == XI_PLACE_LIFETIME_NONE &&
+           operand->escape == XI_PLACE_ESCAPE_NONE &&
+           ((parameter->mode == XR_PARAM_READ && operand->access == XR_CALL_ARG_PLAIN) ||
+            (parameter->mode == XR_PARAM_MOVE && parameter->ownership == XI_OWN_OWNED &&
+             (operand->access == XR_CALL_ARG_MOVE || operand->access == XR_CALL_ARG_PLAIN)));
 }
 
 /* A borrowed read of an Array held in a shared cell. The shared operation

@@ -25,6 +25,7 @@
 #include "xr_semantic_ids.h"
 #include "xr_semantic_allocation_shape.h"
 #include "xr_semantic_shared_read_shape.h"
+#include "xr_semantic_enum_shape.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
@@ -92,7 +93,7 @@ static inline bool xr_semantic_direct_local_string_value_parameter_is_exact(
         parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_READ ||
         (parameter->ownership != XI_OWN_BORROWED && parameter->ownership != XI_OWN_OWNED) ||
         parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_DEFAULT_SENTINEL)) != 0 || parameter->reserved != 0 ||
         !xr_semantic_tagged_string_type_is_exact(xr_semantic_plan_type(plan, parameter->type)))
         return false;
     if (callee_owns)
@@ -162,7 +163,7 @@ xr_semantic_string_concat_tagged_display_type_is_exact(const XrSemanticTypeRecor
            (type->flags & (XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0;
 }
 
-/* One judgement for a string concatenation: it joins two or more exact display
+/* One judgement for a string concatenation: it joins one or more exact display
  * operands into one freshly owned String. A String operand is consumed in its
  * owned tagged carrier. An exact native integer operand is consumed as a
  * logical display value whose native source remains independently frozen by
@@ -176,7 +177,7 @@ static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan
     const XrSemanticFunctionRecord *function =
         operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
     if (!plan || !operation || !operands || !function || operation->opcode != XI_STR_CONCAT ||
-        operation->operand_count < 2u || operation->operand_begin > operand_count ||
+        operation->operand_count == 0u || operation->operand_begin > operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE || operation->metadata_count != 0 ||
         operation->semantic_immediate != 0 || operation->auxiliary_kind != 0 ||
@@ -219,10 +220,12 @@ static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan
 /* One exact scalar display source for `string(x)`. The scalar families already
  * froze a machine representation for every row this admits, so the conversion
  * reads a storage fact that exists rather than inventing one. A reference,
- * aggregate, nullable, nominal, enum-keyed or child-carrying row needs a
- * different display recipe and stays unclaimed. */
+ * aggregate, nullable or child-carrying row needs a different display recipe.
+ * Null and exact unit enums use their existing tagged display carrier. */
 static inline bool
 xr_semantic_string_convert_source_type_is_exact(const XrSemanticTypeRecord *type) {
+    if (xr_semantic_unit_enum_type_is_exact(type))
+        return true;
     XrStableId zero = {{0}};
     if (!type || type->builtin_type != XR_TID_NULL || type->flags != 0 || type->child_count != 0 ||
         type->aggregate_extent != 0 || type->aggregate_align != 0 ||
@@ -240,6 +243,7 @@ xr_semantic_string_convert_source_type_is_exact(const XrSemanticTypeRecord *type
                    type->scalar_rep == XR_NATIVE_ISIZE || type->scalar_rep == XR_NATIVE_USIZE;
         case XR_KIND_FLOAT:
             return type->scalar_rep == XR_NATIVE_F32 || type->scalar_rep == XR_NATIVE_F64;
+        case XR_KIND_NULL:
         case XR_KIND_BOOL:
         case XR_KIND_RUNE:
             return type->scalar_rep == XR_SCALAR_REP_NONE;

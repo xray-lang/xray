@@ -22,7 +22,7 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 83,
+  "operation_count": 95,
   "operations": [
     {
       "stable_id": 1,
@@ -601,6 +601,90 @@
     {
       "stable_id": 167,
       "spelling": "core.string.from_scalar",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 168,
+      "spelling": "core.channel.construct",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 169,
+      "spelling": "core.channel.is_closed",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 170,
+      "spelling": "core.integer.bitwise",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 171,
+      "spelling": "core.string.slice",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 172,
+      "spelling": "core.array.allocate_default",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 173,
+      "spelling": "core.string_builder.construct",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 174,
+      "spelling": "core.string_builder.append",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 175,
+      "spelling": "core.string_builder.clear",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 176,
+      "spelling": "core.string_builder.length",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 177,
+      "spelling": "core.string_builder.snapshot",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 178,
+      "spelling": "core.bytes.timing_safe_equal",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "differential_oracle": "CoreSpec-known-answers-and-source-expectations"
+    },
+    {
+      "stable_id": 179,
+      "spelling": "core.array.append",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "differential_oracle": "CoreSpec-known-answers-and-source-expectations"

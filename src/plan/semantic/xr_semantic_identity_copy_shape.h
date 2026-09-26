@@ -63,20 +63,9 @@ static inline bool xr_semantic_identity_copy_is_exact(const XrSemanticPlan *plan
         xr_semantic_identity_copy_source(plan, operation);
     if (!source)
         return false;
-    if (source->type != operation->result_type) {
-        const XrSemanticTypeRecord *from = xr_semantic_plan_type(plan, source->type);
-        const XrSemanticTypeRecord *to = xr_semantic_plan_type(plan, operation->result_type);
-        /* Sealing a reference binding preserves its carrier. It never removes
-         * constness, changes a nested qualifier, or injects an Optional. */
-        if (!from || !to || (from->flags & XR_SEM_TYPE_CONST) != 0 ||
-            (to->flags & XR_SEM_TYPE_CONST) == 0 ||
-            (from->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 ||
-            (from->flags & (XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
-                            XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
-            !xr_semantic_type_is_const_read_admission(from, to, XR_PARAM_READ) ||
-            !xr_semantic_type_same_structure(plan, from, to))
-            return false;
-    }
+    if (source->type != operation->result_type &&
+        !xr_semantic_type_is_reference_const_seal(plan, source->type, operation->result_type))
+        return false;
     if (source_value_out)
         *source_value_out = source->value;
     return true;

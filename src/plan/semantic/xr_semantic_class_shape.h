@@ -360,7 +360,7 @@ static inline bool xr_semantic_class_argument_parameter_is_exact(const XrSemanti
     if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE ||
         parameter->mode != XR_PARAM_READ || parameter->transfer_mode != XR_TRANSFER_SHARE ||
         (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED) ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_DEFAULT_SENTINEL)) != 0 || parameter->reserved != 0 ||
         parameter->function >= (uint32_t) xr_semantic_plan_function_count(plan))
         return false;
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, parameter->function);
@@ -441,16 +441,10 @@ static inline uint32_t xr_semantic_class_instance_parameter_source_class(const X
 }
 
 /* The declaration whose class instance crosses one call boundary, or NONE.
- * Ordinary parameters transfer ownership at the call itself: owned consumes
- * and borrowed borrows. A method receiver is different because XI_METHOD_ARGS
- * always borrows operand zero. For a move receiver, XI_SOURCE_MOVE before
- * the call performs the ownership transfer; the call then reads that fresh
- * owner through MOVE access. This distinction is structural, not a selector
- * exception, and keeps ordinary owned arguments on the consuming path.
- *
- * The parameter must be the declared self of a method before the receiver form
- * is admitted. A non-instance parameter, an ordinary argument posing as a
- * receiver, or a receiver with mismatched ownership therefore names no class. */
+ * A source move invalidates the original owner before the call. The callee ARC
+ * parameter contract determines whether the transferred receiver is consumed
+ * or borrowed; a borrowed callee leaves cleanup with the caller. Receiver role,
+ * declaration and exact ownership must all agree independently. */
 static inline uint32_t
 xr_semantic_class_call_parameter_source_class(const XrSemanticPlan *plan, uint32_t parameter_index,
                                               const XrSemanticOperandRecord *operand) {
@@ -467,14 +461,16 @@ xr_semantic_class_call_parameter_source_class(const XrSemanticPlan *plan, uint32
     bool method_receiver =
         xr_semantic_class_method_receiver_source_class(plan, parameter_index) == source_class;
     if (method_receiver) {
-        if (operand->role != XR_SEM_OPERAND_RECEIVER || operand->parameter != -1 ||
-            operand->ownership_action != XR_SEM_OPERAND_BORROW)
+        if (operand->role != XR_SEM_OPERAND_RECEIVER || operand->parameter != -1)
             return XR_SEMANTIC_INDEX_NONE;
         if (parameter->mode == XR_PARAM_MOVE) {
             if ((parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED) ||
-                (operand->access != XR_CALL_ARG_PLAIN && operand->access != XR_CALL_ARG_MOVE))
+                (operand->access != XR_CALL_ARG_PLAIN && operand->access != XR_CALL_ARG_MOVE) ||
+                operand->ownership_action != (parameter->ownership == XI_OWN_OWNED
+                    ? XR_SEM_OPERAND_CONSUME : XR_SEM_OPERAND_BORROW))
                 return XR_SEMANTIC_INDEX_NONE;
         } else if (parameter->ownership != XI_OWN_BORROWED ||
+                   operand->ownership_action != XR_SEM_OPERAND_BORROW ||
                    operand->access != XR_CALL_ARG_PLAIN) {
             return XR_SEMANTIC_INDEX_NONE;
         }
@@ -915,6 +911,55 @@ xr_semantic_class_construction_operation_is_exact(const XrSemanticOperationRecor
            operation->view_source_parameter == -1;
 }
 
+/* A class namespace selects a declaration, not an instance receiver. Only a
+ * unique frozen static member of that exact declaration can name a local body. */
+static inline uint32_t xr_semantic_static_method_function(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *call,
+    uint32_t *out_class, uint32_t *out_type) {
+    if (!plan || !call || call->opcode != XI_CALL_METHOD ||
+        (call->semantic_immediate & 1) != 0 || call->metadata_count != 1 ||
+        call->operand_count == 0)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t operand_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!operands || call->operand_begin >= operand_count ||
+        call->operand_count > operand_count - call->operand_begin ||
+        !metadata || call->metadata_begin >= metadata_count)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperandRecord *receiver = &operands[call->operand_begin];
+    if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW || receiver->parameter_mode != 0 ||
+        receiver->transfer_mode != 0 || receiver->access != 0 || receiver->origin != 0 ||
+        receiver->lifetime != 0 || receiver->escape != 0 ||
+        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *load = xr_semantic_class_value_definition(plan, receiver->value);
+    if (!load || load->result_type != receiver->type)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_class = xr_semantic_class_object_read_source_class(plan, load);
+    const char *selector = metadata[call->metadata_begin];
+    if (source_class == XR_SEMANTIC_INDEX_NONE || !selector || !selector[0])
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_function_count(plan); i++) {
+        const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, i);
+        if (!function || function->source_class != source_class ||
+            function->source_kind != XR_SEM_SOURCE_FUNCTION_STATIC_METHOD ||
+            !function->name || strcmp(function->name, selector) != 0)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE ||
+            function->parameter_count != call->operand_count - 1u)
+            return XR_SEMANTIC_INDEX_NONE;
+        match = i;
+    }
+    if (match != XR_SEMANTIC_INDEX_NONE) {
+        if (out_class) *out_class = source_class;
+        if (out_type) *out_type = receiver->type;
+    }
+    return match;
+}
+
 /* The declaration a construction call builds, or NONE. The call names no callee
  * function: what it constructs is proved from the instance type it returns and
  * from the class object its callee operand loads, and the two must name the
@@ -976,7 +1021,7 @@ xr_semantic_class_construction_source_class(const XrSemanticPlan *plan,
             parameter->ordinal != i + 1u || parameter->mode != XR_PARAM_READ ||
             (parameter->ownership != XI_OWN_NONE && parameter->ownership != XI_OWN_OWNED &&
              parameter->ownership != XI_OWN_BORROWED) ||
-            parameter->reserved != 0 || (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+            parameter->reserved != 0 || (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_DEFAULT_SENTINEL)) != 0 ||
             argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) i ||
             !xr_semantic_parameter_type_admits_argument(plan, parameter_type, argument_type,
                                                         parameter->mode) ||
@@ -1037,7 +1082,7 @@ xr_semantic_external_nullable_class_instance_type_is_exact(const XrSemanticTypeR
  * A matching type ID alone is insufficient: both type rows must also name the
  * same source-class identity and the return edge must transfer one whole owned
  * value rather than an alias or parameter borrow. */
-static inline uint32_t xr_semantic_source_export_owned_class_result_source_class(
+static inline uint32_t xr_semantic_source_dependency_owned_class_result_source_class(
     const XrSemanticPlan *caller, const XrSemanticPlan *dependency,
     const XrSemanticOperationRecord *operation, const XrSemanticFunctionRecord *callee) {
     const XrSemanticTypeRecord *caller_type =
@@ -1092,28 +1137,18 @@ xr_semantic_source_class_export_source_class(const XrSemanticPlan *plan,
                : XR_SEMANTIC_INDEX_NONE;
 }
 
-/* The source import behind the class-object callee. It is not a local shared
- * class read: the shared slot is only the caller's import binding, and this
- * proof must reach the root SOURCE_MODULE import row with its non-empty member. */
-static inline bool
-xr_semantic_imported_class_callee_is_exact(const XrSemanticPlan *plan,
-                                           const XrSemanticOperationRecord *operation,
-                                           const char **module_path, const char **member) {
-    if (!plan || !xr_semantic_class_construction_operation_is_exact(operation))
+/* Resolve a class namespace through its frozen shared-slot import binding. */
+static inline bool xr_semantic_imported_class_value_is_exact(
+    const XrSemanticPlan *plan, uint32_t value_id, uint32_t type_id,
+    const char **module_path, const char **member) {
+    if (!plan)
         return false;
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
-    if (!operands || operation->operand_begin >= operand_count ||
-        operation->operand_count > operand_count - operation->operand_begin)
+    if (!operands)
         return false;
-    const XrSemanticOperandRecord *callee = &operands[operation->operand_begin];
-    if (callee->role != XR_SEM_OPERAND_CALLEE || callee->parameter != -1 ||
-        callee->transfer_mode != 0 || callee->ownership_action != XR_SEM_OPERAND_BORROW ||
-        callee->parameter_mode != 0 || callee->access != 0 || callee->origin != 0 ||
-        callee->lifetime != 0 || callee->escape != 0 || callee->flags != 0)
-        return false;
-    const XrSemanticOperationRecord *load = xr_semantic_class_value_definition(plan, callee->value);
-    if (!load || load->result_type != callee->type ||
+    const XrSemanticOperationRecord *load = xr_semantic_class_value_definition(plan, value_id);
+    if (!load || load->result_type != type_id ||
         !xr_semantic_class_shared_read_shape_is_exact(load))
         return false;
     const XrSemanticOperationRecord *store = xr_semantic_class_shared_read_store(plan, load);
@@ -1166,6 +1201,30 @@ xr_semantic_imported_class_callee_is_exact(const XrSemanticPlan *plan,
     if (member)
         *member = name;
     return true;
+}
+
+/* The source import behind the class-object callee. It is not a local shared
+ * class read: the shared slot is only the caller's import binding, and this
+ * proof must reach the root SOURCE_MODULE import row with its non-empty member. */
+static inline bool
+xr_semantic_imported_class_callee_is_exact(const XrSemanticPlan *plan,
+                                           const XrSemanticOperationRecord *operation,
+                                           const char **module_path, const char **member) {
+    if (!plan || !xr_semantic_class_construction_operation_is_exact(operation))
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!operands || operation->operand_begin >= operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    const XrSemanticOperandRecord *callee = &operands[operation->operand_begin];
+    if (callee->role != XR_SEM_OPERAND_CALLEE || callee->parameter != -1 ||
+        callee->transfer_mode != 0 || callee->ownership_action != XR_SEM_OPERAND_BORROW ||
+        callee->parameter_mode != 0 || callee->access != 0 || callee->origin != 0 ||
+        callee->lifetime != 0 || callee->escape != 0 || callee->flags != 0)
+        return false;
+    return xr_semantic_imported_class_value_is_exact(
+        plan, callee->value, callee->type, module_path, member);
 }
 
 /* The exact dependency declaration frozen by imported-constructor authority.
@@ -1222,7 +1281,7 @@ static inline uint32_t xr_semantic_imported_class_construction_authority_source_
             parameter->ordinal != i + 1u || parameter->mode != XR_PARAM_READ ||
             (parameter->ownership != XI_OWN_NONE && parameter->ownership != XI_OWN_OWNED &&
              parameter->ownership != XI_OWN_BORROWED) ||
-            parameter->reserved != 0 || (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+            parameter->reserved != 0 || (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_DEFAULT_SENTINEL)) != 0 ||
             argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) i ||
             !xr_semantic_parameter_type_admits_argument(dependency, parameter_type, argument_type,
                                                         parameter->mode) ||
@@ -1412,7 +1471,7 @@ xr_semantic_class_ref_parameter_load_source_class(const XrSemanticPlan *plan,
     }
     if (!parameter || parameter->type != load->result_type || parameter->mode != XR_PARAM_REF ||
         parameter->ownership != XI_OWN_BORROWED || parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0)
+        (parameter->flags & ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_DEFAULT_SENTINEL)) != 0 || parameter->reserved != 0)
         return XR_SEMANTIC_INDEX_NONE;
     return xr_semantic_class_instance_type_source_class(
         plan, xr_semantic_plan_type(plan, parameter->type));

@@ -35,6 +35,7 @@ typedef struct XiSnapshotPtrMap {
 typedef struct XiSemanticSnapshot {
     XiFunc *root;
     XiSnapshotPtrMap types;
+    XiSnapshotPtrMap values;
     XiSnapshotPtrMap enum_layouts;
     XiSnapshotPtrMap aggregate_layouts;
     XiSnapshotPtrMap class_infos;
@@ -232,8 +233,10 @@ static XrEnumLayout *snapshot_enum_layout(XiSemanticSnapshot *snapshot,
     }
     *copy = *source;
     copy->name = snapshot_strdup(snapshot, source->name);
+    copy->nominal_owner = snapshot_strdup(snapshot, source->nominal_owner);
     copy->variants = NULL;
-    if ((source->name && !copy->name) || source->variant_count == 0)
+    if ((source->name && !copy->name) ||
+        (source->nominal_owner && !copy->nominal_owner) || source->variant_count == 0)
         return copy;
 
     copy->variants = (XrEnumVariantLayout *) snapshot_alloc(
@@ -615,6 +618,12 @@ static bool snapshot_class_data(XiSemanticSnapshot *snapshot, XiClassData *data)
 static bool snapshot_value(XiSemanticSnapshot *snapshot, XiFunc *func, XiValue *value) {
     if (!value)
         return true;
+    if (snapshot_map_get(&snapshot->values, value))
+        return true;
+    if (!snapshot_map_put(&snapshot->values, value, value)) {
+        snapshot->failed = true;
+        return false;
+    }
     bool is_error_check = value->op == XI_ERR_CHECK || value->op == XI_CLEANUP_ERR_CHECK;
     if ((is_error_check && !xi_err_check_producer(func, value)) ||
         (!is_error_check && value->error_producer)) {
@@ -634,7 +643,8 @@ static bool snapshot_value(XiSemanticSnapshot *snapshot, XiFunc *func, XiValue *
 
     if (value->op == XI_IS && value->aux) {
         value->aux = snapshot_type(snapshot, (const XrType *) value->aux);
-    } else if ((value->op == XI_AGG_NEW || value->op == XI_AGG_GET || value->op == XI_AGG_SET ||
+    } else if ((value->op == XI_AGG_NEW || value->op == XI_AGG_GET ||
+                value->op == XI_AGG_UPDATE || value->op == XI_AGG_SET ||
                 value->op == XI_SLICE_FROM_PTR || value->op == XI_SLICE_REINTERPRET ||
                 value->op == XI_BUFFER_MATERIALIZE) &&
                value->aux) {
@@ -767,6 +777,14 @@ static bool snapshot_func(XiSemanticSnapshot *snapshot, XiFunc *func) {
             }
         }
     }
+    /* Unused parameters can leave the block stream while remaining ABI roots. */
+    for (uint16_t i = 0; i < func->nparams; i++) {
+        if (!func->params || !func->params[i] ||
+            !snapshot_value(snapshot, func, func->params[i])) {
+            snapshot_note_failure(snapshot, "parameter metadata");
+            return false;
+        }
+    }
     if (!snapshot_module(snapshot, func->module)) {
         snapshot_note_failure(snapshot, "module metadata");
         return false;
@@ -810,6 +828,7 @@ bool xi_semantic_snapshot_detach_ex(XiFunc *root, char *error, size_t error_size
     if (ok)
         snapshot_mark_detached(root);
     snapshot_map_dispose(&snapshot.types);
+    snapshot_map_dispose(&snapshot.values);
     snapshot_map_dispose(&snapshot.enum_layouts);
     snapshot_map_dispose(&snapshot.aggregate_layouts);
     snapshot_map_dispose(&snapshot.class_infos);

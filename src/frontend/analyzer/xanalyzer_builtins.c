@@ -422,6 +422,13 @@ XrType *xa_builtin_get_method_return_type(XaAnalyzer *analyzer, XrType *containe
         }
     }
 
+    if (xr_type_is_builtin_named_class(container_type, "Task") &&
+        container_type->instance.type_arg_count == 1 &&
+        (sym == SYMBOL_POLL || sym == SYMBOL_AWAIT_RESULT || sym == SYMBOL_AWAIT_TIMEOUT)) {
+        XrType *args[1] = {container_type->instance.type_args[0]};
+        return builtin_prelude_enum_type(X, analyzer, "TaskResult", args, 1);
+    }
+
     // Get element type for generic substitution
     XrType *elem_type = NULL;
     if (XR_TYPE_IS_ARRAY(container_type)) {
@@ -596,8 +603,6 @@ XrType *xa_builtin_get_method_return_type(XaAnalyzer *analyzer, XrType *containe
                 XrType *args[1] = {t};
                 return builtin_prelude_enum_type(X, analyzer, "Recv", args, 1);
             }
-            case SYMBOL_IS_CLOSED:
-                return xr_type_new_bool(NULL);
             case SYMBOL_TRYSEND:
                 return builtin_prelude_enum_type(X, analyzer, "SendResult", NULL, 0);
             case SYMBOL_SENDTIMEOUT:

@@ -464,6 +464,48 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         UINT32_C(0),
         XR_PROGRAM_XI_PROJECTION_SEQUENCE_LENGTH,
     },
+    {
+        XI_BAND,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_BITWISE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE,
+    },
+    {
+        XI_BOR,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_BITWISE,
+        UINT32_C(1),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE,
+    },
+    {
+        XI_BXOR,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_BITWISE,
+        UINT32_C(2),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE,
+    },
+    {
+        XI_BNOT,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_BITWISE,
+        UINT32_C(3),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE,
+    },
+    {
+        XI_SHL,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_BITWISE,
+        UINT32_C(4),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE,
+    },
+    {
+        XI_SHR,
+        XR_PROGRAM_XI_INTEGER_RESULT_TYPE,
+        XR_CORE_OP_CORE_INTEGER_BITWISE,
+        UINT32_C(5),
+        XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE,
+    },
 };
 
 static const XrProgramXiSemanticProjectionRow

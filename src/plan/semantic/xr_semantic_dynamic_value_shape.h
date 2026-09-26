@@ -12,12 +12,15 @@
 #define XR_SEMANTIC_DYNAMIC_VALUE_SHAPE_H
 
 #include "../../ir/xi.h"
+#include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../shared/xr_obj_header.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_range_shape.h"
 #include "xr_semantic_plan.h"
+#include "xr_semantic_local_addr_shape.h"
+#include "xr_semantic_task_shape.h"
 #include "xr_semantic_type_admission_shape.h"
 #include "xr_semantic_value_aggregate_shape.h"
 #include "xr_semantic_allocation_shape.h"
@@ -453,9 +456,77 @@ static inline bool xr_semantic_reference_phi_input_is_exact(const XrSemanticPlan
                       : parameter != NULL;
 }
 
+/* An immutable copied capture borrows the closure's retained managed value. */
+static inline bool xr_semantic_copied_capture_load_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    const XrSemanticFunctionRecord *function = operation
+        ? xr_semantic_plan_function(plan, operation->function) : NULL;
+    if (!function || !operation || operation->opcode != XI_LOAD_UPVAL ||
+        !xr_semantic_dynamic_value_common_is_exact(plan, operation) ||
+        !xr_semantic_dynamic_value_allocates_nothing(operation) ||
+        !xr_semantic_dynamic_value_carrier_type_is_exact(
+            xr_semantic_plan_type(plan, operation->result_type)) ||
+        operation->operand_count != 0 || operation->metadata_count != 0 ||
+        operation->semantic_immediate < 0 ||
+        (uint64_t) operation->semantic_immediate >= function->capture_count ||
+        function->capture_begin > xr_semantic_plan_capture_count(plan) ||
+        function->capture_count > xr_semantic_plan_capture_count(plan) - function->capture_begin ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_LOAD_UPVAL) ||
+        operation->flags != xi_generated_op_default_flags(XI_LOAD_UPVAL) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_LOAD_UPVAL) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED)
+        return false;
+    const XrSemanticCaptureRecord *capture = xr_semantic_plan_capture(
+        plan, function->capture_begin + (uint32_t) operation->semantic_immediate);
+    return capture && capture->function == operation->function &&
+           capture->ordinal == operation->semantic_immediate &&
+           capture->source_function == function->parent &&
+           capture->source == XR_SEM_CAPTURE_LOCAL_VALUE && capture->kind == XR_SEM_CAPTURE_BY_COPY &&
+           capture->flags == 0 && capture->reserved[0] == 0 &&
+           capture->type == operation->result_type && capture->source_type == capture->type &&
+           capture->source_capture == XR_SEMANTIC_INDEX_NONE &&
+           xr_semantic_reference_phi_input_is_exact(
+               plan, capture->source_value, capture->source_type, capture->source_function);
+}
+
+/* Read the current local through the cleanup's frozen frame address. */
+static inline bool xr_semantic_cleanup_reference_load_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    uint32_t count = 0u;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &count);
+    if (!operation || !operands || operation->opcode != XI_PLACE_LOAD ||
+        !xr_semantic_dynamic_value_common_is_exact(plan, operation) ||
+        !xr_semantic_dynamic_value_allocates_nothing(operation) ||
+        !xr_semantic_dynamic_value_carrier_type_is_exact(
+            xr_semantic_plan_type(plan, operation->result_type)) ||
+        operation->operand_count != 1u || operation->operand_begin >= count ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_PLACE_LOAD) ||
+        operation->flags != xi_generated_op_default_flags(XI_PLACE_LOAD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_PLACE_LOAD) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED)
+        return false;
+    const XrSemanticOperandRecord *place = &operands[operation->operand_begin];
+    const XrSemanticOperationRecord *address =
+        xr_semantic_unique_value_definition(plan, place->value);
+    return xr_semantic_local_addr_is_exact(plan, address, NULL) &&
+           address->function == operation->function && address->result_type == place->type &&
+           place->type == operation->result_type && place->role == XR_SEM_OPERAND_VALUE &&
+           place->parameter == -1 && place->transfer_mode == XR_TRANSFER_SHARE &&
+           place->ownership_action == XR_SEM_OPERAND_BORROW &&
+           place->parameter_mode == XR_PARAM_READ && place->access == XR_CALL_ARG_PLAIN &&
+           place->origin == XI_PLACE_ORIGIN_NONE && place->lifetime == XI_PLACE_LIFETIME_NONE &&
+           place->escape == XI_PLACE_ESCAPE_NONE && place->flags == 0;
+}
+
 /* A PHI may preserve an exact source type while merging reference-capable
- * values. It is a generic tagged carrier only when every incoming edge carries
- * that same type in the same function and the operation has the generated,
+ * values. Each incoming edge carries the same type, or an exact null constant
+ * when the result is nullable, in the same function. The operation has the generated,
  * ownership-consuming PHI shape. This keeps the broad carrier reusable without
  * admitting a mixed or forged join. */
 static inline bool xr_semantic_reference_phi_is_exact(const XrSemanticPlan *plan,
@@ -490,14 +561,26 @@ static inline bool xr_semantic_reference_phi_is_exact(const XrSemanticPlan *plan
         return false;
     for (uint16_t i = 0; i < operation->operand_count; i++) {
         const XrSemanticOperandRecord *operand = &operands[operation->operand_begin + i];
-        if (operand->type != operation->result_type || operand->role != XR_SEM_OPERAND_VALUE ||
+        const XrSemanticTypeRecord *input_type = xr_semantic_plan_type(plan, operand->type);
+        bool exact_type = operand->type == operation->result_type;
+        if (!exact_type && (type->flags & XR_SEM_TYPE_NULLABLE) != 0 && input_type &&
+            input_type->kind == XR_KIND_NULL) {
+            const XrSemanticOperationRecord *definition =
+                xr_semantic_unique_value_definition(plan, operand->value);
+            const XrSemanticConstantRecord *constant = definition
+                ? xr_semantic_plan_constant(plan, definition->constant) : NULL;
+            exact_type = definition && definition->opcode == XI_CONST &&
+                         definition->operand_count == 0 && constant &&
+                         constant->kind == XR_SEM_CONST_NULL && constant->type == operand->type;
+        }
+        if (!exact_type || operand->role != XR_SEM_OPERAND_VALUE ||
             operand->parameter != -1 || operand->transfer_mode != XR_TRANSFER_SHARE ||
             operand->ownership_action != XR_SEM_OPERAND_CONSUME ||
             operand->parameter_mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
             operand->origin != XI_PLACE_ORIGIN_NONE ||
             operand->lifetime != XI_PLACE_LIFETIME_NONE ||
             operand->escape != XI_PLACE_ESCAPE_NONE || operand->flags != 0 ||
-            !xr_semantic_reference_phi_input_is_exact(plan, operand->value, operation->result_type,
+            !xr_semantic_reference_phi_input_is_exact(plan, operand->value, operand->type,
                                                       operation->function))
             return false;
     }
@@ -559,7 +642,8 @@ static inline bool
 xr_semantic_optional_reference_pair_is_exact(const XrSemanticPlan *plan,
                                              const XrSemanticTypeRecord *payload,
                                              const XrSemanticTypeRecord *optional) {
-    if (!xr_semantic_dynamic_value_carrier_type_is_exact(payload) ||
+    if ((!xr_semantic_dynamic_value_carrier_type_is_exact(payload) &&
+         !xr_semantic_tagged_tuple_type_is_exact(plan, payload)) ||
         !xr_semantic_type_is_nullable_widening(payload, optional) ||
         (optional->flags & (uint8_t) ~XR_SEM_TYPE_NULLABLE) != payload->flags ||
         !xr_semantic_type_same_structure(plan, payload, optional))
@@ -576,7 +660,8 @@ xr_semantic_optional_reference_inject_is_exact(const XrSemanticPlan *plan,
     const XrSemanticTypeRecord *type =
         operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
     if (!xr_semantic_dynamic_value_common_is_exact(plan, operation) ||
-        !xr_semantic_dynamic_value_carrier_type_is_exact(type) ||
+        (!xr_semantic_dynamic_value_carrier_type_is_exact(type) &&
+         !xr_semantic_tagged_tuple_type_is_exact(plan, type)) ||
         (type->flags & XR_SEM_TYPE_NULLABLE) == 0 || operation->opcode != XI_SUM_INJECT ||
         operation->semantic_immediate < 0 || operation->semantic_immediate > 1 ||
         operation->operand_count != (uint16_t) operation->semantic_immediate ||
@@ -686,16 +771,147 @@ xr_semantic_structural_allocation_is_exact(const XrSemanticPlan *plan,
     return true;
 }
 
+/* Tuple construction publishes one tagged root after consuming its lanes. */
+static inline bool xr_semantic_tuple_allocation_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!operation || operation->opcode != XI_TUPLE_NEW ||
+        !xr_semantic_tagged_tuple_type_is_exact(plan, type) ||
+        (type->flags & XR_SEM_TYPE_NULLABLE) != 0 ||
+        !xr_semantic_dynamic_value_common_is_exact(plan, operation) ||
+        operation->operand_count != type->child_count || operation->metadata_count != 0 ||
+        (operation->semantic_immediate & XI_TUPLE_AUX_ARITY_MASK) != type->child_count ||
+        ((uint64_t) operation->semantic_immediate >> XI_TUPLE_AUX_STORAGE_SHIFT) >
+            XR_OBJ_STORAGE_TRANSFER ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_TUPLE_NEW) ||
+        operation->flags != xi_generated_op_default_flags(XI_TUPLE_NEW) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_TUPLE_NEW) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_complete != 1 ||
+        !xr_semantic_allocation_identity_is_canonical(operation))
+        return false;
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    for (uint16_t i = 0; i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *operand = &operands[operation->operand_begin + i];
+        if (operand->type != children[type->child_begin + i] ||
+            operand->role != XR_SEM_OPERAND_VALUE || operand->parameter != -1 ||
+            operand->flags != 0 || operand->ownership_action != XR_SEM_OPERAND_CONSUME)
+            return false;
+    }
+    return true;
+}
+
+static inline bool xr_semantic_atomic_type_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticTypeRecord *type) {
+    uint32_t count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &count);
+    if (!type || !children || type->child_count != 1 || type->child_begin >= count)
+        return false;
+    const XrSemanticTypeRecord *element = xr_semantic_plan_type(plan, children[type->child_begin]);
+    return element && element->flags == 0 && element->child_count == 0 &&
+        ((element->kind == XR_KIND_INT && element->scalar_rep == XR_NATIVE_I64) ||
+         (element->kind == XR_KIND_FLOAT && element->scalar_rep == XR_NATIVE_F64) ||
+         (element->kind == XR_KIND_BOOL && element->scalar_rep == XR_SCALAR_REP_NONE)) &&
+        xr_semantic_runtime_constructor_type_is_exact(type, XR_KIND_INSTANCE, XR_TID_NULL,
+                                                      "Atomic", element->canonical_key);
+}
+
+/* Compare-exchange returns an owned pair with the observed scalar and success. */
+static inline bool xr_semantic_atomic_compare_result_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    const XrSemanticTypeRecord *type = operation
+        ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!operation || operation->opcode != XI_ATOMIC_RMW ||
+        operation->evidence[1] != XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE ||
+        !xr_semantic_dynamic_value_common_is_exact(plan, operation) ||
+        !xr_semantic_tagged_tuple_type_is_exact(plan, type) ||
+        (type->flags & XR_SEM_TYPE_NULLABLE) || type->child_count != 2 ||
+        (operation->operand_count != 3 && operation->operand_count != 4) ||
+        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->semantic_immediate < 0 || operation->semantic_immediate > 4 ||
+        operation->effects != xi_generated_op_effects(XI_ATOMIC_RMW) ||
+        operation->flags != xi_generated_op_default_flags(XI_ATOMIC_RMW) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_ATOMIC_RMW) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_complete != 1)
+        return false;
+    uint32_t operand_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (!operands || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    const XrSemanticOperandRecord *args = operands + operation->operand_begin;
+    const XrSemanticTypeRecord *receiver = xr_semantic_plan_type(plan, args[0].type);
+    const XrSemanticTypeRecord *element = xr_semantic_plan_type(plan, children[type->child_begin]);
+    const XrSemanticTypeRecord *success = xr_semantic_plan_type(plan, children[type->child_begin + 1]);
+    if (!receiver || !element || !success || element->flags != 0 || element->child_count != 0 ||
+        !((element->kind == XR_KIND_INT && element->scalar_rep == XR_NATIVE_I64) ||
+          (element->kind == XR_KIND_FLOAT && element->scalar_rep == XR_NATIVE_F64) ||
+          (element->kind == XR_KIND_BOOL && element->scalar_rep == XR_SCALAR_REP_NONE)) ||
+        success->kind != XR_KIND_BOOL || success->flags != 0 || success->child_count != 0 ||
+        success->scalar_rep != XR_SCALAR_REP_NONE ||
+        !xr_semantic_runtime_constructor_type_is_exact(receiver, XR_KIND_INSTANCE, XR_TID_NULL,
+                                                       "Atomic", element->canonical_key) ||
+        receiver->child_begin >= child_count ||
+        children[receiver->child_begin] != children[type->child_begin] ||
+        args[1].type != children[type->child_begin] || args[2].type != args[1].type)
+        return false;
+    for (uint16_t i = 0; i < operation->operand_count; i++)
+        if (args[i].role != XR_SEM_OPERAND_VALUE || args[i].parameter != -1 ||
+            args[i].flags != 0 || args[i].ownership_action != XR_SEM_OPERAND_BORROW)
+            return false;
+    if (operation->operand_count == 4) {
+        const XrSemanticTypeRecord *ordering = xr_semantic_plan_type(plan, args[3].type);
+        const XrSemanticOperationRecord *definition = NULL;
+        if (!ordering || ordering->kind != XR_KIND_INT || ordering->flags != 0)
+            return false;
+        for (uint32_t i = 0; i < xr_semantic_plan_operation_count(plan); i++) {
+            const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+            if (candidate && candidate->result_value == args[3].value) {
+                if (definition) return false;
+                definition = candidate;
+            }
+        }
+        if (!definition || definition->function != operation->function ||
+            definition->opcode != XI_CONST || definition->operand_count != 0 ||
+            definition->semantic_immediate < 0 || definition->semantic_immediate > 4)
+            return false;
+    }
+    return true;
+}
+
 static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan,
                                                       const XrSemanticOperationRecord *operation) {
     const XrSemanticTypeRecord *type =
         operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (xr_semantic_yieldable_enum_result_is_exact(plan, operation))
+        return true;
+    if (operation && operation->opcode == XI_ATOMIC_RMW)
+        return xr_semantic_atomic_compare_result_is_exact(plan, operation);
+    if (operation && operation->opcode == XI_TUPLE_NEW)
+        return xr_semantic_tuple_allocation_is_exact(plan, operation);
     if (operation && operation->opcode == XI_OBJECT_NEW)
         return xr_semantic_structural_allocation_is_exact(plan, operation);
     if (operation && operation->opcode == XI_VARIANT_PROJECT)
         return xr_semantic_optional_reference_project_is_exact(plan, operation);
     if (operation && operation->opcode == XI_SUM_INJECT)
         return xr_semantic_optional_reference_inject_is_exact(plan, operation);
+    if (operation && operation->opcode == XI_LOAD_UPVAL)
+        return xr_semantic_copied_capture_load_is_exact(plan, operation);
+    if (operation && operation->opcode == XI_PLACE_LOAD)
+        return xr_semantic_cleanup_reference_load_is_exact(plan, operation);
     if (operation && operation->opcode == XI_PHI)
         return xr_semantic_reference_phi_is_exact(plan, operation);
     if (operation && operation->opcode == XI_AS &&
@@ -706,6 +922,11 @@ static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan
     if (!xr_semantic_dynamic_value_producer_is_exact(operation) ||
         !xr_semantic_dynamic_value_common_is_exact(plan, operation))
         return false;
+    /* A module slot borrows the same tagged tuple root as construction and
+     * direct-call results; reading it must not invent inline aggregate storage. */
+    if (operation->opcode == XI_GET_SHARED && operation->semantic_immediate >= 0 &&
+        xr_semantic_tagged_tuple_type_is_exact(plan, type))
+        return true;
     /* A join, slot read, await or coroutine result is tagged because of the
      * carrier it propagates. The other producers manufacture the compiler's
      * untyped reference value and are held to that narrower type. */

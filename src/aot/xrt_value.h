@@ -1097,8 +1097,8 @@ static inline int64_t xrt_compare_tagged_equal(XrCompareKind kind, XrValue a, Xr
     return xrt_compare_ptr(kind, a.ptr, b.ptr);
 }
 
-static inline int64_t xrt_eq(XrValue a, XrValue b) {
-    return xrt_compare_tagged_equal(XR_COMPARE_EQ, a, b);
+static inline bool xrt_eq(XrValue a, XrValue b) {
+    return xrt_compare_tagged_equal(XR_COMPARE_EQ, a, b) != 0;
 }
 
 static inline int64_t xrt_key_eq(XrValue a, XrValue b) {

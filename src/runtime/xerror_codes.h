@@ -186,9 +186,10 @@
  * guard fires before scheduler or task state is created. */
 #define XR_ERR_DEFER_ASYNC 444
 
-/* ---- Runtime argument errors (E04xx, 450-451) ---- */
+/* ---- Runtime argument errors (E04xx, 450-452) ---- */
 #define XR_ERR_WRONG_ARG_COUNT 450
 #define XR_ERR_INVALID_ARG_TYPE 451
+#define XR_ERR_INVALID_ARG_VALUE 452
 
 /* ---- Runtime coroutine errors (E04xx, 460-462) ---- */
 #define XR_ERR_CORO_DEAD 460

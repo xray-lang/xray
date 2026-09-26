@@ -8,6 +8,9 @@
  * xr_program_from_xi.c - Verified Xi to canonical XrProgram producer
  */
 
+#include "../frontend/analyzer/xbuiltin_receiver_registry.h"
+#include "ir/xi_string_slice.h"
+#include "ir/xi_array_default.h"
 #include "xr_program_from_xi.h"
 #include "../runtime/core/xr_text_kernel.h"
 #include "xr_program_internal.h"
@@ -15,8 +18,9 @@
 #include "../ir/xi_op_name.h"
 
 #include "../base/xmalloc.h"
+#include "../base/xbuiltin_enum.h"
 #include "../base/xglobal_indices.h"
-#include "../analysis/xglobal_summary.h"
+#include "../analysis/xglobal_producer.h"
 #include "../core/xr_core_spec_gen.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -268,6 +272,8 @@ typedef struct XrXiTypeStorage {
     bool nominal_contract_deferred;
     XrXiClassTypeState class_state;
     const XiClassData *class_schema;
+    const XrClassInfo *class_parent_info;
+    bool class_fields_flattened;
 } XrXiTypeStorage;
 
 typedef struct XrXiInterfaceStorage {
@@ -777,6 +783,11 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
             return true;
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE:
+            if (xr_type_is_builtin_named_class(type, "StringBuilder") &&
+                type->instance.type_arg_count == 0) {
+                *type_id = XR_CORE_TYPE_STRING_BUILDER;
+                return true;
+            }
             if (type->instance.class_name && strcmp(type->instance.class_name, "PanicInfo") == 0) {
                 *type_id = XR_CORE_TYPE_PANIC_INFO;
                 return true;
@@ -865,6 +876,19 @@ static bool nominal_contract(const XrXiBuildContext *context, const XrType *type
         found = decl;
     }
     if (!found)
+        return false;
+    const XgModuleSummary *owner = NULL;
+    for (uint32_t index = 0u; index < evidence->nmodules; ++index) {
+        const XgModuleSummary *candidate = &evidence->modules[index];
+        if (candidate->module_id != found->module_id)
+            continue;
+        if (owner || !xg_module_summary_identity_complete(candidate))
+            return false;
+        owner = candidate;
+    }
+    if (!owner || !found->source_node_id ||
+        xg_nominal_decl_key(owner->canonical_hash, found->source_node_id, found->kind,
+                            found->type_key) != found->nominal_key)
         return false;
     if (decl_kind_out)
         *decl_kind_out = decl_kind;
@@ -987,6 +1011,89 @@ static bool variant_schema_matches_type(const XiEnumData *schema, const XrType *
     return true;
 }
 
+static bool variant_schemas_equal(const XiEnumData *left, const XiEnumData *right) {
+    if (left == right)
+        return true;
+    if (!left || !right || !left->name || !right->name ||
+        strcmp(left->name, right->name) || left->layout_id != right->layout_id ||
+        left->member_count != right->member_count || left->is_adt != right->is_adt ||
+        left->max_payload != right->max_payload || left->type_param_count != right->type_param_count)
+        return false;
+    for (uint32_t i = 0u; i < left->member_count; ++i) {
+        const XiEnumMemberData *a = &left->members[i], *b = &right->members[i];
+        if (a->ordinal != b->ordinal || strcmp(a->name, b->name) || a->payload_count != b->payload_count)
+            return false;
+        for (int field = 0; field < a->payload_count; ++field)
+            if (strcmp(a->payload_names[field], b->payload_names[field]) ||
+                !xr_type_equals(a->payload_types[field], b->payload_types[field]))
+                return false;
+    }
+    for (uint8_t i = 0u; i < left->type_param_count; ++i)
+        if (!left->type_param_names || !right->type_param_names ||
+            !left->type_param_names[i] || !right->type_param_names[i] ||
+            strcmp(left->type_param_names[i], right->type_param_names[i]))
+            return false;
+    return true;
+}
+
+/* A prelude unit enum is named by its sealed builtin registry slot. The slot
+ * denotes a type only when the registry row, the type's exact zero-payload
+ * layout, and its Xglobal declaration in the prelude declaration module all
+ * agree. Neither the slot number nor a display name selects a declaration on
+ * its own: a source enum with the same name has a different declaration owner. */
+static const XrBuiltinEnumRow *builtin_unit_enum_declaration(const XrXiBuildContext *context,
+                                                             int64_t builtin_index,
+                                                             const XrType *type) {
+    const XrBuiltinEnumRow *row = builtin_index >= 0 && builtin_index <= INT32_MAX
+                                      ? xr_builtin_enum_registry_row((int) builtin_index)
+                                      : NULL;
+    if (!xr_builtin_enum_row_is_unit(row) || !context || !context->source ||
+        !context->source->global_evidence || !type || type->kind != XR_KIND_ENUM ||
+        type->is_nullable || !type->enum_type.layout)
+        return NULL;
+    const XrEnumLayout *layout = type->enum_type.layout;
+    if (!layout->layout_id || !layout->is_zero_payload ||
+        layout->variant_count != row->member_count)
+        return NULL;
+    for (uint32_t variant = 0u; variant < row->member_count; ++variant) {
+        const XrEnumVariantLayout *row_layout = xr_enum_layout_variant(layout, variant);
+        if (!row_layout || row_layout->tag != variant || row_layout->payload_count != 0u)
+            return NULL;
+    }
+    uint8_t decl_kind = 0u;
+    uint64_t nominal_key = 0u;
+    const XrClassInfo *nominal = type->enum_type.nominal_ref;
+    if (!nominal || !nominal_contract(context, type, &decl_kind, NULL, &nominal_key) ||
+        decl_kind != XG_DECL_ENUM)
+        return NULL;
+    const XgGlobalEvidence *evidence = context->source->global_evidence;
+    const XgDeclSummary *decl = find_xg_decl_by_id(evidence, nominal->xg_decl_id);
+    const XgModuleSummary *owner = decl ? find_xg_module_by_id(evidence, decl->module_id) : NULL;
+    uint64_t prelude_module = xg_prelude_enum_module_canonical_hash();
+    if (!decl || !owner || !prelude_module || owner->kind != XR_MOD_STDLIB ||
+        owner->canonical_hash != prelude_module || decl->nominal_key != nominal_key ||
+        decl->name_id != xg_name_id(row->enum_name) || decl->signature_key != row->member_count)
+        return NULL;
+    return row;
+}
+
+/* The registry row of the prelude unit enum a type declares, when the type is
+ * exactly one registry declaration. */
+static const XrBuiltinEnumRow *builtin_unit_enum_row_for_type(const XrXiBuildContext *context,
+                                                              const XrType *type) {
+    size_t count = 0u;
+    const XrBuiltinEnumRow *rows = xr_builtin_enum_registry(&count);
+    const XrBuiltinEnumRow *found = NULL;
+    for (size_t index = 0u; rows && index < count; ++index) {
+        if (!builtin_unit_enum_declaration(context, rows[index].builtin_index, type))
+            continue;
+        if (found)
+            return NULL;
+        found = &rows[index];
+    }
+    return found;
+}
+
 static const XiEnumData *find_variant_schema(const XrXiBuildContext *context, const XrType *type) {
     const XiEnumData *found = NULL;
     for (uint32_t module_index = 0; context && module_index < context->source->module_count;
@@ -997,7 +1104,7 @@ static const XiEnumData *find_variant_schema(const XrXiBuildContext *context, co
             const XiEnumData *candidate = module->slot_enums[slot];
             if (!variant_schema_matches_type(candidate, type))
                 continue;
-            if (found && found != candidate)
+            if (found && !variant_schemas_equal(found, candidate))
                 return NULL;
             found = candidate;
         }
@@ -1016,7 +1123,7 @@ static const XiEnumData *find_variant_schema(const XrXiBuildContext *context, co
                             : NULL;
                     if (!variant_schema_matches_type(candidate, type))
                         continue;
-                    if (found && found != candidate)
+                    if (found && !variant_schemas_equal(found, candidate))
                         return NULL;
                     found = candidate;
                 }
@@ -1412,6 +1519,26 @@ static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *
                                        uint16_t *type_id, const XrType *const *stack,
                                        uint32_t depth) {
     const XiEnumData *schema = find_variant_schema(context, type);
+    /* A prelude unit enum reached only through its registry slot carries no
+     * Xi schema; its registry row states the same zero-payload member table. */
+    XiEnumData registry_schema;
+    XiEnumMemberData registry_members[XR_BUILTIN_ENUM_MAX_MEMBERS];
+    const XrBuiltinEnumRow *registry_row =
+        schema ? NULL : builtin_unit_enum_row_for_type(context, type);
+    if (registry_row) {
+        memset(&registry_schema, 0, sizeof(registry_schema));
+        memset(registry_members, 0, sizeof(registry_members));
+        for (uint32_t member = 0u; member < registry_row->member_count; ++member) {
+            registry_members[member].name = registry_row->members[member].name;
+            registry_members[member].ordinal = member;
+        }
+        registry_schema.name = registry_row->enum_name;
+        registry_schema.declaration_type = (XrType *) type;
+        registry_schema.member_count = registry_row->member_count;
+        registry_schema.layout_id = type->enum_type.layout->layout_id;
+        registry_schema.members = registry_members;
+        schema = &registry_schema;
+    }
     uint8_t decl_kind = 0u;
     XrCoreIrNominalKind nominal_kind = XR_CORE_IR_NOMINAL_NONE;
     uint64_t nominal_key = 0u;
@@ -1624,6 +1751,11 @@ static bool map_aggregate_type_recursive(XrXiBuildContext *context, const XrType
     const XrClassInfo *nominal_info = nominal_info_for_type(type);
     if (!nominal_info)
         return false;
+    const XgClassSummary *class_row = find_xg_class_by_id(
+        context->source->global_evidence, nominal_info->xg_class_id);
+    if (!class_row || class_row->parent_class_id !=
+            (nominal_info->base ? nominal_info->base->xg_class_id : XG_NO_ID))
+        return false;
 
     uint32_t field_count = schema->instance_field_count;
     if (nominal_kind == XR_CORE_IR_NOMINAL_CLASS) {
@@ -1639,6 +1771,9 @@ static bool map_aggregate_type_recursive(XrXiBuildContext *context, const XrType
                   strcmp(field_name, schema->struct_layout->field_names[field]) != 0)))
                 return false;
         }
+        field_count += schema->inherited_field_count;
+        if (field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION)
+            return false;
         uint8_t material[1u + 4u + 8u];
         material[0] = UINT8_C(0x61);
         put_u32_be(material + 1u, nominal_info->xg_decl_id);
@@ -1685,6 +1820,7 @@ static bool map_aggregate_type_recursive(XrXiBuildContext *context, const XrType
         storage->nominal_contract_deferred = true;
         storage->class_state = XR_XI_CLASS_TYPE_PENDING;
         storage->class_schema = schema;
+        storage->class_parent_info = nominal_info->base;
         *type_id = storage->input.local_id;
         ++context->type_count;
         return true;
@@ -1860,7 +1996,7 @@ static bool map_type_for_mode(XrXiBuildContext *context, const XrType *type, XrP
     return map_existential_type(context, type, use_kind, type_id);
 }
 
-static bool map_array_type_recursive(XrXiBuildContext *context, const XrType *type,
+static bool map_container_type_recursive(XrXiBuildContext *context, const XrType *type,
                                       uint16_t *type_id, const XrType *const *stack, uint32_t depth) {
     if (!type->container.element_type || depth >= 64u || type_stack_contains(stack, depth, type))
         return false;
@@ -1872,7 +2008,8 @@ static bool map_array_type_recursive(XrXiBuildContext *context, const XrType *ty
     if (!map_type_recursive(context, type->container.element_type, &element, nested, depth + 1u) ||
         element == XR_CORE_TYPE_VOID)
         return false;
-    uint8_t material[2u + XR_CORE_IR_KEY_SIZE] = {0xa7};
+    uint8_t material[2u + XR_CORE_IR_KEY_SIZE] = {0};
+    material[0] = type->kind == XR_KIND_CHANNEL ? 0xabu : 0xa7u;
     put_dynamic_type_reference(context, material + 1u, element);
     XrCoreIrKey key = xr_core_ir_key(material, sizeof(material));
     for (uint32_t i = 0u; i < context->type_count; ++i) {
@@ -1885,11 +2022,16 @@ static bool map_array_type_recursive(XrXiBuildContext *context, const XrType *ty
     if (!storage)
         return false;
     storage->input.key = key;
-    storage->input.kind = XR_CORE_IR_TYPE_ARRAY;
+    bool channel = type->kind == XR_KIND_CHANNEL;
+    storage->input.kind = channel ? XR_CORE_IR_TYPE_CHANNEL : XR_CORE_IR_TYPE_ARRAY;
     storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
-    storage->input.copy_contract = logical_copy_contract_for_type(context, element) == XR_CORE_IR_COPY_FORBIDDEN
-                                      ? XR_CORE_IR_COPY_FORBIDDEN : XR_CORE_IR_COPY_EXPLICIT;
-    storage->input.array_element_type = element;
+    storage->input.copy_contract = !channel &&
+        logical_copy_contract_for_type(context, element) == XR_CORE_IR_COPY_FORBIDDEN
+            ? XR_CORE_IR_COPY_FORBIDDEN : XR_CORE_IR_COPY_EXPLICIT;
+    if (channel)
+        storage->input.channel_element_type = element;
+    else
+        storage->input.array_element_type = element;
     *type_id = storage->input.local_id;
     ++context->type_count;
     return true;
@@ -2060,8 +2202,9 @@ static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, ui
         return map_atomic_type(context, type, type_id);
     if (context && type && type_id && type->kind == XR_KIND_STRUCT_OBJECT)
         return map_record_type_recursive(context, type, type_id, stack, depth);
-    if (context && type && type_id && type->kind == XR_KIND_ARRAY)
-        return map_array_type_recursive(context, type, type_id, stack, depth);
+    if (context && type && type_id &&
+        (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_CHANNEL))
+        return map_container_type_recursive(context, type, type_id, stack, depth);
     if (context && type && type_id && type->kind == XR_KIND_FUNCTION)
         return map_callable_type_recursive(context, type, type_id, stack, depth);
     if (context && type && type_id && type->kind == XR_KIND_INTERFACE)
@@ -2151,6 +2294,58 @@ static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, ui
     return true;
 }
 
+static bool flatten_class_parent_fields(XrXiBuildContext *context) {
+    uint32_t *path = NULL;
+    for (uint32_t index = 0u; index < context->type_count; ++index) {
+        XrXiTypeStorage *storage = &context->type_storage[index];
+        if (storage->input.kind != XR_CORE_IR_TYPE_CLASS_REFERENCE || storage->class_fields_flattened)
+            continue;
+        if (storage->input.parent_type_id == XR_CORE_TYPE_VOID) {
+            if (storage->class_schema->inherited_field_count != 0u)
+                goto fail;
+            storage->class_fields_flattened = true;
+            continue;
+        }
+        if (!path) {
+            path = type_mapping_calloc(context, context->type_count, sizeof(*path));
+            if (!path)
+                return false;
+        }
+        uint32_t count = 0u;
+        uint32_t cursor = index;
+        while (cursor != UINT32_MAX && !context->type_storage[cursor].class_fields_flattened) {
+            storage = &context->type_storage[cursor];
+            if (count == context->type_count || storage->input.kind != XR_CORE_IR_TYPE_CLASS_REFERENCE)
+                goto fail;
+            path[count++] = cursor;
+            uint16_t parent = storage->input.parent_type_id;
+            if (parent != XR_CORE_TYPE_VOID &&
+                (parent < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ||
+                 (uint32_t) parent - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE >= context->type_count))
+                goto fail;
+            cursor = parent == XR_CORE_TYPE_VOID ? UINT32_MAX
+                                                : (uint32_t) parent - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+        }
+        while (count) {
+            storage = &context->type_storage[path[--count]];
+            uint32_t inherited = storage->class_schema->inherited_field_count;
+            uint16_t parent_id = storage->input.parent_type_id;
+            const XrXiTypeStorage *parent = parent_id == XR_CORE_TYPE_VOID ? NULL
+                : &context->type_storage[(uint32_t) parent_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE];
+            if (inherited != (parent ? parent->input.field_count : 0u))
+                goto fail;
+            if (inherited)
+                memcpy(storage->field_types, parent->field_types, inherited * sizeof(uint16_t));
+            storage->class_fields_flattened = true;
+        }
+    }
+    xr_free(path);
+    return true;
+fail:
+    xr_free(path);
+    return false;
+}
+
 static bool resolve_pending_class_fields(XrXiBuildContext *context) {
     if (!context)
         return false;
@@ -2168,11 +2363,21 @@ static bool resolve_pending_class_fields(XrXiBuildContext *context) {
 
         const XiClassData *schema = storage->class_schema;
         uint16_t *field_types = storage->field_types;
-        uint32_t field_count = storage->input.field_count;
+        uint32_t field_count = schema->instance_field_count;
         storage->class_state = XR_XI_CLASS_TYPE_RESOLVING;
+        const XrClassInfo *parent_info = storage->class_parent_info;
+        uint16_t parent_type_id = XR_CORE_TYPE_VOID;
+        if (parent_info) {
+            XrType parent_type = {0};
+            parent_type.kind = XR_KIND_INSTANCE;
+            parent_type.instance.class_ref = (XrClassInfo *) parent_info;
+            parent_type.instance.class_name = parent_info->name;
+            if (!map_type_recursive(context, &parent_type, &parent_type_id, NULL, 0u))
+                return false;
+        }
         for (uint32_t field = 0u; field < field_count; ++field) {
             if (!map_type_recursive(context, schema->instance_field_types[field],
-                                    &field_types[field], NULL, 0u))
+                                    &field_types[schema->inherited_field_count + field], NULL, 0u))
                 return false;
         }
 
@@ -2181,9 +2386,10 @@ static bool resolve_pending_class_fields(XrXiBuildContext *context) {
             storage->class_schema != schema || storage->field_types != field_types)
             return false;
         storage->class_state = XR_XI_CLASS_TYPE_RESOLVED;
+        storage->input.parent_type_id = parent_type_id;
         ++context->class_resolution_cursor;
     }
-    return true;
+    return flatten_class_parent_fields(context);
 }
 
 static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *type_id) {
@@ -2198,6 +2404,8 @@ static const XiFunc *resolved_protocol_method_callee(const XrXiBuildContext *con
 static const XrStdlibDefEntry *resolved_provider_native_call(const XrXiBuildContext *context,
                                                              const XiFunc *caller,
                                                              const XiValue *call);
+static bool resolved_byte_compare_call(const XrXiBuildContext *context,
+                                        const XiFunc *caller, const XiValue *call);
 static const XrStdlibDefEntry *resolved_suspension_native_call(const XrXiBuildContext *context,
                                                                const XiFunc *caller,
                                                                const XiValue *call);
@@ -2309,7 +2517,8 @@ static XrProgramBuildStatus validate_function_panic_routes(XrXiBuildContext *con
                     unrouted_panic = value;
             }
             if (exact_integer_divmod(context, function, value) ||
-                exact_array_index(context, function, value, NULL)) {
+                exact_array_index(context, function, value, NULL) || xi_value_is_string_slice(value) ||
+                xi_value_is_scalar_array_default(value)) {
                 if (!unrouted_panic && !find_panic_edge(context, function, value))
                     unrouted_panic = value;
             }
@@ -2538,6 +2747,25 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
                                                     const XiFunc *caller, const XiValue *load,
                                                     uint32_t *variant_ordinal);
 
+/* Channel operations carry an exact opcode and element type from lowering. */
+static bool exact_channel_state_query(const XiValue *value) {
+    uint16_t result = XR_CORE_TYPE_VOID;
+    return value && value->op == XI_CHAN_IS_CLOSED && value->nargs == 1u &&
+           value->args && value->args[0] && value->args[0]->type &&
+           !value->args[0]->type->is_nullable && value->args[0]->type->kind == XR_KIND_CHANNEL &&
+           value->args[0]->type->container.element_type &&
+           map_builtin_type(value->type, &result) && result == XR_CORE_TYPE_BOOL;
+}
+
+static bool resolved_channel_construction(const XiValue *value) {
+    uint16_t capacity = XR_CORE_TYPE_VOID;
+    return value && value->op == XI_CHAN_NEW && value->nargs == 1u &&
+           value->args && value->args[0] && value->type &&
+           !value->type->is_nullable && value->type->kind == XR_KIND_CHANNEL &&
+           value->type->container.element_type &&
+           map_builtin_type(value->args[0]->type, &capacity) && capacity == XR_CORE_TYPE_I64;
+}
+
 /* A sealed prelude constructor is identified by its builtin slot, never by
  * the spelling of a user callable. The scalar and result element must agree. */
 static bool resolved_atomic_construction(const XiValue *call) {
@@ -2555,6 +2783,71 @@ static bool resolved_atomic_construction(const XiValue *call) {
            map_builtin_type(call->type->instance.type_args[0], &element) &&
            map_builtin_type(call->args[1]->type, &argument) && element == argument &&
            (element == XR_CORE_TYPE_I64 || element == XR_CORE_TYPE_BOOL || element == XR_CORE_TYPE_F64);
+}
+
+/* Builtin type identity seals construction; method symbols select the exact
+ * operation. A user class with the same display name cannot gain authority. */
+static uint16_t exact_string_builder_operation(const XiValue *value) {
+    uint16_t result = XR_CORE_TYPE_VOID;
+    if (!value || !map_builtin_type(value->type, &result))
+        return 0u;
+    if (value->op == XI_CALL_BUILTIN && value->nargs == 0u &&
+        result == XR_CORE_TYPE_STRING_BUILDER && value->aux_kind == XI_AUX_KIND_NONE &&
+        value->aux_int == 0 && value->aux &&
+        strcmp((const char *) value->aux, "StringBuilder") == 0)
+        return XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT;
+    uint16_t receiver = XR_CORE_TYPE_VOID;
+    if (value->op != XI_CALL_METHOD || value->nargs == 0u || !value->args ||
+        !value->args[0] || !map_builtin_type(value->args[0]->type, &receiver) ||
+        receiver != XR_CORE_TYPE_STRING_BUILDER)
+        return 0u;
+    if (value->nargs == 2u && value->args[1] &&
+        value->aux_int == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
+        value->xa_intrinsic_id == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+        value->result_alias_operand == 0 && result == XR_CORE_TYPE_STRING_BUILDER) {
+        uint16_t argument = XR_CORE_TYPE_VOID;
+        if (map_builtin_type(value->args[1]->type, &argument) &&
+            (argument == XR_CORE_TYPE_STRING || argument == XR_CORE_TYPE_RUNE ||
+             argument == XR_CORE_TYPE_I64 || argument == XR_CORE_TYPE_F64 ||
+             argument == XR_CORE_TYPE_BOOL || argument == XR_CORE_TYPE_VOID))
+            return XR_CORE_OP_CORE_STRING_BUILDER_APPEND;
+    }
+    if (value->nargs == 1u && value->aux_int == ((int64_t) XI_METHOD_SYMBOL_CLEAR << 1) &&
+        result == XR_CORE_TYPE_STRING_BUILDER && value->result_alias_operand == 0)
+        return XR_CORE_OP_CORE_STRING_BUILDER_CLEAR;
+    if (value->nargs == 1u && value->aux_int == ((int64_t) XI_METHOD_SYMBOL_TOSTRING << 1) &&
+        result == XR_CORE_TYPE_STRING)
+        return XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT;
+    return 0u;
+}
+
+static bool exact_array_append(const XiValue *value) {
+    uint16_t result = XR_CORE_TYPE_VOID;
+    const XaBuiltinReceiverMethodSpec *spec =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH);
+    if (!spec || spec->receiver != XA_BUILTIN_RECEIVER_ARRAY ||
+        spec->receiver_mode != XR_PARAM_REF || spec->result != XA_BUILTIN_TYPE_UNIT ||
+        spec->params[0] != XA_BUILTIN_TYPE_RECEIVER_ELEM ||
+        spec->param_count != 1 || spec->min_params != 1 || spec->is_variadic)
+        return false;
+    if (!value || value->op != XI_CALL_METHOD || value->nargs != 2u || !value->args ||
+        !value->args[0] || !value->args[1] ||
+        value->aux_int != ((int64_t) XI_METHOD_SYMBOL_PUSH << 1) ||
+        !value->aux || strcmp((const char *) value->aux, "push") != 0 ||
+        !map_builtin_type(value->type, &result) || result != XR_CORE_TYPE_VOID ||
+        (value->call_plan && (!value->call_plan->verified || !value->call_plan->has_receiver ||
+                             value->call_plan->receiver.param_mode != spec->receiver_mode)))
+        return false;
+    const XrType *receiver = value->args[0]->type;
+    return receiver && receiver->kind == XR_KIND_ARRAY && !receiver->is_nullable &&
+           !receiver->is_const && receiver->container.element_type &&
+           xr_type_equals(receiver->container.element_type, value->args[1]->type);
+}
+
+static bool string_builder_mutation(const XiValue *value) {
+    uint16_t operation = exact_string_builder_operation(value);
+    return operation == XR_CORE_OP_CORE_STRING_BUILDER_APPEND ||
+           operation == XR_CORE_OP_CORE_STRING_BUILDER_CLEAR;
 }
 
 /* The optimized intrinsic carries folded Ordering members as scalar constants.
@@ -2627,6 +2920,8 @@ static uint16_t exact_atomic_scalar_operation(const XiValue *value) {
 static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *context,
                                                        const XiFunc *function,
                                                        const XiValue *source, uint32_t *slot_out);
+static bool resolved_builtin_unit_enum_case(const XrXiBuildContext *context,
+                                            const XiValue *value, uint32_t *variant_ordinal);
 
 static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *context,
                                                    const XiFunc *function, const XiValue *value,
@@ -2662,12 +2957,19 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                                                                        consumer, NULL)) {
                     elided = true;
                     found = true;
+                } else if (argument < 2u &&
+                           resolved_builtin_unit_enum_case(context, consumer, NULL)) {
+                    /* The registry slot and the ordinal constant are both
+                     * folded into the variant immediate. */
+                    elided = true;
+                    found = true;
                 } else if (argument == 0u &&
                     (consumer->op == XI_VARIANT_CONSTRUCT ||
                      resolved_atomic_construction(consumer) ||
                      (((consumer->op == XI_CALL || consumer->op == XI_CALL_METHOD ||
                         consumer->op == XI_CALL_METHOD_DIRECT) &&
                        (sealed_token ||
+                        resolved_byte_compare_call(context, function, consumer) ||
                         resolved_provider_native_call(context, function, consumer) ||
                         resolved_suspension_native_call(context, function, consumer))) ||
                       resolved_canonical_class_construction(context, function, consumer, NULL,
@@ -2765,6 +3067,37 @@ static const XrStdlibDefEntry *resolved_suspension_native_call(const XrXiBuildCo
                                                            reference->member_name, row->arg_count);
 }
 
+/* A grounded native declaration and its exact callsite evidence jointly
+ * authorize the pure operation. Ordinary same-name functions do not qualify. */
+static bool resolved_byte_compare_call(const XrXiBuildContext *context,
+                                        const XiFunc *caller, const XiValue *call) {
+    if (!context || !caller || !call || call->op != XI_CALL || call->nargs != 3u || !call->args)
+        return false;
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    const XiImportRef *reference = xi_value_import_ref(caller, call->args[0]);
+    if (!row || row->kind != XG_CALL_NATIVE || !(row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) ||
+        (row->flags & (XG_CALL_MAY_ERROR | XG_CALL_MAY_PANIC)) ||
+        !xi_import_ref_is_grounded_native(reference) || !reference->module_path ||
+        !reference->member_name || strcmp(reference->module_path, "crypto") != 0 ||
+        strcmp(reference->member_name, "__timingSafeEqualBytes") != 0 || row->arg_count != 2u ||
+        row->method_id != (XgMethodId)xg_name_id(reference->member_name)) return false;
+    const XrStdlibDefEntry *entry = xr_stdlib_metadata_exact_native_direct_call(
+        reference->module_path, reference->member_name, 2u);
+    if (!entry || entry->runtime_capabilities || entry->provider_contract_key[0] ||
+        entry->provider_operation_key[0] ||
+        strcmp(entry->signature, "(a: Array<u8>, b: Array<u8>): bool") != 0) return false;
+    uint16_t result = XR_CORE_TYPE_VOID;
+    if (!map_builtin_type(call->type, &result) || result != XR_CORE_TYPE_BOOL) return false;
+    for (uint32_t i = 1u; i < 3u; ++i) {
+        const XrType *type = call->args[i] ? call->args[i]->type : NULL;
+        uint16_t element = XR_CORE_TYPE_VOID;
+        if (!type || type->kind != XR_KIND_ARRAY || type->is_nullable ||
+            !map_builtin_type(type->container.element_type, &element) || element != XR_CORE_TYPE_U8)
+            return false;
+    }
+    return true;
+}
+
 static bool projected_native_import_reference_is_exact(const XrXiBuildContext *context,
                                                        const XiFunc *function,
                                                        const XiValue *value) {
@@ -2780,7 +3113,8 @@ static bool projected_native_import_reference_is_exact(const XrXiBuildContext *c
             continue;
         for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
             const XiValue *call = block->values[value_index];
-            if (!resolved_provider_native_call(context, function, call) &&
+            if (!resolved_byte_compare_call(context, function, call) &&
+                !resolved_provider_native_call(context, function, call) &&
                 !resolved_suspension_native_call(context, function, call))
                 continue;
             if (xi_value_import_ref(function, call->args[0]) == reference)
@@ -4396,6 +4730,65 @@ static const XiClassData *resolved_empty_struct_literal(const XrXiBuildContext *
  * exact shared-slot enum descriptor, the runtime symbol table, the detached
  * enum layout, and the Xglobal nominal declaration all agree on one zero-
  * payload ordinal.  Names are diagnostic metadata and never select the case. */
+/* Resolve declaration carriers through the same exact export/slot join as
+ * imported functions. An enum namespace is not a callable runtime value. */
+static const XiEnumData *resolved_enum_carrier(const XrXiBuildContext *context,
+                                               const XiFunc *caller, const XiValue *value) {
+    value = logical_value_identity(value);
+    if (!context || !caller || !value)
+        return NULL;
+    if (value->op == XI_CONST && value->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE) {
+        const XiEnumData *schema = value->aux;
+        uint8_t kind = 0u;
+        return schema && variant_schema_matches_type(schema, schema->declaration_type) &&
+                       nominal_contract(context, schema->declaration_type, &kind, NULL, NULL) &&
+                       kind == XG_DECL_ENUM ? schema : NULL;
+    }
+    if (value->op != XI_GET_SHARED || value->aux_int < 0)
+        return NULL;
+    uint32_t module_index = UINT32_MAX;
+    if (!find_collected_xi_function_module(context, caller, &module_index) ||
+        module_index >= context->source->module_count)
+        return NULL;
+    const XiFunc *root = context->source->module_roots[module_index];
+    const XiModule *module = root ? root->module : NULL;
+    uint32_t slot = (uint32_t) value->aux_int;
+    if (!module || module->init != root || slot >= module->nslots)
+        return NULL;
+    const XiImportRef *reference = module->slot_imports ? module->slot_imports[slot] : NULL;
+    if (reference) {
+        if (!reference->resolution_attempted || reference->resolved_mod_index < 0 ||
+            (uint32_t) reference->resolved_mod_index >= context->source->module_count ||
+            reference->resolved_shared_slot < 0 || reference->resolved_export_slot < 0 ||
+            reference->resolved_func)
+            return NULL;
+        module_index = (uint32_t) reference->resolved_mod_index;
+        root = context->source->module_roots[module_index];
+        module = root ? root->module : NULL;
+        slot = (uint32_t) reference->resolved_shared_slot;
+        uint32_t export_slot = (uint32_t) reference->resolved_export_slot;
+        if (!module || module != reference->resolved_module || module->init != root ||
+            slot >= module->nslots || export_slot >= module->nexports || !module->exports)
+            return NULL;
+        const XiModuleExport *export_row = &module->exports[export_slot];
+        if (export_row->shared_slot != slot || export_row->function || export_row->class_data ||
+            export_row->is_live_binding)
+            return NULL;
+    }
+    const XiEnumData *schema = module->slot_enums ? module->slot_enums[slot] : NULL;
+    if (!schema || !schema->name || !schema->members || !schema->member_count || !schema->layout_id)
+        return NULL;
+    const XgGlobalEvidence *evidence = context->source->global_evidence;
+    uint32_t declarations = 0u;
+    for (uint32_t index = 0u; evidence && index < evidence->ndecls; ++index) {
+        const XgDeclSummary *decl = &evidence->decls[index];
+        if (decl->module_id == (XgModuleId) (module_index + 1u) && decl->kind == XG_DECL_ENUM &&
+            decl->name_id == xg_name_id(schema->name) && decl->type_key && decl->nominal_key)
+            ++declarations;
+    }
+    return declarations == 1u ? schema : NULL;
+}
+
 static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *context,
                                                     const XiFunc *caller, const XiValue *load,
                                                     uint32_t *variant_ordinal) {
@@ -4406,19 +4799,10 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
         load->type->kind != XR_KIND_ENUM || load->type->is_nullable)
         return NULL;
     const XiValue *receiver = logical_value_identity(load->args[0]);
-    if (!receiver || receiver->op != XI_GET_SHARED || receiver->aux_int < 0)
+    if (!receiver)
         return NULL;
 
-    uint32_t module_index = UINT32_MAX;
-    if (!find_collected_xi_function_module(context, caller, &module_index) ||
-        module_index >= context->source->module_count)
-        return NULL;
-    const XiFunc *root = context->source->module_roots[module_index];
-    const XiModule *module = root ? root->module : NULL;
-    uint32_t slot = (uint32_t) receiver->aux_int;
-    if (!module || slot >= module->nslots || !module->slot_enums)
-        return NULL;
-    const XiEnumData *schema = module->slot_enums[slot];
+    const XiEnumData *schema = resolved_enum_carrier(context, caller, receiver);
     if (!variant_schema_matches_type(schema, load->type) || !schema->runtime_type)
         return NULL;
 
@@ -4446,6 +4830,33 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
     if (variant_ordinal)
         *variant_ordinal = (uint32_t) ordinal;
     return schema;
+}
+
+/* A prelude unit enum member lowers to an ENUM_CASE index over its sealed
+ * builtin registry slot, not to a module-slot field load. It is a literal of
+ * the result type's declaration when the slot names that declaration and the
+ * constant ordinal is one of its zero-payload cases. */
+static bool resolved_builtin_unit_enum_case(const XrXiBuildContext *context,
+                                            const XiValue *value, uint32_t *variant_ordinal) {
+    if (variant_ordinal)
+        *variant_ordinal = UINT32_MAX;
+    if (!value || value->op != XI_INDEX_GET || value->aux_kind != XI_AUX_KIND_ENUM_CASE ||
+        value->nargs != 2u || !value->args || !value->args[0] || !value->args[1])
+        return false;
+    const XiValue *domain = logical_value_identity(value->args[0]);
+    const XiValue *ordinal = logical_value_identity(value->args[1]);
+    const XrBuiltinEnumRow *row =
+        domain && domain->op == XI_GET_BUILTIN && domain->nargs == 0u
+            ? builtin_unit_enum_declaration(context, domain->aux_int, value->type)
+            : NULL;
+    if (!row || !ordinal || ordinal->op != XI_CONST || ordinal->nargs != 0u ||
+        ordinal->aux_kind != XI_AUX_KIND_NONE || !ordinal->type ||
+        ordinal->type->kind != XR_KIND_INT || ordinal->type->is_nullable ||
+        ordinal->aux_int < 0 || (uint64_t) ordinal->aux_int >= row->member_count)
+        return false;
+    if (variant_ordinal)
+        *variant_ordinal = (uint32_t) ordinal->aux_int;
+    return true;
 }
 
 /* Xi still carries the generic pending-error scaffold emitted before resolver
@@ -5878,19 +6289,17 @@ static const XiEnumData *static_typed_catch_token_schema(const XrXiBuildContext 
         value && value->nargs == 2u && value->args ? logical_value_identity(value->args[1]) : NULL;
     if (!context || !token || !target)
         return NULL;
-    if (token->op == XI_CONST && token->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && token->aux &&
-        token->type && xr_type_equals(token->type, (XrType *) target))
-        return (const XiEnumData *) token->aux;
+    if (token->op == XI_CONST && token->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && token->aux) {
+        const XiEnumData *schema = token->aux;
+        if (schema->declaration_type &&
+            xr_type_equals(schema->declaration_type, (XrType *) target) &&
+            variant_schema_matches_type(schema, target))
+            return schema;
+        return NULL;
+    }
     if (token->op != XI_GET_SHARED || token->aux_int < 0 || !value->block || !value->block->func)
         return NULL;
-    uint32_t module_index = UINT32_MAX;
-    if (!find_xi_function(context, value->block->func, &module_index, NULL) ||
-        module_index >= context->source->module_count)
-        return NULL;
-    const XiFunc *root = context->source->module_roots[module_index];
-    const XiModule *module = root ? root->module : NULL;
-    uint32_t slot = (uint32_t) token->aux_int;
-    return module && module->slot_enums && slot < module->nslots ? module->slot_enums[slot] : NULL;
+    return resolved_enum_carrier(context, value->block->func, token);
 }
 
 static bool static_typed_catch_contract_is_exact(const XrXiBuildContext *context,
@@ -5898,11 +6307,14 @@ static bool static_typed_catch_contract_is_exact(const XrXiBuildContext *context
     if (!value_is_static_typed_catch_test(value))
         return false;
     const XrType *target = (const XrType *) value->aux;
+    const XiValue *token = logical_value_identity(value->args[1]);
+    if (token && token->op == XI_GET_BUILTIN && token->nargs == 0u)
+        return builtin_unit_enum_declaration(context, token->aux_int, target) != NULL;
     const XiEnumData *schema = static_typed_catch_token_schema(context, value, target);
     uint8_t decl_kind = 0u;
     return target && target->kind == XR_KIND_ENUM && !target->is_nullable &&
            variant_schema_matches_type(schema, target) &&
-           find_variant_schema(context, target) == schema &&
+           variant_schemas_equal(find_variant_schema(context, target), schema) &&
            nominal_contract(context, target, &decl_kind, NULL, NULL) && decl_kind == XG_DECL_ENUM;
 }
 
@@ -6750,13 +7162,17 @@ static XrProgramBuildStatus validate_imported_callable_bindings(const XrXiBuildC
                 for (uint32_t value_index = 0u; block && value_index < block->nvalues;
                      ++value_index) {
                     const XiValue *value = block->values[value_index];
-                    if (!value || !imported_callable_ref(context, function, value) ||
-                        resolved_class_carrier(context, function, value, XG_NO_ID, NULL))
+                    const XiImportRef *reference = value ? imported_callable_ref(context, function, value) : NULL;
+                    if (!reference || resolved_class_carrier(context, function, value, XG_NO_ID, NULL) ||
+                        resolved_enum_carrier(context, function, value))
                         continue;
                     if (!resolved_imported_callable_target(context, function, value, NULL))
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                                    "Xi imported callable v%u has an inconsistent resolver join",
-                                    value->id);
+                                    "Xi module %u function '%s' imported callable v%u line %u (%s.%s) has an inconsistent resolver join",
+                                    module_index, function->name ? function->name : "<unnamed>",
+                                    value->id, value->line,
+                                    reference->module_path ? reference->module_path : "<unknown>",
+                                    reference->member_name ? reference->member_name : "<unknown>");
                 }
             }
         }
@@ -6792,6 +7208,7 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                         resolved_atomic_construction(call) ||
                         resolved_canonical_class_construction(context, function, call, NULL,
                                                               NULL) ||
+                        resolved_byte_compare_call(context, function, call) ||
                         resolved_provider_native_call(context, function, call) ||
                         resolved_suspension_native_call(context, function, call))
                         continue;
@@ -7110,9 +7527,13 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
     /* Every string producer yields a fresh owner: literals, concatenation
      * chains and the i64 renderings folded into them. */
     if (type_id == XR_CORE_TYPE_STRING &&
-        (value->op == XI_CONST || value->op == XI_STR_CONCAT || value->op == XI_CONVERT))
+        (value->op == XI_CONST || value->op == XI_STR_CONCAT || value->op == XI_CONVERT ||
+         xi_value_is_string_slice(value)))
         return true;
-    return (value->op == XI_CLOSURE_NEW && value->nargs != 0u) ||
+    return exact_string_builder_operation(value) == XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT ||
+           exact_string_builder_operation(value) == XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT ||
+           xi_value_is_scalar_array_default(value) ||
+           (value->op == XI_CLOSURE_NEW && value->nargs != 0u) ||
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
            value->op == XI_SUM_INJECT || value->op == XI_AGG_UPDATE ||
            xi_copy_is_value_clone(value) || value->op == XI_SOURCE_MOVE ||
@@ -7393,6 +7814,9 @@ static bool value_has_canonical_materialization(const XrXiBuildContext *context,
     if (!value)
         return false;
     if (xr_program_xi_value_is_materialized(value->op) ||
+        exact_channel_state_query(value) || resolved_channel_construction(value) ||
+        xi_value_is_string_slice(value) || xi_value_is_scalar_array_default(value) ||
+        exact_array_append(value) || exact_string_builder_operation(value) || resolved_byte_compare_call(context, function, value) ||
         resolved_atomic_construction(value) || exact_atomic_scalar_operation(value) ||
         (value->op == XI_GET_SHARED && resolved_module_data_slot(context, function, value, NULL)) ||
         shared_callable_value_is_exact(context, function, value) ||
@@ -7403,6 +7827,7 @@ static bool value_has_canonical_materialization(const XrXiBuildContext *context,
         resolved_value_aggregate_construction(context, function, value, NULL, NULL) ||
         resolved_empty_struct_literal(context, function, value) ||
         resolved_unit_enum_literal(context, function, value, NULL) ||
+        resolved_builtin_unit_enum_case(context, value, NULL) ||
         resolved_aggregate_field_projection(context, value, NULL) ||
         resolved_aggregate_field_store(context, function, value, NULL))
         return true;
@@ -7970,7 +8395,8 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
             return requirement_status;
         const XrXiTrapEdge *trap_edge = find_trap_edge(context, function->xi, value);
         instruction->operation_id = XR_CORE_OP_CORE_PROVIDER_CALL;
-        instruction->result = value_key(function, value);
+        if (result_type != XR_CORE_TYPE_VOID)
+            instruction->result = value_key(function, value);
         instruction->result_type_id = result_type;
         instruction->result_ownership = logical_ownership_for_type(context, result_type);
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
@@ -9271,6 +9697,106 @@ translate_integer_composition(XrXiBuildContext *context, XrXiModuleStorage *modu
     return XR_PROGRAM_BUILD_OK;
 }
 
+/* Mutation returns a new read view of the same storage. Only the construction
+ * owns it; chaining never duplicates ownership or mutates through a stale loan. */
+static XrProgramBuildStatus translate_string_builder_mutation(
+    XrXiBuildContext *context, XrXiFunctionStorage *function, const XiValue *value,
+    const XrXiBlockStorage *block, XrCoreIrInstructionInput *instructions, uint32_t *count) {
+    const XiValue *receiver = logical_value_identity(value->args[0]);
+    uint32_t depth = 0u;
+    while (string_builder_mutation(receiver) && ++depth <= function->xi->next_value_id)
+        receiver = logical_value_identity(receiver->args[0]);
+    if (!receiver || depth > function->xi->next_value_id)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    if (receiver->op == XI_PLACE_LOAD && receiver->nargs == 1u && receiver->args)
+        receiver = receiver->args[0];
+    XrCoreIrKey place;
+    if (!value_operand_key(context, function, block, receiver, &place))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *count = 0u;
+    if (!logical_value_is_place(function->xi, receiver)) {
+        XrCoreIrKey *owner = xr_malloc(sizeof(*owner));
+        if (!owner)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *owner = place;
+        place = key_from_key_and_u32(UINT8_C(0x73), value_key(function, value), 0u);
+        instructions[(*count)++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+            .result = place, .result_type_id = XR_CORE_TYPE_STRING_BUILDER,
+            .result_category = XR_CORE_IR_PLACE, .operands = owner, .operand_count = 1u,
+        };
+    }
+    XrCoreIrKey *operands = xr_malloc(value->nargs * sizeof(*operands));
+    if (!operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    operands[0] = place;
+    if (value->nargs == 2u &&
+        !value_operand_key(context, function, block, value->args[1], &operands[1])) {
+        xr_free(operands);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    instructions[(*count)++] = (XrCoreIrInstructionInput) {
+        .operation_id = exact_string_builder_operation(value),
+        .result_type_id = XR_CORE_TYPE_VOID, .operands = operands,
+        .operand_count = value->nargs,
+    };
+    XrCoreIrKey *borrow = xr_malloc(sizeof(*borrow));
+    if (!borrow)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    *borrow = place;
+    instructions[(*count)++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+        .result = value_key(function, value), .result_type_id = XR_CORE_TYPE_STRING_BUILDER,
+        .operands = borrow, .operand_count = 1u,
+    };
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus translate_array_append(
+    XrXiBuildContext *context, XrXiFunctionStorage *function, const XiValue *value,
+    const XrXiBlockStorage *block, XrCoreIrInstructionInput *instructions, uint32_t *count) {
+    const XiValue *receiver = logical_value_identity(value->args[0]);
+    if (receiver && receiver->op == XI_PLACE_LOAD && receiver->nargs == 1u && receiver->args)
+        receiver = receiver->args[0];
+    uint16_t array_type = XR_CORE_TYPE_VOID, element_type = XR_CORE_TYPE_VOID;
+    XrCoreIrKey place, element;
+    if (!receiver || !map_logical_value_type(context, function->xi, value->args[0], &array_type) ||
+        !map_logical_value_type(context, function->xi, value->args[1], &element_type) ||
+        !value_operand_key(context, function, block, receiver, &place) ||
+        !value_operand_key(context, function, block, value->args[1], &element))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *count = 0u;
+    if (!logical_value_is_place(function->xi, receiver)) {
+        XrCoreIrKey *owner = xr_malloc(sizeof(*owner));
+        if (!owner) return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *owner = place;
+        place = key_from_key_and_u32(UINT8_C(0xb1), value_key(function, value), 0u);
+        instructions[(*count)++] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_PLACE_LOCAL, .result = place,
+            .result_type_id = array_type, .result_category = XR_CORE_IR_PLACE,
+            .operands = owner, .operand_count = 1u};
+    }
+    if (logical_ownership_for_type(context, element_type) == XR_CORE_IR_OWNER) {
+        XrCoreIrKey *source = xr_malloc(sizeof(*source));
+        if (!source) return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *source = element;
+        element = key_from_key_and_u32(UINT8_C(0xb1), value_key(function, value), 1u);
+        instructions[(*count)++] = (XrCoreIrInstructionInput) {
+            .operation_id = type_storage_has_identity(find_dynamic_type_by_id(context, element_type))
+                ? XR_CORE_OP_CORE_OWNER_ALIAS : XR_CORE_OP_CORE_OWNER_COPY,
+            .result = element,
+            .result_type_id = element_type, .result_ownership = XR_CORE_IR_OWNER,
+            .operands = source, .operand_count = 1u};
+    }
+    XrCoreIrKey *operands = xr_malloc(2u * sizeof(*operands));
+    if (!operands) return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    operands[0] = place;
+    operands[1] = element;
+    instructions[(*count)++] = (XrCoreIrInstructionInput) {
+        .operation_id = XR_CORE_OP_CORE_ARRAY_APPEND, .operands = operands, .operand_count = 2u};
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModuleStorage *module,
                                             XrXiFunctionStorage *function, const XiValue *value,
                                             const XrXiBlockStorage *block,
@@ -9356,7 +9882,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         return XR_PROGRAM_BUILD_OK;
     }
     uint32_t unit_enum_ordinal = UINT32_MAX;
-    if (resolved_unit_enum_literal(context, function->xi, value, &unit_enum_ordinal)) {
+    if (resolved_unit_enum_literal(context, function->xi, value, &unit_enum_ordinal) ||
+        resolved_builtin_unit_enum_case(context, value, &unit_enum_ordinal)) {
         const XrXiTypeStorage *variant = find_dynamic_type_by_id(context, result_type);
         if (!variant || variant->input.kind != XR_CORE_IR_TYPE_VARIANT ||
             unit_enum_ordinal >= variant->input.variant_count ||
@@ -9385,6 +9912,54 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
         return XR_PROGRAM_BUILD_OK;
     }
+    if (xi_value_is_scalar_array_default(value)) {
+        instruction->operation_id = XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = XR_CORE_IR_OWNER;
+        const XrXiPanicEdge *edge = find_panic_edge(context, function->xi, value);
+        if (!edge)
+            return set_operands(context, instruction, function, block, value->args, 1u,
+                                diagnostic, diagnostic_size);
+        XrCoreIrKey operand;
+        if (!value_operand_key(context, function, block, value->args[0], &operand))
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        return set_panic_edge_operands(context, instruction, function, block, value, &operand,
+            1u, find_block_storage(function, edge->handler), diagnostic, diagnostic_size);
+    }
+    if (xi_value_is_string_slice(value)) {
+        instruction->operation_id = XR_CORE_OP_CORE_STRING_SLICE;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = XR_CORE_TYPE_STRING;
+        instruction->result_ownership = XR_CORE_IR_OWNER;
+        const XrXiPanicEdge *edge = find_panic_edge(context, function->xi, value);
+        if (!edge)
+            return set_operands(context, instruction, function, block, value->args, 3u,
+                                diagnostic, diagnostic_size);
+        XrCoreIrKey operands[3];
+        for (uint32_t i = 0u; i < 3u; ++i)
+            if (!value_operand_key(context, function, block, value->args[i], &operands[i]))
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+        return set_panic_edge_operands(context, instruction, function, block, value, operands,
+            3u, find_block_storage(function, edge->handler), diagnostic, diagnostic_size);
+    }
+    if (resolved_byte_compare_call(context, function->xi, value)) {
+        instruction->operation_id = XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = XR_CORE_TYPE_BOOL;
+        instruction->result_ownership = XR_CORE_IR_NON_OWNER;
+        return set_operands(context, instruction, function, block, value->args + 1u, 2u,
+                            diagnostic, diagnostic_size);
+    }
+    uint16_t builder_operation = exact_string_builder_operation(value);
+    if (builder_operation) {
+        instruction->operation_id = builder_operation;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = XR_CORE_IR_OWNER;
+        return set_operands(context, instruction, function, block, value->args, value->nargs,
+                            diagnostic, diagnostic_size);
+    }
     uint16_t atomic_operation = exact_atomic_scalar_operation(value);
     if (atomic_operation) {
         instruction->operation_id = atomic_operation;
@@ -9408,6 +9983,22 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->immediate.u32 = mode * 8u + ordering;
         return set_operands(context, instruction, function, block, value->args,
                             operands, diagnostic, diagnostic_size);
+    }
+    if (exact_channel_state_query(value)) {
+        instruction->operation_id = XR_CORE_OP_CORE_CHANNEL_IS_CLOSED;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = XR_CORE_TYPE_BOOL;
+        instruction->result_ownership = XR_CORE_IR_NON_OWNER;
+        return set_operands(context, instruction, function, block, value->args,
+                            1u, diagnostic, diagnostic_size);
+    }
+    if (resolved_channel_construction(value)) {
+        instruction->operation_id = XR_CORE_OP_CORE_CHANNEL_CONSTRUCT;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = XR_CORE_IR_OWNER;
+        return set_operands(context, instruction, function, block, value->args,
+                            1u, diagnostic, diagnostic_size);
     }
     if (resolved_atomic_construction(value)) {
         instruction->operation_id = XR_CORE_OP_CORE_ATOMIC_CONSTRUCT;
@@ -9615,6 +10206,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = result_type;
+            instruction->result_ownership = logical_ownership_for_type(context, result_type);
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
             return set_operands(context, instruction, function, block, value->args, value->nargs,
                                 diagnostic, diagnostic_size);
@@ -10016,6 +10608,28 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
              * emitter did not claim the value. */
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi string concatenation v%u was not expanded", value->id);
+        case XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE: {
+            uint32_t mode = projection.immediate_u32;
+            if (value->nargs != (mode == 3u ? 1u : 2u) || !xr_core_spec_integer_type(result_type))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi bitwise v%u has invalid integer shape", value->id);
+            for (uint16_t index = 0u; index < value->nargs; ++index) {
+                uint16_t operand_type = XR_CORE_TYPE_VOID;
+                if (!map_logical_value_type(context, function->xi, value->args[index], &operand_type) ||
+                    !xr_core_spec_integer_type(operand_type) ||
+                    ((index == 0u || mode < 4u) && operand_type != result_type))
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi bitwise v%u requires exact integer operands", value->id);
+            }
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = result_type;
+            instruction->result_ownership = XR_CORE_IR_NON_OWNER;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+            instruction->immediate.u32 = mode;
+            return set_operands(context, instruction, function, block, value->args, value->nargs,
+                                diagnostic, diagnostic_size);
+        }
         case XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT: {
             uint16_t operand_type = XR_CORE_TYPE_VOID;
             if (value->nargs != 1u || !xr_core_spec_integer_type(result_type) ||
@@ -10237,7 +10851,8 @@ static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *c
                 ? find_xg_class_by_id(context->source->global_evidence, parent->xg_class_id) : NULL;
             if (!parent || !parent_row || parent_row->decl_kind != XG_DECL_CLASS ||
                 parent_row->class_id == class_row->class_id || !parent->needs_runtime_type ||
-                class_data->inherited_field_count != parent->instance_field_count)
+                class_data->inherited_field_count !=
+                    (uint32_t) parent->inherited_field_count + parent->instance_field_count)
                 return false;
         }
     }
@@ -10258,6 +10873,13 @@ static bool static_nominal_publication_source_is_exact(const XrXiBuildContext *c
                 if (!user->args || logical_value_identity(user->args[argument]) != source)
                     continue;
                 if (user->op == XI_RETAIN || user->op == XI_RELEASE)
+                    continue;
+                /* Exact nominal members and catch tokens consume declaration metadata,
+                 * not the runtime module slot. All other uses must prove publication. */
+                if (enum_data &&
+                    ((argument == 0u &&
+                      resolved_unit_enum_literal(context, function, user, NULL) == enum_data) ||
+                     (argument == 1u && static_typed_catch_contract_is_exact(context, user))))
                     continue;
                 if (user->op != XI_SET_SHARED || argument != 0u || user->aux_int < 0 ||
                     (uint64_t) user->aux_int >= module->nslots || publications != 0u ||
@@ -10328,7 +10950,8 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         return true;
     if (static_import_publication_is_exact(context, function, value))
         return true;
-    if (static_nominal_publication_is_exact(context, function, value))
+    if (resolved_enum_carrier(context, function, value) ||
+        static_nominal_publication_is_exact(context, function, value))
         return true;
     if (record_initializer_is_exact(function, value))
         return true;
@@ -10357,6 +10980,12 @@ static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *func
         return true;
     if (atomic_ordering_literal(value, NULL))
         return value_is_only_elided_operand(context, function, value);
+    /* An integer constant whose every use folds it into an immediate, such as
+     * a prelude enum case ordinal, has no runtime value of its own. */
+    if (value->op == XI_CONST && value->nargs == 0u && value->aux_kind == XI_AUX_KIND_NONE &&
+        value->type && value->type->kind == XR_KIND_INT && !value->type->is_nullable &&
+        value_is_only_elided_operand(context, function, value))
+        return true;
     if (resolved_module_namespace_carrier(context, function, value))
         return value_is_only_elided_operand(context, function, value);
     if (shared_callable_value_is_exact(context, function, value))
@@ -10743,7 +11372,8 @@ static XrProgramBuildStatus verify_cleanup_control_flow(XrXiFunctionStorage *fun
                 if (value->op == XI_CALL || value->op == XI_CALL_METHOD ||
                     value->op == XI_CALL_METHOD_DIRECT || value->op == XI_ASSERTION ||
                     value->op == XI_DIV || value->op == XI_MOD ||
-                    value->op == XI_INDEX_GET || value->op == XI_INDEX_SET) {
+                    value->op == XI_INDEX_GET || value->op == XI_INDEX_SET ||
+                    xi_value_is_scalar_array_default(value)) {
                     for (uint32_t b = 0u; b < xi->nblocks && status == XR_PROGRAM_BUILD_OK; ++b) {
                         const XiBlock *handler = xi->blocks[b];
                         for (uint32_t i = 0u; i < handler->nvalues; ++i) {
@@ -11207,6 +11837,8 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
         resolved_empty_struct_literal(context, function->xi, value) ||
         resolved_unit_enum_literal(context, function->xi, value, NULL);
     uint16_t begin = erased_first_operand ? 1u : 0u;
+    if (resolved_builtin_unit_enum_case(context, value, NULL))
+        begin = value->nargs;
     for (uint16_t argument = begin; argument < value->nargs; ++argument) {
         XrProgramBuildStatus status = require_value_available(
             context, function, block, value->args[argument], changed, diagnostic, diagnostic_size);
@@ -12208,7 +12840,8 @@ static XrProgramBuildStatus prepare_panic_continuations(XrXiBuildContext *contex
                         (!typed_invoke_check_block_for_call(context, function, call) &&
                          !exact_condition_assertion(call) &&
                          !exact_integer_divmod(context, function, call) &&
-                         !exact_array_index(context, function, call, NULL)) ||
+                         !exact_array_index(context, function, call, NULL) &&
+                         !xi_value_is_string_slice(call) && !xi_value_is_scalar_array_default(call)) ||
                         caught->nargs != 0u || find_panic_edge(context, function, call))
                         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                                     "Xi function %s panic continuation b%u has no unique local producer "
@@ -14759,6 +15392,12 @@ static bool input_operation_consumes_operand(const XrXiBuildContext *context,
          instruction->operation_id == XR_CORE_OP_CORE_PLACE_EXCHANGE) &&
         operand_index == 1u)
         return true;
+    if (instruction->operation_id == XR_CORE_OP_CORE_ARRAY_APPEND) {
+        uint16_t operand_type = XR_CORE_TYPE_VOID;
+        return operand_index == 1u &&
+               input_value_type(block, instruction_count, instruction->operands[1], &operand_type) &&
+               logical_ownership_for_type(context, operand_type) == XR_CORE_IR_OWNER;
+    }
     if (instruction->operation_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT ||
@@ -16588,7 +17227,11 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALLABLE_PACK)
                             : NULL;
                     const XrCoreOperationSpec *class_construction =
-                        resolved_atomic_construction(value)
+                        exact_channel_state_query(value)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CHANNEL_IS_CLOSED)
+                            : resolved_channel_construction(value)
+                            ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CHANNEL_CONSTRUCT)
+                            : resolved_atomic_construction(value)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ATOMIC_CONSTRUCT)
                             : (resolved_record_construction(function, value, NULL, NULL, NULL) ||
                                resolved_canonical_class_construction(context, function, value, NULL, NULL))
@@ -16603,7 +17246,8 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT)
                             : NULL;
                     const XrCoreOperationSpec *unit_enum_literal =
-                        resolved_unit_enum_literal(context, function, value, NULL)
+                        resolved_unit_enum_literal(context, function, value, NULL) ||
+                                resolved_builtin_unit_enum_case(context, value, NULL)
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_CONSTRUCT)
                             : NULL;
                     const XrCoreOperationSpec *aggregate_field_projection =
@@ -16664,6 +17308,25 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = true;
                         value_effects = shared_callable->effect_mask;
                         value_capabilities = shared_callable->capability_mask;
+                    } else if (xi_value_is_string_slice(value) || xi_value_is_scalar_array_default(value)) {
+                        has_contract = true;
+                        value_effects = XR_CORE_EFFECT_PANIC;
+                        value_capabilities = 0u;
+                    } else if (resolved_byte_compare_call(context, function, value)) {
+                        has_contract = true;
+                        value_effects = 0u;
+                        value_capabilities = 0u;
+                    } else if (exact_array_append(value)) {
+                        const XrCoreOperationSpec *append = xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ARRAY_APPEND);
+                        has_contract = append != NULL;
+                        value_effects = append ? append->effect_mask : 0u;
+                        value_capabilities = append ? append->capability_mask : 0u;
+                    } else if (exact_string_builder_operation(value)) {
+                        const XrCoreOperationSpec *builder = xr_core_spec_operation_by_id(
+                            exact_string_builder_operation(value));
+                        has_contract = builder != NULL;
+                        value_effects = builder ? builder->effect_mask : 0u;
+                        value_capabilities = builder ? builder->capability_mask : 0u;
                     } else if (exact_atomic_scalar_operation(value)) {
                         const XrCoreOperationSpec *atomic = xr_core_spec_operation_by_id(
                             exact_atomic_scalar_operation(value));
@@ -16828,10 +17491,12 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (!value || (value->op != XI_CALL && !witness && !sealed_method))
                             continue;
-                        if (resolved_atomic_construction(value) ||
+                        if (xi_value_is_string_slice(value) || exact_array_append(value) || exact_string_builder_operation(value) ||
+                            resolved_atomic_construction(value) ||
                             resolved_canonical_class_construction(context, storage->xi, value, NULL,
                                                                   NULL) ||
                             resolved_empty_struct_literal(context, storage->xi, value) ||
+                            resolved_byte_compare_call(context, storage->xi, value) ||
                             resolved_provider_native_call(context, storage->xi, value) ||
                             resolved_suspension_native_call(context, storage->xi, value))
                             continue;
@@ -17393,6 +18058,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 source_block->values[value]->op == XI_ASSERTION ||
                 exact_integer_divmod(context, xi, source_block->values[value]) ||
                 exact_array_index(context, xi, source_block->values[value], NULL) ||
+                xi_value_is_scalar_array_default(source_block->values[value]) ||
+                xi_value_is_string_slice(source_block->values[value]) ||
                 source_block->values[value]->op == XI_PRINT) {
                 if (implicit_exit_cleanup_upper_bound == UINT32_MAX)
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
@@ -17487,7 +18154,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 construction_literal_count += 4u;
             }
             if (((xr_program_xi_projection(value->op, XR_CORE_TYPE_I64, &value_projection) &&
-                  value_projection.kind == XR_PROGRAM_XI_PROJECTION_AGGREGATE_UPDATE) ||
+                  (value_projection.kind == XR_PROGRAM_XI_PROJECTION_AGGREGATE_UPDATE ||
+                   value_projection.kind == XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT)) ||
                  resolved_storage_construction(xi, value, NULL, NULL, NULL) ||
                  resolved_value_aggregate_construction(context, xi, value, NULL, NULL)) &&
                 map_type(context, value->type, &update_type) &&
@@ -17511,6 +18179,11 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u)
                 ++emitted;
             if (resolved_module_data_slot(context, xi, value, NULL)) {
+                if (construction_literal_count > UINT32_MAX - 2u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                construction_literal_count += 2u;
+            }
+            if (string_builder_mutation(value) || exact_array_append(value)) {
                 if (construction_literal_count > UINT32_MAX - 2u)
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
                 construction_literal_count += 2u;
@@ -17736,6 +18409,28 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 span->end = instruction_index;
                 continue;
             }
+            if (string_builder_mutation(value) || exact_array_append(value)) {
+                if (instruction_index > instruction_capacity ||
+                    instruction_capacity - instruction_index < 3u)
+                    return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+                uint32_t count = 0u;
+                status = exact_array_append(value)
+                    ? translate_array_append(context, storage, value, block_storage,
+                        &block_storage->instructions[instruction_index], &count)
+                    : translate_string_builder_mutation(context, storage, value, block_storage,
+                        &block_storage->instructions[instruction_index], &count);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return fail(diagnostic, diagnostic_size, status,
+                                "Xi StringBuilder mutation v%u has no exact storage root", value->id);
+                for (uint32_t builder_index = 0u; builder_index < count; ++builder_index) {
+                    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
+                        block_storage->instructions[instruction_index++].operation_id);
+                    storage->local_effect_mask |= operation->effect_mask;
+                    storage->local_capability_mask |= operation->capability_mask;
+                }
+                span->end = instruction_index;
+                continue;
+            }
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u) {
                 XrCoreIrInstructionInput *capture =
                     &block_storage->instructions[instruction_index++];
@@ -17924,7 +18619,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                  instruction->operation_id == XR_CORE_OP_CORE_ARRAY_CONSTRUCT ||
                  instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_UPDATE ||
                  (instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT &&
-                  resolved_value_aggregate_construction(context, xi, value, NULL, NULL))) &&
+                  (value->op == XI_TUPLE_NEW ||
+                   resolved_value_aggregate_construction(context, xi, value, NULL, NULL)))) &&
                 logical_ownership_for_type(context, instruction->result_type_id) == XR_CORE_IR_OWNER) {
                 uint32_t count = 0u;
                 status = expand_affine_aggregate_value(
@@ -18362,10 +19058,12 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (value->op != XI_CALL && !witness && !sealed_method)
                             continue;
-                        if (resolved_atomic_construction(value) ||
+                        if (xi_value_is_string_slice(value) || exact_array_append(value) || exact_string_builder_operation(value) ||
+                            resolved_atomic_construction(value) ||
                             resolved_canonical_class_construction(context, function->xi, value,
                                                                   NULL, NULL) ||
                             resolved_empty_struct_literal(context, function->xi, value) ||
+                            resolved_byte_compare_call(context, function->xi, value) ||
                             resolved_provider_native_call(context, function->xi, value) ||
                             resolved_suspension_native_call(context, function->xi, value))
                             continue;

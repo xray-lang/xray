@@ -402,12 +402,6 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
         return XR_DISP_NEXT;
     }
 
-    // ch.isClosed()
-    if (nargs == 0 && method_symbol == SYMBOL_IS_CLOSED) {
-        base[a] = xr_bool(xr_channel_is_closed(ch));
-        return XR_DISP_NEXT;
-    }
-
     // ch.sendTimeout(value, timeout) - send with timeout
     if (nargs == 2 && method_symbol == SYMBOL_SENDTIMEOUT) {
         XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
@@ -505,7 +499,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm
     const char *method_name = xr_symbol_get_name_in_table(sym_table, method_symbol);
     VM_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
              "Channel has no method '%s', available: send(), recv(), recvOr(), trySend(), "
-             "tryRecv(), sendTimeout(), recvTimeout(), close(), isClosed()",
+             "tryRecv(), sendTimeout(), recvTimeout(), close()",
              method_name ? method_name : "?");
 }
 

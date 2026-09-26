@@ -92,7 +92,12 @@ class ProviderMetadataTests(unittest.TestCase):
 
     def test_repository_provider_metadata_is_exact(self) -> None:
         entries = [entry for entry in parse_defs(ROOT) if entry.provider_declaration]
-        self.assertEqual(7, len(entries))
+        self.assertEqual(12, len(entries))
+        self.assertEqual({"mem.__alloc", "mem.__allocZeroed", "mem.__allocAligned", "mem.__bufferLength"},
+                         {entry.symbol for entry in entries if entry.module == "mem"})
+        entropy = next(entry for entry in entries if entry.symbol == "crypto.__fillRandomBytes")
+        self.assertEqual("Array<u8>", entropy.provider_declaration.logical.parameters[0].type)
+        self.assertEqual("ref", entropy.provider_declaration.logical.parameters[0].mode)
         clock_entries = [
             entry for entry in entries if entry.provider_declaration.contract == CLOCK_CONTRACT
         ]

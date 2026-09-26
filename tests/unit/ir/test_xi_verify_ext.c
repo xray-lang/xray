@@ -466,6 +466,65 @@ TEST(semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity) {
     xi_func_free(root);
 }
 
+TEST(semantic_snapshot_detaches_parameters_outside_block_stream) {
+    XrClassInfo info = {.name = "Receiver"};
+    XrType type = {.kind = XR_KIND_INSTANCE};
+    type.instance.class_name = "Receiver";
+    type.instance.class_ref = &info;
+    XiFunc *root = xi_func_new("snapshot_parameters", &stub_unit);
+    ASSERT(root != NULL);
+    XiBlock *block = xi_block_new(root);
+    ASSERT(block != NULL);
+    root->params = (XiValue **) xr_calloc(2, sizeof(*root->params));
+    ASSERT(root->params != NULL);
+    root->nparams = 2;
+    root->params[0] = xi_param(root, block, 0, &type);
+    root->params[1] = xi_param(root, block, 1, &type);
+    ASSERT(root->params[0] != NULL && root->params[1] != NULL);
+    block->nvalues = 1;
+    ASSERT(xi_semantic_snapshot_detach(root));
+    ASSERT(root->params[0]->type == root->params[1]->type);
+    ASSERT(root->params[1]->type != &type);
+    ASSERT(root->params[1]->type->instance.class_ref != &info);
+    memset(&info, 0, sizeof(info));
+    ASSERT(strcmp(root->params[1]->type->instance.class_ref->name, "Receiver") == 0);
+    xi_func_free(root);
+}
+
+TEST(semantic_snapshot_aggregate_update_owns_nested_layout) {
+    XrAggregateLayout nested = {.field_count = 1};
+    const char *nested_names[] = {"number"};
+    nested.field_names = nested_names;
+    nested.fields[0].native_type = XR_NATIVE_I64;
+    XrAggregateLayout source = {.field_count = 1};
+    const char *names[] = {"nested"};
+    source.field_names = names;
+    source.fields[0].sub_layout = &nested;
+    source.fields[0].native_type = XR_NATIVE_NESTED_AGGREGATE;
+    XiFunc *root = xi_func_new("snapshot_aggregate_update", &stub_unit);
+    ASSERT(root != NULL);
+    XiBlock *block = xi_block_new(root);
+    ASSERT(block != NULL);
+    XiValue *update = xi_value_new(root, block, XI_AGG_UPDATE, &stub_struct, 0);
+    ASSERT(update != NULL);
+    update->aux = &source;
+    ASSERT(xi_semantic_snapshot_detach(root));
+    const XrAggregateLayout *owned = (const XrAggregateLayout *) update->aux;
+    ASSERT(owned != &source && owned->field_names != names);
+    ASSERT(owned->fields[0].sub_layout != &nested);
+    memset(&source, 0, sizeof(source));
+    memset(&nested, 0, sizeof(nested));
+    names[0] = NULL;
+    nested_names[0] = NULL;
+    ASSERT(owned->field_count == 1);
+    ASSERT(strcmp(owned->field_names[0], "nested") == 0);
+    ASSERT(owned->fields[0].sub_layout->field_count == 1);
+    ASSERT(strcmp(owned->fields[0].sub_layout->field_names[0], "number") == 0);
+    ASSERT(xi_semantic_snapshot_detach(root));
+    ASSERT(update->aux == owned);
+    xi_func_free(root);
+}
+
 TEST(semantic_snapshot_rejects_ambiguous_enum_payload_fields) {
     XiFunc *root = xi_func_new("snapshot_invalid_enum_root", &stub_unit);
     ASSERT(root != NULL);
@@ -1065,6 +1124,36 @@ TEST(call_plan_valid_explicit_move_passes) {
     ASSERT(call != NULL && call->call_plan != NULL);
     xi_block_set_return(f->entry, call);
 
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_optional_move_preserves_source_proof) {
+    XiFunc *f = make_func("call_plan_optional_move");
+    ASSERT(f != NULL);
+    XiValue *call = make_move_call(f, f->entry);
+    ASSERT(call != NULL);
+    XiValue *moved = call->args[1];
+    XrType optional = stub_int;
+    optional.is_nullable = true;
+    XiValue *some = xi_value_new(f, f->entry, XI_SUM_INJECT, &optional, 1);
+    ASSERT(some != NULL);
+    some->aux_int = 1;
+    some->args[0] = moved;
+    call->args[1] = some;
+    f->entry->values[f->entry->nvalues - 2] = some;
+    f->entry->values[f->entry->nvalues - 1] = call;
+    xi_block_set_return(f->entry, call);
+    ASSERT(verify_ok(f));
+    some->args[0] = moved->args[0];
+    ASSERT(verify_fail(f));
+    some->args[0] = moved;
+    some->aux_int = 0;
+    ASSERT(verify_fail(f));
+    some->aux_int = 1;
+    optional.kind = XR_KIND_BOOL;
+    ASSERT(verify_fail(f));
+    optional.kind = stub_int.kind;
     ASSERT(verify_ok(f));
     xi_func_free(f);
 }
@@ -3559,6 +3648,8 @@ int main(void) {
 
     run_assertion_plan_aux_is_owned_cloned_snapshotted_and_verified();
     run_semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity();
+    run_semantic_snapshot_detaches_parameters_outside_block_stream();
+    run_semantic_snapshot_aggregate_update_owns_nested_layout();
     run_semantic_snapshot_rejects_ambiguous_enum_payload_fields();
     run_coro_depth_bound_fails_closed();
     run_coro_lower_analyzes_local_callees_before_callers();
@@ -3582,6 +3673,7 @@ int main(void) {
     run_tail_call_with_function_callee_passes();
     run_call_plan_valid_ref_local_place_passes();
     run_call_plan_valid_explicit_move_passes();
+    run_call_plan_optional_move_preserves_source_proof();
     run_call_plan_valid_direct_value_read_place_passes();
     run_call_plan_direct_value_rejects_projection_storage();
     run_call_plan_direct_value_rejects_non_read_mode();

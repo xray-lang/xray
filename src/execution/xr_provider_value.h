@@ -39,6 +39,8 @@ typedef struct XrProviderValueNode {
         bool boolean;
         int64_t i64;
         struct { const uint8_t *data; size_t size; } bytes;
+        /* Synchronous exclusive view; storage and commit belong to the executor. */
+        struct { uint8_t *data; size_t size; } u8_array;
         struct {
             XrStableId id;
             void *payload;

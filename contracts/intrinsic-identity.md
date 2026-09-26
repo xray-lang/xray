@@ -101,12 +101,18 @@ core numeric operations, without reassigning the existing registry.
     The `FREESTANDING` flag records which of the 35 emit without libm and is
     the only authority the freestanding profile consults for a math member.
 
+18. `string.copyBytes` uses stable builtin method symbol 254. Its exact String
+    receiver and owned mutable `Array<u8>` result bind the call. Dynamic symbol
+    numbering and selector-only CGen emission grant no authority. The runtime
+    returns an independent UTF-8 byte allocation and preserves the String owner.
+
 verification-test: test_target_plan
+verification-test: test_semantic_builtin_runtime_method_authority
 
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def b82d2d08038fe71e60bda2f3d9f88b1bb7711be72b28f11a8d15eb635c7ccc4b
-anchor-sha256: src/ir/xi_method_sym.def 0ec1ca5390eb9be96b1a1fcfbf932787a39d6af810630f88c360538451359702
+anchor-sha256: src/ir/xi_method_sym.def a2a847f6827afd57836efda3698b63f28991945579da800975588ad3d3c40982
 anchor-sha256: src/plan/semantic/xr_semantic_native_leaf_shape.h 39d0821e6e750dfc8d68e960a030f5a1bdd53577f0b59afe129b4e4ccbd4003e
 anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h 35d71f47cd448b0baa0980c489b6f807c5affdf0120e746f2d4cf91b81ee5194
 anchor-sha256: src/plan/semantic/xr_semantic_string_utf8_shape.h aa8a342b9578e749c5e812dc9d193220ac63d849e15085130a4279ead5c24056
@@ -115,3 +121,30 @@ anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e7
 anchor-sha256: contracts/capability-deletions.tsv 0ce3ca872d9dafa777f75f8540cc92244edb082615b9733534e418afe2d40449
 anchor-sha256: scripts/check_branch_hint_surface_residue.py de29c337d4f946fda333015f97e5d78143889959e0e5956d5c2790216121283e
 anchor-sha256: tests/regression/05_functions/0582_removed_builtin_names_reusable.xr 037941a5256838f24279cf536a83ccbbaa84af5dde8bc386343addc97b849c49
+
+Native direct signatures admit the registry's exact `Ptr<u8>` and `MutPtr<u8>`
+spellings through the frozen raw-pointer header, including exact mutability.
+They carry no GC root or ownership transfer. Nullable pointers, other pointee
+spellings and malformed pointer headers do not acquire this authority. Borrowed
+Slice results require their own view provenance and are outside this rule.
+
+verification-test: test_native_buffer_storage
+
+Exact fresh String results share the owned tagged native-direct result family
+with native storage objects. Admission requires the declared String signature,
+registry `fresh` ownership and complete owned operation provenance. Borrowed,
+nullable and arbitrary tagged results remain outside this extension. Target
+call ownership, storage slots and C emission retain the same owned-root proof.
+
+verification-test: test_native_leaf_representation
+
+Generic Array pop/shift result identity is the element type with nullable added.
+The complete generic parameter key, including ordinal and name, must match.
+This semantic identity does not authorize a machine carrier or bypass concrete
+TargetPlan storage validation. Runtime-method authority tests cover mismatched
+parameter identities.
+
+Atomic ordering literals from the compiler-owned Ordering enum are folded from
+their exact builtin namespace identity and in-range member ordinal. Other enum
+identities and invalid ordinals must remain unclaimed. This applies to the
+canonical enum-case index projection as well as declaration-backed members.

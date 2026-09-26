@@ -545,6 +545,7 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
                             ? XR_PROGRAM_TYPE_KIND_EXISTENTIAL
                         : type->kind == XR_CORE_IR_TYPE_ATOMIC ? XR_PROGRAM_TYPE_KIND_ATOMIC
                         : type->kind == XR_CORE_IR_TYPE_ARRAY ? XR_PROGRAM_TYPE_KIND_ARRAY
+                        : type->kind == XR_CORE_IR_TYPE_CHANNEL ? XR_PROGRAM_TYPE_KIND_CHANNEL
                             : type->kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE
                                   ? XR_PROGRAM_TYPE_KIND_PROVIDER_RESOURCE
                             : type->kind == XR_CORE_IR_TYPE_RECORD_REFERENCE
@@ -557,6 +558,8 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
         if (type->kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE) {
             buffer_put_uvar(buffer, XR_STABLE_ID_BYTES);
             buffer_put_bytes(buffer, type->resource_id.bytes, XR_STABLE_ID_BYTES);
+        } else if (type->kind == XR_CORE_IR_TYPE_CHANNEL) {
+            buffer_put_uvar(buffer, type->channel_element_type);
         } else if (type->kind == XR_CORE_IR_TYPE_ATOMIC) {
             buffer_put_uvar(buffer, type->atomic_element_type);
         } else if (type->kind == XR_CORE_IR_TYPE_ARRAY) {
@@ -566,6 +569,8 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
             buffer_put_uvar(buffer, type->field_count);
             for (uint32_t field = 0; field < type->field_count; ++field)
                 buffer_put_uvar(buffer, type->field_types[field]);
+            if (type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE)
+                buffer_put_uvar(buffer, type->parent_type_id);
         } else if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
             buffer_put_uvar(buffer, type->nominal_kind);
             buffer_put_uvar(buffer, type->field_count);

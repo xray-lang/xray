@@ -188,4 +188,86 @@ static uint32_t xr_program_integer_divmod_fixture_function(const XrValidatedProg
     return UINT32_MAX;
 }
 
+static XrProgramBuildStatus xr_program_integer_bitwise_fixture_write(unsigned mutation,
+                                                                    XrProgramArtifact *artifact) {
+    static const uint16_t types[] = {XR_CORE_TYPE_I8, XR_CORE_TYPE_U8, XR_CORE_TYPE_I16,
+                                     XR_CORE_TYPE_U16, XR_CORE_TYPE_I32, XR_CORE_TYPE_U32,
+                                     XR_CORE_TYPE_I64, XR_CORE_TYPE_U64};
+    XrCoreIrFunctionInput functions[48] = {0};
+    XrCoreIrBlockInput blocks[48] = {0};
+    XrCoreIrValueInput arguments[48][2] = {0};
+    XrCoreIrInstructionInput instructions[48][3] = {0};
+    XrCoreIrKey values[48][3] = {0};
+    uint16_t parameters[48][2] = {0};
+    for (uint32_t index = 0u; index < 48u; ++index) {
+        uint16_t type = types[index / 6u];
+        char name[64];
+        (void) snprintf(name, sizeof(name), "integer-bitwise:%u", index);
+        XrCoreIrKey key = xr_core_ir_key(name, strlen(name));
+        for (unsigned value = 0u; value < 3u; ++value) {
+            (void) snprintf(name, sizeof(name), "integer-bitwise:%u:value:%u", index, value);
+            values[index][value] = xr_core_ir_key(name, strlen(name));
+        }
+        for (unsigned argument = 0u; argument < 2u; ++argument) {
+            parameters[index][argument] =
+                index == 0u && mutation == argument + 1u ? XR_CORE_TYPE_BOOL : type;
+            arguments[index][argument] = (XrCoreIrValueInput) {
+                .key = values[index][argument], .type_id = parameters[index][argument],
+            };
+        }
+        instructions[index][0] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+            .operands = values[index], .operand_count = 2u,
+        };
+        uint16_t result_type = index == 0u && mutation == 3u ? XR_CORE_TYPE_BOOL : type;
+        instructions[index][1] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_INTEGER_BITWISE,
+            .operands = values[index],
+            .operand_count = index == 0u && mutation == 6u ? 1u : (index % 6u == 3u ? 1u : 2u),
+            .result = values[index][2], .result_type_id = result_type,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+            .immediate.u32 = index == 0u && mutation == 4u ? 6u : index % 6u,
+        };
+        instructions[index][2] = (XrCoreIrInstructionInput) {
+            .operation_id = XR_CORE_OP_CORE_RETURN,
+            .operands = &values[index][2], .operand_count = 1u,
+        };
+        blocks[index] = (XrCoreIrBlockInput) {
+            .key = key, .arguments = arguments[index], .argument_count = 2u,
+            .instructions = instructions[index], .instruction_count = 3u,
+        };
+        functions[index] = (XrCoreIrFunctionInput) {
+            .key = key, .parameter_types = parameters[index], .parameter_count = 2u,
+            .result_type_id = result_type,
+            .entry_block = key, .blocks = &blocks[index], .block_count = 1u,
+            .flags = index == 0u ? XR_PROGRAM_FUNCTION_ENTRY : 0u,
+        };
+    }
+    XrCoreIrKey identity = xr_core_ir_key("exact-integer-bitwise", 21u);
+    uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
+    XrCoreIrModuleInput module = {.key = identity, .functions = functions, .function_count = 48u};
+    XrCoreIrProgramInput input = {
+        .semantic_profile_fingerprint = identity.bytes,
+        .required_features = &feature, .required_feature_count = 1u,
+        .modules = &module, .module_count = 1u,
+    };
+    XrCoreIrProgram *program = NULL;
+    XrProgramBuildStatus status = xr_core_ir_program_build(&input, &program, NULL, 0u);
+    if (status == XR_PROGRAM_BUILD_OK)
+        status = xr_program_write(program, artifact, NULL, 0u);
+    xr_core_ir_program_free(program);
+    return status;
+}
+
+static uint32_t xr_program_integer_bitwise_fixture_function(const XrValidatedProgram *program,
+                                                           uint16_t type, unsigned remainder) {
+    for (uint32_t index = 0u; index < program->function_count; ++index) {
+        const XrValidatedFunction *function = &program->functions[index];
+        if (function->result_type_id == type &&
+            function->blocks[0].instructions[1].immediate.u32 == remainder)
+            return index;
+    }
+    return UINT32_MAX;
+}
+
 #endif  // XR_PROGRAM_INTEGER_FIXTURE_H

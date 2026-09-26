@@ -346,6 +346,7 @@ enum {
     SYMBOL_MUL_HIGH,
     SYMBOL_WINDOW,
     SYMBOL_APPEND,
+    SYMBOL_COPY_BYTES,
 
     SYMBOL_BUILTIN_COUNT  // sentinel
 };

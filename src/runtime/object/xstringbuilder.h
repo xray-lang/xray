@@ -46,16 +46,16 @@ XR_FUNC void xr_stringbuilder_free(XrStringBuilder *sb);
 /* ========== Operations ========== */
 
 // Append XrString
-XR_FUNC void xr_stringbuilder_append_str(XrStringBuilder *sb, struct XrString *s);
+XR_FUNC bool xr_stringbuilder_append_str(XrStringBuilder *sb, struct XrString *s);
 
 // Append C string
-XR_FUNC void xr_stringbuilder_append_cstr(XrStringBuilder *sb, const char *s, size_t len);
+XR_FUNC bool xr_stringbuilder_append_cstr(XrStringBuilder *sb, const char *s, size_t len);
 
 // Append integer
-XR_FUNC void xr_stringbuilder_append_int(XrStringBuilder *sb, int64_t val);
+XR_FUNC bool xr_stringbuilder_append_int(XrStringBuilder *sb, int64_t val);
 
 // Append float
-XR_FUNC void xr_stringbuilder_append_float(XrStringBuilder *sb, double val);
+XR_FUNC bool xr_stringbuilder_append_float(XrStringBuilder *sb, double val);
 
 // Convert to XrString (does not reset buffer)
 XR_FUNC struct XrString *xr_stringbuilder_to_string(XrStringBuilder *sb);

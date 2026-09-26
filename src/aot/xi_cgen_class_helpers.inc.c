@@ -393,7 +393,10 @@ static void emit_class_field_cache_decls(XiCgenCtx *ctx, FILE *out) {
         return;
     for (uint16_t i = 0; i < cache->nfields; i++) {
         CgClassFieldCacheEntry *entry = &cache->fields[i];
-        fprintf(out, "    %s ", ctype_str(entry->rep));
+        const char *c_type = entry->rep == XR_REP_I64 && entry->type &&
+                                     entry->type->kind == XR_KIND_BOOL
+                                 ? "uint8_t" : ctype_str(entry->rep);
+        fprintf(out, "    %s ", c_type);
         emit_class_field_cache_var(out, i);
         fprintf(out, " = ");
         if (cache->native_receiver && entry->layout_index >= 0) {

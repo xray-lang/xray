@@ -130,6 +130,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
     if (!candidate)
         return CG_NATIVE_DIRECT_EMISSION_UNCOVERED;
 
+    const char *failed_contract = "registry";
     const CgValueEmissionRegistryEntry *authority = NULL;
     for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
         if (ctx->value_emission_registry[i].semantic_plan != function->semantic_plan)
@@ -143,6 +144,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         !xr_target_plan_fingerprint_is_intact(authority->target_plan))
         goto invalid;
 
+    failed_contract = "semantic operation";
     const XrSemanticOperationRecord *operation =
         cg_semantic_operation_for_value(ctx, function, value);
     const XrStdlibDefEntry *entry = NULL;
@@ -161,6 +163,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         entry != candidate)
         goto invalid;
 
+    failed_contract = "semantic operands";
     uint32_t semantic_operand_count = 0;
     const XrSemanticOperandRecord *semantic_operands =
         xr_semantic_plan_operands(authority->semantic_plan, &semantic_operand_count);
@@ -174,6 +177,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         live_callee != semantic_operands[operation->operand_begin].value)
         goto invalid;
 
+    failed_contract = "target partition";
     uint32_t call_count = 0;
     uint32_t argument_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(authority->target_plan, &call_count);
@@ -232,6 +236,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
             goto invalid;
         call = &calls[i];
     }
+    failed_contract = "target call";
     const XrSemanticCallTargetRecord *target =
         call && call->semantic_call_target != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_call_target(authority->semantic_plan, call->semantic_call_target)
@@ -256,6 +261,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         call->flags != 0)
         goto invalid;
 
+    failed_contract = "result representation";
     uint32_t live_result = XR_SEMANTIC_INDEX_NONE;
     const XrTargetValueRepRecord *result = xr_target_plan_value_rep_for_module(
         authority->target_plan, target_partition, operation->result_value);
@@ -272,7 +278,8 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         call->result_register_rep != result->register_rep ||
         call->result_memory_rep != result->memory_rep || !result_register || !result_memory)
         goto invalid;
-    if (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_FRESH_NATIVE) {
+    failed_contract = "result ownership";
+    if (result_kind == XR_SEM_NATIVE_DIRECT_RESULT_FRESH_TAGGED) {
         uint32_t slot_count = 0;
         const XrTargetSlotRecord *slots = xr_target_plan_slots(authority->target_plan, &slot_count);
         const XrTargetSlotRecord *slot =
@@ -298,6 +305,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
         goto invalid;
     }
 
+    failed_contract = "argument ABI";
     for (uint16_t ordinal = 0; ordinal < argc; ordinal++) {
         uint32_t semantic_operand = operation->operand_begin + 1u + ordinal;
         const XrSemanticOperandRecord *operand = &semantic_operands[semantic_operand];
@@ -325,6 +333,7 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
             goto invalid;
     }
 
+    failed_contract = "provider signature";
     const CgAotStdlibMethod *method =
         cg_find_aot_stdlib_method(entry->module, entry->name, entry->argc);
     if (!method || method->ret_kind != CG_AOT_RET_VALUE || method->argc != entry->argc ||
@@ -349,8 +358,12 @@ cg_native_direct_emission_view(XiCgenCtx *ctx, const XiFunc *function, const XiV
     return CG_NATIVE_DIRECT_EMISSION_EXACT;
 
 invalid:
-    if (ctx)
-        (void) cg_value_emission_fail(ctx, "native-direct C emission authority is incomplete");
+    if (ctx) {
+        char error[160];
+        snprintf(error, sizeof(error), "native-direct C emission authority is incomplete (%s)",
+                 failed_contract);
+        (void) cg_value_emission_fail(ctx, error);
+    }
     return CG_NATIVE_DIRECT_EMISSION_INVALID;
 }
 
@@ -562,6 +575,8 @@ static bool cg_import_ref_has_aot_resolution(XiCgenCtx *ctx, const XiFunc *f, co
          cg_module_has_aot_direct_calls(ref->module_path)))
         return true;
     if (xicgen_import_ref_is_core_math_member(ref))
+        return true;
+    if (cg_native_timer_import_is_exact(ctx, f, v))
         return true;
     if (ref->member_name &&
         (xa_builtin_get_object_shape(ref->module_path, ref->member_name) ||

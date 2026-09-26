@@ -3202,6 +3202,13 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
         XA_PROGRAM_SEMANTIC_CLOSURE_READY);
     xr_program_semantic_closure_free(cloned_symbol_closure);
     AstNode *entry_node = entry_spec->ast->as.program.statements[1];
+    entry_node->is_exported = true;
+    XrProgramSemanticClosure *outside_family = NULL;
+    ASSERT_EQ_INT(xa_program_semantic_closure_publish_scalar_module_graph(
+        fixture.analyzer, fixture.graph, &outside_family, error, sizeof(error)),
+        XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED);
+    ASSERT_NULL(outside_family);
+    entry_node->is_exported = false;
     XaSymbol *entry_symbol =
         xa_analyzer_symbol_by_id(fixture.analyzer, entry_node->as.function_decl.symbol_id);
     ASSERT_NOT_NULL(entry_symbol);

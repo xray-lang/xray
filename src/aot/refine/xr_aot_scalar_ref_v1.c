@@ -14,6 +14,7 @@
 #include "../../ir/xi_own.h"
 #include "../../plan/semantic/xr_semantic_ids.h"
 #include "../../plan/semantic/xr_semantic_local_addr_shape.h"
+#include "../../plan/semantic/xr_semantic_range_slice_shape.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
@@ -59,6 +60,13 @@ static bool i64_type_is_exact(const XrSemanticTypeRecord *type) {
     return type && type->kind == XR_KIND_INT && type->scalar_rep == XR_NATIVE_I64 &&
            type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->flags == 0 && type->builtin_type == XR_TID_NULL;
+}
+
+static uint16_t native_ref_kind(const XrSemanticPlan *semantic, uint32_t type) {
+    if (xr_semantic_slice_view_type_is_exact(semantic, type, NULL))
+        return XR_MACHINE_REP_VIEW;
+    return i64_type_is_exact(xr_semantic_plan_type(semantic, type))
+               ? XR_MACHINE_REP_I64 : XR_MACHINE_REP_COUNT;
 }
 
 static bool authority_scope_is_intact(const XrSemanticPlan *semantic, const XrTargetPlan *target) {
@@ -119,13 +127,15 @@ static bool parameter_is_exact(const XrSemanticPlan *semantic,
         parameter ? xr_semantic_plan_function(semantic, parameter->function) : NULL;
     const XrSemanticTypeRecord *type =
         parameter ? xr_semantic_plan_type(semantic, parameter->type) : NULL;
-    return parameter && function && i64_type_is_exact(type) &&
+    return parameter && function &&
+           (i64_type_is_exact(type) || xr_semantic_slice_ref_parameter_is_exact(semantic, parameter)) &&
            parameter->ordinal < function->parameter_count &&
            function->parameter_begin + parameter->ordinal <
                xr_semantic_plan_parameter_count(semantic) &&
            xr_semantic_plan_parameter(
                semantic, function->parameter_begin + parameter->ordinal) == parameter &&
-           parameter->mode == XR_PARAM_REF && parameter->ownership == XI_OWN_NONE &&
+           parameter->mode == XR_PARAM_REF &&
+           parameter->ownership == (type->kind == XR_KIND_SLICE ? XI_OWN_BORROWED : XI_OWN_NONE) &&
            parameter->transfer_mode == XR_TRANSFER_SHARE &&
            (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 &&
            parameter->reserved == 0;
@@ -134,7 +144,7 @@ static bool parameter_is_exact(const XrSemanticPlan *semantic,
 static bool parameter_is_scalar_ref(const XrSemanticPlan *semantic,
                                     const XrSemanticParameterRecord *parameter) {
     return parameter && parameter->mode == XR_PARAM_REF &&
-           i64_type_is_exact(xr_semantic_plan_type(semantic, parameter->type));
+           native_ref_kind(semantic, parameter->type) != XR_MACHINE_REP_COUNT;
 }
 
 static XrAotScalarRefV1Status semantic_claim(
@@ -246,15 +256,15 @@ static bool value_slot_is_exact(const XrSemanticPlan *semantic, const XrTargetPl
     return binding && register_rep && memory_rep && slot &&
            binding->semantic_value == semantic_value && register_rep->id == binding->register_rep &&
            memory_rep->id == binding->memory_rep && register_rep->kind == machine_kind &&
-           memory_rep->kind == machine_kind && register_rep->root_kind == XR_TARGET_ROOT_NONE &&
-           memory_rep->root_kind == XR_TARGET_ROOT_NONE &&
-           register_rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
-           memory_rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL && slot->id == binding->slot &&
+           memory_rep->kind == machine_kind && register_rep->root_kind == (machine_kind == XR_MACHINE_REP_VIEW ? XR_TARGET_ROOT_VIEW_OWNER : XR_TARGET_ROOT_NONE) &&
+           memory_rep->root_kind == (machine_kind == XR_MACHINE_REP_VIEW ? XR_TARGET_ROOT_VIEW_OWNER : XR_TARGET_ROOT_NONE) &&
+           register_rep->ownership == (machine_kind == XR_MACHINE_REP_VIEW ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_TRIVIAL) &&
+           memory_rep->ownership == (machine_kind == XR_MACHINE_REP_VIEW ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_TRIVIAL) && slot->id == binding->slot &&
            slot->function == target_function && slot->semantic_value == semantic_value &&
            slot->semantic_operation == semantic_operation && slot->role == role &&
            slot->register_rep == binding->register_rep && slot->memory_rep == binding->memory_rep &&
-           slot->root_kind == XR_TARGET_ROOT_NONE &&
-           slot->ownership == XR_TARGET_OWNERSHIP_TRIVIAL && slot->reserved == 0 &&
+           slot->root_kind == (machine_kind == XR_MACHINE_REP_VIEW ? XR_TARGET_ROOT_VIEW_OWNER : XR_TARGET_ROOT_NONE) &&
+           slot->ownership == (machine_kind == XR_MACHINE_REP_VIEW ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_TRIVIAL) && slot->reserved == 0 &&
            slot->size == memory_rep->memory_size && slot->align == memory_rep->memory_align;
 }
 
@@ -269,14 +279,15 @@ static bool source_value_slot_is_exact(const XrSemanticPlan *semantic, const XrT
     uint8_t role = parameter ? XR_TARGET_SLOT_PARAMETER : XR_TARGET_SLOT_TEMPORARY;
     bool exact_source =
         (parameter && !operation && parameter->function == function && parameter->type == type &&
-         parameter->mode == XR_PARAM_READ && parameter->ownership == XI_OWN_NONE &&
+         ((parameter->mode == XR_PARAM_READ && parameter->ownership == XI_OWN_NONE) ||
+          xr_semantic_slice_ref_parameter_is_exact(semantic, parameter)) &&
          parameter->transfer_mode == XR_TRANSFER_SHARE) ||
         (!parameter && operation && operation->function == function &&
          operation->result_type == type && operation->result_value == semantic_value);
     const XrTargetValueRepRecord *binding =
         exact_source ? scoped_value_binding(semantic, target, semantic_value) : NULL;
     if (!exact_source ||
-        !value_slot_is_exact(semantic, target, semantic_value, function, role, XR_MACHINE_REP_I64))
+        !value_slot_is_exact(semantic, target, semantic_value, function, role, native_ref_kind(semantic, type)))
         return false;
     if (out)
         *out = binding;
@@ -324,7 +335,7 @@ static bool target_argument_is_exact(const XrSemanticPlan *semantic, const XrTar
         !source_value_slot_is_exact(semantic, target, claim->source->value, claim->call->function,
                                     claim->source->type, &caller) ||
         !value_slot_is_exact(semantic, target, claim->parameter->value, claim->parameter->function,
-                             XR_TARGET_SLOT_PARAMETER, XR_MACHINE_REP_I64) ||
+                             XR_TARGET_SLOT_PARAMETER, native_ref_kind(semantic, claim->parameter->type)) ||
         !value_slot_is_exact(semantic, target, claim->address->result_value, claim->call->function,
                              XR_TARGET_SLOT_TEMPORARY, XR_MACHINE_REP_RAW_PTR))
         return false;
@@ -530,7 +541,7 @@ XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_place_use_status(
     if (exact && operation->opcode == XI_PLACE_LOAD)
         exact = operation->result_type == owner_type &&
                 value_slot_is_exact(semantic, target, operation->result_value, operation->function,
-                                    XR_TARGET_SLOT_TEMPORARY, XR_MACHINE_REP_I64);
+                                    XR_TARGET_SLOT_TEMPORARY, native_ref_kind(semantic, owner_type));
     if (exact && operation->opcode == XI_PLACE_STORE) {
         const XrSemanticOperandRecord *stored = place + 1;
         exact = stored->type == owner_type && stored->role == XR_SEM_OPERAND_VALUE &&

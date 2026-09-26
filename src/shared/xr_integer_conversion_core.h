@@ -14,10 +14,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define XR_INTEGER_INLINE static inline __attribute__((unused))
+#else
+#define XR_INTEGER_INLINE static inline
+#endif
+
 /* Callers carry exact logical widths; target ABI storage never chooses the
  * interpretation of a source value. Signed results are sign extended so the
  * same bit result works in both exact-width and erased integer carriers. */
-static inline uint64_t xr_integer_convert_bits(uint64_t raw, uint8_t source_width,
+XR_INTEGER_INLINE uint64_t xr_integer_convert_bits(uint64_t raw, uint8_t source_width,
                                                bool source_signed, uint8_t target_width,
                                                bool target_signed) {
     if (source_width == 0u || source_width > 64u || target_width == 0u || target_width > 64u)
@@ -36,9 +42,10 @@ static inline uint64_t xr_integer_convert_bits(uint64_t raw, uint8_t source_widt
 }
 
 /* Both casts are in range, including the INT64_MIN bit pattern. */
-static inline int64_t xr_integer_signed_from_bits(uint64_t bits) {
+XR_INTEGER_INLINE int64_t xr_integer_signed_from_bits(uint64_t bits) {
     return bits <= (uint64_t) INT64_MAX ? (int64_t) bits
                                         : -INT64_C(1) - (int64_t) (UINT64_MAX - bits);
 }
 
+#undef XR_INTEGER_INLINE
 #endif  // XR_INTEGER_CONVERSION_CORE_H

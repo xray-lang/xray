@@ -70,13 +70,13 @@ class ProviderCodegenTests(unittest.TestCase):
                               host=replace(self.clock.host, adapter="i64-nullary-i64",
                                            header="shared/xr_os_core.h", symbol="xr_os_core_getpid"))
         entry = SimpleNamespace(symbol="sample.__probe", provider_declaration=declaration)
-        self.assertEqual(12, len(admitted_entries([*self.entries, entry])))
+        self.assertEqual(13, len(admitted_entries([*self.entries, entry])))
         generated = emit_provider_descriptors([*self.entries, entry])
         self.assertIn('"xray.runtime.provider-operation.v1/environment/probe"', generated)
         self.assertIn('"xr_os_core_getpid"', generated)
         self.assertIn("XR_STDLIB_PROVIDER_I64_NULLARY_I64", generated)
         native = emit_provider_aot_sources([*self.entries, entry])
-        self.assertIn("XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 12u", native)
+        self.assertIn("XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 13u", native)
         self.assertEqual(native, emit_provider_aot_sources(list(reversed([*self.entries, entry]))))
 
     def test_aot_uses_shared_typed_host_bodies(self):
@@ -114,6 +114,31 @@ class ProviderCodegenTests(unittest.TestCase):
         self.assertEqual(b"\x05\x02\x03\x06\x05\x02\x02\x07" + identity, encoded)
         self.assertTrue(affine)
         self.assertEqual((b"\x06\x05\x02\x03\x02", False), logical_type("(i64, bool)?"))
+
+    def test_byte_array_type_is_distinct_and_affine(self):
+        self.assertEqual((b"\x08", True), logical_type("Array<u8>"))
+        self.assertEqual((b"\x05\x02\x08\x06\x08", True), logical_type("(Array<u8>, Array<u8>?)"))
+        self.assertNotEqual(logical_type("string"), logical_type("Array<u8>"))
+        for spelling in ("Array<i64>", "Array<u16>", "Array<bool>", "ref Array<u8>"):
+            with self.subTest(spelling=spelling), self.assertRaises(ValueError):
+                logical_type(spelling)
+
+    def test_entropy_requires_exact_exclusive_byte_view(self):
+        declaration = next(entry.provider_declaration for entry in self.entries
+                           if entry.symbol == "crypto.__fillRandomBytes")
+        parameter, = declaration.logical.parameters
+        self.assertEqual(("Array<u8>", "ref", "borrow"),
+                         (parameter.type, parameter.mode, parameter.owner))
+        self.assertEqual("forbidden", declaration.logical.reentry)
+        wire = logical_bytes(declaration)
+        self.assertEqual(2, wire[19])
+        self.assertEqual(b"\x02\x02\x08\x01\x01", wire[22:])
+        for changed in (replace(parameter, mode="in"), replace(parameter, mode="out"),
+                        replace(parameter, type="Array<u8>?"), replace(parameter, owner="consume")):
+            with self.subTest(parameter=changed), self.assertRaises(ValueError):
+                logical_bytes(replace(declaration, logical=replace(declaration.logical, parameters=(changed,))))
+        with self.assertRaises(ValueError):
+            logical_bytes(replace(declaration, logical=replace(declaration.logical, reentry="allowed")))
 
     def test_storage_declarations_have_exact_ownership_and_error_authority(self):
         storage = {entry.name: entry for entry in self.entries

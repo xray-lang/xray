@@ -1241,8 +1241,8 @@ static void test_source_export_row_roundtrip_and_mutate(void) {
                                                       sizeof(error)));
     const XrTargetCallRecord *decoded_calls = xr_target_plan_calls(decoded, &count);
     REQUIRE(decoded_calls && count == 1 && decoded_calls[0].source_dependency == 0 &&
-            xr_stable_id_equal(decoded_calls[0].source_export_identity,
-                               calls[0].source_export_identity) &&
+            xr_stable_id_equal(decoded_calls[0].source_declaration_identity,
+                               calls[0].source_declaration_identity) &&
             xr_stable_id_equal(decoded_calls[0].source_callee_identity,
                                calls[0].source_callee_identity) &&
             xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
@@ -1253,7 +1253,7 @@ static void test_source_export_row_roundtrip_and_mutate(void) {
     static const size_t mutations[] = {
         36,  /* source_dependency */
         40,  /* source_export */
-        44,  /* source_export_identity */
+        44,  /* source_declaration_identity */
         60,  /* source_callee_identity */
         76,  /* result_value */
         80,  /* result_slot */

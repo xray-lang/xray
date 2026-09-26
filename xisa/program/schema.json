@@ -2,7 +2,7 @@
   "schema": "xray-program-format-schema/3",
   "format": {
     "major": 3,
-    "minor": 9,
+    "minor": 11,
     "magic_hex": "585250524f470d0a",
     "program_id_domain": "xray-program-id-v3"
   },
@@ -34,7 +34,8 @@
       "16:i16",
       "17:i32",
       "18:u64",
-      "19:f64"
+      "19:f64",
+      "20:string-builder"
     ],
     "dynamic_type_base": 32,
     "dynamic_kinds": [
@@ -47,7 +48,8 @@
       "array",
       "atomic",
       "record-reference",
-      "provider-resource"
+      "provider-resource",
+      "channel"
     ],
     "ownership_kinds": [
       "0:trivial",
@@ -58,11 +60,11 @@
       "1:explicit",
       "2:forbidden"
     ],
-    "builtin_ownership": "void, bool, i8, i16, i32, i64, u8, u16, u32, u64, f64, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune are trivial with trivial copy; string is affine with explicit copy; panic-info is affine with forbidden copy",
+    "builtin_ownership": "void, bool, i8, i16, i32, i64, u8, u16, u32, u64, f64, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune are trivial with trivial copy; string is affine with explicit copy; panic-info and string-builder are affine with forbidden copy",
     "constant_shape": "ascending unique (TypeId, kind, value) rows; kinds are 1:i64 2:bool 3:string 4:rune; string rows carry a minimal-ULEB128 byte length followed by valid UTF-8 bytes ordered by unsigned byte lexicographic order; rune rows carry one Unicode scalar value; kind 5:f64 carries the exact unsigned 64-bit IEEE-754 bit pattern in minimal ULEB128, ordered by unsigned bits without NaN or signed-zero normalization",
     "identity_order": "ascending-semantic-key",
     "aggregate_shape": "declaration-ordered-field-type-ids",
-    "class_reference_shape": "declaration-ordered-field-type-ids; nominal CLASS is implied by the type kind; physical object layout and lifetime representation are forbidden",
+    "class_reference_shape": "declaration-ordered-field-type-ids followed by parent TypeId (void for a root); parent must be an exact class-reference whose fields match the child prefix; parent graph is acyclic; nominal CLASS is implied; physical layout and lifetime representation are forbidden",
     "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
     "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
     "callable_shape": "one canonical SignatureId with visible effect and capability upper bounds; every callable TypeId is affine with explicit copy and its signature has no receiver",
@@ -76,7 +78,8 @@
     "display_name_shape": "after each dynamic shape: bounded UTF-8 type display name followed by declaration-ordered variant display names; each name is minimal-ULEB128 byte length plus bytes; zero means absent; no NUL or ASCII control bytes; names never act as lookup identities",
     "atomic_shape": "one scalar element TypeId (i64, f64 or bool); affine with explicit identity-preserving copy; synchronized storage and reference counts are executor-private",
     "record_reference_shape": "ordered-field-type-ids; non-nominal affine reference root with explicit or forbidden copy; source semantic key includes exact field names, readonly contracts and child type identities; physical layout and lifetime representation are forbidden",
-    "provider_resource_shape": "16-byte nonzero stable resource identity preceded by minimal-ULEB128 length 16; non-nominal affine provider resource with forbidden copy; handles, addresses, physical layout and finalizers are executor-private"
+    "provider_resource_shape": "16-byte nonzero stable resource identity preceded by minimal-ULEB128 length 16; non-nominal affine provider resource with forbidden copy; handles, addresses, physical layout and finalizers are executor-private",
+    "channel_shape": "one non-void runtime element TypeId; non-nominal affine handle with explicit identity-preserving copy independent of element copy; capacity, queue, synchronization and message storage are executor-private"
   },
   "value_system": {
     "function_parameter_contract": "ordered-(TypeId,ParamMode) plus declaration-owned receiver marker; receiver occupies parameter slot 0 and source parameter ordinals exclude it",

@@ -450,6 +450,48 @@
       "projection_kind": "sequence-length",
       "core_operation": "core.sequence.length",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.band",
+      "result_type": "integer",
+      "projection_kind": "integer-bitwise",
+      "core_operation": "core.integer.bitwise",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.bor",
+      "result_type": "integer",
+      "projection_kind": "integer-bitwise",
+      "core_operation": "core.integer.bitwise",
+      "immediate_u32": 1
+    },
+    {
+      "xi_operation": "xi.bxor",
+      "result_type": "integer",
+      "projection_kind": "integer-bitwise",
+      "core_operation": "core.integer.bitwise",
+      "immediate_u32": 2
+    },
+    {
+      "xi_operation": "xi.bnot",
+      "result_type": "integer",
+      "projection_kind": "integer-bitwise",
+      "core_operation": "core.integer.bitwise",
+      "immediate_u32": 3
+    },
+    {
+      "xi_operation": "xi.shl",
+      "result_type": "integer",
+      "projection_kind": "integer-bitwise",
+      "core_operation": "core.integer.bitwise",
+      "immediate_u32": 4
+    },
+    {
+      "xi_operation": "xi.shr",
+      "result_type": "integer",
+      "projection_kind": "integer-bitwise",
+      "core_operation": "core.integer.bitwise",
+      "immediate_u32": 5
     }
   ],
   "semantic_mappings": [

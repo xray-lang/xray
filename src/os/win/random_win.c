@@ -23,15 +23,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 
 void xr_random_bytes(unsigned char *buf, size_t len) {
-    // Truncate len to ULONG range; len > 4GiB is nonsensical for
-    // a single CSPRNG call. STATUS_SUCCESS is 0; any non-zero
-    // NTSTATUS means failure and we must not proceed with biased
-    // output (crypto IVs / keys would silently weaken).
-    if (BCryptGenRandom(NULL, buf, (ULONG) len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) {
-        fprintf(stderr,
-                "xray: CSPRNG failure (BCryptGenRandom); aborting to avoid biased output\n");
-        abort();
+    /* The public length is size_t; each OS request is bounded by ULONG.
+     * Never report success after filling only a truncated prefix. */
+    while (len != 0u) {
+        ULONG chunk = len > ULONG_MAX ? ULONG_MAX : (ULONG)len;
+        if (BCryptGenRandom(NULL, buf, chunk, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) {
+            fprintf(stderr,
+                    "xray: CSPRNG failure (BCryptGenRandom); aborting to avoid biased output\n");
+            abort();
+        }
+        buf += chunk;
+        len -= chunk;
     }
 }

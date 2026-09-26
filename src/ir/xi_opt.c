@@ -12,6 +12,7 @@
  */
 
 #include "xi_opt.h"
+#include "xi_module.h"
 #include "xi_pass_policy.h"
 #include "xi_opt_gvn_pre.h"
 #include "xi_tbaa.h"
@@ -37,6 +38,7 @@
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
+#include "../plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
@@ -53,6 +55,7 @@
 #include "xi_coro_lower.h"
 #include "../base/xdefs.h"
 #include "../base/xglobal_indices.h"
+#include "../base/xbuiltin_enum.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xa_selection.h"
@@ -60,6 +63,9 @@
 #include "../os/os_time.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/class/xclass_info.h"
+#include "../runtime/class/xenum.h"
+#include "../frontend/analyzer/xanalyzer_symbol.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -507,44 +513,56 @@ static void rewrite_to_const_int(XiValue *v, int64_t value) {
     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
-static bool ordering_member_index_opt(const char *name, int64_t *out_index) {
-    if (!name || !out_index)
-        return false;
-    if (strcmp(name, "Relaxed") == 0) {
-        *out_index = 0;
-        return true;
-    }
-    if (strcmp(name, "Acquire") == 0) {
-        *out_index = 1;
-        return true;
-    }
-    if (strcmp(name, "Release") == 0) {
-        *out_index = 2;
-        return true;
-    }
-    if (strcmp(name, "AcquireRelease") == 0) {
-        *out_index = 3;
-        return true;
-    }
-    if (strcmp(name, "SeqCst") == 0) {
-        *out_index = 4;
-        return true;
-    }
-    return false;
-}
-
 static bool rewrite_ordering_member_to_const_int(XiValue *v) {
-    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->args[0] || !v->aux)
+    if (v && v->op == XI_INDEX_GET && v->aux_kind == XI_AUX_KIND_ENUM_CASE &&
+        v->nargs == 2 && v->args && v->args[0] && v->args[1]) {
+        const XiValue *domain = v->args[0];
+        const XiValue *ordinal = v->args[1];
+        const XrBuiltinEnumRow *row = xr_builtin_enum_registry_row(XR_GLOBAL_VAR_ORDERING);
+        if (domain->op == XI_GET_BUILTIN && domain->aux_int == XR_GLOBAL_VAR_ORDERING &&
+            ordinal->op == XI_CONST && ordinal->aux_kind == XI_AUX_KIND_NONE &&
+            ordinal->nargs == 0 && ordinal->type && ordinal->type->kind == XR_KIND_INT &&
+            !ordinal->type->is_nullable && row && xr_builtin_enum_row_is_unit(row) &&
+            ordinal->aux_int >= 0 && (uint64_t) ordinal->aux_int < row->member_count) {
+            rewrite_to_const_int(v, ordinal->aux_int);
+            v->type = xr_type_new_int(NULL);
+            return true;
+        }
+        return false;
+    }
+    if (!v || v->op != XI_LOAD_FIELD || v->nargs != 1 || !v->args[0] || !v->aux)
         return false;
     XiValue *recv = v->args[0];
-    while (recv && xi_copy_is_identity_alias(recv) && recv->nargs >= 1)
+    while (recv && xi_copy_is_identity_alias(recv) && recv->nargs == 1)
         recv = recv->args[0];
-    if (!recv || recv->op != XI_GET_BUILTIN || recv->aux_int != XR_GLOBAL_VAR_ORDERING)
+    if (!recv || recv->op != XI_CONST || recv->aux_kind != XI_AUX_KIND_ENUM_NAMESPACE ||
+        !recv->aux)
         return false;
-    int64_t index = 0;
-    if (!ordering_member_index_opt((const char *) v->aux, &index))
+    const XiEnumData *schema = recv->aux;
+    const XrEnumType *runtime_type = schema->runtime_type;
+    const XrBuiltinEnumRow *row = xr_builtin_enum_registry_row(XR_GLOBAL_VAR_ORDERING);
+    if (!row || !runtime_type || !runtime_type->layout || !schema->name ||
+        !runtime_type->layout->nominal_owner ||
+        strcmp(runtime_type->layout->nominal_owner, "prelude") != 0 ||
+        strcmp(schema->name, row->enum_name) != 0 ||
+        schema->layout_id != runtime_type->layout->layout_id || schema->is_adt ||
+        schema->member_count != row->member_count || !schema->members ||
+        runtime_type->member_count != row->member_count)
         return false;
-    rewrite_to_const_int(v, index);
+    int selected = -1;
+    for (uint32_t i = 0; i < row->member_count; i++) {
+        if (!schema->members[i].name || schema->members[i].ordinal != i ||
+            schema->members[i].payload_count != 0 || row->members[i].has_payload ||
+            strcmp(schema->members[i].name, row->members[i].name) != 0)
+            return false;
+        if (strcmp((const char *) v->aux, row->members[i].name) == 0)
+            selected = (int) i;
+    }
+    if (selected < 0 ||
+        xr_enum_type_find_member_index_by_symbol((XrEnumType *) runtime_type,
+                                                (int) v->aux_int) != selected)
+        return false;
+    rewrite_to_const_int(v, selected);
     v->type = xr_type_new_int(NULL);
     return true;
 }
@@ -847,8 +865,18 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
  * (e.g. `var temp = b`).  Resolving through it would merge the
  * domains, causing loop-carried variables to share a physical
  * register and corrupt each other on reassignment. */
-static XiValue *resolve_copy(XiValue *v) {
+static XiValue *resolve_copy(XiValue *v, bool preserve_adapter_source) {
     while (v && xi_copy_is_identity_alias(v) && v->nargs >= 1) {
+        const XiFunc *owner = v->block ? v->block->func : NULL;
+        const XrSemanticFunctionRecord *frozen =
+            owner && owner->semantic_plan
+                ? xr_semantic_plan_function(owner->semantic_plan,
+                                            owner->semantic_plan_function_index)
+                : NULL;
+        /* Frozen copies are source identities for independently verified
+         * representation adapters. Propagation must not erase that boundary. */
+        if (preserve_adapter_source && frozen && v->id < frozen->value_count)
+            break;
         XiValue *src = v->args[0];
         /* Stop at variable-domain boundaries (prevents register corruption) */
         if (xi_var_id_is_valid(v->var_id) && src && xi_var_id_is_valid(src->var_id) &&
@@ -875,7 +903,7 @@ XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
             for (uint16_t a = 0; a < v->nargs; a++) {
-                XiValue *resolved = resolve_copy(v->args[a]);
+                XiValue *resolved = resolve_copy(v->args[a], v->backend_origin != XI_BACKEND_VALUE_NONE);
                 if (resolved && resolved != v->args[a]) {
                     v->args[a] = resolved;
                     chg.values_changed = true;
@@ -892,7 +920,7 @@ XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
                 XiValue *arg = phi->value.args[a];
                 if (!arg || arg->op != XI_COPY || arg->nargs < 1)
                     continue;
-                XiValue *resolved = resolve_copy(arg);
+                XiValue *resolved = resolve_copy(arg, false);
                 if (resolved && resolved != arg &&
                     (!xi_var_id_is_valid(arg->var_id) || arg->var_id == resolved->var_id)) {
                     phi->value.args[a] = resolved;
@@ -903,7 +931,7 @@ XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
 
         /* Rewrite block control */
         if (blk->control) {
-            XiValue *resolved = resolve_copy(blk->control);
+            XiValue *resolved = resolve_copy(blk->control, false);
             if (resolved && resolved != blk->control) {
                 blk->control = resolved;
                 chg.values_changed = true;
@@ -1642,8 +1670,14 @@ XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
             for (uint32_t i = 0; i < blk->nvalues; /* no increment */) {
                 XiValue *v = blk->values[i];
 
-                /* Keep if: has uses, has side effects, or may throw */
-                if (v->uses > 0 || (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW))) {
+                /* Declared parameters remain members of the function even
+                 * without body uses: ABI and coroutine frames own their slots. */
+                bool declared_parameter =
+                    v->op == XI_PARAM && f->params && v->aux_int >= 0 &&
+                    v->aux_int < xi_func_semantic_param_count(f) &&
+                    f->params[v->aux_int] == v;
+                if (declared_parameter || v->uses > 0 ||
+                    (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW))) {
                     i++;
                     continue;
                 }
@@ -1775,6 +1809,10 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
     if (type->is_nullable)
         return XR_REP_TAGGED;
     switch (type->kind) {
+        case XR_KIND_ENUM:
+            return type->enum_type.layout && type->enum_type.layout->is_zero_payload &&
+                   type->enum_type.layout->layout_id && type->enum_type.layout->variant_count
+                ? XR_REP_I64 : XR_REP_TAGGED;
         case XR_KIND_POINTER:
             return XR_REP_RAWPTR;
         /* A reference-capable container carries exactly one storage fact: the
@@ -1848,6 +1886,25 @@ static bool sr_scalar_copy_operand_rep(const XiValue *value, uint16_t argument_i
         value->type->kind != value->args[0]->type->kind)
         return false;
     *out = argument_rep;
+    return true;
+}
+
+/* Copy reads a borrowed Slice in its native view carrier and returns a fresh
+ * Array owner. Boxing the view here would introduce an unplanned adapter. */
+static bool sr_slice_copy_operand_rep(const XiValue *value, uint16_t argument_index, XrRep *out) {
+    if (!value || !out || value->op != XI_CALL_BUILTIN || value->nargs != 1 ||
+        argument_index != 0 || !value->aux || value->aux_kind != XI_AUX_KIND_NONE ||
+        strcmp((const char *) value->aux, "copy") != 0 || !value->args[0] ||
+        !value->args[0]->type || !value->type)
+        return false;
+    const XrType *source = value->args[0]->type;
+    const XrType *result = value->type;
+    if (source->kind != XR_KIND_SLICE || result->kind != XR_KIND_ARRAY ||
+        source->is_nullable || source->is_const || result->is_nullable || result->is_const ||
+        !source->container.element_type || !result->container.element_type ||
+        !xr_type_equals(source->container.element_type, result->container.element_type))
+        return false;
+    *out = sr_type_native_boundary_rep(source);
     return true;
 }
 
@@ -2154,7 +2211,7 @@ static bool sr_value_index_container_is_static(const XiValue *value) {
  * native representations. Every other container keeps the native boundary it
  * already carries at its own definition, so no adapter appears there either. */
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy);
-static bool sr_number_parse_error_member_access_is_exact(const XiValue *value);
+static bool sr_builtin_unit_enum_member_access_is_exact(const XiValue *value);
 
 static XrRep sr_container_operand_rep(const XiValue *container, const XiRepPolicy *policy) {
     const XiValue *v = sr_unwrap_identity_value(container);
@@ -2483,7 +2540,7 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
         return false;
     switch (v->op) {
         case XI_INDEX_GET:
-            if (sr_number_parse_error_member_access_is_exact(v)) {
+            if (sr_builtin_unit_enum_member_access_is_exact(v)) {
                 *out = XR_REP_I64;
                 return true;
             }
@@ -2848,7 +2905,7 @@ static bool sr_array_hof_identity_is_exact(const XiValue *value, SrArrayHofIdent
     return true;
 }
 
-static const XrSemanticOperationRecord *sr_number_parse_error_operation(const XiValue *value) {
+static const XrSemanticOperationRecord *sr_frozen_operation(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
     const XrSemanticPlan *plan = function ? function->semantic_plan : NULL;
     if (!function || !plan || !xr_semantic_plan_is_verified(plan) ||
@@ -2874,25 +2931,36 @@ static const XrSemanticOperationRecord *sr_number_parse_error_operation(const Xi
     return match;
 }
 
-static bool sr_number_parse_error_member_access_is_exact(const XiValue *value) {
+static bool sr_builtin_unit_enum_member_access_is_exact(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
     return value && value->op == XI_INDEX_GET && function && function->semantic_plan &&
-           xr_semantic_number_parse_error_member_access_is_exact(
-               function->semantic_plan, sr_number_parse_error_operation(value), NULL, NULL, NULL);
+           xr_semantic_builtin_unit_enum_member_access_is_exact(
+               function->semantic_plan, sr_frozen_operation(value), NULL, NULL, NULL);
 }
 
 static bool sr_number_parse_error_catch_narrow_is_exact(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
     return value && value->op == XI_AS && function && function->semantic_plan &&
            xr_semantic_number_parse_error_catch_narrow_is_exact(
-               function->semantic_plan, sr_number_parse_error_operation(value), NULL);
+               function->semantic_plan, sr_frozen_operation(value), NULL);
 }
 
-static bool sr_number_parse_error_equality_is_exact(const XiValue *value) {
+static bool sr_unit_enum_equality_is_exact(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
-    return value && value->op == XI_EQ && function && function->semantic_plan &&
-           xr_semantic_number_parse_error_equality_is_exact(function->semantic_plan,
-                                                            sr_number_parse_error_operation(value));
+    return value && (value->op == XI_EQ || value->op == XI_NE) && value->nargs == 2 &&
+           value->args[0] && value->args[0]->type &&
+           value->args[0]->type->kind == XR_KIND_ENUM && function &&
+           function->semantic_plan && xr_semantic_unit_enum_equality_is_exact(
+               function->semantic_plan, sr_frozen_operation(value));
+}
+
+static bool sr_native_direct_call_is_exact(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    const XrSemanticOperationRecord *operation = sr_frozen_operation(value);
+    return value && value->op == XI_CALL && function && operation &&
+           operation->opcode == value->op && operation->operand_count == value->nargs &&
+           xr_semantic_native_direct_call_shape_is_exact(function->semantic_plan, operation,
+                                                         NULL, NULL);
 }
 
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
@@ -2900,6 +2968,18 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         return XR_REP_TAGGED;
     if (v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL && v->op != XI_CONVERT)
         return XR_REP_TAGGED;
+    /* Frozen unit declarations have one typed ordinal carrier. Explicit
+     * adapters remain responsible for erased tagged boundaries. Namespace
+     * references may carry the declaration type but are not enum instances. */
+    const XrSemanticOperationRecord *frozen =
+        v->type->kind == XR_KIND_ENUM && !v->type->is_nullable &&
+        v->backend_origin == XI_BACKEND_VALUE_NONE && v->op != XI_BOX &&
+        v->op != XI_GET_SHARED && v->op != XI_GET_BUILTIN && v->op != XI_IMPORT_REF
+            ? sr_frozen_operation(v) : NULL;
+    if (frozen &&
+        frozen->opcode == v->op && xr_semantic_unit_enum_type_is_exact(
+            xr_semantic_plan_type(v->block->func->semantic_plan, frozen->result_type)))
+        return XR_REP_I64;
     XrRep memory_rep = XR_REP_TAGGED;
     if (sr_def_rep_memory_op(v, &memory_rep))
         return memory_rep;
@@ -3025,6 +3105,11 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             if (policy && !policy->force_phi_tagged)
                 return sr_type_native_boundary_rep(v->type);
             return XR_REP_TAGGED;
+        case XI_SLICE:
+        case XI_SLICE_WINDOW:
+            return v->type && v->type->kind == XR_KIND_SLICE ? XR_REP_PTR : XR_REP_TAGGED;
+        case XI_SLICE_FROM_PTR:
+            return XR_REP_PTR;
         case XI_BOX:
             return XR_REP_TAGGED;
         case XI_UNBOX: {
@@ -3308,8 +3393,12 @@ static bool sr_use_rep_value_op(const XiValue *user, uint16_t arg_idx, const XiR
                                 XrRep *out) {
     switch (user->op) {
         case XI_NOT:
-            *out =
-                arg_idx == 0 && user->args[0] ? sr_def_rep(user->args[0], policy) : XR_REP_TAGGED;
+            *out = XR_REP_TAGGED;
+            if (arg_idx == 0 && user->nargs == 1 && user->args[0]) {
+                *out = sr_type_scalar_rep(user->args[0]->type);
+                if (*out == XR_REP_TAGGED)
+                    *out = sr_def_rep(user->args[0], policy);
+            }
             return true;
         case XI_CONVERT:
             if (sr_enum_ordinal_owner_or_shape(user)) {
@@ -3396,7 +3485,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_GE:
             if (sr_compare_uses_null(user))
                 return XR_REP_TAGGED;
-            if (user->op == XI_EQ && sr_number_parse_error_equality_is_exact(user))
+            if (sr_unit_enum_equality_is_exact(user))
                 return XR_REP_I64;
             if (arg_idx < user->nargs && user->args[arg_idx] && user->args[arg_idx]->type) {
                 return sr_type_scalar_rep(user->args[arg_idx]->type);
@@ -3404,12 +3493,19 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             return XR_REP_TAGGED;
         /* Both call forms share the ordinary argument layout, so an argument
          * carries the same representation whichever form holds it. */
+        case XI_GO:
+            if (arg_idx > 0 && arg_idx < user->nargs && user->args[arg_idx])
+                return sr_type_native_boundary_rep(user->args[arg_idx]->type);
+            return XR_REP_TAGGED;
         case XI_CALL:
         case XI_TAIL_CALL:
             if (arg_idx > 0 && arg_idx < user->nargs && user->args[arg_idx] &&
                 (user->args[arg_idx]->op == XI_LOCAL_ADDR ||
                  sr_param_is_call_bound_place(user->args[arg_idx])))
                 return XR_REP_RAWPTR;
+            /* Native leaf shims consume tagged values even under native call policy. */
+            if (arg_idx > 0 && sr_native_direct_call_is_exact(user))
+                return XR_REP_TAGGED;
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 return sr_type_native_boundary_rep(user->args[arg_idx]->type);
@@ -3424,6 +3520,11 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             return arg_idx == 0 && user->args[0]
                        ? sr_type_call_place_pointee_rep(user->args[0]->type)
                        : XR_REP_TAGGED;
+        case XI_SLICE_FROM_PTR:
+            if (arg_idx == 2)
+                return user->args[2] ? sr_def_rep(user->args[2], policy) : XR_REP_TAGGED;
+            return arg_idx < 2 && user->args[arg_idx]
+                       ? sr_type_native_boundary_rep(user->args[arg_idx]->type) : XR_REP_TAGGED;
         case XI_SLICE:
             /* A range slice borrows its container and hands back a window over
              * the same elements: the container arrives in whatever carrier its
@@ -3450,6 +3551,8 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 return array_intrinsic_rep;
             XrRep scalar_copy_rep = XR_REP_TAGGED;
             if (sr_scalar_copy_operand_rep(user, arg_idx, &scalar_copy_rep))
+                return scalar_copy_rep;
+            if (sr_slice_copy_operand_rep(user, arg_idx, &scalar_copy_rep))
                 return scalar_copy_rep;
             if (user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
@@ -3501,6 +3604,14 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
              * canonical representation-selection boundary native so no BOX
              * adapter can mutate that authority. */
             return arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
+        case XI_ATOMIC_LOAD:
+        case XI_ATOMIC_STORE:
+        case XI_ATOMIC_RMW:
+            /* Atomic helpers take a tagged cell and native scalar data/order.
+             * Keep that boundary explicit instead of inserting unused boxes. */
+            return arg_idx > 0 && arg_idx < user->nargs && user->args[arg_idx]
+                       ? sr_type_native_boundary_rep(user->args[arg_idx]->type)
+                       : XR_REP_TAGGED;
         case XI_RANGE:
             /* Range owns its tagged heap result, but the shared range kernel
              * consumes two native signed bounds. The representation selector

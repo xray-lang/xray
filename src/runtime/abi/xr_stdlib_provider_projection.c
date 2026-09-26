@@ -76,22 +76,41 @@ static bool logical_signature_matches(const XrProviderLogicalContract *logical, 
 static bool logical_is_admitted(const XrProviderLogicalContract *logical, uint8_t adapter) {
     const uint32_t unsupported = XR_PROVIDER_EFFECT_MAY_ERROR | XR_PROVIDER_EFFECT_MAY_PANIC |
                                  XR_PROVIDER_EFFECT_MAY_SUSPEND;
+    bool mutable_borrow = false;
+    for (uint8_t index = 0u; index < logical->parameter_count; ++index)
+        mutable_borrow |= logical->parameter_modes[index] == XR_PROVIDER_MODE_REF;
     if (logical->runtime_profiles != XR_PROVIDER_LOGICAL_PROFILE_HOSTED ||
         (logical->effects & unsupported) != 0u ||
         (logical->result_owner != XR_PROVIDER_OWNER_TRIVIAL &&
          !(adapter == XR_STDLIB_PROVIDER_TYPED && logical->result_owner == XR_PROVIDER_OWNER_OWNED)) ||
         logical->error_owner != XR_PROVIDER_OWNER_TRIVIAL ||
         logical->threads != XR_PROVIDER_THREADS_ANY ||
-        logical->reentry != XR_PROVIDER_REENTRY_ALLOWED ||
+        logical->reentry != (mutable_borrow ? XR_PROVIDER_REENTRY_FORBIDDEN : XR_PROVIDER_REENTRY_ALLOWED) ||
         logical->callbacks != XR_PROVIDER_CALLBACK_NONE ||
         !logical_signature_matches(logical, adapter))
         return false;
-    for (uint8_t index = 0u; index < logical->parameter_count; ++index)
+    if (mutable_borrow) {
+        XrProviderLogicalTypeView result;
+        if (adapter != XR_STDLIB_PROVIDER_TYPED || logical->result_owner != XR_PROVIDER_OWNER_TRIVIAL ||
+            !xr_provider_logical_contract_type(logical, logical->parameter_count, &result) ||
+            result.size != 1u || result.bytes[0] != XR_PROVIDER_TYPE_UNIT)
+            return false;
+    }
+    for (uint8_t index = 0u; index < logical->parameter_count; ++index) {
+        if (logical->parameter_modes[index] == XR_PROVIDER_MODE_REF) {
+            XrProviderLogicalTypeView type;
+            if (logical->parameter_owners[index] != XR_PROVIDER_OWNER_BORROWED ||
+                !xr_provider_logical_contract_type(logical, index, &type) ||
+                type.size != 1u || type.bytes[0] != XR_PROVIDER_TYPE_U8_ARRAY)
+                return false;
+            continue;
+        }
         if (logical->parameter_modes[index] != XR_PROVIDER_MODE_IN ||
             (logical->parameter_owners[index] != XR_PROVIDER_OWNER_TRIVIAL &&
              !(adapter == XR_STDLIB_PROVIDER_TYPED &&
                logical->parameter_owners[index] == XR_PROVIDER_OWNER_BORROWED)))
             return false;
+    }
     return true;
 }
 

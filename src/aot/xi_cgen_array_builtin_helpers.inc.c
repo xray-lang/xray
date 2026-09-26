@@ -169,12 +169,29 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             emission.recipe_argument_value != (filled ? fill_semantic : UINT32_MAX) ||
             emission.recipe_argument_count != 0 || emission.recipe_arguments != NULL ||
             emission.recipe_layout_id != 0 ||
-            xi_value_allocation_storage_mode(v) != XR_OBJ_STORAGE_NORMAL) {
+            xi_value_allocation_storage_mode(v) > XR_OBJ_STORAGE_TRANSFER) {
+            if (getenv("XRAY_AOT_REFINE_TRACE"))
+                fprintf(stderr,
+                        "[array-recipe] function=%s value=%u kind=%u nargs=%u status=%u "
+                        "rep=%u register=%u memory=%u materialization=%u/%u "
+                        "storage=%u/%u count=%u:%u/%u fill=%u:%u/%u allocation=%u "
+                        "ctype=%s symbol=%s\n",
+                        f->name ? f->name : "<anonymous>", v->id, v->array_intrinsic_kind,
+                        v->nargs, status, emission.rep, emission.target_register_kind,
+                        emission.target_memory_kind, emission.materialization, expected_materialization,
+                        xi_storage, emission.recipe_discriminant, count_identity, count_semantic,
+                        emission.recipe_operand_value, fill_identity, fill_semantic,
+                        emission.recipe_argument_value, xi_value_allocation_storage_mode(v),
+                        emission.c_type ? emission.c_type : "<none>",
+                        emission.recipe_symbol ? emission.recipe_symbol : "<none>");
             (void) cg_value_emission_fail(ctx,
                                           "Array intrinsic C emission recipe is missing or stale");
             emit_codegen_abort_expr(out);
             return true;
         }
+        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, "xrt_array_set_storage(");
         fprintf(out, "%s(", emission.recipe_symbol);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         if (filled) {
@@ -182,6 +199,8 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         }
         fprintf(out, ", %s)", storage_symbol);
+        if (storage_mode != XR_OBJ_STORAGE_NORMAL)
+            fprintf(out, ", %u)", (unsigned) storage_mode);
         return true;
     }
     if (v && v->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE) {

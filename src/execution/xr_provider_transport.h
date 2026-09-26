@@ -59,7 +59,7 @@ static inline void xr_provider_pack_dispose(XrProviderValuePack *result, const X
  * Contract validation bounds the entire walk to MAX_TYPE_BYTES logical bytes. */
 static inline bool xr_provider_value_walk(const XrProviderResourceAccess *access, XrProviderLogicalTypeView type,
                               size_t *type_offset, XrProviderValuePack *pack,
-                              uint32_t *node_offset, bool input) {
+                              uint32_t *node_offset, bool input, uint8_t mode) {
     if (*type_offset >= type.size)
         return false;
     uint8_t token = type.bytes[(*type_offset)++];
@@ -78,7 +78,7 @@ static inline bool xr_provider_value_walk(const XrProviderResourceAccess *access
         if (!count || (node && node->child_count != count))
             return false;
         for (uint8_t index = 0u; index < count; ++index) {
-            if (!xr_provider_value_walk(access, type, type_offset, pack, node_offset, input))
+            if (!xr_provider_value_walk(access, type, type_offset, pack, node_offset, input, mode))
                 return false;
         }
         return true;
@@ -87,7 +87,7 @@ static inline bool xr_provider_value_walk(const XrProviderResourceAccess *access
         if (node && node->child_count > 1u)
             return false;
         return xr_provider_value_walk(access, type, type_offset,
-                                 node && node->child_count ? pack : NULL, node_offset, input);
+                                 node && node->child_count ? pack : NULL, node_offset, input, mode);
     }
     if (node && node->child_count != 0u)
         return false;
@@ -113,6 +113,9 @@ static inline bool xr_provider_value_walk(const XrProviderResourceAccess *access
         }
         return !node->as.resource.owner && node->as.resource.payload && node->as.resource.destroy;
     }
+    if (token == XR_PROVIDER_TYPE_U8_ARRAY)
+        return input && mode == XR_PROVIDER_MODE_REF &&
+               (!node || node->as.u8_array.size == 0u || node->as.u8_array.data);
     if (token == XR_PROVIDER_TYPE_BYTES)
         return !node || (input && (node->as.bytes.size == 0u || node->as.bytes.data));
     return token == XR_PROVIDER_TYPE_UNIT || token == XR_PROVIDER_TYPE_BOOL || token == XR_PROVIDER_TYPE_I64;

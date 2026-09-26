@@ -791,6 +791,7 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_copy.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_class.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_string_builder.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_module.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_exports.inc.c
             ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_provider_typed.inc.c
@@ -2055,13 +2056,16 @@ endif()
 # Native provider programs reuse the OS implementation without linking any
 # compiler, Program loader, VM, or legacy tagged runtime.
 if(WIN32)
-    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/win/time_win.c src/os/win/pipe_win.c)
+    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/win/time_win.c src/os/win/pipe_win.c src/os/win/random_win.c)
 else()
-    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/unix/time_unix.c src/os/unix/pipe_unix.c)
+    set(XRAY_NATIVE_PROVIDER_OS_SOURCES src/os/unix/time_unix.c src/os/unix/pipe_unix.c src/os/unix/random_unix.c)
 endif()
 add_library(xray_native_provider_runtime STATIC ${XRAY_NATIVE_PROVIDER_OS_SOURCES})
 target_include_directories(xray_native_provider_runtime PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_compile_features(xray_native_provider_runtime PUBLIC c_std_11)
+if(WIN32)
+    target_link_libraries(xray_native_provider_runtime PUBLIC bcrypt)
+endif()
 if(NOT WIN32)
     target_compile_definitions(xray_native_provider_runtime PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
@@ -2125,6 +2129,48 @@ add_custom_command(
     COMMENT "Embedding the shared integer division kernel for generated C"
     VERBATIM)
 add_custom_target(gen-integer-division-kernel-embed DEPENDS ${XRAY_INTEGER_DIVISION_KERNEL_EMBED})
+set(XRAY_INTEGER_BITWISE_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_integer_bitwise_core.h)
+set(XRAY_INTEGER_BITWISE_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_integer_bitwise_kernel_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_INTEGER_BITWISE_KERNEL_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_INTEGER_BITWISE_KERNEL_HEADER}
+            -DOUTPUT=${XRAY_INTEGER_BITWISE_KERNEL_EMBED}
+            -DSYMBOL=xr_integer_bitwise_kernel_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_INTEGER_BITWISE_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared integer bitwise kernel for generated C"
+    VERBATIM)
+add_custom_target(gen-integer-bitwise-kernel-embed DEPENDS ${XRAY_INTEGER_BITWISE_KERNEL_EMBED})
+set(XRAY_ARRAY_ALLOCATION_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_array_allocation_plan.h)
+set(XRAY_ARRAY_ALLOCATION_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_array_allocation_kernel_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_ARRAY_ALLOCATION_KERNEL_HEADER}
+            -DOUTPUT=${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED}
+            -DSYMBOL=xr_array_allocation_kernel_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_ARRAY_ALLOCATION_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared array allocation planner for generated C"
+    VERBATIM)
+add_custom_target(gen-array-allocation-kernel-embed DEPENDS ${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED})
+set(XRAY_ARRAY_APPEND_KERNEL_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_array_append_storage.h)
+set(XRAY_ARRAY_APPEND_KERNEL_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_array_append_kernel_embedded.inc.c)
+add_custom_command(
+    OUTPUT ${XRAY_ARRAY_APPEND_KERNEL_EMBED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${XRAY_ARRAY_APPEND_KERNEL_HEADER}
+            -DOUTPUT=${XRAY_ARRAY_APPEND_KERNEL_EMBED}
+            -DSYMBOL=xr_array_append_kernel_source
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    DEPENDS ${XRAY_ARRAY_APPEND_KERNEL_HEADER} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+    COMMENT "Embedding the shared array append storage for generated C"
+    VERBATIM)
+add_custom_target(gen-array-append-kernel-embed DEPENDS ${XRAY_ARRAY_APPEND_KERNEL_EMBED})
 set(XRAY_VALUE_FORMAT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_value_format_core.h)
 set(XRAY_VALUE_FORMAT_EMBED ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_value_format_embedded.inc.c)
 add_custom_command(
@@ -2153,7 +2199,34 @@ foreach(XR_SYNC_PART atomic_compat semantic_owner_ids_gen sync_core)
         VERBATIM)
     list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_SYNC_OUTPUT})
 endforeach()
+foreach(XR_CHANNEL_PART buffer storage)
+    set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_channel_${XR_CHANNEL_PART}.h)
+    set(XR_CHANNEL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_channel_${XR_CHANNEL_PART}_embedded.inc.c)
+    add_custom_command(OUTPUT ${XR_CHANNEL_OUTPUT}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${XR_CHANNEL_INPUT} -DOUTPUT=${XR_CHANNEL_OUTPUT}
+                -DSYMBOL=xr_channel_${XR_CHANNEL_PART}_source
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        DEPENDS ${XR_CHANNEL_INPUT} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        COMMENT "Embedding the shared channel ${XR_CHANNEL_PART} for generated C"
+        VERBATIM)
+    list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_CHANNEL_OUTPUT})
+endforeach()
 add_custom_target(gen-sync-kernel-embed DEPENDS ${XRAY_SYNC_KERNEL_EMBEDS})
+set(XRAY_STRING_BUILDER_EMBEDS)
+foreach(XR_BUILDER_INPUT IN ITEMS shared/xr_byte_compare_core.h shared/xr_buffer_capacity_core.h runtime/core/xr_string_builder_storage.h)
+    get_filename_component(XR_BUILDER_NAME "${XR_BUILDER_INPUT}" NAME_WE)
+    set(XR_BUILDER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${XR_BUILDER_NAME}_embedded.inc.c")
+    add_custom_command(OUTPUT "${XR_BUILDER_OUTPUT}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_BUILDER_INPUT}
+                -DOUTPUT=${XR_BUILDER_OUTPUT} -DSYMBOL=${XR_BUILDER_NAME}_source
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_BUILDER_INPUT}
+                ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
+        VERBATIM)
+    list(APPEND XRAY_STRING_BUILDER_EMBEDS "${XR_BUILDER_OUTPUT}")
+endforeach()
 set(XRAY_PROVIDER_VALUE_EMBEDS)
 foreach(XR_PROVIDER_INPUT IN ITEMS base/xstable_id.h execution/xr_provider_value.h)
     get_filename_component(XR_PROVIDER_NAME "${XR_PROVIDER_INPUT}" NAME_WE)
@@ -2169,7 +2242,7 @@ foreach(XR_PROVIDER_INPUT IN ITEMS base/xstable_id.h execution/xr_provider_value
     list(APPEND XRAY_PROVIDER_VALUE_EMBEDS "${XR_PROVIDER_OUTPUT}")
 endforeach()
 set_source_files_properties(src/aot/program/xr_backend_ir_emit_c.c PROPERTIES
-    OBJECT_DEPENDS "${XRAY_TEXT_KERNEL_EMBED};${XRAY_INTEGER_KERNEL_EMBED};${XRAY_INTEGER_DIVISION_KERNEL_EMBED};${XRAY_VALUE_FORMAT_EMBED};${XRAY_SYNC_KERNEL_EMBEDS};${XRAY_PROVIDER_VALUE_EMBEDS}")
+    OBJECT_DEPENDS "${XRAY_TEXT_KERNEL_EMBED};${XRAY_INTEGER_KERNEL_EMBED};${XRAY_INTEGER_DIVISION_KERNEL_EMBED};${XRAY_INTEGER_BITWISE_KERNEL_EMBED};${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED};${XRAY_ARRAY_APPEND_KERNEL_EMBED};${XRAY_STRING_BUILDER_EMBEDS};${XRAY_VALUE_FORMAT_EMBED};${XRAY_SYNC_KERNEL_EMBEDS};${XRAY_PROVIDER_VALUE_EMBEDS}")
 
 # The canonical-program AOT compiler is a private build product. This narrow
 # target keeps its warning contract independent from the legacy Xi/TargetPlan

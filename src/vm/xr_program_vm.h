@@ -95,6 +95,8 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_ATOMIC,
     XR_VM_VALUE_F64,
     XR_VM_VALUE_RESOURCE,
+    XR_VM_VALUE_CHANNEL,
+    XR_VM_VALUE_STRING_BUILDER,
 } XrVmValueKind;
 
 /* Bounds diagnostics travel with the panic through cleanup and suspension. */
@@ -129,6 +131,8 @@ typedef struct XrVmValue {
         const void *callable;
         const void *string;
         const void *atomic_storage;
+        const void *channel_storage;
+        const void *string_builder;
         const void *resource;
         uint32_t rune;
     } as;

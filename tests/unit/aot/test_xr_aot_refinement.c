@@ -2310,10 +2310,11 @@ static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
 
     fixture = closure_storage_fixture_create(true);
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
         fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
         &diag));
-    REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
+    REQUIRE(plan != NULL);
+    xr_aot_refinement_plan_free(plan);
     closure_storage_fixture_free(&fixture);
 }
 
@@ -4057,6 +4058,19 @@ static void test_native_direct_fresh_result_refinement_authority_is_exact(void) 
     REQUIRE(xr_aot_representation_refinement_build_from_authority(
         target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan != NULL);
+    XiValue *scalar_argument = live_call->args[1];
+    xi_opt_select_rep_with_policy(function, &policy);
+    REQUIRE(live_call->args[1] != scalar_argument);
+    REQUIRE(live_call->args[1]->op == XI_BOX &&
+            live_call->args[1]->args[0] == scalar_argument);
+    XrAotRefinementPlanView materialized = xr_aot_refinement_plan_view(plan);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &materialized, function, target, &policy, &diag));
+    XiValue *adapter = live_call->args[1];
+    live_call->args[1] = scalar_argument;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &materialized, function, target, &policy, &diag));
+    live_call->args[1] = adapter;
     xr_aot_refinement_plan_free(plan);
 
     XrTargetCallRecord saved_call = target->calls[0];
@@ -5827,6 +5841,14 @@ static void test_array_parameter_storage_includes_variadic_carriers(void) {
         corrupt = *formal;
         corrupt.ownership = XI_OWN_NONE;
         REQUIRE(!xr_semantic_direct_local_reference_parameter_is_exact(semantic, &corrupt, NULL));
+        corrupt = *formal;
+        corrupt.mode = XR_PARAM_MOVE;
+        corrupt.ownership = XI_OWN_BORROWED;
+        REQUIRE(!xr_semantic_direct_local_reference_parameter_is_exact(semantic, &corrupt, NULL));
+        corrupt.ownership = XI_OWN_OWNED;
+        bool move_owns = false;
+        REQUIRE(xr_semantic_direct_local_reference_parameter_is_exact(semantic, &corrupt,
+                                                                     &move_owns) && move_owns);
         XiRepPolicy policy = xi_rep_policy_native_boundary();
         XrAotRefinementDiagnostic diag = {0};
         XrAotRefinementPlan *refinement = NULL;

@@ -43,8 +43,16 @@ static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx, const X
 
     const XaotValuePlan *plan = cg_value_plan_optional(ctx, v);
     if (!plan) {
-        fprintf(stderr, "[xi_cgen] ERROR: required legacy Xaot row is missing for v%u\n",
-                (unsigned) v->id);
+        const XiFunc *owner = v->block ? v->block->func : NULL;
+        const XaotFuncPlan *function_plan =
+            owner ? xaot_bundle_find_func_plan(ctx->aot_bundle, owner) : NULL;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: required legacy Xaot row is missing for v%u "
+                "function=%s op=%s emission-status=%u reachable=%d suspend=%d\n",
+                (unsigned) v->id, owner && owner->name ? owner->name : "<none>",
+                xi_generated_op_name(v->op), (unsigned) emission_status,
+                function_plan ? (int) function_plan->reachable : -1,
+                function_plan ? (int) function_plan->may_suspend : -1);
         ctx->error = true;
     }
     return plan;
@@ -1070,8 +1078,15 @@ static const char *emit_load_conversion_prefix(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(", plan->rep.c_type);
         return "))";
     }
-    return emit_conversion_prefix_ctx(ctx, out, v->type, from_rep,
-                                      cg_value_plan_storage_rep(ctx, v));
+    XrRep storage_rep = cg_value_plan_storage_rep(ctx, v);
+    XrCValueEmissionView emission = {0};
+    XrRep emission_rep = XR_REP_TAGGED;
+    if (from_rep == XR_REP_TAGGED && storage_rep == XR_REP_I64 &&
+        cg_value_emission_view(ctx, NULL, v, &emission) == CG_VALUE_EMISSION_FOUND &&
+        cg_value_emission_storage_rep(ctx, &emission, &emission_rep) &&
+        emission_rep == XR_REP_I64 && emission.c_type)
+        fprintf(out, "(%s)", emission.c_type);
+    return emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, storage_rep);
 }
 
 static const char *emit_tagged_to_value_storage_prefix(XiCgenCtx *ctx, FILE *out,

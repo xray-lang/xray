@@ -205,6 +205,7 @@ typedef struct XaotEnumPlan {
     bool value_iteration_reachable;
     bool variant_iteration_reachable;
     bool owns_members;
+    bool owns_enum_data;
     const char *c_type;
 } XaotEnumPlan;
 

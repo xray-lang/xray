@@ -420,8 +420,18 @@ static bool prepare_value_is_unit_enum_ordinal_compare_member(const XaotBundle *
                                                               const XiValue *value);
 
 static void apply_unit_enum_ordinal_value_plan(XaotBundle *bundle, XaotValuePlan *vp) {
-    if (!vp)
+    /* Explicit adapters own their output carrier. A BOX keeps the enum source
+     * type while producing a tagged value for an erased use; an UNBOX of a
+     * unit enum produces exactly the native ordinal carrier. */
+    if (!vp || !vp->value)
         return;
+    if (vp->value->backend_origin != XI_BACKEND_VALUE_NONE) {
+        if (vp->value->backend_origin == XI_BACKEND_VALUE_REP_UNBOX &&
+            vp->value->op == XI_UNBOX && vp->value->rep == XR_REP_I64 &&
+            prepare_type_is_unit_enum_ordinal(bundle, vp->value->type))
+            prepare_value_plan_set_rep(vp, prepare_enum_ordinal_value_rep(vp->value->type));
+        return;
+    }
     if (!prepare_type_is_unit_enum_ordinal(bundle, vp->value ? vp->value->type : NULL) &&
         !prepare_value_is_unit_enum_ordinal_member(bundle, vp->func, vp->value) &&
         !prepare_value_is_unit_enum_ordinal_compare_member(bundle, vp->func, vp->value))
@@ -3940,6 +3950,15 @@ static bool prepare_func_transfer_plans(XaotBundle *bundle, const XiFunc *func) 
                     if (!xaot_prepare_transfer_plan_for_site(func, site, transfer_index, &derived))
                         continue;
                     if (derived.action == XR_TRANSFER_REJECT) {
+                        const XiValue *move = prepare_transfer_source_move(derived.value);
+                        fprintf(stderr,
+                                "[aot-transfer] function=%s site=%u argument=%u mode=%u reason=%u "
+                                "move-proof=%u storage-plan=%u source-domain=%u\n",
+                                func->name ? func->name : "<anonymous>", site->id, transfer_index,
+                                (unsigned) derived.mode, (unsigned) derived.unproven_reason,
+                                move ? move->move_evidence_id : 0u,
+                                move ? move->move_storage_plan_id : 0u,
+                                move ? (unsigned) move->move_source_domain : 0u);
                         bundle->error_msg = "cross-execution transfer lacks a verified plan";
                         return false;
                     }
@@ -4382,6 +4401,15 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                             xi_generated_op_name(vp->value->op), vp->value->backend_origin,
                             rep_adapter ? 1u : 0u, vp->rep.kind,
                             adapter_error[0] ? adapter_error : "legacy output mismatch");
+                    fprintf(stderr,
+                            "[aot-prepare] adapter output type-kind=%u rep=%u c-type=%s "
+                            "flags=0x%x source-op=%s source-rep=%u\n",
+                            vp->value->type ? vp->value->type->kind : UINT32_MAX, vp->rep.rep,
+                            vp->rep.c_type ? vp->rep.c_type : "<null>", vp->rep.flags,
+                            vp->value->nargs && vp->value->args[0]
+                                ? xi_generated_op_name(vp->value->args[0]->op) : "<none>",
+                            vp->value->nargs && vp->value->args[0]
+                                ? vp->value->args[0]->rep : UINT32_MAX);
                 }
                 bundle->error_msg = "AOT prepare refused an inexact representation adapter row";
                 return false;
@@ -4474,6 +4502,15 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                             xi_generated_op_name(vp->value->op), vp->value->backend_origin,
                             rep_adapter ? 1u : 0u, vp->rep.kind,
                             adapter_error[0] ? adapter_error : "legacy output mismatch");
+                    fprintf(stderr,
+                            "[aot-prepare] adapter output type-kind=%u rep=%u c-type=%s "
+                            "flags=0x%x source-op=%s source-rep=%u\n",
+                            vp->value->type ? vp->value->type->kind : UINT32_MAX, vp->rep.rep,
+                            vp->rep.c_type ? vp->rep.c_type : "<null>", vp->rep.flags,
+                            vp->value->nargs && vp->value->args[0]
+                                ? xi_generated_op_name(vp->value->args[0]->op) : "<none>",
+                            vp->value->nargs && vp->value->args[0]
+                                ? vp->value->args[0]->rep : UINT32_MAX);
                 }
                 bundle->error_msg = "AOT prepare refused an inexact representation adapter row";
                 return false;
@@ -5335,7 +5372,7 @@ static bool prepare_seed_source_export_call_place_reps(XaotBundle *bundle, XiFun
     for (uint32_t i = 0; i < xr_semantic_plan_source_export_count(callee_semantic); i++) {
         const XrSemanticSourceExportRecord *candidate =
             xr_semantic_plan_source_export(callee_semantic, i);
-        if (!candidate || !xr_stable_id_equal(candidate->id, source_call->source_export_identity))
+        if (!candidate || !xr_stable_id_equal(candidate->id, source_call->source_declaration_identity))
             continue;
         if (source_export) {
             bundle->error_msg = "AOT source-export identity is ambiguous";
@@ -5397,6 +5434,14 @@ static bool prepare_seed_source_export_call_place_reps(XaotBundle *bundle, XiFun
         const XrSemanticOperandRecord *operand =
             &operands[source_operation->operand_begin + ordinal + 1u];
         XiValue *place = call->args[ordinal + 1u];
+        const XiValue *semantic_place = place;
+        if (place && place->backend_origin != XI_BACKEND_VALUE_NONE) {
+            if (!xr_aot_rep_adapter_value_is_exact(caller_target, func, place, NULL, 0)) {
+                bundle->error_msg = "AOT source-export argument has an invalid representation adapter";
+                return false;
+            }
+            semantic_place = place->args[0];
+        }
         uint32_t place_function = XR_SEMANTIC_INDEX_NONE;
         uint32_t place_value = XR_SEMANTIC_INDEX_NONE;
         if (!parameter || !operand || argument->call != source_call->id ||
@@ -5407,9 +5452,18 @@ static bool prepare_seed_source_export_call_place_reps(XaotBundle *bundle, XiFun
             argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
             argument->callee_register_rep != argument->register_rep ||
             argument->callee_memory_rep != argument->memory_rep ||
-            !xr_aot_scalar_semantic_value_id(caller_target, func, place, &place_function,
+            !xr_aot_scalar_semantic_value_id(caller_target, func, semantic_place, &place_function,
                                              &place_value, NULL, 0) ||
             place_function != semantic_function || place_value != argument->semantic_value) {
+            if (getenv("XRAY_AOT_REFINE_TRACE"))
+                fprintf(stderr,
+                        "[aot-prepare] source-export argument function=%s ordinal=%u "
+                        "value=%u op=%s backend-origin=%u semantic=%u expected=%u\n",
+                        func->name ? func->name : "<anonymous>", ordinal,
+                        place ? place->id : UINT32_MAX,
+                        place ? xi_generated_op_name(place->op) : "<none>",
+                        place ? place->backend_origin : 0u, place_value,
+                        argument->semantic_value);
             bundle->error_msg = "AOT source-export argument lacks exact TargetPlan identity";
             return false;
         }
@@ -5418,10 +5472,26 @@ static bool prepare_seed_source_export_call_place_reps(XaotBundle *bundle, XiFun
         const XaotAbiSlot *slot = &callee_func_plan->abi.params[ordinal];
         const XrTargetMachineRepRecord *machine =
             xr_target_plan_machine_rep(caller_target, argument->memory_rep);
+        bool exact_place = place && place->op == XI_LOCAL_ADDR && place->nargs == 1 && place->args[0];
+        if (place && place->op == XI_PARAM && place->aux_int >= 0) {
+            const XaotFuncPlan *caller_plan = xaot_bundle_find_func_plan(bundle, func);
+            const XrSemanticFunctionRecord *caller_function =
+                xr_semantic_plan_function(caller_semantic, semantic_function);
+            const XrSemanticParameterRecord *forwarded = caller_function &&
+                (uint32_t) place->aux_int < caller_function->parameter_count
+                ? xr_semantic_plan_parameter(caller_semantic,
+                    caller_function->parameter_begin + (uint32_t) place->aux_int) : NULL;
+            const XaotAbiSlot *caller_slot = caller_plan && caller_plan->abi.params &&
+                place->aux_int < caller_plan->abi.nparams
+                ? &caller_plan->abi.params[place->aux_int] : NULL;
+            exact_place = forwarded && forwarded->value == place_value &&
+                forwarded->mode == XR_PARAM_REF && caller_slot &&
+                (caller_slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) != 0 &&
+                caller_slot->rep.rep == XAOT_REP_RAWPTR;
+        }
         if (parameter->mode != XR_PARAM_REF || argument->ownership != XR_TARGET_CALL_WRITEBACK ||
             argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE || !machine ||
-            machine->kind != XR_MACHINE_REP_RAW_PTR || !place || place->op != XI_LOCAL_ADDR ||
-            place->nargs != 1 || !place->args[0] ||
+            machine->kind != XR_MACHINE_REP_RAW_PTR || !exact_place ||
             (slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 || slot->rep.rep != XAOT_REP_RAWPTR ||
             !slot->rep.c_type) {
             bundle->error_msg = "AOT source-export ref argument lacks exact place ABI";

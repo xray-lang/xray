@@ -14,6 +14,7 @@
 XrString *xr_strbuf_to_string(XrStrBuf *sb) {
     uint32_t hash = xr_string_hash(sb->data, sb->length);
     XrString *s = xr_string_intern(sb->X, sb->data, sb->length, hash);
-    sb->length = 0;
+    if (s)
+        sb->length = 0;
     return s;
 }

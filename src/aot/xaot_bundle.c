@@ -151,6 +151,14 @@ static void xaot_enum_plan_free(XaotEnumPlan *plan) {
             xr_free(members[i].payload_types);
         xr_free(members);
     }
+    if (plan->owns_enum_data && plan->enum_data) {
+        const XiEnumData *data = plan->enum_data;
+        for (uint32_t i = 0; i < data->member_count; i++)
+            xr_free((void *) data->members[i].name);
+        xr_free(data->members);
+        xr_free((void *) data->name);
+        xr_free((void *) data);
+    }
     xr_free(plan->type_args);
     xr_free((void *) plan->c_type);
     memset(plan, 0, sizeof(*plan));
@@ -778,7 +786,7 @@ static bool bundle_representation_materialization_verify(
         valid = xr_aot_representation_materialization_verify_modules(
             views, roots, bundle->nmodules, bundle->program_target_plan, policy, &failed_module,
             &diagnostic);
-        if (!valid && getenv("XRAY_AOT_REFINE_TRACE")) {
+        if (!valid) {
             const XiModule *module =
                 failed_module < bundle->nmodules ? bundle->modules[failed_module] : NULL;
             const XrSemanticPlan *semantic =
@@ -5774,16 +5782,63 @@ static XaotEnumPlan *xaot_bundle_add_concrete_enum_plan(XaotBundle *bundle,
     return plan;
 }
 
+/* Materialize unit declarations that have no module slot, including prelude
+ * enums. Copy all names into bundle ownership; only the declaration type uses
+ * the same borrowed Xi arena lifetime as ordinary lowered enum metadata. */
+static bool xaot_bundle_prepare_unit_enum_layout(XaotBundle *bundle, const XrType *type) {
+    const XrEnumLayout *layout = type->kind == XR_KIND_ENUM ? type->enum_type.layout : NULL;
+    if (!layout || !layout->is_zero_payload || !layout->variant_count)
+        return true;
+    if (!layout->name || !layout->variants || !layout->layout_id ||
+        !layout->nominal_owner || !layout->nominal_owner[0]) {
+        bundle->error_msg = "unit enum has incomplete nominal layout";
+        return false;
+    }
+    XiEnumData *data = (XiEnumData *) xr_calloc(1, sizeof(*data));
+    if (!data)
+        return false;
+    XaotEnumPlan owned = {0};
+    owned.enum_data = data;
+    owned.owns_enum_data = true;
+    data->name = xr_strdup(layout->name);
+    data->layout_id = layout->layout_id;
+    data->declaration_type = (XrType *) type;
+    data->members = (XiEnumMemberData *) xr_calloc(layout->variant_count, sizeof(*data->members));
+    if (!data->name || !data->members)
+        goto fail;
+    data->member_count = layout->variant_count;
+    for (uint32_t i = 0; i < layout->variant_count; i++) {
+        const XrEnumVariantLayout *variant = &layout->variants[i];
+        if (!variant->name || variant->tag != i || variant->payload_count != 0)
+            goto fail;
+        data->members[i].name = xr_strdup(variant->name);
+        data->members[i].ordinal = i;
+        if (!data->members[i].name)
+            goto fail;
+    }
+    XaotEnumPlan *plan = xaot_bundle_add_enum_plan(bundle, data, 0);
+    if (!plan)
+        goto fail;
+    plan->owns_enum_data = true;
+    return true;
+fail:
+    xaot_enum_plan_free(&owned);
+    bundle->error_msg = "failed to materialize owned unit enum declaration";
+    return false;
+}
+
 XR_FUNC bool xaot_bundle_prepare_enum_plan_for_type(XaotBundle *bundle, const XrType *type) {
     const char *name = type_enum_name(type);
     int argc = type_enum_arg_count(type);
     uint32_t module_index = 0;
     const XiEnumData *ed;
 
-    if (!bundle || !type || !name || argc <= 0)
+    if (!bundle || !type || !name)
         return true;
     if (xaot_bundle_find_enum_plan_for_type(bundle, type))
         return true;
+    if (argc <= 0)
+        return xaot_bundle_prepare_unit_enum_layout(bundle, type);
     ed = find_enum_data_by_name(bundle, name, &module_index);
     if (!ed || ed->type_param_count == 0)
         return true;

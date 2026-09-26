@@ -14,6 +14,7 @@
 #include "../../../src/aot/xaot_bundle.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/base/xbuiltin_enum.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/frontend/analyzer/xanalyzer_mono.h"
 #include "../../../src/frontend/canonical/xcanon.h"
@@ -50,6 +51,15 @@ TEST(global_evidence_module_summary_requires_typed_identity) {
     ASSERT_FALSE(xg_module_summary_from_module_spec(&summary, 1, &spec));
     init_memory_module_spec(&spec);
     ASSERT_TRUE(xg_module_summary_from_module_spec(&summary, 1, &spec));
+    for (uint8_t kind = XR_MOD_STDLIB; kind <= XR_MOD_MEMORY; ++kind) {
+        summary.kind = kind;
+        ASSERT_TRUE(xg_module_summary_identity_complete(&summary));
+    }
+    summary.kind = UINT8_MAX;
+    ASSERT_FALSE(xg_module_summary_identity_complete(&summary));
+    summary.kind = XR_MOD_STDLIB;
+    summary.source_hash = 0u;
+    ASSERT_FALSE(xg_module_summary_identity_complete(&summary));
 }
 
 static void finalize_object_shape_fixture(XgObjectShapeSummary *shape) {
@@ -9320,9 +9330,38 @@ TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry) {
     XgGlobalEvidence evidence = {0};
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
         &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, exact_analyzer));
-    ASSERT_EQ_UINT(evidence.ndecls, 1);
+    size_t prelude_count = 0u;
+    const XrBuiltinEnumRow *prelude = xr_builtin_enum_registry(&prelude_count);
+    ASSERT_EQ_UINT(evidence.ndecls, 1u + prelude_count);
     ASSERT_EQ_UINT(evidence.decls[0].kind, XG_DECL_ENUM);
+    for (size_t index = 0u; index < prelude_count; ++index) {
+        const XgDeclSummary *decl = evidence_find_decl_by_name_kind(
+            &evidence, prelude[index].enum_name, XG_DECL_ENUM);
+        ASSERT_NOT_NULL(decl);
+        ASSERT_EQ_UINT(decl->module_id, 2u);
+        ASSERT_TRUE(decl->nominal_key != 0u);
+        ASSERT_EQ_UINT(decl->signature_key, prelude[index].member_count);
+    }
 
+    uint64_t prelude_keys[32] = {0};
+    ASSERT_TRUE(prelude_count <= 32u);
+    for (size_t index = 0u; index < prelude_count; ++index) {
+        XaSymbol *symbol = xa_analyzer_lookup(exact_analyzer, prelude[index].enum_name);
+        ASSERT_NOT_NULL(symbol);
+        prelude_keys[index] = symbol->links.class_info->xg_nominal_key;
+        symbol->links.class_info->xg_decl_id = UINT32_MAX;
+    }
+    xg_global_evidence_free(&evidence);
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, exact_analyzer));
+    for (size_t index = 0u; index < prelude_count; ++index) {
+        XaSymbol *symbol = xa_analyzer_lookup(exact_analyzer, prelude[index].enum_name);
+        const XgDeclSummary *decl = evidence_find_decl_by_name_kind(
+            &evidence, prelude[index].enum_name, XG_DECL_ENUM);
+        ASSERT_NOT_NULL(decl);
+        ASSERT_EQ_UINT(decl->nominal_key, prelude_keys[index]);
+        ASSERT_EQ_UINT(symbol->links.class_info->xg_decl_id, decl->decl_id);
+    }
     xg_global_evidence_free(&evidence);
     xr_program_destroy(other_ast);
     xa_analyzer_free(other_analyzer);
@@ -9417,7 +9456,8 @@ TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key) {
             class_decl_id = evidence.decls[i].decl_id;
         else if (evidence.decls[i].kind == XG_DECL_INTERFACE)
             interface_decl_id = evidence.decls[i].decl_id;
-        else if (evidence.decls[i].kind == XG_DECL_ENUM)
+        else if (evidence.decls[i].kind == XG_DECL_ENUM &&
+                 evidence.decls[i].name_id == xg_name_id("Tone"))
             enum_decl_id = evidence.decls[i].decl_id;
     }
     ASSERT_TRUE(class_decl_id != XG_NO_ID);
@@ -11105,6 +11145,41 @@ TEST(global_evidence_preserves_integer_division_panic_through_calls) {
                     ASSERT_EQ_INT((evidence.callsites[call].flags & XG_CALL_MAY_PANIC) != 0u,
                                   panics);
             }
+        }
+        xa_analyzer_free(analyzer);
+        xg_global_evidence_free(&evidence);
+        teardown_parser_session();
+    }
+}
+
+TEST(global_evidence_preserves_array_length_panic_through_calls) {
+    const char *sources[] = {
+        "fn create(n: i64) -> i64 { return len(Array<u8>(n)) }\n",
+        "fn create(n: i64) -> i64 { return len(Array<i64>()) }\n",
+        "fn create(n: i64) -> i64 { const a = [1, 2]; return len(Array<i64>(a)) }\n",
+    };
+    for (uint32_t scenario = 0u; scenario < 3u; ++scenario) {
+        setup_parser_session();
+        char source[512];
+        int count = snprintf(source, sizeof(source), "%s"
+            "fn relay(n: i64) -> i64 { return create(n) }\n"
+            "fn indirect(n: i64) -> i64 { var f = create; return f(n) }\n", sources[scenario]);
+        ASSERT_TRUE(count > 0 && (size_t) count < sizeof(source));
+        XgGlobalEvidence evidence;
+        XaAnalyzer *analyzer = NULL;
+        ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &evidence, &analyzer, NULL));
+        const char *names[] = {"create", "relay", "indirect"};
+        for (uint32_t name = 0u; name < 3u; ++name) {
+            uint32_t effects = 0u;
+            const XgBodySummary *body = evidence_find_body_by_name(&evidence, names[name]);
+            ASSERT_NOT_NULL(body);
+            ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&evidence, body, &effects));
+            ASSERT_EQ_INT((effects & XG_BODY_MAY_PANIC) != 0u, scenario == 0u);
+            if (name != 0u)
+                for (uint32_t call = 0u; call < evidence.ncallsites; ++call)
+                    if (evidence.callsites[call].owner_func_id == body->func_id)
+                        ASSERT_EQ_INT((evidence.callsites[call].flags & XG_CALL_MAY_PANIC) != 0u,
+                                      scenario == 0u);
         }
         xa_analyzer_free(analyzer);
         xg_global_evidence_free(&evidence);
@@ -16537,6 +16612,7 @@ RUN_TEST(global_evidence_producer_marks_read_mem_effect);
 RUN_TEST(global_evidence_prelude_constructor_has_exact_native_identity);
 RUN_TEST(global_evidence_enum_member_selection_is_not_a_memory_read);
 RUN_TEST(global_evidence_preserves_integer_division_panic_through_calls);
+RUN_TEST(global_evidence_preserves_array_length_panic_through_calls);
 RUN_TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_captures);
 RUN_TEST(global_evidence_producer_marks_call_effect);
 RUN_TEST(global_evidence_producer_marks_native_method_calls_as_native_capability);

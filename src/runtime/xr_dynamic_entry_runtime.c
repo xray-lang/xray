@@ -1604,7 +1604,7 @@ static XrRuntimeEntryHandle *registry_lookup(
     for (uint32_t i = 0; i < registry->count; i++) {
         XrRuntimeEntryRegistryRow *row = registry->rows[i];
         if (registry_key_equal(row, dependency->semantic_fingerprint,
-                               call->source_export_identity,
+                               call->source_declaration_identity,
                                call->source_callee_identity) && row->handle) {
             candidate = row->handle;
             candidate_row = row;

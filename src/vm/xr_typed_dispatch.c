@@ -1351,8 +1351,8 @@ static bool leaf_aggregate_call_is_exact(const XrTargetPlan *plan,
         call->caller_storage_slot != row->result_slot ||
         call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
         call->source_export != XR_SEMANTIC_INDEX_NONE ||
-        !bytes_are_zero(call->source_export_identity.bytes,
-                        sizeof(call->source_export_identity.bytes)) ||
+        !bytes_are_zero(call->source_declaration_identity.bytes,
+                        sizeof(call->source_declaration_identity.bytes)) ||
         !bytes_are_zero(call->source_callee_identity.bytes,
                         sizeof(call->source_callee_identity.bytes)) ||
         call->result_register_rep != call->result_memory_rep ||
@@ -1394,8 +1394,8 @@ static bool leaf_product_call_is_exact(const XrTargetPlan *plan,
         call->caller_storage_slot != row->result_slot ||
         call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
         call->source_export != XR_SEMANTIC_INDEX_NONE ||
-        !bytes_are_zero(call->source_export_identity.bytes,
-                        sizeof(call->source_export_identity.bytes)) ||
+        !bytes_are_zero(call->source_declaration_identity.bytes,
+                        sizeof(call->source_declaration_identity.bytes)) ||
         !bytes_are_zero(call->source_callee_identity.bytes,
                         sizeof(call->source_callee_identity.bytes)) ||
         call->result_register_rep != call->result_memory_rep ||

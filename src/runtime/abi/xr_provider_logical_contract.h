@@ -43,6 +43,8 @@ typedef enum XrProviderLogicalTypeToken {
     XR_PROVIDER_TYPE_OPTIONAL = 6,
     /* Followed by one nonzero, target-independent XrStableId. */
     XR_PROVIDER_TYPE_RESOURCE = 7,
+    /* Exact affine Array<u8>; direction is carried by the parameter mode. */
+    XR_PROVIDER_TYPE_U8_ARRAY = 8,
 } XrProviderLogicalTypeToken;
 
 typedef enum XrProviderLogicalParameterMode {

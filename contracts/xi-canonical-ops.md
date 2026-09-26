@@ -178,6 +178,12 @@ compatibility opcode, reserved hole, or second bounds owner.
     verification is not relaxed and no replacement semantic operation is
     synthesized by C emission.
 
+Aggregate instruction layouts cross the analyzer boundary only through the
+owned semantic snapshot. `XI_AGG_UPDATE`, like construction, reads and stores,
+must copy the complete layout, field names and nested layouts before analyzer
+destruction. Repeated detachment preserves the owned identity. A source-level
+local value copy followed by field updates is tested after analyzer destruction.
+
 24. Module declaration metadata has one owner on `XiFunc.module_slots`.
     The declaration name, kind, source coordinates, exact type, const flag and
     export flag are published together during lowering. Optimization may remove
@@ -247,3 +253,78 @@ verification-test: test_xi_opt
 verification-test: test_xi_lower
 verification-test: test_xi_verify_ext
 verification-test: test_module_graph
+
+verification-test: test_xi_cgen_aggregate_snapshot
+
+Parameters remain semantic snapshot roots even when optimization removes them
+from the block instruction stream. Repeated references to the same Xi value
+are detached once, preserving shared type identity across live and unused
+parameters. Analyzer destruction must not invalidate an ABI parameter type.
+
+verification-test: test_xi_cgen_parameter_snapshot
+
+## Borrowed slice copy boundary
+
+An exact `copy(Slice<T>) -> Array<T>` consumes the native borrowed slice
+view and produces an independently owned array. Representation selection must
+not insert a tagged BOX for that view. Source and destination element types
+must match; nullable or const container shapes are not admitted by this rule.
+The native regression mutates the source and reads the returned copy after the
+source function has exited, expecting `50\n`.
+
+verification-test: test_xi_slice_copy_native
+
+## Omitted C locals
+
+Function-scope declarations follow the same exact class-array-field and
+structured counted-loop elision decisions as statement emission. A byte-array
+append with no actual IR consumer and no source debug storage executes as an
+expression statement: its borrowed result introduces no local or cleanup, while
+the mutation and error behavior remain intact. This direct consumer is declared
+separately from ordinary calls in the canonical lowering table.
+
+## Frozen representation adapter sources
+
+Late copy propagation must stop at a frozen semantic COPY when that value is
+an operand of a backend representation adapter. Its immutable adapter record
+names the COPY, so bypassing it and deleting it destroys source identity.
+Copies without an adapter consumer retain their existing propagation rules,
+including independently verified source-namespace elision. The optimizer
+regression checks that a return adapter retains its materialized COPY source.
+
+Boolean class-field caches use uint8_t, matching the typed boolean read and
+preventing an implicit int64_t narrowing in generated C. The returned-class
+native regression consumes a boolean getter before printing the updated field.
+
+## Nullable call value boundaries
+
+Resolved nullable value parameters use the same explicit None/Some injection
+as binding and return boundaries before semantic freezing. The common call-plan
+entry applies it to positional, non-spread arguments of function, method and
+constructor calls. REF parameters retain their original place; conversion may
+not manufacture a temporary place. The declared function type and ordinary
+type assignability must admit the value before this injection is produced.
+
+An exact Some injection may enclose an explicit source move at a consuming call
+boundary. The move check traverses only the one-payload, ordinal-one injection
+whose non-null payload type exactly matches the nullable result base. It still
+requires the original source move; a plain payload, None or mismatched payload
+cannot manufacture consumption evidence.
+
+## Boolean negation storage
+
+NOT consumes the proved native scalar carrier of a boolean operand. A boolean
+default parameter using a tagged missing-argument sentinel receives an explicit representation
+UNBOX; an already native boolean remains unchanged. Materialization must agree
+with the immutable use-site authority and retain the original parameter as the
+adapter source. This storage choice does not admit non-boolean conditions.
+
+verification-test: test_xi_default_bool_not_native
+
+Declared PARAM values remain exact block members after dead-code elimination,
+even when their body use count is zero. Fixed, defaulted and trailing rest slots
+are interface identities consumed by ordinary ABI and coroutine frame plans.
+Unrelated unused computations remain removable; retaining a parameter does not
+invent a body use or a side effect.
+
+verification-test: test_native_coroutine_method_authority

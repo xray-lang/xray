@@ -829,6 +829,10 @@ static void emit_class_native_runtime_clone_helper(XiCgenCtx *ctx, FILE *out, co
                                                    const char *prefix) {
     if (!cd || !cd->instance_layout)
         return;
+    char native_type[288];
+    class_native_type_name(native_type, sizeof(native_type), prefix, cd->class_name);
+    fprintf(out, "#ifndef XRT_CLONE_DEFINED_%s\n#define XRT_CLONE_DEFINED_%s 1\n",
+            native_type, native_type);
     fprintf(out, "static void *");
     emit_class_native_runtime_clone_name(out, prefix, cd);
     fprintf(out, "(void *obj) {\n");
@@ -859,7 +863,7 @@ static void emit_class_native_runtime_clone_helper(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, ";\n");
     }
     fprintf(out, "    return dst;\n");
-    fprintf(out, "}\n");
+    fprintf(out, "}\n#endif /* XRT_CLONE_DEFINED_%s */\n", native_type);
 }
 
 static void emit_class_native_clone_helper(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
@@ -4730,18 +4734,7 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
     } else if (callee && callee->op == XI_CLASS_CREATE && callee->aux) {
         cd = (const XiClassData *) callee->aux;
         target = cg_find_constructor(f, cd);
-    } else if (!cd && callee && callee->op == XI_IMPORT_REF && callee->aux) {
-        for (int i = 0; i < ctx->nimports; i++) {
-            const CgImportEntry *imp = &ctx->imports[i];
-            const XiFunc *ctor = imp->target_func;
-            if (!ctor && imp->target_class && imp->exporter_func)
-                ctor = cg_find_constructor(imp->exporter_func, imp->target_class);
-            if (ctor == target && imp->target_class) {
-                cd = imp->target_class;
-                prefix = imp->target_mod_name;
-                break;
-            }
-        }
+
     }
     if (!cd && target)
         cd = cg_class_native_class_for_ctor_target(ctx, target);
@@ -4929,6 +4922,16 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
     return true;
 }
 
+static bool cg_class_native_ctor_statement_is_exact(XiCgenCtx *ctx, const XiClassData *cd,
+                                                     const XiFunc *target) {
+    if (!cd || !cd->instance_layout || !cg_class_native_module_for_data(ctx, cd))
+        return false;
+    if (!target)
+        return true;
+    CgClassNativeFunc info = cg_class_native_func(ctx, target);
+    return info.layout && info.is_constructor && info.class_data == cd;
+}
+
 /* Heap-backed native construction has several ordered effects: allocation,
  * default initialization, constructor execution and storage-mode publication.
  * Keep them in statement position so every generated artifact is valid C11. */
@@ -4941,15 +4944,10 @@ static bool emit_portable_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out
     const XiFunc *target = NULL;
     const char *ctor_prefix = NULL;
     const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, &target, &ctor_prefix);
-    if (!cd || !cd->instance_layout || !cg_class_native_module_for_data(ctx, cd))
+    if (!cg_class_native_ctor_statement_is_exact(ctx, cd, target))
         return false;
 
     const char *class_prefix = ctor_prefix ? ctor_prefix : prefix;
-    if (target) {
-        CgClassNativeFunc info = cg_class_native_func(ctx, target);
-        if (!info.layout || !info.is_constructor || info.class_data != cd)
-            return false;
-    }
 
     fprintf(out, "    ");
     emit_class_native_type_name(out, class_prefix, cd->class_name);
@@ -5473,16 +5471,27 @@ static void emit_class_native_instance_base_ref(XiCgenCtx *ctx, FILE *out, const
         emit_class_shared_native_export_storage_name(out, exp);
         return;
     }
-    /* A value this emitter itself built as a native instance -- an inlined
-     * constructor whose object lives in a C local, a receiver, a slot with
-     * pointer storage -- is already a bare pointer at this point, whatever
-     * representation the plan states for it. Reading the plan first would
-     * spell `.ptr` on something that is not a tagged value at all, and the
-     * generated C would name no such member. Ask what this emitter produced
-     * before asking what the plan calls it. */
+    /* Portable constructors publish the representation selected by the plan.
+     * Constructor provenance alone does not make a tagged result a C pointer. */
     const XiValue *origin = cg_class_native_instance_origin(ctx, f, v);
     if (origin) {
-        emit_vref(out, origin);
+        const XiFunc *constructor = NULL;
+        const XiClassData *constructed =
+            cg_class_native_ctor_call_data(ctx, f, origin, &constructor, NULL);
+        bool boxed_constructor = cg_value_plan_storage_rep(ctx, origin) == XR_REP_TAGGED &&
+            cg_class_native_ctor_statement_is_exact(ctx, constructed, constructor);
+        if (boxed_constructor) {
+            fprintf(out, "((");
+            emit_class_native_type_name(out, cg_class_native_prefix_for_data(ctx, constructed, NULL),
+                                        constructed->class_name);
+            fprintf(out, "*)xrt_checked_instance_ptr(");
+            emit_vref(out, origin);
+            fprintf(out, ", (uint16_t)");
+            emit_class_native_type_id_expr(ctx, out, constructed);
+            fprintf(out, "))");
+        } else {
+            emit_vref(out, origin);
+        }
         return;
     }
     if (typed_ptr && cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
@@ -6497,8 +6506,11 @@ static bool cg_class_native_err_check_after_nothrow_call(XiCgenCtx *ctx, const X
  * single native class under `prefix`.  Shared by own-module emission and the
  * imported-class typedefs a separate-compilation unit needs for instances of
  * classes defined in other modules (cross-module classes). */
+static bool cg_class_needs_runtime_registration(XiCgenCtx *ctx, const XiModule *module,
+                                                const XiClassData *cd);
+
 static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
-                                          const char *prefix) {
+                                          const char *prefix, bool emit_runtime_clone) {
     if (!cd)
         return;
     char native_type[288];
@@ -6597,9 +6609,10 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, "};\n");
     }
     emit_class_native_derived_eq_hash_callbacks(ctx, out, cd, prefix);
-    emit_class_native_runtime_clone_helper(ctx, out, cd, prefix);
     if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
         fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
+        if (emit_runtime_clone)
+            emit_class_native_runtime_clone_helper(ctx, out, cd, prefix);
         return;
     }
     fprintf(out, "static void ");
@@ -6643,6 +6656,8 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     }
     fprintf(out, "}\n");
     fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
+    if (emit_runtime_clone)
+        emit_class_native_runtime_clone_helper(ctx, out, cd, prefix);
 }
 
 static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *module,
@@ -6650,7 +6665,9 @@ static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *modu
     if (!module || !module->classes)
         return;
     for (uint16_t ci = 0; ci < module->nclasses; ci++)
-        emit_one_class_native_typedef(ctx, out, module->classes[ci], prefix);
+        emit_one_class_native_typedef(
+            ctx, out, module->classes[ci], prefix,
+            cg_class_needs_runtime_registration(ctx, module, module->classes[ci]));
 }
 
 static void emit_class_native_clone_helpers(XiCgenCtx *ctx, FILE *out, XiModule *module,
@@ -6717,7 +6734,7 @@ static void cg_collect_native_class(XiCgenCtx *ctx, FILE *out, const XiClassData
             return;
         if (*nseen < seen_cap)
             seen[(*nseen)++] = cd;
-        emit_one_class_native_typedef(ctx, out, cd, cpfx);
+        emit_one_class_native_typedef(ctx, out, cd, cpfx, false);
         /* Continue to the super class so the emitted `base` member resolves. */
         cd = cd->super_name ? cg_class_native_data_by_name(ctx, cd->super_name) : NULL;
     }

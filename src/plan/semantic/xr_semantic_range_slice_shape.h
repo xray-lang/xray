@@ -15,6 +15,7 @@
 #define XR_SEMANTIC_RANGE_SLICE_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_raw_slice_shape.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../ir/xi_own.h"
@@ -71,6 +72,18 @@ static inline bool xr_semantic_slice_view_type_is_exact(const XrSemanticPlan *pl
     if (out_element_type)
         *out_element_type = element_type;
     return true;
+}
+
+/* A ref Slice parameter borrows the native descriptor itself. Its backing
+ * allocation remains owned by the caller and is never transferred by this ABI. */
+static inline bool xr_semantic_slice_ref_parameter_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter) {
+    return plan && parameter && parameter->function < xr_semantic_plan_function_count(plan) &&
+           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_REF &&
+           parameter->ownership == XI_OWN_BORROWED &&
+           parameter->transfer_mode == XR_TRANSFER_SHARE &&
+           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
+           xr_semantic_slice_view_type_is_exact(plan, parameter->type, NULL);
 }
 
 /* One judgement for `container[start:end]`. The result borrows the container's
@@ -237,11 +250,50 @@ static inline bool xr_semantic_range_slice_is_exact(const XrSemanticPlan *plan,
     return true;
 }
 
+static inline bool xr_semantic_slice_ref_load_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t *out_element_type) {
+    uint32_t count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &count);
+    if (!operation || !operands || operation->opcode != XI_PLACE_LOAD ||
+        operation->operand_count != 1 || operation->operand_begin >= count ||
+        operation->effects != xi_generated_op_effects(XI_PLACE_LOAD) ||
+        operation->flags != xi_generated_op_default_flags(XI_PLACE_LOAD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_PLACE_LOAD) ||
+        operation->result_ownership != xi_generated_op_result_ownership(XI_PLACE_LOAD) ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 || operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE || operation->allocation_key ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        !xr_semantic_slice_view_type_is_exact(plan, operation->result_type, out_element_type))
+        return false;
+    const XrSemanticOperandRecord *place = &operands[operation->operand_begin];
+    if (place->type != operation->result_type || place->role != XR_SEM_OPERAND_VALUE ||
+        place->parameter != -1 || place->ownership_action != XR_SEM_OPERAND_BORROW ||
+        place->access != XR_CALL_ARG_PLAIN || place->flags != 0 ||
+        place->parameter_mode != XR_PARAM_READ || place->transfer_mode != XR_TRANSFER_SHARE ||
+        place->origin != XI_PLACE_ORIGIN_NONE || place->lifetime != XI_PLACE_LIFETIME_NONE ||
+        place->escape != XI_PLACE_ESCAPE_NONE)
+        return false;
+    for (uint32_t i = 0; i < xr_semantic_plan_parameter_count(plan); i++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, i);
+        if (parameter && parameter->value == place->value &&
+            parameter->type == place->type && parameter->function == operation->function &&
+            xr_semantic_slice_ref_parameter_is_exact(plan, parameter))
+            return true;
+    }
+    return false;
+}
+
 static inline bool xr_semantic_slice_view_result_is_exact(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     uint32_t *out_element_type) {
-    return xr_semantic_range_slice_is_exact(plan, operation, out_element_type) ||
-           xr_semantic_direct_local_slice_result_is_exact(plan, operation, out_element_type);
+    return xr_semantic_slice_ref_load_is_exact(plan, operation, out_element_type) ||
+           xr_semantic_range_slice_is_exact(plan, operation, out_element_type) ||
+           xr_semantic_direct_local_slice_result_is_exact(plan, operation, out_element_type) ||
+           (xr_semantic_raw_slice_is_exact(plan, operation) &&
+            xr_semantic_slice_view_type_is_exact(plan, operation->result_type, out_element_type));
 }
 
 #endif  // XR_SEMANTIC_RANGE_SLICE_SHAPE_H

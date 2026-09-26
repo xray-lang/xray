@@ -8,12 +8,14 @@
  * xr_semantic_builder.c - Xi to immutable SemanticPlan construction
  */
 
+#include "xr_semantic_json_codec_shape.h"
 #include "xr_semantic_array_type_shape.h"
 #include "xr_semantic_builder.h"
 #include "xr_semantic_array_element_storage_shape.h"
 #include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
 #include "xr_semantic_class_shape.h"
+#include "xr_semantic_imported_static_method_shape.h"
 #include "xr_semantic_string_runes_shape.h"
 #include "xr_semantic_builtin_runtime_method_shape.h"
 #include "xr_semantic_iterator_rune_has_next_shape.h"
@@ -370,6 +372,16 @@ static bool source_class_identity_for_type(const XrSemanticBuildContext *ctx, co
                                            XrStableId *out);
 static uint8_t classify_import_resolution(const XiImportRef *ref);
 static const XiValue *strip_identity_copies(const XiFunc *function, const XiValue *value);
+
+/* Runtime ownership is distinct from a local reference-counting credit.
+ * Parameters borrow runtime-managed handles even though ARC emits no retain. */
+static uint8_t semantic_parameter_ownership(const XiFunc *function, const XiValue *parameter) {
+    uint8_t ownership = xi_arc_parameter_ownership(function, parameter);
+    if (ownership == XI_OWN_NONE && parameter && parameter->op == XI_PARAM &&
+        xr_type_is_runtime_managed(parameter->type))
+        return XI_OWN_BORROWED;
+    return ownership;
+}
 
 static bool source_enum_key(const XrType *type, XrTextBuilder *key, XrStableId *identity,
                             uint8_t *flags) {
@@ -1864,7 +1876,7 @@ static bool append_parameter_records(XrSemanticBuildContext *ctx, uint32_t funct
         record->value = function->value_begin + source->params[p]->id;
         record->ordinal = p;
         record->mode = mode;
-        record->ownership = xi_arc_parameter_ownership(source, source->params[p]);
+        record->ownership = semantic_parameter_ownership(source, source->params[p]);
         record->transfer_mode = source->params[p]->transfer_mode;
         bool program_leaf_value = source_is_program_leaf_aggregate(ctx, source->params[p]->type);
         if (program_leaf_value) {
@@ -1873,6 +1885,8 @@ static bool append_parameter_records(XrSemanticBuildContext *ctx, uint32_t funct
         }
         record->flags =
             (uint8_t) ((p < source->min_params ? XR_SEM_PARAMETER_REQUIRED : 0u) |
+                       (source->entry_type == 1 && p >= source->min_params && p < source->nparams
+                            ? XR_SEM_PARAMETER_DEFAULT_SENTINEL : 0u) |
                        (source->is_vararg && p == source->nparams ? XR_SEM_PARAMETER_VARIADIC
                                                                   : 0u) |
                        (source->receiver_borrowed && p == 0 ? XR_SEM_PARAMETER_RECEIVER_BORROWED
@@ -2227,9 +2241,9 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
             if (!class_data)
                 return fail(ctx, "XR_SEM_0007", "class operation has no semantic metadata");
             if (!add_metadata(ctx, record, class_data->class_name) ||
-                !add_metadata(ctx, record, class_data->super_name) ||
-                !add_metadata(ctx, record, class_data->generic_origin_name) ||
-                !add_metadata(ctx, record, class_data->display_name))
+                !add_metadata(ctx, record, class_data->super_name ? class_data->super_name : "") ||
+                !add_metadata(ctx, record, class_data->generic_origin_name ? class_data->generic_origin_name : "") ||
+                !add_metadata(ctx, record, class_data->display_name ? class_data->display_name : ""))
                 return false;
             for (uint16_t i = 0; i < class_data->instance_field_count; i++) {
                 if (!add_metadata(ctx, record, class_data->instance_field_names[i]))
@@ -2304,6 +2318,19 @@ static bool classify_operand_contract(XrSemanticBuildContext *ctx, const XiValue
     return true;
 }
 
+/* The payload is the only transferred operand of a public Channel send.
+ * Receiver and timeout operands remain borrowed in the shared domain. */
+static bool channel_method_transfers_operand(const XiValue *value, uint16_t index) {
+    if (!value || value->op != XI_CALL_METHOD || index != 1 || value->nargs < 2 ||
+        !value->args || !value->args[0] || !value->args[0]->type ||
+        value->args[0]->type->kind != XR_KIND_CHANNEL || value->args[0]->type->is_nullable)
+        return false;
+    XiMethodSymbolId symbol = xi_call_method_symbol_id(value);
+    if (symbol == XI_METHOD_SYMBOL_SEND || symbol == XI_METHOD_SYMBOL_TRY_SEND)
+        return value->nargs == 2;
+    return symbol == XI_METHOD_SYMBOL_SEND_TIMEOUT && value->nargs == 3;
+}
+
 static bool append_operand(XrSemanticBuildContext *ctx, const XiFunc *function,
                            const XiValue *value, uint16_t index) {
     if (ctx->plan->operand_count >= XR_SEMANTIC_MAX_OPERANDS ||
@@ -2324,7 +2351,8 @@ static bool append_operand(XrSemanticBuildContext *ctx, const XiFunc *function,
     uint8_t transfer_mode = XR_TRANSFER_SHARE;
     if ((value->op == XI_GO || value->op == XI_THREAD_SPAWN) && index > 0)
         transfer_mode = xi_go_arg_transfer_mode(value, (uint16_t) (index - 1));
-    else if ((value->op == XI_CHAN_SEND || value->op == XI_CHAN_TRY_SEND) && index > 0)
+    else if (((value->op == XI_CHAN_SEND || value->op == XI_CHAN_TRY_SEND) && index > 0) ||
+             channel_method_transfers_operand(value, index))
         transfer_mode = xi_chan_send_transfer_mode(value);
     record->transfer_mode = transfer_mode;
     const XiValue *operand = value->args[index];
@@ -2336,6 +2364,13 @@ static bool append_operand(XrSemanticBuildContext *ctx, const XiFunc *function,
         destroys_scoped_stack_closure || xi_arc_operand_consumes(function, value, index)
             ? XR_SEM_OPERAND_CONSUME
             : XR_SEM_OPERAND_BORROW;
+    if ((value->op == XI_CALL || value->op == XI_CALL_METHOD ||
+         value->op == XI_CALL_METHOD_DIRECT || value->op == XI_TAIL_CALL) &&
+        record->role == XR_SEM_OPERAND_ARGUMENT &&
+        (record->parameter_mode == XR_PARAM_READ || record->parameter_mode == XR_PARAM_REF) &&
+        record->transfer_mode == XR_TRANSFER_SHARE &&
+        xr_semantic_task_type_is_exact(ctx->plan, record->type))
+        record->ownership_action = XR_SEM_OPERAND_BORROW;
     if (ctx->program_closure &&
         xr_program_semantic_closure_family(ctx->program_closure) ==
             XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
@@ -2911,7 +2946,8 @@ static const uint8_t *plan_suspendability(XrSemanticBuildContext *ctx, const XrS
             ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
               (plan->operations[target->operation].opcode == XI_CALL ||
                plan->operations[target->operation].opcode == XI_TAIL_CALL)) ||
-             (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL &&
+             ((target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
+               target->kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_LOCAL) &&
               plan->operations[target->operation].opcode == XI_CALL_METHOD))) {
             next[i] = head[target->function];
             head[target->function] = i;
@@ -3391,6 +3427,14 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
     uint8_t target_kind = 0;
     int function =
         resolve_source_instance_method_local(ctx, value, operation, &receiver_type, &target_kind);
+    if (function < 0) {
+        uint32_t static_function = xr_semantic_static_method_function(
+            ctx->plan, &ctx->plan->operations[operation], NULL, &receiver_type);
+        if (static_function != XR_SEMANTIC_INDEX_NONE) {
+            function = (int) static_function;
+            target_kind = XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_LOCAL;
+        }
+    }
     if (function < 0)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
@@ -3399,7 +3443,7 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
                        XR_SEMANTIC_MAX_CALL_TARGETS))
         return fail(ctx, "XR_EXEC_5003", "semantic call-target budget exhausted");
     const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
-    uint32_t source_class = ctx->plan->types[receiver_type].source_class;
+    uint32_t source_class = ctx->plan->functions[function].source_class;
     if (source_class == XR_SEMANTIC_INDEX_NONE)
         source_class = ctx->functions[call->function].source_class;
     XrSemanticCallTargetRecord *record = &ctx->plan->call_targets[ctx->plan->call_target_count++];
@@ -3594,6 +3638,55 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
     return true;
 }
 
+static bool append_source_static_method_dependency_call_target(
+    XrSemanticBuildContext *ctx, const XiValue *value, uint32_t operation) {
+    const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
+    const XiFunc *caller = ctx->functions[call->function].source;
+    const XrSemanticPlan *dependency_plan = NULL;
+    const XrSemanticSourceExportRecord *exported = NULL;
+    uint32_t source_export = XR_SEMANTIC_INDEX_NONE;
+    const XiImportRef *ref = resolve_source_imported_class_callee(
+        ctx, caller, value->args[0], &dependency_plan, &exported, &source_export, NULL);
+    uint32_t function = ref ? xr_semantic_imported_static_method_function(
+        ctx->plan, call, dependency_plan, exported) : XR_SEMANTIC_INDEX_NONE;
+    if (function == XR_SEMANTIC_INDEX_NONE)
+        return true;
+    uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
+    if (!append_dependency(ctx, ref->resolved_module, &dependency))
+        return fail(ctx, "XR_SEM_0019", "static method dependency is incomplete");
+    if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
+        !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
+                       ctx->plan->call_target_count + 1, sizeof(*ctx->plan->call_targets),
+                       XR_SEMANTIC_MAX_CALL_TARGETS))
+        return fail(ctx, "XR_EXEC_5003", "semantic call-target budget exhausted");
+    XrSemanticCallTargetRecord *record = &ctx->plan->call_targets[ctx->plan->call_target_count++];
+    memset(record, 0, sizeof(*record));
+    record->operation = operation;
+    record->function = XR_SEMANTIC_INDEX_NONE;
+    record->dependency = dependency;
+    record->source_export = source_export;
+    record->export_identity = exported->id;
+    record->callee_function = dependency_plan->functions[function].id;
+    record->callable_type = XR_SEMANTIC_INDEX_NONE;
+    record->kind = XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY;
+    XrTextBuilder key = {0};
+    bool valid = text_append_format(
+                     &key, "call-target-v12:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+                 text_append_stable_id(&key, call->id) && text_append(&key, ":dependency=") &&
+                 text_append_stable_id(&key, ctx->plan->dependencies[dependency].id) &&
+                 text_append(&key, ":class-export=") && text_append_stable_id(&key, exported->id) &&
+                 text_append(&key, ":function=") && text_append_stable_id(&key, record->callee_function) &&
+                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    if (valid)
+        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!valid || !record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_SEM_0019", "static method call identity is incomplete");
+    return true;
+}
+
 /* Names the construction of a declared class. A local construction is proved
  * through its own class-object shared slot. An imported construction instead
  * freezes the exact dependency class export and constructor body; treating its
@@ -3708,6 +3801,10 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
         if (ctx->plan->call_target_count != before)
             return true;
         if (!append_source_instance_method_local_call_target(ctx, value, operation))
+            return false;
+        if (ctx->plan->call_target_count != before)
+            return true;
+        if (!append_source_static_method_dependency_call_target(ctx, value, operation))
             return false;
         return ctx->plan->call_target_count != before
                    ? true
@@ -4599,15 +4696,17 @@ static bool xi_panic_info_constructor_exact(const XiValue *value) {
            strcmp((const char *) value->aux, "constructor") == 0;
 }
 
-static bool xi_json_namespace_value_exact(const XiValue *value) {
+static bool xi_json_namespace_codec_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 2 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->args[1] && value->aux &&
-           strcmp((const char *) value->aux, "value") == 0 && value->aux_kind == XI_AUX_KIND_NONE &&
+           ((strcmp((const char *) value->aux, "value") == 0 && value->type &&
+             value->type->kind == XR_KIND_JSON) ||
+            (strcmp((const char *) value->aux, "stringify") == 0 && value->type &&
+             value->type->kind == XR_KIND_STRING)) && value->aux_kind == XI_AUX_KIND_NONE &&
            value->aux_int > 0 && (value->aux_int & 1) == 0 && receiver->op == XI_GET_BUILTIN &&
            receiver->aux_int == XR_GLOBAL_VAR_JSON && receiver->aux &&
            strcmp((const char *) receiver->aux, "JSON") == 0 && receiver->type &&
-           receiver->type->kind == XR_KIND_CLASS && !receiver->type->instance.class_ref &&
-           value->type && value->type->kind == XR_KIND_JSON;
+           receiver->type->kind == XR_KIND_CLASS && !receiver->type->instance.class_ref;
 }
 
 static bool semantic_json_namespace_type_exact(const XrSemanticTypeRecord *type) {
@@ -4624,7 +4723,7 @@ static bool semantic_json_namespace_type_exact(const XrSemanticTypeRecord *type)
            strcmp(type->canonical_key, expected) == 0;
 }
 
-static bool semantic_json_namespace_value_exact(const XrSemanticBuildContext *ctx,
+static bool semantic_json_namespace_codec_exact(const XrSemanticBuildContext *ctx,
                                                 const XrSemanticOperationRecord *record) {
     if (!ctx || !record || record->operand_count != 2 ||
         record->operand_begin > ctx->plan->operand_count ||
@@ -4638,9 +4737,8 @@ static bool semantic_json_namespace_value_exact(const XrSemanticBuildContext *ct
     const XrSemanticTypeRecord *result_type =
         record->result_type < ctx->plan->type_count ? &ctx->plan->types[record->result_type] : NULL;
     return semantic_json_namespace_type_exact(receiver_type) && result_type &&
-           result_type->kind == XR_KIND_JSON && result_type->builtin_type == XR_TID_NULL &&
-           result_type->child_count == 0 && result_type->scalar_rep == XR_SCALAR_REP_NONE &&
-           strcmp(ctx->plan->metadata[record->metadata_begin], "value") == 0 &&
+           xr_semantic_json_codec_result_is_exact(
+               ctx->plan->metadata[record->metadata_begin], result_type) &&
            receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
            receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
@@ -4767,7 +4865,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (value->op == XI_PARAM && value->aux_int == 0 && function->has_receiver)
         record->parameter_mode = function->receiver_mode;
     if (value->op == XI_PARAM)
-        record->parameter_ownership = xi_arc_parameter_ownership(function, value);
+        record->parameter_ownership = semantic_parameter_ownership(function, value);
     if (value->op == XI_PARAM && source_is_program_leaf_aggregate(ctx, value->type))
         record->parameter_ownership = XI_OWN_NONE;
     record->flags = value->flags;
@@ -4835,6 +4933,24 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->evidence[XR_SEM_PRINT_EVIDENCE_TERMINATOR] = plan->terminator;
         record->evidence[XR_SEM_PRINT_EVIDENCE_TARGET] = plan->target;
         record->evidence[XR_SEM_PRINT_EVIDENCE_CAPABILITIES] = plan->required_capabilities;
+    }
+    if (value->op == XI_SLICE_FROM_PTR) {
+        const XiViewEvidence *view = &value->view_evidence;
+        const XiViewSourceEvidence *source = xi_view_evidence_single_source(view);
+        XrType *element = value->type && XR_TYPE_IS_SLICE(value->type)
+                              ? value->type->container.element_type : NULL;
+        if (!source || source->source_operand != 2 || source->source_param != -1 ||
+            source->origin != XI_VIEW_ORIGIN_FOREIGN || source->lifetime != 1 ||
+            value->nargs != 3 || !value->args[2] || !element ||
+            !add_type(ctx, element, &record->view_element_type))
+            return fail(ctx, "XR_SEM_0019", "raw Slice view authority is incomplete");
+        record->view_source_value = value_ref(ctx, function, value->args[2]);
+        record->view_source_operand = 2;
+        record->view_source_parameter = -1;
+        record->view_origin = source->origin;
+        record->view_capability = view->capability;
+        record->view_lifetime = source->lifetime;
+        record->view_complete = view->complete;
     }
     if (value->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
         const XiViewEvidence *view = &value->view_evidence;
@@ -4963,8 +5079,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (xi_string_builder_to_string_exact(value) &&
         semantic_string_builder_to_string_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING;
-    if (xi_json_namespace_value_exact(value) && semantic_json_namespace_value_exact(ctx, record))
-        record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE;
+    if (xi_json_namespace_codec_exact(value) && semantic_json_namespace_codec_exact(ctx, record))
+        record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_CODEC;
     if (xi_panic_info_constructor_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_PANIC_INFO_CONSTRUCTOR;
         if (!xr_semantic_panic_info_constructor_is_exact(ctx->plan, record, NULL))
@@ -5082,8 +5198,33 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
             return false;
     }
     if (record->intrinsic_kind == XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD &&
-        !xr_semantic_builtin_runtime_method_is_exact(ctx->plan, record, NULL, NULL))
+        !xr_semantic_builtin_runtime_method_is_exact(ctx->plan, record, NULL, NULL)) {
+        if (getenv("XRAY_TARGET_TRACE")) {
+            const XaBuiltinReceiverMethodSpec *spec = xr_semantic_builtin_runtime_method_spec(record);
+            const XrSemanticOperandRecord *head = ctx->plan->operands + record->operand_begin;
+            const XrSemanticTypeRecord *receiver = xr_semantic_plan_type(ctx->plan, head->type);
+            const XrSemanticTypeRecord *result = xr_semantic_plan_type(ctx->plan, record->result_type);
+            fprintf(stderr, "[semantic runtime method] spec=%s receiver=%d result=%d contract=%d "
+                    "ownership=%u provenance=%u complete=%u transfer=%u flags=%x/%x effects=%x/%x "
+                    "allocation=%s\n", spec ? spec->source_name : "<none>",
+                    spec && xr_semantic_builtin_runtime_method_receiver_type_is_exact(ctx->plan, receiver, spec->receiver),
+                    spec && xr_semantic_builtin_runtime_method_result_type_is_exact(ctx->plan, spec, receiver, result),
+                    spec && xr_semantic_builtin_runtime_method_result_contract_is_exact(spec, record, result),
+                    record->result_ownership, record->return_provenance, record->return_complete,
+                    record->transfer_mode, record->flags, xi_generated_op_default_flags(XI_CALL_METHOD),
+                    record->effects, xi_generated_op_effects(XI_CALL_METHOD),
+                    record->allocation_key ? record->allocation_key : "<none>");
+            fprintf(stderr, "[semantic runtime method] receiver-type=%s result-type=%s\n",
+                    receiver && receiver->canonical_key ? receiver->canonical_key : "<none>",
+                    result && result->canonical_key ? result->canonical_key : "<none>");
+            for (uint16_t i = 0; i < record->operand_count; i++)
+                fprintf(stderr, "[semantic runtime method] operand=%u type=%u role=%u parameter=%d "
+                        "transfer=%u ownership=%u mode=%u flags=%u\n", i, head[i].type,
+                        head[i].role, head[i].parameter, head[i].transfer_mode,
+                        head[i].ownership_action, head[i].parameter_mode, head[i].flags);
+        }
         return fail(ctx, "XR_SEM_0019", "builtin runtime method authority is not exact");
+    }
     return append_call_target(ctx, value, index);
 }
 

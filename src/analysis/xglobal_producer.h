@@ -48,5 +48,10 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
     XgGlobalEvidence *evidence, const struct XrModuleGraph *graph, uint32_t profile,
     uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
     uint32_t imported_module_count, struct XaAnalyzer *analyzer);
+/* Canonical identity of the compile-time evidence module that owns the builtin
+ * prelude enum declarations.  The producer publishes registry declarations
+ * under it; consumers use it to tell a registry declaration apart from a
+ * source enum with the same display name.  Returns 0 on allocation failure. */
+XR_FUNC uint64_t xg_prelude_enum_module_canonical_hash(void);
 
 #endif  // XGLOBAL_PRODUCER_H

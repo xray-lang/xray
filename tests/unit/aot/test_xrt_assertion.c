@@ -422,6 +422,42 @@ static void test_failure_and_action_ownership(void) {
     CHECK(XR_IS_NULL(xrt_pending_error), "assertion action never leaks a pending typed error");
 }
 
+static XrValue stack_closure_entry(xrt_closure_t *closure) {
+    return XR_FROM_INT(XR_TO_INT(closure->upvals[0]) + (XR_IS_NULL(closure->upvals[1]) ? 0 : 1));
+}
+
+/* A non-escaping closure lives in portable frame storage: it is marked as
+ * stack storage, reference counting never frees it, and the scope-end drop
+ * releases each capture exactly once. */
+static void test_stack_closure_frame(XrtExecutionArena *arena) {
+    static const XrAotCallableDesc callable = {5, 0, 0, (void (*)(void)) stack_closure_entry};
+    size_t baseline = xrt_execution_arena_live_objects(arena);
+    XrValue text = xr_box_str("captured");
+    XRT_CLOSURE_STACK_FRAME(frame, 2);
+    xrt_closure_t *closure = xrt_closure_stack_init(&frame, sizeof(frame), &callable, 2);
+    XrObjHeader *header = (XrObjHeader *) ((char *) closure - sizeof(XrObjHeader));
+    CHECK((void *) header == (void *) &frame, "closure header starts the frame storage");
+    CHECK((header->extra & XR_OBJ_STORAGE_STACK) != 0, "frame storage is marked as stack storage");
+    CHECK(((uintptr_t) closure % sizeof(void *)) == 0, "closure storage is pointer aligned");
+    CHECK(closure->nupvals == 2 && XR_IS_NULL(closure->upvals[0]) &&
+              XR_IS_NULL(closure->upvals[1]),
+          "frame captures start empty");
+    closure->upvals[0] = XR_FROM_INT(41);
+    closure->upvals[1] = text;
+    XrValue value = xr_mkptr(closure, XR_TAG_CLOSURE);
+    xrt_retain(value);
+    xrt_release(value);
+    XrValue result = ((XrValue(*)(xrt_closure_t *)) closure->callable->sync_entry)(closure);
+    CHECK(XR_IS_INT(result) && XR_TO_INT(result) == 42, "stack closure reads its captures");
+    CHECK(xrt_execution_arena_live_objects(arena) == baseline + 1,
+          "reference counting leaves the captured owner alive until the drop");
+    xrt_closure_stack_drop(value);
+    CHECK(closure->nupvals == 0, "drop clears the capture count");
+    CHECK(xrt_execution_arena_live_objects(arena) == baseline, "drop releases the captured owner");
+    xrt_closure_stack_drop(value);
+    CHECK(xrt_execution_arena_live_objects(arena) == baseline, "a second drop releases nothing");
+}
+
 int main(void) {
     XrtExecutionArena *arena = xrt_execution_arena_new();
     void *previous = xrt_execution_arena_enter(arena);
@@ -430,6 +466,7 @@ int main(void) {
     test_collection_key_equivalence_matrix();
     test_cycle_matrix();
     test_failure_and_action_ownership();
+    test_stack_closure_frame(arena);
     xrt_execution_arena_restore(previous);
     xrt_execution_arena_destroy(arena);
 

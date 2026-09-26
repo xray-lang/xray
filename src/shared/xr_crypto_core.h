@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "xr_byte_compare_core.h"
 
 #include "../base/xdefs.h"
 #include "../base/xsha256.h"
@@ -28,15 +29,5 @@ XR_FUNC void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *d
 XR_FUNC void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output);
 XR_FUNC void xr_secure_wipe(void *ptr, size_t len);
 
-static inline bool xr_crypto_core_timing_safe_equal(const char *a, size_t a_len, const char *b,
-                                                    size_t b_len) {
-    if ((!a && a_len != 0) || (!b && b_len != 0))
-        return false;
-    volatile uint8_t diff = (a_len != b_len) ? 1 : 0;
-    size_t min_len = a_len < b_len ? a_len : b_len;
-    for (size_t i = 0; i < min_len; i++)
-        diff |= (uint8_t) (((uint8_t) a[i]) ^ ((uint8_t) b[i]));
-    return diff == 0;
-}
 
 #endif  // XR_CRYPTO_CORE_H

@@ -11,6 +11,7 @@
 #include "xglobal_producer.h"
 
 #include "../base/xhash.h"
+#include "../base/xbuiltin_enum.h"
 #include "../base/xarena.h"
 #include "../toolchain/xcompiler_session.h"
 #include "../base/xmalloc.h"
@@ -9464,6 +9465,8 @@ static bool body_sequence_registry_receiver_matches(const XgLocalType *local,
     switch (receiver) {
         case XA_BUILTIN_RECEIVER_STRING:
         case XA_BUILTIN_RECEIVER_RANGE:
+        case XA_BUILTIN_RECEIVER_CHANNEL:
+        case XA_BUILTIN_RECEIVER_TASK:
             return false;
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
@@ -11564,6 +11567,20 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             break;
         case AST_NEW_EXPR:
+            /* Runtime-length arrays reject negative counts through the panic
+             * channel. Publish that fact before transitive call closure so
+             * callers materialize the same failure edge as the constructor. */
+            if (bc->producer->analyzer && node->as.new_expr.arg_count == 1 &&
+                node->as.new_expr.arguments && node->as.new_expr.arguments[0]) {
+                const XrType *result = xa_analyzer_get_node_type(bc->producer->analyzer, node);
+                const XrType *count = xa_analyzer_get_node_type(
+                    bc->producer->analyzer, node->as.new_expr.arguments[0]);
+                if (result && result->kind == XR_KIND_ARRAY && count &&
+                    count->kind == XR_KIND_INT && !count->is_nullable) {
+                    bc->effect_bits |= XG_BODY_MAY_PANIC;
+                    bc->capability_bits |= XG_CAP_EXCEPTION;
+                }
+            }
             bc->effect_bits |= XG_BODY_MAY_ALLOC;
             bc->capability_bits |= XG_CAP_OBJECTS;
             bc->capability_bits |=
@@ -13180,6 +13197,76 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
         NULL);
 }
 
+static bool prelude_enum_module_identity(char **identity_out) {
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB, "prelude", NULL};
+    return xr_module_identity_from_logical(&authority, "builtin-enums", identity_out);
+}
+
+XR_FUNC uint64_t xg_prelude_enum_module_canonical_hash(void) {
+    char *identity = NULL;
+    if (!prelude_enum_module_identity(&identity))
+        return 0;
+    uint64_t hash = hash_text64(identity);
+    xr_free(identity);
+    return hash;
+}
+
+/* Registry declarations have one owner regardless of the importing source graph.
+ * This evidence module contains no runtime initializer or mutable storage. */
+static bool producer_publish_prelude_enums(XgProducer *producer) {
+    if (!producer->analyzer)
+        return true;
+    char *identity = NULL;
+    if (!prelude_enum_module_identity(&identity))
+        return false;
+    static const char declaration_text[] =
+#define XR_BUILTIN_ENUM(name, arity, slot, variants) #name ":" #arity ":" #variants ";"
+#include "../../stdlib/prelude/builtin_symbols.def"
+        ;
+    XgModuleSummary module = {0};
+    module.module_id = producer->evidence->nmodules + 1u;
+    module.name_id = hash_name32(identity);
+    module.canonical_hash = hash_text64(identity);
+    module.source_hash = hash_text64(declaration_text);
+    module.kind = XR_MOD_STDLIB;
+    xr_free(identity);
+    if (!module.canonical_hash || !xg_global_evidence_add_module(producer->evidence, &module))
+        return false;
+    size_t count = 0u;
+    const XrBuiltinEnumRow *rows = xr_builtin_enum_registry(&count);
+    for (size_t index = 0u; index < count; ++index) {
+        const XrBuiltinEnumRow *row = &rows[index];
+        XaSymbol *symbol = xa_analyzer_lookup(producer->analyzer, row->enum_name);
+        if (!symbol || !symbol->is_builtin || symbol->kind != XA_SYM_ENUM)
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(producer->analyzer, symbol);
+        XrClassInfo *info = links ? links->class_info : NULL;
+        if (!info || info->declaration_symbol != symbol || !links->enum_info ||
+            !links->type || links->type->kind != XR_KIND_ENUM ||
+            links->type->enum_type.nominal_ref != info ||
+            links->enum_info->variant_count != row->member_count)
+            return false;
+        XgDeclSummary decl = {0};
+        decl.module_id = module.module_id;
+        decl.decl_id = producer->evidence->ndecls + 1u;
+        decl.kind = XG_DECL_ENUM;
+        decl.name_id = hash_name32(row->enum_name);
+        decl.type_key = hash_named_type_key32(row->enum_name, NULL, 0);
+        decl.signature_key = row->member_count;
+        decl.source_node_id = decl.name_id;
+        decl.nominal_key = producer_nominal_key_fields(producer, decl.module_id,
+            decl.source_node_id, decl.kind, decl.type_key);
+        decl.storage_domain = XR_STORAGE_MODULE_STATIC;
+        decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
+        if (!decl.nominal_key || !xg_global_evidence_add_decl(producer->evidence, &decl) ||
+            !producer_rebind_enum_info(info, decl.nominal_key, decl.decl_id))
+            return false;
+    }
+    return true;
+}
+
 static bool xg_global_evidence_build_from_module_graph_impl(
     XgGlobalEvidence *evidence, const XrModuleGraph *graph, uint32_t profile,
     uint64_t imported_summary_hash, const XgModuleSummary *imported_modules,
@@ -13273,7 +13360,9 @@ static bool xg_global_evidence_build_from_module_graph_impl(
     }
 
     const char *failed_stage = NULL;
-    if (!producer_publish_nominal_conformances(&producer))
+    if (!producer_publish_prelude_enums(&producer))
+        failed_stage = "prelude-enum";
+    else if (!producer_publish_nominal_conformances(&producer))
         failed_stage = "nominal-conformance";
     else if (!producer_finalize_class_graph(&producer))
         failed_stage = "class-graph";

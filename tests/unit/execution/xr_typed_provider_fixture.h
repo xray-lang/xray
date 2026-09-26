@@ -58,6 +58,20 @@ static int typed_provider_compare(const void *left, const void *right) {
     return memcmp(a->contract_id.bytes, b->contract_id.bytes, XR_STABLE_ID_BYTES);
 }
 
+static inline XrProviderLogicalContract typed_byte_contract(void) {
+    XrProviderLogicalContract c = xr_program_fixture_provider_contract();
+    c.effects = XR_PROVIDER_EFFECT_IO;
+    c.parameter_count = 1u;
+    c.parameter_modes[0] = XR_PROVIDER_MODE_REF;
+    c.parameter_owners[0] = XR_PROVIDER_OWNER_BORROWED;
+    c.reentry = XR_PROVIDER_REENTRY_FORBIDDEN;
+    c.type_byte_count = 3u;
+    c.types[0] = XR_PROVIDER_TYPE_U8_ARRAY;
+    c.types[1] = XR_PROVIDER_TYPE_UNIT;
+    c.types[2] = XR_PROVIDER_TYPE_UNIT;
+    return c;
+}
+
 static XrTargetProfile *typed_profile_build(unsigned mutation) {
     XrTestTargetProfileFixture base;
     if (!xr_test_target_profile_fixture_init(&base, false, XR_TARGET_RUNTIME_PROFILE_HOSTED))
@@ -101,6 +115,11 @@ static XrTargetProfile *typed_profile_build(unsigned mutation) {
     if (mutation == 1u) host->operations[0].call_abi.result.width = 8u;
     if (mutation == 2u) host->operations[0].call_abi.parameters[1].flags = 0u;
     if (mutation == 3u) host->operations[0].call_abi.parameters[2].flags = XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE;
+    if (mutation == 4u) {
+        host->operation_count = 1u;
+        host->operations[0].logical_contract = typed_byte_contract();
+        memset(&host->operations[1], 0, sizeof(host->operations[1]));
+    }
     qsort(providers, 3u, sizeof(providers[0]), typed_provider_compare);
     base.input.providers = providers;
     base.input.provider_count = 3u;

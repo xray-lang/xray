@@ -71,8 +71,8 @@ XR_FUNCDEF bool xr_provider_logical_contract_equal(const XrProviderLogicalContra
 }
 
 static bool type_size(const uint8_t *bytes, uint8_t available, uint8_t *size_out,
-                      bool *resource_out) {
-    bool resource = false;
+                      bool *nontrivial_out) {
+    bool nontrivial = false;
     uint16_t pending = 1u;
     uint8_t offset = 0u;
     while (pending != 0u) {
@@ -86,12 +86,15 @@ static bool type_size(const uint8_t *bytes, uint8_t available, uint8_t *size_out
             case XR_PROVIDER_TYPE_I64:
             case XR_PROVIDER_TYPE_BYTES:
                 break;
+            case XR_PROVIDER_TYPE_U8_ARRAY:
+                nontrivial = true;
+                break;
             case XR_PROVIDER_TYPE_RESOURCE:
                 if ((uint32_t) available - offset < XR_STABLE_ID_BYTES ||
                     all_zero(bytes + offset, XR_STABLE_ID_BYTES))
                     return false;
                 offset += XR_STABLE_ID_BYTES;
-                resource = true;
+                nontrivial = true;
                 break;
             case XR_PROVIDER_TYPE_OPTIONAL:
                 ++pending;
@@ -107,7 +110,7 @@ static bool type_size(const uint8_t *bytes, uint8_t available, uint8_t *size_out
         if (pending > available - offset)
             return false;
     }
-    if (resource_out) *resource_out = resource;
+    if (nontrivial_out) *nontrivial_out = nontrivial;
     *size_out = offset;
     return true;
 }

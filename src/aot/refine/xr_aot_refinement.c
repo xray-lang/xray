@@ -1016,11 +1016,11 @@ static uint32_t derive_direct_call_record(const XrAotBaselineRef *baseline,
                semantic_target->dependency != call->source_dependency ||
                semantic_target->source_export != call->source_export ||
                !xr_stable_id_equal(semantic_target->export_identity,
-                                   call->source_export_identity) ||
+                                   call->source_declaration_identity) ||
                !xr_stable_id_equal(semantic_target->callee_function,
                                    call->source_callee_identity) ||
                !xr_stable_id_equal(program_graph->export_identity,
-                                   call->source_export_identity) ||
+                                   call->source_declaration_identity) ||
                !xr_stable_id_equal(program_graph->exported_function_identity,
                                    call->source_callee_identity)) {
         return XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED;

@@ -131,7 +131,8 @@ static inline bool xr_target_container_copy_storage(const XrSemanticPlan *plan,
     if (!out || !xr_semantic_container_copy_is_exact(plan, operation, NULL, &semantic_storage))
         return false;
     const XrSemanticTypeRecord *result = xr_semantic_plan_type(plan, operation->result_type);
-    if (result && result->kind == XR_KIND_STRUCT_OBJECT) {
+    if (result && (result->kind == XR_KIND_STRUCT_OBJECT ||
+                   xr_semantic_tagged_string_type_is_exact(result))) {
         *out = XR_TARGET_ARRAY_STORAGE_NONE;
         return true;
     }

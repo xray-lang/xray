@@ -43,6 +43,8 @@ def logical_type(text: str, depth: int = 0) -> tuple[bytes, bool]:
     text = text.strip()
     if depth > 32 or len(text) > 4096:
         raise ValueError("provider type exceeds its bound")
+    if text == "Array<u8>":
+        return b"\x08", True
     if text in SCALARS:
         return SCALARS[text], text == "string"
     resource = re.fullmatch(r"resource<([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)>", text)

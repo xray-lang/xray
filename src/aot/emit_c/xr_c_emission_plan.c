@@ -18,6 +18,9 @@
 #include "../../plan/target/xr_target_array_storage_shape.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
+#include "../../plan/semantic/xr_semantic_task_shape.h"
+#include "../../plan/semantic/xr_semantic_range_slice_shape.h"
+#include "../../plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_catch_shape.h"
 #include "../../plan/semantic/xr_semantic_enum_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
@@ -325,6 +328,16 @@ static const XrSemanticTypeRecord *emission_semantic_value_type(const XrCEmissio
     return match;
 }
 
+static bool emission_is_slice_ref_parameter(const XrCEmissionModuleScope *scope,
+                                             uint32_t semantic_value) {
+    for (uint32_t i = 0; i < xr_semantic_plan_parameter_count(scope->semantic); i++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(scope->semantic, i);
+        if (parameter && parameter->value == semantic_value)
+            return xr_semantic_slice_ref_parameter_is_exact(scope->semantic, parameter);
+    }
+    return false;
+}
+
 static const char *emission_raw_pointer_c_type(const XrCEmissionModuleScope *scope,
                                                uint32_t semantic_value) {
     const XrSemanticTypeRecord *type = emission_semantic_value_type(scope, semantic_value);
@@ -416,8 +429,9 @@ static bool exact_direct_local_tagged_ref_parameter_recipe(const XrCEmissionModu
  * never overrides a call that names a representation -- this is the answer of
  * last resort, for a function no call in this module reaches.
  *
- * Scalars use their declared native kind. Borrow views use their fixed pointer
- * and length ABI; other aggregates and owning references require a call boundary. */
+ * Scalars use their declared native kind, borrow views use pointer and length,
+ * and exact Array declarations use the owning tagged carrier. Other aggregates
+ * and reference families still require their own proved boundary. */
 static bool declared_scalar_c_rep(const XrSemanticTypeRecord *type, XrCValueRep *out,
                                   const char **c_type) {
     if (!type || !out || !c_type || (type->flags & XR_SEM_TYPE_NULLABLE) != 0)
@@ -523,13 +537,58 @@ static bool function_states_own_boundary(const XrSemanticFunctionRecord *functio
     return function && (function->flags & XR_SEM_FUNCTION_EXTERN) == 0;
 }
 
+/* The nullable scalar ABI carries both the payload and its null tag. This
+ * declaration proof admits only the scalar widths owned by that carrier. */
+static bool declared_nullable_scalar_c_rep(const XrSemanticTypeRecord *type,
+                                           XrCValueRep *out, const char **c_type) {
+    const uint8_t allowed = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST;
+    XrStableId zero = {{0}};
+    if (!type || (type->flags & XR_SEM_TYPE_NULLABLE) == 0 ||
+        (type->flags & (uint8_t) ~allowed) != 0 || type->builtin_type != XR_TID_NULL ||
+        type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(type->source_class_identity, zero) || type->source_enum_key ||
+        type->enum_layout_id != 0 || type->enum_member_count != 0 || type->enum_flags != 0 ||
+        type->reserved_enum != 0)
+        return false;
+    bool exact = (type->kind == XR_KIND_INT &&
+                  (type->scalar_rep == XR_NATIVE_I64 || type->scalar_rep == XR_NATIVE_U8)) ||
+                 (type->kind == XR_KIND_FLOAT && type->scalar_rep == XR_NATIVE_F64) ||
+                 (type->kind == XR_KIND_BOOL && type->scalar_rep == XR_SCALAR_REP_NONE);
+    if (!exact)
+        return false;
+    *out = XR_C_VALUE_REP_TAGGED;
+    *c_type = "XrValue";
+    return true;
+}
+
 static bool declared_boundary_c_rep(const XrCEmissionModuleScope *scope, uint32_t type_index,
                                     XrCValueRep *out, const char **c_type) {
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(scope->semantic, type_index);
-    if (declared_scalar_c_rep(type, out, c_type))
+    if (declared_scalar_c_rep(type, out, c_type) ||
+        declared_nullable_scalar_c_rep(type, out, c_type))
         return true;
+    if (xr_semantic_tagged_string_type_is_exact(type) ||
+        xr_semantic_nullable_tagged_string_type_is_exact(type) ||
+        xr_semantic_class_instance_type_source_class(scope->semantic, type) !=
+            XR_SEMANTIC_INDEX_NONE ||
+        xr_semantic_nullable_class_instance_type_source_class(scope->semantic, type) !=
+            XR_SEMANTIC_INDEX_NONE ||
+        xr_semantic_external_class_instance_type_is_exact(type) ||
+        xr_semantic_external_nullable_class_instance_type_is_exact(type)) {
+        *out = XR_C_VALUE_REP_TAGGED;
+        *c_type = "XrValue";
+        return true;
+    }
     uint32_t child_count = 0;
     const uint32_t *children = xr_semantic_plan_type_children(scope->semantic, &child_count);
+    if (xr_semantic_array_type_row_is_exact(type) && children &&
+        type->child_begin < child_count &&
+        xr_semantic_plan_type(scope->semantic, children[type->child_begin])) {
+        *out = XR_C_VALUE_REP_TAGGED;
+        *c_type = "XrValue";
+        return true;
+    }
     const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW;
     if (!type || type->kind != XR_KIND_SLICE || type->builtin_type != XR_TID_NULL ||
         (type->flags & required) != required ||
@@ -637,8 +696,9 @@ static bool machine_kind_to_c_rep(const XrCEmissionModuleScope *scope, uint32_t 
             *c_type = "XrValue";
             return true;
         case XR_MACHINE_REP_VIEW:
-            *out = XR_C_VALUE_REP_VIEW;
-            *c_type = "xr_span_t";
+            *out = emission_is_slice_ref_parameter(scope, semantic_value)
+                       ? XR_C_VALUE_REP_RAW_PTR : XR_C_VALUE_REP_VIEW;
+            *c_type = *out == XR_C_VALUE_REP_RAW_PTR ? "xr_span_t *" : "xr_span_t";
             return true;
         case XR_MACHINE_REP_RAW_PTR:
             *out = XR_C_VALUE_REP_RAW_PTR;
@@ -1341,7 +1401,7 @@ static bool exact_array_intrinsic_recipe(const XrCEmissionModuleScope *scope,
         call->callee_function != XR_SEMANTIC_INDEX_NONE ||
         call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
         call->source_export != XR_SEMANTIC_INDEX_NONE ||
-        !emission_stable_id_is_zero(call->source_export_identity) ||
+        !emission_stable_id_is_zero(call->source_declaration_identity) ||
         !emission_stable_id_is_zero(call->source_callee_identity) ||
         call->result_value != binding->semantic_value || call->result_slot != binding->slot ||
         call->result_register_rep != binding->register_rep ||
@@ -1481,7 +1541,7 @@ static bool exact_array_fill_scalar_recipe(const XrCEmissionModuleScope *scope,
         call->callee_function != XR_SEMANTIC_INDEX_NONE ||
         call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
         call->source_export != XR_SEMANTIC_INDEX_NONE ||
-        !emission_stable_id_is_zero(call->source_export_identity) ||
+        !emission_stable_id_is_zero(call->source_declaration_identity) ||
         !emission_stable_id_is_zero(call->source_callee_identity) ||
         call->result_value != binding->semantic_value || call->result_slot != binding->slot ||
         call->result_register_rep != binding->register_rep ||
@@ -1780,7 +1840,7 @@ static bool exact_array_hof_direct_recipe(const XrCEmissionModuleScope *scope,
         emission_semantic_function(scope, call->callee_function) != operation->callable_function ||
         call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
         call->source_export != XR_SEMANTIC_INDEX_NONE ||
-        !emission_stable_id_is_zero(call->source_export_identity) ||
+        !emission_stable_id_is_zero(call->source_declaration_identity) ||
         !emission_stable_id_is_zero(call->source_callee_identity) ||
         call->result_value != binding->semantic_value || call->result_slot != binding->slot ||
         call->result_register_rep != binding->register_rep ||
@@ -1883,7 +1943,8 @@ exact_direct_local_tagged_ref_parameter_prior(const XrCEmissionModuleScope *scop
         parameter->transfer_mode != XR_TRANSFER_SHARE ||
         (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0)
         return false;
-    if (xr_semantic_class_instance_type_source_class(semantic, array) != XR_SEMANTIC_INDEX_NONE ||
+    if (xr_semantic_task_type_is_exact(semantic, parameter->type) ||
+        xr_semantic_class_instance_type_source_class(semantic, array) != XR_SEMANTIC_INDEX_NONE ||
         xr_semantic_runtime_constructor_type_is_exact(array, XR_KIND_INSTANCE, XR_TID_STRINGBUILDER,
                                                       "StringBuilder", NULL) ||
         (array->kind == XR_KIND_STRUCT_OBJECT &&
@@ -2037,25 +2098,27 @@ static bool build_direct_local_tagged_ref_argument_view(const XrCEmissionModuleS
         caller_slot->root_kind == XR_TARGET_ROOT_NONE &&
         caller_slot->role == XR_TARGET_SLOT_PARAMETER;
     XrStableId expected_identity = {{0}};
+    uint32_t shift = xr_semantic_local_call_operand_shift(semantic_target);
     if (!semantic || !argument || !out || !call || !operation || !callee || !operand ||
         !semantic_target || !parameter || !parameter_binding || !caller_slot || !callee_slot ||
         !caller_register || !caller_memory || !callee_register || !callee_memory ||
-        semantic_target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+        !xr_semantic_call_target_names_local_function(
+            semantic_target, operation, (uint32_t) xr_semantic_plan_function_count(semantic)) ||
         semantic_target->operation != call->semantic_operation ||
         semantic_target->function != emission_semantic_function(scope, call->callee_function) ||
         call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
         call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
-        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
         operation->result_value != call->result_value ||
         operation->function != emission_semantic_function(scope, call->caller_function) ||
-        argument->semantic_operand != operation->operand_begin + argument->ordinal + 1u ||
+        (shift == 0u && argument->ordinal == 0u) ||
+        argument->semantic_operand != operation->operand_begin + argument->ordinal + shift ||
         argument->semantic_value != operand->value ||
         argument->callee_parameter != callee->parameter_begin + argument->ordinal ||
         parameter->function != emission_semantic_function(scope, call->callee_function) ||
         parameter->ordinal != argument->ordinal || parameter->type != operand->type ||
         parameter->mode != XR_PARAM_REF || parameter->ownership != XI_OWN_BORROWED ||
         parameter->transfer_mode != XR_TRANSFER_SHARE || operand->role != XR_SEM_OPERAND_ARGUMENT ||
-        operand->parameter != (int16_t) argument->ordinal ||
+        operand->parameter != (int16_t) (argument->ordinal + shift - 1u) ||
         operand->parameter_mode != XR_PARAM_REF || operand->access != XR_CALL_ARG_REF ||
         operand->origin == XI_PLACE_ORIGIN_NONE ||
         operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
@@ -2137,7 +2200,10 @@ classify_direct_local_tagged_ref_argument(const XrCEmissionModuleScope *scope,
         exact_direct_local_tagged_ref_parameter_prior(scope, parameter, NULL);
     XrStableId expected_identity = {{0}};
     bool exact_prior_identity =
-        semantic_target && parameter && semantic_target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+        semantic_target && parameter &&
+        xr_semantic_call_target_names_local_function(
+            semantic_target, xr_semantic_plan_operation(semantic, call->semantic_operation),
+            (uint32_t) xr_semantic_plan_function_count(semantic)) &&
         emission_identity_from_pair("xray-target-direct-tagged-ref-argument-v2",
                                     semantic_target->id, parameter->id, argument->ordinal,
                                     &expected_identity) &&
@@ -2260,7 +2326,7 @@ static bool build_exact_string_byte_slice_view_recipe(const XrCEmissionModuleSco
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_value != binding->semantic_value || call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2347,7 +2413,7 @@ static bool verify_exact_string_byte_slice_view_recipe(const XrCEmissionModuleSc
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_value != binding->semantic_value || call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2386,7 +2452,7 @@ static const XrTargetCallRecord *runtime_constructor_call(const XrCEmissionModul
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_value != binding->semantic_value || call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2422,10 +2488,24 @@ static const char *exact_runtime_constructor_recipe(const XrCEmissionModuleScope
                                                     uint32_t *argument_value) {
     const XrSemanticOperationRecord *operation = binding_operation(scope, binding);
     XrSemanticRuntimeConstructorShape shape = {0};
-    if (!operation || !runtime_constructor_call(scope, binding) ||
-        operation->result_value != binding->semantic_value ||
+    if (!operation || operation->result_value != binding->semantic_value ||
         !xr_semantic_runtime_constructor_shape(scope->semantic, operation, &shape))
         return NULL;
+    if (!runtime_constructor_call(scope, binding)) {
+        if (getenv("XRAY_AOT_REFINE_TRACE")) {
+            const XrSemanticFunctionRecord *function =
+                xr_semantic_plan_function(scope->semantic, operation->function);
+            fprintf(stderr,
+                    "[c-emission-constructor] missing exact call module=%u function=%s "
+                    "value=%u slot=%u frozen-reachable=%d calls=%u:%u\n",
+                    scope->partition_index, function && function->name ? function->name : "?",
+                    binding->semantic_value, binding->slot,
+                    !scope->partition || xr_target_program_function_is_reachable(
+                        &scope->reachability, scope->partition_index, operation->function),
+                    scope->call_begin, scope->call_end);
+        }
+        return NULL;
+    }
     if (shape.argument_value != XR_SEMANTIC_INDEX_NONE) {
         const XrTargetValueRepRecord *argument = xr_target_plan_value_rep_for_module(
             scope->target, scope->partition_index, shape.argument_value);
@@ -2546,7 +2626,7 @@ static bool exact_string_runes_recipe(const XrCEmissionModuleScope *scope,
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2589,7 +2669,7 @@ static bool exact_iterator_rune_has_next_recipe(const XrCEmissionModuleScope *sc
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2632,7 +2712,7 @@ static bool exact_iterator_rune_next_recipe(const XrCEmissionModuleScope *scope,
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2692,7 +2772,7 @@ static bool exact_iterator_rune_nth_recipe(const XrCEmissionModuleScope *scope,
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2761,7 +2841,7 @@ static bool exact_rune_to_uint32_recipe(const XrCEmissionModuleScope *scope,
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2824,7 +2904,7 @@ static bool exact_rune_to_string_recipe(const XrCEmissionModuleScope *scope,
         match->callee_function != XR_SEMANTIC_INDEX_NONE ||
         match->source_dependency != XR_SEMANTIC_INDEX_NONE ||
         match->source_export != XR_SEMANTIC_INDEX_NONE ||
-        !emission_stable_id_is_zero(match->source_export_identity) ||
+        !emission_stable_id_is_zero(match->source_declaration_identity) ||
         !emission_stable_id_is_zero(match->source_callee_identity) ||
         match->result_slot != binding->slot ||
         match->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
@@ -2882,7 +2962,7 @@ static bool exact_rune_is_whitespace_recipe(const XrCEmissionModuleScope *scope,
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -2928,7 +3008,7 @@ static bool exact_string_slice_range_recipe(const XrCEmissionModuleScope *scope,
             call->callee_function != XR_SEMANTIC_INDEX_NONE ||
             call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
             call->source_export != XR_SEMANTIC_INDEX_NONE ||
-            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_declaration_identity) ||
             !emission_stable_id_is_zero(call->source_callee_identity) ||
             call->result_slot != binding->slot ||
             call->result_register_rep != binding->register_rep ||
@@ -3276,12 +3356,29 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
     xr_sha256_update(ctx, encoded, sizeof(encoded));
 }
 
+/* Imported calls name an exported declaration instead of a local callee
+ * index. Resolve both frozen identities before using their ABI witnesses. */
+static bool emission_call_names_function(const XrCEmissionModuleScope *scope,
+                                          const XrTargetCallRecord *call, uint32_t function) {
+    if (emission_semantic_function(scope, call->callee_function) == function)
+        return true;
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(scope->semantic, function);
+    const XrSemanticSourceExportRecord *exported =
+        xr_semantic_plan_source_export(scope->semantic, call->source_export);
+    return call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT && callee && exported &&
+           exported->kind == XR_SEM_SOURCE_EXPORT_FUNCTION && exported->function == function &&
+           xr_stable_id_equal(call->source_callee_identity, callee->id) &&
+           xr_stable_id_equal(call->source_declaration_identity, exported->id) &&
+           xr_stable_id_equal(exported->exported_entity, callee->id);
+}
+
 /* Whether any call in this plan names a result representation for `callee`. */
 static bool target_plan_has_call_result_rep(const XrCEmissionModuleScope *scope, uint32_t callee) {
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &call_count);
     for (uint32_t i = 0; calls && i < call_count; i++)
-        if (emission_semantic_function(scope, calls[i].callee_function) == callee)
+        if (emission_call_names_function(scope, &calls[i], callee))
             return true;
     return false;
 }
@@ -3495,8 +3592,9 @@ static bool verify_value(const XrCValueEmissionView *value) {
             expected_c_type = "XrValue";
             break;
         case XR_MACHINE_REP_VIEW:
-            expected_rep = XR_C_VALUE_REP_VIEW;
-            expected_c_type = "xr_span_t";
+            expected_rep = value->rep == XR_C_VALUE_REP_RAW_PTR
+                               ? XR_C_VALUE_REP_RAW_PTR : XR_C_VALUE_REP_VIEW;
+            expected_c_type = expected_rep == XR_C_VALUE_REP_RAW_PTR ? "xr_span_t *" : "xr_span_t";
             break;
         case XR_MACHINE_REP_AGGREGATE:
             expected_rep = XR_C_VALUE_REP_AGGREGATE;
@@ -3542,7 +3640,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
                                    strcmp(value->c_type, "const void * *") != 0 &&
                                    strcmp(value->c_type, "void * *") != 0 &&
                                    strcmp(value->c_type, "XrValue *") != 0 &&
-                                   strcmp(value->c_type, "int64_t *") != 0))
+                                   strcmp(value->c_type, "int64_t *") != 0 &&
+                                   strcmp(value->c_type, "xr_span_t *") != 0))
                 return false;
             expected_c_type = value->c_type;
             break;
@@ -3683,7 +3782,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
         recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_operand_value == UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX &&
-                       value->recipe_argument_count >= 2u && value->recipe_arguments != NULL &&
+                       value->recipe_argument_count >= 1u && value->recipe_arguments != NULL &&
                        value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_STRING_CONCAT_SYMBOL) == 0;
         for (uint16_t i = 0; recipe_valid && i < value->recipe_argument_count; i++) {
@@ -3727,7 +3826,8 @@ static bool verify_value(const XrCValueEmissionView *value) {
             value->rep == XR_C_VALUE_REP_RAW_PTR && value->c_type &&
             ((value->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
               value->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
-              (strcmp(value->c_type, "void *") == 0 || strcmp(value->c_type, "int64_t *") == 0))) &&
+              (strcmp(value->c_type, "void *") == 0 || strcmp(value->c_type, "int64_t *") == 0 ||
+               strcmp(value->c_type, "xr_span_t *") == 0))) &&
             value->literal_byte_length == 0 && value->literal_bytes == NULL &&
             value->recipe_operand_value != UINT32_MAX &&
             value->recipe_operand_value != value->semantic_value &&
@@ -3906,7 +4006,8 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
     for (uint32_t i = 0; i < plan->call_argument_count; i++) {
         const XrCCallArgumentEmissionView *argument = &plan->call_arguments[i];
         const char *scalar_ref_c_type =
-            argument->caller_register_kind == XR_MACHINE_REP_I64 ? "int64_t *" : NULL;
+            argument->caller_register_kind == XR_MACHINE_REP_I64 ? "int64_t *"
+            : argument->caller_register_kind == XR_MACHINE_REP_VIEW ? "xr_span_t *" : NULL;
         bool exact_tagged_ref = argument->c_type && strcmp(argument->c_type, "XrValue *") == 0 &&
                                 ((argument->caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
                                   argument->caller_memory_kind == XR_MACHINE_REP_DYN_VALUE) ||
@@ -4029,8 +4130,9 @@ static bool verify_target_kind_projection(const XrCEmissionModuleScope *scope,
             *out_c_type = "XrValue";
             return true;
         case XR_MACHINE_REP_VIEW:
-            *out_rep = XR_C_VALUE_REP_VIEW;
-            *out_c_type = "xr_span_t";
+            *out_rep = emission_is_slice_ref_parameter(scope, semantic_value)
+                           ? XR_C_VALUE_REP_RAW_PTR : XR_C_VALUE_REP_VIEW;
+            *out_c_type = *out_rep == XR_C_VALUE_REP_RAW_PTR ? "xr_span_t *" : "xr_span_t";
             return true;
         case XR_MACHINE_REP_RAW_PTR:
             *out_rep = XR_C_VALUE_REP_RAW_PTR;
@@ -4082,7 +4184,9 @@ static bool verify_container_copy_call_storage(const XrTargetPlan *target_plan,
         uint8_t expected_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         const XrSemanticTypeRecord *result_type =
             xr_semantic_plan_type(semantic, operation->result_type);
-        if (result_type && result_type->kind == XR_KIND_STRUCT_OBJECT) {
+        if (xr_semantic_tagged_string_type_is_exact(result_type)) {
+            expected_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        } else if (result_type && result_type->kind == XR_KIND_STRUCT_OBJECT) {
             if (!xr_semantic_source_structural_copy_shape_is_exact(semantic,
                                                                   operation->result_type))
                 return false;
@@ -4181,7 +4285,7 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             expected_scalar_ref_address ? scalar_ref_projection.source_value : UINT32_MAX;
         if (expected_scalar_ref_address) {
             expected_register = expected_memory = XR_C_VALUE_REP_RAW_PTR;
-            register_c_type = memory_c_type = "int64_t *";
+            register_c_type = memory_c_type = scalar_ref_projection.call_argument.c_type;
             register_supported = memory_supported = true;
         }
         XrCAggregateProjection aggregate = {0};
@@ -4751,7 +4855,7 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
         XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |
         XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE |
         XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |
-        XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |
+        XR_TARGET_FAMILY_JSON_NAMESPACE_CODEC_STORAGE |
         XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE |
         XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE | XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |
         XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE |
@@ -5821,7 +5925,7 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
                             xr_target_plan_calls(target_plan, &call_count);
                         const XrTargetCallRecord *agreed = NULL;
                         for (uint32_t c = 0; calls && c < call_count; c++) {
-                            if (emission_semantic_function(&scope, calls[c].callee_function) != f)
+                            if (!emission_call_names_function(&scope, &calls[c], f))
                                 continue;
                             if (agreed &&
                                 (agreed->result_register_rep != calls[c].result_register_rep ||
@@ -5896,8 +6000,8 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
                     for (uint32_t a = 0; calls && arguments && a < argument_count; a++) {
                         if (arguments[a].ordinal != (uint16_t) (ordinal - 1u) ||
                             arguments[a].call >= call_count ||
-                            emission_semantic_function(
-                                &scope, calls[arguments[a].call].callee_function) != f)
+                            !emission_call_names_function(
+                                &scope, &calls[arguments[a].call], f))
                             continue;
                         if (agreed &&
                             (agreed->callee_register_rep != arguments[a].callee_register_rep ||
@@ -6019,6 +6123,9 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
                 };
             }
             if (!complete) {
+                if (getenv("XRAY_AOT_REFINE_TRACE"))
+                    fprintf(stderr, "[c-emission-abi] function=%s ordinal=%u signature-incomplete\n",
+                            function->name ? function->name : "?", abi_index - written);
                 for (uint32_t row = written; row < abi_index; row++) {
                     if (plan->function_abis[row].rep == XR_C_VALUE_REP_AGGREGATE)
                         xr_free((void *) plan->function_abis[row].c_type);

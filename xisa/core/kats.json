@@ -23312,6 +23312,3766 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "id": "channel-construct-valid",
+      "operation": "core.channel.construct",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "operand_type": "i64",
+        "capacity": 2,
+        "stored_capacity": 2,
+        "closed": false,
+        "count": 0,
+        "result_ownership": "owner",
+        "result_type": "Channel<string>",
+        "identity": "fresh"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "channel-construct-zero",
+      "operation": "core.channel.construct",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "operand_type": "i64",
+        "capacity": 0,
+        "stored_capacity": 0,
+        "closed": false,
+        "count": 0,
+        "result_ownership": "owner",
+        "result_type": "Channel<string>",
+        "identity": "fresh"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "channel-construct-negative",
+      "operation": "core.channel.construct",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "operand_type": "i64",
+        "capacity": -1,
+        "stored_capacity": -1,
+        "closed": false,
+        "count": 0,
+        "result_ownership": "owner",
+        "result_type": "Channel<string>",
+        "identity": "fresh"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "channel-construct-overflow",
+      "operation": "core.channel.construct",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "operand_type": "i64",
+        "capacity": 4294967296,
+        "stored_capacity": 4294967296,
+        "closed": false,
+        "count": 0,
+        "result_ownership": "owner",
+        "result_type": "Channel<string>",
+        "identity": "fresh"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "channel-construct-wrong-element",
+      "operation": "core.channel.construct",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "operand_type": "i64",
+        "capacity": 2,
+        "stored_capacity": 2,
+        "closed": false,
+        "count": 0,
+        "result_ownership": "owner",
+        "result_type": "Channel<i64>",
+        "identity": "fresh"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "channel-is-closed-valid",
+      "operation": "core.channel.is_closed",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "source_rooted": true,
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "closed": true,
+        "result": true,
+        "identity": "preserved"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "channel-is-closed-unrooted",
+      "operation": "core.channel.is_closed",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "source_rooted": false,
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "closed": true,
+        "result": true,
+        "identity": "preserved"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "channel-is-closed-inverted",
+      "operation": "core.channel.is_closed",
+      "kind": "contract",
+      "actual": {
+        "type_kind": "channel",
+        "element_type": "string",
+        "type_ownership": "affine",
+        "copy_contract": "identity-preserving",
+        "source_consumed": false,
+        "source_rooted": true,
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "closed": true,
+        "result": false,
+        "identity": "preserved"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "integer-bitwise-0",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "i8",
+          "value": "-128"
+        },
+        {
+          "type": "i64",
+          "value": "7"
+        }
+      ],
+      "result_type": "i8",
+      "immediates": {
+        "operation": "shift-right"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "-1"
+      }
+    },
+    {
+      "id": "integer-bitwise-1",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u8",
+          "value": "255"
+        },
+        {
+          "type": "i64",
+          "value": "7"
+        }
+      ],
+      "result_type": "u8",
+      "immediates": {
+        "operation": "shift-right"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "1"
+      }
+    },
+    {
+      "id": "integer-bitwise-2",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "i8",
+          "value": "127"
+        },
+        {
+          "type": "i64",
+          "value": "1"
+        }
+      ],
+      "result_type": "i8",
+      "immediates": {
+        "operation": "shift-left"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "-2"
+      }
+    },
+    {
+      "id": "integer-bitwise-3",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "i64",
+          "value": "-2"
+        },
+        {
+          "type": "i64",
+          "value": "-1"
+        }
+      ],
+      "result_type": "i64",
+      "immediates": {
+        "operation": "shift-right"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "-1"
+      }
+    },
+    {
+      "id": "integer-bitwise-4",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u64",
+          "value": "1"
+        },
+        {
+          "type": "u8",
+          "value": "64"
+        }
+      ],
+      "result_type": "u64",
+      "immediates": {
+        "operation": "shift-left"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "1"
+      }
+    },
+    {
+      "id": "integer-bitwise-5",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u64",
+          "value": "1"
+        },
+        {
+          "type": "i16",
+          "value": "65"
+        }
+      ],
+      "result_type": "u64",
+      "immediates": {
+        "operation": "shift-left"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "2"
+      }
+    },
+    {
+      "id": "integer-bitwise-6",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u8",
+          "value": "255"
+        },
+        {
+          "type": "u8",
+          "value": "42"
+        }
+      ],
+      "result_type": "u8",
+      "immediates": {
+        "operation": "and"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "42"
+      }
+    },
+    {
+      "id": "integer-bitwise-7",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "i16",
+          "value": "-256"
+        },
+        {
+          "type": "i16",
+          "value": "42"
+        }
+      ],
+      "result_type": "i16",
+      "immediates": {
+        "operation": "or"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "-214"
+      }
+    },
+    {
+      "id": "integer-bitwise-8",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u32",
+          "value": "4294967295"
+        },
+        {
+          "type": "u32",
+          "value": "42"
+        }
+      ],
+      "result_type": "u32",
+      "immediates": {
+        "operation": "xor"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "4294967253"
+      }
+    },
+    {
+      "id": "integer-bitwise-9",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "i32",
+          "value": "0"
+        }
+      ],
+      "result_type": "i32",
+      "immediates": {
+        "operation": "not"
+      },
+      "kind": "scalar",
+      "expect": {
+        "value": "-1"
+      }
+    },
+    {
+      "id": "integer-bitwise-reject-bad-mode",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u8",
+          "value": "255"
+        },
+        {
+          "type": "u8",
+          "value": "42"
+        }
+      ],
+      "result_type": "u8",
+      "immediates": {
+        "operation": "rotate"
+      },
+      "kind": "scalar",
+      "expect": {
+        "rejected": "integer-bitwise-mode"
+      }
+    },
+    {
+      "id": "integer-bitwise-reject-bad-arity",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u8",
+          "value": "255"
+        }
+      ],
+      "result_type": "u8",
+      "immediates": {
+        "operation": "and"
+      },
+      "kind": "scalar",
+      "expect": {
+        "rejected": "integer-bitwise-shape"
+      }
+    },
+    {
+      "id": "integer-bitwise-reject-bool",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "bool",
+          "value": "255"
+        },
+        {
+          "type": "u8",
+          "value": "42"
+        }
+      ],
+      "result_type": "u8",
+      "immediates": {
+        "operation": "and"
+      },
+      "kind": "scalar",
+      "expect": {
+        "rejected": "integer-type"
+      }
+    },
+    {
+      "id": "integer-bitwise-reject-mixed",
+      "operation": "core.integer.bitwise",
+      "arguments": [
+        {
+          "type": "u8",
+          "value": "255"
+        },
+        {
+          "type": "i8",
+          "value": "42"
+        }
+      ],
+      "result_type": "u8",
+      "immediates": {
+        "operation": "and"
+      },
+      "kind": "scalar",
+      "expect": {
+        "rejected": "integer-type"
+      }
+    },
+    {
+      "id": "string-slice-0",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "Aé中🙂\u0000é",
+        "1",
+        "4"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "é中🙂",
+        "byte_length": 9
+      }
+    },
+    {
+      "id": "string-slice-1",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "abc",
+        "0",
+        "3"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "abc",
+        "byte_length": 3
+      }
+    },
+    {
+      "id": "string-slice-2",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "abc",
+        "3",
+        "3"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "",
+        "byte_length": 0
+      }
+    },
+    {
+      "id": "string-slice-3",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "",
+        "0",
+        "0"
+      ],
+      "immediates": {},
+      "expect": {
+        "value": "",
+        "byte_length": 0
+      }
+    },
+    {
+      "id": "string-slice-4",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "é",
+        "-1",
+        "1"
+      ],
+      "immediates": {},
+      "expect": {
+        "panic": "index-out-of-bounds"
+      }
+    },
+    {
+      "id": "string-slice-5",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "é",
+        "0",
+        "2"
+      ],
+      "immediates": {},
+      "expect": {
+        "panic": "index-out-of-bounds"
+      }
+    },
+    {
+      "id": "string-slice-6",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "abc",
+        "2",
+        "1"
+      ],
+      "immediates": {},
+      "expect": {
+        "panic": "index-out-of-bounds"
+      }
+    },
+    {
+      "id": "string-slice-7",
+      "operation": "core.string.slice",
+      "kind": "scalar",
+      "arguments": [
+        "abc",
+        "0",
+        "9223372036854775807"
+      ],
+      "immediates": {},
+      "expect": {
+        "panic": "index-out-of-bounds"
+      }
+    },
+    {
+      "id": "array-allocate-default-bool",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "bool",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<bool>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-i8",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "i8",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<i8>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-u8",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "u8",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<u8>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-i16",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "i16",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<i16>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-u16",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "u16",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<u16>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-i32",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "i32",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<i32>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-u32",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "u32",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<u32>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-i64",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "i64",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<i64>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-u64",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "u64",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<u64>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-f64",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "f64",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<f64>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-allocate-default-string",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "string",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<string>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-allocate-default-class",
+      "operation": "core.array.allocate_default",
+      "kind": "contract",
+      "actual": {
+        "element_type": "class",
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "Array<class>",
+        "result_ownership": "owner",
+        "panic_type": "PanicInfo"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-construct-valid",
+      "operation": "core.string_builder.construct",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [],
+        "operand_modes": [],
+        "result_type": "string-builder",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": false,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-construct-reject-result_type",
+      "operation": "core.string_builder.construct",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [],
+        "operand_modes": [],
+        "result_type": "bool",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": false,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-construct-reject-result_ownership",
+      "operation": "core.string_builder.construct",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [],
+        "operand_modes": [],
+        "result_type": "string-builder",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": false,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-construct-reject-immediates",
+      "operation": "core.string_builder.construct",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [],
+        "operand_modes": [],
+        "result_type": "string-builder",
+        "result_ownership": "owner",
+        "immediates": {
+          "mode": 1
+        },
+        "receiver_rooted": false,
+        "receiver_writable": false,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-construct-reject-operand_modes",
+      "operation": "core.string_builder.construct",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [],
+        "operand_modes": [
+          "consume"
+        ],
+        "result_type": "string-builder",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": false,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-valid",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-append-reject-result_type",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-reject-result_ownership",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-reject-immediates",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {
+          "mode": 1
+        },
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-reject-operand_modes",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "consume"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-reject-receiver_rooted",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-reject-receiver_initialized",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-reject-receiver_writable",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-reject-borrow_conflict",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "string"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-value-rune",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "rune"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-append-value-i64",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "i64"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-append-value-f64",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "f64"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-append-value-bool",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "bool"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-append-value-void",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "void"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-append-value-u64",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "u64"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-value-class",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "class"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-append-value-any",
+      "operation": "core.string_builder.append",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder",
+          "any"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "borrow-value"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-valid",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-result_type",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-result_ownership",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "void",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-immediates",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {
+          "mode": 1
+        },
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-operand_modes",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "consume"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-receiver_rooted",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-receiver_initialized",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-receiver_writable",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-clear-reject-borrow_conflict",
+      "operation": "core.string_builder.clear",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-place-mut"
+        ],
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-length-valid",
+      "operation": "core.string_builder.length",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "i64",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-length-reject-result_type",
+      "operation": "core.string_builder.length",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-length-reject-result_ownership",
+      "operation": "core.string_builder.length",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "i64",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-length-reject-immediates",
+      "operation": "core.string_builder.length",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "i64",
+        "result_ownership": "non-owner",
+        "immediates": {
+          "mode": 1
+        },
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-length-reject-operand_modes",
+      "operation": "core.string_builder.length",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "consume"
+        ],
+        "result_type": "i64",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-length-reject-receiver_rooted",
+      "operation": "core.string_builder.length",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "i64",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-length-reject-receiver_initialized",
+      "operation": "core.string_builder.length",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "i64",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-snapshot-valid",
+      "operation": "core.string_builder.snapshot",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "string",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "string-builder-snapshot-reject-result_type",
+      "operation": "core.string_builder.snapshot",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "bool",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-snapshot-reject-result_ownership",
+      "operation": "core.string_builder.snapshot",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "string",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-snapshot-reject-immediates",
+      "operation": "core.string_builder.snapshot",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "string",
+        "result_ownership": "owner",
+        "immediates": {
+          "mode": 1
+        },
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-snapshot-reject-operand_modes",
+      "operation": "core.string_builder.snapshot",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "consume"
+        ],
+        "result_type": "string",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-snapshot-reject-receiver_rooted",
+      "operation": "core.string_builder.snapshot",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "string",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": false,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "string-builder-snapshot-reject-receiver_initialized",
+      "operation": "core.string_builder.snapshot",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "string-builder"
+        ],
+        "operand_modes": [
+          "borrow-value"
+        ],
+        "result_type": "string",
+        "result_ownership": "owner",
+        "immediates": {},
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": false,
+        "borrow_conflict": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "bytes-timing-safe-empty",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [],
+        "right": [],
+        "result": true,
+        "visited_indices": [],
+        "inputs_after": [
+          [],
+          []
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-empty-left",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [],
+        "right": [
+          0
+        ],
+        "result": false,
+        "visited_indices": [],
+        "inputs_after": [
+          [],
+          [
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-empty-right",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0
+        ],
+        "right": [],
+        "result": false,
+        "visited_indices": [],
+        "inputs_after": [
+          [
+            0
+          ],
+          []
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-equal",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-shorter",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": false,
+        "visited_indices": [
+          0,
+          1
+        ],
+        "inputs_after": [
+          [
+            0,
+            128
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-first",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          1,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": false,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            1,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-middle",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          129,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": false,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            129,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-last",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": true
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          254
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": false,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            254
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-wrong-type",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<i64>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-place",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-unrooted",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          false,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-consumed",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          true
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-owner-result",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-wrong-result-type",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "i64",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-wrong-result",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": false,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-allocates",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 1,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-early-exit",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0
+        ],
+        "inputs_after": [
+          [
+            0,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "bytes-timing-safe-modifies-input",
+      "operation": "core.bytes.timing_safe_equal",
+      "kind": "contract",
+      "expect": {
+        "valid": false
+      },
+      "actual": {
+        "operand_types": [
+          "Array<u8>",
+          "Array<u8>"
+        ],
+        "operand_categories": [
+          "value",
+          "value"
+        ],
+        "operands_rooted": [
+          true,
+          true
+        ],
+        "operands_consumed": [
+          false,
+          false
+        ],
+        "result_type": "bool",
+        "result_ownership": "non-owner",
+        "allocation_count": 0,
+        "left": [
+          0,
+          128,
+          255
+        ],
+        "right": [
+          0,
+          128,
+          255
+        ],
+        "result": true,
+        "visited_indices": [
+          0,
+          1,
+          2
+        ],
+        "inputs_after": [
+          [
+            1,
+            128,
+            255
+          ],
+          [
+            0,
+            128,
+            255
+          ]
+        ]
+      }
+    },
+    {
+      "id": "array-append-tuple-owner",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-append-failure-preserves-owner",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "length_after": 1,
+        "element_consumed": false,
+        "outcome": "resource-limit",
+        "backing_preserved": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-append-scalar-empty",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "i64",
+        "operand_types": [
+          "Array<i64>",
+          "i64"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "trivial",
+        "input_ownership": "non-owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [],
+        "element": 42,
+        "elements_after": [
+          42
+        ],
+        "length_after": 1,
+        "element_consumed": false,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "array-append-reject-receiver_rooted",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": false,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-receiver_writable",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": false,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-receiver_initialized",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": false,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-borrow_conflict",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": true,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-operand_types",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<i64>",
+          "string"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-input_ownership",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "non-owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-element_consumed",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": false,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-identity_after",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-2",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-length_after",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": true,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-elements_after",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-result_type",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "i64",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "c",
+            "d"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": true,
+        "outcome": "ok"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-failure-backing_preserved",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "length_after": 1,
+        "element_consumed": false,
+        "outcome": "resource-limit",
+        "backing_preserved": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-failure-element_consumed",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "length_after": 1,
+        "element_consumed": true,
+        "outcome": "resource-limit",
+        "backing_preserved": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "array-append-reject-failure-length_after",
+      "operation": "core.array.append",
+      "kind": "contract",
+      "actual": {
+        "element_type": "tuple<string,string>",
+        "operand_types": [
+          "Array<tuple<string,string>>",
+          "tuple<string,string>"
+        ],
+        "operand_categories": [
+          "place",
+          "value"
+        ],
+        "operand_modes": [
+          "borrow-place-mut",
+          "consume-if-owner"
+        ],
+        "element_ownership": "affine",
+        "input_ownership": "owner",
+        "receiver_rooted": true,
+        "receiver_writable": true,
+        "receiver_initialized": true,
+        "borrow_conflict": false,
+        "result_type": "void",
+        "result_ownership": "non-owner",
+        "immediates": {},
+        "identity_before": "array-1",
+        "identity_after": "array-1",
+        "elements_before": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "element": [
+          "c",
+          "d"
+        ],
+        "elements_after": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "length_after": 2,
+        "element_consumed": false,
+        "outcome": "resource-limit",
+        "backing_preserved": true
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

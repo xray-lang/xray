@@ -143,6 +143,36 @@ XR_TEXT_KERNEL_FUNCTION size_t xr_text_scalar_count(const uint8_t *bytes, size_t
     return count;
 }
 
+/* Convert a half-open scalar range in already-admitted UTF-8 to byte offsets.
+ * Offsets avoid pointer arithmetic on an empty NULL-backed string. Outputs
+ * remain zero on failure; allocation and publication belong to the caller. */
+XR_TEXT_KERNEL_FUNCTION int xr_text_scalar_range(const uint8_t *bytes, size_t size,
+                                                 int64_t start, int64_t end,
+                                                 size_t *offset, size_t *length) {
+    if (!offset || !length)
+        return 0;
+    *offset = 0u;
+    *length = 0u;
+    if ((!bytes && size != 0u) || start < 0 || end < start)
+        return 0;
+    size_t cursor = 0u, ordinal = 0u, first = 0u;
+    for (;;) {
+        if ((uint64_t)ordinal == (uint64_t)start)
+            first = cursor;
+        if ((uint64_t)ordinal == (uint64_t)end) {
+            *offset = first;
+            *length = cursor - first;
+            return 1;
+        }
+        if (cursor == size)
+            return 0;
+        ++cursor;
+        while (cursor < size && (bytes[cursor] & UINT8_C(0xC0)) == UINT8_C(0x80))
+            ++cursor;
+        ++ordinal;
+    }
+}
+
 /* Both signed and unsigned display use one magnitude conversion. A null
  * output only measures; the largest unsigned value never crosses int64_t. */
 XR_TEXT_KERNEL_FUNCTION size_t xr_text_display_u64(uint64_t value, uint8_t *out) {

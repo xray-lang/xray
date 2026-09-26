@@ -14,6 +14,7 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "xr_semantic_plan.h"
+#include "xr_semantic_type_admission_shape.h"
 
 /* Both ownership-transfer operations carry the source representation into a
  * fresh SSA value. OWNER_FORWARD is the ARC kernel spelling; SOURCE_MOVE is
@@ -97,7 +98,11 @@ static inline bool xr_semantic_owner_transfer_is_exact(const XrSemanticPlan *pla
                                                        uint32_t *source_value_out) {
     const XrSemanticOperandRecord *source =
         xr_semantic_owner_transfer_base_is_exact(plan, operation);
-    if (!source || source->type != operation->result_type)
+    if (!source)
+        return false;
+    if (source->type != operation->result_type &&
+        (operation->opcode != XI_OWNER_FORWARD ||
+         !xr_semantic_type_is_reference_const_seal(plan, source->type, operation->result_type)))
         return false;
     if (source_value_out)
         *source_value_out = source->value;

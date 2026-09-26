@@ -53,80 +53,6 @@ static inline bool xr_semantic_number_parse_error_namespace_is_exact(
            xr_semantic_builtin_enum_namespace_is_exact(plan, operation);
 }
 
-static inline const XrSemanticOperationRecord *
-xr_semantic_number_parse_error_value_definition(const XrSemanticPlan *plan,
-                                                 uint32_t semantic_value) {
-    const XrSemanticOperationRecord *definition = NULL;
-    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
-    for (uint32_t i = 0; i < operation_count; i++) {
-        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
-        if (!candidate || candidate->result_value != semantic_value)
-            continue;
-        if (definition)
-            return NULL;
-        definition = candidate;
-    }
-    return definition;
-}
-
-/* Member selection carries a frozen integer ordinal. The source spelling was
- * consumed while binding; neither SemanticPlan nor AOT recovers the selected
- * variant from a field-name string. */
-static inline bool xr_semantic_number_parse_error_member_access_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
-    uint32_t *namespace_value, uint32_t *member_index_value, uint32_t *member_index) {
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
-    if (namespace_value)
-        *namespace_value = XR_SEMANTIC_INDEX_NONE;
-    if (member_index_value)
-        *member_index_value = XR_SEMANTIC_INDEX_NONE;
-    if (member_index)
-        *member_index = UINT32_MAX;
-    if (!plan || !operation || !operands || operation->opcode != XI_INDEX_GET ||
-        operation->operand_count != 2 || operation->operand_begin > operand_count ||
-        operation->operand_count > operand_count - operation->operand_begin ||
-        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_ENUM_CASE ||
-        operation->semantic_immediate != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
-        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
-        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
-        operation->effects != xi_generated_op_effects(XI_INDEX_GET) ||
-        operation->flags != xi_generated_op_default_flags(XI_INDEX_GET) ||
-        operation->ownership_use != xi_generated_op_own_use(XI_INDEX_GET) ||
-        operation->result_alias_operand != -1 ||
-        !xr_semantic_number_parse_error_type_is_exact(plan, operation->result_type))
-        return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
-    const XrSemanticOperandRecord *index = receiver + 1;
-    const XrSemanticOperationRecord *receiver_definition =
-        xr_semantic_number_parse_error_value_definition(plan, receiver->value);
-    const XrSemanticOperationRecord *index_definition =
-        xr_semantic_number_parse_error_value_definition(plan, index->value);
-    const XrSemanticConstantRecord *constant =
-        index_definition && index_definition->constant != XR_SEMANTIC_INDEX_NONE
-            ? xr_semantic_plan_constant(plan, index_definition->constant)
-            : NULL;
-    const XrSemanticTypeRecord *index_type = xr_semantic_plan_type(plan, index->type);
-    if (!receiver_definition || !index_definition || !constant || !index_type ||
-        receiver_definition->function != operation->function ||
-        index_definition->function != operation->function ||
-        !xr_semantic_number_parse_error_namespace_is_exact(plan, receiver_definition) ||
-        index_definition->opcode != XI_CONST || constant->kind != XR_SEM_CONST_INT ||
-        constant->integer < 0 || constant->integer >= XR_NUMBER_PARSE_ERROR_MEMBER_COUNT ||
-        index_type->kind != XR_KIND_INT || index_type->scalar_rep != XR_NATIVE_I64 ||
-        receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
-        receiver->flags != 0 || index->role != XR_SEM_OPERAND_VALUE || index->parameter != -1 ||
-        index->flags != 0)
-        return false;
-    if (namespace_value)
-        *namespace_value = receiver->value;
-    if (member_index_value)
-        *member_index_value = index->value;
-    if (member_index)
-        *member_index = (uint32_t) constant->integer;
-    return true;
-}
-
 /* Typed error clauses lower as ERR_CATCH(any) -> IS(namespace) -> AS(enum).
  * This predicate accepts only the NumberParseError narrowing form and proves
  * its result type from the source-enum identity rather than from the AS name. */
@@ -177,54 +103,6 @@ static inline bool xr_semantic_number_parse_error_catch_narrow_is_exact(
     if (caught_value)
         *caught_value = source->value;
     return true;
-}
-
-/* Catch dispatch compares one exact typed error with one stable builtin case.
- * Both Xi values carry the compact declaration ordinal after their own typed
- * operations have consumed the tagged namespace/error carriers. */
-static inline bool xr_semantic_number_parse_error_equality_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
-    const XrSemanticTypeRecord *result_type =
-        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
-    if (!plan || !operation || !operands || !result_type || operation->opcode != XI_EQ ||
-        operation->operand_count != 2 || operation->operand_begin > operand_count ||
-        operation->operand_count > operand_count - operation->operand_begin ||
-        operation->metadata_count != 0 || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
-        operation->semantic_immediate != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
-        operation->effects != xi_generated_op_effects(XI_EQ) ||
-        operation->flags != xi_generated_op_default_flags(XI_EQ) ||
-        operation->result_alias_operand != -1 || result_type->kind != XR_KIND_BOOL ||
-        result_type->child_count != 0)
-        return false;
-    const XrSemanticOperandRecord *left = &operands[operation->operand_begin];
-    const XrSemanticOperandRecord *right = left + 1;
-    const XrSemanticOperationRecord *left_definition =
-        xr_semantic_number_parse_error_value_definition(plan, left->value);
-    const XrSemanticOperationRecord *right_definition =
-        xr_semantic_number_parse_error_value_definition(plan, right->value);
-    bool left_caught = left_definition &&
-                       xr_semantic_number_parse_error_catch_narrow_is_exact(
-                           plan, left_definition, NULL);
-    bool right_caught = right_definition &&
-                        xr_semantic_number_parse_error_catch_narrow_is_exact(
-                            plan, right_definition, NULL);
-    bool left_member = left_definition &&
-                       xr_semantic_number_parse_error_member_access_is_exact(
-                           plan, left_definition, NULL, NULL, NULL);
-    bool right_member = right_definition &&
-                        xr_semantic_number_parse_error_member_access_is_exact(
-                            plan, right_definition, NULL, NULL, NULL);
-    return left_definition && right_definition &&
-           left_definition->function == operation->function &&
-           right_definition->function == operation->function &&
-           left_definition->result_type == left->type &&
-           right_definition->result_type == right->type && left->type == right->type &&
-           xr_semantic_number_parse_error_type_is_exact(plan, left->type) &&
-           left->role == XR_SEM_OPERAND_VALUE && left->parameter == -1 && left->flags == 0 &&
-           right->role == XR_SEM_OPERAND_VALUE && right->parameter == -1 && right->flags == 0 &&
-           ((left_caught && right_member) || (right_caught && left_member));
 }
 
 #endif /* XR_SEMANTIC_NUMBER_PARSE_ERROR_SHAPE_H */

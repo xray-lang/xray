@@ -29,6 +29,7 @@
 #include <stddef.h>
 #include "xr_semantic_plan.h"
 #include "xr_semantic_array_type_shape.h"
+#include "xr_semantic_channel_type_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_string_shape.h"
 #include "xr_semantic_value_aggregate_shape.h"
@@ -107,6 +108,8 @@ static const XrArrayMemberShape xr_array_member_shapes[] = {
      * string it returns is freshly owned rather than a borrow of anything. */
     {"join", 2, 2, XR_ARRAY_MEMBER_RESULT_STRING, 0, XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ,
      XR_ARRAY_MEMBER_REFERENCE_PRESERVE, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 1},
+    {"toString", 1, 1, XR_ARRAY_MEMBER_RESULT_STRING, 0, XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ,
+     XR_ARRAY_MEMBER_REFERENCE_PRESERVE, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 0},
 };
 
 static inline const XrArrayMemberShape *xr_array_member_shape(const char *selector,
@@ -196,12 +199,8 @@ xr_semantic_array_member_owned_reference_type_is_exact(const XrSemanticPlan *pla
     if (xr_semantic_tagged_string_type_is_exact(type) ||
         xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
         xr_semantic_array_type_row_is_exact(type) ||
-        (type && type->kind == XR_KIND_CHANNEL &&
-         type->child_count == 1 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-         type->scalar_rep == XR_SCALAR_REP_NONE &&
-         (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
-             (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-         type->source_class == XR_SEMANTIC_INDEX_NONE && type->canonical_key))
+        xr_semantic_channel_type_row_is_exact(plan, type) ||
+        xr_semantic_tagged_tuple_type_is_exact(plan, type))
         return true;
     if (!plan || !type || type->kind != XR_KIND_STRUCT_OBJECT)
         return false;

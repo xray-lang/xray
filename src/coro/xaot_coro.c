@@ -3533,13 +3533,6 @@ static bool aot_context_from_channel_value(XrValue channel_value, XrAotContext *
     return true;
 }
 
-XrValue xr_aot_chan_try_send_sync(XrValue channel_value, XrValue send_value) {
-    XrAotContext ctx = {0};
-    if (!aot_context_from_channel_value(channel_value, &ctx))
-        return XR_NULL_VAL;
-    return xr_aot_chan_try_send(&ctx, channel_value, send_value);
-}
-
 XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value) {
     if (!ctx || !xr_value_is_channel(channel_value))
         return aot_recv_closed(ctx);

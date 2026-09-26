@@ -40,8 +40,18 @@ class ProviderDeclarationTests(unittest.TestCase):
         from stdlibgen import parse_defs
         inventory = declaration_inventory(parse_defs(ROOT))
         self.assertEqual(153, inventory["leaf_count"])
-        self.assertEqual(11, sum(row["declared"] for row in inventory["leaves"]))
-        self.assertEqual(11, sum(row["admitted"] for row in inventory["leaves"]))
+        expected_symbols = {
+            "crypto.__fillRandomBytes", "mem.__alloc", "mem.__allocAligned",
+            "mem.__allocZeroed", "mem.__bufferLength", "os.__getpid",
+            "sys.__pipeClose", "sys.__pipeOpen", "time.__cpuNanos",
+            "time.__monotonicNanos", "time.__realtimeNanos", "time.__utcOffsetAt",
+        }
+        self.assertEqual(expected_symbols, {
+            row["symbol"] for row in inventory["leaves"] if row["declared"]
+        })
+        self.assertEqual(expected_symbols, {
+            row["symbol"] for row in inventory["leaves"] if row["admitted"]
+        })
         generated = json.loads((ROOT / "stdlib/provider_inventory.generated.json").read_text())
         self.assertEqual(json.loads(json.dumps(inventory)), generated)
 

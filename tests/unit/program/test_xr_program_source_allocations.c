@@ -132,6 +132,15 @@ static size_t run_allocation_case(unsigned scenario, size_t failure) {
         "fn answer() -> i64 { return 42 }\n"
         "fn exported() -> i64 { return 42 }\n"
         "@test\nfn checkAnswer() { assert(exported() == 42) }\n",
+        "fn answer() -> i64 {\n"
+        " var text = StringBuilder()\n"
+        " text.append(\"first\").append(42)\n"
+        " const snapshot = text.toString()\n"
+        " text.clear().append(\"second\")\n"
+        " assert(snapshot == \"first42\")\n"
+        " return 42\n}\n"
+        "fn exported() -> i64 { return 42 }\n"
+        "@test\nfn checkAnswer() { assert(exported() == 42) }\n",
     };
     REQUIRE(scenario < XR_COUNTOF(sources));
     const char *source = sources[scenario];
@@ -186,7 +195,7 @@ static size_t run_allocation_case(unsigned scenario, size_t failure) {
 }
 
 int main(void) {
-    for (unsigned scenario = 0u; scenario < 7u; ++scenario) {
+    for (unsigned scenario = 0u; scenario < 8u; ++scenario) {
         size_t count = run_allocation_case(scenario, 0u);
         REQUIRE(count > 0u);
         printf("source allocation scenario %u: %zu points\n", scenario, count);

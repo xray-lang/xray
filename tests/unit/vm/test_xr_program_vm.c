@@ -1,7 +1,13 @@
+#include "../program/xr_program_byte_compare_fixture.h"
 /*
  * Task 299: runtime-only typed VM over the validated XrProgram graph.
  */
 
+#include "../program/xr_program_string_builder_fixture.h"
+#include "../program/xr_program_array_default_fixture.h"
+#include "../program/xr_program_array_append_fixture.h"
+#include "../program/xr_program_string_slice_fixture.h"
+#include "../program/xr_program_channel_fixture.h"
 #include "../program/xr_program_atomic_fixture.h"
 #include "../program/xr_program_f64_fixture.h"
 #include "core/xr_core_spec_gen.h"
@@ -5266,6 +5272,160 @@ static void test_exact_integer_divmod(void) {
     xr_validated_program_free(program);
 }
 
+static void test_array_append_execution(void) {
+    XrProgramArtifact artifact = {0};
+    REQUIRE(xr_program_array_append_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ARRAY_APPEND) != NULL);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    XrVmCode *code = NULL;
+    REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+    XrVmValue arg = {.kind = XR_VM_VALUE_I64, .as.i64 = 42};
+    for (unsigned i = 0u; i < 2u; ++i) {
+        XrVmOutcome result = xr_vm_code_execute(code, instance, 0u, &arg, 1u);
+        REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+        REQUIRE(result.value.as.i64 == 9);
+        xr_vm_outcome_dispose(&result);
+    }
+    xr_vm_code_free(code);
+    code = NULL;
+    options.max_value_cells = 8u;
+    REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+    XrVmOutcome limited = xr_vm_code_execute(code, instance, 0u, &arg, 1u);
+    REQUIRE(limited.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
+    xr_vm_outcome_dispose(&limited);
+    xr_vm_code_free(code);
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_array_default_execution(void) {
+    XrProgramArtifact artifact = {0};
+    REQUIRE(xr_program_array_default_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT) != NULL);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    XrVmCode *code = NULL;
+    REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+    const int64_t counts[] = {3, 0, -1, INT64_MIN, INT64_MAX, 4};
+    for (unsigned i = 0; i < XR_COUNTOF(counts); ++i) {
+        XrVmValue arg = {.kind = XR_VM_VALUE_I64, .as.i64 = counts[i]};
+        XrVmOutcome result = xr_vm_code_execute(code, instance, 0u, &arg, 1u);
+        REQUIRE(result.kind == (counts[i] < 0 ? XR_VM_OUTCOME_PANIC :
+            counts[i] == INT64_MAX ? XR_VM_OUTCOME_RESOURCE_LIMIT : XR_VM_OUTCOME_RETURN));
+        if (counts[i] < 0) REQUIRE(result.panic_value.as.panic_info.code == 452u);
+        else if (counts[i] != INT64_MAX) REQUIRE(result.value.as.i64 == counts[i]);
+        xr_vm_outcome_dispose(&result);
+    }
+    xr_vm_code_free(code);
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_string_slice_execution(void) {
+    XrProgramArtifact artifact = {0};
+    REQUIRE(xr_program_string_slice_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    XrVmCode *code = NULL;
+    REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+    REQUIRE(xr_core_spec_operation_by_id(XR_CORE_OP_CORE_STRING_SLICE) != NULL);
+    XrVmValue args[2] = {{.kind = XR_VM_VALUE_I64, .as.i64 = 1},
+                         {.kind = XR_VM_VALUE_I64, .as.i64 = 4}};
+    XrVmOutcome result = xr_vm_code_execute(code, instance, 0u, args, 2u);
+    REQUIRE(result.kind == XR_VM_OUTCOME_RETURN && result.value.kind == XR_VM_VALUE_STRING);
+    XrVmStringView view;
+    static const uint8_t expected[] = {0xc3,0xa9,0xe4,0xb8,0xad,0xf0,0x9f,0x99,0x82};
+    REQUIRE(xr_vm_value_string_view(&result.value, &view));
+    REQUIRE(view.size == sizeof(expected) && memcmp(view.bytes, expected, sizeof(expected)) == 0);
+    xr_vm_outcome_dispose(&result);
+    args[0].as.i64 = 4;
+    result = xr_vm_code_execute(code, instance, 0u, args, 2u);
+    REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+    REQUIRE(xr_vm_value_string_view(&result.value, &view) && view.size == 0u);
+    xr_vm_outcome_dispose(&result);
+    args[0].as.i64 = -1;
+    result = xr_vm_code_execute(code, instance, 0u, args, 2u);
+    REQUIRE(result.kind == XR_VM_OUTCOME_PANIC && result.panic_value.as.panic_info.code == 430u);
+    xr_vm_outcome_dispose(&result);
+    args[0].as.i64 = 1;
+    result = xr_vm_code_execute(code, instance, 0u, args, 2u);
+    REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+    xr_vm_code_free(code);
+    XrExecutionDiagnostic diagnostic;
+    REQUIRE(xr_execution_instance_begin_drain(instance, &diagnostic) == XR_EXECUTION_OK);
+    require_coroutine_trap_generation_busy(instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+    REQUIRE(xr_vm_value_string_view(&result.value, &view));
+    REQUIRE(view.size == sizeof(expected) && memcmp(view.bytes, expected, sizeof(expected)) == 0);
+    xr_vm_outcome_dispose(&result);
+    REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+    REQUIRE(xr_execution_instance_retire(instance, &diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_free(&instance, &diagnostic) == XR_EXECUTION_OK);
+}
+
+static void test_exact_integer_bitwise(void) {
+    XrProgramArtifact artifact = {0};
+    REQUIRE(xr_program_integer_bitwise_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) ==
+            XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        XrVmCode *code = NULL;
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+#define XR_INTEGER_BITWISE_CASE(type, member, mode, left, right, expected) \
+    do { \
+        uint32_t entry = xr_program_integer_bitwise_fixture_function(program, XR_CORE_TYPE_##type, mode); \
+        REQUIRE(entry != UINT32_MAX); \
+        REQUIRE(program->functions[entry].blocks[0].instructions[1].operation_id == XR_CORE_OP_CORE_INTEGER_BITWISE); \
+        XrVmValue arguments[2] = {{.kind = XR_VM_VALUE_##type, .as.member = (left)}, \
+                                  {.kind = XR_VM_VALUE_##type, .as.member = (right)}}; \
+        XrVmOutcome result = xr_vm_code_execute(code, instance, entry, arguments, 2u); \
+        REQUIRE(result.kind == XR_VM_OUTCOME_RETURN && result.value.kind == XR_VM_VALUE_##type); \
+        REQUIRE(result.value.as.member == (expected)); \
+        xr_vm_outcome_dispose(&result); \
+    } while (0);
+#include "../program/xr_program_integer_bitwise_cases.inc.c"
+#undef XR_INTEGER_BITWISE_CASE
+        xr_vm_code_free(code);
+    }
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void test_coroutine_typed_outcomes_after_suspension(void) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
@@ -5371,6 +5531,63 @@ static void test_array_element_places(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_byte_compare_execution(void) {
+    for (unsigned scenario = 0u; scenario < 9u; ++scenario) {
+        XrProgramArtifact artifact = {0}; XrValidatedProgram *program = NULL;
+        REQUIRE(xr_program_byte_compare_fixture_write(scenario, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+        xr_program_artifact_free(&artifact);
+        XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile != NULL);
+        TestProviderBindings bindings; build_provider_bindings(profile, &bindings);
+        for (unsigned repeat = 0u; repeat < 2u; ++repeat) {
+            XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+            XrVmCode *code = NULL;
+            REQUIRE(xr_vm_code_build(program, profile, NULL, &code, NULL) == XR_VM_CODE_OK);
+            XrVmOutcome result = xr_vm_code_execute(code, instance, program->entry_function, NULL, 0u);
+            REQUIRE(result.kind == XR_VM_OUTCOME_RETURN && result.value.kind == XR_VM_VALUE_BOOL);
+            REQUIRE(result.value.as.boolean == (scenario == 0u || scenario == 1u || scenario == 6u));
+            xr_vm_outcome_dispose(&result); xr_vm_code_free(code); retire_and_free(&instance);
+        }
+        xr_target_profile_free(profile); xr_validated_program_free(program);
+    }
+}
+
+static void test_channel_storage_execution(void) {
+    for (int64_t capacity = -1; capacity <= 2; ++capacity) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        REQUIRE(xr_program_channel_fixture_write(capacity, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+        const XrValidatedInstruction *ops = program->functions[program->entry_function].blocks[0].instructions;
+        REQUIRE(ops[1].operation_id == XR_CORE_OP_CORE_CHANNEL_CONSTRUCT);
+        REQUIRE(ops[4].operation_id == XR_CORE_OP_CORE_CHANNEL_IS_CLOSED);
+        XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile != NULL);
+        TestProviderBindings bindings;
+        build_provider_bindings(profile, &bindings);
+        for (unsigned budget = 1u; budget <= 2u; ++budget) {
+            XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+            XrVmCodeOptions options = xr_vm_code_default_options();
+            options.max_value_cells = budget == 1u ? 1u : 16u;
+            XrVmCode *code = NULL;
+            REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+            XrVmOutcome result = xr_vm_code_execute(code, instance, program->entry_function, NULL, 0u);
+            if (capacity < 0 || budget == 1u) REQUIRE(result.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
+            else {
+                REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+                REQUIRE(result.value.kind == XR_VM_VALUE_BOOL && !result.value.as.boolean);
+            }
+            xr_vm_outcome_dispose(&result);
+            xr_vm_code_free(code);
+            retire_and_free(&instance);
+        }
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 static void test_atomic_storage_execution(void) {
     for (unsigned mode = 0u; mode <= 10u; ++mode)
     for (unsigned boolean = 0u; boolean < 3u; ++boolean) {
@@ -5446,11 +5663,76 @@ static void test_f64_scalar_execution(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_string_builder_execution(void) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE(xr_program_string_builder_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    const XrValidatedInstruction *ops = program->functions[program->entry_function].blocks[0].instructions;
+    REQUIRE(ops[0].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT);
+    REQUIRE(ops[3].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_APPEND);
+    REQUIRE(ops[6].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT);
+    REQUIRE(ops[7].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_CLEAR);
+    REQUIRE(ops[8].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_LENGTH);
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    const uint8_t expected[] = {'A', 0, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80};
+    for (unsigned budget = 0u; budget < 2u; ++budget) {
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        options.max_value_cells = budget ? 1024u : 1u;
+        XrVmCode *code = NULL;
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+        for (unsigned independent = 0u; independent < 2u; ++independent) {
+            XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+            XrVmOutcome result = xr_vm_code_execute(code, instance, program->entry_function, NULL, 0u);
+            if (!budget) REQUIRE(result.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
+            else {
+                REQUIRE(result.kind == XR_VM_OUTCOME_RETURN && result.owns_dynamic_values);
+                XrVmStringView view;
+                REQUIRE(xr_vm_value_string_view(&result.value, &view));
+                REQUIRE(view.size == sizeof(expected) && memcmp(view.bytes, expected, sizeof(expected)) == 0);
+            }
+            xr_vm_outcome_dispose(&result);
+            retire_and_free(&instance);
+        }
+        xr_vm_code_free(code);
+    }
+    XrProgramArtifact call_artifact = {0};
+    XrValidatedProgram *call_program = NULL;
+    REQUIRE(xr_program_string_builder_call_fixture_write(0u, &call_artifact) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(call_artifact.bytes, call_artifact.size, NULL, &call_program, NULL) == XR_PROGRAM_VERIFY_OK);
+    XrInstance *call_instance = create_instance(call_program, profile, &bindings, 1u);
+    XrVmCode *call_code = NULL;
+    REQUIRE(xr_vm_code_build(call_program, profile, NULL, &call_code, NULL) == XR_VM_CODE_OK);
+    XrVmOutcome call_result = xr_vm_code_execute(call_code, call_instance, call_program->entry_function, NULL, 0u);
+    REQUIRE(call_result.kind == XR_VM_OUTCOME_RETURN && call_result.value.kind == XR_VM_VALUE_I64);
+    REQUIRE(call_result.value.as.i64 == 0);
+    xr_vm_outcome_dispose(&call_result);
+    xr_vm_code_free(call_code);
+    retire_and_free(&call_instance);
+    xr_validated_program_free(call_program);
+    xr_program_artifact_free(&call_artifact);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
 int main(int argc, char **argv) {
-    if (argc == 1)
+    const XrCoreOperationSpec *byte_compare =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL);
+    REQUIRE(byte_compare && byte_compare->vm_status == XR_CORE_COVERAGE_COMPLETE &&
+          byte_compare->decoder_status == XR_CORE_COVERAGE_COMPLETE);
+    if (argc == 1) {
+        test_string_builder_execution();
         test_f64_scalar_execution();
-    if (argc == 1)
+    }
+    if (argc == 1) {
+        test_byte_compare_execution();
+        test_channel_storage_execution();
         test_atomic_storage_execution();
+    }
     if (argc == 3 && strcmp(argv[1], "--h2-class-differential") == 0)
         return run_h2_class_differential_probe(argv[2]);
     if (argc != 1)
@@ -5464,6 +5746,10 @@ int main(int argc, char **argv) {
     test_coroutine_typed_outcomes_after_suspension();
     test_exact_integer_conversions();
     test_exact_integer_divmod();
+    test_exact_integer_bitwise();
+    test_string_slice_execution();
+    test_array_append_execution();
+    test_array_default_execution();
     test_panic_point_chained_cleanup();
     test_coroutine_child_string_storage();
     test_coroutine_arithmetic_uses_ordinary_operation_semantics();

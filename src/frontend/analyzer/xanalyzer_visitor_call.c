@@ -6169,14 +6169,8 @@ static void xa_check_transfer_storage_param_arg(XaInferContext *ctx, AstNode *ca
             &loc);
         return;
     }
-    if (source_links && source_links->root_id != 0 && source_links->root_alias == XA_ROOT_UNIQUE &&
-        source_links->final_move.complete && source_links->allocation_plan.complete) {
-        source_links->storage_domain = XR_STORAGE_TRANSFERABLE;
-        source_links->allocation_plan.domain = XR_STORAGE_TRANSFERABLE;
-        source_links->allocation_plan.materialization = XR_MATERIALIZE_SYSTEM_HEAP;
-        source_links->allocation_plan.evidence |= XA_OWNERSHIP_EV_TRANSFER;
+    if (xa_boundary_arg_is_verified_move(ctx, arg_node))
         return;
-    }
 
     XrLocation loc = {.file = ctx->file_path,
                       .line = arg_node && arg_node->line ? arg_node->line : call_node->line,
@@ -7451,14 +7445,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // Check if callee is callable
     if (!XR_TYPE_IS_FUNCTION(callee_type)) {
-        // Builtin method call: container.method() where member_access returned
-        // the method's return type directly (e.g. arr.length() → int).
-        // Accept primitive/container return types without warning.
-        if (call->callee && call->callee->type == AST_MEMBER_ACCESS && callee_type &&
-            !XR_TYPE_IS_UNKNOWN(callee_type)) {
-            xa_report_arg_accesses_require_known_contract(ctx, node, call);
-            return callee_type;
-        }
         /* A nullable function value is a null-safety problem, not a
          * "not callable" problem: report the cause and the fix (spec §2.13
          * N-12). */

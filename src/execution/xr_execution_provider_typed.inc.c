@@ -32,8 +32,18 @@ static bool typed_pack_matches(const XrExecutionLease *lease, const XrProviderLo
     for (uint8_t index = first; index < limit; ++index) {
         XrProviderLogicalTypeView type;
         size_t offset = 0u;
+        if (input && logical->parameter_modes[index] == XR_PROVIDER_MODE_REF) {
+            if (!xr_provider_logical_contract_type(logical, index, &type) || type.size != 1u ||
+                type.bytes[0] != XR_PROVIDER_TYPE_U8_ARRAY ||
+                logical->parameter_owners[index] != XR_PROVIDER_OWNER_BORROWED ||
+                logical->reentry != XR_PROVIDER_REENTRY_FORBIDDEN ||
+                logical->callbacks != XR_PROVIDER_CALLBACK_NONE ||
+                (logical->effects & XR_PROVIDER_EFFECT_MAY_SUSPEND) != 0u)
+                return false;
+        }
         if (!xr_provider_logical_contract_type(logical, index, &type) ||
-            !xr_provider_value_walk(&access, type, &offset, pack, &node_offset, input) || offset != type.size)
+            !xr_provider_value_walk(&access, type, &offset, pack, &node_offset, input,
+                                    input ? logical->parameter_modes[index] : 0u) || offset != type.size)
             return false;
     }
     return node_offset == pack->count;

@@ -365,6 +365,10 @@ static void arc_copy_to_move(XiFunc *f) {
                     continue;
                 if (!value_has_consuming_use(f, v))
                     continue; /* result only borrowed: keep the borrow-copy */
+                /* The cleanup-return marker belongs to COPY. ARC has now
+                 * made that transfer explicit in the opcode. */
+                if (xi_copy_is_cleanup_return(v))
+                    v->aux_int = 0;
                 v->op = XI_OWNER_FORWARD;
                 changed = true;
             }
@@ -847,10 +851,14 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
     if (v->op != XI_CALL_METHOD || v->nargs < 1 || !v->args[0])
         return false;
     const struct XrType *recv_type = v->args[0]->type;
-    if (!recv_type || recv_type->kind != XR_KIND_CHANNEL)
-        return false;
     const char *method = (const char *) v->aux;
-    if (!method)
+    if (!recv_type || !method)
+        return false;
+    if (xr_type_is_builtin_named_class(recv_type, "Task"))
+        return (v->nargs == 1 && (strcmp(method, "awaitResult") == 0 ||
+                                  strcmp(method, "poll") == 0)) ||
+               (v->nargs == 2 && strcmp(method, "awaitTimeout") == 0);
+    if (recv_type->kind != XR_KIND_CHANNEL)
         return false;
     return strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0 ||
            strcmp(method, "recvOr") == 0 || strcmp(method, "recvTimeout") == 0 ||
@@ -1261,7 +1269,7 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
                 if (!consume_site_vec_push(sites, blk, user, (blk->rpo << 16) | (i & 0xFFFF),
                                            UINT16_MAX))
                     return false;
-                break; /* one consume record per user is enough */
+                /* Each consuming operand needs its own ownership credit. */
             }
         }
         /* Phi uses consume the incoming value on its edge. Phis live on
@@ -2360,7 +2368,14 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
         return false;
     }
     for (uint32_t i = 0; i < sites.count; i++) {
-        moves[i] = !consume_is_live_after(f, target, &sites.items[i], live, pos_by_id) &&
+        /* Equal instruction sites are consecutive after sorting. Only the
+         * final operand can receive the original owner; preceding operands
+         * need independent credits even when the value dies here. */
+        bool repeated_operand = sites.items[i].user && sites.items[i].user->op != XI_PHI &&
+            i + 1 < sites.count && sites.items[i + 1].user == sites.items[i].user &&
+            sites.items[i + 1].blk == sites.items[i].blk;
+        moves[i] = !repeated_operand &&
+                   !consume_is_live_after(f, target, &sites.items[i], live, pos_by_id) &&
                    !(frame_pinned && sites.items[i].user != NULL);
         if (moves[i] && sites.items[i].blk && pos_by_id[sites.items[i].blk->id]) {
             ArcLive *site_live = &live[pos_by_id[sites.items[i].blk->id] - 1];

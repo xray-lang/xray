@@ -432,6 +432,7 @@ static inline int xrt_method_result_is_owned(int sym) {
          * integers.  See the note below for why most array producers cannot
          * be listed. */
         case XRT_SYM_SPLIT:
+        case XRT_SYM_COPY_BYTES:
         case XRT_SYM_TO_ARRAY:
         /* Moved out of the receiver: pop/shift shorten it without releasing
          * what they hand back, so the reference is the caller's. */
@@ -543,6 +544,8 @@ static inline XrValue xrt_str_to_bytes(XrValue s) {
  * prerequisite for an ARC pass that drops an owned method result at its death
  * point, which is what would close the leak in `var b = a.reverse()`. */
 static inline XrValue xrt_method_0(XrValue recv, int sym) {
+    if (sym == XRT_SYM_COPY_BYTES && XR_IS_STR(recv))
+        return xrt_str_to_bytes(recv);
     /* User instances resolve through the symbol-keyed table first: a call
      * site that could not be devirtualized must still reach the compiled
      * method instead of silently answering NULL. */
@@ -578,7 +581,10 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_CLEAR)
             return xrt_array_clear_value(recv);
         if (sym == XRT_SYM_POP && a->length > 0) {
+            if (a->data_storage == XR_ARRAY_DATA_BORROWED)
+                return XR_NULL_VAL;
             a->length--;
+            XR_ARRAY_MARK_MUTATED(a);
             return xr_typed_get(a->data, (int32_t) a->length, a->elem_type);
         }
         if (sym == XRT_SYM_SHIFT && a->length > 0) {

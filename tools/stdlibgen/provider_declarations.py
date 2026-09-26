@@ -193,7 +193,14 @@ def parse_provider_declaration(props: Mapping[str, object], parameter_types: Seq
         fail(context, "provider parameter facts must describe every logical parameter")
     if set(modes) - {"in", "ref", "out"} or set(owners) - {"trivial", "borrow", "consume"}:
         fail(context, "provider parameter modes or owners are invalid")
-    parameters = tuple(LogicalParameter(*row) for row in zip(parameter_types, modes, owners))
+    normalized = []
+    for spelling, mode, owner in zip(parameter_types, modes, owners):
+        prefix = re.match(r"^(ref|out)\s+(.+)$", spelling)
+        signature_mode = prefix[1] if prefix else "in"
+        if signature_mode != mode:
+            fail(context, "provider parameter mode disagrees with its signature")
+        normalized.append(LogicalParameter(prefix[2] if prefix else spelling, mode, owner))
+    parameters = tuple(normalized)
     resources = parse_resources(text_property(props, "provider_resources", context),
                                 parameters, result_type, context)
     logical = ProviderLogicalDeclaration(
@@ -238,14 +245,19 @@ def admission_reasons(declaration: ProviderDeclaration) -> tuple[str, ...]:
             or logical.callbacks != "none"):
         reasons.append("typed-error-panic-suspend-or-callback-binding-not-implemented")
     typed = host.adapter == "typed"
+    mutable_borrow = any(parameter.mode == "ref" for parameter in logical.parameters)
     if typed:
         try:
             parameter_types = [logical_type(parameter.type) for parameter in logical.parameters]
             result_type = logical_type(logical.result_type)
             if len(parameter_types) > 8 or sum(len(row[0]) for row in parameter_types) + len(result_type[0]) + 1 > 64:
                 reasons.append("logical-signature-exceeds-transport-bound")
-            if logical.result_owner != ("owned" if result_type[1] else "trivial") or any(
-                    parameter.mode != "in" or parameter.owner != ("borrow" if shape[1] else "trivial")
+            if (logical.result_owner != ("owned" if result_type[1] else "trivial")
+                    or "Array<" in logical.result_type
+                    or (mutable_borrow and logical.result_type != "()")) or any(
+                    not ((parameter.mode == "ref" and shape[0] == b"\x08" and parameter.owner == "borrow")
+                         or (parameter.mode == "in" and "Array<" not in parameter.type
+                             and parameter.owner == ("borrow" if shape[1] else "trivial")))
                     for parameter, shape in zip(logical.parameters, parameter_types)):
                 reasons.append("typed-signature-ownership-mismatch")
         except ValueError:
@@ -254,7 +266,7 @@ def admission_reasons(declaration: ProviderDeclaration) -> tuple[str, ...]:
             parameter.mode != "in" or parameter.owner != "trivial"
             for parameter in logical.parameters):
         reasons.append("managed-or-reference-parameter-binding-not-implemented")
-    if logical.threads != "any" or logical.reentry != "allowed":
+    if logical.threads != "any" or logical.reentry != ("forbidden" if typed and mutable_borrow else "allowed"):
         reasons.append("instance-affine-or-nonreentrant-binding-not-implemented")
     if logical.profiles != ("hosted",):
         reasons.append("non-hosted-leaf-binding-not-implemented")

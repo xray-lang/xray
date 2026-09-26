@@ -12,6 +12,9 @@
 #define XR_SEMANTIC_TASK_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_enum_shape.h"
+#include "xr_semantic_channel_type_shape.h"
+#include "xr_semantic_range_shape.h"
 #include "xr_semantic_builtin_identity_shape.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
@@ -29,9 +32,8 @@ static inline bool xr_semantic_shape_stable_id_is_zero(XrStableId id) {
 /* Rebuild the builtin nominal identity from the frozen type key. This is kept
  * here instead of in a target or AOT layer so every consumer agrees on what a
  * Task<T> type is before it assigns storage to a value of that type. */
-static inline bool xr_semantic_task_type_is_exact(const XrSemanticPlan *plan,
-                                                  uint32_t semantic_type) {
-    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+static inline bool xr_semantic_task_type_row_is_exact(const XrSemanticPlan *plan,
+                                                      const XrSemanticTypeRecord *type) {
     if (!plan || !type || !type->canonical_key || type->kind != XR_KIND_INSTANCE ||
         type->builtin_type != XR_TID_COROUTINE || type->source_class != XR_SEMANTIC_INDEX_NONE ||
         type->child_count != 1 || type->scalar_rep != XR_SCALAR_REP_NONE ||
@@ -74,6 +76,11 @@ static inline bool xr_semantic_task_type_is_exact(const XrSemanticPlan *plan,
     return strncmp(named, prefix, sizeof(prefix) - 1u) == 0 &&
            key_length > (size_t) consumed + alias_length + sizeof(prefix) - 1u &&
            type->canonical_key[key_length - 1u] == ']';
+}
+
+static inline bool xr_semantic_task_type_is_exact(const XrSemanticPlan *plan,
+                                                  uint32_t semantic_type) {
+    return xr_semantic_task_type_row_is_exact(plan, xr_semantic_plan_type(plan, semantic_type));
 }
 
 /* The target-independent half of a direct-local GO result proof. The caller
@@ -215,6 +222,73 @@ static inline bool xr_semantic_builtin_instance_yieldable_call_is_exact(
     if (receiver_type)
         *receiver_type = receiver->type;
     return true;
+}
+
+/* Public receive and terminal observation return owning nominal enums.
+ * The frozen call target proves suspension and the receiver binds payload T. */
+static inline bool xr_semantic_yieldable_enum_result_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    bool task = operation &&
+        (operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_AWAIT_RESULT << 1) ||
+         operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_AWAIT_TIMEOUT << 1));
+    bool timed = operation &&
+        (operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_RECV_TIMEOUT << 1) ||
+         operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_AWAIT_TIMEOUT << 1));
+    const char *selector = task ? (timed ? "awaitTimeout" : "awaitResult")
+                                : (timed ? "recvTimeout" : "recv");
+    if (!plan || !operation || operation->opcode != XI_CALL_METHOD ||
+        (!task && !timed && operation->semantic_immediate != ((int64_t) XI_METHOD_SYMBOL_RECV << 1)) ||
+        operation->operand_count != (timed ? 2 : 1) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1 ||
+        operation->result_alias_operand != -1 || operation->transfer_mode != XR_TRANSFER_SHARE)
+        return false;
+    uint32_t operand_count = 0, child_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!operands || operation->operand_begin >= operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin || !children || !metadata ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        !metadata[operation->metadata_begin] ||
+        strcmp(metadata[operation->metadata_begin], selector) != 0)
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *channel = xr_semantic_plan_type(plan, receiver->type);
+    const XrSemanticTypeRecord *result = xr_semantic_plan_type(plan, operation->result_type);
+    if (!(task ? xr_semantic_task_type_is_exact(plan, receiver->type)
+               : xr_semantic_channel_type_row_is_exact(plan, channel)) ||
+        !xr_semantic_builtin_enum_declaration_is_exact(
+            result, task ? XR_GLOBAL_VAR_TASK_RESULT : XR_GLOBAL_VAR_RECV) ||
+        result->child_count != 1 || channel->child_begin >= child_count ||
+        result->child_begin >= child_count ||
+        children[channel->child_begin] != children[result->child_begin] ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->transfer_mode != XR_TRANSFER_SHARE)
+        return false;
+    if (timed) {
+        const XrSemanticOperandRecord *timeout = receiver + 1;
+        if (!xr_semantic_range_bound_type_is_exact(xr_semantic_plan_type(plan, timeout->type)) ||
+            timeout->role != XR_SEM_OPERAND_ARGUMENT || timeout->parameter != 0 ||
+            timeout->transfer_mode != XR_TRANSFER_SHARE ||
+            timeout->ownership_action != XR_SEM_OPERAND_CONSUME ||
+            timeout->parameter_mode != XR_PARAM_READ || timeout->access != XR_CALL_ARG_PLAIN ||
+            timeout->origin != 0 || timeout->lifetime != 0 || timeout->escape != 0 ||
+            timeout->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+            return false;
+    }
+    unsigned matches = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_call_target_count(plan); i++) {
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
+        if (xr_semantic_plan_operation(plan, target->operation) != operation)
+            continue;
+        if (!xr_semantic_builtin_instance_yieldable_call_is_exact(plan, target, operation, NULL))
+            return false;
+        matches++;
+    }
+    return matches == 1;
 }
 
 #endif  // XR_SEMANTIC_TASK_SHAPE_H

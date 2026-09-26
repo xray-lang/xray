@@ -135,10 +135,14 @@ requirements fail before C publication; embedded AOT retains its explicit typed 
 
 Generated native adapters include their declared host headers, check exact C function prototypes,
 and call the shared typed host implementation. The standalone build links the narrow
-`xray_native_provider_runtime` archive when needed; this archive contains only OS time/pipe
+`xray_native_provider_runtime` archive when needed; this archive contains only OS time/pipe/random
 implementation objects, with no compiler, VM, Program loader, or tagged-value runtime. Header-only
 host helpers share the same implementation with VM adapters. These host dependencies belong to
 the native toolchain/runtime-object identity, never to target-neutral Program semantics.
+The CLI compiles the same time, pipe and entropy OS units, with command and object
+identity storage sized from its unit inventory. Windows links the declared BCrypt
+system library. Sealing includes every compiled object and the final link command;
+adding a provider unit cannot silently omit its bytes from the artifact binding.
 Freestanding standalone emission without an embedder remains unsupported.
 Source-built clock, Pipe and process fixtures execute generated native bindings
 through Reference and both VM decode policies, then execute strict standalone C.
@@ -525,3 +529,47 @@ verification-test: test_xr_program_module_initializer_panic_message_aot_native
 verification-test: test_xr_program_module_initializer_panic_message_allocations
 verification-test: test_xr_program_aot_module_state_13
 verification-test: panic_report_diagnostics
+
+### Mutable array append implementation boundary
+
+The existing `Array<T>.push(value: T)` declaration mutably borrows its receiver,
+returns unit, and stores one exact T. Canonical execution must bind this operation
+from the builtin declaration identity and receiver element type; a source selector
+alone is insufficient. Scalar elements copy their value. Managed and aggregate
+elements transfer one logical owner into the new slot, using an explicit owner
+copy for value types or an identity-preserving alias owner for reference types
+when the source remains live. The array identity is stable across growth;
+all aliases observe the new length, while validated borrow/place rules prohibit
+invalid outstanding element access across reallocation.
+
+Both executors must plan growth before mutation, share overflow-safe geometric
+capacity arithmetic, and distinguish physical element width from logical type
+identity. Count and byte budgets are checked before allocation. Allocation or
+budget failure leaves the original storage, initialized prefix and length intact
+and does not publish or consume an element into a nonexistent slot. Successful
+publication transfers the element once, then updates length; destruction visits
+only initialized elements and releases reserved storage exactly once. The VM
+accounts reserved capacity against its value-cell budget; native storage uses
+its typed element representation and context allocator. No XrValue compatibility
+bridge is part of the canonical operation.
+
+The source regression `source_owner_tuple_array_elements` frees its compiler
+session before independent VM executions. Native code is generated from the same
+Program; both executors return 42 after the source StringBuilder is cleared.
+This regression proves the exercised path, not every array element contract. Qualification
+also requires scalar, empty-to-nonempty, repeated growth, retained element,
+wrong-type/const-receiver, allocation-failure and physical-release cases. Array
+append does not by itself qualify nullable tuple returns or other array methods.
+
+The array-append source binding consumes the sealed builtin receiver declaration,
+stable method symbol, exact non-const Array receiver and exact element type.
+Optimized builtin calls need not retain the transient XiCallPlan. If one remains,
+it must agree with the declaration. Runtime ownership uses the same reference
+identity judgement as array construction: reference elements acquire alias
+owners; value aggregates acquire explicit copies. The receiver is a mutable
+place and its storage identity is unchanged by backing reallocation.
+
+The tuple-array and class-identity source regressions now execute the shared
+Program in VM and native. This local evidence does not qualify all ownership
+combinations, live element loans, all allocation failures, the old TargetPlan
+consumer, or the full product safety and release gates.

@@ -25,6 +25,7 @@
 #include "../parser/xast_api.h"
 #include "../parser/xparse_internal.h"
 #include "../analyzer/xanalyzer.h"
+#include "../analyzer/xanalyzer_mono.h"
 #include "../analyzer/xa_selection.h"
 #include "../../runtime/value/xtype.h"
 
@@ -544,9 +545,13 @@ static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node, bool in_stmt_
     AstNode *eq_check = xr_ast_binary(ctx->session, AST_BINARY_EQ, test_lhs, null_lit, line);
     XR_DCHECK(eq_check != NULL, "canon_nullish_coalesce: eq alloc");
 
-    /* Duplicate the LHS reference for the false branch.
-     * Since lhs is simple (variable/literal), safe to reuse pointer. */
-    AstNode *ternary = xr_ast_ternary(ctx->session, eq_check, rhs, test_lhs, line);
+    /* Branch narrowing belongs to an occurrence, not to the tested node. */
+    AstNode *present_lhs = xr_ast_clone_session(test_lhs, ctx->session);
+    if (!present_lhs) {
+        ctx->error_count++;
+        return;
+    }
+    AstNode *ternary = xr_ast_ternary(ctx->session, eq_check, rhs, present_lhs, line);
     XR_DCHECK(ternary != NULL, "canon_nullish_coalesce: ternary alloc");
 
     uint32_t saved_id = node->node_id;

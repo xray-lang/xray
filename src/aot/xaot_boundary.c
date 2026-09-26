@@ -239,7 +239,9 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
          * local
          * function index. They still consume its current ABI. */
         bool source_export =
-            calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+            (calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT ||
+             calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_METHOD ||
+             calls[i].target_kind == XR_TARGET_CALL_TARGET_SOURCE_STATIC_METHOD) &&
             xr_stable_id_equal(calls[i].source_callee_identity, semantic_function->id);
         if (calls[i].callee_function != function_row->id && !source_export)
             continue;

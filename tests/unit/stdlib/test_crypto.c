@@ -104,10 +104,10 @@ TEST(crypto_bytes_to_hex) {
 }
 
 TEST(crypto_timing_safe_equal) {
-    ASSERT_TRUE(xr_crypto_core_timing_safe_equal("same", 4, "same", 4));
-    ASSERT_TRUE(!xr_crypto_core_timing_safe_equal("same", 4, "sand", 4));
-    ASSERT_TRUE(!xr_crypto_core_timing_safe_equal("same", 4, "same", 3));
-    ASSERT_TRUE(xr_crypto_core_timing_safe_equal(NULL, 0, NULL, 0));
+    ASSERT_TRUE(xr_crypto_core_timing_safe_equal("same", 4, 1, "same", 4, 1));
+    ASSERT_TRUE(!xr_crypto_core_timing_safe_equal("same", 4, 1, "sand", 4, 1));
+    ASSERT_TRUE(!xr_crypto_core_timing_safe_equal("same", 4, 1, "same", 3, 1));
+    ASSERT_TRUE(xr_crypto_core_timing_safe_equal(NULL, 0, 1, NULL, 0, 1));
 }
 
 /* ========== Main ========== */

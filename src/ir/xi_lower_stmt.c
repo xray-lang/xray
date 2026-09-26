@@ -472,6 +472,9 @@ static XiValue *stmt_narrow_for_target_type(XiLower *l, AstNode *node, XiValue *
                                             struct XrType *target_type) {
     if (!val || !val->type || !target_type)
         return val;
+    /* Exact optional assignments preserve the tag, including null. */
+    if (target_type->is_nullable && xr_type_equals(target_type, val->type))
+        return val;
     if (XR_TYPE_IS_FLOAT(val->type) && XR_TYPE_IS_FLOAT(target_type)) {
         if (xr_type_equals(target_type, val->type))
             return val;
@@ -1768,12 +1771,9 @@ static bool match_pattern_is_wildcard(AstNode *pattern) {
     return pattern && pattern->type == AST_PATTERN_WILDCARD;
 }
 
-static bool match_channel_recv_subject(XiLower *l, AstNode *expr, AstNode **chan_expr_out,
-                                       bool *try_recv_out) {
+static bool match_channel_recv_subject(XiLower *l, AstNode *expr, AstNode **chan_expr_out) {
     if (chan_expr_out)
         *chan_expr_out = NULL;
-    if (try_recv_out)
-        *try_recv_out = false;
     if (!expr || expr->type != AST_CALL_EXPR)
         return false;
 
@@ -1784,9 +1784,7 @@ static bool match_channel_recv_subject(XiLower *l, AstNode *expr, AstNode **chan
     if (!ma->object || !ma->name)
         return false;
 
-    bool is_recv = strcmp(ma->name, "recv") == 0;
-    bool is_try_recv = strcmp(ma->name, "tryRecv") == 0;
-    if (!is_recv && !is_try_recv)
+    if (strcmp(ma->name, "recv") != 0)
         return false;
 
     struct XrType *recv_type = xa_analyzer_get_node_type(l->analyzer, ma->object);
@@ -1795,8 +1793,6 @@ static bool match_channel_recv_subject(XiLower *l, AstNode *expr, AstNode **chan
 
     if (chan_expr_out)
         *chan_expr_out = ma->object;
-    if (try_recv_out)
-        *try_recv_out = is_try_recv;
     return true;
 }
 
@@ -1906,8 +1902,7 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
         *out_value = NULL;
     MatchExprNode *m = &node->as.match_expr;
     AstNode *chan_expr = NULL;
-    bool is_try_recv = false;
-    if (!match_channel_recv_subject(l, m->expr, &chan_expr, &is_try_recv))
+    if (!match_channel_recv_subject(l, m->expr, &chan_expr))
         return false;
     if (!match_channel_recv_fast_supported(m))
         return false;
@@ -1922,14 +1917,12 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
     if (!payload_type)
         payload_type = l->type_any;
 
-    XiValue *recv = xi_value_new(l->func, l->cur_block,
-                                 is_try_recv ? XI_CHAN_TRY_RECV : XI_CHAN_RECV, payload_type, 1);
+    XiValue *recv = xi_value_new(l->func, l->cur_block, XI_CHAN_RECV, payload_type, 1);
     if (!recv)
         return true;
     recv->args[0] = chan;
     recv->flags |= XI_FLAG_SIDE_EFFECT;
-    if (!is_try_recv)
-        recv->flags |= XI_FLAG_MAY_SUSPEND;
+    recv->flags |= XI_FLAG_MAY_SUSPEND;
     recv->line = (uint32_t) node->line;
 
     XiValue *recv_status = lower_chan_recv_status(l, recv);

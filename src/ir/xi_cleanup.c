@@ -9,6 +9,8 @@
  */
 
 #include "xi_cleanup.h"
+#include "xi_string_slice.h"
+#include "xi_array_default.h"
 #include "xi_coro_lower.h"
 #include "xi_edit.h"
 #include "xi_verify.h"
@@ -856,7 +858,7 @@ static bool cleanup_index_bounds_proven(const XiValue *point) {
 
 static bool cleanup_point_may_panic(const XiFunc *function, const XiValue *point,
                                      const XgGlobalEvidence *evidence) {
-    if (point->op == XI_ASSERTION)
+    if (point->op == XI_ASSERTION || xi_value_is_string_slice(point) || xi_value_is_scalar_array_default(point))
         return true;
     if (point->op == XI_INDEX_GET || point->op == XI_INDEX_SET)
         return !cleanup_index_bounds_proven(point);
@@ -952,7 +954,8 @@ static bool normalize_function_panic_exits(XiFunc *function, const XgGlobalEvide
              * ordinary failure edge. Avoid splitting a module-slot borrow
              * merely to add an empty handler. */
             if (!exact || (handler_count == 0u &&
-                           (call->op == XI_INDEX_GET || call->op == XI_INDEX_SET))) {
+                           (call->op == XI_INDEX_GET || call->op == XI_INDEX_SET ||
+                            xi_value_is_string_slice(call) || xi_value_is_scalar_array_default(call)))) {
                 xr_free(handlers);
                 continue;
             }

@@ -62,7 +62,7 @@ void xr_stringbuilder_init_inplace(XrStringBuilder *sb) {
     sb->buffer = (XrStrBuf *) xr_malloc(sizeof(XrStrBuf));
     if (sb->buffer) {
         sb->buffer->data = (char *) xr_malloc(64);
-        sb->buffer->capacity = 64;
+        sb->buffer->capacity = sb->buffer->data ? 64u : 0u;
         sb->buffer->length = 0;
         sb->buffer->X = xr_exec_context_vm_owner();
         if (sb->buffer->data) {
@@ -83,34 +83,38 @@ void xr_stringbuilder_free(XrStringBuilder *sb) {
 
 /* ========== Operations ========== */
 
-void xr_stringbuilder_append_str(XrStringBuilder *sb, XrString *s) {
-    if (!sb || !sb->buffer || !s)
-        return;
-    xr_strbuf_append_str(sb->buffer, s);
-    sb->rune_length += xr_utf8_strlen(s->data, s->length);
+bool xr_stringbuilder_append_str(XrStringBuilder *sb, XrString *s) {
+    return s && xr_stringbuilder_append_cstr(sb, s->data, s->length);
 }
 
-void xr_stringbuilder_append_cstr(XrStringBuilder *sb, const char *s, size_t len) {
-    if (!sb || !sb->buffer || !s)
-        return;
-    xr_strbuf_append_cstr(sb->buffer, s, len);
-    sb->rune_length += xr_utf8_strlen(s, len);
+bool xr_stringbuilder_append_cstr(XrStringBuilder *sb, const char *s, size_t len) {
+    if (!sb || !sb->buffer || (!s && len))
+        return false;
+    size_t runes = len ? xr_utf8_strlen(s, len) : 0u;
+    if (!xr_strbuf_append_cstr(sb->buffer, s, len))
+        return false;
+    sb->rune_length += runes;
+    return true;
 }
 
-void xr_stringbuilder_append_int(XrStringBuilder *sb, int64_t val) {
+bool xr_stringbuilder_append_int(XrStringBuilder *sb, int64_t val) {
     if (!sb || !sb->buffer)
-        return;
+        return false;
     size_t before = sb->buffer->length;
-    xr_strbuf_append_int(sb->buffer, val);
+    if (!xr_strbuf_append_int(sb->buffer, val))
+        return false;
     sb->rune_length += sb->buffer->length - before;
+    return true;
 }
 
-void xr_stringbuilder_append_float(XrStringBuilder *sb, double val) {
+bool xr_stringbuilder_append_float(XrStringBuilder *sb, double val) {
     if (!sb || !sb->buffer)
-        return;
+        return false;
     size_t before = sb->buffer->length;
-    xr_strbuf_append_float(sb->buffer, val);
+    if (!xr_strbuf_append_float(sb->buffer, val))
+        return false;
     sb->rune_length += sb->buffer->length - before;
+    return true;
 }
 
 XrString *xr_stringbuilder_to_string(XrStringBuilder *sb) {
@@ -122,10 +126,6 @@ XrString *xr_stringbuilder_to_string(XrStringBuilder *sb) {
     if (len == 0) {
         return xr_string_intern(sb->buffer->X, "", 0, 0);
     }
-
-    // Temporarily add null terminator
-    xr_strbuf_ensure(sb->buffer, 1);
-    sb->buffer->data[len] = '\0';
 
     XrString *str = xr_string_intern(sb->buffer->X, sb->buffer->data, len, 0);
     return str;

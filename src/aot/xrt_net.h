@@ -1449,23 +1449,23 @@ static inline XrValue xrt_net_udp_send_to(XrValue conn_value, XrValue data_value
  * records the sender on the conn, or -1 with the code stored. A zero deadline
  * waits without limit.
  */
-static inline XrValue xrt_net_udp_recv_into(XrValue conn_value, XrValue buffer_value,
+static inline xrt_net_try_result_t xrt_net_udp_recv_into_try(XrValue conn_value, XrValue buffer_value,
                                             XrValue deadline_value) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
         if (conn)
             xrt_net_set_error_base(&conn->base, XRT_NETERR_CLOSED, 0);
-        return XR_FROM_INT(-1);
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
     }
     if (!XR_IS_ARRAY(buffer_value) || !buffer_value.ptr) {
         xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XR_FROM_INT(-1);
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
     }
     xrt_net_array_view_t *buffer = (xrt_net_array_view_t *) buffer_value.ptr;
     if (buffer->elem_type != XR_ELEM_U8 || buffer->elem_size != 1 || buffer->capacity <= 0 ||
         !buffer->data) {
         xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XR_FROM_INT(-1);
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
     }
 
     int64_t deadline = xrt_net_int_arg(deadline_value);
@@ -1490,18 +1490,31 @@ static inline XrValue xrt_net_udp_recv_into(XrValue conn_value, XrValue buffer_v
                 conn->udp_from_port = ntohs(sin6->sin6_port);
             }
             xrt_net_clear_error_base(&conn->base);
-            return XR_FROM_INT((int64_t) n);
+            return xrt_net_try_done(XR_FROM_INT((int64_t) n), 0);
         }
         int err = xr_get_socket_error();
         if (err == XR_EINTR)
             continue;
-        if (xr_socket_err_is_again(err)) {
-            int ready = xrt_net_wait_fd(conn->base.fd, true, deadline);
-            if (ready > 0)
-                continue;
-            err = xr_get_socket_error();
-        }
+        if (xr_socket_err_is_again(err))
+            return xrt_net_try_wait(XRT_NET_TRY_WAIT_READ, conn->base.fd, deadline, 0);
         xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(err), err);
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
+    }
+}
+
+/* Synchronous entry drives the same nonblocking attempt as a coroutine. */
+static inline XrValue xrt_net_udp_recv_into(XrValue conn_value, XrValue buffer_value,
+                                            XrValue deadline_value) {
+    for (;;) {
+        xrt_net_try_result_t result =
+            xrt_net_udp_recv_into_try(conn_value, buffer_value, deadline_value);
+        if (result.state == XRT_NET_TRY_DONE)
+            return result.value;
+        xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+        if (xrt_net_wait_fd(conn->base.fd, true, xrt_net_int_arg(deadline_value)) > 0)
+            continue;
+        int error = xr_get_socket_error();
+        xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(error), error);
         return XR_FROM_INT(-1);
     }
 }

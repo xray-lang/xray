@@ -42,7 +42,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE = UINT64_C(1) << 13,
     XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE = UINT64_C(1) << 14,
     XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE = UINT64_C(1) << 15,
-    XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE = UINT64_C(1) << 16,
+    XR_TARGET_FAMILY_JSON_NAMESPACE_CODEC_STORAGE = UINT64_C(1) << 16,
     XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE = UINT64_C(1) << 17,
     XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE = UINT64_C(1) << 18,
     XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE = UINT64_C(1) << 19,
@@ -158,7 +158,7 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                                \
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                            \
                  XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE |                                    \
-                 XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |                                   \
+                 XR_TARGET_FAMILY_JSON_NAMESPACE_CODEC_STORAGE |                                   \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE |                           \
                  XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                                       \
                  XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |                                \
@@ -306,12 +306,14 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
     XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE,
     XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
+    XR_TARGET_CALL_CONVENTION_SOURCE_METHOD,
+    XR_TARGET_CALL_CONVENTION_SOURCE_STATIC_METHOD,
     XR_TARGET_CALL_CONVENTION_RUNTIME_CONSTRUCTOR,
     XR_TARGET_CALL_CONVENTION_STRING_BYTE_SLICE_VIEW,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING,
-    XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_VALUE,
+    XR_TARGET_CALL_CONVENTION_JSON_NAMESPACE_CODEC,
     XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR,
     XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR,
     XR_TARGET_CALL_CONVENTION_NATIVE_NAMESPACE_YIELDABLE,
@@ -354,7 +356,7 @@ typedef enum XrTargetCallConvention {
  * wrapper proven by an ordered SemanticPlan module set; it never identifies a
  * private implementation or reuses a dependency function index as a local
  * index. CHANNEL_CLOSE names a sealed runtime receiver operation.
- * JSON_NAMESPACE_VALUE names the sealed compiler-owned JSON class namespace
+ * JSON_NAMESPACE_CODEC names the sealed compiler-owned JSON class namespace
  * member, whose receiver is a reserved builtin global rather than a value.
  * ARRAY_MEMBER_SCALAR names a sealed builtin container member on an array
  * receiver whose element carries no reference, so neither a consumed argument
@@ -403,12 +405,14 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
     XR_TARGET_CALL_TARGET_CHANNEL_CLOSE,
     XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
+    XR_TARGET_CALL_TARGET_SOURCE_METHOD,
+    XR_TARGET_CALL_TARGET_SOURCE_STATIC_METHOD,
     XR_TARGET_CALL_TARGET_RUNTIME_CONSTRUCTOR,
     XR_TARGET_CALL_TARGET_STRING_BYTE_SLICE_VIEW,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING,
-    XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE,
+    XR_TARGET_CALL_TARGET_JSON_NAMESPACE_CODEC,
     XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR,
     XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR,
     XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE,
@@ -775,7 +779,8 @@ typedef struct XrTargetCallRecord {
     uint32_t source_dependency;
     uint32_t source_export;
     uint32_t runtime_capabilities;
-    XrStableId source_export_identity;
+    /* Exact export or source method identity, distinguished by target_kind. */
+    XrStableId source_declaration_identity;
     XrStableId source_callee_identity;
     XrStableId native_callee_identity;
     uint32_t result_value;

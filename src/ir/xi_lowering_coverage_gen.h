@@ -30,12 +30,12 @@ enum { XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT = 207 };
 enum { XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT = 33 };
 enum { XI_LOWERING_REJECTED_TARGET_COUNT = 0 };
 enum { XI_LOWERING_REJECTED_ENTRY_COUNT = 0 };
-enum { XI_LOWERING_CONSUMER_TARGET_COUNT = 33 };
-enum { XI_LOWERING_CONSUMER_ENTRY_COUNT = 33 };
-enum { XI_LOWERING_CONSUMER_BINDING_COUNT = 44 };
+enum { XI_LOWERING_CONSUMER_TARGET_COUNT = 35 };
+enum { XI_LOWERING_CONSUMER_ENTRY_COUNT = 35 };
+enum { XI_LOWERING_CONSUMER_BINDING_COUNT = 46 };
 enum { XI_LOWERING_CONSUMER_ROUTER_WITNESS_COUNT = 6 };
-enum { XI_LOWERING_CONSUMER_EMITTER_WITNESS_COUNT = 36 };
-enum { XI_LOWERING_CONSUMER_PREDICATE_WITNESS_COUNT = 6 };
+enum { XI_LOWERING_CONSUMER_EMITTER_WITNESS_COUNT = 38 };
+enum { XI_LOWERING_CONSUMER_PREDICATE_WITNESS_COUNT = 8 };
 enum { XI_LOWERING_CONSUMER_PREDICATE_DOMAIN_WITNESS_COUNT = 2 };
 enum { XI_LOWERING_CONSUMER_GUARDED_SELECTOR_COUNT = 1 };
 enum { XI_LOWERING_CONSUMER_ACTIVATION_EDGE_COUNT = 13 };
@@ -246,7 +246,7 @@ enum { XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT = 33 };
     X(BYTE_SLICE_STORE_F32, "xi.byte.slice.store.f32", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(BYTE_SLICE_STORE_F64, "xi.byte.slice.store.f64", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(BYTE_SLICE_FILL, "xi.byte.slice.fill", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
-    X(BYTE_SLICE_COPY, "xi.byte.slice.copy", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
+    X(BYTE_SLICE_COPY, "xi.byte.slice.copy", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, XI_LOWER_TARGET_AOT_C) \
     X(BYTE_SLICE_COMPARE, "xi.byte.slice.compare", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(BYTE_SLICE_COMMON_PREFIX, "xi.byte.slice.common.prefix", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(BYTE_SLICE_REPEAT, "xi.byte.slice.repeat", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
@@ -260,7 +260,7 @@ enum { XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT = 33 };
     X(SLICE_REINTERPRET, "xi.slice.reinterpret", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(BYTE_ARRAY_COPY_WITHIN, "xi.byte.array.copy.within", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(BYTE_ARRAY_COPY_FROM, "xi.byte.array.copy.from", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
-    X(BYTE_ARRAY_APPEND_FROM, "xi.byte.array.append.from", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
+    X(BYTE_ARRAY_APPEND_FROM, "xi.byte.array.append.from", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, XI_LOWER_TARGET_AOT_C) \
     X(BYTE_ARRAY_REPEAT_FROM, "xi.byte.array.repeat.from", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(ARRAY_DATA_PTR, "xi.array.data.ptr", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
     X(STATIC_BYTES_PTR, "xi.static.bytes.ptr", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0, 0) \
@@ -317,7 +317,9 @@ enum { XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT = 33 };
     X(FIXED_BYTES_CONST, "xi.fixed.bytes.const", "src/aot/xi_cgen.c", emit_value_stmt, XI_LOWERING_CONSUMER_WITNESS_SELECTOR) \
     X(SCOPE_ENTER, "xi.scope.enter", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, XI_LOWERING_CONSUMER_WITNESS_SELECTOR) \
     X(SCOPE_EXIT, "xi.scope.exit", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, XI_LOWERING_CONSUMER_WITNESS_SELECTOR) \
-    X(TUPLE_GET, "xi.tuple.get", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, XI_LOWERING_CONSUMER_WITNESS_SELECTOR)
+    X(TUPLE_GET, "xi.tuple.get", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, XI_LOWERING_CONSUMER_WITNESS_SELECTOR) \
+    X(BYTE_SLICE_COPY, "xi.byte.slice.copy", "src/aot/xi_cgen.c", emit_value_stmt, XI_LOWERING_CONSUMER_WITNESS_SELECTOR) \
+    X(BYTE_ARRAY_APPEND_FROM, "xi.byte.array.append.from", "src/aot/xi_cgen.c", emit_value_stmt, XI_LOWERING_CONSUMER_WITNESS_SELECTOR)
 
 
 #define XI_LOWERING_CONSUMER_ROUTER_WITNESSES(X) \
@@ -365,7 +367,9 @@ enum { XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT = 33 };
     X(FIXED_BYTES_CONST, "xi.fixed.bytes.const", "src/aot/xi_cgen.c", emit_value_stmt, "src/aot/xi_cgen.c", emit_value_rhs) \
     X(SCOPE_ENTER, "xi.scope.enter", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, "src/aot/xi_cgen.c", emit_value_source_line) \
     X(SCOPE_EXIT, "xi.scope.exit", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, "src/aot/xi_cgen_coro.inc.c", emit_coro_scope_exit_error_check) \
-    X(TUPLE_GET, "xi.tuple.get", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, "src/aot/xi_cgen_abi_helpers.inc.c", emit_value_as_rep_ctx)
+    X(TUPLE_GET, "xi.tuple.get", "src/aot/xi_cgen_coro.inc.c", emit_coro_value_stmt, "src/aot/xi_cgen_abi_helpers.inc.c", emit_value_as_rep_ctx) \
+    X(BYTE_SLICE_COPY, "xi.byte.slice.copy", "src/aot/xi_cgen.c", emit_value_stmt, "src/aot/xi_cgen.c", emit_value_rhs) \
+    X(BYTE_ARRAY_APPEND_FROM, "xi.byte.array.append.from", "src/aot/xi_cgen.c", emit_value_stmt, "src/aot/xi_cgen.c", emit_value_rhs)
 
 
 static inline uint32_t xi_lowering_covered_targets(uint16_t op) {
@@ -1021,7 +1025,7 @@ static inline uint32_t xi_lowering_consumer_targets(uint16_t op) {
         case XI_BYTE_SLICE_STORE_F32: return 0;
         case XI_BYTE_SLICE_STORE_F64: return 0;
         case XI_BYTE_SLICE_FILL: return 0;
-        case XI_BYTE_SLICE_COPY: return 0;
+        case XI_BYTE_SLICE_COPY: return XI_LOWER_TARGET_AOT_C;
         case XI_BYTE_SLICE_COMPARE: return 0;
         case XI_BYTE_SLICE_COMMON_PREFIX: return 0;
         case XI_BYTE_SLICE_REPEAT: return 0;
@@ -1035,7 +1039,7 @@ static inline uint32_t xi_lowering_consumer_targets(uint16_t op) {
         case XI_SLICE_REINTERPRET: return 0;
         case XI_BYTE_ARRAY_COPY_WITHIN: return 0;
         case XI_BYTE_ARRAY_COPY_FROM: return 0;
-        case XI_BYTE_ARRAY_APPEND_FROM: return 0;
+        case XI_BYTE_ARRAY_APPEND_FROM: return XI_LOWER_TARGET_AOT_C;
         case XI_BYTE_ARRAY_REPEAT_FROM: return 0;
         case XI_ARRAY_DATA_PTR: return 0;
         case XI_STATIC_BYTES_PTR: return 0;

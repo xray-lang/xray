@@ -71,6 +71,7 @@ TYPE_SYSTEM_KEYS = {
     "class_reference_shape",
     "array_shape",
     "atomic_shape",
+    "channel_shape",
     "record_reference_shape",
     "provider_resource_shape",
     "variant_shape",
@@ -133,6 +134,7 @@ VALUE_MAPPING_KEYS = {
     "immediate_u32",
 }
 PROJECTION_KINDS = {
+    "integer-bitwise": "XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE",
     "sequence-length": "XR_PROGRAM_XI_PROJECTION_SEQUENCE_LENGTH",
     "integer-convert": "XR_PROGRAM_XI_PROJECTION_INTEGER_CONVERT",
     "integer-wrapping": "XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING",
@@ -234,6 +236,7 @@ CORE_TYPE_NAMES = {
     "bool": "XR_CORE_TYPE_BOOL",
     "i64": "XR_CORE_TYPE_I64",
     "f64": "XR_CORE_TYPE_F64",
+    "string-builder": "XR_CORE_TYPE_STRING_BUILDER",
     "u32": "XR_CORE_TYPE_U32",
     "error": "XR_CORE_TYPE_ERROR",
     "panic-info": "XR_CORE_TYPE_PANIC_INFO",
@@ -249,7 +252,7 @@ CORE_TYPE_NAMES = {
 
 BUILTIN_OWNERSHIP = (
     "void, bool, i8, i16, i32, i64, u8, u16, u32, u64, f64, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune "
-    "are trivial with trivial copy; string is affine with explicit copy; panic-info is affine "
+    "are trivial with trivial copy; string is affine with explicit copy; panic-info and string-builder are affine "
     "with forbidden copy"
 )
 CONSTANT_SHAPE = (
@@ -313,7 +316,7 @@ def validate(schema: dict[str, Any]) -> None:
     require(schema["schema"] == "xray-program-format-schema/3", "program schema version drifted")
     fmt = schema["format"]
     require(isinstance(fmt, dict) and set(fmt) == FORMAT_KEYS, "format fields drifted")
-    require(fmt["major"] == 3 and fmt["minor"] == 9, "XrProgram format must be 3.9")
+    require(fmt["major"] == 3 and fmt["minor"] == 11, "XrProgram format must be 3.11")
     require(isinstance(fmt["magic_hex"], str) and re.fullmatch(r"[0-9a-f]{16}", fmt["magic_hex"]),
             "program magic must be eight canonical lowercase hex bytes")
     require(fmt["program_id_domain"] == "xray-program-id-v3", "ProgramId domain drifted")
@@ -338,11 +341,11 @@ def validate(schema: dict[str, Any]) -> None:
         "builtin_rows": [
             "0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info", "6:u16",
             "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian", "12:string",
-            "13:rune", "14:i8", "15:u8", "16:i16", "17:i32", "18:u64", "19:f64",
+            "13:rune", "14:i8", "15:u8", "16:i16", "17:i32", "18:u64", "19:f64", "20:string-builder",
         ],
         "dynamic_type_base": 32,
         "dynamic_kinds": [
-            "aggregate", "variant", "view", "callable", "existential", "class-reference", "array", "atomic", "record-reference", "provider-resource",
+            "aggregate", "variant", "view", "callable", "existential", "class-reference", "array", "atomic", "record-reference", "provider-resource", "channel",
         ],
         "ownership_kinds": ["0:trivial", "1:affine"],
         "copy_contracts": ["0:trivial", "1:explicit", "2:forbidden"],
@@ -350,9 +353,10 @@ def validate(schema: dict[str, Any]) -> None:
         "constant_shape": CONSTANT_SHAPE,
         "identity_order": "ascending-semantic-key",
         "aggregate_shape": "declaration-ordered-field-type-ids",
-        "class_reference_shape": "declaration-ordered-field-type-ids; nominal CLASS is implied by the type kind; physical object layout and lifetime representation are forbidden",
+        "class_reference_shape": "declaration-ordered-field-type-ids followed by parent TypeId (void for a root); parent must be an exact class-reference whose fields match the child prefix; parent graph is acyclic; nominal CLASS is implied; physical layout and lifetime representation are forbidden",
         "record_reference_shape": 'ordered-field-type-ids; non-nominal affine reference root with explicit or forbidden copy; source semantic key includes exact field names, readonly contracts and child type identities; physical layout and lifetime representation are forbidden',
         "provider_resource_shape": '16-byte nonzero stable resource identity preceded by minimal-ULEB128 length 16; non-nominal affine provider resource with forbidden copy; handles, addresses, physical layout and finalizers are executor-private',
+        "channel_shape": 'one non-void runtime element TypeId; non-nominal affine handle with explicit identity-preserving copy independent of element copy; capacity, queue, synchronization and message storage are executor-private',
         "atomic_shape": 'one scalar element TypeId (i64, f64 or bool); affine with explicit identity-preserving copy; synchronized storage and reference counts are executor-private',
         "array_shape": "one element TypeId; heap-owned dynamic container is affine; copy is explicit unless its element copy is forbidden; length, capacity and physical layout are not type identity",
         "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
@@ -602,6 +606,7 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_INTEGER_WRAPPING = 25,",
         "    XR_PROGRAM_XI_PROJECTION_INTEGER_DIVMOD = 26,",
         "    XR_PROGRAM_XI_PROJECTION_SEQUENCE_LENGTH = 27,",
+        "    XR_PROGRAM_XI_PROJECTION_INTEGER_BITWISE = 28,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",
@@ -963,6 +968,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Constant table: `{type_system['constant_shape']}`",
         f"- Aggregate shape: `{type_system['aggregate_shape']}`",
         f"- Class-reference shape: `{type_system['class_reference_shape']}`",
+        f"- Channel shape: `{type_system['channel_shape']}`",
         f"- Atomic shape: `{type_system['atomic_shape']}`",
         f"- Provider resource shape: `{type_system['provider_resource_shape']}`",
         f"- Structural reference shape: `{type_system['record_reference_shape']}`",

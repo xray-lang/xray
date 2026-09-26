@@ -526,31 +526,6 @@ static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
     return true;
 }
 
-static bool emit_static_number_parse_error_member_value_expr(XiCgenCtx *ctx, FILE *out,
-                                                              const XiValue *v,
-                                                              uint32_t member_index) {
-    const XrNumberParseErrorRegistryRow *row =
-        xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
-    const XrBuiltinEnumRow *ed = xr_builtin_enum_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
-    if (!row || !ed || ed->builtin_index != (int) row->global_index ||
-        ed->member_count != XR_NUMBER_PARSE_ERROR_MEMBER_COUNT ||
-        member_index >= ed->member_count || ed->members[member_index].has_payload ||
-        strcmp(ed->enum_name, row->enum_name) != 0 ||
-        strcmp(ed->members[member_index].name, row->members[member_index]) != 0)
-        return false;
-    XrRep source_rep =
-        ctx && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ? XR_REP_I64 : XR_REP_TAGGED;
-    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, source_rep,
-                                                     cg_value_plan_storage_rep(ctx, v));
-    if (source_rep == XR_REP_I64)
-        fprintf(out, "INT64_C(%u)", (unsigned) member_index);
-    else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, row->enum_name, ed,
-                                                          member_index))
-        emit_prelude_enum_member_value_expr(ctx, out, ed, member_index);
-    emit_conversion_suffix(out, conv_suffix);
-    return true;
-}
-
 static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                const XiEnumData *ed, uint32_t member_index) {
     if (!out || !ed || !ed->members || member_index >= ed->member_count)
@@ -1200,29 +1175,12 @@ static void emit_call_hidden_closure(FILE *out, const XiFunc *current, const XiF
 
 static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *function,
                                  const XiValue *v) {
-    XrCValueEmissionView recipe = {0};
-    if (!cg_string_concat_emission_view(ctx, function, v, &recipe)) {
-        emit_codegen_abort_expr(out);
-        return;
-    }
-
-    fprintf(out, "({ xrt_strpart_t _scp_%u[%u]; ", v->id, (unsigned) v->nargs);
-    for (uint16_t i = 0; i < v->nargs; i++) {
-        const XrCRecipeArgumentView *argument = &recipe.recipe_arguments[i];
-        if (xr_c_recipe_argument_is_direct_scalar(argument->kind)) {
-            bool piece_signed = argument->kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_I64;
-            const XiValue *source =
-                cg_string_concat_direct_scalar_source(ctx, function, v->args[i], argument);
-            fprintf(out, "xrt_strpart_init_%s(&_scp_%u[%u], (%s)", piece_signed ? "i64" : "u64",
-                    v->id, (unsigned) i, piece_signed ? "int64_t" : "uint64_t");
-            emit_value_as_rep_ctx(ctx, out, source, XR_REP_I64);
-        } else {
-            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-            emit_value_as_display_tagged(ctx, out, v->args[i], NULL);
-        }
-        fprintf(out, "); ");
-    }
-    fprintf(out, "%s(%u, _scp_%u); })", recipe.recipe_symbol, (unsigned) v->nargs, v->id);
+    (void) function;
+    (void) v;
+    /* Exact concatenation recipes emit scoped C11 statements before the
+     * expression dispatcher. An expression here has no executable recipe. */
+    (void) cg_value_emission_fail(ctx, "string concat requires exact scoped C emission authority");
+    emit_codegen_abort_expr(out);
 }
 
 static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1482,11 +1440,23 @@ static bool emit_closure_new_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc 
         emit_vref(out, v);
         fprintf(out, ";\n");
     }
-    fprintf(out, "    {\n");
+    /* A non-escaping closure lives in frame storage declared at the value's
+     * own scope, so it outlives the construction block like its users do. */
     bool stack_closure = v->op == XI_STACK_ALLOC;
-    const char *alloc_fn = stack_closure ? "xrt_closure_stack_new" : "xrt_closure_new";
-    fprintf(out, "        xrt_closure_t *_c = (xrt_closure_t*)%s(&_xr_callable_%u, %u).ptr; ",
-            alloc_fn, v->id, (unsigned) child->ncaptures);
+    if (stack_closure)
+        fprintf(out, "    XRT_CLOSURE_STACK_FRAME(_xr_closure_frame_%u, %u);\n", v->id,
+                (unsigned) child->ncaptures);
+    fprintf(out, "    {\n");
+    if (stack_closure)
+        fprintf(out,
+                "        xrt_closure_t *_c = xrt_closure_stack_init(&_xr_closure_frame_%u, "
+                "sizeof(_xr_closure_frame_%u), &_xr_callable_%u, %u); ",
+                v->id, v->id, v->id, (unsigned) child->ncaptures);
+    else
+        fprintf(out,
+                "        xrt_closure_t *_c = "
+                "(xrt_closure_t*)xrt_closure_new(&_xr_callable_%u, %u).ptr; ",
+                v->id, (unsigned) child->ncaptures);
     emit_closure_upval_initializers(ctx, out, current, v, true);
     fprintf(out, "\n        ");
     emit_vref(out, v);

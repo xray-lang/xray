@@ -47,21 +47,21 @@ static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf, 
 
     if (!bundle || !bundle->modules || !bundle->program_target_plan)
         return set_error(errbuf, errbuf_len, "AOT bundle has no program TargetPlan");
+    const XrTargetPlan *target_plan = xaot_bundle_program_target_plan(bundle);
+    if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES)
+        return set_error(errbuf, errbuf_len,
+                         "AOT program TargetPlan family coverage is incomplete");
+    /* All modules share this immutable program authority. Verify its contents
+     * once per bundle admission, then check every module's membership below. */
+    if (!xr_target_plan_is_verified(target_plan) ||
+        !xr_target_plan_verify(target_plan, target_error, sizeof(target_error)))
+        return set_error(errbuf, errbuf_len, "AOT program TargetPlan is corrupt");
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_module(bundle, module_index)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
-        if (!module || !module->init || !target_plan)
+        if (!module || !module->init ||
+            !xaot_bundle_program_semantic_for_module(bundle, module_index))
             return set_error(errbuf, errbuf_len,
                              "AOT module is absent from the program TargetPlan");
-        if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES)
-            return set_error(errbuf, errbuf_len,
-                             "AOT program TargetPlan family coverage is incomplete");
-        if (!xr_target_plan_is_verified(target_plan) ||
-            !xr_target_plan_verify(target_plan, target_error, sizeof(target_error)))
-            return set_error(errbuf, errbuf_len, "AOT program TargetPlan is corrupt");
     }
     return true;
 }
@@ -860,6 +860,23 @@ XR_FUNC bool xaot_verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan 
             if (!member->payload_types[p])
                 return set_error(errbuf, errbuf_len,
                                  "AOT enum plan has a missing payload field type");
+        }
+    }
+    if (plan->owns_enum_data) {
+        const XrType *type = ed->declaration_type;
+        const XrEnumLayout *layout = type && type->kind == XR_KIND_ENUM
+                                        ? type->enum_type.layout : NULL;
+        if (plan->owns_members || !layout || !layout->is_zero_payload ||
+            !layout->name || !ed->name || strcmp(layout->name, ed->name) != 0 ||
+            layout->layout_id != ed->layout_id || layout->variant_count != ed->member_count ||
+            !layout->variants || plan->members != ed->members)
+            return set_error(errbuf, errbuf_len, "owned enum declaration does not match Xi layout");
+        for (uint32_t i = 0; i < layout->variant_count; i++) {
+            const XrEnumVariantLayout *variant = &layout->variants[i];
+            if (!variant->name || strcmp(variant->name, ed->members[i].name) != 0 ||
+                variant->tag != i || variant->payload_count != 0 ||
+                ed->members[i].payload_count != 0)
+                return set_error(errbuf, errbuf_len, "owned enum member does not match Xi layout");
         }
     }
     if (plan->layout_id != ed->layout_id)
@@ -3241,6 +3258,31 @@ verify_find_evidence_method_by_signature_in_class(const XgGlobalEvidence *ev,
     return NULL;
 }
 
+/* Static calls bind a declaration in the named class, not a virtual slot. */
+static const XgMethodSummary *verify_find_evidence_static_method(
+    const XgGlobalEvidence *ev, XgClassId class_id, uint32_t name_id,
+    uint32_t signature_key) {
+    const XgClassSummary *cls = verify_find_evidence_class(ev, class_id);
+    if (!cls || cls->method_start == 0 || name_id == 0 || signature_key == 0)
+        return NULL;
+    const XgMethodSummary *result = NULL;
+    for (uint32_t i = 0; i < cls->method_count; i++) {
+        uint32_t index = cls->method_start - 1 + i;
+        if (index >= ev->nmethods)
+            return NULL;
+        const XgMethodSummary *method = &ev->methods[index];
+        if (method->owner_class_id == class_id && method->name_id == name_id &&
+            method->signature_key == signature_key &&
+            (method->flags & XG_METHOD_STATIC) != 0 &&
+            (method->flags & XG_METHOD_CONSTRUCTOR) == 0) {
+            if (result)
+                return NULL;
+            result = method;
+        }
+    }
+    return result;
+}
+
 static const XgMethodSummary *
 verify_find_evidence_method_in_hierarchy(const XgGlobalEvidence *ev, XgClassId class_id,
                                          XgMethodId method_or_name_id) {
@@ -3859,9 +3901,13 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                     bool allow_constructor =
                         call_method && (call_method->flags & XG_METHOD_CONSTRUCTOR) != 0;
                     const XgMethodSummary *target_method =
-                        verify_find_evidence_method_by_signature_in_hierarchy(
-                            ev, call->receiver_static_class_id, call->method_name_id,
-                            call->method_signature_key, allow_constructor);
+                        call_method && (call_method->flags & XG_METHOD_STATIC) != 0
+                            ? verify_find_evidence_static_method(
+                                  ev, call->receiver_static_class_id, call->method_name_id,
+                                  call->method_signature_key)
+                            : verify_find_evidence_method_by_signature_in_hierarchy(
+                                  ev, call->receiver_static_class_id, call->method_name_id,
+                                  call->method_signature_key, allow_constructor);
                     if (!target_method || target_method->method_id != call->method_id)
                         return set_error(
                             errbuf, errbuf_len,

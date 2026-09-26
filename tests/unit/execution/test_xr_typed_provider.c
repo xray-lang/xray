@@ -9,10 +9,139 @@
 #include "xr_typed_provider_fixture.h"
 #include "base/xmalloc.h"
 #include "vm/xr_program_vm.h"
+#include "execution/xr_provider_transport.h"
 
 #define REQUIRE(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); abort(); } } while (0)
 
 #include "xr_typed_provider_host_fixture.h"
+#include "xr_typed_provider_bytes_fixture.h"
+
+#ifdef XR_TYPED_PROVIDER_ALLOCATION_TEST
+#include "xr_typed_provider_allocations.inc.c"
+
+static void check_byte_allocation_failures(XrVmCode *code, XrInstance *instance) {
+    size_t baseline = typed_live_count;
+    for (size_t failure = 1u; failure < 128u; ++failure) {
+        typed_attempt = 0u;
+        typed_fail_at = failure;
+        typed_failed = false;
+        typed_armed = true;
+        XrVmValue seed = {.kind = XR_VM_VALUE_U8, .as.u8 = 7u};
+        XrVmOutcome outcome = xr_vm_code_execute(code, instance, 0u, &seed, 1u);
+        typed_armed = false;
+        REQUIRE(outcome.kind == (typed_failed ? XR_VM_OUTCOME_RESOURCE_LIMIT : XR_VM_OUTCOME_RETURN));
+        xr_vm_outcome_dispose(&outcome);
+        REQUIRE(typed_live_count == baseline);
+        if (!typed_failed) {
+            REQUIRE(typed_attempt + 1u == failure);
+            printf("Byte loan allocation points: %zu\n", typed_attempt);
+            return;
+        }
+    }
+    abort();
+}
+#endif
+
+static XrProviderCallStatus fill_test_bytes(void *opaque, const XrProviderValuePack *arguments,
+                                            XrProviderValuePack *result) {
+    HostState *host = opaque;
+    ++host->calls;
+    REQUIRE(arguments->count == 1u && arguments->nodes[0].token == XR_PROVIDER_TYPE_U8_ARRAY);
+    size_t count = arguments->nodes[0].as.u8_array.size;
+    uint8_t *bytes = arguments->nodes[0].as.u8_array.data;
+    REQUIRE(count == 0u || count == 3u);
+    for (size_t i = 0u; i < count; ++i) {
+        REQUIRE(bytes[i] == 7u);
+        bytes[i] = (uint8_t)(40u + i);
+    }
+    result->count = 1u;
+    result->nodes[0].token = host->mode == 2u ? XR_PROVIDER_TYPE_BOOL : XR_PROVIDER_TYPE_UNIT;
+    return host->mode == 1u ? XR_PROVIDER_CALL_FAILED :
+           host->mode == 3u ? XR_PROVIDER_CALL_OUT_OF_MEMORY : XR_PROVIDER_CALL_OK;
+}
+
+static void check_byte_programs(void) {
+    XrTargetProfile *profile = typed_profile_build(4u);
+    REQUIRE(profile);
+    for (unsigned mutation = 1u; mutation <= 4u; ++mutation)
+        REQUIRE(typed_byte_program(false, mutation) == NULL);
+    REQUIRE(typed_byte_program(false, 6u) == NULL);
+    for (unsigned empty = 0u; empty < 2u; ++empty) {
+        XrValidatedProgram *program = typed_byte_program(empty != 0u, 0u);
+        REQUIRE(program);
+        XrVmCode *code = NULL;
+        XrVmCodeOptions options = xr_vm_code_default_options();
+        REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+        for (unsigned mode = 0u; mode < 4u; ++mode) {
+            HostState host = {.mode = mode};
+            XrProviderOperationBinding operation = {.operation_id = {{1u}},
+                .trampoline_kind = XR_PROVIDER_TRAMPOLINE_TYPED, .context = &host, .entry.typed = fill_test_bytes};
+            XrProviderBinding binding = {.contract_id = typed_contract_id,
+                .behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL, .operations = &operation, .operation_count = 1u};
+            for (size_t i = 0u; i < xr_target_profile_provider_count(profile); ++i) {
+                const XrTargetProviderContract *p = xr_target_profile_provider(profile, i);
+                if (memcmp(p->contract_id.bytes, typed_contract_id.bytes, XR_STABLE_ID_BYTES) == 0)
+                    REQUIRE(xr_target_provider_contract_fingerprint(p, &binding.contract_fingerprint) == XR_RUNTIME_ABI_OK);
+            }
+            XrExecutionBindingInput input = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+                .program = program, .profile = profile, .providers = &binding, .provider_count = 1u, .generation = 1u};
+            XrInstance *instance = NULL;
+            REQUIRE(xr_execution_instance_create(&input, &instance, NULL) == XR_EXECUTION_OK);
+            XrVmValue seed = {.kind = XR_VM_VALUE_U8, .as.u8 = 7u};
+            XrVmOutcome outcome = xr_vm_code_execute(code, instance, 0u, &seed, 1u);
+            REQUIRE(host.calls == 1u);
+            if (!mode) {
+                REQUIRE(outcome.kind == XR_VM_OUTCOME_RETURN);
+                XrVmAggregateView view = {0};
+                REQUIRE(xr_vm_value_aggregate_view(&outcome.value, &view));
+                REQUIRE(view.field_count == (empty ? 0u : 3u));
+                for (uint32_t i = 0u; i < view.field_count; ++i)
+                    REQUIRE(view.fields[i].kind == XR_VM_VALUE_U8 && view.fields[i].as.u8 == 40u + i);
+            } else if (mode == 3u) REQUIRE(outcome.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
+            else REQUIRE(outcome.kind == XR_VM_OUTCOME_TRAP && outcome.trap == XR_VM_TRAP_PROVIDER_CALL_FAILED);
+            xr_vm_outcome_dispose(&outcome);
+#ifdef XR_TYPED_PROVIDER_ALLOCATION_TEST
+            if (!mode) check_byte_allocation_failures(code, instance);
+#endif
+            REQUIRE(xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK);
+        }
+        xr_vm_code_free(code);
+        xr_validated_program_free(program);
+    }
+    xr_target_profile_free(profile);
+}
+
+static bool byte_view_admitted(XrProviderValuePack *pack, bool input, uint8_t mode) {
+    static const uint8_t type[] = {8u};
+    size_t offset = 0u;
+    uint32_t node = 0u;
+    return xr_provider_value_walk(NULL, (XrProviderLogicalTypeView){type, sizeof(type)},
+                                  &offset, pack, &node, input, mode) &&
+           offset == sizeof(type) && node == pack->count;
+}
+
+static void check_byte_view_transport(void) {
+    uint8_t storage[] = {0u, 127u, 255u};
+    XrProviderValuePack pack = {.count = 1u, .nodes = {{.token = XR_PROVIDER_TYPE_U8_ARRAY}}};
+    pack.nodes[0].as.u8_array.data = storage;
+    pack.nodes[0].as.u8_array.size = sizeof(storage);
+    REQUIRE(byte_view_admitted(&pack, true, XR_PROVIDER_MODE_REF));
+    REQUIRE(!byte_view_admitted(&pack, false, 0u));
+    REQUIRE(!byte_view_admitted(&pack, true, XR_PROVIDER_MODE_IN));
+    REQUIRE(!byte_view_admitted(&pack, true, XR_PROVIDER_MODE_OUT));
+    pack.nodes[0].token = XR_PROVIDER_TYPE_BYTES;
+    REQUIRE(!byte_view_admitted(&pack, true, XR_PROVIDER_MODE_REF));
+    pack.nodes[0].token = XR_PROVIDER_TYPE_U8_ARRAY;
+    pack.nodes[0].as.u8_array.data = NULL;
+    REQUIRE(!byte_view_admitted(&pack, true, XR_PROVIDER_MODE_REF));
+    pack.nodes[0].as.u8_array.size = 0u;
+    REQUIRE(byte_view_admitted(&pack, true, XR_PROVIDER_MODE_REF));
+    pack.nodes[0].child_count = 1u;
+    REQUIRE(!byte_view_admitted(&pack, true, XR_PROVIDER_MODE_REF));
+    REQUIRE(storage[0] == 0u && storage[1] == 127u && storage[2] == 255u);
+}
 
 static void check_direct_calls(XrInstance *instance, HostState *host) {
     XrExecutionLease lease = {0};
@@ -49,10 +178,6 @@ static void check_direct_calls(XrInstance *instance, HostState *host) {
     xr_execution_provider_result_dispose(&result);
     REQUIRE(host->made == 1u && host->freed == 1u);
 }
-
-#ifdef XR_TYPED_PROVIDER_ALLOCATION_TEST
-#include "xr_typed_provider_allocations.inc.c"
-#endif
 
 static void check_complete_resource_programs(void) {
     for (unsigned scenario = 4u; scenario <= 5u; ++scenario) {
@@ -91,6 +216,8 @@ static void check_complete_resource_programs(void) {
 }
 
 int main(void) {
+    check_byte_programs();
+    check_byte_view_transport();
     check_complete_resource_programs();
     XrTargetProfile *profile = typed_profile_build(0u);
     REQUIRE(profile != NULL);

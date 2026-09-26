@@ -109,7 +109,7 @@ static void test_record_type_invalid_and_hostile(void) {
     XrProgramView view;
     CHECK(xr_program_decode_structure(artifact.bytes, artifact.size, NULL, &view, NULL, 0u) ==
           XR_PROGRAM_DECODE_OK);
-    size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 19u * 4u;
+    size_t row = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset + 1u + 20u * 4u;
     /* Exact independent row: reference root, forbidden copy, one PanicInfo field. */
     const uint8_t first[39] = {32u, 40u, 1u, 2u, 1u, [36] = 1u, [37] = 5u};
     CHECK(row + sizeof(first) <= artifact.size);

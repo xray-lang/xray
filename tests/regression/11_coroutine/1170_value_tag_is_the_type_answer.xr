@@ -27,7 +27,7 @@ fn test_channel_is_still_recognized_as_a_channel() {
     // The predicate must keep answering yes for an actual channel.
     var ch = Channel<i64>(4)
     ch.send(7)
-    assertEqual(ch.isClosed(), false)
+    assertEqual(ch.isClosed, false)
     ch.close()
-    assertEqual(ch.isClosed(), true)
+    assertEqual(ch.isClosed, true)
 }

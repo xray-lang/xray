@@ -1,8 +1,8 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "a150eed8c055fdc2c839638d82deb9f2553d17b0cac50c21151cffbdb05012ff",
-  "program_schema_sha256": "45ea23754a62656fc42ab17ba7925d98422b1efa429524f27d9ea28d892baa46",
+  "core_spec_semantic_sha256": "69075c19fb8d9b74075be1c9c48e9bbcf8b8cc09dbc4118b5efa3332b6b6776a",
+  "program_schema_sha256": "ec846ecc84ec5d56f3646be719db19621b31259cd40a643ec902374f627b7da2",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "execution_budgets": [
@@ -10,7 +10,7 @@
     "call-depth",
     "aggregate-value-cells"
   ],
-  "operation_count": 83,
+  "operation_count": 95,
   "operations": [
     {
       "stable_id": 1,
@@ -675,6 +675,102 @@
       "verifier": "COMPLETE",
       "evaluator": "NOT_APPLICABLE",
       "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 168,
+      "spelling": "core.channel.construct",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 169,
+      "spelling": "core.channel.is_closed",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 170,
+      "spelling": "core.integer.bitwise",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 171,
+      "spelling": "core.string.slice",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 172,
+      "spelling": "core.array.allocate_default",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 173,
+      "spelling": "core.string_builder.construct",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 174,
+      "spelling": "core.string_builder.append",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 175,
+      "spelling": "core.string_builder.clear",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 176,
+      "spelling": "core.string_builder.length",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 177,
+      "spelling": "core.string_builder.snapshot",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 178,
+      "spelling": "core.bytes.timing_safe_equal",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 179,
+      "spelling": "core.array.append",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "NOT_APPLICABLE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     }
   ],
   "incomplete_operations": [],
@@ -698,7 +794,19 @@
     "core.constant.f64",
     "core.compare.f64",
     "core.scalar.bitcast64",
-    "core.string.from_scalar"
+    "core.string.from_scalar",
+    "core.channel.construct",
+    "core.channel.is_closed",
+    "core.integer.bitwise",
+    "core.string.slice",
+    "core.array.allocate_default",
+    "core.string_builder.construct",
+    "core.string_builder.append",
+    "core.string_builder.clear",
+    "core.string_builder.length",
+    "core.string_builder.snapshot",
+    "core.bytes.timing_safe_equal",
+    "core.array.append"
   ],
   "negative_mutations": [
     "core-spec-identity",

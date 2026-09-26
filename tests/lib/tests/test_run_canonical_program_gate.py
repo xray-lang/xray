@@ -1,6 +1,7 @@
 """Tests for the small exact canonical-Program lane runner."""
 
 import os
+import io
 import subprocess
 import unittest
 from pathlib import Path
@@ -18,8 +19,28 @@ runner = load_module(
 
 
 class CanonicalProgramGateEnvironmentTests(unittest.TestCase):
+    def test_provider_lane_covers_actual_stdlib_bindings(self) -> None:
+        for lane in ("provider", "asan-provider"):
+            targets, tests = runner.LANES[lane]
+            for name in ("test_stdlib_provider_contract", "test_stdlib_provider_binding"):
+                self.assertIn(name, targets)
+                self.assertIn(name, tests)
+            self.assertIn("test_stdlib_provider_metadata", tests)
+
+    def test_failed_command_reports_elapsed_time_and_still_fails(self) -> None:
+        output = io.StringIO()
+        with mock.patch.object(runner.subprocess, "run",
+                               return_value=subprocess.CompletedProcess(["probe"], 7)), \
+                mock.patch.object(runner.time, "perf_counter", side_effect=(10.0, 12.5)), \
+                mock.patch.object(runner.sys, "stderr", output):
+            with self.assertRaises(subprocess.CalledProcessError) as failure:
+                runner.run(["probe"])
+        self.assertEqual(failure.exception.returncode, 7)
+        self.assertEqual(runner.json.loads(output.getvalue()),
+                         {"command": ["probe"], "exit_code": 7, "elapsed_seconds": 2.5})
+
     def test_release_lanes_use_shared_edit_loop_environment(self) -> None:
-        for lane in ("semantic", "native"):
+        for lane in ("semantic", "native", "provider"):
             with self.subTest(lane=lane):
                 self.assertEqual(
                     runner.lane_environment(lane),
@@ -27,10 +48,12 @@ class CanonicalProgramGateEnvironmentTests(unittest.TestCase):
                 )
 
     def test_asan_lane_uses_sanitizer_environment(self) -> None:
-        self.assertEqual(
-            runner.lane_environment("asan-source"),
-            ("XR_ASAN_BUILD_DIR", "XR_ASAN_JOBS", "build-asan"),
-        )
+        for lane in ("asan-source", "asan-provider"):
+            with self.subTest(lane=lane):
+                self.assertEqual(
+                    runner.lane_environment(lane),
+                    ("XR_ASAN_BUILD_DIR", "XR_ASAN_JOBS", "build-asan"),
+                )
 
     def test_job_environment_is_strict(self) -> None:
         with mock.patch.dict(os.environ, {"XR_JOBS": "6"}, clear=True):

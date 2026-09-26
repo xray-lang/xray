@@ -11,6 +11,7 @@
  * produced by xi_lower.c and transformed by xi_opt.c.
  */
 
+#include "xi_array_default.h"
 #include "xi_verify.h"
 #include "xi_evidence.h"
 #include "xi_effect.h"
@@ -716,6 +717,12 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
     /* Op must be in valid range */
     if (v->op >= XI_OP_COUNT) {
         verr(ctx, "func '%s': value v%u in b%u has invalid op %u", f->name, v->id, blk->id, v->op);
+        return;
+    }
+
+    if (v->array_default_construct &&
+        (v->op != XI_ARRAY_NEW || v->nargs != 1u || !v->type || v->type->kind != XR_KIND_ARRAY)) {
+        verr(ctx, "func '%s': v%u has invalid runtime-length array construction identity", f->name, v->id);
         return;
     }
 
@@ -1496,7 +1503,7 @@ static bool verify_panic_catch_contract(VerifyCtx *ctx, const XiFunc *f, const X
             bool invoke = (registration->op == XI_CALL || registration->op == XI_CALL_METHOD ||
                            registration->op == XI_CALL_METHOD_DIRECT) &&
                           (checks == 1u || panic_only);
-            bool primitive = registration->op == XI_ASSERTION ||
+            bool primitive = xi_value_is_scalar_array_default(registration) || registration->op == XI_ASSERTION ||
                              registration->op == XI_INDEX_GET || registration->op == XI_INDEX_SET ||
                              ((registration->op == XI_DIV || registration->op == XI_MOD) &&
                               registration->type && registration->type->kind == XR_KIND_INT);
@@ -1905,15 +1912,27 @@ static bool verify_arg_access_matches_mode(XrParamMode mode, XrCallArgAccess acc
 
 /* Representation selection may insert a BOX/UNBOX bridge between the
  * source-level ownership edge and a tagged call boundary.  The move proof is
- * semantic, so follow only those representation wrappers; do not accept a
+ * semantic, so follow those wrappers and exact Optional Some injections; do not accept a
  * general COPY as a substitute for an explicit source move. */
 static bool verify_call_arg_has_source_move(const XiValue *value) {
     for (uint8_t depth = 0; value && depth < 8; depth++) {
         if (value->op == XI_SOURCE_MOVE)
             return true;
-        if (value->nargs != 1 || !value->args[0])
+        if (value->nargs != 1 || !value->args || !value->args[0])
             return false;
         switch ((XiOp) value->op) {
+            case XI_SUM_INJECT: {
+                const XiValue *payload = value->args[0];
+                if (value->aux_int != 1 || value->aux || !value->type ||
+                    !value->type->is_nullable || !payload->type || payload->type->is_nullable)
+                    return false;
+                XrType base = *value->type;
+                base.is_nullable = false;
+                if (!xr_type_equals(&base, payload->type))
+                    return false;
+                value = payload;
+                break;
+            }
             case XI_BOX:
             case XI_UNBOX:
             case XI_ENUM_DESCRIPTOR_BOX:

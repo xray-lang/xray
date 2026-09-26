@@ -832,6 +832,8 @@ static XrProgramBuildStatus copy_display_name(const char *input, char **output) 
 
 static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrType *output) {
     memset(output, 0, sizeof(*output));
+    if (input->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE && input->parent_type_id != XR_CORE_TYPE_VOID)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
     const XrStableId zero_resource = {{0}};
     if (input->kind != XR_CORE_IR_TYPE_PROVIDER_RESOURCE &&
         memcmp(input->resource_id.bytes, zero_resource.bytes, XR_STABLE_ID_BYTES) != 0)
@@ -846,7 +848,9 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     if ((input->kind != XR_CORE_IR_TYPE_ARRAY && input->array_element_type != 0u) ||
         (input->kind != XR_CORE_IR_TYPE_ATOMIC && input->atomic_element_type != 0u) ||
-        ((input->kind == XR_CORE_IR_TYPE_ARRAY || input->kind == XR_CORE_IR_TYPE_ATOMIC) &&
+        (input->kind != XR_CORE_IR_TYPE_CHANNEL && input->channel_element_type != 0u) ||
+        ((input->kind == XR_CORE_IR_TYPE_ARRAY || input->kind == XR_CORE_IR_TYPE_ATOMIC ||
+          input->kind == XR_CORE_IR_TYPE_CHANNEL) &&
          (input->view_element_type != 0u || input->view_capability != 0u ||
           input->callable_signature || !xr_core_ir_key_is_zero(input->existential_interface) ||
           input->interface_use_kind != 0u)))
@@ -863,10 +867,12 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
     output->ownership = input->ownership;
     output->copy_contract = input->copy_contract;
     output->field_count = input->field_count;
+    output->parent_type_id = input->parent_type_id;
     output->variant_count = input->variant_count;
     output->view_element_type = input->view_element_type;
     output->array_element_type = input->array_element_type;
     output->atomic_element_type = input->atomic_element_type;
+    output->channel_element_type = input->channel_element_type;
     output->resource_id = input->resource_id;
     output->view_capability = input->view_capability;
     output->existential_interface = input->existential_interface;
@@ -962,6 +968,9 @@ static bool remap_type_id(const XrCoreIrType *types, uint32_t count, uint16_t ol
 static bool remap_program_types(XrCoreIrProgram *program) {
     for (uint32_t index = 0; index < program->type_count; ++index) {
         XrCoreIrType *type = &program->types[index];
+        if (!remap_type_id(program->types, program->type_count, type->parent_type_id,
+                           &type->parent_type_id))
+            return false;
         for (uint32_t field = 0; field < type->field_count; ++field) {
             if (!remap_type_id(program->types, program->type_count, type->field_types[field],
                                &type->field_types[field]))
@@ -978,6 +987,10 @@ static bool remap_program_types(XrCoreIrProgram *program) {
         if (type->kind == XR_CORE_IR_TYPE_VIEW &&
             !remap_type_id(program->types, program->type_count, type->view_element_type,
                            &type->view_element_type))
+            return false;
+        if (type->kind == XR_CORE_IR_TYPE_CHANNEL &&
+            !remap_type_id(program->types, program->type_count, type->channel_element_type,
+                           &type->channel_element_type))
             return false;
         if (type->kind == XR_CORE_IR_TYPE_ARRAY &&
             !remap_type_id(program->types, program->type_count, type->array_element_type,
@@ -1459,7 +1472,8 @@ static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uin
         type->kind == XR_CORE_IR_TYPE_EXISTENTIAL ||
         type->kind == XR_CORE_IR_TYPE_CLASS_REFERENCE ||
         type->kind == XR_CORE_IR_TYPE_RECORD_REFERENCE || type->kind == XR_CORE_IR_TYPE_ARRAY ||
-        type->kind == XR_CORE_IR_TYPE_ATOMIC || type->kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE) {
+        type->kind == XR_CORE_IR_TYPE_ATOMIC || type->kind == XR_CORE_IR_TYPE_CHANNEL ||
+        type->kind == XR_CORE_IR_TYPE_PROVIDER_RESOURCE) {
         state[index] = 3u;
         return true;
     }
@@ -1493,6 +1507,48 @@ static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uin
     }
     state[index] = value_fields ? 2u : 3u;
     return type->nominal_kind != XR_CORE_IR_NOMINAL_STRUCT || value_fields;
+}
+
+static bool class_parent_graph_is_valid(const XrCoreIrProgram *program, uint8_t *state) {
+    memset(state, 0, program->type_count);
+    for (uint32_t index = 0u; index < program->type_count; ++index) {
+        const XrCoreIrType *type = &program->types[index];
+        uint16_t parent_id = type->parent_type_id;
+        if (parent_id == XR_CORE_TYPE_VOID)
+            continue;
+        if (type->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE ||
+            parent_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ||
+            (uint32_t) parent_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE >= program->type_count)
+            return false;
+        const XrCoreIrType *parent =
+            &program->types[(uint32_t) parent_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE];
+        if (parent->kind != XR_CORE_IR_TYPE_CLASS_REFERENCE || parent == type ||
+            parent->field_count > type->field_count)
+            return false;
+        for (uint32_t field = 0u; field < parent->field_count; ++field)
+            if (parent->field_types[field] != type->field_types[field])
+                return false;
+    }
+    /* Color each parent edge once; field-reference cycles do not participate. */
+    for (uint32_t index = 0u; index < program->type_count; ++index) {
+        uint32_t cursor = index;
+        while (cursor != UINT32_MAX && state[cursor] == 0u) {
+            state[cursor] = 1u;
+            uint16_t parent = program->types[cursor].parent_type_id;
+            cursor = parent == XR_CORE_TYPE_VOID ? UINT32_MAX
+                                                : (uint32_t) parent - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+        }
+        if (cursor != UINT32_MAX && state[cursor] == 1u)
+            return false;
+        cursor = index;
+        while (cursor != UINT32_MAX && state[cursor] == 1u) {
+            state[cursor] = 2u;
+            uint16_t parent = program->types[cursor].parent_type_id;
+            cursor = parent == XR_CORE_TYPE_VOID ? UINT32_MAX
+                                                : (uint32_t) parent - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+        }
+    }
+    return true;
 }
 
 static XrProgramBuildStatus validate_types(const XrCoreIrProgram *program) {
@@ -1569,6 +1625,14 @@ static XrProgramBuildStatus validate_types(const XrCoreIrProgram *program) {
                                    type->copy_contract == XR_CORE_IR_COPY_TRIVIAL
                              : type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
                                    type->copy_contract == XR_CORE_IR_COPY_FORBIDDEN);
+        } else if (type->kind == XR_CORE_IR_TYPE_CHANNEL) {
+            valid = valid && type->field_count == 0u && !type->field_types &&
+                    type->variant_count == 0u && !type->variants &&
+                    type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
+                    type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                    type->copy_contract == XR_CORE_IR_COPY_EXPLICIT &&
+                    type_id_supported(program, type->channel_element_type) &&
+                    type->channel_element_type != XR_CORE_TYPE_VOID;
         } else if (type->kind == XR_CORE_IR_TYPE_ATOMIC) {
             valid = valid && type->field_count == 0u && !type->field_types &&
                     type->variant_count == 0u && !type->variants &&
@@ -1613,6 +1677,8 @@ static XrProgramBuildStatus validate_types(const XrCoreIrProgram *program) {
         if (valid)
             valid = type_graph_visit(program, index, state);
     }
+    if (valid)
+        valid = class_parent_graph_is_valid(program, state);
     for (uint32_t index = 0; valid && index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
         if (type->kind == XR_CORE_IR_TYPE_ARRAY &&

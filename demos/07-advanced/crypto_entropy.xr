@@ -1,0 +1,4 @@
+import crypto
+const result = crypto.randomBytes(3)
+assert(len(result) == 6)
+print(len(result))

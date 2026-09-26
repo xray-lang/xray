@@ -143,6 +143,8 @@ static void test_runtime_owner_publishes_validated_structures(void) {
         XR_PROVIDER_IO_CONTRACT_KEY,
         XR_PROVIDER_CLOCK_CONTRACT_KEY,
         XR_PROVIDER_PROCESS_CONTRACT_KEY,
+        XR_PROVIDER_ENTROPY_CONTRACT_KEY,
+        XR_PROVIDER_BYTE_STORAGE_CONTRACT_KEY,
     };
     CHECK(authority.provider_count == sizeof(expected_providers) / sizeof(expected_providers[0]));
     for (size_t i = 0u; i < sizeof(expected_providers) / sizeof(expected_providers[0]); ++i)

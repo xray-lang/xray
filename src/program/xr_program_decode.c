@@ -199,6 +199,7 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
              kind != XR_PROGRAM_TYPE_KIND_VIEW && kind != XR_PROGRAM_TYPE_KIND_CALLABLE &&
              kind != XR_PROGRAM_TYPE_KIND_EXISTENTIAL &&
              kind != XR_PROGRAM_TYPE_KIND_ATOMIC &&
+             kind != XR_PROGRAM_TYPE_KIND_CHANNEL &&
              kind != XR_PROGRAM_TYPE_KIND_ARRAY &&
              kind != XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE &&
              kind != XR_PROGRAM_TYPE_KIND_RECORD_REFERENCE &&
@@ -223,6 +224,12 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
             }
             take_bytes(&section, resource, sizeof(resource));
             if (memcmp(resource, zero, sizeof(resource)) == 0)
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+        } else if (kind == XR_PROGRAM_TYPE_KIND_CHANNEL) {
+            if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                copy_contract != XR_CORE_IR_COPY_EXPLICIT ||
+                !encoded_type_id_is_valid(shape_head, dynamic_count) ||
+                shape_head == XR_CORE_TYPE_VOID)
                 section.status = XR_PROGRAM_DECODE_NONCANONICAL;
         } else if (kind == XR_PROGRAM_TYPE_KIND_ATOMIC) {
             if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
@@ -249,6 +256,13 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
                 uint64_t field_type = take_uvar(&section);
                 if (!encoded_type_id_is_valid(field_type, dynamic_count) ||
                     field_type == XR_CORE_TYPE_VOID)
+                    section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            }
+            if (kind == XR_PROGRAM_TYPE_KIND_CLASS_REFERENCE) {
+                uint64_t parent = take_uvar(&section);
+                if (parent != XR_CORE_TYPE_VOID &&
+                    (parent < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ||
+                     !encoded_type_id_is_valid(parent, dynamic_count) || parent == type_id))
                     section.status = XR_PROGRAM_DECODE_NONCANONICAL;
             }
         } else if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {

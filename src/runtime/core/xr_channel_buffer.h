@@ -19,6 +19,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define XR_CHANNEL_CORE_FUNCTION static inline __attribute__((unused))
+#else
+#define XR_CHANNEL_CORE_FUNCTION static inline
+#endif
+
 typedef struct XrChannelBufferState {
     uint32_t capacity;
     uint32_t count;
@@ -26,7 +32,7 @@ typedef struct XrChannelBufferState {
     uint32_t read_index;
 } XrChannelBufferState;
 
-static inline bool xr_channel_buffer_valid(const XrChannelBufferState *state) {
+XR_CHANNEL_CORE_FUNCTION bool xr_channel_buffer_valid(const XrChannelBufferState *state) {
     if (!state || state->count > state->capacity)
         return false;
     if (!state->capacity)
@@ -41,14 +47,14 @@ static inline bool xr_channel_buffer_valid(const XrChannelBufferState *state) {
 
 /* An offset is a logical occupied position, not a physical array index.
  * Subtract before adding so a valid ring near UINT32_MAX cannot wrap early. */
-static inline uint32_t xr_channel_buffer_slot(const XrChannelBufferState *state, uint32_t offset) {
+XR_CHANNEL_CORE_FUNCTION uint32_t xr_channel_buffer_slot(const XrChannelBufferState *state, uint32_t offset) {
     if (!xr_channel_buffer_valid(state) || offset >= state->count)
         return UINT32_MAX;
     uint32_t until_wrap = state->capacity - state->read_index;
     return offset >= until_wrap ? offset - until_wrap : state->read_index + offset;
 }
 
-static inline bool xr_channel_buffer_push(XrChannelBufferState *state, uint32_t *slot) {
+XR_CHANNEL_CORE_FUNCTION bool xr_channel_buffer_push(XrChannelBufferState *state, uint32_t *slot) {
     if (!slot || !xr_channel_buffer_valid(state) || state->count == state->capacity)
         return false;
     *slot = state->write_index;
@@ -58,7 +64,7 @@ static inline bool xr_channel_buffer_push(XrChannelBufferState *state, uint32_t 
     return true;
 }
 
-static inline bool xr_channel_buffer_pop(XrChannelBufferState *state, uint32_t *slot) {
+XR_CHANNEL_CORE_FUNCTION bool xr_channel_buffer_pop(XrChannelBufferState *state, uint32_t *slot) {
     if (!slot || !xr_channel_buffer_valid(state) || state->count == 0u)
         return false;
     *slot = state->read_index;

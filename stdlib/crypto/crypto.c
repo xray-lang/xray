@@ -53,8 +53,8 @@ static XrValue crypto_timing_safe_equal_bytes(XrVMRuntime *isolate, XrValue *arg
     if (!a || !b || a->elem_type != XR_ELEM_U8 || b->elem_type != XR_ELEM_U8 || a->length < 0 ||
         b->length < 0 || (a->length != 0 && !a->data) || (b->length != 0 && !b->data))
         return xr_bool(false);
-    return xr_bool(xr_crypto_core_timing_safe_equal((const char *) a->data, (size_t) a->length,
-                                                    (const char *) b->data, (size_t) b->length));
+    return xr_bool(xr_crypto_core_timing_safe_equal(a->data, (size_t) a->length, 1u,
+                                                    b->data, (size_t) b->length, 1u));
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_CRYPTO 1

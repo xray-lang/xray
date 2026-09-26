@@ -35,6 +35,7 @@
 #include "../base/xmemstream.h"
 #include "../base/xglobal_indices.h"
 #include "../os/os_dir.h"
+#include "../os/os_time.h"
 #include "../ir/xi.h"
 #include "../ir/xi_evidence.h"
 #include "../ir/xi_op_name.h"
@@ -77,6 +78,14 @@
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
+
+static void xaot_trace_phase(const char *phase, int module) {
+    if (!getenv("XRAY_AOT_PHASE_TIMING"))
+        return;
+    fprintf(stderr, "[aot-phase] time_ns=%llu phase=%s module=%d\n",
+            (unsigned long long) xr_time_monotonic_ns(), phase, module);
+    fflush(stderr);
+}
 
 static const uint32_t xaot_evidence_cache_phases[XG_EVIDENCE_CACHE_PHASE_COUNT] = {
     XG_EVIDENCE_CACHE_DECLARATIONS,
@@ -1973,6 +1982,7 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
         valid = semantics[i] && roots[i];
     }
     XrAotRefinementDiagnostic diag = {0};
+    xaot_trace_phase("direct-call-authority", -1);
     if (valid && !xr_aot_refinement_direct_call_authority_build_modules(
                      program_target, semantics, count, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID,
                      refinements, &failed_module, &diag)) {
@@ -1982,6 +1992,7 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
         valid = false;
     }
     if (valid) {
+        xaot_trace_phase("tail-call-conformance", -1);
         for (uint32_t i = 0; i < count; ++i)
             views[i] = xr_aot_refinement_plan_view(refinements[i]);
         XrAotTailCallDiagnostic tail_diag = {0};
@@ -1995,6 +2006,7 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
                     tail_diag.semantic_operation, tail_diag.target_call_index,
                     tail_diag.semantic_function, tail_diag.semantic_value);
     }
+    xaot_trace_phase("direct-call-complete", -1);
     for (uint32_t i = 0; refinements && i < count; ++i)
         xr_aot_refinement_plan_free(refinements[i]);
     xr_free(conformances);
@@ -2637,6 +2649,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             goto fail_free_ir;
         }
     }
+    xaot_trace_phase("target-build", -1);
     if (!xaot_build_program_target_plan(
             &aot_bundle, options->target_profile, xr_compiler_session_cache_store(session),
             evidence_cache_rebuild, evidence_cache_verbose,
@@ -2657,6 +2670,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             goto fail_free_ir;
         }
     }
+    xaot_trace_phase("module-summaries", -1);
     if (!xaot_publish_module_summaries(session, graph, modules, nmodules, source_program_closure,
                                        options, evidence_cache_verbose,
                                        &result->module_summary_cache))
@@ -2724,9 +2738,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     if (!xaot_validate_module_direct_calls(&aot_bundle))
         goto fail_free_ir;
+    xaot_trace_phase("representation", -1);
     if (!program_graph_product &&
         !xaot_install_module_representation_refinements(&aot_bundle, &cfg.rep_policy))
         goto fail_free_ir;
+    xaot_trace_phase("emission-plans", -1);
     /* Built before prepare, not after. The plans depend only on the retained
      * TargetPlans and the target profile -- neither of which prepare produces
      * -- and prepare has no dependency of its own on them. Building them here
@@ -2739,6 +2755,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         for (uint32_t mi = 0; mi < aot_bundle.nmodules; mi++)
             aot_bundle.module_emission_plans[mi] = emission_plans[mi];
     }
+    xaot_trace_phase("prepare", -1);
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
         if (emit_global_evidence_dump && global_evidence_dump)
             fputs(global_evidence_dump, stdout);
@@ -2746,6 +2763,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 aot_bundle.error_msg ? aot_bundle.error_msg : "?");
         goto fail_free_ir;
     }
+    xaot_trace_phase("prepare-complete", -1);
     /* Prepare may materialize representation adapters but may not alter the
      * frozen tail-call identity. Rebuild and recheck the authority before any
      * C-emission artifact can be published. */
@@ -2753,6 +2771,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     {
         char verify_err[512];
+        xaot_trace_phase("bundle-verify", -1);
         if (!xaot_verify_bundle(&aot_bundle, verify_err, sizeof(verify_err))) {
             /* A requested semantic-evidence dump is produced before Xi/AOT
              * preparation.  Preserve that diagnostic on a later verifier
@@ -2771,6 +2790,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             goto fail_free_ir;
         }
     }
+    xaot_trace_phase("bundle-verified", -1);
     if (!reject_profile_capability_plans(&aot_bundle))
         goto fail_free_ir;
     if (!reject_profile_metadata_plans(&aot_bundle))
@@ -2808,11 +2828,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     has_explicit_vector_ops = xaot_bundle_has_explicit_vector_ops(modules, nmodules);
+    xaot_trace_phase("cgen-install", -1);
     if (!xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle)) {
         fprintf(stderr, "Error: failed to install program C emission authority\n");
         xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;
     }
+    xaot_trace_phase("cgen-value-plans", -1);
     if (program_graph_product && evidence_cache_verbose)
         printf("[program-semantic-plan] modules=%d entry=%d xi=verified "
                "semantic=verified target=verified aot-binding=verified "
@@ -2825,6 +2847,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;
     }
+    xaot_trace_phase("cgen-options", -1);
     xi_cgen_ctx_set_target(cg_ctx, options->target, has_explicit_vector_ops);
     xi_cgen_ctx_set_artifact_kind(cg_ctx, artifact_kind);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
@@ -2835,7 +2858,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xi_cgen_ctx_set_residue_tracking(cg_ctx, want_residue);
 
     /* --- Resolve cross-module imports for C codegen --- */
+    xaot_trace_phase("cgen-imports", -1);
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
+    xaot_trace_phase("cgen-installed", -1);
 
     /* --- Generate C: one translation unit per module --- */
     XaotModuleSource *sources =
@@ -2849,6 +2874,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     size_t total_c_bytes = 0;
 
     for (int m = 0; m < nmodules && emit_ok; m++) {
+        xaot_trace_phase("emit-begin", m);
         char *buf = NULL;
         size_t bufsz = 0;
         FILE *mem = xr_open_memstream(&buf, &bufsz);
@@ -2866,6 +2892,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
              * (external cross-module symbols; entry unit carries main). */
             xi_cgen_module_tu(cg_ctx, mem, modules, nmodules, m, entry_index);
         }
+        xaot_trace_phase("emit-end", m);
         if (xi_cgen_has_error(cg_ctx)) {
             fprintf(stderr, "Error: AOT C code generation failed in module '%s'\n",
                     mod_names[m] ? mod_names[m] : "?");

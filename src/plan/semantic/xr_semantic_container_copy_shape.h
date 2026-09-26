@@ -39,7 +39,7 @@ static inline bool xr_semantic_container_copy_is_exact(const XrSemanticPlan *pla
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
     const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
-    if (!plan || !operation || !operands || !metadata || !children ||
+    if (!plan || !operation || !operands || !metadata ||
         operation->opcode != XI_CALL_BUILTIN || operation->operand_count != 1 ||
         operation->operand_begin >= operand_count || operation->metadata_count != 1 ||
         operation->metadata_begin >= metadata_count ||
@@ -68,6 +68,15 @@ static inline bool xr_semantic_container_copy_is_exact(const XrSemanticPlan *pla
         argument->origin != 0 || argument->lifetime != 0 || argument->escape != 0 || !result ||
         !source)
         return false;
+    if (xr_semantic_tagged_string_type_is_exact(result)) {
+        if (argument->type != operation->result_type)
+            return false;
+        if (argument_value)
+            *argument_value = argument->value;
+        if (element_storage)
+            *element_storage = XR_ELEM_ANY;
+        return true;
+    }
     /* Structural objects use the same explicit deep-copy call and owned tagged
      * result as containers. Field values are cloned by the existing object
      * graph copier; there is no homogeneous element lane on the outer root. */
@@ -85,7 +94,7 @@ static inline bool xr_semantic_container_copy_is_exact(const XrSemanticPlan *pla
     }
     /* The result is the owned array; the argument is either that same array or a
      * borrowed window over the same elements. */
-    if (result->kind != XR_KIND_ARRAY ||
+    if (!children || result->kind != XR_KIND_ARRAY ||
         result->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
         result->builtin_type != XR_TID_NULL || result->child_count != 1 ||
         result->aggregate_extent != 0 || result->aggregate_align != 0 ||

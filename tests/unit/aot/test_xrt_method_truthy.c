@@ -132,6 +132,67 @@ static XrValue test_string_with_bytes(const char *bytes, size_t len) {
     return s;
 }
 
+static void test_array_pop_transfers_element_owner(void) {
+    XrValue array_value = xrt_array_new(0);
+    xrt_array_t *array = (xrt_array_t *)array_value.ptr;
+    uint64_t version = array->content_version;
+    ASSERT_TRUE_MSG(XR_IS_NULL(xrt_method_0(array_value, XRT_SYM_POP)), "empty pop returns null");
+    ASSERT_TRUE_MSG(array->content_version == version, "empty pop does not mutate array");
+    XrValue text = test_string_with_bytes("survives", 8);
+    xrt_array_push(array_value, text);
+    version = array->content_version;
+    XrValue result = xrt_method_0(array_value, XRT_SYM_POP);
+    ASSERT_TRUE_MSG(array->length == 0 && array->content_version != version,
+                    "pop shortens array and invalidates content version");
+    xrt_release(array_value);
+    ASSERT_TRUE_MSG(XR_IS_STR(result) && xr_str_len(result) == 8 &&
+                    memcmp(xr_str_data(result), "survives", 8) == 0,
+                    "popped owner survives destruction of its former array");
+    xrt_release(result);
+    array_value = xrt_array_new(0);
+    xrt_array_push(array_value, test_string_with_bytes("discard", 7));
+    xrt_discard_owned(xrt_method_0(array_value, XRT_SYM_POP));
+    ASSERT_TRUE_MSG(((xrt_array_t *)array_value.ptr)->length == 0,
+                    "discarded pop consumes only its returned element");
+    xrt_release(array_value);
+}
+
+static void test_byte_array_pop_preserves_nullable_payload(void) {
+    const char bytes[] = {0, (char) 255};
+    XrValue text = test_string_with_bytes(bytes, sizeof(bytes));
+    XrValue array = xrt_method_0(text, XRT_SYM_COPY_BYTES);
+    xrt_release(text);
+    ASSERT_INT(xrt_method_0(array, XRT_SYM_POP), 255, "byte pop zero-extends upper boundary");
+    ASSERT_INT(xrt_method_0(array, XRT_SYM_POP), 0, "byte zero is distinct from null");
+    ASSERT_NULL(xrt_method_0(array, XRT_SYM_POP), "empty byte pop returns null");
+    xrt_release(array);
+}
+
+static void test_string_copy_bytes_owned_dispatch(void) {
+    const char input[] = {'A', '\0', (char)0xc3, (char)0xa9};
+    XrValue text = test_string_with_bytes(input, sizeof(input));
+    XrValue copy = xrt_method_0(text, XRT_SYM_COPY_BYTES);
+    ASSERT_TRUE_MSG(XR_IS_ARRAY(copy), "copyBytes returns an array");
+    xrt_array_t *array = (xrt_array_t *)copy.ptr;
+    ASSERT_TRUE_MSG(array && array->length == sizeof(input), "copyBytes preserves UTF-8 byte length");
+    ASSERT_TRUE_MSG(memcmp(array->data, input, sizeof(input)) == 0,
+                    "copyBytes preserves embedded null and UTF-8 bytes");
+    ((uint8_t *)array->data)[0] = 'B';
+    ASSERT_TRUE_MSG(memcmp(xr_str_data(text), input, sizeof(input)) == 0,
+                    "copyBytes owns independent mutable storage");
+    ASSERT_TRUE_MSG(xrt_method_result_is_owned(XRT_SYM_COPY_BYTES),
+                    "discarded copies require release");
+    xrt_release(copy);
+    xrt_discard_owned(xrt_method_0(text, XRT_SYM_COPY_BYTES));
+    xrt_release(text);
+    text = test_string_with_bytes("", 0);
+    copy = xrt_method_0(text, XRT_SYM_COPY_BYTES);
+    ASSERT_TRUE_MSG(XR_IS_ARRAY(copy) && ((xrt_array_t *)copy.ptr)->length == 0,
+                    "empty string produces an owned empty array");
+    xrt_release(copy);
+    xrt_release(text);
+}
+
 static void test_xrt_exact_number_parse_failure_channel(void) {
     const XrNumberParseErrorRegistryRow *row =
         xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
@@ -432,6 +493,9 @@ static void test_xrt_threadlocal_live_registry(void) {
 }
 
 int main(void) {
+    test_array_pop_transfers_element_owner();
+    test_byte_array_pop_preserves_nullable_payload();
+    test_string_copy_bytes_owned_dispatch();
     test_xrt_exact_number_parse_failure_channel();
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();

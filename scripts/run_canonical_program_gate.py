@@ -26,7 +26,31 @@ from xraytest import buildlock, sanitizer, workspace  # noqa: E402
 import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 
+PROVIDER_TARGETS = (
+    "test_stdlib_provider_contract",
+    "test_stdlib_provider_binding",
+    "test_provider_logical_contract",
+    "test_provider_logical_admission",
+    "test_xr_program_provider_requirements",
+    "test_xr_typed_provider",
+    "test_xr_typed_provider_allocations",
+    "test_xr_typed_provider_local_native",
+    "test_xr_typed_provider_module_native",
+    "test_xr_typed_provider_bytes_native",
+    "test_xr_typed_provider_empty_native",
+    "test_xr_typed_provider_bytes_module_native",
+    "test_xr_typed_provider_local_native_allocations",
+    "test_xr_typed_provider_module_native_allocations",
+    "test_xr_typed_provider_bytes_native_allocations",
+    "test_xr_typed_provider_empty_native_allocations",
+)
+PROVIDER_TESTS = (*PROVIDER_TARGETS, "test_provider_codegen",
+                  "test_stdlib_provider_metadata")
+
+
 LANES = {
+    "provider": (PROVIDER_TARGETS, PROVIDER_TESTS),
+    "asan-provider": (PROVIDER_TARGETS, PROVIDER_TESTS),
     "semantic": (
         (
             "test_xr_program",
@@ -76,7 +100,7 @@ LANES = {
 
 
 def lane_environment(lane: str) -> tuple[str, str, str]:
-    if lane == "asan-source":
+    if lane.startswith("asan-"):
         return "XR_ASAN_BUILD_DIR", "XR_ASAN_JOBS", "build-asan"
     return "XR_BUILD_DIR", "XR_JOBS", "build"
 
@@ -119,7 +143,7 @@ def activate_environment(lane: str, build_dir: Path) -> None:
 
     if not sanitizer.activate_windows_msvc_environment(log):
         raise RuntimeError("MSVC x64 SDK environment is unavailable")
-    if lane != "asan-source":
+    if not lane.startswith("asan-"):
         return
     spec = sanitizer.BuildSpec(
         build_dir=build_dir,
@@ -145,6 +169,9 @@ def run(command: list[str]) -> float:
     result = subprocess.run(command, cwd=ROOT, check=False)
     elapsed = time.perf_counter() - started
     if result.returncode:
+        print(json.dumps({"command": command, "exit_code": result.returncode,
+                          "elapsed_seconds": round(elapsed, 3)}),
+              file=sys.stderr, flush=True)
         raise subprocess.CalledProcessError(result.returncode, command)
     return elapsed
 
@@ -199,9 +226,12 @@ def main() -> int:
         lease = buildlock.BuildTreeLock(build_dir)
         with lease:
             lock_wait_seconds = time.perf_counter() - lock_started
+            environment_started = time.perf_counter()
             activate_environment(args.lane, build_dir)
+            environment_seconds = time.perf_counter() - environment_started
             build_seconds = run(build)
             test_seconds = run_exact_tests(test, LANES[args.lane][1])
+        total_seconds = time.perf_counter() - lock_started
     except (ValueError, TimeoutError, RuntimeError,
             subprocess.CalledProcessError) as error:
         print(f"canonical Program {args.lane} gate failed: {error}", file=sys.stderr)
@@ -211,9 +241,10 @@ def main() -> int:
             {
                 "lane": args.lane,
                 "lock_wait_seconds": round(lock_wait_seconds, 3),
+                "environment_seconds": round(environment_seconds, 3),
                 "build_seconds": round(build_seconds, 3),
                 "test_seconds": round(test_seconds, 3),
-                "total_seconds": round(build_seconds + test_seconds, 3),
+                "total_seconds": round(total_seconds, 3),
                 "targets": len(LANES[args.lane][0]),
                 "tests": len(LANES[args.lane][1]),
             },

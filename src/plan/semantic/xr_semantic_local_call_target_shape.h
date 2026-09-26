@@ -46,7 +46,8 @@ xr_semantic_call_target_names_local_function(const XrSemanticCallTargetRecord *t
      * receiver in operand 0, filling parameter 0. The two differ in whether the
      * binding is proven or owed, which is a question for the layer holding the
      * module graph, not for the shape. */
-    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
+    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_LOCAL ||
+        target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
         target->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL ||
         target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE)
         return operation->opcode == XI_CALL_METHOD;

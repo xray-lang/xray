@@ -10,7 +10,12 @@
 
 #include "xr_target_program_reachability.h"
 #include "../semantic/xr_semantic_class_shape.h"
+#include "../semantic/xr_semantic_imported_static_method_shape.h"
+#include "../semantic/xr_semantic_class_seal_shape.h"
+#include "../semantic/xr_semantic_dependency_method_shape.h"
 #include "../semantic/xr_semantic_local_call_target_shape.h"
+#include "../semantic/xr_semantic_direct_callee_shape.h"
+#include "../semantic/xr_semantic_allocation_shape.h"
 #include "../../base/xmalloc.h"
 #include <stdio.h>
 #include <string.h>
@@ -24,8 +29,12 @@ static bool reachability_fail(char *error, size_t error_size, const char *detail
 void xr_target_program_reachability_dispose(XrTargetProgramReachability *reachability) {
     if (!reachability)
         return;
+    xr_free(reachability->module_identities);
+    xr_free(reachability->module_fingerprints);
     xr_free(reachability->function_begins);
     xr_free(reachability->functions);
+    xr_free(reachability->class_begins);
+    xr_free(reachability->sealed_classes);
     memset(reachability, 0, sizeof(*reachability));
 }
 
@@ -37,6 +46,107 @@ bool xr_target_program_function_is_reachable(const XrTargetProgramReachability *
     uint32_t begin = reachability->function_begins[module];
     uint32_t end = reachability->function_begins[module + 1u];
     return function < end - begin && reachability->functions[begin + function] != 0;
+}
+
+bool xr_target_program_class_is_sealed(const XrTargetProgramReachability *reachability,
+                                       uint32_t module, uint32_t source_class) {
+    if (!reachability || !reachability->class_begins || !reachability->sealed_classes ||
+        module >= reachability->module_count)
+        return false;
+    uint32_t begin = reachability->class_begins[module];
+    uint32_t end = reachability->class_begins[module + 1u];
+    return source_class < end - begin && reachability->sealed_classes[begin + source_class] != 0;
+}
+
+static bool reachability_module_is_exact(const XrTargetProgramReachability *proof,
+                                          uint32_t module, const XrSemanticPlan *semantic) {
+    const XrSemanticEntityRecord *entity =
+        semantic ? xr_semantic_plan_unique_module_entity(semantic) : NULL;
+    return proof && entity && proof->module_identities && proof->module_fingerprints &&
+           module < proof->module_count &&
+           xr_stable_id_equal(proof->module_identities[module], entity->id) &&
+           xr_fingerprint_equal(proof->module_fingerprints[module],
+                                 xr_semantic_plan_fingerprint(semantic));
+}
+
+const XrSemanticSourceMethodRecord *xr_target_program_direct_dependency_method(
+    const XrTargetProgramReachability *proof, uint32_t caller_module,
+    const XrSemanticPlan *semantic, const XrSemanticCallTargetRecord *target,
+    const XrSemanticPlan *dependency) {
+    if (!reachability_module_is_exact(proof, caller_module, semantic))
+        return NULL;
+    const XrSemanticSourceMethodRecord *method =
+        xr_semantic_dependency_method_is_exact(semantic, target, dependency);
+    if (!method)
+        return NULL;
+    uint32_t match = UINT32_MAX;
+    for (uint32_t module = 0; module < proof->module_count; module++) {
+        if (!reachability_module_is_exact(proof, module, dependency))
+            continue;
+        if (match != UINT32_MAX)
+            return NULL;
+        match = module;
+    }
+    const XrSemanticSourceClassRecord *source_class =
+        xr_semantic_plan_source_class(dependency, method->source_class);
+    return match != UINT32_MAX && source_class &&
+           ((source_class->flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) != 0 ||
+            xr_target_program_class_is_sealed(proof, match, method->source_class))
+               ? method : NULL;
+}
+
+bool xr_target_program_call_binds_instance_method(
+    const XrTargetProgramReachability *reachability, uint32_t module,
+    const XrSemanticPlan *semantic, const XrSemanticCallTargetRecord *target) {
+    if (!target || !reachability_module_is_exact(reachability, module, semantic))
+        return false;
+    if (target->kind != XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE)
+        return xr_semantic_call_target_binds_instance_method(target, semantic, NULL, 0);
+    const XrSemanticTypeRecord *receiver = xr_semantic_plan_type(semantic, target->callable_type);
+    return receiver && xr_target_program_class_is_sealed(reachability, module,
+                                                        receiver->source_class);
+}
+
+static bool reachability_build_class_seals(const XrSemanticPlan *const *modules,
+                                           uint32_t module_count,
+                                           XrTargetProgramReachability *out) {
+    out->module_identities = (XrStableId *) xr_calloc(module_count, sizeof(XrStableId));
+    out->module_fingerprints = (XrFingerprint *) xr_calloc(module_count, sizeof(XrFingerprint));
+    if (!out->module_identities || !out->module_fingerprints)
+        return false;
+    for (uint32_t m = 0; m < module_count; m++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_unique_module_entity(modules[m]);
+        if (!entity)
+            return false;
+        out->module_identities[m] = entity->id;
+        out->module_fingerprints[m] = xr_semantic_plan_fingerprint(modules[m]);
+    }
+    out->class_begins = (uint32_t *) xr_calloc((size_t) module_count + 1u,
+                                               sizeof(*out->class_begins));
+    if (!out->class_begins)
+        return false;
+    for (uint32_t m = 0; m < module_count; m++) {
+        size_t count = xr_semantic_plan_source_class_count(modules[m]);
+        if (count > UINT32_MAX - out->class_begins[m])
+            return false;
+        out->class_begins[m + 1u] = out->class_begins[m] + (uint32_t) count;
+    }
+    uint32_t count = out->class_begins[module_count];
+    out->sealed_classes = (uint8_t *) xr_calloc(count ? count : 1u, 1u);
+    if (!out->sealed_classes)
+        return false;
+    for (uint32_t m = 0; m < module_count; m++) {
+        uint32_t begin = out->class_begins[m];
+        uint32_t end = out->class_begins[m + 1u];
+        for (uint32_t c = 0; c < end - begin; c++) {
+            const XrSemanticSourceClassRecord *source_class =
+                xr_semantic_plan_source_class(modules[m], c);
+            out->sealed_classes[begin + c] = source_class &&
+                xr_semantic_graph_seals_class(modules[0], modules + 1u, module_count - 1u,
+                                               source_class->name);
+        }
+    }
+    return true;
 }
 
 static bool reachability_mark(XrTargetProgramReachability *reachability, uint32_t module,
@@ -93,30 +203,26 @@ static bool reachability_mark_target(const XrSemanticPlan *const *modules, uint3
         return reachability_mark(reachability, caller_module, target->function, changed);
 
     if (target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+        target->kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY ||
         target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY) {
         uint32_t dependency_module = UINT32_MAX;
         if (!reachability_dependency_module(modules, module_count, semantic, target->dependency,
                                             &dependency_module))
             return false;
         const XrSemanticPlan *dependency = modules[dependency_module];
+        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_STATIC_METHOD_DEPENDENCY) {
+            uint32_t function = xr_semantic_dependency_static_method_is_exact(semantic, target, dependency);
+            return function != XR_SEMANTIC_INDEX_NONE &&
+                   reachability_mark(reachability, dependency_module, function, changed);
+        }
         if (target->kind == XR_SEM_CALL_TARGET_SOURCE_METHOD_DEPENDENCY) {
             /* A dependency method names its declaration, not an export-table
              * ordinal. Retaining its body does not prove a closed dispatch
              * domain; the execution adapter must still establish that. */
-            uint32_t function = XR_SEMANTIC_INDEX_NONE;
-            uint32_t count = (uint32_t) xr_semantic_plan_source_method_count(dependency);
-            for (uint32_t index = 0u; index < count; ++index) {
-                const XrSemanticSourceMethodRecord *method =
-                    xr_semantic_plan_source_method(dependency, index);
-                if (!method || !xr_stable_id_equal(method->id, target->export_identity))
-                    continue;
-                if (function != XR_SEMANTIC_INDEX_NONE ||
-                    method->function >= xr_semantic_plan_function_count(dependency))
-                    return false;
-                function = method->function;
-            }
-            return function != XR_SEMANTIC_INDEX_NONE &&
-                   reachability_mark(reachability, dependency_module, function, changed);
+            const XrSemanticSourceMethodRecord *method =
+                xr_semantic_dependency_method_is_exact(semantic, target, dependency);
+            return method && reachability_mark(reachability, dependency_module,
+                                               method->function, changed);
         }
         const XrSemanticSourceExportRecord *source_export =
             target->source_export < xr_semantic_plan_source_export_count(dependency)
@@ -154,6 +260,69 @@ static bool reachability_mark_target(const XrSemanticPlan *const *modules, uint3
            reachability_mark(reachability, constructor_module, constructor, changed);
 }
 
+/* Retaining a body is independent of admitting its physical spawn ABI. The
+ * storage verifier still proves initialization, dominance and argument transfer. */
+static const XrSemanticOperationRecord *reachability_value_definition(
+    const XrSemanticPlan *semantic, uint32_t value) {
+    const XrSemanticOperationRecord *match = NULL;
+    if (value == XR_SEMANTIC_INDEX_NONE)
+        return NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->result_value != value)
+            continue;
+        if (match)
+            return NULL;
+        match = operation;
+    }
+    return match;
+}
+
+static uint32_t reachability_spawn_target(const XrSemanticPlan *semantic,
+                                          const XrSemanticOperationRecord *spawn) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    if (!spawn || spawn->opcode != XI_GO || !operands || !spawn->operand_count ||
+        spawn->operand_begin > operand_count ||
+        spawn->operand_count > operand_count - spawn->operand_begin)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperandRecord *operand = &operands[spawn->operand_begin];
+    const XrSemanticOperationRecord *source =
+        reachability_value_definition(semantic, operand->value);
+    if (!source || source->function != spawn->function || source->result_type != operand->type)
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *producer = source;
+    const XrSemanticOperationRecord *store = NULL;
+    if (source->opcode == XI_GET_SHARED) {
+        for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+            const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+            if (!candidate || candidate->opcode != XI_SET_SHARED ||
+                candidate->semantic_immediate != source->semantic_immediate)
+                continue;
+            if (store)
+                return XR_SEMANTIC_INDEX_NONE;
+            store = candidate;
+        }
+        if (!store || store->operand_count != 1 || store->operand_begin >= operand_count)
+            return XR_SEMANTIC_INDEX_NONE;
+        producer = reachability_value_definition(semantic, operands[store->operand_begin].value);
+        if (!producer || producer->function != store->function ||
+            producer->result_type != operands[store->operand_begin].type)
+            return XR_SEMANTIC_INDEX_NONE;
+    }
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(semantic, producer->callable_function);
+    if (producer->opcode != XI_CLOSURE_NEW || producer->operand_count != 0 ||
+        !xr_semantic_allocation_identity_is_canonical(producer) ||
+        producer->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED || !callee ||
+        callee->capture_count != 0 || callee->parent != producer->function ||
+        (uint32_t) callee->parameter_count + 1u != spawn->operand_count ||
+        (store && !xr_semantic_direct_local_callee_type_is_exact(
+                      semantic, source, producer->callable_function)))
+        return XR_SEMANTIC_INDEX_NONE;
+    return producer->callable_function;
+}
+
 bool xr_target_program_reachability_build(const XrSemanticPlan *const *modules,
                                           uint32_t module_count, XrTargetProgramReachability *out,
                                           char *error, size_t error_size) {
@@ -187,6 +356,11 @@ bool xr_target_program_reachability_build(const XrSemanticPlan *const *modules,
         .function_begins = begins,
         .functions = functions,
     };
+
+    if (!reachability_build_class_seals(modules, module_count, out)) {
+        xr_target_program_reachability_dispose(out);
+        return reachability_fail(error, error_size, "program class seal allocation is incomplete");
+    }
 
     bool changed = false;
     for (uint32_t module = 0; module < module_count; module++) {
@@ -222,11 +396,18 @@ bool xr_target_program_reachability_build(const XrSemanticPlan *const *modules,
                  operation_index++) {
                 const XrSemanticOperationRecord *operation =
                     xr_semantic_plan_operation(semantic, operation_index);
-                if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF ||
+                if (!operation ||
                     !xr_target_program_function_is_reachable(out, module, operation->function))
                     continue;
-                if (!reachability_mark(out, module, operation->callable_function, &changed))
-                    goto invalid;
+                if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF) {
+                    if (!reachability_mark(out, module, operation->callable_function, &changed))
+                        goto invalid;
+                } else if (operation->opcode == XI_GO) {
+                    uint32_t callee = reachability_spawn_target(semantic, operation);
+                    if (callee != XR_SEMANTIC_INDEX_NONE &&
+                        !reachability_mark(out, module, callee, &changed))
+                        goto invalid;
+                }
             }
         }
     } while (changed);

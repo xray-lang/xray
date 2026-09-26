@@ -94,7 +94,7 @@ fn chameneo(id: i64, initial_color: i64) {
         meetings++
     }
 
-    if (!reply_ch.isClosed()) {
+    if (!reply_ch.isClosed) {
         reply_ch.close()
     }
     done_ch.send(meetings)

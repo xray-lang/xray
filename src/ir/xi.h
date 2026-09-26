@@ -1380,6 +1380,7 @@ typedef struct XiValue {
     uint32_t xg_callable_capability_union; /* union of exact target capabilities */
     uint32_t xa_intrinsic_id;      /* stable XaIntrinsicId for canonical semantic operations */
     uint8_t array_intrinsic_kind;  /* XiArrayIntrinsicKind, or NONE */
+    bool array_default_construct; /* Explicit Array<T>(length), never a literal prefix. */
     uint8_t array_member_kind;     /* XiArrayMemberKind, or NONE */
     uint8_t array_hof_kind;        /* XiArrayHofKind, or NONE */
     uint8_t array_element_storage; /* exact XrArrayElemType for a frozen Array operation */
@@ -1522,6 +1523,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_callable_capability_union = src->xg_callable_capability_union;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->array_intrinsic_kind = src->array_intrinsic_kind;
+    dst->array_default_construct = src->array_default_construct;
     dst->array_member_kind = src->array_member_kind;
     dst->array_hof_kind = src->array_hof_kind;
     dst->array_element_storage = src->array_element_storage;

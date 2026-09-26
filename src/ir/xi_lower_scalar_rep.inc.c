@@ -85,6 +85,11 @@ static XiValue *xi_lower_narrow_for_native_type(XiLower *l, AstNode *node, XiVal
         return NULL;
     struct XrType *result_type =
         target_type ? target_type : xi_lower_native_result_type(l, val->type, native_type);
+    /* An already exact optional value keeps its tagged null alternative.
+     * A native width operation would unbox it even on the null path. */
+    if (result_type && result_type->is_nullable && val->type &&
+        xr_type_equals(result_type, val->type))
+        return val;
     if (!narrow_op) {
         if (!result_type || !val->type || xr_type_equals(result_type, val->type) ||
             !((XR_TYPE_IS_INT(result_type) && XR_TYPE_IS_INT(val->type)) ||

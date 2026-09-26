@@ -343,7 +343,43 @@ static void test_f64_display(void) {
     }
 }
 
+static void test_scalar_ranges(void) {
+    /* A, e-acute, CJK, supplementary emoji, NUL, e, combining acute. */
+    static const uint8_t bytes[] = {
+        0x41, 0xc3, 0xa9, 0xe4, 0xb8, 0xad, 0xf0, 0x9f, 0x99, 0x82,
+        0x00, 0x65, 0xcc, 0x81,
+    };
+    static const size_t boundaries[] = {0u, 1u, 3u, 6u, 10u, 11u, 12u, 14u};
+    REQUIRE(xr_text_utf8_is_valid(bytes, sizeof(bytes)));
+    for (int64_t start = 0; start <= 7; ++start) {
+        for (int64_t end = start; end <= 7; ++end) {
+            size_t offset = SIZE_MAX, length = SIZE_MAX;
+            REQUIRE(xr_text_scalar_range(bytes, sizeof(bytes), start, end, &offset, &length));
+            REQUIRE(offset == boundaries[start]);
+            REQUIRE(length == boundaries[end] - boundaries[start]);
+        }
+    }
+    static const int64_t invalid[][2] = {
+        {-1, 0}, {0, -1}, {3, 2}, {0, 8}, {8, 8}, {0, INT64_MAX},
+        {INT64_MAX, INT64_MAX}, {INT64_MIN, 0},
+    };
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        size_t offset = SIZE_MAX, length = SIZE_MAX;
+        REQUIRE(!xr_text_scalar_range(bytes, sizeof(bytes), invalid[index][0], invalid[index][1],
+                                      &offset, &length));
+        REQUIRE(offset == 0u && length == 0u);
+    }
+    size_t offset = SIZE_MAX, length = SIZE_MAX;
+    REQUIRE(xr_text_scalar_range(NULL, 0u, 0, 0, &offset, &length));
+    REQUIRE(offset == 0u && length == 0u);
+    REQUIRE(!xr_text_scalar_range(NULL, 0u, 0, 1, &offset, &length));
+    REQUIRE(!xr_text_scalar_range(NULL, 1u, 0, 0, &offset, &length));
+    REQUIRE(!xr_text_scalar_range(bytes, sizeof(bytes), 0, 1, NULL, &length));
+    REQUIRE(!xr_text_scalar_range(bytes, sizeof(bytes), 0, 1, &offset, NULL));
+}
+
 int main(void) {
+    test_scalar_ranges();
     test_utf8_admission();
     test_rune_admission_and_encoding();
     test_i64_display();

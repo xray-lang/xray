@@ -25,7 +25,8 @@ EXPORT_EMITTER = Path("src/aot/program/xr_backend_ir_emit_exports.inc.c")
 PROVIDER_EMITTER = Path("src/aot/program/xr_backend_ir_provider.inc.c")
 PROVIDER_SOURCES = Path("src/aot/program/xr_provider_aot_sources_gen.inc.c")
 TYPED_PROVIDER_EMITTER = Path("src/aot/program/xr_backend_ir_emit_provider_typed.inc.c")
-EMISSION_FRAGMENTS = (TYPED_PROVIDER_EMITTER, COPY_EMITTER, CLASS_EMITTER, MODULE_EMITTER, EXPORT_EMITTER, PROVIDER_EMITTER, PROVIDER_SOURCES)
+STRING_BUILDER_EMITTER = Path("src/aot/program/xr_backend_ir_emit_string_builder.inc.c")
+EMISSION_FRAGMENTS = (STRING_BUILDER_EMITTER, TYPED_PROVIDER_EMITTER, COPY_EMITTER, CLASS_EMITTER, MODULE_EMITTER, EXPORT_EMITTER, PROVIDER_EMITTER, PROVIDER_SOURCES)
 POINTER_ABI_ASSERT = (
     '"_Static_assert(sizeof(void *) == %u && _Alignof(void *) == %u,\\n"'
 )

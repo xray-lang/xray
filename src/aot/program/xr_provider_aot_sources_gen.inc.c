@@ -14,6 +14,22 @@
 
 static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
     {
+        .contract_id = { { 0x13, 0xd0, 0xb3, 0x69, 0xe2, 0xeb, 0x0b, 0xed, 0x9d, 0x8d, 0x52, 0xc5, 0x3c, 0x7d, 0x15, 0x8a } },
+        .operation_id = { { 0xb9, 0x12, 0xce, 0x85, 0x4b, 0xac, 0x31, 0x0d, 0x1c, 0x15, 0x1a, 0x36, 0x61, 0xf6, 0xc7, 0xdb } },
+        .kind = XR_AOT_NATIVE_TYPED,
+        .header = "execution/xr_random_provider.h",
+        .definition =
+            "_Static_assert(_Generic(&xr_random_provider_fill,\n"
+            "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
+            "    \"Provider host signature does not match its explicit adapter\");\n"
+            "static int xr_aot_native_provider_0(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "    (void)context;\n"
+            "    return xr_random_provider_fill(context, arguments, result);\n"
+            "}\n"
+            "\n"
+        ,
+    },
+    {
         .contract_id = { { 0x17, 0x07, 0xc5, 0x61, 0xe4, 0x98, 0xd7, 0x3d, 0x03, 0x86, 0x23, 0x30, 0xb7, 0xcd, 0xae, 0xc6 } },
         .operation_id = { { 0x48, 0x83, 0x2a, 0x90, 0x67, 0x12, 0x89, 0x24, 0x47, 0xd7, 0x3f, 0xa2, 0x84, 0xa0, 0x74, 0x0c } },
         .kind = XR_AOT_NATIVE_I64_NULLARY,
@@ -22,7 +38,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_time_monotonic_ns,\n"
             "    uint64_t (*)(void): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_0(void *context, int64_t *result_out) {\n"
+            "static int xr_aot_native_provider_1(void *context, int64_t *result_out) {\n"
             "    (void)context;\n"
             "    if (!result_out) return 1;\n"
             "    uint64_t raw = xr_time_monotonic_ns();\n"
@@ -42,7 +58,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_time_realtime_ns,\n"
             "    uint64_t (*)(void): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_1(void *context, int64_t *result_out) {\n"
+            "static int xr_aot_native_provider_2(void *context, int64_t *result_out) {\n"
             "    (void)context;\n"
             "    if (!result_out) return 1;\n"
             "    uint64_t raw = xr_time_realtime_ns();\n"
@@ -62,7 +78,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_time_utc_offset_at,\n"
             "    bool (*)(int64_t, int64_t *): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_2(void *context, int64_t argument, int64_t *result_out) {\n"
+            "static int xr_aot_native_provider_3(void *context, int64_t argument, int64_t *result_out) {\n"
             "    (void)context;\n"
             "    return xr_time_utc_offset_at(argument, result_out) ?\n"
             "           0 : 1;\n"
@@ -79,7 +95,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_time_process_cpu_ns,\n"
             "    uint64_t (*)(void): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_3(void *context, int64_t *result_out) {\n"
+            "static int xr_aot_native_provider_4(void *context, int64_t *result_out) {\n"
             "    (void)context;\n"
             "    if (!result_out) return 1;\n"
             "    uint64_t raw = xr_time_process_cpu_ns();\n"
@@ -99,7 +115,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_os_core_getpid,\n"
             "    int64_t (*)(void): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_4(void *context, int64_t *result_out) {\n"
+            "static int xr_aot_native_provider_5(void *context, int64_t *result_out) {\n"
             "    (void)context;\n"
             "    if (!result_out) return 1;\n"
             "    *result_out = xr_os_core_getpid();\n"
@@ -117,7 +133,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_pipe_close,\n"
             "    int (*)(XrPipeHandle): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_5(void *context, int64_t argument, bool *result_out) {\n"
+            "static int xr_aot_native_provider_6(void *context, int64_t argument, bool *result_out) {\n"
             "    (void)context;\n"
             "    if (!result_out) return 1;\n"
             "    XrPipeHandle handle = (XrPipeHandle)argument;\n"
@@ -140,7 +156,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_pipe_create,\n"
             "    int (*)(XrPipe *, const XrPipeOptions *): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_6(void *context, bool *present_out, int64_t *first_out, int64_t *second_out) {\n"
+            "static int xr_aot_native_provider_7(void *context, bool *present_out, int64_t *first_out, int64_t *second_out) {\n"
             "    (void)context;\n"
             "    if (!present_out || !first_out || !second_out)\n"
             "        return 1;\n"
@@ -163,7 +179,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_byte_storage_allocate,\n"
             "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_7(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "static int xr_aot_native_provider_8(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
             "    (void)context;\n"
             "    return xr_byte_storage_allocate(context, arguments, result);\n"
             "}\n"
@@ -179,7 +195,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_byte_storage_allocate_zeroed,\n"
             "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_8(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "static int xr_aot_native_provider_9(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
             "    (void)context;\n"
             "    return xr_byte_storage_allocate_zeroed(context, arguments, result);\n"
             "}\n"
@@ -195,7 +211,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_byte_storage_length,\n"
             "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_9(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "static int xr_aot_native_provider_10(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
             "    (void)context;\n"
             "    return xr_byte_storage_length(context, arguments, result);\n"
             "}\n"
@@ -211,7 +227,7 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
             "_Static_assert(_Generic(&xr_byte_storage_allocate_aligned,\n"
             "    XrProviderCallStatus (*)(void *, const XrProviderValuePack *, XrProviderValuePack *): 1, default: 0),\n"
             "    \"Provider host signature does not match its explicit adapter\");\n"
-            "static int xr_aot_native_provider_10(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
+            "static int xr_aot_native_provider_11(void *context, const XrProviderValuePack *arguments, XrProviderValuePack *result) {\n"
             "    (void)context;\n"
             "    return xr_byte_storage_allocate_aligned(context, arguments, result);\n"
             "}\n"
@@ -219,6 +235,6 @@ static const XrAotNativeProviderSource xr_aot_native_provider_sources[] = {
         ,
     },
 };
-#define XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 11u
+#define XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 12u
 
 /* clang-format on */

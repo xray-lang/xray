@@ -70,6 +70,7 @@ CONSUMER_TASKS = {
 }
 STATUS_VALUES = {"COMPLETE", "NOT_YET_ACTIVE", "NOT_APPLICABLE"}
 ARITHMETIC_KINDS = {
+    "integer-bitwise",
     "none",
     "integer-conversion",
     "integer-division-remainder",
@@ -346,15 +347,17 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
         require(isinstance(operation["materialization"], str) and operation["materialization"],
                 f"operation {spelling} lacks materialization intent")
         require(operation["determinism"].get("kind") ==
-                ("linearizable" if spelling in {"core.atomic.load", "core.atomic.exchange", "core.atomic.compare_exchange", "core.atomic.update"}
+                ("linearizable" if spelling in {"core.channel.is_closed", "core.atomic.load", "core.atomic.exchange", "core.atomic.compare_exchange", "core.atomic.update"}
                  else "deterministic"),
                 f"operation {spelling} has an invalid execution-trace contract")
         require(isinstance(operation["determinism"].get("allowed_trace"), str)
                 and operation["determinism"]["allowed_trace"],
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
-            "scalar-bitcast64", "atomic-construct", "atomic-load", "atomic-exchange", "atomic-compare-exchange", "atomic-update",
-            "aggregate-construct", "array-construct", "sequence-element-place", "aggregate-project", "aggregate-update", "assert-condition",
+            "array-append", "bytes-timing-safe-equal", "string-builder-construct", "string-builder-append", "string-builder-clear",
+            "string-builder-length", "string-builder-snapshot",
+            "channel-construct", "channel-is-closed", "scalar-bitcast64", "atomic-construct", "atomic-load", "atomic-exchange", "atomic-compare-exchange", "atomic-update",
+            "aggregate-construct", "array-construct", "array-allocate-default", "sequence-element-place", "aggregate-project", "aggregate-update", "assert-condition",
             "class-construct", "owner-alias", "class-field-load", "class-field-place",
             "block-arguments", "branch", "cancel-publish", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
@@ -530,6 +533,40 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         raw = string_bytes(operand["value"], f"KAT {case['id']}")
         return {"value": str(len(raw.decode("utf-8")))}
 
+    if spelling == "core.integer.bitwise":
+        mode = immediates.get("operation")
+        if set(immediates) != {"operation"} or mode not in {"and", "or", "xor", "not", "shift-left", "shift-right"}:
+            return {"rejected": "integer-bitwise-mode"}
+        if len(arguments) != (1 if mode == "not" else 2):
+            return {"rejected": "integer-bitwise-shape"}
+        result_type = str(case.get("result_type"))
+        integer = re.fullmatch(r"([iu])(8|16|32|64)", result_type)
+        if not integer:
+            return {"rejected": "integer-type"}
+        values = []
+        for index, arg in enumerate(arguments):
+            if not isinstance(arg, dict) or set(arg) != {"type", "value"}:
+                return {"rejected": "integer-type"}
+            kind = re.fullmatch(r"([iu])(8|16|32|64)", str(arg["type"]))
+            if not kind or (not (index == 1 and mode.startswith("shift")) and arg["type"] != result_type):
+                return {"rejected": "integer-type"}
+            width, signed = int(kind[2]), kind[1] == "i"
+            value = int(arg["value"])
+            if not (-(1 << (width - 1)) if signed else 0) <= value <= (1 << (width - int(signed))) - 1:
+                return {"rejected": "integer-range"}
+            values.append(value)
+        left = values[0]
+        right = values[1] if len(values) == 2 else 0
+        result = {"and": lambda: left & right, "or": lambda: left | right,
+                  "xor": lambda: left ^ right, "not": lambda: ~left,
+                  "shift-left": lambda: left << (right % 64),
+                  "shift-right": lambda: left >> (right % 64)}[mode]()
+        width, signed = int(integer[2]), integer[1] == "i"
+        result %= 1 << width
+        if signed and result >= 1 << (width - 1):
+            result -= 1 << width
+        return {"value": str(result)}
+
     if spelling == "core.integer.divmod":
         if len(arguments) != 2 or set(immediates) != {"operation"}:
             return {"rejected": "integer-divmod-shape"}
@@ -608,6 +645,17 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
         rendered = render_display_operand(operand, f"KAT {case['id']} operand")
         require(rendered is not None, f"KAT {case['id']} scalar is not displayable")
         return string_result(rendered)
+    if spelling == "core.string.slice":
+        if len(arguments) != 3 or immediates:
+            return {"rejected": "string-slice-shape"}
+        raw = string_bytes(arguments[0], f"KAT {case['id']}")
+        if raw is None:
+            return {"rejected": "string-type"}
+        text = raw.decode("utf-8")
+        start, end = int(arguments[1]), int(arguments[2])
+        if start < 0 or end < start or end > len(text):
+            return {"panic": "index-out-of-bounds"}
+        return string_result(text[start:end].encode("utf-8"))
     if spelling == "core.string.concat":
         require(len(arguments) == 2 and not immediates,
                 f"KAT {case['id']} string.concat arity is not two")
@@ -1119,6 +1167,57 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and type(actual.get("allocation_count")) is int
                 and actual.get("allocation_count") == 0
                 and actual.get("cleanup_owners_preserved") is True)
+    if validator == "array-append":
+        element = actual.get("element_type")
+        before = actual.get("elements_before")
+        affine = actual.get("element_ownership") == "affine"
+        outcome = actual.get("outcome")
+        common = (isinstance(element, str) and element not in ("", "void", "any")
+                  and actual.get("operand_types") == [f"Array<{element}>", element]
+                  and actual.get("operand_categories") == ["place", "value"]
+                  and actual.get("operand_modes") == ["borrow-place-mut", "consume-if-owner"]
+                  and actual.get("element_ownership") in ("trivial", "affine")
+                  and actual.get("input_ownership") == ("owner" if affine else "non-owner")
+                  and actual.get("receiver_rooted") is True
+                  and actual.get("receiver_writable") is True
+                  and actual.get("receiver_initialized") is True
+                  and actual.get("borrow_conflict") is False
+                  and actual.get("result_type") == "void"
+                  and actual.get("result_ownership") == "non-owner"
+                  and actual.get("immediates") == {}
+                  and actual.get("identity_after") == actual.get("identity_before")
+                  and isinstance(actual.get("identity_before"), str)
+                  and bool(actual.get("identity_before"))
+                  and isinstance(before, list) and "element" in actual
+                  and type(actual.get("length_after")) is int)
+        if not common:
+            return False
+        if outcome == "ok":
+            return (actual.get("elements_after") == before + [actual["element"]]
+                    and actual.get("length_after") == len(before) + 1
+                    and actual.get("element_consumed") is affine)
+        return (outcome == "resource-limit"
+                and actual.get("elements_after") == before
+                and actual.get("length_after") == len(before)
+                and actual.get("backing_preserved") is True
+                and actual.get("element_consumed") is False)
+    if validator == "bytes-timing-safe-equal":
+        left, right = actual.get("left"), actual.get("right")
+        byte_array = lambda values: (isinstance(values, list)
+            and all(type(value) is int and 0 <= value <= 255 for value in values))
+        return (byte_array(left) and byte_array(right)
+                and actual.get("operand_types") == ["Array<u8>", "Array<u8>"]
+                and actual.get("operand_categories") == ["value", "value"]
+                and actual.get("operands_rooted") == [True, True]
+                and actual.get("operands_consumed") == [False, False]
+                and actual.get("result_type") == "bool"
+                and actual.get("result_ownership") == "non-owner"
+                and type(actual.get("result")) is bool
+                and actual.get("result") == (left == right)
+                and actual.get("visited_indices") == list(range(min(len(left), len(right))))
+                and actual.get("inputs_after") == [left, right]
+                and type(actual.get("allocation_count")) is int
+                and actual.get("allocation_count") == 0)
     if validator == "scalar-bitcast64":
         bits = actual.get("input_bits")
         return (actual.get("source_type") in {"i64", "u64", "f64"}
@@ -1127,6 +1226,27 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_bits") == bits
                 and actual.get("operand_ownership") == "non-owner"
                 and actual.get("result_ownership") == "non-owner")
+    if validator in {"channel-construct", "channel-is-closed"}:
+        common = (actual.get("type_kind") == "channel"
+                  and actual.get("element_type") not in (None, "", "void")
+                  and actual.get("type_ownership") == "affine"
+                  and actual.get("copy_contract") == "identity-preserving"
+                  and actual.get("source_consumed") is False)
+        if validator == "channel-is-closed":
+            return (common and actual.get("source_rooted") is True
+                    and actual.get("result_type") == "bool"
+                    and actual.get("result_ownership") == "non-owner"
+                    and type(actual.get("closed")) is bool
+                    and actual.get("result") is actual.get("closed")
+                    and actual.get("identity") == "preserved")
+        capacity = actual.get("capacity")
+        return (common and actual.get("operand_type") == "i64"
+                and type(capacity) is int and 0 <= capacity <= 0xffffffff
+                and actual.get("stored_capacity") == capacity
+                and actual.get("closed") is False and actual.get("count") == 0
+                and actual.get("result_ownership") == "owner"
+                and actual.get("result_type") == f"Channel<{actual.get('element_type')}>"
+                and actual.get("identity") == "fresh")
     if validator in {"atomic-construct", "atomic-load", "atomic-exchange", "atomic-compare-exchange", "atomic-update"}:
         element = actual.get("element_type")
         action = validator.removeprefix("atomic-")
@@ -1188,6 +1308,40 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and scalar_valid(actual.get("replacement"))
                 and type(actual.get("stored")) is type(actual.get("replacement"))
                 and actual.get("stored") == actual.get("replacement"))
+    if validator.startswith("string-builder-"):
+        operation = validator.removeprefix("string-builder-")
+        expected = {
+            "construct": ([], [], "string-builder", "owner"),
+            "append": (["string-builder", None], ["borrow-place-mut", "borrow-value"], "void", "non-owner"),
+            "clear": (["string-builder"], ["borrow-place-mut"], "void", "non-owner"),
+            "length": (["string-builder"], ["borrow-value"], "i64", "non-owner"),
+            "snapshot": (["string-builder"], ["borrow-value"], "string", "owner"),
+        }.get(operation)
+        if expected is None:
+            return False
+        types, modes, result, owner = expected
+        actual_types = actual.get("operand_types")
+        if operation == "append":
+            if (not isinstance(actual_types, list) or len(actual_types) != 2 or
+                    actual_types[1] not in {"string", "rune", "i64", "f64", "bool", "void"}):
+                return False
+            types = ["string-builder", actual_types[1]]
+        if (actual_types != types or actual.get("operand_modes") != modes or
+                actual.get("result_type") != result or actual.get("result_ownership") != owner or
+                actual.get("immediates") != {}):
+            return False
+        if operation != "construct" and (actual.get("receiver_rooted") is not True or
+                                          actual.get("receiver_initialized") is not True):
+            return False
+        return operation not in {"append", "clear"} or (
+            actual.get("receiver_writable") is True and actual.get("borrow_conflict") is False)
+    if validator == "array-allocate-default":
+        element = actual.get("element_type")
+        return (element in {"bool", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f64"}
+                and actual.get("operand_types") == ["i64"]
+                and actual.get("result_type") == f"Array<{element}>"
+                and actual.get("result_ownership") == "owner"
+                and actual.get("panic_type") == "PanicInfo")
     if validator == "array-construct":
         operands = actual.get("operand_types")
         element = actual.get("element_type")

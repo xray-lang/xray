@@ -32,8 +32,11 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_COMPARE_RUNE:
         case XR_CORE_OP_CORE_INTEGER_DIVMOD:
         case XR_CORE_OP_CORE_SCALAR_BITCAST64:
+        case XR_CORE_OP_CORE_INTEGER_BITWISE:
         case XR_CORE_OP_CORE_INTEGER_CONVERT:
         case XR_CORE_OP_CORE_STRING_FROM_SCALAR:
+        case XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT:
+        case XR_CORE_OP_CORE_STRING_SLICE:
         case XR_CORE_OP_CORE_STRING_CONCAT:
         case XR_CORE_OP_CORE_SEQUENCE_LENGTH:
         case XR_CORE_OP_CORE_SEQUENCE_ELEMENT_PLACE:
@@ -73,11 +76,20 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_PROVIDER_CALL:
         case XR_CORE_OP_CORE_OUTPUT_GROUP:
+        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
+        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
+        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
+        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
+        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT:
+        case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL:
+        case XR_CORE_OP_CORE_CHANNEL_CONSTRUCT:
+        case XR_CORE_OP_CORE_CHANNEL_IS_CLOSED:
         case XR_CORE_OP_CORE_ATOMIC_CONSTRUCT:
         case XR_CORE_OP_CORE_ATOMIC_LOAD:
         case XR_CORE_OP_CORE_ATOMIC_EXCHANGE:
         case XR_CORE_OP_CORE_ATOMIC_COMPARE_EXCHANGE:
         case XR_CORE_OP_CORE_ATOMIC_UPDATE:
+        case XR_CORE_OP_CORE_ARRAY_APPEND:
         case XR_CORE_OP_CORE_ARRAY_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
@@ -208,6 +220,9 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
             break;
         case XR_CORE_TYPE_PANIC_INFO:
             representation = XR_BACKEND_VALUE_PANIC_U32;
+            break;
+        case XR_CORE_TYPE_STRING_BUILDER:
+            representation = XR_BACKEND_VALUE_STRING_BUILDER_HANDLE;
             break;
         case XR_CORE_TYPE_STRING:
             representation = XR_BACKEND_VALUE_STRING_HANDLE;
@@ -373,6 +388,13 @@ XrBackendStatus xr_backend_ir_build(const XrValidatedProgram *program,
         !xr_target_profile_verify(profile, NULL, 0)) {
         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return XR_BACKEND_INVALID_INPUT;
+    }
+    for (uint32_t index = 0u; index < program->type_count; ++index) {
+        if (program->types[index].parent_type_id != XR_CORE_TYPE_VOID) {
+            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION,
+                                       0u, 0u, 0u, 0u);
+            return XR_BACKEND_UNSUPPORTED_OPERATION;
+        }
     }
     XrBackendStatus class_status = class_storage_status(program);
     if (class_status != XR_BACKEND_OK) {

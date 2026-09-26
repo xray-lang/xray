@@ -51,6 +51,8 @@ static void test_actions(void) {
 
     XaotTransferPlan copied = derive(func, make_go(func, local_array, XR_TRANSFER_COPY));
     require(copied.action == XR_TRANSFER_EXPLICIT_COPY);
+    require(copied.source_domain == XR_STORAGE_EXEC_LOCAL);
+    require(copied.target_domain == XR_STORAGE_TRANSFERABLE);
     require(copied.cost_class == XAOT_TRANSFER_COST_ON);
     require(copied.drop_action == XAOT_TRANSFER_DROP_CLONE);
 

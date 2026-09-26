@@ -344,19 +344,20 @@ def run_sharded(registry: dict, producer: Path, jobs: int) -> bool:
     if worker_count < 1:
         raise FixtureError("sharded source tests require at least one worker")
 
-    def run_case(name: str) -> tuple[str, subprocess.CompletedProcess[bytes] | None, str | None]:
+    def run_case(name: str) -> tuple[str, subprocess.CompletedProcess[bytes] | None, str | None, float]:
+        case_started = time.monotonic()
         try:
             result = subprocess.run([producer, "--run-case", name], capture_output=True,
                                     check=False, timeout=180)
-            return name, result, None
+            return name, result, None, time.monotonic() - case_started
         except subprocess.TimeoutExpired:
-            return name, None, "timed out after 180 seconds"
+            return name, None, "timed out after 180 seconds", time.monotonic() - case_started
 
     started = time.monotonic()
     with ThreadPoolExecutor(max_workers=worker_count) as pool:
         results = list(pool.map(run_case, names))
     failures = 0
-    for name, result, error in results:
+    for name, result, error, _ in results:
         if error is None and result is not None and result.returncode == 0:
             continue
         failures += 1
@@ -370,6 +371,8 @@ def run_sharded(registry: dict, producer: Path, jobs: int) -> bool:
     passed = len(names) - failures
     print(f"source shards: {passed}/{len(names)} passed with {worker_count} workers "
           f"in {elapsed:.2f}s")
+    for name, _, _, duration in sorted(results, key=lambda row: (-row[3], row[0]))[:5]:
+        print(f"source shard duration: {name} {duration:.3f}s")
     return failures == 0
 
 
@@ -754,6 +757,7 @@ class BuildGraphTests(unittest.TestCase):
                                str(producer),
                                "--jobs", "2"])
             self.assertIn("source shards: 1/1 passed with 1 workers", sharded)
+            self.assertRegex(sharded, r"source shard duration: example [0-9]+\.[0-9]{3}s")
 
 
 def parse_arguments(arguments: list[str]) -> argparse.Namespace:

@@ -304,6 +304,7 @@ static const char *xr_builtin_symbol_names[] = {
     "mulHigh",
     "window",
     "append",
+    "copyBytes",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

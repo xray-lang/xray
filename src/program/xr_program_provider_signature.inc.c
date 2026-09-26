@@ -77,12 +77,17 @@ static const XrProviderLogicalContract *provider_instruction_contract(
 }
 
 static bool provider_synchronous_policy(const XrProviderLogicalContract *logical) {
+    bool mutable_borrow = false;
+    if (logical) {
+        for (uint8_t i = 0u; i < logical->parameter_count; ++i)
+            mutable_borrow |= logical->parameter_modes[i] == XR_PROVIDER_MODE_REF;
+    }
     if (!logical ||
         (logical->effects & (XR_PROVIDER_EFFECT_MAY_ERROR | XR_PROVIDER_EFFECT_MAY_PANIC |
                              XR_PROVIDER_EFFECT_MAY_SUSPEND)) != 0u ||
         logical->error_owner != XR_PROVIDER_OWNER_TRIVIAL ||
         logical->threads != XR_PROVIDER_THREADS_ANY ||
-        logical->reentry != XR_PROVIDER_REENTRY_ALLOWED ||
+        logical->reentry != (mutable_borrow ? XR_PROVIDER_REENTRY_FORBIDDEN : XR_PROVIDER_REENTRY_ALLOWED) ||
         logical->callbacks != XR_PROVIDER_CALLBACK_NONE ||
         logical->refusal != XR_PROVIDER_REFUSAL_TRAP)
         return false;
@@ -91,10 +96,11 @@ static bool provider_synchronous_policy(const XrProviderLogicalContract *logical
            error.size == 1u && error.bytes[0] == XR_PROVIDER_TYPE_UNIT;
 }
 
-static bool verify_provider_signature(const XrValidatedProgram *program,
+static bool verify_provider_signature(VerifyContext *context,
                                       const XrValidatedFunction *function,
                                       const XrValidatedInstruction *instruction,
                                       uint32_t data_count) {
+    const XrValidatedProgram *program = context->program;
     const XrProviderLogicalContract *logical = provider_instruction_contract(program, instruction);
     if (!provider_synchronous_policy(logical) || logical->parameter_count != data_count ||
         instruction->result_category != XR_CORE_IR_VALUE ||
@@ -115,9 +121,44 @@ static bool verify_provider_signature(const XrValidatedProgram *program,
         XrProviderLogicalTypeView type;
         bool affine = xr_validated_program_type_ownership(program, type_id) ==
                       XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+        if (logical->parameter_modes[parameter] == XR_PROVIDER_MODE_REF) {
+            const XrValidatedType *array = xr_validated_program_type(program, type_id);
+            uint32_t root = scoped_place_root(function, value, function->value_blocks[value]);
+            if (!array || array->kind != XR_CORE_IR_TYPE_ARRAY || array->array_element_type != XR_CORE_TYPE_U8 ||
+                !affine || function->value_categories[value] != XR_CORE_IR_PLACE ||
+                function->value_ownerships[value] != XR_CORE_IR_NON_OWNER ||
+                logical->parameter_owners[parameter] != XR_PROVIDER_OWNER_BORROWED ||
+                logical->reentry != XR_PROVIDER_REENTRY_FORBIDDEN ||
+                instruction->result_type_id != XR_CORE_TYPE_VOID ||
+                !xr_provider_logical_contract_type(logical, (uint8_t)parameter, &type) ||
+                type.size != 1u || type.bytes[0] != XR_PROVIDER_TYPE_U8_ARRAY ||
+                root == XR_PROGRAM_LOCATION_NONE ||
+                (function->value_categories[root] == XR_CORE_IR_VALUE &&
+                 function->value_ownerships[root] != XR_CORE_IR_OWNER))
+                return false;
+            /* Distinct owned value roots prove disjoint storage. Reference and
+             * module roots need an address proof before simultaneous loans. */
+            for (uint32_t previous = 0u; previous < parameter; ++previous) {
+                if (logical->parameter_modes[previous] != XR_PROVIDER_MODE_REF)
+                    continue;
+                uint32_t other = instruction->operands[previous];
+                uint32_t other_root = scoped_place_root(function, other, function->value_blocks[other]);
+                if (other_root == XR_PROGRAM_LOCATION_NONE || other_root == root ||
+                    function->value_categories[root] != XR_CORE_IR_VALUE ||
+                    function->value_categories[other_root] != XR_CORE_IR_VALUE ||
+                    function->value_ownerships[other_root] != XR_CORE_IR_OWNER)
+                    return false;
+                uint32_t identity = scoped_reference_identity(context, function, root);
+                uint32_t other_identity = scoped_reference_identity(context, function, other_root);
+                if (identity == XR_PROGRAM_LOCATION_NONE || other_identity == XR_PROGRAM_LOCATION_NONE ||
+                    identity == other_identity)
+                    return false;
+            }
+            continue;
+        }
         /* Resource handles and byte views remain borrowed through synchronous
-         * host calls. Managed transfer and REF/OUT require their own executor
-         * handoff, and are not inferred from physical pointer arguments. */
+         * host calls. Managed transfer and OUT are not inferred from physical
+         * pointer arguments. */
         if (logical->parameter_modes[parameter] != XR_PROVIDER_MODE_IN ||
             logical->parameter_owners[parameter] !=
                 (affine ? XR_PROVIDER_OWNER_BORROWED : XR_PROVIDER_OWNER_TRIVIAL) ||

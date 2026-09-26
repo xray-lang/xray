@@ -13,7 +13,12 @@
 #include "../program/xr_program_module_fixture.h"
 #include "../program/xr_program_output_trap_fixture.h"
 #include "../program/xr_program_array_fixture.h"
+#include "../program/xr_program_string_builder_fixture.h"
+#include "../program/xr_program_array_default_fixture.h"
+#include "../program/xr_program_array_append_fixture.h"
+#include "../program/xr_program_string_slice_fixture.h"
 #include "../program/xr_program_atomic_fixture.h"
+#include "../program/xr_program_channel_fixture.h"
 #include "../program/xr_program_callable_fixture.h"
 #include "../program/xr_program_reborrow_fixture.h"
 #include "../program/xr_program_assert_fixture.h"
@@ -480,13 +485,75 @@ static void test_owned_result_allocation_failures(void) {
     xr_target_profile_free(profile);
 }
 
-static void test_atomic_allocation_failures(void) {
+static void test_sequence_allocation_failures(bool array) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    REQUIRE((array ? xr_program_array_default_fixture_write(0u, &artifact) : xr_program_string_slice_fixture_write(0u, &artifact)) == XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile);
-    for (unsigned boolean = 0u; boolean < 2u; ++boolean) {
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    XrVmCode *code = NULL;
+    REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
+    size_t baseline = live_count;
+    for (unsigned scenario = 0u; scenario < 3u; ++scenario) {
+        bool completed = false;
+        for (size_t failure = 1u; failure < 128u; ++failure) {
+            XrExecutionBindingInput binding = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+                .program = program, .profile = profile, .generation = 1u};
+            XrInstance *instance = NULL;
+            REQUIRE(xr_execution_instance_create(&binding, &instance, NULL) == XR_EXECUTION_OK);
+            XrVmValue args[2] = {{.kind = XR_VM_VALUE_I64, .as.i64 = scenario == 0u ? 1 : scenario == 1u ? 4 : -1},
+                                {.kind = XR_VM_VALUE_I64, .as.i64 = 4}};
+            if (array) args[0].as.i64 = scenario == 0u ? 3 : scenario == 1u ? 0 : -1;
+            attempt = 0u; fail_at = failure; failed = false; armed = true;
+            XrVmOutcome outcome = xr_vm_code_execute(code, instance,
+                xr_validated_program_entry_function(program), args, array ? 1u : 2u);
+            armed = false;
+            REQUIRE(outcome.kind == (failed ? XR_VM_OUTCOME_RESOURCE_LIMIT :
+                scenario == 2u ? XR_VM_OUTCOME_PANIC : XR_VM_OUTCOME_RETURN));
+            if (failed) {
+                REQUIRE(!outcome.private_owner && !outcome.owns_dynamic_values);
+            } else if (scenario == 2u) {
+                REQUIRE(outcome.panic_value.as.panic_info.code == (array ? 452u : 430u));
+            } else if (array) {
+                REQUIRE(outcome.value.kind == XR_VM_VALUE_I64 && outcome.value.as.i64 == args[0].as.i64);
+            } else {
+                XrVmStringView view = {0};
+                static const uint8_t expected[] = {0xc3,0xa9,0xe4,0xb8,0xad,0xf0,0x9f,0x99,0x82};
+                REQUIRE(xr_vm_value_string_view(&outcome.value, &view));
+                REQUIRE(view.size == (scenario == 0u ? sizeof(expected) : 0u));
+                REQUIRE(!view.size || memcmp(view.bytes, expected, sizeof(expected)) == 0);
+            }
+            xr_vm_outcome_dispose(&outcome);
+            REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+            REQUIRE(xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(live_count == baseline);
+            if (!failed) {
+                printf("VM sequence allocation failures: array=%u scenario=%u points=%zu\n", array, scenario, failure - 1u);
+                completed = true;
+                break;
+            }
+        }
+        REQUIRE(completed);
+    }
+    xr_vm_code_free(code);
+    REQUIRE(live_count == 0u);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_shared_handle_allocation_failures(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile);
+    for (unsigned kind = 0u; kind < 4u; ++kind) {
         XrProgramArtifact artifact = {0};
         XrValidatedProgram *program = NULL;
-        REQUIRE(xr_program_atomic_fixture_write(boolean != 0u, 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        REQUIRE((kind >= 2u ? xr_program_channel_fixture_write(kind == 2u ? 0 : 2, 0u, &artifact)
+                              : xr_program_atomic_fixture_write(kind != 0u, 0u, &artifact)) == XR_PROGRAM_BUILD_OK);
         REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
         xr_program_artifact_free(&artifact);
         XrExecutionBindingInput binding = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -507,8 +574,9 @@ static void test_atomic_allocation_failures(void) {
             armed = false;
             REQUIRE(outcome.kind == (failed ? XR_VM_OUTCOME_RESOURCE_LIMIT : XR_VM_OUTCOME_RETURN));
             if (!failed) {
-                REQUIRE(outcome.value.kind == (boolean ? XR_VM_VALUE_BOOL : XR_VM_VALUE_I64));
-                REQUIRE(boolean ? outcome.value.as.boolean : outcome.value.as.i64 == 42);
+                REQUIRE(outcome.value.kind == (kind ? XR_VM_VALUE_BOOL : XR_VM_VALUE_I64));
+                REQUIRE(kind >= 2u ? !outcome.value.as.boolean :
+                        kind ? outcome.value.as.boolean : outcome.value.as.i64 == 42);
                 completed = true;
             }
             xr_vm_outcome_dispose(&outcome);
@@ -517,7 +585,7 @@ static void test_atomic_allocation_failures(void) {
             REQUIRE(xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK);
             REQUIRE(live_count == baseline);
             if (completed) {
-                printf("VM atomic allocation failures: bool=%u points=%zu\n", boolean, failure - 1u);
+                printf("VM shared handle allocation failures: kind=%u points=%zu\n", kind, failure - 1u);
                 break;
             }
         }
@@ -587,10 +655,112 @@ static void test_assert_message_allocation_failures(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_string_builder_allocation_failures(void) {
+    for (unsigned scenario = 0u; scenario < 3u; ++scenario) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        REQUIRE(xr_program_string_builder_fixture_write(scenario ? 99u + scenario : 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+        xr_program_artifact_free(&artifact);
+        XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile);
+        XrVmCode *code = NULL;
+        REQUIRE(xr_vm_code_build(program, profile, NULL, &code, NULL) == XR_VM_CODE_OK);
+        size_t baseline = live_count;
+        bool completed = false;
+        for (size_t failure = 1u; failure < 128u; ++failure) {
+            XrExecutionBindingInput binding = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+                .program = program, .profile = profile, .generation = 1u};
+            XrInstance *instance = NULL;
+            REQUIRE(xr_execution_instance_create(&binding, &instance, NULL) == XR_EXECUTION_OK);
+            attempt = 0u; fail_at = failure; failed = false; armed = true;
+            XrVmOutcome outcome = xr_vm_code_execute(code, instance,
+                xr_validated_program_entry_function(program), NULL, 0u);
+            armed = false;
+            REQUIRE(outcome.kind == (failed ? XR_VM_OUTCOME_RESOURCE_LIMIT : XR_VM_OUTCOME_RETURN));
+            if (failed) REQUIRE(!outcome.private_owner && !outcome.owns_dynamic_values);
+            else {
+                const uint8_t expected[] = {'A', 0, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80};
+                XrVmStringView view;
+                REQUIRE(xr_vm_value_string_view(&outcome.value, &view));
+                REQUIRE(view.size == (scenario == 2u ? 0u : scenario == 1u ? 72u : 8u));
+                for (size_t offset = 0u; offset < view.size; offset += sizeof(expected))
+                    REQUIRE(memcmp(view.bytes + offset, expected, sizeof(expected)) == 0);
+            }
+            xr_vm_outcome_dispose(&outcome);
+            REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+            REQUIRE(xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(live_count == baseline);
+            if (!failed) {
+                printf("VM StringBuilder allocation failures: scenario=%u points=%zu\n", scenario, failure - 1u);
+                completed = true;
+                break;
+            }
+        }
+        REQUIRE(completed);
+        xr_vm_code_free(code);
+        REQUIRE(live_count == 0u);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+    }
+}
+
+static void test_array_append_allocation_failures(void) {
+    for (unsigned scenario = 0u; scenario < 2u; ++scenario) {
+        XrProgramArtifact artifact = {0};
+        XrValidatedProgram *program = NULL;
+        REQUIRE(xr_program_array_append_fixture_write(scenario ? 100u : 0u, &artifact) == XR_PROGRAM_BUILD_OK);
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
+        xr_program_artifact_free(&artifact);
+        XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        REQUIRE(profile);
+        XrVmCode *code = NULL;
+        REQUIRE(xr_vm_code_build(program, profile, NULL, &code, NULL) == XR_VM_CODE_OK);
+        size_t baseline = live_count;
+        bool completed = false;
+        for (size_t failure = 1u; failure < 128u; ++failure) {
+            XrExecutionBindingInput binding = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+                .program = program, .profile = profile, .generation = 1u};
+            XrInstance *instance = NULL;
+            REQUIRE(xr_execution_instance_create(&binding, &instance, NULL) == XR_EXECUTION_OK);
+            attempt = 0u; fail_at = failure; failed = false; armed = true;
+            XrVmValue argument = {.kind = XR_VM_VALUE_I64, .as.i64 = 42};
+            XrVmOutcome outcome = xr_vm_code_execute(code, instance,
+                xr_validated_program_entry_function(program), &argument, 1u);
+            armed = false;
+            REQUIRE(outcome.kind == (failed ? XR_VM_OUTCOME_RESOURCE_LIMIT : XR_VM_OUTCOME_RETURN));
+            if (failed) REQUIRE(!outcome.private_owner && !outcome.owns_dynamic_values);
+            else REQUIRE(outcome.value.kind == XR_VM_VALUE_I64 && outcome.value.as.i64 == 9);
+            xr_vm_outcome_dispose(&outcome);
+            REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
+            REQUIRE(xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK);
+            REQUIRE(live_count == baseline);
+            if (!failed) {
+                printf("VM array append allocation failures: scenario=%u points=%zu\n", scenario, failure - 1u);
+                completed = true;
+                break;
+            }
+        }
+        REQUIRE(completed);
+        xr_vm_code_free(code);
+        REQUIRE(live_count == 0u);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+    }
+}
+
 int main(void) {
+    test_array_append_allocation_failures();
+    test_string_builder_allocation_failures();
     test_assert_message_allocation_failures();
-    test_atomic_allocation_failures();
+    test_shared_handle_allocation_failures();
     test_owned_result_allocation_failures();
+    test_sequence_allocation_failures(false);
+    test_sequence_allocation_failures(true);
     test_array_allocation_failures();
     test_initializer_error_allocation_failures();
     test_output_allocation_failures();

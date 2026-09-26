@@ -1343,7 +1343,12 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_byte_slice_copy)
-  :aot-c (driver xicgen_byte_slice_copy))
+  :aot-c (driver xicgen_byte_slice_copy)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs)
+      (predicate "src/aot/xi_cgen.c" cg_unused_byte_append_emits_statement))))
 
 (lower xi.byte.slice.compare
   :match ()
@@ -1427,7 +1432,12 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_byte_array_append_from)
-  :aot-c (driver xicgen_byte_array_append_from))
+  :aot-c (driver xicgen_byte_array_append_from)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs)
+      (predicate "src/aot/xi_cgen.c" cg_unused_byte_append_emits_statement))))
 
 (lower xi.byte.array.repeat.from
   :match ()
