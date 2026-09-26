@@ -175,11 +175,34 @@ add_executable(test_xir_output_native xir/test_xir_output_native.c ${XIR_OUTPUT_
 target_link_libraries(test_xir_output_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_output_vm xir/test_xir_output_vm.c)
 target_link_libraries(test_xir_output_vm PRIVATE xray_xir_vm)
+add_xray_bootstrap_executable(test_xir_source xir/test_xir_source.c)
+target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
+add_xray_bootstrap_executable(test_xir_source_admission xir/test_xir_source_admission.c)
+target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
+add_xray_bootstrap_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
+target_link_libraries(test_xir_source_allocations PRIVATE xray_xir)
+target_compile_definitions(test_xir_source_allocations PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
+set(XIR_SOURCE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_fixture.c)
+add_custom_command(OUTPUT ${XIR_SOURCE_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_source> ${XIR_SOURCE_GENERATED}
+    DEPENDS test_xir_source
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/root.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/alpha.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/beta.xr
+    VERBATIM)
+add_executable(test_xir_source_native xir/test_xir_source_native.c ${XIR_SOURCE_GENERATED})
+target_link_libraries(test_xir_source_native PRIVATE xray_xir_scalar)
+add_xray_bootstrap_executable(test_xir_source_mixed xir/test_xir_source_mixed.c ${XIR_SOURCE_GENERATED})
+target_link_libraries(test_xir_source_mixed PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 foreach(xir_test IN ITEMS test_xir_execution test_xir_emit test_xir_native test_xir_calls
     test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
     test_xir_emit_program test_xir_program_vm test_xir_program_native
-    test_xir_emit_output test_xir_output_vm test_xir_output_native)
+    test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native
+    test_xir_source_admission test_xir_source_allocations test_xir_source_mixed)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()

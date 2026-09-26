@@ -1,0 +1,7 @@
+const counter = Atomic(10)
+export fn next() -> i64 { return counter.fetchAdd(1) }
+export fn tag(value: string) -> string {
+    var text = "a"
+    text = text + value
+    return text
+}

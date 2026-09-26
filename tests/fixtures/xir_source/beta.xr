@@ -1,0 +1,2 @@
+const counter = Atomic(20)
+export fn next() -> i64 { return counter.fetchAdd(1) }

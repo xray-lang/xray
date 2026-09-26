@@ -1,0 +1,10 @@
+import "./alpha" as alpha
+import { next as betaNext } from "./beta"
+print(alpha.tag("中"), betaNext())
+print(alpha.next())
+print(alpha.next(), alpha.next())
+print(true)
+var suffix = "!"
+fn main() { print("main must not run implicitly") }
+export fn result() -> string { return alpha.tag(suffix) }
+export fn advance() -> i64 { return alpha.next() }

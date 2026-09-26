@@ -6853,6 +6853,22 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
 精确准入、预算与租约责任见 `contracts/xir-program-instance.md`；这不授予源码或缓存格式资格。
 
+### 17.9 新 XIR 源码准入边界
+
+新 source owner 复用实际 parser 与模块 resolver/graph，直接检查声明和构造 Built，
+只发布拥有数据的 Checked；不调用旧 analyzer、IR 或执行器。首批按声明族准入
+bool/i64/string、只读参数的普通具名函数、直接调用、局部绑定、模块状态、string拼接、
+print及默认SeqCst的Atomic<i64>构造/load/fetchAdd。未实施语法明确拒绝；不将未约束泛型
+按实例猜测检查。每个函数体都检查，包括不可达函数。未标注返回类型的值返回推断尚不准入。
+
+顶层函数提升，顶层执行语句及绑定初始化按源码顺序每实例执行一次；main只是普通函数。
+各模块私有unit initializer与返回0的合成i64入口分开。库模块状态必须是const Sendable，
+当前准入scalar/string/Atomic<i64>；根var属于实例。跨模块调用要求直接导入与export，
+模块身份来自resolver，重复/私有/未解析声明与环拒绝。字符串AST已经解码，不重复解码。
+
+当前CALL/PRINT最多两个参数；泛型、完整stdlib、协程语法、foreign provider、parser完整
+OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口合同见 `contracts/xir-source-owner.md`。
+
 ---
 
 ## 18. 错误码 (Error Codes)

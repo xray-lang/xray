@@ -6909,6 +6909,30 @@ The initial instance interface admits exclusive driving by one host thread only.
 The precise internal contract is `contracts/xir-program-instance.md`; source and
 serialized/cache admission require separate qualification.
 
+### 17.9 New XIR Source Admission Boundary
+
+The source owner reuses the real parser and module resolver/graph, checks source
+declarations directly into Built, and publishes only owned Checked snapshots.
+It does not invoke the legacy analyzer, IR or executors. Initial admission covers
+bool/i64/string, ordinary named functions with read parameters, direct calls,
+local/module bindings, string concatenation, print, and default SeqCst Atomic<i64>
+construction/load/fetchAdd. Unimplemented syntax fails closed. All function bodies
+are checked, including unreachable ones; value-return inference without an
+annotation is not yet admitted. Generic bodies cannot bypass constraints.
+
+Functions are hoisted, while top-level statements and initializers run once per
+instance in source order. A function named main is ordinary. Private unit module
+initializers precede a separate synthesized i64 entry returning zero. Library
+state must be const Sendable; admitted carriers are scalar/string/Atomic<i64>.
+Root mutable state belongs to the instance. Cross-module calls require direct
+imports and export visibility, using resolver-owned identities. Duplicate,
+private, unresolved and cyclic declarations fail. Parser string payloads are
+already decoded and must not be decoded again.
+
+CALL/PRINT currently admit at most two arguments. Full generics, stdlib, coroutine
+syntax, foreign providers, parser OOM/input budgets, default CLI and product
+qualification remain separate. The interface contract is `contracts/xir-source-owner.md`.
+
 ---
 
 ## 18. Error Codes
