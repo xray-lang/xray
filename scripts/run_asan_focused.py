@@ -23,7 +23,7 @@ CMakeLists or CI: dead code that could only rot.
 
 Environment overrides:
     XR_ASAN_PROFILE       full (default), canonical-program, h2, h2-reference,
-                          h2-source, h2-vm, h2-aot, or generic-identity
+                          h2-source, h2-vm, h2-aot, generic-identity, or xir
     XR_ASAN_JOBS          parallel build/test jobs (default: all cores)
     XR_ASAN_BUILD_DIR     ASan build directory (default: build-asan)
     XR_ASAN_CTEST_REGEX   unit test name regex (default: ^test_)
@@ -81,6 +81,8 @@ ASAN_OPTIONS = ("detect_leaks=0:abort_on_error=1:symbolize=1:"
 UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
 EXACT_PROFILES = {
+    "xir": (("test_xir_stages", "test_xir_allocations"),
+            ("test_xir_stages", "test_xir_allocations")),
     "canonical-program": (
         canonical_profile.CTEST_NAMES,
         canonical_profile.BUILD_TARGETS,

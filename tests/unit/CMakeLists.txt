@@ -84,6 +84,25 @@ add_xray_python_unit_test(xr_program_h2_backend_differential_self_test
 # value/ — Value system
 # ============================================================================
 
+add_executable(test_xir_stages xir/test_xir_stages.c)
+target_link_libraries(test_xir_stages PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_stages PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_stages PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_stages COMMAND test_xir_stages)
+set_tests_properties(test_xir_stages PROPERTIES LABELS "unit;xir;metadata;ownership")
+add_executable(test_xir_allocations xir/test_xir_allocations.c)
+target_include_directories(test_xir_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test_xir_allocations PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_allocations PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_allocations COMMAND test_xir_allocations)
+set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
+
 # Task 295 CoreSpec metadata is intentionally independent of xray_core and both
 # executors. This target compiles only the generated registry projection.
 add_executable(test_core_spec

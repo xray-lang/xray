@@ -1,0 +1,10 @@
+/* name, stage mask, result rule, value operands, successors, terminator */
+XR_XIR_OP(CONST_BOOL, 7, BOOL,   0, 0, 0)
+XR_XIR_OP(CONST_I64,  7, I64,    0, 0, 0)
+XR_XIR_OP(COPY,       3, SCALAR, 1, 0, 0)
+XR_XIR_OP(SCALAR_COPY,4, SCALAR, 1, 0, 0)
+XR_XIR_OP(ADD_I64,    7, I64,    2, 0, 0)
+XR_XIR_OP(EQ_I64,     7, BOOL,   2, 0, 0)
+XR_XIR_OP(JUMP,       7, UNIT,   0, 1, 1)
+XR_XIR_OP(BRANCH,     7, UNIT,   1, 2, 1)
+XR_XIR_OP(RETURN,     7, UNIT,   0, 0, 1)

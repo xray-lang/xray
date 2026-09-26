@@ -27,6 +27,7 @@ class ContractSpec:
 
 
 CONTRACT_SPECS = (
+    ContractSpec("xir-stages.md", ()),
     ContractSpec(
         "intrinsic-identity.md",
         (

@@ -6810,6 +6810,29 @@ Both paths lower the program to Xi IR in `src/ir/`; they differ in optimization 
 `xray build --native file.xr` uses the prepare/verify/representation/container/link plans in `src/aot/`, generates C from Xi IR, and invokes a host, Clang, or Zig C toolchain. Hosted native binaries still link the Xray runtime; `--profile freestanding` uses a restricted freestanding capability set. Consult `xray build --help` for current `--target`, `--toolchain`, `--cpu`, `--lto`, and related options.
 
 Native AOT does not emit machine code directly from SSA and is not a JIT; the selected C toolchain produces the final machine code.
+### 17.6 Staged XIR Contract
+
+The new compiler has one stage order: `Built → Checked → specialization and
+reverification → Lowered`. This section freezes the nongeneric scalar subset;
+the preceding legacy product implementation has not migrated and no CLI cutover
+is claimed. Ordinary generics are checked against constraints at definition and
+specialized on Checked. Explicitly derived content is checked again. Ordinary
+instances close before immutable executable-image sealing; the VM executes Lowered.
+
+The initial internal subset admits unit, bool, and i64. Scalar copy preserves the
+value; signed i64 addition reports overflow; equality produces bool; branches
+require bool; returns match their declaration. Parameters in this internal subset
+are bool/i64; unit is a result/terminator type without a value ID. Calls, managed values, borrowing,
+generics, and new source spellings are absent and unsupported operations reject.
+Blocks partition instructions, are reachable from the entry, and end in exactly
+one terminator; entry has no predecessors. SSA uses require an earlier same-block
+definition or a dominating definition; unit instructions do not produce values.
+Abstract copy belongs to Built/Checked and physical scalar-copy to Lowered;
+changing a stage tag is insufficient. Transitions reverify and copy all metadata,
+publish no partial artifact on failure, and never borrow input storage. Structure,
+types, dominance, and verification work are bounded. Unknown stages, operations,
+and types reject. The exact internal fields and assertions are owned by
+`contracts/xir-stages.md`; this contract does not grant execution qualification.
 
 ---
 

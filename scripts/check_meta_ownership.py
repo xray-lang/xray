@@ -57,10 +57,10 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 # Category A is about IR/plan/evidence structs borrowing AST strings.
-A_SCAN_DIRS = ("src/ir", "src/aot", "src/analysis")
+A_SCAN_DIRS = ("src/ir", "src/aot", "src/analysis", "src/xir")
 # Category B (pointer-across-growth) is a general UAF shape; scan the same
 # compiler-meta layers where realloc-backed dynamic arrays live.
-B_SCAN_DIRS = ("src/ir", "src/aot", "src/analysis")
+B_SCAN_DIRS = ("src/ir", "src/aot", "src/analysis", "src/xir")
 # Category C is specific to the CGen context family.
 C_FILE_GLOBS = ("src/aot/xi_cgen",)
 

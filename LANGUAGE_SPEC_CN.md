@@ -6780,6 +6780,23 @@ Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码
 `xray build --native file.xr` 经 `src/aot/` 的 prepare/verify/representation/container/link plan，把 Xi IR 生成 C，再调用 host、Clang 或 Zig C toolchain 编译链接。hosted native 仍链接 Xray runtime；`--profile freestanding` 使用受限的 freestanding capability 集。`--target`、`--toolchain`、`--cpu`、`--lto` 等选项以 `xray build --help` 为准。
 
 native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码由所选 C toolchain 产生。
+### 17.6 分阶段 XIR 合同
+
+新编译主干唯一阶段顺序为 `Built → Checked → 特化与复验 → Lowered`。
+本节先冻结非泛型标量子集；前述旧产品实现尚未迁移，本节不宣称 CLI 已切换。
+普通泛型定义按约束检查，单态化位于 Checked；显式派生的新内容重新检查。
+普通实例在不可变可执行 image 封存前完成，VM 只执行 Lowered。
+
+首个内部子集接受 `unit`、`bool`、`i64`，标量复制保持值，`i64` 加法溢出报错，
+相等产生 `bool`，条件分支只接受 `bool`，返回类型须与声明相同。此内部子集参数
+只含 bool/i64；unit 可作结果和终结操作类型，不产生值 ID。
+此子集没有调用、托管值、借用、泛型或新源码拼写；未实现操作必须拒绝。
+CFG 的块完整划分指令，均从入口可达，并以一个终结操作结束；入口无前驱。
+SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不能作为值使用。
+抽象 copy 只在 Built/Checked，物理 scalar-copy 只在 Lowered，不能仅改阶段标签。
+阶段转换重新验证并复制所有元数据，成功产物不借用输入；失败不发布部分产物。
+验证的结构、类型、支配关系和工作量有预算，未知阶段、操作和类型均拒绝。
+精确内部字段及断言入口见 `contracts/xir-stages.md`；该合同不授予执行资格。
 
 ---
 

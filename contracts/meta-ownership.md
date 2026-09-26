@@ -17,4 +17,10 @@ cannot be made explicit.
 
 ## Verification
 
+The inventory scans `src/xir` as well as the existing compiler metadata layers.
+XIR stage snapshots copy function names, parameter types, block ranges, and
+instructions before the caller can destroy its construction storage. A behavioral
+lifetime assertion supplements the shape inventory; it does not replace it.
+
 verification-test: meta_ownership_inventory
+verification-test: test_xir_stages

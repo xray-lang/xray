@@ -2884,6 +2884,8 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 # Unit Tests
 # ============================================================================
 
+add_subdirectory(src/xir)
+
 if(BUILD_TESTS)
     enable_testing()
 
