@@ -200,13 +200,24 @@ static void source_compound_fault(XrXirInstance *instance, uint32_t calculate) {
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == (i ? 3 : 0));
     }
 }
-typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text; } SourceFunctions;
+static void source_deep_pair(XrXirInstance **instances, uint32_t function, XrXirValue *results) {
+    for (unsigned i = 0; i < 2; ++i) {
+        XrXirValue argument = {XR_XIR_I64, 0, 64 + i};
+        CHECK(xr_xir_instance_start(instances[i], function, &argument, 1) == XR_XIR_CALL_READY);
+    }
+    for (unsigned i = 0; i < 2; ++i) source_resume_once(instances[i], xr_xir_instance_poll(instances[i]));
+    for (unsigned i = 0; i < 2; ++i) {
+        CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
+    }
+}
+typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text, stack_depth; } SourceFunctions;
 static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions functions, XrXirValue *results) {
     SourceOutput outputs[2] = {{0, false}, {0, true}};
     XrXirOutputSink sinks[2] = {{source_bytes, &outputs[0], 65536}, {source_bytes, &outputs[1], 65536}};
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     config.metadata_limit = 65536; config.value_limit = 65536; config.call_limit = 65536;
-    config.poll_limit = 2000; config.depth_limit = 16;
+    config.poll_limit = 2000; config.depth_limit = 96;
     XrXirInstance *instances[2] = {NULL, NULL};
     for (uint32_t i = 0; i < 2; ++i) {
         config.output = (XrXirOutputProvider) {xr_xir_output_render, &sinks[i]};
@@ -226,6 +237,8 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
     source_cancel_cases(program, entry, functions.resume_text);
     XrXirValue resumed[2] = {{0}, {0}};
     source_resume_pair(instances, functions.resume_text, resumed);
+    XrXirValue deep[2] = {{0}, {0}};
+    source_deep_pair(instances, functions.stack_depth, deep);
     source_failed_init(program, entry, config);
     for (unsigned i = 0; i < 2; ++i) source_compound_fault(instances[i], functions.calculate);
     for (unsigned i = 0; i < 2; ++i) source_bitwise(instances[i], functions.calculate);
@@ -244,6 +257,9 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         const char *bytes = NULL; size_t length = 0;
         CHECK(xr_xir_string_view(&resumed[i], &bytes, &length) && length == 3 && !memcmp(bytes, i ? "ry!" : "rn!", 3));
         xr_xir_value_drop(&resumed[i]);
+        CHECK(xr_xir_string_view(&deep[i], &bytes, &length) && length == 130 + i * 2);
+        for (size_t at = 0; at < length; ++at) CHECK(bytes[at] == (at % 2 ? 'r' : 'f'));
+        xr_xir_value_drop(&deep[i]);
     }
 }
 static void source_result_drop(XrXirValue *value) {

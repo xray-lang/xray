@@ -16,13 +16,13 @@
 #include "xir_source_runtime_allocations.h"
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
-XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text;
+XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth;
 int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&fixture_source_program, 262144, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, fixture_source_program.declarations->entry_function,
-        (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text}, results);
+        (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth}, results);
     runtime_source_failures(program, fixture_source_program.declarations->entry_function, fixture_source_resume_text);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);

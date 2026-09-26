@@ -2,7 +2,7 @@
 
 This internal x86_64 call ABI establishes control-flow and cleanup ownership.
 It does not certify source calls, generic caches, module instances,
-concurrent cancellation, segmented allocation, or product migration.
+concurrent cancellation, or product migration.
 
 A sealed call table contains typed entry descriptors. An activation owns a copied
 table, copied parameter types, and its nonmoving frames. Entry environments and
@@ -39,6 +39,27 @@ have separate limits. Accounting includes the activation and copied descriptors,
 not just user payload. Allocation failure restores live bytes and allocation/free
 counts to a balanced state with live bytes at the caller's baseline. Entry state
 is aligned to sixteen bytes on this target. Cleanup cannot create new calls or suspend.
+
+Each activation owns a linked stack of nonmoving frame segments. A segment normally
+reserves 4096 physical bytes including its header; oversized frames reserve their
+exact aligned footprint. A smaller remaining budget may reduce a normal segment,
+but never below the complete frame plus metadata and guard space. Every reserved
+byte, unused tail, header and alignment gap is charged to the same physical budget.
+No active segment is reallocated or shared between activations. Pushing a frame
+copies arguments before publishing it; failed argument copies roll back the
+reservation and release an otherwise empty segment. Frames are zeroed on admission.
+Popping runs cleanup and releases arguments/inbox before rewinding storage. Empty
+segments are physically freed immediately, including the last segment on terminal
+completion; there is no retained empty-segment cache. Live ancestors keep their
+addresses across expansion, child return and suspension. No source borrow lifetime
+or escaping view permission follows merely from address stability.
+
+Sanitizer builds poison unused segment storage, frame tail guards and popped
+frames, and unpoison only a newly admitted frame. This preserves detection of
+cross-frame overrun and use-after-pop while a segment still contains live ancestors.
+Normal and instrumented builds use identical physical layout and budget rules.
+The host-thread exclusivity and nonrecursive trampoline rules above still apply;
+segmentation neither introduces a scheduler nor admits concurrent driving.
 
 verification-test: test_xir_calls
 verification-test: test_xir_emit_calls

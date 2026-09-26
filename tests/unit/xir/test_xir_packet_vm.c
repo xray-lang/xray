@@ -38,15 +38,16 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
-    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX;
+    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) result = i;
         if (module->functions[i].name_length == 9 && !memcmp(module->functions[i].name, "calculate", 9)) calculate = i;
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "update", 6)) update = i;
         if (module->functions[i].name_length == 10 && !memcmp(module->functions[i].name, "resumeText", 10)) resume_text = i;
+        if (module->functions[i].name_length == 10 && !memcmp(module->functions[i].name, "stackDepth", 10)) stack_depth = i;
         if (module->functions[i].name_length == 7 && !memcmp(module->functions[i].name, "advance", 7)) advance = i;
     }
-    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX);
+    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirCSource source;
     CHECK(xr_xir_emit_c(lowered, "fixture_source", 524288, &source) == XR_XIR_OK);
@@ -55,13 +56,14 @@ int main(int argc, char **argv) {
         CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         CHECK(fprintf(file, "\nconst uint32_t fixture_source_result = %uu;\nconst uint32_t fixture_source_advance = %uu;\nconst uint32_t fixture_source_update = %uu;\nconst uint32_t fixture_source_calculate = %uu;\n", result, advance, update, calculate) > 0);
         CHECK(fprintf(file, "const uint32_t fixture_source_resume_text = %uu;\n", resume_text) > 0);
+        CHECK(fprintf(file, "const uint32_t fixture_source_stack_depth = %uu;\n", stack_depth) > 0);
         CHECK(fclose(file) == 0);
     }
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text}, results);
+    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth}, results);
     runtime_source_failures(program, entry, resume_text);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);

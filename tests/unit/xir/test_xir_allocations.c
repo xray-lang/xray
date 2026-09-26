@@ -89,6 +89,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_string_fixture.h"
 #include "xir_output_fixture.h"
 #include "xir_local_fixture.h"
+#include "xir_segment_cases.h"
 
 static void phi_snapshot_failure(void) {
     XrXirArtifact *checked = local_fixture(), *lowered = NULL;
@@ -337,6 +338,7 @@ static size_t declaration_allocation_failures(void) {
 }
 
 int main(void) {
+    segment_cases();
     XrXirInstruction ops[] = {
         {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 42},
         {XR_XIR_COPY, XR_XIR_I64, {0, 0}, {0, 0}, 0},

@@ -47,20 +47,21 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
-    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX;
+    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) result = i;
         if (module->functions[i].name_length == 9 && !memcmp(module->functions[i].name, "calculate", 9)) calculate = i;
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "update", 6)) update = i;
         if (module->functions[i].name_length == 10 && !memcmp(module->functions[i].name, "resumeText", 10)) resume_text = i;
+        if (module->functions[i].name_length == 10 && !memcmp(module->functions[i].name, "stackDepth", 10)) stack_depth = i;
         if (module->functions[i].name_length == 7 && !memcmp(module->functions[i].name, "advance", 7)) advance = i;
     }
-    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX);
+    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text}, results);
+    source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth}, results);
     runtime_source_failures(program, entry, resume_text);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);

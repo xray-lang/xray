@@ -15,6 +15,23 @@
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define XR_XIR_FRAME_ASAN 1
+#endif
+#endif
+#if defined(__SANITIZE_ADDRESS__) && !defined(XR_XIR_FRAME_ASAN)
+#define XR_XIR_FRAME_ASAN 1
+#endif
+#if defined(XR_XIR_FRAME_ASAN)
+#include <sanitizer/asan_interface.h>
+#endif
+
+typedef struct CallSegment {
+    struct CallSegment *parent;
+    uint64_t allocation_bytes, used;
+} CallSegment;
+
 typedef struct CallFrame {
     struct CallFrame *parent;
     const XrXirCallEntry *entry;
@@ -27,6 +44,7 @@ typedef struct CallFrame {
 struct XrXirCall {
     XrXirCallConfig config;
     CallFrame *top;
+    CallSegment *segment;
     XrXirCallResult result;
     uint64_t allocation_bytes, polls_left, next_wake;
     bool driving, cleaning, cancel_requested;
@@ -79,6 +97,57 @@ static void call_deallocate(XrXirCallAccounting *accounting, void *memory, uint6
     xr_free(memory);
 }
 
+static uint64_t frame_align(uint64_t bytes) {
+    return (bytes + XR_XIR_CALL_STATE_ALIGNMENT - 1) / XR_XIR_CALL_STATE_ALIGNMENT * XR_XIR_CALL_STATE_ALIGNMENT;
+}
+static void frame_poison(void *pointer, uint64_t bytes, bool poison) {
+#if defined(XR_XIR_FRAME_ASAN)
+    if (poison) __asan_poison_memory_region(pointer, (size_t) bytes);
+    else __asan_unpoison_memory_region(pointer, (size_t) bytes);
+#else
+    (void) pointer; (void) bytes; (void) poison;
+#endif
+}
+static CallFrame *frame_reserve(XrXirCall *call, uint64_t bytes, XrXirCallStatus *status) {
+    uint64_t reserved = frame_align(bytes) + XR_XIR_CALL_STATE_ALIGNMENT;
+    CallSegment *segment = call->segment;
+    if (!segment || reserved > segment->allocation_bytes - segment->used) {
+        uint64_t header = frame_align(sizeof(CallSegment)), required = header + reserved;
+        if (call->config.accounting->live_bytes > call->config.byte_limit) {
+            *status = XR_XIR_CALL_LIMIT; return NULL;
+        }
+        uint64_t available = call->config.byte_limit - call->config.accounting->live_bytes;
+        uint64_t capacity = required < 4096 ? 4096 : required;
+        if (capacity > available && required <= available)
+            capacity = available / XR_XIR_CALL_STATE_ALIGNMENT * XR_XIR_CALL_STATE_ALIGNMENT;
+        segment = call_allocate(&call->config, capacity, status);
+        if (!segment) return NULL;
+        segment->parent = call->segment; segment->allocation_bytes = capacity; segment->used = header;
+        call->segment = segment;
+        frame_poison((unsigned char *) segment + (size_t) header, capacity - header, true);
+    }
+    CallFrame *frame = (CallFrame *) ((unsigned char *) segment + (size_t) segment->used);
+    segment->used += reserved;
+    frame_poison(frame, bytes, false);
+    memset(frame, 0, (size_t) bytes);
+    frame->allocation_bytes = reserved;
+    return frame;
+}
+static void frame_release(XrXirCall *call, CallFrame *frame) {
+    CallSegment *segment = call->segment;
+    uint64_t bytes = frame->allocation_bytes;
+    XR_CHECK(segment && segment->used >= bytes &&
+        (unsigned char *) segment + (size_t) (segment->used - bytes) == (unsigned char *) frame,
+        "call frame release must rewind the current segment");
+    segment->used -= bytes;
+    frame_poison(frame, bytes, true);
+    if (segment->used == frame_align(sizeof(CallSegment))) {
+        call->segment = segment->parent;
+        frame_poison(segment, segment->allocation_bytes, false);
+        call_deallocate(call->config.accounting, segment, segment->allocation_bytes);
+    }
+}
+
 static bool entry_arguments(const XrXirCallEntry *entry, const XrXirValue *arguments,
                              uint32_t count) {
     if (count != entry->parameter_count || (count && !arguments))
@@ -107,19 +176,18 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
     uint64_t arguments_offset = state_offset() + ((uint64_t) entry->state_bytes + 7) / 8 * 8;
     uint64_t bytes = arguments_offset + (uint64_t) count * sizeof(XrXirValue);
     XrXirCallStatus status = XR_XIR_CALL_READY;
-    CallFrame *frame = call_allocate(&call->config, bytes, &status);
+    CallFrame *frame = frame_reserve(call, bytes, &status);
     if (!frame)
         return status;
     frame->parent = call->top;
     frame->entry = entry;
-    frame->allocation_bytes = bytes;
     frame->inbox = call_result(XR_XIR_CALL_READY);
     frame->state = (unsigned char *) frame + (size_t) state_offset();
     frame->arguments = (XrXirValue *) ((unsigned char *) frame + (size_t) arguments_offset);
     for (uint32_t i = 0; i < count; ++i) {
         if (xr_xir_value_copy(&arguments[i], &frame->arguments[i]) != XR_XIR_VALUE_OK) {
             for (uint32_t p = 0; p < i; ++p) xr_xir_value_drop(&frame->arguments[p]);
-            call_deallocate(accounting, frame, bytes);
+            frame_release(call, frame);
             return XR_XIR_CALL_LIMIT;
         }
     }
@@ -149,7 +217,7 @@ static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
         xr_xir_value_drop(&frame->arguments[i]);
     xr_xir_value_drop(&frame->inbox.value);
     --call->config.accounting->depth;
-    call_deallocate(call->config.accounting, frame, frame->allocation_bytes);
+    frame_release(call, frame);
 }
 
 static void unwind(XrXirCall *call, XrXirCallStatus reason) {

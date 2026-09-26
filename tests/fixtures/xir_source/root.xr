@@ -168,3 +168,9 @@ fn resumedNative(flag:bool)->string {
 }
 
 export fn resumeText(flag:bool)->string { return resumedNative(flag) }
+
+export fn stackDepth(n:i64)->string {
+    const held = "f" + "r"
+    if (n == 0) { Coro.yield(); return held }
+    return stackDepth(n - 1) + held
+}

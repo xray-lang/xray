@@ -21,7 +21,7 @@
 #include "xir_source_runtime_allocations.h"
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
-XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text;
+XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth;
 typedef struct MixedSource {
     XrXirArtifact *artifact;
     XrXirCallEntry entries[64];
@@ -76,7 +76,7 @@ int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text}, results);
+    source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth}, results);
     runtime_source_failures(program, entry, fixture_source_resume_text);
     CHECK(!released);
     xr_xir_program_drop(program); CHECK(released == 1);
