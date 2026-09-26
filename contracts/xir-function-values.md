@@ -54,3 +54,27 @@ verification-test: test_xir_source_mixed
 verification-test: test_xir_packet_vm
 verification-test: test_xir_source_admission
 verification-test: test_xir_source_allocations
+
+## Explicit source specialization values
+
+`name<T,...>` and `module.name<T,...>` form ordinary function values without
+calling the target. `<` must be adjacent to the name, as for an explicit call.
+The complete type list must end before an expression delimiter (comma, semicolon,
+closing parenthesis/bracket/brace, colon or end of input), a member dot, or a new
+line. A following parenthesis remains the existing direct generic call; grouping
+`(name<T>)(value)` invokes the constructed value. Otherwise speculative parsing
+restores the comparison interpretation, including `a<b>c` and `a < b`.
+
+The source AST has a distinct reference node owning its type-argument array in
+the parser arena. All explicit types must match the declaration's parameter count
+and prove its constraints in the enclosing definition. Module visibility and
+imports are unchanged; builtin/constructed types and ordinary value variables
+cannot be specialized this way. No generic inference or new runtime dictionary
+is introduced. FUNCTION_REF uses the existing Checked type-argument range and
+instance collector; every referenced ordinary instance closes before Program
+sealing, including reference-only targets and references inside generic bodies.
+
+verification-test: test_xir_source_generics
+
+A discarded standalone specialization value is effectless under E0208, just as
+a discarded ordinary function name is; it must be used as a value or invoked.

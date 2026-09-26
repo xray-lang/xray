@@ -73,6 +73,12 @@ typedef struct CallExprNode {
     int semantic_type_arg_count;
 } CallExprNode;
 
+typedef struct FunctionRefNode {
+    AstNode *callee;
+    XrTypeRef **type_args;
+    int type_arg_count;
+} FunctionRefNode;
+
 // is expression node (runtime type check)
 typedef struct IsExprNode {
     AstNode *expr;

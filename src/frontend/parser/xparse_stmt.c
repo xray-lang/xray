@@ -51,6 +51,7 @@ static bool expr_stmt_is_effectless(const AstNode *expr) {
         case AST_FIXED_BYTES_LITERAL:
         case AST_TEMPLATE_STRING:
         case AST_VARIABLE:
+        case AST_FUNCTION_REF:
         case AST_THIS_EXPR:
         case AST_ARRAY_LITERAL:
         case AST_OBJECT_LITERAL:

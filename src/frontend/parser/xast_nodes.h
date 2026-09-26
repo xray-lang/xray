@@ -84,6 +84,7 @@ struct AstNode {
         FunctionDeclNode function_decl;
         FunctionDeclNode function_expr;
         CallExprNode call_expr;
+        FunctionRefNode function_ref;
         ReturnStmtNode return_stmt;
         IsExprNode is_expr;
         AsExprNode as_expr;

@@ -291,6 +291,20 @@ print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
 
 结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
+
+### 9.8 显式泛型函数取值
+
+`identity<string>`与`module.identity<string>`表示已给出完整类型实参的普通函数值，
+不会调用函数。`<`紧邻名字，与显式调用保持同一消歧规则。完整类型列表后为表达式分隔符
+（逗号、分号、右圆/方/花括号、冒号、输入结束）、成员点或换行时可解析为取值；后跟左圆括号
+继续解析为直接泛型调用。`(identity<string>)(value)`先构造值再间接调用。
+不符合这些边界时恢复比较解析，`a<b>c`与`a < b`不改变解释。
+
+取值要求准确数量的显式类型实参，并在外围定义处证明声明约束；可见性与import权限保持不变。
+不能特化普通变量或借此构造类型；不引入类型推断或运行时泛型字典。
+引用使用同一Checked实例闭包，只有函数值引用到的实例也在Program封存前完成特化和复验。
+泛型体中的引用可使用外围T，不能等具体实参到来后补救非法定义。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -585,4 +599,23 @@ print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
 
 Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
+
+### 9.8 Explicit Generic Function Values
+
+`identity<string>` and `module.identity<string>` form ordinary function values
+without calling the target. The opening angle must be adjacent to the name.
+After the complete type list, an expression delimiter (comma, semicolon, closing
+parenthesis/bracket/brace, colon or end of input), member dot or new line admits a
+reference. A following opening parenthesis retains direct generic-call syntax.
+`(identity<string>)(value)` constructs a value and invokes it indirectly. Otherwise
+parsing restores comparison interpretation, including `a<b>c` and `a < b`.
+
+References require the exact explicit type-argument count and declaration
+constraints proved in the enclosing definition, with unchanged visibility and
+import permissions. Ordinary variables and type constructors cannot be specialized
+as functions. There is no inference or runtime generic dictionary. Reference-only
+instances join the same Checked instance closure before Program sealing; references
+inside generic bodies can use enclosing parameters without deferring definition
+checking until concrete instantiation.
+
 <!-- /xr-spec:en -->

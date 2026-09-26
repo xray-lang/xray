@@ -162,11 +162,12 @@ fn resumedNative(flag:bool)->string {
     true ? noYield() : sourceYield()
     var text = "r"
     const provider: fn(bool)->fn(bool)->string = chooseCallback
-    var callback = alpha.invoke<bool,fn(bool)->string>(provider, flag)
+    var callback = (alpha.invoke<bool,fn(bool)->string>)(provider, flag)
     const kept = callback
     callback = rightCallback
     activeCallback = alpha.nested<bool,string>(passCallback, alpha.keep<bool,string>(kept))
-    const selected = alpha.invoke<bool,string>(activeCallback, flipCallback(flag))
+    const invoke = alpha.invoke<bool,string>
+    const selected = invoke(activeCallback, flipCallback(flag))
     const pause: fn() = sourceYield
     pause()
     text = selected + "!"
@@ -181,8 +182,8 @@ export fn stackDepth(n:i64)->string {
     return stackDepth(n - 1) + held
 }
 
-fn leftCallback(flag:bool)->string { return alpha.pause<string>(flag ? "ry" : "wrong") }
-fn rightCallback(flag:bool)->string { return alpha.pause<string>(flag ? "wrong" : "rn") }
+fn leftCallback(flag:bool)->string { const pause = alpha.pause<string>; return pause(flag ? "ry" : "wrong") }
+fn rightCallback(flag:bool)->string { const pause = alpha.pause<string>; return pause(flag ? "wrong" : "rn") }
 fn chooseCallback(flag:bool)->fn(bool)->string { return flag ? leftCallback : rightCallback }
 fn passCallback(callback:fn(bool)->string)->fn(bool)->string { return callback }
 var activeCallback:fn(bool)->string = rightCallback

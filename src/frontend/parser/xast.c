@@ -567,6 +567,17 @@ AstNode *xr_ast_function_expr(XrCompilerSession *session, XrParamNode **params, 
     return node;
 }
 
+AstNode *xr_ast_function_ref(XrCompilerSession *session, AstNode *callee,
+    XrTypeRef **type_args, int type_arg_count, int line) {
+    XR_CHECK(callee && type_args && type_arg_count > 0, "function reference requires explicit types");
+    AstNode *node = alloc_node(session, AST_FUNCTION_REF, line);
+    node->as.function_ref.callee = callee;
+    node->as.function_ref.type_arg_count = type_arg_count;
+    node->as.function_ref.type_args = ast_alloc_array(session, sizeof(*type_args), (size_t) type_arg_count);
+    memcpy(node->as.function_ref.type_args, type_args, (size_t) type_arg_count * sizeof(*type_args));
+    return node;
+}
+
 // Create function call node
 // callee: expression being called (usually a variable)
 // arguments: argument list (expression array)
@@ -1590,6 +1601,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "FunctionExpr";
         case AST_CALL_EXPR:
             return "CallExpr";
+        case AST_FUNCTION_REF:
+            return "FunctionRef";
         case AST_COMPTIME_EXPR:
             return "ComptimeExpr";
         case AST_RETURN_STMT:
@@ -1934,6 +1947,11 @@ void xr_ast_print(AstNode *node, int indent) {
                 printf("%*s  body:\n", indent * 2, "");
                 xr_ast_print(node->as.function_expr.body, indent + 2);
             }
+            break;
+
+        case AST_FUNCTION_REF:
+            printf(" [types=%d]\n", node->as.function_ref.type_arg_count);
+            xr_ast_print(node->as.function_ref.callee, indent + 1);
             break;
 
         case AST_CALL_EXPR:

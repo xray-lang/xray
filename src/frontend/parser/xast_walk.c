@@ -230,6 +230,11 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
             return true;
         }
 
+        case AST_FUNCTION_REF:
+            emit(w, n->as.function_ref.callee);
+            emit_type_refs(w, n->as.function_ref.type_args, n->as.function_ref.type_arg_count);
+            return true;
+
         /* ---- Calls, access, aggregates ---- */
         case AST_CALL_EXPR:
             emit(w, n->as.call_expr.callee);
@@ -761,6 +766,11 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             }
             return true;
 
+        case AST_FUNCTION_REF:
+            sig_add(s, " targs=%d", n->as.function_ref.type_arg_count);
+            for (int i = 0; i < n->as.function_ref.type_arg_count; ++i)
+                sig_type_ref(s, n->as.function_ref.type_args[i]);
+            return true;
         case AST_CALL_EXPR:
             sig_add(s, " args=%d targs=%d", n->as.call_expr.arg_count,
                     n->as.call_expr.type_arg_count);

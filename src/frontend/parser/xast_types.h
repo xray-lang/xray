@@ -216,6 +216,7 @@ typedef enum {
     AST_UNSAFE_EXPR,     // unsafe { expr } - FFI / raw-pointer escape hatch
 
     // Program node
+    AST_FUNCTION_REF, // Explicit ordinary function specialization value
     AST_PROGRAM  // Root node
 } AstNodeType;
 

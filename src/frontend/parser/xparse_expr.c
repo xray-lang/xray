@@ -1278,7 +1278,16 @@ AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
     return node;
 }
 
-// Try to parse generic invocation or namespace-qualified aggregate construction.
+static bool generic_reference_boundary(const Parser *parser) {
+    if (parser->current.line > parser->previous.line) return true;
+    switch (parser->current.type) {
+    case TK_COMMA: case TK_SEMICOLON: case TK_RPAREN: case TK_RBRACKET:
+    case TK_RBRACE: case TK_COLON: case TK_EOF: case TK_DOT: return true;
+    default: return false;
+    }
+}
+
+// Try to parse generic invocation, function reference or aggregate construction.
 // Returns NULL when '<' is a comparison rather than a generic suffix.
 AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
     // Only try if callee is an identifier or member access
@@ -1343,7 +1352,10 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
         return xr_parse_struct_literal_after_type(parser, callee, type_args, type_arg_count);
     }
 
-    // Every remaining generic suffix is a call and must be followed by '('.
+    if (!xr_parser_check(parser, TK_LPAREN) && generic_reference_boundary(parser)) {
+        parser->panic_mode = saved_panic_mode;
+        return xr_ast_function_ref(parser->compiler_session, callee, type_args, type_arg_count, line);
+    }
     if (!xr_parser_check(parser, TK_LPAREN)) {
         *parser = checkpoint;
         parser->panic_mode = saved_panic_mode;

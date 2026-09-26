@@ -131,6 +131,9 @@ XR_FUNC AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *c
                                           int arg_count, XrTypeRef **type_args, int type_arg_count,
                                           int line);
 
+XR_FUNC AstNode *xr_ast_function_ref(XrCompilerSession *session, AstNode *callee,
+    XrTypeRef **type_args, int type_arg_count, int line);
+
 // Create return statement node
 XR_FUNC AstNode *xr_ast_return_stmt(XrCompilerSession *session, AstNode **values, int count,
                                     int line);

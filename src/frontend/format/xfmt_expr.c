@@ -436,6 +436,11 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, node->as.variable.name);
             break;
 
+        case AST_FUNCTION_REF:
+            xfmt_emit_expression(ctx, node->as.function_ref.callee);
+            xfmt_emit_generic_args(ctx, node->as.function_ref.type_args, node->as.function_ref.type_arg_count);
+            break;
+
         // Call
         case AST_CALL_EXPR:
             fmt_call(ctx, node);

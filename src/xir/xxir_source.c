@@ -283,20 +283,21 @@ static uint32_t stream_primitive(SourceContext *ctx, const char *name) {
     if (!strcmp(name, "__writeStderr")) return 2;
     return 0;
 }
-static bool ordinary_call(SourceContext *ctx, AstNode *node, SourceName *target,
-                           const SourceValue *args, SourceValue *value) {
-    CallExprNode *call = &node->as.call_expr;
-    const XrXirFunction *function = &ctx->functions[target->index];
-    const XrXirGeneric *callee = &ctx->generics[target->index];
-    if ((uint32_t) call->arg_count != function->parameter_count ||
-        (uint32_t) call->type_arg_count != callee->parameter_count)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "call requires the declared value and explicit type arguments");
-    uint32_t count = (uint32_t) call->type_arg_count;
+typedef struct SourceTypeArguments {
+    XrTypeRef **refs;
+    uint32_t count;
+    SourceSubstitution substitution;
+} SourceTypeArguments;
+static bool source_instantiation(SourceContext *ctx, AstNode *node, const XrXirGeneric *callee,
+    SourceTypeArguments *arguments, XrXirInstruction *op) {
+    uint32_t count = arguments->count;
+    if (count > 65536 || count != callee->parameter_count || (count && !arguments->refs))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function requires its exact explicit type arguments");
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
     if (count && !types) return false;
     XrXirModule view = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics, &ctx->callables};
     for (uint32_t i = 0; i < count; ++i) {
-        if (!source_work(ctx, node) || !source_type(ctx, call->type_args[i], &types[i])) return false;
+        if (!source_work(ctx, node) || !source_type(ctx, arguments->refs[i], &types[i])) return false;
         if (!xr_xir_type_satisfies(&view, ctx->function, types[i], callee->constraints[i]))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type argument does not prove the declared constraint");
     }
@@ -312,19 +313,27 @@ static bool ordinary_call(SourceContext *ctx, AstNode *node, SourceName *target,
         if (caller->argument_count) memcpy(table, caller->arguments, caller->argument_count * sizeof(*table));
         caller->arguments = table; body->type_capacity = capacity;
     }
-    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0},
-        {count ? caller->argument_count : 0, count}, target->index};
+    op->targets[0] = count ? caller->argument_count : 0; op->targets[1] = count;
     if (count) memcpy((XrXirType *) caller->arguments + caller->argument_count, types, count * sizeof(*types));
-    caller->argument_count = needed;
-    SourceSubstitution substitution = {types, count};
-    if (!source_substitute(ctx, &substitution, function->result, 0, &op.type)) return false;
+    caller->argument_count = needed; arguments->substitution = (SourceSubstitution) {types,count}; return true;
+}
+static bool ordinary_call(SourceContext *ctx, AstNode *node, SourceName *target,
+    const SourceValue *args, SourceValue *value) {
+    CallExprNode *call = &node->as.call_expr;
+    const XrXirFunction *function = &ctx->functions[target->index];
+    if ((uint32_t) call->arg_count != function->parameter_count)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "call requires the declared value arguments");
+    SourceTypeArguments arguments = {call->type_args,(uint32_t) call->type_arg_count,{0}};
+    XrXirInstruction op = {XR_XIR_CALL,XR_XIR_UNIT,{0},{0},target->index};
+    if (!source_instantiation(ctx,node,&ctx->generics[target->index],&arguments,&op) ||
+        !source_substitute(ctx,&arguments.substitution,function->result,0,&op.type)) return false;
     for (uint32_t i = 0; i < function->parameter_count; ++i) {
         XrXirType parameter;
-        if (!source_substitute(ctx, &substitution, function->parameters[i], 0, &parameter)) return false;
+        if (!source_substitute(ctx,&arguments.substitution,function->parameters[i],0,&parameter)) return false;
         if (args[i].type != parameter)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "call argument type does not match declaration");
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call argument type does not match declaration");
     }
-    return emit_group(ctx, op, args, (uint32_t) call->arg_count, value);
+    return emit_group(ctx,op,args,(uint32_t) call->arg_count,value);
 }
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -559,16 +568,36 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, SourceValue *v
 }
 static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName *symbol, SourceValue *value) {
     if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_function(ctx, symbol, symbol->imported);
-    if (!symbol || symbol->kind != SOURCE_FUNCTION || ctx->generics[symbol->index].parameter_count)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a closed declared function");
+    if (!symbol || symbol->kind != SOURCE_FUNCTION)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a declared function");
     const XrXirFunction *function = &ctx->functions[symbol->index];
+    SourceTypeArguments arguments = {0};
+    if (node->type == AST_FUNCTION_REF) {
+        arguments.refs = node->as.function_ref.type_args;
+        arguments.count = (uint32_t) node->as.function_ref.type_arg_count;
+    }
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF,XR_XIR_UNIT,{0},{0},symbol->index};
+    if (!source_instantiation(ctx,node,&ctx->generics[symbol->index],&arguments,&op)) return false;
     uint32_t count = function->parameter_count;
-    XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
+    XrXirCallableParameter *parameters = count ? source_alloc(ctx,count,sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
-    for (uint32_t p = 0; p < count; ++p) parameters[p].type = function->parameters[p];
-    XrXirType type;
-    if (!source_signature(ctx, parameters, count, function->result, &type)) return false;
-    return emit(ctx, (XrXirInstruction) {XR_XIR_FUNCTION_REF, type, {0}, {0}, symbol->index}, value);
+    for (uint32_t p = 0; p < count; ++p)
+        if (!source_substitute(ctx,&arguments.substitution,function->parameters[p],0,&parameters[p].type)) return false;
+    XrXirType result;
+    if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||
+        !source_signature(ctx,parameters,count,result,&op.type)) return false;
+    return emit(ctx,op,value);
+}
+static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    AstNode *callee = node->as.function_ref.callee;
+    SourceName *symbol = NULL;
+    if (callee && callee->type == AST_VARIABLE) symbol = visible_name(ctx,callee->as.variable.name);
+    else if (callee && callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *member = &callee->as.member_access;
+        SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx,member->object->as.variable.name) : NULL;
+        if (base && base->kind == SOURCE_MODULE) symbol = imported_function(ctx,base,member->name);
+    }
+    return source_function_value(ctx,node,symbol,value);
 }
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *value) {
     switch (node->type) {
@@ -577,6 +606,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
     case AST_TERNARY: return source_conditional(ctx, node, value);
     case AST_GROUPING: return expression(ctx, node->as.grouping, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
+    case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, value);
     case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);
     case AST_MEMBER_ACCESS: {
         MemberAccessNode *member = &node->as.member_access;

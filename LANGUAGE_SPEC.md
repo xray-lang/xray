@@ -5181,6 +5181,24 @@ print(typeName(c))             // "Container<i64>" when type names are enabled
 
 Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
 
+### 9.8 Explicit Generic Function Values
+
+`identity<string>` and `module.identity<string>` form ordinary function values
+without calling the target. The opening angle must be adjacent to the name.
+After the complete type list, an expression delimiter (comma, semicolon, closing
+parenthesis/bracket/brace, colon or end of input), member dot or new line admits a
+reference. A following opening parenthesis retains direct generic-call syntax.
+`(identity<string>)(value)` constructs a value and invokes it indirectly. Otherwise
+parsing restores comparison interpretation, including `a<b>c` and `a < b`.
+
+References require the exact explicit type-argument count and declaration
+constraints proved in the enclosing definition, with unchanged visibility and
+import permissions. Ordinary variables and type constructors cannot be specialized
+as functions. There is no inference or runtime generic dictionary. Reference-only
+instances join the same Checked instance closure before Program sealing; references
+inside generic bodies can use enclosing parameters without deferring definition
+checking until concrete instantiation.
+
 ---
 
 ## 10. Concurrency and Coroutines
