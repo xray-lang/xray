@@ -14,7 +14,7 @@
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
 
-#define XR_XIR_CALL_ABI_VERSION 7u
+#define XR_XIR_CALL_ABI_VERSION 8u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {

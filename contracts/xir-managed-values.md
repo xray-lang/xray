@@ -4,7 +4,7 @@ This contract adds internal string values and explicit result ownership to the
 resumable runtime. It does not qualify source syntax, Program/Instance sealing,
 generic library publication, concurrent activation driving, or product cutover.
 
-Value ABI 4 replaces prior value ABIs without an alias or reader. A value remains a
+Value ABI 5 replaces prior value ABIs without an alias or reader. A value remains a
 16-byte, eight-aligned carrier: u32 type, zero reserved u32, and eight payload
 bytes. Unit/bool/i64 retain their canonical meanings. String payload bytes encode
 a live opaque pointer by memcpy; they are never language integers. Host values
@@ -29,7 +29,7 @@ in place when capacity permits and reallocates its byte buffer otherwise; shared
 storage separates. Self-append is valid. Failure preserves the original value,
 published copies, and live accounting. Capacity is an implementation detail.
 
-Call ABI 7 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
+Call ABI 8 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
 owned frame storage before publication. Resume arguments/inbox and action return
 values are borrowed views. The driver retains a return before child cleanup and
 owns each inbox and terminal result. Poll exposes a borrowed result; explicit
@@ -38,7 +38,7 @@ an untaken result. Taking a result needs no allocation and the resulting owned
 value survives activation and input destruction. Frame cleanup runs before its
 arguments and inbox are dropped. Failure/cancellation publishes no partial result.
 
-Typed output is an explicit synchronous provider effect. Call ABI 7 replaces
+Typed output is an explicit synchronous provider effect. Call ABI 8 replaces
 the scalar callback with a borrowed typed group. Raw output has one value and
 names stdout or stderr. Line output names stdout and carries zero or more
 bool/i64/string values: arguments evaluate left to right before one provider call.

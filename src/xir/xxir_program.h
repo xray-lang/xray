@@ -15,7 +15,7 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 3u
+#define XR_XIR_PROGRAM_ABI_VERSION 4u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
@@ -69,7 +69,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,
     const XrXirValue *arguments, uint32_t count);
-XR_FUNC XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry,
+    const XrXirValue *captures, uint32_t count, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXirValue *function, uint32_t *entry);
 /* Execution helpers require a view from the instance's active callback. */
 XR_FUNC XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, XrXirValue *output);

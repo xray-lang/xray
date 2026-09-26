@@ -175,8 +175,10 @@ static void drop_arguments(XrXirValue *arguments, uint32_t count) {
     xr_free(arguments);
 }
 static XrXirCallStatus capture_arguments(XrXirInstance *instance, const XrXirValue *arguments,
-                                        uint32_t count, XrXirValue **output) {
+                                        uint32_t count, const XrXirFunctionBinding *binding, XrXirValue **output) {
     *output = NULL;
+    uint32_t captures = binding ? binding->capture_count : 0;
+    count += captures;
     if (!count) return XR_XIR_CALL_READY;
     uint64_t bytes = (uint64_t) count * sizeof(XrXirValue);
     if (bytes > SIZE_MAX || bytes > instance->config.metadata_limit - instance->metadata_bytes)
@@ -184,7 +186,7 @@ static XrXirCallStatus capture_arguments(XrXirInstance *instance, const XrXirVal
     XrXirValue *owned = xr_calloc(count, sizeof(*owned));
     if (!owned) return XR_XIR_CALL_OOM;
     for (uint32_t p = 0; p < count; ++p) {
-        XrXirCallStatus status = value_call_status(xr_xir_value_copy(&arguments[p], &owned[p]));
+        XrXirCallStatus status = value_call_status(xr_xir_value_copy(p < captures ? &binding->captures[p] : &arguments[p - captures], &owned[p]));
         if (status != XR_XIR_CALL_READY) { drop_arguments(owned, count); return status; }
     }
     *output = owned;
@@ -192,7 +194,7 @@ static XrXirCallStatus capture_arguments(XrXirInstance *instance, const XrXirVal
 }
 static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValue *value, uint32_t *entry);
 static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
-                                      const XrXirValue *arguments, uint32_t count, bool public_entry) {
+                                      const XrXirValue *arguments, uint32_t count, bool public_entry, const XrXirFunctionBinding *binding) {
     if (!instance) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance->observing) return XR_XIR_CALL_BUSY;
     if (instance->state == XR_XIR_INSTANCE_FAILED) return instance->failure.status;
@@ -205,17 +207,21 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     if (entry >= instance->program->entry_count ||
         (public_entry && entry != d->entry_function && !d->functions[entry].exported)) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *requested = &instance->program->entries[entry];
-    if (count != requested->parameter_count || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
-    for (uint32_t p = 0; p < count; ++p) {
-        if (!xr_xir_value_argument(&arguments[p], requested->parameters[p])) return XR_XIR_CALL_BAD_ARGUMENT;
+    uint32_t captures = binding ? binding->capture_count : 0;
+    if (captures > requested->parameter_count || count != requested->parameter_count - captures ||
+        (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
+    for (uint32_t p = 0; p < requested->parameter_count; ++p) {
+        const XrXirValue *value = p < captures ? &binding->captures[p] : &arguments[p - captures];
+        if (!xr_xir_value_argument(value, requested->parameters[p])) return XR_XIR_CALL_BAD_ARGUMENT;
         uint32_t target;
         if (xr_xir_type_is_callable(requested->parameters[p]) &&
-            resolve_function(instance, &arguments[p], &target) != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_ARGUMENT;
+            resolve_function(instance, value, &target) != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_ARGUMENT;
     }
     if (instance->epoch == UINT64_MAX) return XR_XIR_CALL_LIMIT;
     XrXirValue *owned = NULL;
-    XrXirCallStatus status = capture_arguments(instance, arguments, count, &owned);
+    XrXirCallStatus status = capture_arguments(instance, arguments, count, binding, &owned);
     if (status != XR_XIR_CALL_READY) return status;
+    count += captures;
     xr_xir_call_free(instance->call);
     instance->call = NULL;
     ++instance->epoch;
@@ -340,7 +346,7 @@ XrXirCallStatus xr_xir_instance_slot_write(XrXirCallView *view, uint32_t slot,
 
 XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t entry,
     const XrXirValue *arguments, uint32_t count) {
-    return instance_start(instance, entry, arguments, count, true);
+    return instance_start(instance, entry, arguments, count, true, NULL);
 }
 static XrXirCallStatus resolve_function(XrXirInstance *instance, const XrXirValue *value, uint32_t *entry) {
     if (!instance || !entry) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -356,7 +362,7 @@ XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const Xr
     const XrXirValue *arguments, uint32_t count) {
     uint32_t entry = 0;
     XrXirCallStatus status = resolve_function(instance, function, &entry);
-    return status == XR_XIR_CALL_READY ? instance_start(instance, entry, arguments, count, false) : status;
+    return status == XR_XIR_CALL_READY ? instance_start(instance, entry, arguments, count, false, xr_xir_function_binding(function)) : status;
 }
 XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXirValue *function, uint32_t *entry) {
     XrXirInstance *instance = view_instance(view);
@@ -374,24 +380,31 @@ static XrXirCallStatus prepare_function_gate(XrXirInstance *instance) {
     instance->function_gate = gate; instance->metadata_bytes += sizeof(*gate);
     return XR_XIR_CALL_READY;
 }
-XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry, XrXirValue *output) {
+XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry,
+    const XrXirValue *captures, uint32_t count, XrXirValue *output) {
     XrXirInstance *instance = view_instance(view);
     if (!instance || instance->stopping) return XR_XIR_CALL_BAD_STATE;
     const XrXirCallableSignature *signature = xr_xir_callable_signature(instance->program->callables, type);
-    if (!signature || entry >= instance->program->entry_count) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!signature || entry >= instance->program->entry_count || (count && !captures)) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *target = &instance->program->entries[entry];
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t caller = xr_xir_call_current_entry(view->activation);
     uint32_t from = d->functions[caller].module, to = d->functions[entry].module;
     if (entry == d->modules[to].initializer || !xr_xir_module_imports(d, from, to) ||
-        (from != to && !d->functions[entry].exported) || target->parameter_count != signature->parameter_count ||
+        (from != to && !d->functions[entry].exported) || count > target->parameter_count || target->parameter_count - count != signature->parameter_count ||
         target->result != signature->result) return XR_XIR_CALL_BAD_ARGUMENT;
-    for (uint32_t p = 0; p < target->parameter_count; ++p)
-        if (target->parameters[p] != signature->parameters[p].type) return XR_XIR_CALL_BAD_ARGUMENT;
+    for (uint32_t p = 0; p < count; ++p) {
+        if (!xr_xir_value_argument(&captures[p], target->parameters[p])) return XR_XIR_CALL_BAD_ARGUMENT;
+        uint32_t nested;
+        if (xr_xir_type_is_callable(target->parameters[p]) &&
+            resolve_function(instance, &captures[p], &nested) != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_ARGUMENT;
+    }
+    for (uint32_t p = 0; p < signature->parameter_count; ++p)
+        if (target->parameters[p + count] != signature->parameters[p].type) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus status = prepare_function_gate(instance);
     if (status != XR_XIR_CALL_READY) return status;
     if (!function_gate_retain(instance->function_gate)) return XR_XIR_CALL_LIMIT;
-    XrXirFunctionBinding binding = {instance->function_gate, function_gate_drop, entry};
+    XrXirFunctionBinding binding = {instance->function_gate, function_gate_drop, entry, captures, count};
     status = value_call_status(xr_xir_function_new(instance->domain, type, &binding, output));
     if (status != XR_XIR_CALL_READY) function_gate_drop(instance->function_gate);
     return status;

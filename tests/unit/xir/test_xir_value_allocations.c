@@ -179,11 +179,61 @@ static void saturation(void) {
     xr_xir_value_drop(&value); xr_xir_domain_drop(domain);
     CHECK(!live);
 }
+static void capture_release(void *owner) { ++*(size_t *) owner; }
+static void capture_ownership(void) {
+    XrXirDomain *domain = NULL; XrXirValue values[2] = {{0}}, output = {0};
+    CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain,"first",5,&values[0]) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain,"second",6,&values[1]) == XR_XIR_VALUE_OK);
+    size_t releases = 0, baseline = live;
+    uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
+    XrXirFunctionBinding binding = {&releases,capture_release,7,values,2};
+    atomic_store(&object_pointer(values+1)->references,UINT32_MAX);
+    CHECK(xr_xir_function_new(domain,(XrXirType)256,&binding,&output) == XR_XIR_VALUE_REFCOUNT_LIMIT);
+    CHECK(!output.type && !releases && live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
+    CHECK(atomic_load(&object_pointer(values)->references) == 1);
+    atomic_store(&object_pointer(values+1)->references,1);
+    fail_at = calls;
+    CHECK(xr_xir_function_new(domain,(XrXirType)256,&binding,&output) == XR_XIR_VALUE_OOM);
+    CHECK(!output.type && !releases && live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
+    fail_at = SIZE_MAX;
+    domain->limit = bytes;
+    CHECK(xr_xir_function_new(domain,(XrXirType)256,&binding,&output) == XR_XIR_VALUE_LIMIT);
+    domain->limit = 65536;
+    CHECK(xr_xir_function_new(domain,(XrXirType)256,&binding,&output) == XR_XIR_VALUE_OK);
+    XrXirValue copy = {0}; CHECK(xr_xir_value_copy(&output,&copy) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_append(values,values+1) == XR_XIR_VALUE_OK);
+    const XrXirFunctionBinding *owned = xr_xir_function_binding(&output);
+    const char *text; size_t length;
+    CHECK(owned->captures != values && owned->capture_count == 2);
+    CHECK(xr_xir_string_view(owned->captures,&text,&length) && length == 5 && !memcmp(text,"first",5));
+    xr_xir_domain_drop(domain); xr_xir_value_drop(values); xr_xir_value_drop(values+1);
+    xr_xir_value_drop(&output); CHECK(!releases);
+    xr_xir_value_drop(&copy); CHECK(releases == 1 && !live);
+}
+static void deep_capture_release(void) {
+    XrXirDomain *domain = NULL; XrXirValue previous = {XR_XIR_I64,0,17};
+    CHECK(xr_xir_domain_new(32u*1024u*1024u,&domain) == XR_XIR_VALUE_OK);
+    size_t releases = 0;
+    for (uint32_t depth = 0; depth < 100000; ++depth) {
+        XrXirValue next = {0};
+        XrXirFunctionBinding binding = {&releases,capture_release,0,&previous,1};
+        CHECK(xr_xir_function_new(domain,(XrXirType)256,&binding,&next) == XR_XIR_VALUE_OK);
+        xr_xir_value_drop(&previous); previous = next;
+    }
+    xr_xir_domain_drop(domain);
+    size_t allocations = calls;
+    fail_at = calls;
+    xr_xir_value_drop(&previous);
+    CHECK(releases == 100000 && !live && calls == allocations);
+    fail_at = SIZE_MAX;
+    puts("Capture cleanup: 100000 nested environments; zero cleanup allocations; zero live blocks");
+}
 int main(void) {
     fail_at = SIZE_MAX; calls = 0; fail_sequence();
     size_t count = calls;
     for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }
-    fail_at = SIZE_MAX; saturation(); output_allocation();
+    fail_at = SIZE_MAX; saturation(); output_allocation(); capture_ownership(); deep_capture_release();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
     return 0;
 }

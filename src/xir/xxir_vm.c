@@ -55,12 +55,18 @@ static XrXirRunStatus string_status(XrXirValueStatus status) {
     return XR_XIR_RUN_BAD_ARTIFACT;
 }
 
-static XrXirRunStatus instance_step(ScalarRun *run, const XrXirInstruction *op, uint32_t destination) {
+static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirInstruction *op, uint32_t destination) {
     XrXirValue value = {0};
     XrXirCallStatus status = XR_XIR_CALL_READY;
     switch (op->op) {
     case XR_XIR_FUNCTION_REF:
-        status = xr_xir_instance_function(run->view, op->type, (uint32_t) op->immediate, &value); break;
+        for (uint32_t i = 0; i < op->args[1]; ++i) {
+            uint32_t id = run->function->operands[op->args[0] + i];
+            state->arguments[i] = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
+                xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
+        }
+        status = xr_xir_instance_function(run->view, op->type, (uint32_t) op->immediate,
+            state->arguments, op->args[1], &value); break;
     case XR_XIR_CONST_STRING:
         status = xr_xir_instance_literal(run->view, (uint32_t) op->immediate, &value); break;
     case XR_XIR_SLOT_LOAD:
@@ -133,8 +139,9 @@ static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t
 static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
     XrXirAction *action, uint32_t destination) {
     uint32_t callee = (uint32_t) op->immediate;
+    XrXirValue value = {0};
     if (op->op == XR_XIR_CALL_INDIRECT) {
-        XrXirValue value = {(uint32_t) xr_xir_operand_type(run->function, callee), 0,
+        value = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, callee), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
         XrXirCallStatus status = xr_xir_instance_resolve_function(run->view, &value, &callee);
         if (status != XR_XIR_CALL_READY) {
@@ -148,7 +155,7 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
             xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
     }
     state->waiting = true; state->destination = destination; state->expected = op->type;
-    *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], {0}};
+    *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], value};
     return XR_XIR_RUN_OK;
 }
 
@@ -161,7 +168,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}};
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF) {
         state->instruction = next;
-        return instance_step(run, op, run->layout->offsets[result_id]);
+        return instance_step(run, state, op, run->layout->offsets[result_id]);
     }
     if (op->op == XR_XIR_JUMP || op->op == XR_XIR_BRANCH) {
         uint32_t edge = op->op == XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) ? 1 : 0;

@@ -291,7 +291,7 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_scalar.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 4u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 5u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");
@@ -308,13 +308,18 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
 }
 
 static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
-                               const XrXirInstruction *op, const XrXirFunctionLayout *layout,
-                               uint32_t destination) {
+                               const XrXirFunction *function, const XrXirInstruction *op,
+                               const XrXirFunctionLayout *layout, uint32_t destination) {
     append(buffer, "        { XrXirValue value = {0}; XrXirCallStatus status = XR_XIR_CALL_READY;\n");
     switch (op->op) {
     case XR_XIR_FUNCTION_REF:
-        append(buffer, "status = xr_xir_instance_function(view, (XrXirType) %u, %uu, &value);\n",
-            (uint32_t) op->type, (uint32_t) op->immediate); break;
+        for (uint32_t p = 0; p < op->args[1]; ++p) {
+            uint32_t id = function->operands[op->args[0] + p];
+            append(buffer, "state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+                p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+        }
+        append(buffer, "status = xr_xir_instance_function(view, (XrXirType) %u, %uu, %s, %uu, &value);\n",
+            (uint32_t) op->type, (uint32_t) op->immediate, op->args[1] ? "state->arguments" : "NULL", op->args[1]); break;
     case XR_XIR_CONST_STRING:
     case XR_XIR_SLOT_LOAD:
         append(buffer, "        status = %s(view, %uu, &value);\n",
@@ -354,11 +359,11 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
 
 static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
-    append(buffer, "        { uint32_t callee = %uu;\n", (uint32_t) op->immediate);
+    append(buffer, "        { uint32_t callee = %uu; XrXirValue target = {0};\n", (uint32_t) op->immediate);
     if (op->op == XR_XIR_CALL_INDIRECT) {
         uint32_t id = (uint32_t) op->immediate;
-        append(buffer, "        XrXirValue function = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-            "        XrXirCallStatus status = xr_xir_instance_resolve_function(view, &function, &callee);\n"
+        append(buffer, "        target = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        XrXirCallStatus status = xr_xir_instance_resolve_function(view, &target, &callee);\n"
             "        if (status != XR_XIR_CALL_READY) return (XrXirAction) "
             "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}};\n",
             (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
@@ -370,7 +375,7 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
         append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
             p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
-    append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_CALL, callee, %s, %uu, {0}}; }\n",
+    append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_CALL, callee, %s, %uu, target}; }\n",
         op->args[1] ? "state->arguments" : "NULL", op->args[1]);
 }
 
@@ -381,7 +386,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     uint32_t destination = layout->offsets[function->parameter_count + index];
     append(buffer, "    case %uu:\n        state->pc = %uu;\n", index, index + 1);
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF) {
-        emit_instance_step(buffer, module, op, layout, destination);
+        emit_instance_step(buffer, module, function, op, layout, destination);
         return;
     }
     switch (op->op) {
@@ -629,7 +634,7 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 3u, \"XIR program ABI\");\n"
+    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 4u, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         prefix, prefix, module->function_count, prefix);
@@ -649,8 +654,8 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 7u, \"XIR call ABI\");\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 4u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 8u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 5u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");

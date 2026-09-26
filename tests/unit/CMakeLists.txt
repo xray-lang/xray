@@ -159,7 +159,7 @@ add_custom_command(OUTPUT ${XIR_PROGRAM_GENERATED}
     VERBATIM)
 add_executable(test_xir_program_native xir/test_xir_program_native.c ${XIR_PROGRAM_GENERATED})
 target_link_libraries(test_xir_program_native PRIVATE xray_xir_scalar)
-add_executable(test_xir_program_vm xir/test_xir_program_vm.c)
+add_executable(test_xir_program_vm xir/test_xir_program_vm.c ${XIR_PROGRAM_GENERATED})
 target_link_libraries(test_xir_program_vm PRIVATE xray_xir_vm)
 if(NOT WIN32)
     find_package(Threads REQUIRED)

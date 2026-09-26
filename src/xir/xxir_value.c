@@ -27,6 +27,7 @@ typedef struct XirObject {
     _Atomic(uint32_t) references;
     XrXirDomain *domain;
     XrXirType type;
+    struct XirObject *release_next;
 } XirObject;
 typedef struct XirAtomicI64 {
     XirObject object;
@@ -217,28 +218,38 @@ XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output)
     *output = *source;
     return XR_XIR_VALUE_OK;
 }
+static void queue_release(const XrXirValue *value, XirObject **pending) {
+    if (!xr_xir_type_is_owned((XrXirType) value->type)) return;
+    XirObject *object = object_pointer(value);
+    if (reference_release(&object->references)) {
+        object->release_next = *pending; *pending = object;
+    }
+}
 void xr_xir_value_drop(XrXirValue *value) {
     if (!value) return;
     XR_CHECK(unit_value(value) || xr_xir_value_argument(value, (XrXirType) value->type),
              "invalid owned value release");
-    if (xr_xir_type_is_owned((XrXirType) value->type)) {
-        XirObject *object = object_pointer(value);
-        if (reference_release(&object->references)) {
-            XrXirDomain *domain = object->domain;
-            if (object->type == XR_XIR_STRING) {
-                XirString *string = (XirString *) object;
-                domain_deallocate(domain, string->bytes, string->capacity);
-                domain_deallocate(domain, string, sizeof(*string));
-            } else if (xr_xir_type_is_callable(object->type)) {
-                XirFunction *function = (XirFunction *) object;
-                XrXirFunctionBinding binding = function->binding;
-                domain_deallocate(domain, function, sizeof(*function));
-                binding.release(binding.owner);
-            } else domain_deallocate(domain, object, sizeof(XirAtomicI64));
-            xr_xir_domain_drop(domain);
-        }
-    }
+    XirObject *pending = NULL;
+    queue_release(value, &pending);
     *value = (XrXirValue) {0};
+    while (pending) {
+        XirObject *object = pending; pending = object->release_next;
+        XrXirDomain *domain = object->domain;
+        if (object->type == XR_XIR_STRING) {
+            XirString *string = (XirString *) object;
+            domain_deallocate(domain, string->bytes, string->capacity);
+            domain_deallocate(domain, string, sizeof(*string));
+        } else if (xr_xir_type_is_callable(object->type)) {
+            XirFunction *function = (XirFunction *) object;
+            XrXirFunctionBinding binding = function->binding;
+            for (uint32_t i = 0; i < binding.capture_count; ++i)
+                queue_release(&binding.captures[i], &pending);
+            domain_deallocate(domain, function, sizeof(*function) +
+                (size_t) binding.capture_count * sizeof(XrXirValue));
+            binding.release(binding.owner);
+        } else domain_deallocate(domain, object, sizeof(XirAtomicI64));
+        xr_xir_domain_drop(domain);
+    }
 }
 XrXirValueStatus xr_xir_string_append(XrXirValue *destination, const XrXirValue *suffix) {
     if (!xr_xir_value_argument(destination, XR_XIR_STRING) ||
@@ -349,14 +360,30 @@ void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *owned) {
 XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirType type,
     const XrXirFunctionBinding *binding, XrXirValue *output) {
     if (!domain || !unit_value(output) || !xr_xir_type_is_callable(type) ||
-        !binding || !binding->owner || !binding->release) return XR_XIR_VALUE_BAD_ARGUMENT;
+        !binding || !binding->owner || !binding->release || binding->capture_count > 65536 ||
+        (binding->capture_count && !binding->captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    for (uint32_t i = 0; i < binding->capture_count; ++i)
+        if (!xr_xir_value_argument(&binding->captures[i], (XrXirType) binding->captures[i].type))
+            return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!reference_retain(&domain->references)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
-    XirFunction *function = domain_allocate(domain, sizeof(*function), &status);
+    size_t bytes = sizeof(XirFunction) + (size_t) binding->capture_count * sizeof(XrXirValue);
+    XirFunction *function = domain_allocate(domain, bytes, &status);
     if (!function) { xr_xir_domain_drop(domain); return status; }
     atomic_init(&function->object.references, 1);
     function->object.domain = domain; function->object.type = type;
     function->binding = *binding;
+    XrXirValue *captures = (XrXirValue *) (function + 1);
+    function->binding.captures = binding->capture_count ? captures : NULL;
+    memset(captures, 0, (size_t) binding->capture_count * sizeof(*captures));
+    for (uint32_t i = 0; i < binding->capture_count; ++i) {
+        status = xr_xir_value_copy(&binding->captures[i], &captures[i]);
+        if (status != XR_XIR_VALUE_OK) {
+            while (i) xr_xir_value_drop(&captures[--i]);
+            domain_deallocate(domain, function, bytes); xr_xir_domain_drop(domain);
+            return status;
+        }
+    }
     output->type = (uint32_t) type;
     memcpy(&output->payload, &function, sizeof(function));
     return XR_XIR_VALUE_OK;

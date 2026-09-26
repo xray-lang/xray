@@ -38,9 +38,9 @@ contract; all other admitted compound operators require i64. Const/read bindings
 member/index targets and unsupported type pairs reject. These use the same operators
 and typed places; no wrapping/shift flags or alternate implementation is retained.
 
-Checked schema is 3; semantic contract is 8 and call ABI is 7. Old semantic
+Checked schema is 4; semantic contract is 10 and call ABI is 8. Old semantic
 packets and call entries reject before execution, without an old reader/adapter.
-Value ABI 4 and Program ABI 3 follow the owned function-value boundary. Compiler-generated C binds call ABI 7.
+Value ABI 5 and Program ABI 4 follow the owned function-value boundary. Compiler-generated C binds call ABI 8.
 The scalar leaf and resumable entry paths, packet consumer and source producer
 must all use this same contract. Wider numeric families remain unqualified.
 

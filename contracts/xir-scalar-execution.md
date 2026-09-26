@@ -4,7 +4,7 @@ This contract admits internal scalar leaf execution only. Source-language admiss
 Managed string calls are governed by `xir-managed-values.md`; module instances
 remain unimplemented. Resumable XIR calls are
 governed separately by `xir-resumable-calls.md`; leaf tests do not certify them. The current
-target is x86_64 little-endian with value boundary ABI version 4. Other targets,
+target is x86_64 little-endian with value boundary ABI version 5. Other targets,
 ABI versions, and layout contexts reject explicitly.
 
 The layout service takes type, target, context, and ABI identity. Storage bool is

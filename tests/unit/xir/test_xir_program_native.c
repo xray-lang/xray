@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_program_cases.h"
+#include "xir_capture_cases.h"
+extern const XrXirProgramSpec captures_program;
 extern const XrXirProgramSpec program0_program, program1_program, program2_program;
 int main(void) {
     const XrXirProgramSpec *specs[] = {&program0_program, &program1_program, &program2_program};
@@ -22,6 +24,10 @@ int main(void) {
         CHECK(xr_xir_program_seal(specs[mode], 65536, &program) == XR_XIR_OK);
         program_cases(program, mode);
     }
+    XrXirProgram *captures = NULL;
+    CHECK(xr_xir_program_seal(&captures_program,65536,&captures) == XR_XIR_OK);
+    capture_cases(captures);
+    puts("Native capture environments, two suspensions, cancellation and escaped ownership passed");
     puts("Native module programs match independent output, state and lifetime expectations");
     return 0;
 }

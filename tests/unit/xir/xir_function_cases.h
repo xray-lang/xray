@@ -25,15 +25,22 @@ static XrXirAction function_case_resume(XrXirCallView *view) {
         status = xr_xir_instance_literal(view, 0, &frame->owned);
         if (status == XR_XIR_CALL_READY) status = xr_xir_instance_slot_write(view, 0, &frame->owned, true);
     } else if (entry == 1) return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, 17}};
-    else if (entry == 2) status = xr_xir_instance_function(view, (XrXirType) 256, 3, &frame->owned);
+    else if (entry == 2) {
+        XrXirValue capture = {0};
+        status = xr_xir_instance_slot_read(view, 0, &capture);
+        if (status == XR_XIR_CALL_READY)
+            status = xr_xir_instance_function(view, (XrXirType) 256, 3, &capture, 1, &frame->owned);
+        xr_xir_value_drop(&capture);
+    }
     else if (entry == 3 && !frame->phase++) {
-        status = xr_xir_instance_slot_read(view, 0, &frame->owned);
+        status = xr_xir_value_copy(&view->arguments[0], &frame->owned) == XR_XIR_VALUE_OK ?
+            XR_XIR_CALL_READY : XR_XIR_CALL_LIMIT;
         if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0}};
     } else if (entry == 4) {
         if (!frame->phase++) {
             uint32_t target = UINT32_MAX;
             status = xr_xir_instance_resolve_function(view, &view->arguments[0], &target);
-            if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_CALL, target, NULL, 0, {0}};
+            if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_CALL, target, NULL, 0, view->arguments[0]};
         } else return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->inbox.value};
     }
     if (status != XR_XIR_CALL_READY) return function_case_fault(status);
@@ -51,10 +58,10 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1};
     XrXirCallableSignature signature = {NULL, 0, XR_XIR_STRING, 0, 0};
     XrXirCallableTypes types = {&signature, 1};
-    XrXirType callback_type = (XrXirType) 256;
+    XrXirType callback_type = (XrXirType) 256, capture_type = XR_XIR_STRING;
     XrXirCallEntry entries[5];
     for (unsigned i = 0; i < 5; ++i) entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION,
-        i == 4 ? &callback_type : NULL, i == 4 ? 1u : 0u,
+        i == 4 ? &callback_type : i == 3 ? &capture_type : NULL, i >= 3 ? 1u : 0u,
         i == 0 ? XR_XIR_UNIT : i == 1 ? XR_XIR_I64 : i == 2 ? callback_type : XR_XIR_STRING,
         sizeof(FunctionCaseFrame), function_case_resume, function_case_cleanup, NULL};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},

@@ -6,8 +6,8 @@ explicit ownership operations. It conveys no Sendable or no_suspend proof.
 Constructing a value checks the full signature and existing module import,
 visibility and initializer restrictions. Describing a type never grants access.
 
-Program sealing owns a verified signature table. Boxed value ABI 4, call ABI 7
-and Program ABI 3 replace their predecessors without an alternate runtime path.
+Program sealing owns a verified signature table. Boxed value ABI 5, call ABI 8
+and Program ABI 4 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
 it does not own module slots, providers, active frames or instance allocations.
@@ -36,7 +36,7 @@ resolved before Program sealing. CALL_INDIRECT records an SSA callee ID in its
 immediate and the existing ordered argument range. Callee dominance, value role,
 full signature and result are checked without enumerating implementation targets.
 Both operations use the canonical owned frame layout and resumable ABI. Semantic
-contract 9 rejects previous packets; wire schema is 4. Function-valued root
+contract 10 rejects previous packets; wire schema is 4. Function-valued root
 slots are instance state; non-root ordinary callable slots have no Sendable proof.
 
 Source admission uses the existing fn(...) -> R spelling (unit omits the arrow).
@@ -78,3 +78,28 @@ verification-test: test_xir_source_generics
 
 A discarded standalone specialization value is effectless under E0208, just as
 a discarded ordinary function name is; it must be used as a value or invoked.
+
+## Owned capture prefix
+
+FUNCTION_REF args denote an ordered operand-table capture range. The target
+parameter prefix matches captures under explicit generic substitution; the
+remaining parameters and result match the callable signature. Every capture
+is a dominated value, never a local place. Ranges, budgets, module authority
+and post-specialization verification remain mandatory.
+
+Construction copies each value into one immutable owned environment, publishes
+only on success, and leaves the binding lease with the caller on failure.
+Function copies share that environment. CALL action.value is a borrowed
+function value for indirect calls and canonical unit for direct calls. The
+frame driver copies captures followed by explicit arguments before the caller
+can clean up. No borrowed environment survives independently of its owner.
+
+Last-reference destruction drains nested immutable environments without host
+recursion or allocation. stop/free revokes entry but not escaped value lifetime.
+Value5/Call8/Program4 and schema4/semantic10 replace earlier contracts.
+Shared var cells, cycles, source closure production and concurrency remain open;
+this contract never substitutes snapshot capture for shared mutable bindings.
+
+verification-test: test_xir_program_vm
+verification-test: test_xir_program_native
+verification-test: test_xir_value_allocations

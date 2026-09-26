@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_program_fixture.h"
+#include "xir_capture_fixture.h"
 int main(int argc, char **argv) {
     FILE *file = argc == 2 ? fopen(argv[1], "wb") : NULL;
     CHECK(argc == 1 || (argc == 2 && file));
@@ -28,6 +29,13 @@ int main(int argc, char **argv) {
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_c_source_free(&source);
     }
+    XrXirArtifact *captures = capture_fixture();
+    XrXirCSource capture_source = {0};
+    CHECK(xr_xir_emit_c(captures,"captures",200000,&capture_source) == XR_XIR_OK);
+    xr_xir_artifact_free(captures);
+    CHECK(!strstr(capture_source.text,"xr_xir_vm") && !strstr(capture_source.text,"({"));
+    if (file) CHECK(fwrite(capture_source.text,1,capture_source.length,file) == capture_source.length);
+    xr_xir_c_source_free(&capture_source);
     if (file) CHECK(fclose(file) == 0);
     puts("Native program code and immutable declarations emitted");
     return 0;

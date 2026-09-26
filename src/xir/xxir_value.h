@@ -14,7 +14,7 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 4u
+#define XR_XIR_VALUE_ABI_VERSION 5u
 #define XR_XIR_CALLABLE_TYPE_BASE 256u
 #define XR_XIR_CALLABLE_TYPE_LIMIT 65536u
 #define XR_XIR_ARCH_X86_64 1u
@@ -56,6 +56,8 @@ typedef struct XrXirFunctionBinding {
     void *owner;
     void (*release)(void *owner);
     uint32_t entry;
+    const XrXirValue *captures;
+    uint32_t capture_count;
 } XrXirFunctionBinding;
 /* Successful construction takes the binding lease; failures leave it with the caller. */
 XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirType type,
