@@ -6847,8 +6847,8 @@ scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
 
 Internal resumable calls are governed by `contracts/xir-resumable-calls.md`.
-Direct CALL names a module function and admits at most two bool/i64 parameters
-in this subset; its result exactly matches the declaration. SUSPEND saves the next
+Direct CALL names a module function and passes an owned operand-table range;
+argument count, types and result exactly match the declaration. SUSPEND saves the next
 instruction; THROW carries an i64 error token. These are internal XIR operations,
 not new source keywords or qualification of modules, generics, or stdlib caches.
 VM and generated C return typed frame/result actions to the same trampoline.
@@ -6879,8 +6879,8 @@ contain one value without separators or a newline. Print evaluates arguments lef
 to right before one group call, renders one ASCII space between values and one
 final LF (also for zero arguments). Validation, budget checks and complete buffer
 allocation precede one byte-sink call; failures publish no partial group. The
-current fixed-operand PRINT admits 0–2 values, while the native group limit is
-65536. This does not qualify the complete variadic source print family.
+PRINT and native groups both admit 0–65536 values within resource budgets.
+Unimplemented source types and display protocols require separate qualification.
 Missing/rejecting providers are runtime failures. Source admission and complete
 Program/Instance qualification remain separate from this internal contract.
 String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT
@@ -6929,7 +6929,13 @@ imports and export visibility, using resolver-owned identities. Duplicate,
 private, unresolved and cyclic declarations fail. Parser string payloads are
 already decoded and must not be decoded again.
 
-CALL/PRINT currently admit at most two arguments. Full generics, stdlib, coroutine
+CALL/PRINT args[0]/args[1] encode first/count ranges into owned function operand
+tables. Nonempty ranges partition each table in instruction order; empty ranges
+are zero/zero and PRINT immediate is zero. Each group admits up to 65536 values,
+all type- and dominance-checked. Nested arguments evaluate left to right before
+appending the outer range. Lowered records and reverifies the maximum outgoing
+count; stable frames reserve typed-value staging and charge its physical bytes.
+Full generics, stdlib, coroutine
 syntax, foreign providers, parser OOM/input budgets, default CLI and product
 qualification remain separate. The interface contract is `contracts/xir-source-owner.md`.
 

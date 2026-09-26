@@ -48,6 +48,7 @@ int main(void) {
         CHECK(owner->entries[i].result == fixture_source_program.entries[i].result);
         CHECK(owner->entries[i].parameter_count == fixture_source_program.entries[i].parameter_count);
         if ((module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "next", 4)) ||
+            (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "pack", 4)) ||
             (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)))
             owner->entries[i] = fixture_source_program.entries[i];
     }

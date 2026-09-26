@@ -76,9 +76,8 @@ static bool value_type(XrXirType type) {
 
 static uint32_t operand_count(const XrXirFunction *function, const XrXirInstruction *op,
                               const XrXirModule *module) {
-    if (op->op == XR_XIR_CALL)
-        return module->functions[op->immediate].parameter_count;
-    if (op->op == XR_XIR_PRINT) return (uint32_t) op->immediate;
+    (void) module;
+    if (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT) return op->args[1];
     return op->op == XR_XIR_RETURN ? (function->result != XR_XIR_UNIT) : op_rules[op->op].operands;
 }
 
@@ -113,12 +112,15 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         return XR_XIR_BAD_STAGE;
     XrXirStatus declared = declaration_instruction(function, op, module);
     if (declared != XR_XIR_OK) return declared;
-    if (op->op == XR_XIR_PRINT && (op->immediate < 0 || op->immediate > 2)) return XR_XIR_BAD_STRUCTURE;
+    bool range = op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT;
+    if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
+        op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
+        return XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_CALL) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
             return XR_XIR_BAD_STRUCTURE;
         const XrXirFunction *callee = &module->functions[op->immediate];
-        if (callee->parameter_count > 2 || (callee->parameter_count && !callee->parameters))
+        if (callee->parameter_count != op->args[1] || (callee->parameter_count && !callee->parameters))
             return XR_XIR_BAD_STRUCTURE;
         if (op->type != callee->result)
             return XR_XIR_BAD_TYPE;
@@ -143,7 +145,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
     uint32_t operands = operand_count(function, op, module);
-    for (uint32_t i = operands; i < 2; ++i)
+    for (uint32_t i = range ? 2 : operands; i < 2; ++i)
         if (op->args[i])
             return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < rule->edges; ++i)
@@ -157,7 +159,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_OUTPUT) {
         if (op->immediate != 1 && op->immediate != 2) return XR_XIR_BAD_STRUCTURE;
-    } else if (op->op != XR_XIR_CONST_I64 && op->op != XR_XIR_CALL && op->op != XR_XIR_PRINT &&
+    } else if (op->op != XR_XIR_CONST_I64 && op->op != XR_XIR_CALL &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
@@ -174,12 +176,15 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
     uint64_t bytes = sizeof(*function) + (uint64_t) function->name_length +
         (uint64_t) function->parameter_count * sizeof(*function->parameters) +
         (uint64_t) function->block_count * sizeof(*function->blocks) +
+        (uint64_t) function->operand_count * sizeof(*function->operands) +
         (uint64_t) function->instruction_count * sizeof(*function->instructions);
     if (!spend(&context->remaining.metadata_bytes, bytes) || bytes > SIZE_MAX)
         return XR_XIR_BUDGET;
     if (!function->name || !function->name_length || !function->blocks ||
         !function->block_count || !function->instructions || !function->instruction_count ||
         (function->parameter_count && !function->parameters) ||
+        (function->operand_count && !function->operands) || (!function->operand_count && function->operands) ||
+        function->parameter_count > 65536 ||
         function->parameter_count > UINT32_MAX - function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     if (function->result != XR_XIR_UNIT && !value_type(function->result))
@@ -194,7 +199,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         if (!value_type(function->parameters[p]))
             return XR_XIR_BAD_TYPE;
     }
-    uint32_t end = 0;
+    uint32_t end = 0, operand_end = 0;
     for (uint32_t b = 0; b < function->block_count; ++b) {
         context->location.block = b;
         const XrXirBlock *block = &function->blocks[b];
@@ -216,11 +221,15 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             XrXirStatus status = instruction_shape(function, op, stage, context->module);
             if (status != XR_XIR_OK)
                 return status;
+            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT) && op->args[1]) {
+                if (op->args[0] != operand_end) return XR_XIR_BAD_STRUCTURE;
+                operand_end += op->args[1];
+            }
             if (op_rules[op->op].terminal != (i == end - 1))
                 return XR_XIR_BAD_STRUCTURE;
         }
     }
-    return end == function->instruction_count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    return end == function->instruction_count && operand_end == function->operand_count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
 }
 
 static void graph_free(Graph *graph) {
@@ -376,19 +385,22 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_ATOMIC_I64_LOAD || op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
             expected = XR_XIR_ATOMIC_I64;
         uint32_t count = operand_count(function, op, context->module);
+        if (!spend(&context->remaining.work, count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a) {
             XrXirType operand_type = op->op == XR_XIR_CALL ?
                 context->module->functions[op->immediate].parameters[a] : expected;
             if (op->op == XR_XIR_ATOMIC_I64_FETCH_ADD && a == 1) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {
-                uint32_t id = op->args[a];
+                uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + a] : op->args[a];
                 if (id >= function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
                 operand_type = id < function->parameter_count ? function->parameters[id] :
                     function->instructions[id - function->parameter_count].type;
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
                 if (!scalar(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
-            XrXirStatus status = value_use(function, graph, i, op->args[a], operand_type);
+            uint32_t id = op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT ?
+                function->operands[op->args[0] + a] : op->args[a];
+            XrXirStatus status = value_use(function, graph, i, id, operand_type);
             if (status != XR_XIR_OK)
                 return status;
         }

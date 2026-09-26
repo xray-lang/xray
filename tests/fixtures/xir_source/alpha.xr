@@ -5,3 +5,7 @@ export fn tag(value: string) -> string {
     text = text + value
     return text
 }
+export fn pack(left: string, first: i64, last: i64, right: string) -> string {
+    print(first, last, left, right)
+    return tag(left + right)
+}

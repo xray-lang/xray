@@ -263,8 +263,8 @@ int main(void) {
     XrXirBlock block = {0, 3};
     XrXirType parameter = XR_XIR_I64;
     XrXirFunction functions[] = {
-        {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3},
-        {"second", 6, &parameter, 1, XR_XIR_I64, &block, 1, ops, 3},
+        {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
+        {"second", 6, &parameter, 1, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
     };
     XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;

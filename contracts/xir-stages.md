@@ -18,7 +18,7 @@ bool/i64 values; unit is a result/terminator type and has no value ID in this
 internal subset. Copying a scalar preserves its value without resource ownership. Integer
 addition has checked signed overflow; equality and signed less-than return bool. Branch conditions
 must be bool. Direct scalar CALL, SUSPEND, and THROW are separately governed by the resumable
-call contract. Calls carry a function-table index, at most two arguments, and an
+call contract. Calls carry a function-table index, a checked operand-table range, and an
 exact declared result type. Generic, resource, and borrowing operations
 are outside this subset and are rejected rather than guessed or lowered through
 an older representation. This subset introduces no new source spelling.
@@ -42,6 +42,19 @@ memory, and verification work across the whole module. Counts are checked before
 traversal/allocation. Host view pointers must designate the advertised live arrays;
 the view API is not an untrusted byte decoder. Serialized admission is not provided.
 Allocation failure, malformed data, and exhausted budgets are distinct failures.
+
+CALL and PRINT use args[0]/args[1] as a first/count range into the owning function's
+operand table. CALL immediate names its callee; PRINT immediate is zero. Empty
+ranges are canonical zero/zero. Nonempty ranges partition the table exactly in
+instruction order; gaps, overlaps, trailing entries and overflow are rejected.
+Every referenced value is type-checked and dominance-checked at its instruction.
+CALL range length equals the callee signature. Arity is bounded by the current
+native boundary's 65536-value limit and resource budgets, not a two-value format.
+Both stage transitions copy the operand table. Lowered layout freezes the maximum
+outgoing group size; its byte cost is charged to frame limits and reverified.
+VM/native argument staging lives in the stable caller activation across child
+calls or suspension; staged values borrow owned SSA slots until the driver copies
+them. The old inline CALL/PRINT operand encoding is not retained.
 
 verification-test: test_xir_stages
 verification-test: test_xir_allocations

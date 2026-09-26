@@ -69,14 +69,14 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
     };
     const XrXirBlock blocks[] = {{0, 4}, {0, 9}, {0, 11}, {0, 6}, {0, 2}};
     const XrXirFunction functions[] = {
-        {"init_root", 9, NULL, 0, XR_XIR_UNIT, &blocks[0], 1, init, 4},
-        {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 9},
-        {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, alpha, 9},
-        {"main", 4, NULL, 0, XR_XIR_I64, &blocks[2], 1, root, 11},
-        {"alpha_next", 10, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_alpha, 6},
-        {"beta_next", 9, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_beta, 6},
-        {"root_string", 11, NULL, 0, XR_XIR_STRING, &blocks[4], 1, get_string, 2},
-        {"alpha_cell", 10, NULL, 0, XR_XIR_ATOMIC_I64, &blocks[0], 1, get_atomic, 4}
+        {"init_root", 9, NULL, 0, XR_XIR_UNIT, &blocks[0], 1, init, 4, NULL, 0},
+        {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 9, NULL, 0},
+        {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, alpha, 9, NULL, 0},
+        {"main", 4, NULL, 0, XR_XIR_I64, &blocks[2], 1, root, 11, NULL, 0},
+        {"alpha_next", 10, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_alpha, 6, NULL, 0},
+        {"beta_next", 9, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_beta, 6, NULL, 0},
+        {"root_string", 11, NULL, 0, XR_XIR_STRING, &blocks[4], 1, get_string, 2, NULL, 0},
+        {"alpha_cell", 10, NULL, 0, XR_XIR_ATOMIC_I64, &blocks[0], 1, get_atomic, 4, NULL, 0}
     };
     const uint32_t imports[] = {1, 2};
     const XrXirSourceModule modules[] = {

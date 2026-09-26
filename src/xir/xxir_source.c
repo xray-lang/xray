@@ -30,7 +30,8 @@ typedef struct SourceName {
 typedef struct SourceFunction {
     AstNode *node;
     uint32_t module, count, capacity;
-    XrXirType parameters[2];
+    XrXirType *parameters;
+    uint32_t *operands, operand_count, operand_capacity;
     XrXirBlock block;
     XrXirInstruction *ops;
 } SourceFunction;
@@ -130,6 +131,23 @@ static bool emit(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     return true;
 }
 static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value);
+static bool emit_group(SourceContext *ctx, XrXirInstruction op, const SourceValue *args,
+                       uint32_t count, SourceValue *value) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    if (count > UINT32_MAX - body->operand_count)
+        return source_fail(ctx, NULL, XR_XIR_BUDGET, "operand capacity overflow");
+    uint32_t needed = body->operand_count + count;
+    if (needed > body->operand_capacity) {
+        uint32_t capacity = needed <= UINT32_MAX / 2 ? needed * 2 : needed;
+        uint32_t *operands = source_alloc(ctx, capacity, sizeof(*operands));
+        if (!operands) return false;
+        if (body->operand_count) memcpy(operands, body->operands, body->operand_count * sizeof(*operands));
+        body->operands = operands; body->operand_capacity = capacity;
+    }
+    op.args[0] = count ? body->operand_count : 0; op.args[1] = count;
+    for (uint32_t i = 0; i < count; ++i) body->operands[body->operand_count++] = args[i].id;
+    return emit(ctx, op, value);
+}
 static bool statement(SourceContext *ctx, AstNode *node, bool top);
 static SourceName *visible_name(SourceContext *ctx, const char *name) {
     SourceName *symbol = find_name(ctx, ctx->locals, name);
@@ -144,7 +162,7 @@ static SourceName *imported_function(SourceContext *ctx, SourceName *symbol, con
 }
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
-    if (call->arg_count < 0 || call->arg_count > 2 || call->type_arg_count || call->default_arg_count)
+    if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count || call->default_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "call arity or type arguments are not admitted");
     SourceName *target = NULL;
     bool print = false, atomic = false;
@@ -172,7 +190,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
     if (!print && !atomic && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION))
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unresolved or unsupported callable");
-    SourceValue args[2] = {{0}, {0}};
+    SourceValue *args = call->arg_count ? source_alloc(ctx, (size_t) call->arg_count, sizeof(*args)) : NULL;
+    if (call->arg_count && !args) return false;
     for (int i = 0; i < call->arg_count; ++i) {
         if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "ref and move arguments require an implemented contract");
@@ -184,7 +203,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         for (int i = 0; i < call->arg_count; ++i)
             if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_I64 && args[i].type != XR_XIR_STRING)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
-        op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {args[0].id, args[1].id}, {0, 0}, call->arg_count};
+        op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0};
     } else if (atomic) {
         if (call->arg_count != 1 || args[0].type != XR_XIR_I64)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Atomic requires one i64 initializer");
@@ -200,8 +219,10 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         for (int i = 0; i < call->arg_count; ++i)
             if (args[i].type != function->parameters[i])
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "call argument type does not match declaration");
-        op = (XrXirInstruction) {XR_XIR_CALL, function->result, {args[0].id, args[1].id}, {0, 0}, target->index};
+        op = (XrXirInstruction) {XR_XIR_CALL, function->result, {0, 0}, {0, 0}, target->index};
     }
+    if (op.op == XR_XIR_CALL || op.op == XR_XIR_PRINT)
+        return emit_group(ctx, op, args, (uint32_t) call->arg_count, value);
     return emit(ctx, op, value);
 }
 static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
@@ -328,23 +349,28 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
 static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) {
     FunctionDeclNode *decl = &node->as.function_decl;
     if (decl->is_generator || decl->is_extern || decl->attr_count || decl->type_param_count ||
-        decl->throws_count || decl->borrow_origin_count || !decl->body || decl->param_count > 2 || decl->param_count < 0)
+        decl->throws_count || decl->borrow_origin_count || !decl->body || decl->param_count > 65536 || decl->param_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function contract is not implemented in XIR");
     SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], decl->name, node);
     if (!symbol) return false;
     symbol->kind = SOURCE_FUNCTION; symbol->index = index;
     SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = ctx->module;
+    body->parameters = decl->param_count ? source_alloc(ctx, (size_t) decl->param_count, sizeof(*body->parameters)) : NULL;
+    if (decl->param_count && !body->parameters) return false;
     XrXirFunction *function = &ctx->functions[index];
     *function = (XrXirFunction) {decl->name, (uint32_t) strlen(decl->name), body->parameters,
-        (uint32_t) decl->param_count, XR_XIR_UNIT, &body->block, 1, NULL, 0};
+        (uint32_t) decl->param_count, XR_XIR_UNIT, &body->block, 1, NULL, 0, NULL, 0};
     if (!source_type(ctx, decl->return_type, &function->result)) return false;
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         if (!param->type || param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest ||
             !source_type(ctx, param->type, &body->parameters[i]) || body->parameters[i] == XR_XIR_UNIT)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
-        for (int j = 0; j < i; ++j) if (!strcmp(param->name, decl->params[j]->name))
-            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
+        for (int j = 0; j < i; ++j) {
+            if (!source_work(ctx, node)) return false;
+            if (!strcmp(param->name, decl->params[j]->name))
+                return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
+        }
     }
     ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported};
     return true;
@@ -397,7 +423,7 @@ static bool collect_declarations(SourceContext *ctx) {
         for (int i = 0; i < spec->dep_count; ++i) deps[i] = (uint32_t) spec->dep_indices[i];
         ctx->modules[m] = (XrXirSourceModule) {spec->canonical, (uint32_t) strlen(spec->canonical), deps, (uint32_t) spec->dep_count, m};
         ctx->bodies[m].module = m;
-        ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, &ctx->bodies[m].block, 1, NULL, 0};
+        ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, &ctx->bodies[m].block, 1, NULL, 0, NULL, 0};
         ctx->identities[m].module = m;
         for (int i = 0; i < spec->ast->as.program.count; ++i) {
             AstNode *node = spec->ast->as.program.statements[i];
@@ -426,6 +452,7 @@ static bool finish_body(SourceContext *ctx) {
     }
     body->block = (XrXirBlock) {0, body->count};
     function->instructions = body->ops; function->instruction_count = body->count;
+    function->operands = body->operands; function->operand_count = body->operand_count;
     return true;
 }
 static bool build_bodies(SourceContext *ctx) {
@@ -452,7 +479,7 @@ static bool build_bodies(SourceContext *ctx) {
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,
-        &ctx->bodies[ctx->function].block, 1, NULL, 0};
+        &ctx->bodies[ctx->function].block, 1, NULL, 0, NULL, 0};
     if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 0}, NULL) ||
         !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}, NULL)) return false;
     ctx->returned = true;

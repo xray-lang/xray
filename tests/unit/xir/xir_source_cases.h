@@ -17,11 +17,13 @@ typedef struct SourceOutput { uint32_t calls; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     SourceOutput *output = context;
     CHECK(stream == XR_XIR_STDOUT);
-    CHECK(output->calls < 4);
+    CHECK(output->calls < 6);
     if (!output->calls) CHECK(length == 8 && !memcmp(bytes, "a\xE4\xB8\xAD 20\n", 8));
     else if (output->calls == 1) CHECK(length == 3 && !memcmp(bytes, "10\n", 3));
     else if (output->calls == 2) CHECK(length == 6 && !memcmp(bytes, "11 12\n", 6));
-    else CHECK(length == 5 && !memcmp(bytes, "true\n", 5));
+    else if (output->calls == 3) CHECK(length == 5 && !memcmp(bytes, "true\n", 5));
+    else if (output->calls == 4) CHECK(length == 11 && !memcmp(bytes, "13 14 ax y\n", 11));
+    else CHECK(length == 16 && !memcmp(bytes, "aaxy true 42 az\n", 16));
     ++output->calls;
     return true;
 }
@@ -40,11 +42,11 @@ static XrXirValue source_run(XrXirProgram *program, uint32_t entry, uint32_t res
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
     XrXirCallResult polled = xr_xir_instance_poll(instance).outcome;
     CHECK(polled.status == XR_XIR_CALL_RETURNED && polled.value.type == XR_XIR_I64 && polled.value.payload == 0);
-    CHECK(output.calls == 4);
-    for (int64_t expected = 13; expected < 15; ++expected) {
+    CHECK(output.calls == 6);
+    for (int64_t expected = 15; expected < 17; ++expected) {
         CHECK(xr_xir_instance_start(instance, advance, NULL, 0) == XR_XIR_CALL_READY);
         polled = xr_xir_instance_poll(instance).outcome;
-        CHECK(polled.status == XR_XIR_CALL_RETURNED && polled.value.payload == expected && output.calls == 4);
+        CHECK(polled.status == XR_XIR_CALL_RETURNED && polled.value.payload == expected && output.calls == 6);
     }
     CHECK(xr_xir_instance_start(instance, result_function, NULL, 0) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);

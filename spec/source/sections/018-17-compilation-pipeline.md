@@ -75,7 +75,7 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 Checked不可执行；未知目标/ABI拒绝。此内部子集不授予模块、调用或可恢复ABI资格。
 
 内部可恢复调用受 `contracts/xir-resumable-calls.md` 约束。直接CALL引用模块函数身份，
-本子集最多传递两个bool/i64参数，结果精确匹配声明；SUSPEND保存下一指令，THROW传递i64错误token。
+CALL参数通过函数自有操作数表传递，数量和类型须精确匹配声明；SUSPEND保存下一指令，THROW传递i64错误token。
 这些是内部XIR操作，不引入源码关键字，也不授予模块、泛型或stdlib缓存资格。
 VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不把待恢复的子调用留在C栈上。
 帧地址稳定，深度、实际字节与恢复工作分别有预算；挂起token只可消费一次，重入驱动/销毁拒绝。
@@ -97,8 +97,8 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 bool/i64/string 类型以借用组调用实例配置的同步 provider；缺失或拒绝是运行时失败。
 原始输出组只有一个值，不加空格或换行；print 输出组在参数从左到右求值后一次发布，
 渲染时值间恰一个 ASCII 空格，末尾一个 LF，零参数也输出 LF。渲染器先完整验证、
-预算检查和分配，再调用字节 sink 一次，失败不发布部分组。当前固定操作数 PRINT
-只准入 0–2 个值，native group 上限 65536；这不是完整可变参数源码 print 的资格。
+预算检查和分配，再调用字节 sink 一次，失败不发布部分组。PRINT 和 native group 均准入
+0–65536 个值，并受资源预算限制；未实现的源码类型与显示协议仍需单独验证。
 
 以上仅冻结内部 C 边界；源码 string 声明、模块实例、泛型库发布和最终产品资格仍分别验收。
 实际预算、并发、失败原子性及释放义务见 `contracts/xir-managed-values.md`。
@@ -134,7 +134,11 @@ print及默认SeqCst的Atomic<i64>构造/load/fetchAdd。未实施语法明确�
 当前准入scalar/string/Atomic<i64>；根var属于实例。跨模块调用要求直接导入与export，
 模块身份来自resolver，重复/私有/未解析声明与环拒绝。字符串AST已经解码，不重复解码。
 
-当前CALL/PRINT最多两个参数；泛型、完整stdlib、协程语法、foreign provider、parser完整
+CALL/PRINT用args[0]/args[1]表示函数自有操作数表的起点/数量；非空范围按指令顺序
+完整分割该表，空范围必须为0/0，PRINT immediate为0。单组上限65536，每个值均检查
+类型与支配关系。嵌套参数从左到右求值完成后才追加外层范围。Lowered保存并复验最大
+出站参数数量，稳定帧为其分配typed value暂存区并计入物理字节预算。
+泛型、完整stdlib、协程语法、foreign provider、parser完整
 OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口合同见 `contracts/xir-source-owner.md`。
 
 <!-- /xr-spec:cn -->
@@ -221,8 +225,8 @@ scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
 
 Internal resumable calls are governed by `contracts/xir-resumable-calls.md`.
-Direct CALL names a module function and admits at most two bool/i64 parameters
-in this subset; its result exactly matches the declaration. SUSPEND saves the next
+Direct CALL names a module function and passes an owned operand-table range;
+argument count, types and result exactly match the declaration. SUSPEND saves the next
 instruction; THROW carries an i64 error token. These are internal XIR operations,
 not new source keywords or qualification of modules, generics, or stdlib caches.
 VM and generated C return typed frame/result actions to the same trampoline.
@@ -253,8 +257,8 @@ contain one value without separators or a newline. Print evaluates arguments lef
 to right before one group call, renders one ASCII space between values and one
 final LF (also for zero arguments). Validation, budget checks and complete buffer
 allocation precede one byte-sink call; failures publish no partial group. The
-current fixed-operand PRINT admits 0–2 values, while the native group limit is
-65536. This does not qualify the complete variadic source print family.
+PRINT and native groups both admit 0–65536 values within resource budgets.
+Unimplemented source types and display protocols require separate qualification.
 Missing/rejecting providers are runtime failures. Source admission and complete
 Program/Instance qualification remain separate from this internal contract.
 String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT
@@ -303,7 +307,13 @@ imports and export visibility, using resolver-owned identities. Duplicate,
 private, unresolved and cyclic declarations fail. Parser string payloads are
 already decoded and must not be decoded again.
 
-CALL/PRINT currently admit at most two arguments. Full generics, stdlib, coroutine
+CALL/PRINT args[0]/args[1] encode first/count ranges into owned function operand
+tables. Nonempty ranges partition each table in instruction order; empty ranges
+are zero/zero and PRINT immediate is zero. Each group admits up to 65536 values,
+all type- and dominance-checked. Nested arguments evaluate left to right before
+appending the outer range. Lowered records and reverifies the maximum outgoing
+count; stable frames reserve typed-value staging and charge its physical bytes.
+Full generics, stdlib, coroutine
 syntax, foreign providers, parser OOM/input budgets, default CLI and product
 qualification remain separate. The interface contract is `contracts/xir-source-owner.md`.
 

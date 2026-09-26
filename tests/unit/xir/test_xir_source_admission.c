@@ -30,7 +30,7 @@ int main(void) {
         "const a = 1\na = 2\n",
         "const a: string = 1\n",
         "const a = 1\nconst a = 2\n",
-        "print(1, 2, 3)\n",
+        "print(Atomic(1), 2, 3)\n",
         "print(Atomic(1))\n",
         "const a = Atomic(true)\n",
         "const a = Atomic(1)\na.fetchAdd(false)\n",

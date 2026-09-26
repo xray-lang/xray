@@ -13,17 +13,18 @@
 #define XIR_OUTPUT_FIXTURE_H
 #include "xir/xxir.h"
 static XrXirArtifact *output_fixture(void) {
+    const uint32_t operands[] = {0, 1, 5};
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirInstruction ops[] = {
         {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 1}, {0, 0}, 2},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 2}, {0, 0}, 0},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {1, 0}, {0, 0}, 2},
         {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0}, 1},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {5, 0}, {0, 0}, 1},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {2, 1}, {0, 0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
     };
     const XrXirBlock blocks[] = {{0, 6}};
-    const XrXirFunction functions[] = {{"output", 6, parameters, 2, XR_XIR_UNIT, blocks, 1, ops, 6}};
+    const XrXirFunction functions[] = {{"output", 6, parameters, 2, XR_XIR_UNIT, blocks, 1, ops, 6, operands, 3}};
     const XrXirModule built = {XR_XIR_BUILT, functions, 1, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;

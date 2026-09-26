@@ -48,7 +48,7 @@ static void fixture_init(Fixture *fixture) {
     fixture->instructions[4] = (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 9};
     fixture->instructions[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {6, 0}, {0, 0}, 0};
     fixture->function = (XrXirFunction) {fixture->name, 5, fixture->parameters, 2,
-        XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6};
+        XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6, NULL, 0};
     fixture->module = (XrXirModule) {XR_XIR_BUILT, &fixture->function, 1, NULL};
 }
 
@@ -217,7 +217,7 @@ static void loops_and_storage_order(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
     };
     XrXirBlock blocks[] = {{0, 2}, {2, 1}, {3, 1}, {4, 1}};
-    XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5};
+    XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     ops[0].immediate = 2;
@@ -246,7 +246,7 @@ static void dominance_word_boundary(void) {
         else
             ops[next++] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {b + 1, 0}, 0};
     }
-    XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71};
+    XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     ops[64] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {65, 69}, 0};
@@ -267,7 +267,7 @@ static void reverse_storage_and_boolean_values(void) {
         {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0},
     };
     XrXirBlock blocks[] = {{0, 1}, {1, 1}, {2, 4}};
-    XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6};
+    XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);

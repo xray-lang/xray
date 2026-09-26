@@ -70,15 +70,15 @@ static XrXirArtifact *fixture_checked(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
     };
     const XrXirFunction functions[] = {
-        {"add", 3, add_parameters, 3, XR_XIR_I64, add_blocks, 3, add, 6},
-        {"eq", 2, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, eq, 2},
-        {"copy", 4, bool_parameters, 1, XR_XIR_BOOL, pair_blocks, 1, copy, 2},
-        {"unit", 4, NULL, 0, XR_XIR_UNIT, unit_blocks, 1, unit, 1},
-        {"min", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, minimum, 2},
-        {"loop", 4, NULL, 0, XR_XIR_UNIT, loop_blocks, 2, loop, 2},
-        {"reverse", 7, NULL, 0, XR_XIR_BOOL, reverse_blocks, 3, reverse, 6},
-        {"false", 5, NULL, 0, XR_XIR_BOOL, pair_blocks, 1, boolean, 2},
-        {"max", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, maximum, 2}
+        {"add", 3, add_parameters, 3, XR_XIR_I64, add_blocks, 3, add, 6, NULL, 0},
+        {"eq", 2, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, eq, 2, NULL, 0},
+        {"copy", 4, bool_parameters, 1, XR_XIR_BOOL, pair_blocks, 1, copy, 2, NULL, 0},
+        {"unit", 4, NULL, 0, XR_XIR_UNIT, unit_blocks, 1, unit, 1, NULL, 0},
+        {"min", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, minimum, 2, NULL, 0},
+        {"loop", 4, NULL, 0, XR_XIR_UNIT, loop_blocks, 2, loop, 2, NULL, 0},
+        {"reverse", 7, NULL, 0, XR_XIR_BOOL, reverse_blocks, 3, reverse, 6, NULL, 0},
+        {"false", 5, NULL, 0, XR_XIR_BOOL, pair_blocks, 1, boolean, 2, NULL, 0},
+        {"max", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, maximum, 2, NULL, 0}
     };
     const XrXirModule module = {XR_XIR_BUILT, functions, 9, NULL};
     XrXirArtifact *artifact = NULL;

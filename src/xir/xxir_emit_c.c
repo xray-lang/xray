@@ -290,16 +290,16 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         break;
     case XR_XIR_OUTPUT:
     case XR_XIR_PRINT: {
-        uint32_t count = op->op == XR_XIR_PRINT ? (uint32_t) op->immediate : 1;
+        uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
         for (uint32_t p = 0; p < count; ++p) {
-            uint32_t id = op->args[p];
+            uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + p] : op->args[p];
             XrXirType type = id < function->parameter_count ? function->parameters[id] :
                 function->instructions[id - function->parameter_count].type;
             append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
                    p, (uint32_t) type, layout->offsets[id]);
         }
-        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, %uu, state->arguments, %uu, {0}};\n",
-            op->op == XR_XIR_PRINT ? 3u : (uint32_t) op->immediate, count);
+        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, %uu, %s, %uu, {0}};\n",
+            op->op == XR_XIR_PRINT ? 3u : (uint32_t) op->immediate, count ? "state->arguments" : "NULL", count);
         return;
     }
     case XR_XIR_ADD_I64:
@@ -332,9 +332,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         for (uint32_t p = 0; p < callee->parameter_count; ++p)
             append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, "
                    "xr_xir_scalar_load(state->frame, %uu)};\n", p, (uint32_t) callee->parameters[p],
-                   layout->offsets[op->args[p]]);
-        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_CALL, %uu, state->arguments, %uu, {0, 0, 0}};\n",
-               (uint32_t) op->immediate, callee->parameter_count);
+                   layout->offsets[function->operands[op->args[0] + p]]);
+        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_CALL, %uu, %s, %uu, {0, 0, 0}};\n",
+               (uint32_t) op->immediate, callee->parameter_count ? "state->arguments" : "NULL", callee->parameter_count);
         return;
     }
     case XR_XIR_SUSPEND:
@@ -362,14 +362,15 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirModule *module = xr_xir_artifact_module(artifact);
     const XrXirFunction *function = &module->functions[index];
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, index);
-    if (layout->frame_bytes > UINT32_MAX - 64u) {
+    if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) > UINT32_MAX - 64u) {
         buffer->status = XR_XIR_BUDGET;
         return;
     }
     append(buffer, "typedef struct %s_state_%u {\n"
-           "    uint32_t pc, destination, expected; bool initialized, waiting;\n"
-           "    XrXirValue arguments[2]; unsigned char frame[%u];\n"
-           "} %s_state_%u;\n", prefix, index, layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
+           "    uint32_t pc, destination, expected; bool initialized, waiting;\n", prefix, index);
+    if (layout->outgoing_count) append(buffer, "    XrXirValue arguments[%u];\n", layout->outgoing_count);
+    append(buffer, "    unsigned char frame[%u];\n} %s_state_%u;\n",
+           layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
     append(buffer, "XR_FUNC XrXirAction %s_f%u(XrXirCallView *view) {\n"
            "    %s_state_%u *state = view->state;\n", prefix, index, prefix, index);
     for (uint32_t i = 0; i < function->instruction_count; ++i)

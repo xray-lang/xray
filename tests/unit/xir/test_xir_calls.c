@@ -122,7 +122,7 @@ static XrXirArtifact *comparator_artifact(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0}
     };
     XrXirBlock block = {0, 2};
-    XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2};
+    XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
@@ -284,8 +284,12 @@ static void call_admission(void) {
     CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_TYPE);
     op[0].type = XR_XIR_I64;
     op[0].args[0] = 99;
-    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_VALUE);
+    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
     op[0].args[0] = 0;
+    uint32_t *operands = (uint32_t *) module->functions[0].operands;
+    operands[0] = 99;
+    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_VALUE);
+    operands[0] = 0;
     CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_OK);
     XrXirVmBinding bindings[3];
     XrXirCallEntry entries[3];

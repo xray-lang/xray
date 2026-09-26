@@ -68,6 +68,7 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
             (uint64_t) function->parameter_count * (sizeof(XrXirType) + sizeof(XrXirLayout)) +
             (uint64_t) function->block_count * sizeof(XrXirBlock) +
             (uint64_t) function->instruction_count * sizeof(XrXirInstruction) +
+            (uint64_t) function->operand_count * sizeof(uint32_t) +
             slots * sizeof(uint32_t) * 2;
         if (slots > UINT32_MAX || required > SIZE_MAX ||
             !subtract_bytes(&bytes, required) || !subtract_bytes(&work, slots + 1))
@@ -130,6 +131,15 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         }
     }
     XrXirLayout result;
+    uint32_t outgoing = 0;
+    for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        const XrXirInstruction *op = &function->instructions[i];
+        uint32_t count = op->op == XR_XIR_OUTPUT ? 1 :
+            op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT ? op->args[1] : 0;
+        if (count > outgoing) outgoing = count;
+    }
+    uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue);
+    if (physical_bytes > UINT32_MAX || physical_bytes > budget->frame_bytes) return XR_XIR_BUDGET;
     XrXirStatus status = xr_xir_layout(function->result, &artifact->target, XR_XIR_LAYOUT_RESULT, &result);
     if (status != XR_XIR_OK)
         return status;
@@ -137,8 +147,9 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         layout->result = result;
         layout->frame_bytes = bytes;
         layout->owned_count = owned;
+        layout->outgoing_count = outgoing;
     } else if (!layout_equal(layout->result, result) || layout->frame_bytes != bytes ||
-               layout->owned_count != owned) {
+               layout->owned_count != owned || layout->outgoing_count != outgoing) {
         return XR_XIR_BAD_LAYOUT;
     }
     return XR_XIR_OK;

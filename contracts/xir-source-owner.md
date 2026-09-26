@@ -13,8 +13,10 @@ concatenation, print and Atomic<i64> construction/load/fetchAdd. Integer arithme
 generics, ref/move, user aggregates, reflection, coroutine syntax, attributes and
 unimplemented declarations fail closed. Every function body is checked, including
 unreachable functions. No ordinary generic body is instantiated by duck typing.
-The current fixed-operand XIR bounds calls and print to two arguments; this is a
-temporary admission limit, not full source-language qualification.
+Calls and print use owned function operand tables, admitting up to 65536
+arguments within metadata, work, parameter and physical frame budgets. Arguments
+are evaluated left to right before appending the owning instruction range; nested
+calls cannot interleave ranges. This does not qualify unimplemented source types.
 
 Top-level functions are hoisted; top-level executable statements and binding
 initializers execute in source order once per instance. A function named main is

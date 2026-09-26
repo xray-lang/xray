@@ -6807,7 +6807,7 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 Checked不可执行；未知目标/ABI拒绝。此内部子集不授予模块、调用或可恢复ABI资格。
 
 内部可恢复调用受 `contracts/xir-resumable-calls.md` 约束。直接CALL引用模块函数身份，
-本子集最多传递两个bool/i64参数，结果精确匹配声明；SUSPEND保存下一指令，THROW传递i64错误token。
+CALL参数通过函数自有操作数表传递，数量和类型须精确匹配声明；SUSPEND保存下一指令，THROW传递i64错误token。
 这些是内部XIR操作，不引入源码关键字，也不授予模块、泛型或stdlib缓存资格。
 VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不把待恢复的子调用留在C栈上。
 帧地址稳定，深度、实际字节与恢复工作分别有预算；挂起token只可消费一次，重入驱动/销毁拒绝。
@@ -6829,8 +6829,8 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 bool/i64/string 类型以借用组调用实例配置的同步 provider；缺失或拒绝是运行时失败。
 原始输出组只有一个值，不加空格或换行；print 输出组在参数从左到右求值后一次发布，
 渲染时值间恰一个 ASCII 空格，末尾一个 LF，零参数也输出 LF。渲染器先完整验证、
-预算检查和分配，再调用字节 sink 一次，失败不发布部分组。当前固定操作数 PRINT
-只准入 0–2 个值，native group 上限 65536；这不是完整可变参数源码 print 的资格。
+预算检查和分配，再调用字节 sink 一次，失败不发布部分组。PRINT 和 native group 均准入
+0–65536 个值，并受资源预算限制；未实现的源码类型与显示协议仍需单独验证。
 
 以上仅冻结内部 C 边界；源码 string 声明、模块实例、泛型库发布和最终产品资格仍分别验收。
 实际预算、并发、失败原子性及释放义务见 `contracts/xir-managed-values.md`。
@@ -6866,7 +6866,11 @@ print及默认SeqCst的Atomic<i64>构造/load/fetchAdd。未实施语法明确�
 当前准入scalar/string/Atomic<i64>；根var属于实例。跨模块调用要求直接导入与export，
 模块身份来自resolver，重复/私有/未解析声明与环拒绝。字符串AST已经解码，不重复解码。
 
-当前CALL/PRINT最多两个参数；泛型、完整stdlib、协程语法、foreign provider、parser完整
+CALL/PRINT用args[0]/args[1]表示函数自有操作数表的起点/数量；非空范围按指令顺序
+完整分割该表，空范围必须为0/0，PRINT immediate为0。单组上限65536，每个值均检查
+类型与支配关系。嵌套参数从左到右求值完成后才追加外层范围。Lowered保存并复验最大
+出站参数数量，稳定帧为其分配typed value暂存区并计入物理字节预算。
+泛型、完整stdlib、协程语法、foreign provider、parser完整
 OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口合同见 `contracts/xir-source-owner.md`。
 
 ---

@@ -53,6 +53,7 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
         xr_free((void *) functions[i].parameters);
         xr_free((void *) functions[i].blocks);
         xr_free((void *) functions[i].instructions);
+        xr_free((void *) functions[i].operands);
         if (artifact->layouts) {
             xr_free((void *) artifact->layouts[i].offsets);
             xr_free((void *) artifact->layouts[i].parameters);
@@ -100,8 +101,9 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         to->blocks = copy_bytes(from->blocks, (size_t) from->block_count * sizeof(*from->blocks));
         to->instructions = copy_bytes(from->instructions,
                                      (size_t) from->instruction_count * sizeof(*from->instructions));
+        to->operands = copy_bytes(from->operands, (size_t) from->operand_count * sizeof(*from->operands));
         if (!to->name || (to->parameter_count && !to->parameters) ||
-            !to->blocks || !to->instructions) {
+            !to->blocks || !to->instructions || (to->operand_count && !to->operands)) {
             xr_xir_artifact_free(copy);
             return NULL;
         }

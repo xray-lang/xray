@@ -51,11 +51,12 @@ provider chooses rendering. Missing/rejecting providers fail with OUTPUT_ERROR, 
 language throw or fallback. Reentrant cancellation takes effect after the callback;
 already accepted output is not rolled back. The provider cannot suspend and must
 copy any value it retains. Provider context is borrowed for activation lifetime.
-The native group interface admits up to 65536 values. The current fixed-operand
-XIR PRINT instruction admits only zero, one or two values (its immediate count),
-and rejects greater arities before execution. This implementation bound does not
-qualify the complete variadic source print family. Each operand must dominate
-the instruction and have bool/i64/string type; unused operand fields are zero.
+Both native groups and XIR PRINT admit up to 65536 values within resource budgets.
+PRINT uses a first/count range into the owned function operand table and a zero
+immediate. Each operand must dominate the instruction and have bool/i64/string
+type. Empty ranges are canonical zero/zero; nonempty ranges partition the table
+in instruction order. Lowering reserves the exact maximum outgoing group capacity
+in the stable activation frame and includes it in physical-byte admission.
 Call ABI 3 providers and generated entries are rejected, with no adapter.
 
 verification-test: test_xir_values

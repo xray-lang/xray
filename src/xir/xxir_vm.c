@@ -27,7 +27,7 @@ typedef struct VmState {
     uint32_t instruction, destination;
     XrXirType expected;
     bool initialized, waiting;
-    XrXirValue arguments[2];
+    XrXirValue *arguments;
 } VmState;
 
 static XrXirRunStatus string_status(XrXirValueStatus status) {
@@ -106,9 +106,9 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     }
     case XR_XIR_OUTPUT:
     case XR_XIR_PRINT: {
-        uint32_t count = op->op == XR_XIR_PRINT ? (uint32_t) op->immediate : 1;
+        uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
         for (uint32_t p = 0; p < count; ++p) {
-            uint32_t id = op->args[p];
+            uint32_t id = op->op == XR_XIR_PRINT ? run->function->operands[op->args[0] + p] : op->args[p];
             XrXirType type = id < run->function->parameter_count ? run->function->parameters[id] :
                 run->function->instructions[id - run->function->parameter_count].type;
             state->arguments[p] = (XrXirValue) {(uint32_t) type, 0,
@@ -146,7 +146,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         const XrXirFunction *callee = &run->module->functions[op->immediate];
         for (uint32_t i = 0; i < callee->parameter_count; ++i)
             state->arguments[i] = (XrXirValue) {(uint32_t) callee->parameters[i], 0,
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[i]])};
+                xr_xir_scalar_load(run->frame, run->layout->offsets[run->function->operands[op->args[0] + i]])};
         state->waiting = true;
         state->destination = run->layout->offsets[result_id];
         state->expected = op->type;
@@ -184,6 +184,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(binding->artifact, binding->function);
     VmState *state = view->state;
     ScalarRun run = {module, function, layout, state + 1, view};
+    state->arguments = (XrXirValue *) ((unsigned char *) run.frame + layout->frame_bytes);
     if (!state->initialized) {
         if (view->argument_count != function->parameter_count)
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
@@ -238,10 +239,12 @@ static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t functio
     const XrXirModule *module = xr_xir_artifact_module(artifact);
     const XrXirFunction *body = &module->functions[function];
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, function);
-    if (layout->frame_bytes > UINT32_MAX - sizeof(VmState)) return XR_XIR_BUDGET;
+    uint64_t bytes = sizeof(VmState) + (uint64_t) layout->frame_bytes +
+        (uint64_t) layout->outgoing_count * sizeof(XrXirValue);
+    if (bytes > UINT32_MAX) return XR_XIR_BUDGET;
     *binding = (XrXirVmBinding) {artifact, function};
     *entry = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, body->parameters, body->parameter_count,
-        body->result, (uint32_t) sizeof(VmState) + layout->frame_bytes, vm_resume, vm_cleanup, binding};
+        body->result, (uint32_t) bytes, vm_resume, vm_cleanup, binding};
     return XR_XIR_OK;
 }
 

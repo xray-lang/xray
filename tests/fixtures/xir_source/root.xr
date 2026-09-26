@@ -4,6 +4,7 @@ print(alpha.tag("中"), betaNext())
 print(alpha.next())
 print(alpha.next(), alpha.next())
 print(true)
+print(alpha.pack(alpha.tag("x"), alpha.next(), alpha.next(), "y"), true, 42, alpha.tag("z"))
 var suffix = "!"
 fn main() { print("main must not run implicitly") }
 export fn result() -> string { return alpha.tag(suffix) }

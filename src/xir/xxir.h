@@ -71,6 +71,7 @@ typedef struct XrXirFunctionLayout {
     XrXirLayout result;
     uint32_t owned_count;
     const uint32_t *owned_offsets;
+    uint32_t outgoing_count;
 } XrXirFunctionLayout;
 
 typedef struct XrXirInstruction {
@@ -98,6 +99,8 @@ typedef struct XrXirFunction {
     uint32_t block_count;
     const XrXirInstruction *instructions;
     uint32_t instruction_count;
+    const uint32_t *operands;
+    uint32_t operand_count;
 } XrXirFunction;
 
 typedef struct XrXirModule {

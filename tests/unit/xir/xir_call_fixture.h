@@ -16,16 +16,17 @@
 #include "xir/xxir.h"
 
 static XrXirArtifact *call_fixture(uint32_t mode) {
+    const uint32_t operands[] = {0, 1};
     const XrXirType params[] = {XR_XIR_I64, XR_XIR_I64};
     const XrXirBlock root_block = {0, 2};
     const XrXirBlock sort_blocks[] = {{0, 2}, {2, 1}, {3, 1}};
     const XrXirBlock compare_block = {0, 3};
     const XrXirInstruction root[] = {
-        {XR_XIR_CALL, XR_XIR_I64, {0, 1}, {0, 0}, 1},
+        {XR_XIR_CALL, XR_XIR_I64, {0, 2}, {0, 0}, 1},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0}
     };
     const XrXirInstruction sort[] = {
-        {XR_XIR_CALL, XR_XIR_BOOL, {0, 1}, {0, 0}, 2},
+        {XR_XIR_CALL, XR_XIR_BOOL, {0, 2}, {0, 0}, 2},
         {XR_XIR_BRANCH, XR_XIR_UNIT, {2, 0}, {1, 2}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0}
@@ -44,9 +45,9 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
         compare[2] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {3, 0}, {0, 0}, 0};
     }
     const XrXirFunction functions[] = {
-        {"entry", 5, params, 2, XR_XIR_I64, &root_block, 1, root, 2},
-        {"minimum", 7, params, 2, XR_XIR_I64, sort_blocks, 3, sort, 4},
-        {"compare", 7, params, 2, XR_XIR_BOOL, &compare_block, 1, compare, 3}
+        {"entry", 5, params, 2, XR_XIR_I64, &root_block, 1, root, 2, operands, 2},
+        {"minimum", 7, params, 2, XR_XIR_I64, sort_blocks, 3, sort, 4, operands, 2},
+        {"compare", 7, params, 2, XR_XIR_BOOL, &compare_block, 1, compare, 3, NULL, 0}
     };
     const XrXirModule module = {XR_XIR_BUILT, functions, 3, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
