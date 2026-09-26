@@ -186,12 +186,28 @@ fn leftCallback(flag:bool)->string { const pause = alpha.pause<string>; return p
 fn rightCallback(flag:bool)->string { const pause = alpha.pause<string>; return pause(flag ? "wrong" : "rn") }
 fn chooseCallback(flag:bool)->fn(bool)->string {
     var unused = "mutable but not captured"
-    const prefix = closureScope() == 9 ? "r" : "bad"
+    var prefix = "bad"
     const frozen = alpha.frozen<string>(flag ? "y" : "n")
     const make = fn()->fn(bool)->string {
         return (value:bool) -> prefix + frozen()
     }
-    return make()
+    const ready = make()
+    prefix = closureScope() == 9 && sharedControl() == 28 ? "r" : "bad"
+    return ready
+}
+fn sharedControl()->i64 {
+    var number = 1
+    const first = fn() { number += 2; return number }
+    const second = fn() { number *= 3; return number }
+    const snapshot = number
+    const a = first()
+    number = 4
+    const b = second()
+    const empty:fn(bool)->string = rightCallback
+    var callback:fn(bool)->string = empty
+    callback = fn(value:bool)->string { return callback(value) }
+    callback = empty
+    return snapshot + a + b + number
 }
 fn closureScope()->i64 {
     const value = 3

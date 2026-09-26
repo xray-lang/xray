@@ -24,13 +24,13 @@ XR_DATA const XrXirProgramSpec fixture_source_program;
 XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth;
 typedef struct MixedSource {
     XrXirArtifact *artifact;
-    XrXirCallEntry entries[64];
-    XrXirVmBinding bindings[64];
+    XrXirCallEntry *entries;
+    XrXirVmBinding *bindings;
 } MixedSource;
 static uint32_t released;
 static void mixed_release(void *pointer) {
     MixedSource *owner = pointer;
-    xr_xir_artifact_free(owner->artifact); xr_free(owner); ++released;
+    xr_xir_artifact_free(owner->artifact); xr_free(owner->entries); xr_free(owner->bindings); xr_free(owner); ++released;
 }
 int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
@@ -47,7 +47,10 @@ int main(void) {
     CHECK(xr_xir_lower(checked, &target, NULL, &owner->artifact, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
-    CHECK(module->function_count <= 64 && module->function_count == fixture_source_program.entry_count);
+    CHECK(module->function_count == fixture_source_program.entry_count);
+    owner->entries = xr_calloc(module->function_count, sizeof(*owner->entries));
+    owner->bindings = xr_calloc(module->function_count, sizeof(*owner->bindings));
+    CHECK(owner->entries && owner->bindings);
     unsigned native_resumes = 0, vm_pauses = 0;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         CHECK(xr_xir_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);

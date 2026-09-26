@@ -74,6 +74,7 @@ static XrXirType spec_signature(SpecContext *c, XrXirCallableSignature signature
 static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirType type, uint32_t depth) {
     if (!spec_work(c, 1)) return XR_XIR_UNIT;
     if (depth == 128) { c->diagnostic.status = XR_XIR_BUDGET; return XR_XIR_UNIT; }
+    if (xr_xir_type_is_cell(type)) return xr_xir_cell_type(spec_type(c, instance, xr_xir_cell_element(type), depth + 1));
     if ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE) {
         uint32_t index = (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE;
         if (index >= instance->count) { c->diagnostic.status = XR_XIR_BAD_TYPE; return XR_XIR_UNIT; }

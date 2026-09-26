@@ -14,6 +14,7 @@
 #include "../base/xmalloc.h"
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
+    if (xr_xir_type_is_cell(type)) type = xr_xir_cell_element(type);
     if (type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64) return true;
     if (xr_xir_callable_signature(module->callables, type))
         return xr_xir_callable_span(module->callables, type) <=
@@ -22,6 +23,7 @@ bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirT
         (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < module->generics[function].parameter_count;
 }
 bool xr_xir_type_satisfies(const XrXirModule *module, uint32_t function, XrXirType type, uint32_t constraints) {
+    if (xr_xir_type_is_cell(type)) return false;
     if (constraints & ~XR_XIR_CONSTRAINT_SENDABLE || !xr_xir_type_in_context(module, function, type)) return false;
     if ((uint32_t) type < XR_XIR_TYPE_PARAMETER_BASE)
         return !xr_xir_callable_signature(module->callables, type) || !constraints;
@@ -99,6 +101,8 @@ typedef struct CallTypes {
 static XrXirStatus call_type_matches(CallTypes *c, XrXirType type, XrXirType actual, uint32_t depth) {
     if (!c->remaining->work || depth == 128) return XR_XIR_BUDGET;
     --c->remaining->work;
+    if (xr_xir_type_is_cell(type)) return xr_xir_type_is_cell(actual) ?
+        call_type_matches(c, xr_xir_cell_element(type), xr_xir_cell_element(actual), depth + 1) : XR_XIR_BAD_TYPE;
     if ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE) {
         uint32_t index = (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE;
         return index < c->count && c->arguments[index] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;

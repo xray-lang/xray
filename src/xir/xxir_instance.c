@@ -213,6 +213,8 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     for (uint32_t p = 0; p < requested->parameter_count; ++p) {
         const XrXirValue *value = p < captures ? &binding->captures[p] : &arguments[p - captures];
         if (!xr_xir_value_argument(value, requested->parameters[p])) return XR_XIR_CALL_BAD_ARGUMENT;
+        if (xr_xir_type_is_cell(requested->parameters[p]) && !xr_xir_cell_in_domain(value, instance->domain))
+            return XR_XIR_CALL_BAD_ARGUMENT;
         uint32_t target;
         if (xr_xir_type_is_callable(requested->parameters[p]) &&
             resolve_function(instance, value, &target) != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -395,6 +397,8 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, ui
         target->result != signature->result) return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t p = 0; p < count; ++p) {
         if (!xr_xir_value_argument(&captures[p], target->parameters[p])) return XR_XIR_CALL_BAD_ARGUMENT;
+        if (xr_xir_type_is_cell(target->parameters[p]) && !xr_xir_cell_in_domain(&captures[p], instance->domain))
+            return XR_XIR_CALL_BAD_ARGUMENT;
         uint32_t nested;
         if (xr_xir_type_is_callable(target->parameters[p]) &&
             resolve_function(instance, &captures[p], &nested) != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -408,4 +412,27 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, ui
     status = value_call_status(xr_xir_function_new(instance->domain, type, &binding, output));
     if (status != XR_XIR_CALL_READY) function_gate_drop(instance->function_gate);
     return status;
+}
+XrXirCallStatus xr_xir_instance_cell(XrXirCallView *view, const XrXirValue *initial, XrXirValue *output) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || instance->stopping) return XR_XIR_CALL_BAD_STATE;
+    uint32_t entry;
+    if (initial && xr_xir_type_is_callable((XrXirType) initial->type) &&
+        resolve_function(instance, initial, &entry) != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_ARGUMENT;
+    return value_call_status(xr_xir_cell_new(instance->domain, initial, output));
+}
+XrXirCallStatus xr_xir_instance_cell_read(XrXirCallView *view, const XrXirValue *cell, XrXirValue *output) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || instance->stopping) return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_cell_in_domain(cell, instance->domain)) return XR_XIR_CALL_BAD_ARGUMENT;
+    return value_call_status(xr_xir_cell_read(cell, output));
+}
+XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const XrXirValue *cell, const XrXirValue *value) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || instance->stopping) return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_cell_in_domain(cell, instance->domain)) return XR_XIR_CALL_BAD_ARGUMENT;
+    uint32_t entry;
+    if (value && xr_xir_type_is_callable((XrXirType) value->type) &&
+        resolve_function(instance, value, &entry) != XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_ARGUMENT;
+    return value_call_status(xr_xir_cell_write(cell, value));
 }

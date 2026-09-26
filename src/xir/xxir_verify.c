@@ -117,6 +117,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         return XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
+    if (op->op == XR_XIR_CELL_NEW && (!module->declarations || !xr_xir_type_is_cell(op->type))) return XR_XIR_BAD_TYPE;
+    if (op->op == XR_XIR_CELL_READ && xr_xir_type_is_cell(op->type)) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
             return XR_XIR_BAD_STRUCTURE;
@@ -212,6 +214,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         function->parameter_count > UINT32_MAX - function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t function_id = (uint32_t) (function - context->module->functions);
+    if (xr_xir_type_is_cell(function->result)) return XR_XIR_BAD_TYPE;
     if (function->result != XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->result))
         return XR_XIR_BAD_TYPE;
     if (!spend(&context->remaining.work, function->name_length))
@@ -223,6 +226,8 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             return XR_XIR_BUDGET;
         if (!xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
             return XR_XIR_BAD_TYPE;
+        if (xr_xir_type_is_cell(function->parameters[p]) && (!context->module->declarations ||
+            context->module->declarations->functions[function_id].exported)) return XR_XIR_BAD_TYPE;
     }
     uint32_t end = 0, operand_end = 0, type_end = 0;
     for (uint32_t b = 0; b < function->block_count; ++b) {
@@ -481,6 +486,12 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
         if (op->op == XR_XIR_ATOMIC_I64_NEW) expected = XR_XIR_I64;
+        if (op->op == XR_XIR_CELL_NEW) expected = xr_xir_cell_element(op->type);
+        if (op->op == XR_XIR_CELL_READ) expected = xr_xir_cell_type(op->type);
+        if (op->op == XR_XIR_CELL_WRITE) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            if (!xr_xir_type_is_cell(expected)) return XR_XIR_BAD_TYPE;
+        }
         if (op->op == XR_XIR_WRITE_STREAM) expected = XR_XIR_STRING;
         if (op->op == XR_XIR_ATOMIC_I64_LOAD || op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
             expected = XR_XIR_ATOMIC_I64;
@@ -511,6 +522,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (match != XR_XIR_OK) return match;
             }
             if (op->op == XR_XIR_ATOMIC_I64_FETCH_ADD && a == 1) operand_type = XR_XIR_I64;
+            if (op->op == XR_XIR_CELL_WRITE && a == 1) operand_type = xr_xir_cell_element(expected);
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {
                 uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + a] : op->args[a];
                 if (id >= function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;

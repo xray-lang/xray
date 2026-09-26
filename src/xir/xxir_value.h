@@ -14,7 +14,8 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 5u
+#define XR_XIR_VALUE_ABI_VERSION 6u
+#define XR_XIR_CELL_TYPE_FLAG 0x40000000u
 #define XR_XIR_CALLABLE_TYPE_BASE 256u
 #define XR_XIR_CALLABLE_TYPE_LIMIT 65536u
 #define XR_XIR_ARCH_X86_64 1u
@@ -66,7 +67,20 @@ XR_FUNC const XrXirFunctionBinding *xr_xir_function_binding(const XrXirValue *va
 static inline bool xr_xir_type_is_callable(XrXirType type) {
     return (uint32_t) type >= XR_XIR_CALLABLE_TYPE_BASE && (uint32_t) type < XR_XIR_CALLABLE_TYPE_LIMIT;
 }
-static inline bool xr_xir_type_is_owned(XrXirType type) {
-    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || xr_xir_type_is_callable(type);
+static inline bool xr_xir_type_is_cell(XrXirType type) {
+    return ((uint32_t) type & ~0x1ffffu) == XR_XIR_CELL_TYPE_FLAG;
 }
+static inline XrXirType xr_xir_cell_element(XrXirType type) {
+    return (XrXirType) ((uint32_t) type & ~XR_XIR_CELL_TYPE_FLAG);
+}
+static inline XrXirType xr_xir_cell_type(XrXirType element) {
+    return (XrXirType) (XR_XIR_CELL_TYPE_FLAG | (uint32_t) element);
+}
+static inline bool xr_xir_type_is_owned(XrXirType type) {
+    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || xr_xir_type_is_callable(type) || xr_xir_type_is_cell(type);
+}
+XR_FUNC XrXirValueStatus xr_xir_cell_new(XrXirDomain *domain, const XrXirValue *initial, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_cell_read(const XrXirValue *cell, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_cell_write(const XrXirValue *cell, const XrXirValue *value);
+XR_FUNC bool xr_xir_cell_in_domain(const XrXirValue *cell, XrXirDomain *domain);
 #endif // XXIR_VALUE_H

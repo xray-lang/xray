@@ -93,7 +93,7 @@ print(c())      // 2
 
 XIR源码入口准入参数显式标注类型的 `fn(...) -> R { ... }` 与箭头闭包。没有返回标注时，在定义处从返回表达式推导唯一精确类型；所有返回必须一致，非unit结果必须覆盖所有路径。不从调用目标或一次实例化推断参数、约束或效应。闭包不能声明自己的一等泛型参数；外围T及其已冻结约束进入私有实现函数，在Checked上与捕获类型一起特化、复验并封存。
 
-此族先接通不可变按值捕获；使用到的var捕获在共享cell实现前明确拒绝，未使用的var不造成拒绝。ref/move/视图捕获、noescape及Sendable/效应承诺仍按尚未准入的合同拒绝，不将它们降成普通复制或静默添加承诺。源码生成的函数和捕获仅进入§17.18的唯一XIR/环境路径。
+此族支持不可变按值捕获与普通var共享cell捕获；未使用的外层绑定不进入环境。共享cell只允许单实例内访问，不授予Sendable或跨worker能力；强环回收仍按§17.19保持OPEN。ref/move/视图捕获、noescape及Sendable/效应承诺仍按尚未准入的合同拒绝，不将它们降成普通复制或静默添加承诺。源码生成的函数和捕获仅进入§17.18的唯一XIR/环境路径。
 
 ### 7.3 所有权与 move
 
@@ -293,7 +293,7 @@ Ordinary closures capture according to the binding: local const and ordinary rea
 
 The XIR source producer admits fn expressions and arrow closures with explicitly typed parameters. An omitted return annotation infers one exact type from return expressions at definition; all returns must agree and a non-unit result must cover every path. No parameter, constraint or effect is inferred from an invocation target or one instantiation. A closure cannot declare first-class generic parameters of its own. Enclosing type parameters and frozen constraints belong to its private implementation, specialized and rechecked with capture types on Checked before sealing.
 
-Immutable value captures are admitted first. Used var captures reject until shared cells are implemented; unused outer vars do not cause rejection. Ref/move/view captures and unadmitted noescape, Sendable or effect promises fail closed instead of becoming copies or implicit promises. Source functions and captures use only the XIR/environment path in section 17.18.
+Immutable value captures and ordinary var shared cells are admitted; unused external bindings do not enter environments. Shared cells permit only same-instance access, convey no Sendable or cross-worker capability, and retain the OPEN strong-cycle reclamation boundary in section 17.19. Ref/move/view captures and unadmitted noescape, Sendable or effect promises fail closed instead of becoming copies or implicit promises. Source functions and captures use only the XIR/environment path in section 17.18.
 
 ### 7.3 Ownership and `move`
 

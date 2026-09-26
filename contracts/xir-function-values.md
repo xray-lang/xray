@@ -6,8 +6,8 @@ explicit ownership operations. It conveys no Sendable or no_suspend proof.
 Constructing a value checks the full signature and existing module import,
 visibility and initializer restrictions. Describing a type never grants access.
 
-Program sealing owns a verified signature table. Boxed value ABI 5, call ABI 8
-and Program ABI 4 replace their predecessors without an alternate runtime path.
+Program sealing owns a verified signature table. Boxed value ABI 6, call ABI 9
+and Program ABI 5 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
 it does not own module slots, providers, active frames or instance allocations.
@@ -36,7 +36,7 @@ resolved before Program sealing. CALL_INDIRECT records an SSA callee ID in its
 immediate and the existing ordered argument range. Callee dominance, value role,
 full signature and result are checked without enumerating implementation targets.
 Both operations use the canonical owned frame layout and resumable ABI. Semantic
-contract 10 rejects previous packets; wire schema is 4. Function-valued root
+contract 11 rejects previous packets; wire schema is 4. Function-valued root
 slots are instance state; non-root ordinary callable slots have no Sendable proof.
 
 Source admission uses the existing fn(...) -> R spelling (unit omits the arrow).
@@ -96,8 +96,8 @@ can clean up. No borrowed environment survives independently of its owner.
 
 Last-reference destruction drains nested immutable environments without host
 recursion or allocation. stop/free revokes entry but not escaped value lifetime.
-Value5/Call8/Program4 and schema4/semantic10 replace earlier contracts.
-Shared var cells, cycles, full callable contracts and concurrency remain open;
+Value6/Call9/Program5 and schema4/semantic11 replace earlier contracts.
+Strong-cycle reclamation, full callable contracts and concurrency remain open;
 this contract never substitutes snapshot capture for shared mutable bindings.
 
 verification-test: test_xir_program_vm
@@ -110,7 +110,7 @@ AST_FUNCTION_EXPR produces a private implementation with ordered lexical
 value captures followed by explicit parameters. A bounded lexical scan observes
 block, parameter, declaration-initializer, branch and for-header scope; only
 used external local bindings become captures, with transitive nested capture.
-Used mutable locals reject until shared cells are admitted. Module references
+Mutable locals retain typed shared cells. Module references
 keep module authority rather than being snapshotted.
 
 Parameters require explicit supported read types; absent result annotation
@@ -121,4 +121,4 @@ the FUNCTION_REF capture prefix go through ordinary Checked validation,
 specialization and recheck. No source/AST retry occurs during instantiation.
 
 This producer adds no wire opcode or ABI revision: it consumes the current
-schema4/semantic10 and Value5/Call8/Program4 environment contract.
+schema4/semantic11 and Value6/Call9/Program5 environment contract.

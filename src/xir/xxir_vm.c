@@ -59,6 +59,18 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
     XrXirValue value = {0};
     XrXirCallStatus status = XR_XIR_CALL_READY;
     switch (op->op) {
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
+        XrXirValue left = {(uint32_t) xr_xir_operand_type(run->function, op->args[0]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        if (op->op == XR_XIR_CELL_NEW) status = xr_xir_instance_cell(run->view, &left, &value);
+        else if (op->op == XR_XIR_CELL_READ) status = xr_xir_instance_cell_read(run->view, &left, &value);
+        else {
+            XrXirValue right = {(uint32_t) xr_xir_operand_type(run->function, op->args[1]), 0,
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+            status = xr_xir_instance_cell_write(run->view, &left, &right);
+        }
+        break;
+    }
     case XR_XIR_FUNCTION_REF:
         for (uint32_t i = 0; i < op->args[1]; ++i) {
             uint32_t id = run->function->operands[op->args[0] + i];
@@ -166,7 +178,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     uint32_t next = instruction + 1;
     int64_t value = 0;
     *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}};
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF) {
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF ||
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE)) {
         state->instruction = next;
         return instance_step(run, state, op, run->layout->offsets[result_id]);
     }

@@ -291,7 +291,7 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_scalar.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 5u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 6u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");
@@ -310,8 +310,19 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
 static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
                                const XrXirFunction *function, const XrXirInstruction *op,
                                const XrXirFunctionLayout *layout, uint32_t destination) {
-    append(buffer, "        { XrXirValue value = {0}; XrXirCallStatus status = XR_XIR_CALL_READY;\n");
+    append(buffer, "        { XrXirCallStatus status = XR_XIR_CALL_READY;\n");
+    if (op->op != XR_XIR_CELL_WRITE) append(buffer, "        XrXirValue value = {0};\n");
     switch (op->op) {
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
+        append(buffer, "        XrXirValue left = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
+        if (op->op == XR_XIR_CELL_WRITE) {
+            append(buffer, "        XrXirValue right = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+                "        status = xr_xir_instance_cell_write(view, &left, &right);\n",
+                (uint32_t) xr_xir_operand_type(function, op->args[1]), layout->offsets[op->args[1]]);
+        } else append(buffer, "        status = %s(view, &left, &value);\n",
+            op->op == XR_XIR_CELL_NEW ? "xr_xir_instance_cell" : "xr_xir_instance_cell_read");
+        break;
     case XR_XIR_FUNCTION_REF:
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             uint32_t id = function->operands[op->args[0] + p];
@@ -385,7 +396,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     const XrXirInstruction *op = &function->instructions[index];
     uint32_t destination = layout->offsets[function->parameter_count + index];
     append(buffer, "    case %uu:\n        state->pc = %uu;\n", index, index + 1);
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF) {
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF ||
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE)) {
         emit_instance_step(buffer, module, function, op, layout, destination);
         return;
     }
@@ -634,7 +646,7 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 4u, \"XIR program ABI\");\n"
+    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 5u, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         prefix, prefix, module->function_count, prefix);
@@ -654,8 +666,8 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 8u, \"XIR call ABI\");\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 5u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 9u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 6u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");

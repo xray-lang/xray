@@ -31,5 +31,8 @@ export fn nested<A,B>(transform:fn(fn(A)->B)->fn(A)->B,callback:fn(A)->B)->fn(A)
     return apply(transform, callback)
 }
 export fn frozen<T:Sendable>(value:T)->fn()->T {
-    return fn()->T { Coro.yield(); return requireSendable<T>(value) }
+    var stored = value
+    const read = fn()->T { Coro.yield(); return requireSendable<T>(stored) }
+    stored = value
+    return read
 }

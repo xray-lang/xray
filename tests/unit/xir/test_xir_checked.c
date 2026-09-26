@@ -123,7 +123,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_I64, XR_XIR_EQ_I64, XR_XIR_LT_I64, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 4 && XR_XIR_CHECKED_CONTRACT == 10 && XR_XIR_OP_COUNT == 51, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 4 && XR_XIR_CHECKED_CONTRACT == 11 && XR_XIR_OP_COUNT == 54, "packet revision");
     _Static_assert(XR_XIR_FUNCTION_REF == 49 && XR_XIR_CALL_INDIRECT == 50, "callable wire operations");
     _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_ATOMIC_I64 == 4, "wire type identities");
     for (unsigned i = 0; i < 25; ++i) CHECK((unsigned) identities[i] == i + 1);
@@ -142,8 +142,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0xc0, 0x97, 0x5f, 0x09, 0xff, 0x27, 0xd2, 0xfb, 0x2a, 0xd5, 0x81, 0x25, 0x7f, 0x4f, 0xe3, 0x21,
-        0x4f, 0x52, 0xb2, 0x52, 0x65, 0xcd, 0x9f, 0x54, 0x80, 0xa4, 0xef, 0xd1, 0x1a, 0x68, 0x14, 0xb9};
+        0x83, 0xfc, 0x83, 0xae, 0xde, 0x57, 0x5b, 0x21, 0xa7, 0x49, 0x27, 0x71, 0xb9, 0xb8, 0xc2, 0xa5,
+        0xd3, 0x58, 0x95, 0x42, 0xb5, 0x40, 0xe5, 0xed, 0x47, 0x92, 0xd4, 0xc2, 0xd8, 0x44, 0x18, 0xf2};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].instructions[0].immediate == INT64_MIN);
@@ -335,11 +335,13 @@ static void capture_packet_rejection(void) {
     CHECK(matches == 1);
     put32(packet.bytes+found+12,2); digest_packet(&packet);
     CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_BAD_TYPE && !decoded);
-    put32(packet.bytes+found+12,1); put32(packet.bytes+12,9); digest_packet(&packet);
+    put32(packet.bytes+found+12,1); put32(packet.bytes+12,10); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
     xr_xir_checked_packet_free(&packet);
 }
+#include "xir_cell_checked_cases.h"
 int main(void) {
+    cell_checked_cases();
     capture_rejections(); capture_packet_rejection();
     generic_callable_contracts(); generic_callable_depth();
     callable_contracts(); function_ir_rejections();

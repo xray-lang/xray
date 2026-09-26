@@ -229,11 +229,13 @@ static void deep_capture_release(void) {
     fail_at = SIZE_MAX;
     puts("Capture cleanup: 100000 nested environments; zero cleanup allocations; zero live blocks");
 }
+#include "xir_cell_allocation_cases.h"
 int main(void) {
     fail_at = SIZE_MAX; calls = 0; fail_sequence();
     size_t count = calls;
     for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }
     fail_at = SIZE_MAX; saturation(); output_allocation(); capture_ownership(); deep_capture_release();
+    cell_allocation_cases(); cell_cycles_and_domains(); deep_cell_release();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
     return 0;
 }

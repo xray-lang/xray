@@ -542,12 +542,12 @@ static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *valu
     }
     SourceValue left, right;
     XrXirInstruction read = symbol->kind == SOURCE_LOCAL ?
-        (XrXirInstruction) {XR_XIR_LOCAL_READ, symbol->type, {symbol->index, 0}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type, {symbol->index, 0}, {0}, 0} :
         (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0}, {0}, symbol->index};
     if (!emit(ctx, read, &left) || !expression(ctx, assignment->value, &right) ||
         !source_binary(ctx, node, operation, left, right, value)) return false;
     XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?
-        (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {symbol->index, value->id}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {symbol->index, value->id}, {0}, 0} :
         (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {value->id, 0}, {0}, symbol->index};
     return emit(ctx, write, NULL);
 }
@@ -632,7 +632,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
         if (!symbol || (symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_LOCAL) || !symbol->type)
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
         if (symbol->kind == SOURCE_LOCAL) {
-            if (symbol->mutable) return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, symbol->type,
+            if (symbol->mutable) return emit(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type,
                 {symbol->index, 0}, {0}, 0}, value);
             *value = (SourceValue) {symbol->index, symbol->type}; return true;
         }
@@ -653,7 +653,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
         if (!expression(ctx, node->as.assignment.value, &assigned)) return false;
         if (assigned.type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "assignment type mismatch");
         if (symbol->kind == SOURCE_LOCAL) {
-            if (!emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT,
+            if (!emit(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT,
                 {symbol->index, assigned.id}, {0}, 0}, NULL)) return false;
         }
         else if (!emit(ctx, (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {assigned.id, 0}, {0, 0}, symbol->index}, NULL)) return false;
@@ -692,9 +692,10 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     }
     symbol = source_alloc(ctx, 1, sizeof(*symbol));
     if (!symbol) return false;
-    if (!decl->is_const && !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_NEW, initial.type,
+    XrXirType logical_type = initial.type;
+    if (!decl->is_const && !emit(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, xr_xir_cell_type(initial.type),
         {initial.id, 0}, {0}, 0}, &initial)) return false;
-    *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_LOCAL, initial.id, ctx->module, initial.type, !decl->is_const};
+    *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_LOCAL, initial.id, ctx->module, logical_type, !decl->is_const};
     ctx->locals = symbol;
     return true;
 }
@@ -744,13 +745,13 @@ static bool source_increment(SourceContext *ctx, AstNode *node) {
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "increment requires a mutable i64 binding");
     SourceValue old, one, result;
     XrXirInstruction read = symbol->kind == SOURCE_LOCAL ?
-        (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_I64, {symbol->index, 0}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_I64, {symbol->index, 0}, {0}, 0} :
         (XrXirInstruction) {XR_XIR_SLOT_LOAD, XR_XIR_I64, {0}, {0}, symbol->index};
     if (!emit(ctx, read, &old) ||
         !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, node->type == AST_INC ? 1 : -1}, &one) ||
         !emit(ctx, (XrXirInstruction) {XR_XIR_ADD_I64, XR_XIR_I64, {old.id, one.id}, {0}, 0}, &result)) return false;
     XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?
-        (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {symbol->index, result.id}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {symbol->index, result.id}, {0}, 0} :
         (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {result.id, 0}, {0}, symbol->index};
     return emit(ctx, write, NULL);
 }
@@ -1034,8 +1035,6 @@ static bool capture_name(SourceCaptureScan *scan, const char *name, AstNode *nod
     if (find_name(ctx, scan->bound, name)) return true;
     SourceName *source = visible_name(ctx, name);
     if (!source || source->kind != SOURCE_LOCAL) return ctx->diagnostic.status == XR_XIR_OK;
-    if (source->mutable)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "mutable capture requires a shared cell");
     for (SourceCapture *p = scan->captures; p; p = p->next) {
         if (!source_work(ctx, node)) return false;
         if (p->source == source) return true;
@@ -1107,7 +1106,8 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         SourceName *symbol = add_name(ctx, &ctx->locals, p->source->name, node);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = p->index; symbol->type = p->source->type;
-        body->parameters[p->index] = symbol->type;
+        symbol->mutable = p->source->mutable;
+        body->parameters[p->index] = symbol->mutable ? xr_xir_cell_type(symbol->type) : symbol->type;
     }
     FunctionDeclNode *decl = &node->as.function_expr;
     for (int i = 0; i < decl->param_count; ++i) {
@@ -1159,7 +1159,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
     if (!ok) return false;
     for (SourceCapture *p = scan.captures; p; p = p->next)
-        captures[p->index] = (SourceValue) {p->source->index, p->source->type};
+        captures[p->index] = (SourceValue) {p->source->index,
+            p->source->mutable ? xr_xir_cell_type(p->source->type) : p->source->type};
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, index};
     uint32_t count = ctx->generics[index].parameter_count;
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;

@@ -13,11 +13,6 @@
 #define XR_XIR_SOURCE_CLOSURE_CASES_H
 static void source_closure_cases(const XrXirSourceRequest *request) {
     const char *rejected[] = {
-        "fn make() { var x = 1; const f = fn()->i64 { return x } }\n",
-        "fn make() { var x = 1; const f = fn() { x = 2 } }\n",
-        "fn make() { var x = 1; const f = fn() { x += 2 } }\n",
-        "fn make() { var x = 1; const f = fn() { x++ } }\n",
-        "fn make() { var x = 1; const f = fn() { const g = fn()->i64 { return x } } }\n",
         "fn make() { const x = 1; const f = fn() { x = 2 } }\n",
         "const f = fn(x) { return x }\n",
         "const f = (x) -> x\n",
@@ -42,13 +37,13 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         XrXirStatus status = xr_xir_source_check(request, &checked, &diagnostic);
         if (status == XR_XIR_OK) fprintf(stderr, "incorrectly accepted closure case %u\n", i);
         CHECK(status != XR_XIR_OK && !checked && diagnostic.status == status);
-        if (i < 5) {
-            if (status != XR_XIR_BAD_TYPE || !strstr(diagnostic.message, "shared cell"))
-                fprintf(stderr, "closure rejection %u: %s (%u)\n", i, diagnostic.message, status);
-            CHECK(status == XR_XIR_BAD_TYPE && strstr(diagnostic.message, "shared cell"));
-        }
     }
     const char *accepted[] = {
+        "fn make() { var x = 1; const f = fn()->i64 { return x } }\n",
+        "fn make() { var x = 1; const f = fn() { x = 2 } }\n",
+        "fn make() { var x = 1; const f = fn() { x += 2 } }\n",
+        "fn make() { var x = 1; const f = fn() { x++ } }\n",
+        "fn make() { var x = 1; const f = fn() { const g = fn()->i64 { return x } } }\n",
         "fn make() { var unused = 1; const f = fn()->i64 { return 7 } }\n",
         "fn make(x:i64) { const f = (x:i64) -> x + 1 }\n",
         "fn make() { var x = 1; const f = fn() { const x = 2; return x } }\n",
@@ -62,7 +57,7 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         "const f = make<string>(\"owned\"); const n = make<i64>(7)\n"),
         "fn make() { const f = fn() { return }; const g = () -> 7 }\n"
     };
-    const unsigned captures[] = {0, 0, 0, 1, 1, 2, 0, 1, 0, 1, 0};
+    const unsigned captures[] = {1, 1, 1, 1, 2, 0, 0, 0, 1, 1, 2, 0, 1, 0, 1, 0};
     for (unsigned i = 0; i < sizeof(accepted) / sizeof(accepted[0]); ++i) {
         write_generic_source(request->entry_path, accepted[i]);
         XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
@@ -88,6 +83,6 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
         xr_xir_artifact_free(closed);
     }
-    puts("Source closures: 22 fail-closed cases and 11 exact lexical capture/Checked round-trips passed");
+    puts("Source closures: 17 fail-closed cases and 16 exact lexical capture/Checked round-trips passed");
 }
 #endif

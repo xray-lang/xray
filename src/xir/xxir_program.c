@@ -16,6 +16,7 @@
 #include "../base/xchecks.h"
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
+    if (xr_xir_type_is_cell(type)) type = xr_xir_cell_element(type);
     return type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING ||
         type == XR_XIR_ATOMIC_I64 || xr_xir_callable_signature(spec->callables, type);
 }
@@ -41,20 +42,21 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
     *bytes = signature_budget.metadata_bytes; *work = signature_budget.work;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
         const XrXirSlot *slot = &spec->declarations->slots[s];
-        if (!program_value_type(spec, slot->type) || (xr_xir_type_is_callable(slot->type) &&
+        if (xr_xir_type_is_cell(slot->type) || !program_value_type(spec, slot->type) || (xr_xir_type_is_callable(slot->type) &&
             slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
         if (!entry->resume || (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
-        if (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result)) return XR_XIR_BAD_TYPE;
+        if (xr_xir_type_is_cell(entry->result) || (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
         uint64_t parameter_bytes = (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (parameter_bytes > *bytes || parameter_bytes > SIZE_MAX || entry->parameter_count > *work)
             return XR_XIR_BUDGET;
         *bytes -= parameter_bytes; *work -= entry->parameter_count;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
-            if (!program_value_type(spec, entry->parameters[p])) return XR_XIR_BAD_TYPE;
+            if (!program_value_type(spec, entry->parameters[p]) ||
+                (xr_xir_type_is_cell(entry->parameters[p]) && spec->declarations->functions[i].exported)) return XR_XIR_BAD_TYPE;
     }
     const XrXirDeclarations *d = spec->declarations;
     const XrXirCallEntry *entry = &spec->entries[d->entry_function];

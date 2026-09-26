@@ -82,7 +82,7 @@ static void copy_worker(XrXirValue *source) {
             int64_t previous = 0;
             CHECK(xr_xir_atomic_i64_fetch_add(&copy, 1, &previous));
             CHECK(previous >= 0 && previous < 8000);
-        } else {
+        } else if (source->type == XR_XIR_STRING) {
             CHECK(xr_xir_string_append(&copy, source) == XR_XIR_VALUE_OK);
             bytes_equal(&copy, "threadthread", 12);
         }
@@ -95,12 +95,16 @@ static DWORD WINAPI thread_entry(void *pointer) { copy_worker(pointer); return 0
 #else
 static void *thread_entry(void *pointer) { copy_worker(pointer); return NULL; }
 #endif
-static void concurrent_copies(bool atomic) {
+static void concurrent_copies(unsigned kind) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirValue value = {0}, copies[4] = {{0}, {0}, {0}, {0}};
-    CHECK((atomic ? xr_xir_atomic_i64_new(domain, 0, &value) :
+    CHECK((kind == 1 ? xr_xir_atomic_i64_new(domain, 0, &value) :
         xr_xir_string_new(domain, "thread", 6, &value)) == XR_XIR_VALUE_OK);
+    if (kind == 2) {
+        XrXirValue cell = {0}; CHECK(xr_xir_cell_new(domain, &value, &cell) == XR_XIR_VALUE_OK);
+        xr_xir_value_drop(&value); value = cell;
+    }
 #if defined(XR_OS_WINDOWS)
     HANDLE threads[4];
 #else
@@ -123,9 +127,12 @@ static void concurrent_copies(bool atomic) {
         CHECK(pthread_join(threads[i], NULL) == 0);
 #endif
     }
-    if (atomic) {
+    if (kind == 1) {
         int64_t count = 0;
         CHECK(xr_xir_atomic_i64_load(&value, &count) && count == 8000);
+    } else if (kind == 2) {
+        XrXirValue content = {0}; CHECK(xr_xir_cell_read(&value, &content) == XR_XIR_VALUE_OK);
+        bytes_equal(&content, "thread", 6); xr_xir_value_drop(&content);
     } else bytes_equal(&value, "thread", 6);
     xr_xir_value_drop(&value);
     XrXirDomainStats stats = xr_xir_domain_stats(domain);
@@ -203,7 +210,7 @@ static void atomic_boundaries(void) {
     xr_xir_value_drop(&copy);
 }
 int main(void) {
-    unicode_cases(); cow_cases(); concurrent_copies(false); concurrent_copies(true); typed_output(); atomic_boundaries();
+    unicode_cases(); cow_cases(); concurrent_copies(0); concurrent_copies(1); concurrent_copies(2); typed_output(); atomic_boundaries();
     puts("Strict Unicode, CoW growth, independent lifetime and concurrent owned copies passed");
     return 0;
 }
