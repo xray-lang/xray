@@ -106,8 +106,21 @@ set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;own
 
 add_executable(test_xir_execution xir/test_xir_execution.c)
 target_link_libraries(test_xir_execution PRIVATE xray_xir_vm)
+add_executable(test_xir_calls xir/test_xir_calls.c)
+target_link_libraries(test_xir_calls PRIVATE xray_xir_vm)
 add_executable(test_xir_emit xir/test_xir_emit.c)
 target_link_libraries(test_xir_emit PRIVATE xray_xir_cgen)
+add_executable(test_xir_emit_calls xir/test_xir_emit_calls.c)
+target_link_libraries(test_xir_emit_calls PRIVATE xray_xir_cgen)
+set(XIR_CALL_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_call_fixture.c)
+add_custom_command(OUTPUT ${XIR_CALL_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_emit_calls> ${XIR_CALL_GENERATED}
+    DEPENDS test_xir_emit_calls
+    VERBATIM)
+add_executable(test_xir_call_native xir/test_xir_call_native.c ${XIR_CALL_GENERATED})
+target_link_libraries(test_xir_call_native PRIVATE xray_xir_scalar)
+target_sources(test_xir_calls PRIVATE ${XIR_CALL_GENERATED})
 set(XIR_SCALAR_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_scalar_fixture.c)
 add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -116,7 +129,8 @@ add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
     VERBATIM)
 add_executable(test_xir_native xir/test_xir_native.c ${XIR_SCALAR_GENERATED})
 target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
-foreach(xir_test IN ITEMS test_xir_execution test_xir_emit test_xir_native)
+foreach(xir_test IN ITEMS test_xir_execution test_xir_emit test_xir_native test_xir_calls
+    test_xir_emit_calls test_xir_call_native)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()

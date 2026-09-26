@@ -78,6 +78,44 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_scalar.c"
 #include "xir/xxir_vm.c"
 #include "xir/xxir_emit_c.c"
+#include "xir/xxir_call.c"
+
+typedef struct AllocationFrame { bool entered; XrXirScalar argument; } AllocationFrame;
+static XrXirAction allocation_resume(XrXirCallView *view) {
+    AllocationFrame *frame = view->state;
+    if (!frame->entered && view->arguments[0].payload) {
+        frame->entered = true;
+        frame->argument = (XrXirScalar) {XR_XIR_I64, 0, view->arguments[0].payload - 1};
+        return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &frame->argument, 1, {0, 0, 0}};
+    }
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0,
+        frame->entered ? view->inbox.value.payload + 1 : 0}};
+}
+
+static size_t call_allocation_failures(void) {
+    XrXirType type = XR_XIR_I64;
+    XrXirCallEntry entry = {1, &type, 1, XR_XIR_I64, sizeof(AllocationFrame), allocation_resume, NULL, NULL};
+    size_t expected_calls = 0;
+    for (size_t attempt = 0; attempt <= expected_calls; ++attempt) {
+        fail_at = attempt ? attempt - 1 : SIZE_MAX;
+        calls = 0;
+        XrXirCallAccounting accounting = {0};
+        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting};
+        XrXirScalar argument = {XR_XIR_I64, 0, 3};
+        XrXirCall *call = NULL;
+        XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
+        if (status == XR_XIR_CALL_READY) {
+            XrXirCallResult result = xr_xir_call_poll(call);
+            CHECK(result.status == (attempt ? XR_XIR_CALL_OOM : XR_XIR_CALL_RETURNED));
+            if (!attempt) CHECK(result.value.payload == 3);
+            CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+        } else CHECK(attempt && status == XR_XIR_CALL_OOM && !call);
+        if (!attempt) expected_calls = calls;
+        CHECK(live == 0 && accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
+    }
+    fail_at = SIZE_MAX;
+    return expected_calls;
+}
 
 int main(void) {
     XrXirInstruction ops[] = {
@@ -160,20 +198,35 @@ int main(void) {
     fail_at = SIZE_MAX;
     calls = 0;
     XrXirCSource source;
-    CHECK(xr_xir_emit_c(lowered, "allocation", 65536, &source) == XR_XIR_OK);
+    CHECK(xr_xir_emit_leaf_c(lowered, "allocation", 65536, &source) == XR_XIR_OK);
     size_t emit_calls = calls;
     xr_xir_c_source_free(&source);
     CHECK(live == lowered_live);
     for (size_t i = 0; i < emit_calls; ++i) {
         calls = 0;
         fail_at = i;
-        CHECK(xr_xir_emit_c(lowered, "allocation", 65536, &source) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_emit_leaf_c(lowered, "allocation", 65536, &source) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(!source.text && !source.length && live == lowered_live);
+    }
+    fail_at = SIZE_MAX;
+    calls = 0;
+    CHECK(xr_xir_emit_c(lowered, "resumable", 65536, &source) == XR_XIR_OK);
+    size_t resume_emit_calls = calls;
+    xr_xir_c_source_free(&source);
+    CHECK(live == lowered_live);
+    for (size_t i = 0; i < resume_emit_calls; ++i) {
+        calls = 0;
+        fail_at = i;
+        CHECK(xr_xir_emit_c(lowered, "resumable", 65536, &source) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!source.text && !source.length && live == lowered_live);
     }
     fail_at = SIZE_MAX;
     xr_xir_artifact_free(lowered);
     CHECK(live == 0);
+    size_t call_sites = call_allocation_failures();
     printf("XIR physical release passed at %zu check, %zu lower, %zu VM, %zu emit allocation sites\n",
            check_calls, lower_calls, run_calls, emit_calls);
+    printf("Resumable physical release passed at %zu emitter and %zu activation/frame allocation sites\n",
+           resume_emit_calls, call_sites);
     return 0;
 }

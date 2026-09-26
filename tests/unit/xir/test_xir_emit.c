@@ -18,14 +18,14 @@
 int main(int argc, char **argv) {
     XrXirArtifact *checked = fixture_checked();
     XrXirCSource source;
-    CHECK(xr_xir_emit_c(checked, "fixture", 65536, &source) == XR_XIR_BAD_STAGE);
+    CHECK(xr_xir_emit_leaf_c(checked, "fixture", 65536, &source) == XR_XIR_BAD_STAGE);
     CHECK(!source.text && !source.length);
     xr_xir_artifact_free(checked);
     XrXirArtifact *artifact = fixture_lowered();
-    CHECK(xr_xir_emit_c(artifact, "invalid;", 65536, &source) == XR_XIR_BAD_STRUCTURE);
-    CHECK(xr_xir_emit_c(artifact, "fixture", 1, &source) == XR_XIR_BUDGET);
+    CHECK(xr_xir_emit_leaf_c(artifact, "invalid;", 65536, &source) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_emit_leaf_c(artifact, "fixture", 1, &source) == XR_XIR_BUDGET);
     CHECK(!source.text && !source.length);
-    CHECK(xr_xir_emit_c(artifact, "fixture", 65536, &source) == XR_XIR_OK);
+    CHECK(xr_xir_emit_leaf_c(artifact, "fixture", 65536, &source) == XR_XIR_OK);
     xr_xir_artifact_free(artifact);
     CHECK(source.length == strlen(source.text));
     CHECK(!strstr(source.text, "({"));

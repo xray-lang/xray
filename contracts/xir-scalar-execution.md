@@ -1,8 +1,8 @@
 # XIR scalar layout and execution contract
 
-This contract admits internal scalar execution only. Source-language admission,
-managed values, calls, module instances, and resumable cross-module ABI remain
-unimplemented; scalar tests are not evidence for those capabilities. The current
+This contract admits internal scalar leaf execution only. Source-language admission,
+managed values and module instances remain unimplemented. Resumable XIR calls are
+governed separately by `xir-resumable-calls.md`; leaf tests do not certify them. The current
 target is x86_64 little-endian with scalar boundary ABI version 1. Other targets,
 ABI versions, and layout contexts reject explicitly.
 

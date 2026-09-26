@@ -18,6 +18,8 @@
 
 typedef struct XrXirCSource { char *text; size_t length; } XrXirCSource;
 
+XR_FUNC XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol_prefix,
+                                    size_t byte_limit, XrXirCSource *output);
 XR_FUNC XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_prefix,
                                 size_t byte_limit, XrXirCSource *output);
 XR_FUNC void xr_xir_c_source_free(XrXirCSource *source);

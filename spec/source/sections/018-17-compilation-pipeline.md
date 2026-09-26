@@ -56,9 +56,9 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 普通实例在不可变可执行 image 封存前完成，VM 只执行 Lowered。
 
 首个内部子集接受 `unit`、`bool`、`i64`，标量复制保持值，`i64` 加法溢出报错，
-相等产生 `bool`，条件分支只接受 `bool`，返回类型须与声明相同。此内部子集参数
+相等及有符号小于比较产生 `bool`，条件分支只接受 `bool`，返回类型须与声明相同。此内部子集参数
 只含 bool/i64；unit 可作结果和终结操作类型，不产生值 ID。
-此子集没有调用、托管值、借用、泛型或新源码拼写；未实现操作必须拒绝。
+此子集没有托管值、借用、泛型或新源码拼写；未实现操作必须拒绝。内部直接调用另见下文。
 CFG 的块完整划分指令，均从入口可达，并以一个终结操作结束；入口无前驱。
 SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不能作为值使用。
 抽象 copy 只在 Built/Checked，物理 scalar-copy 只在 Lowered，不能仅改阶段标签。
@@ -73,6 +73,15 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 参数必须精确匹配，错误清空结果；每条指令消耗一步，帧和步骤均受预算限制。
 有符号加法须在计算前检查溢出，所有退出释放帧，标量结果独立存活。
 Checked不可执行；未知目标/ABI拒绝。此内部子集不授予模块、调用或可恢复ABI资格。
+
+内部可恢复调用受 `contracts/xir-resumable-calls.md` 约束。直接CALL引用模块函数身份，
+本子集最多传递两个bool/i64参数，结果精确匹配声明；SUSPEND保存下一指令，THROW传递i64错误token。
+这些是内部XIR操作，不引入源码关键字，也不授予模块、泛型或stdlib缓存资格。
+VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不把待恢复的子调用留在C栈上。
+帧地址稳定，深度、实际字节与恢复工作分别有预算；挂起token只可消费一次，重入驱动/销毁拒绝。
+取消在回调交还控制后按子帧到父帧清理；清理不能再次挂起或重新争取完成权。
+当前内部接口只允许单宿主线程独占驱动，不声称并发取消、分段池、托管值或完整image/instance已完成。
+闭合标量叶子可使用经明确验证的非挂起入口，但CALL/SUSPEND/THROW不能退回该入口。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -130,10 +139,10 @@ specialized on Checked. Explicitly derived content is checked again. Ordinary
 instances close before immutable executable-image sealing; the VM executes Lowered.
 
 The initial internal subset admits unit, bool, and i64. Scalar copy preserves the
-value; signed i64 addition reports overflow; equality produces bool; branches
+value; signed i64 addition reports overflow; equality and signed less-than produce bool; branches
 require bool; returns match their declaration. Parameters in this internal subset
-are bool/i64; unit is a result/terminator type without a value ID. Calls, managed values, borrowing,
-generics, and new source spellings are absent and unsupported operations reject.
+are bool/i64; unit is a result/terminator type without a value ID. Managed values, borrowing, generics, and new source spellings are absent;
+unsupported operations reject. Internal direct calls are defined below.
 Blocks partition instructions, are reachable from the entry, and end in exactly
 one terminator; entry has no predecessors. SSA uses require an earlier same-block
 definition or a dominating definition; unit instructions do not produce values.
@@ -155,4 +164,19 @@ instruction consumes one step; frames and steps are bounded. Signed addition
 checks overflow before computation, every exit releases its frame, and inline
 scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
+
+Internal resumable calls are governed by `contracts/xir-resumable-calls.md`.
+Direct CALL names a module function and admits at most two bool/i64 parameters
+in this subset; its result exactly matches the declaration. SUSPEND saves the next
+instruction; THROW carries an i64 error token. These are internal XIR operations,
+not new source keywords or qualification of modules, generics, or stdlib caches.
+VM and generated C return typed frame/result actions to the same trampoline.
+A caller never keeps a resumable child on its native stack. Frames do not move;
+depth, physical bytes, and resume work have separate budgets. Wake tokens are
+single-use; reentrant drive/destruction rejects. Cancellation cleans children
+before parents after the running callback yields control. Cleanup cannot suspend
+or reopen completion arbitration. The current interface admits exclusive driving
+by one host thread; concurrent cancellation, segmented pools, managed values, and
+complete image/instance ownership remain unqualified. Verified closed scalar
+leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back to it.
 <!-- /xr-spec:en -->

@@ -6822,8 +6822,8 @@ instances close before immutable executable-image sealing; the VM executes Lower
 The initial internal subset admits unit, bool, and i64. Scalar copy preserves the
 value; signed i64 addition reports overflow; equality produces bool; branches
 require bool; returns match their declaration. Parameters in this internal subset
-are bool/i64; unit is a result/terminator type without a value ID. Calls, managed values, borrowing,
-generics, and new source spellings are absent and unsupported operations reject.
+are bool/i64; unit is a result/terminator type without a value ID. Managed values, borrowing, generics, and new source spellings are absent;
+unsupported operations reject. Internal direct calls are defined below.
 Blocks partition instructions, are reachable from the entry, and end in exactly
 one terminator; entry has no predecessors. SSA uses require an earlier same-block
 definition or a dominating definition; unit instructions do not produce values.
@@ -6845,6 +6845,21 @@ instruction consumes one step; frames and steps are bounded. Signed addition
 checks overflow before computation, every exit releases its frame, and inline
 scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
+
+Internal resumable calls are governed by `contracts/xir-resumable-calls.md`.
+Direct CALL names a module function and admits at most two bool/i64 parameters
+in this subset; its result exactly matches the declaration. SUSPEND saves the next
+instruction; THROW carries an i64 error token. These are internal XIR operations,
+not new source keywords or qualification of modules, generics, or stdlib caches.
+VM and generated C return typed frame/result actions to the same trampoline.
+A caller never keeps a resumable child on its native stack. Frames do not move;
+depth, physical bytes, and resume work have separate budgets. Wake tokens are
+single-use; reentrant drive/destruction rejects. Cancellation cleans children
+before parents after the running callback yields control. Cleanup cannot suspend
+or reopen completion arbitration. The current interface admits exclusive driving
+by one host thread; concurrent cancellation, segmented pools, managed values, and
+complete image/instance ownership remain unqualified. Verified closed scalar
+leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back to it.
 
 ---
 
