@@ -1,4 +1,4 @@
-# XIR binary floating conversion foundation
+# XIR binary floating values and execution
 
 The runtime-neutral floating core accepts explicit IEEE binary32 or binary64
 bit patterns, with binary32 zero extended to 64 bits. Unsupported widths or
@@ -25,15 +25,38 @@ Comparison reports less/equal/greater/unordered without subtracting or using
 host floating instructions. Either NaN makes the comparison unordered, +0 and
 -0 compare equal, and infinities/subnormals retain IEEE ordering. Negation flips
 the sign of every non-NaN value and canonicalizes NaN instead of leaking payload
-or sign. These helpers define a single future execution boundary for both VM
+or sign. These helpers define the execution boundary for both VM
 and generated native code.
 
-This contract qualifies conversion/comparison/negation foundation only. It does
-not admit float types into XIR values, packets, source, arithmetic, layout or
-typed output yet. Existing integer Value7/Call11/Program6 and Checked
-schema4/semantic12 remain unchanged. Full floating arithmetic, decimal parsing
-and formatting, math methods, XIR integration and cross-platform qualification
-remain open. No compatibility path is introduced.
+XIR admits f32 (type 12) and f64 (type 13). Values and CONST_FLOAT require
+canonical positive quiet NaN, with binary32 zero extended; all other IEEE
+encodings including signed zero and infinities are admitted. Scalar storage is
+4/8 bytes, SSA and frame payloads are 8 bytes, boxed/parameter/result values
+are 16 bytes aligned to 8. Copy, local/cell storage, module slots, generic
+substitution, callables and suspension preserve exact bits and concrete type.
+
+CONVERT_NUMBER replaces the former integer-only conversion without an alias. It accepts any concrete
+integer/float pair, retaining the integer narrowing/wrapping contract. Floating
+conversion uses the rules above; out-of-range float-to-integer raises a distinct
+NUMERIC_RANGE execution fault with canonical unit result and normal cleanup.
+NEG_FLOAT and six float comparisons accept equal-width concrete float operands;
+NaN makes EQ false, NE true, and every ordered relation false. No host FPU state
+changes occur. Checked schema4/semantic13, Value8/Call12/Program7 reject older
+versions, including otherwise integer-only artifacts.
+
+Source admits f32/f64 annotations, explicit numeric casts, float negation and
+comparisons. The only implicit floating conversion is f32 to f64, including
+conditional joins. Integer/float mixing requires explicit casts. Ordinary
+generic bodies cannot perform numeric operations without concrete proof.
+Decimal literals, floating arithmetic and floating typed output remain rejected
+until their parsing/arithmetic/formatting contracts are implemented. No product
+or cross-platform qualification is implied by this subset.
 
 verification-test: test_xir_execution
 verification-test: test_xir_native
+verification-test: test_xir_checked
+verification-test: test_xir_source
+verification-test: test_xir_source_native
+verification-test: test_xir_source_mixed
+verification-test: test_xir_source_admission
+verification-test: test_xir_packet_vm

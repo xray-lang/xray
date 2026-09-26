@@ -110,10 +110,17 @@ static void emit_integer_step(CBuffer *buffer, const XrXirFunction *function,
             "xr_xir_integer_compare(xr_xir_integer_format((XrXirType) %uu), "
             "xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &ordering);\n",
             (uint32_t) input, frame, left, frame, layout->offsets[op->args[1]]);
-    } else if (op->op == XR_XIR_CONVERT_INT) {
-        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_integer_convert("
-            "xr_xir_integer_format((XrXirType) %uu), xr_xir_integer_format((XrXirType) %uu), "
+    } else if (op->op == XR_XIR_CONVERT_NUMBER) {
+        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_number_convert("
+            "(XrXirType) %uu, (XrXirType) %uu, "
             "xr_xir_scalar_load(%s, %uu), &temporary);\n", (uint32_t) input, (uint32_t) op->type, frame, left);
+    } else if (op->op == XR_XIR_NEG_FLOAT) {
+        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_float_negative((XrXirType) %uu, "
+            "xr_xir_scalar_load(%s, %uu), &temporary);\n", (uint32_t) input, frame, left);
+    } else if (op->op >= XR_XIR_EQ_FLOAT && op->op <= XR_XIR_GE_FLOAT) {
+        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_float_relation((XrXirType) %uu, "
+            "(XrXirFloatRelation) %uu, xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &temporary);\n",
+            (uint32_t) input, (uint32_t) (op->op - XR_XIR_EQ_FLOAT), frame, left, frame, layout->offsets[op->args[1]]);
     } else {
         append(buffer, "    XrXirRunStatus numeric_status = xr_xir_integer_arithmetic("
             "xr_xir_integer_format((XrXirType) %uu), (XrXirArithmetic) %d, "
@@ -121,7 +128,8 @@ static void emit_integer_step(CBuffer *buffer, const XrXirFunction *function,
             (uint32_t) op->type, emit_arithmetic_operation(op->op), frame, left, frame, layout->offsets[op->args[1]]);
     }
     if (resumable) append(buffer, "    if (numeric_status != XR_XIR_RUN_OK) return (XrXirAction) "
-        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, numeric_status == XR_XIR_RUN_DIVIDE_BY_ZERO ? "
+        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, numeric_status == XR_XIR_RUN_NUMERIC_RANGE ? XR_XIR_CALL_NUMERIC_RANGE : "
+        "numeric_status == XR_XIR_RUN_DIVIDE_BY_ZERO ? "
         "XR_XIR_CALL_DIVIDE_BY_ZERO : XR_XIR_CALL_BAD_ARGUMENT}};\n");
     else append(buffer, "    if (numeric_status != XR_XIR_RUN_OK) { status = numeric_status; goto xr_done; }\n");
     append(buffer, "    xr_xir_scalar_store(%s, %uu, ", frame, destination);
@@ -216,6 +224,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     switch (op->op) {
     case XR_XIR_PHI: break;
     case XR_XIR_CONST_BOOL:
+    case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_INT:
         append(buffer, "    xr_xir_scalar_store(frame, %uu, ", destination);
         emit_constant(buffer, op->immediate);
@@ -237,7 +246,9 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
     case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
     case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
-    case XR_XIR_CONVERT_INT:
+    case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
+    case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+    case XR_XIR_CONVERT_NUMBER:
         emit_integer_step(buffer, function, layout, index, false);
         break;
     case XR_XIR_JUMP:
@@ -310,9 +321,9 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
             if (xr_xir_type_is_owned(function->parameters[p])) return XR_XIR_BAD_STAGE;
     }
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
-    append(&buffer, "#include \"xir/xxir_scalar.h\"\n"
+    append(&buffer, "#include \"xir/xxir_float.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 7u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 8u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");
@@ -425,6 +436,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     switch (op->op) {
     case XR_XIR_PHI: break;
     case XR_XIR_CONST_BOOL:
+    case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_INT:
         append(buffer, "        xr_xir_scalar_store(state->frame, %uu, ", destination);
         emit_constant(buffer, op->immediate);
@@ -484,7 +496,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
     case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
     case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
-    case XR_XIR_CONVERT_INT:
+    case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
+    case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+    case XR_XIR_CONVERT_NUMBER:
         emit_integer_step(buffer, function, layout, index, true);
         break;
     case XR_XIR_JUMP:
@@ -652,7 +666,7 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 6u, \"XIR program ABI\");\n"
+    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 7u, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         prefix, prefix, module->function_count, prefix);
@@ -670,10 +684,10 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     XrXirStatus status = xr_xir_artifact_verify(artifact, NULL, NULL);
     if (status != XR_XIR_OK) return status;
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
-    append(&buffer, "#include \"xir/xxir_program.h\"\n"
+    append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 11u, \"XIR call ABI\");\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 7u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 12u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 8u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");

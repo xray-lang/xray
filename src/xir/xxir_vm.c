@@ -13,6 +13,7 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_float.h"
 #include "xxir_callable.h"
 #include "../base/xmalloc.h"
 
@@ -171,6 +172,13 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
     return XR_XIR_RUN_OK;
 }
 
+static XrXirRunStatus floating_step(ScalarRun *run, const XrXirInstruction *op, int64_t *value) {
+    XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
+    int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
+    if (op->op == XR_XIR_NEG_FLOAT) return xr_xir_float_negative(type, left, value);
+    return xr_xir_float_relation(type, (XrXirFloatRelation) (op->op - XR_XIR_EQ_FLOAT), left,
+        xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), value);
+}
 static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *action) {
     uint32_t instruction = state->instruction;
     const XrXirInstruction *op = &run->function->instructions[instruction];
@@ -190,8 +198,15 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return status;
     }
     if (op->op == XR_XIR_PHI) { state->instruction = next; return XR_XIR_RUN_OK; }
+    if (op->op >= XR_XIR_NEG_FLOAT && op->op <= XR_XIR_GE_FLOAT) {
+        XrXirRunStatus status = floating_step(run, op, &value);
+        if (status != XR_XIR_RUN_OK) return status;
+        xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], value);
+        state->instruction = next; return XR_XIR_RUN_OK;
+    }
     switch (op->op) {
     case XR_XIR_CONST_BOOL:
+    case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_INT:
         value = op->immediate;
         break;
@@ -270,9 +285,9 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         }
         break;
     }
-    case XR_XIR_CONVERT_INT: {
+    case XR_XIR_CONVERT_NUMBER: {
         XrXirType from = xr_xir_operand_type(run->function, op->args[0]);
-        XrXirRunStatus status = xr_xir_integer_convert(xr_xir_integer_format(from), xr_xir_integer_format(op->type),
+        XrXirRunStatus status = xr_xir_number_convert(from, op->type,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &value);
         if (status != XR_XIR_RUN_OK) return status;
         break;
@@ -344,6 +359,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     XrXirRunStatus status = scalar_step(&run, state, &action);
     if (status != XR_XIR_RUN_OK)
         return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0,
+            status == XR_XIR_RUN_NUMERIC_RANGE ? XR_XIR_CALL_NUMERIC_RANGE :
             status == XR_XIR_RUN_DIVIDE_BY_ZERO ? XR_XIR_CALL_DIVIDE_BY_ZERO :
             status == XR_XIR_RUN_OUT_OF_MEMORY ? XR_XIR_CALL_OOM :
             status == XR_XIR_RUN_FRAME_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE}};

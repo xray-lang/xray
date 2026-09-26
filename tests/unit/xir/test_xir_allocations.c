@@ -80,6 +80,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_layout.c"
 #include "xir/xxir_value.c"
 #include "xir/xxir_scalar.c"
+#include "xir/xxir_float.c"
 #include "xir/xxir_vm.c"
 #include "xir/xxir_emit_c.c"
 #include "xir/xxir_call.c"

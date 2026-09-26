@@ -173,6 +173,18 @@ static XrXirArtifact *fixture_checked(void) {
                 {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0}}, 2, NULL, 0},
 #include "xir_integer_cases.def"
 #undef XIR_INTEGER_CASE
+#define FLOAT_PARAMETERS_0(type) NULL
+#define FLOAT_PARAMETERS_1(type) (const XrXirType[]) {type}
+#define FLOAT_PARAMETERS_2(type) (const XrXirType[]) {type, type}
+#define XIR_FLOAT_FUNCTION(id, type, op, result, count, immediate) \
+        {"floating" #id, sizeof("floating" #id) - 1, FLOAT_PARAMETERS_##count(type), count, result, pair_blocks, 1, \
+            (const XrXirInstruction[]) {{op, result, {0, count == 2 ? 1 : 0}, {0}, immediate}, \
+                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0}}, 2, NULL, 0},
+#include "xir_float_functions.def"
+#undef XIR_FLOAT_FUNCTION
+#undef FLOAT_PARAMETERS_0
+#undef FLOAT_PARAMETERS_1
+#undef FLOAT_PARAMETERS_2
     };
     const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL};
     XrXirArtifact *artifact = NULL;

@@ -27,7 +27,7 @@ typedef enum XrXirRunStatus {
     XR_XIR_RUN_DIVIDE_BY_ZERO,
     XR_XIR_RUN_STEP_LIMIT,
     XR_XIR_RUN_FRAME_LIMIT,
-    XR_XIR_RUN_OUT_OF_MEMORY
+    XR_XIR_RUN_OUT_OF_MEMORY, XR_XIR_RUN_NUMERIC_RANGE
 } XrXirRunStatus;
 
 typedef struct XrXirRunContext {

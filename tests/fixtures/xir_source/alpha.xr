@@ -36,3 +36,6 @@ export fn frozen<T:Sendable>(value:T)->fn()->T {
     stored = value
     return read
 }
+
+const floatingSeed: f32 = 16777217 as f32
+export fn floatSeed()->f32 { return floatingSeed }

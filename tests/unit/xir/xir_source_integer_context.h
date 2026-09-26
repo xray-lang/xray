@@ -56,7 +56,7 @@ static void source_large_integer_casts(const XrXirSourceRequest *request, const 
         const XrXirModule *module = xr_xir_artifact_module(artifact);
         const XrXirInstruction *ops = module->functions[0].instructions;
         CHECK(ops[0].op == XR_XIR_CONST_INT && ops[0].type == XR_XIR_U64 && ops[0].immediate == -1);
-        CHECK(ops[1].op == XR_XIR_CONVERT_INT && ops[1].type == source_integer_types[i].type && ops[1].args[0] == 0);
+        CHECK(ops[1].op == XR_XIR_CONVERT_NUMBER && ops[1].type == source_integer_types[i].type && ops[1].args[0] == 0);
         xr_xir_artifact_free(artifact);
     }
     puts("Large source integer casts: all 8 targets preserve the full u64 input");
@@ -80,7 +80,7 @@ static void source_integer_joins(const XrXirSourceRequest *request, const char *
                 const XrXirBlock *block = &function->blocks[b];
                 for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                     const XrXirInstruction *op = &function->instructions[i];
-                    if (op->op == XR_XIR_CONVERT_INT) {
+                    if (op->op == XR_XIR_CONVERT_NUMBER) {
                         CHECK(conversion == UINT32_MAX && op->args[0] == 1 && op->type == source_integer_types[last].type);
                         conversion = function->parameter_count + i; predecessor = b;
                     }
@@ -125,7 +125,7 @@ static void source_integer_contexts(const XrXirSourceRequest *request, const cha
             const XrXirFunction *function = &module->functions[f];
             for (uint32_t i = 0; i < function->instruction_count; ++i) {
                 const XrXirInstruction *op = &function->instructions[i];
-                if (op->op != XR_XIR_CONVERT_INT) continue;
+                if (op->op != XR_XIR_CONVERT_NUMBER) continue;
                 CHECK(op->type == to->type); ++conversions;
                 uint32_t id = op->args[0];
                 XrXirType input = id < function->parameter_count ? function->parameters[id] :

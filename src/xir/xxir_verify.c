@@ -19,7 +19,7 @@
 #include <limits.h>
 
 typedef enum ResultRule {
-    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_CALL, RULE_ATOMIC
+    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_NUMBER, RULE_FLOAT, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_CALL, RULE_ATOMIC
 } ResultRule;
 typedef struct OpRule {
     uint8_t stages;
@@ -70,7 +70,7 @@ static bool spend_count(uint32_t *remaining, uint32_t amount) {
 }
 
 static bool scalar(XrXirType type) {
-    return type == XR_XIR_BOOL || xr_xir_type_is_integer(type);
+    return type == XR_XIR_BOOL || xr_xir_type_is_number(type);
 }
 
 static uint32_t operand_count(const XrXirFunction *function, const XrXirInstruction *op,
@@ -163,6 +163,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if ((rule->result == RULE_UNIT && op->type != XR_XIR_UNIT) ||
         (rule->result == RULE_BOOL && op->type != XR_XIR_BOOL) ||
         (rule->result == RULE_I64 && op->type != XR_XIR_I64) ||
+        (rule->result == RULE_NUMBER && !xr_xir_type_is_number(op->type)) ||
+        (rule->result == RULE_FLOAT && !xr_xir_float_bits(op->type)) ||
         (rule->result == RULE_INTEGER && !xr_xir_type_is_integer(op->type)) ||
         (rule->result == RULE_OWNED && (!xr_xir_type_is_owned(op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
@@ -185,6 +187,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_CONST_INT) {
         if (!xr_xir_integer_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
+    } else if (op->op == XR_XIR_CONST_FLOAT) {
+        if (!xr_xir_float_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM) {
         if (op->immediate != 1 && op->immediate != 2) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CALL &&
@@ -482,9 +486,14 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         else if (op->op == XR_XIR_BRANCH)
             expected = XR_XIR_BOOL;
         else if (op->op == XR_XIR_EQ_INT || op->op == XR_XIR_LT_INT ||
-                 (op->op >= XR_XIR_NE_INT && op->op <= XR_XIR_GE_INT) || op->op == XR_XIR_CONVERT_INT) {
+                 (op->op >= XR_XIR_NE_INT && op->op <= XR_XIR_GE_INT)) {
             expected = xr_xir_operand_type(function, op->args[0]);
             if (!xr_xir_type_is_integer(expected)) return XR_XIR_BAD_TYPE;
+        }
+        if (op->op == XR_XIR_CONVERT_NUMBER || (op->op >= XR_XIR_EQ_FLOAT && op->op <= XR_XIR_GE_FLOAT)) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            if (op->op == XR_XIR_CONVERT_NUMBER ? !xr_xir_type_is_number(expected) : !xr_xir_float_bits(expected))
+                return XR_XIR_BAD_TYPE;
         }
         if (op->op == XR_XIR_THROW)
             expected = XR_XIR_I64;
@@ -538,7 +547,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 operand_type = id < function->parameter_count ? function->parameters[id] :
                     function->instructions[id - function->parameter_count].type;
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
-                if (!scalar(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
+                if (operand_type != XR_XIR_BOOL && !xr_xir_type_is_integer(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
             uint32_t id = op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT ?
                 function->operands[op->args[0] + a] : op->args[a];

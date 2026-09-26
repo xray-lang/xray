@@ -234,7 +234,7 @@ for(init; condition; step)初始化一次，循环初始化绑定只在该循环
 除数为零产生独立DIVIDE_BY_ZERO fault，没有结果并逆序清理所有帧；初始化中失败保持粘滞，
 已初始化实例的普通调用失败允许后续调用。生成C在宿主/和%之前检查特殊对，不执行有符号溢出。
 一元负号降为零减操作数，其他运算经同一Checked→Lowered→共享标量运行时。
-当前Checked schema 4/语义合同12、Call ABI 11、Value7/Program6按§17.16替换旧版本，无reader或适配路径。
+当前Checked schema 4/语义合同13、Call ABI 12、Value7/Program6按§17.16替换旧版本，无reader或适配路径。
 具体i64能力不能通过实例化补给普通泛型；其他数值族与显式checked/saturating库方法尚未接通。
 
 ### 17.15 XIR i64位运算
@@ -245,7 +245,7 @@ for(init; condition; step)初始化一次，循环初始化绑定只在该循环
 操作数从左到右各求值一次，位运算拒绝bool/string/Atomic及未约束T。变量复合赋值先读左值，
 再求右侧，计算后写回并返回新值；右侧即使修改同一变量也不能改变已读取的快照，失败不写回。
 +=另准入string拼接及快照，其余复合运算要求i64；const/read、成员与索引目标暂不准入。
-当前Checked schema4/语义合同12、Call11/Value7/Program6遵循§17.16，无旧包或ABI适配。其他定宽整数与显式转换见§17.21，完整上下文推导仍未准入。
+当前Checked schema4/语义合同13、Call11/Value7/Program6遵循§17.16，无旧包或ABI适配。其他定宽整数与显式转换见§17.21，完整上下文推导仍未准入。
 
 ### 17.16 XIR拥有式函数值与间接调用
 
@@ -264,7 +264,7 @@ Built→Checked深复制描述；普通特化和复验后，唯一Lowered布局�
 当前同一宿主线程的驱动器只接受原实例内调用；另一实例或Program即使数字ID相同也拒绝。
 跨实例转交及并发准入仍待完整资格，不能据当前拒绝边界缩减总任务。
 
-当前唯一包为schema4/语义合同12，Value ABI7/Call ABI9/Program ABI6原子取代旧版本；
+当前唯一包为schema4/语义合同13，Value ABI8/Call ABI12/Program ABI7原子取代旧版本；
 没有旧reader、boxed适配器或第二执行链。源码/包验证、VM/native独立预期、挂起/取消、
 结果外逃、代码租约和逐处分配失败测试按机器合同验证；这不构成完整语言或产品资格。
 
@@ -278,7 +278,7 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 全局槽必须闭合。特化重新生成闭合规范类型表，并重映射参数、结果、指令、显式实参和槽，
 随后复验。Lowered和不可变Program拒绝全部残留开放签名，包括未使用条目。
 结构替换与匹配消耗工作量和元数据预算，最多允许128层活动结构替换。
-唯一Checked schema4/语义合同12、Program ABI6原子替代旧版本；Value7/Call11保持当前协议。
+唯一Checked schema4/语义合同13、Program ABI7原子替代旧版本；Value7/Call11保持当前协议。
 捕获、其他mode、效应承诺、类型推断及成员见证继续按各自合同和门独立接通。
 
 ### 17.18 XIR 拥有式不可变捕获环境
@@ -289,7 +289,7 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 
 间接调用仍发布同一可恢复 CALL action，携带借用的函数值；唯一帧驱动器把环境前缀和显式实参复制到新帧。在新帧完成拥有前，调用方帧继续保活环境；挂起、抛出、取消和返回沿用统一清理。宿主函数调用入口同样保留捕获和实参，再释放前次结果。实例 stop/free 撤销执行准入，但外逃环境和值仍可读取、复制和释放。
 
-该内部合同不把 var 变成按值捕获，也不授予 Sendable、noescape 或 no_suspend。普通 var 的共享 cell、循环回收及源码闭包生产入口须分别接通并验收；内部构造通过不代表源码闭包完成。Value ABI 7、Call ABI 11、Program ABI 6、Checked schema4/语义合同12为唯一现行版本，旧版本拒绝。
+该内部合同不把 var 变成按值捕获，也不授予 Sendable、noescape 或 no_suspend。普通 var 的共享 cell、循环回收及源码闭包生产入口须分别接通并验收；内部构造通过不代表源码闭包完成。Value ABI 8、Call ABI 12、Program ABI 7、Checked schema4/语义合同13为唯一现行版本，旧版本拒绝。
 
 ### 17.19 XIR 共享捕获 cell
 
@@ -300,18 +300,18 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 当前唯一版本为Value7/Call11/Program6、Checked schema4/语义12，无旧版本读取或ABI适配。源码var不得以快照冒充共享cell。
 ### 17.20 定宽整数运行时基础
 
-统一无分配整数核心显式接收8/16/32/64位和符号；有符号payload符号扩展，无符号payload零扩展，u64保留全部64位。非规范payload和非法宽度拒绝。算术、比较、显式转换及§3.3.2移位遵循§2.3.1；失败返回状态并将数值输出清零。当前i64的VM与native路径均使用该核心，旧入口已删除，Call ABI11拒绝旧native条目。Checked schema4/语义12和Value7/Program6保持不变。本节确认运行时基础；八种整数的XIR、显式cast、同符号运算提升和输出接入见§17.21，完整上下文推导与容器仍OPEN。
+统一无分配整数核心显式接收8/16/32/64位和符号；有符号payload符号扩展，无符号payload零扩展，u64保留全部64位。非规范payload和非法宽度拒绝。算术、比较、显式转换及§3.3.2移位遵循§2.3.1；失败返回状态并将数值输出清零。当前i64的VM与native路径均使用该核心，旧入口已删除，Call ABI12拒绝旧native条目。Checked schema4/语义12和Value7/Program6保持不变。本节确认运行时基础；八种整数的XIR、显式cast、同符号运算提升和输出接入见§17.21，完整上下文推导与容器仍OPEN。
 
 ### 17.21 类型化定宽整数XIR
 
-整数类型ID为i64=2、i8=5、i16=6、i32=7、u8=8、u16=9、u32=10、u64=11。唯一CONST_INT与算术/比较/移位INT操作族替代旧i64专用名称；CONVERT_INT显式转换具体整数，所有指令继续检查类型、值角色和支配。算术两侧及结果类型相同；比较两侧同类型并返回bool；移位保留左类型，计数可为任意整数。无约束T不能通过特化获得算术资格。
+整数类型ID为i64=2、i8=5、i16=6、i32=7、u8=8、u16=9、u32=10、u64=11。唯一CONST_INT与算术/比较/移位INT操作族替代旧i64专用名称；CONVERT_NUMBER显式转换具体整数，所有指令继续检查类型、值角色和支配。算术两侧及结果类型相同；比较两侧同类型并返回bool；移位保留左类型，计数可为任意整数。无约束T不能通过特化获得算术资格。
 
 常量和边界值保持规范payload；copy、phi、调用、模块槽、cell、callable签名和输出保留精确类型。存储宽度/对齐为1/2/4/8字节，frame仍为8字节，boxed/参数/结果仍16字节且8对齐。无符号输出按完整无符号十进制解释，u64全一位型为18446744073709551615。输出预算及一次发布不变。Value7/Call11/Program6、Checked schema4/语义12为唯一版本，旧包与条目拒绝。源码已接通八种类型名称、具体整数as、已定型操作数的同符号宽化、原宽度一元运算/增减、共享cell、模块状态及print。nullable cast、bool/rune/float与无约束T转换拒绝。直接整数字面量与赋值/参数/返回宽化见§17.22；完整推断、浮点和容器仍OPEN。
 
 
 ### 17.22 整数上下文与无损宽化
 
-声明注解、赋值目标、已声明返回类型、普通/间接调用参数（显式泛型替换后）给出唯一上下文。直接整数字面量包含括号和一次直接负号；无整数上下文时默认i64，有上下文时先检查数学值范围再产生该类型常量。因此u64最大值与i64最小值不经过宿主有符号溢出；负零可表示为无符号零。已有类型的表达式仅同符号向更宽整数转换，不隐式窄化、改符号或把无约束T当整数。转换显式进入CONVERT_INT，仍由Checked复验。推断返回类型的闭包不从外部调用签名获得未经实现的推断权限。
+声明注解、赋值目标、已声明返回类型、普通/间接调用参数（显式泛型替换后）给出唯一上下文。直接整数字面量包含括号和一次直接负号；无整数上下文时默认i64，有上下文时先检查数学值范围再产生该类型常量。因此u64最大值与i64最小值不经过宿主有符号溢出；负零可表示为无符号零。已有类型的表达式仅同符号向更宽整数转换，不隐式窄化、改符号或把无约束T当整数。转换显式进入CONVERT_NUMBER，仍由Checked复验。推断返回类型的闭包不从外部调用签名获得未经实现的推断权限。
 
 二元算术/比较中的直接字面量由另一已定型操作数获得上下文；两侧均为直接字面量时采用外层整数上下文，否则默认i64。上下文不穿透任意已成形子表达式做常量折叠。取反的直接字面量可用外层整数上下文，已定型一元操作保留其操作数类型。移位左侧直接字面量可用外层上下文，但计数独立定型，不因左侧窄类型而拒绝256或负数；结果仍按§3.3.2处理。复合赋值的非移位RHS采用绑定类型；先读取左侧快照，再执行RHS，成功才写回。显式as的输入独立定型，`200 as i8`继续环绕，不变为越界字面量错误。唯一例外是超过i64正范围且仍可由u64表示的直接正字面量（包括括号）：它保留完整u64幅度作为转换源，再按目标宽度取模；负字面量不借此绕过i64下界检查。
 
@@ -324,8 +324,19 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 
 浮点到整数先向零截断再检查目标完整范围；(-1,0)可转unsigned零。NaN、无穷或截断后越界返回RANGE；非法宽度/编码返回BAD_ARGUMENT，失败清零输出。比较返回less/equal/greater/unordered，任一NaN为unordered，正负零相等；负号翻转非NaN符号并规范化NaN。全部通过整数位运算实现，不分配、不执行宿主浮点运算/转换、不更改宿主舍入模式或异常标志，也不依赖旧scalar标签/生成元数据。
 
-此处只确认共同转换/比较/负号基础；浮点XIR类型、packet、layout、源码、算术和typed output尚未准入，不能以辅助函数测试代替VM/native浮点贯穿。现有整数协议与ABI不变，完整浮点与跨平台资格仍OPEN。
+此处只确认共同转换/比较/负号基础；XIR类型、packet、layout及源码执行边界见17.24；浮点算术和typed output尚未准入，不能以辅助函数测试代替VM/native浮点贯穿。17.24修订唯一准入版本，完整浮点与跨平台资格仍OPEN。
 
+
+### 17.24 XIR 浮点值与执行边界
+
+f32/f64 使用规范 IEEE 位型：f32 高32位为零，NaN 仅允许正 canonical quiet NaN。
+存储为4/8字节，SSA/frame 为8字节，boxed/参数/结果为16字节且对齐8。
+CONST_FLOAT、NEG_FLOAT、六种浮点比较与唯一 CONVERT_NUMBER 经同一 Checked/Lowered 管线执行。
+CONVERT_NUMBER 原子替换先前仅限整数的转换指令；浮点转整数先截断再检查完整范围，失败为 NUMERIC_RANGE，清理后结果为 unit。
+NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。所有转换遵循17.23且不改变宿主浮点环境。
+源码接受显式数值 cast、浮点负号/比较、f32 到 f64 隐式宽化及条件合流；整数/浮点混合必须显式 cast。
+拷贝、槽、cell、闭包、泛型实例与挂起保留位型。十进制字面量、浮点算术及浮点输出仍未准入。
+唯一版本为 Value8/Call12/Program7、Checked schema4/semantic13，旧版本拒绝，无兼容路径。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -426,7 +437,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 7 and call ABI 11 replace the initial scalar boundary without aliases.
+Value ABI 8 and call ABI 12 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -636,7 +647,7 @@ INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result a
 unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
 after an arithmetic fault in an initialized instance. Generated C guards special pairs
 before host / or % and never executes signed overflow. Negation lowers to zero minus
-the operand. Current Checked schema 4 / semantic contract 12, Call ABI 11, Value7 and Program6 follow
+the operand. Current Checked schema 4 / semantic contract 12, Call ABI 12, Value7 and Program6 follow
 §17.16 without a compatibility reader or adapter.
 Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
 and explicit checked/saturating library methods remain outside this admitted subset.
@@ -653,7 +664,7 @@ to right. Bitwise operators reject bool, string, Atomic and unconstrained T. Var
 compound assignments read the old value before evaluating the RHS, compute, store
 and return the new value; an RHS assignment cannot change that earlier snapshot.
 Failure skips the store. String += also admits owned concat snapshots; other compound
-operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema4 / semantic contract12
+operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema4 / semantic contract13
 and Call11/Value7/Program6 follow §17.16 without compatibility paths. Other
 integer widths and conversions are not yet admitted.
 
@@ -707,7 +718,7 @@ builds a fresh canonical closed type table and remaps parameters, results,
 instructions, explicit type arguments and slots before rechecking. No open
 signature may enter Lowered or an immutable Program. Traversal spends work and
 metadata budgets and admits at most 128 active structural substitution levels.
-Checked schema 4/semantic contract 12 and Program ABI 6 replace earlier versions.
+Checked schema 4/semantic contract 12 and Program ABI 7 replace earlier versions.
 Captures, other parameter modes, effect promises, inference and member witnesses
 remain outside this admitted subset and retain their independent gates.
 
@@ -719,7 +730,7 @@ Construction obtains a logical copy of every captured value and publishes no par
 
 An indirect call publishes the same resumable CALL action with a borrowed function value. The sole frame driver copies the environment prefix and explicit arguments into the new frame while the caller still owns the environment. Suspension, throw, cancellation and return use the existing cleanup path. Host function entry likewise retains captures and arguments before releasing a previous result. Instance stop/free revokes execution admission while escaped environments remain readable, copyable and releasable.
 
-This internal contract does not turn var captures into copies or grant Sendable, noescape or no_suspend. Shared mutable cells, cycle reclamation and the source closure producer require separate implementation and qualification. Internal construction does not certify source closures. Value ABI 7, Call ABI 11, Program ABI 6 and Checked schema4/semantic contract12 are the sole current versions; predecessors are rejected.
+This internal contract does not turn var captures into copies or grant Sendable, noescape or no_suspend. Shared mutable cells, cycle reclamation and the source closure producer require separate implementation and qualification. Internal construction does not certify source closures. Value ABI 8, Call ABI 12, Program ABI 7 and Checked schema4/semantic contract13 are the sole current versions; predecessors are rejected.
 
 ### 17.19 XIR shared capture cells
 
@@ -730,18 +741,18 @@ Ordinary var captures retain one shared storage identity; every alias observes u
 The unique versions are Value7/Call11/Program6 and Checked schema4/semantic12, without old readers or ABI adapters. Source var capture must not substitute snapshots for shared cells.
 ### 17.20 Fixed-width integer runtime foundation
 
-The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and Call ABI11 rejects old native entries. Checked schema4/semantic12 and Value7/Program6 stay unchanged. This section qualifies the runtime foundation. Typed XIR, explicit casts, same-signedness arithmetic widening and output follow §17.21; full contextual inference and containers remain OPEN.
+The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and Call ABI12 rejects old native entries. Checked schema4/semantic12 and Value7/Program6 stay unchanged. This section qualifies the runtime foundation. Typed XIR, explicit casts, same-signedness arithmetic widening and output follow §17.21; full contextual inference and containers remain OPEN.
 
 ### 17.21 Typed fixed-width integer XIR
 
-Integer type IDs are i64=2, i8=5, i16=6, i32=7, u8=8, u16=9, u32=10 and u64=11. The sole CONST_INT and arithmetic/comparison/shift INT family replace the old i64-specific names. CONVERT_INT explicitly converts concrete integers. All instructions retain type, value-role and dominance checks. Arithmetic operands and results share an exact type; comparison operands share a type and return bool; shifts keep the left type and accept any integer count. Unconstrained T gains no arithmetic authority from specialization.
+Integer type IDs are i64=2, i8=5, i16=6, i32=7, u8=8, u16=9, u32=10 and u64=11. The sole CONST_INT and arithmetic/comparison/shift INT family replace the old i64-specific names. CONVERT_NUMBER explicitly converts concrete integers. All instructions retain type, value-role and dominance checks. Arithmetic operands and results share an exact type; comparison operands share a type and return bool; shifts keep the left type and accept any integer count. Unconstrained T gains no arithmetic authority from specialization.
 
 Constants and boundaries preserve canonical payloads. Copy, phi, calls, module slots, cells, callable signatures and output retain exact type identity. Storage width/alignment is 1/2/4/8 bytes; frame slots remain 8 bytes, boxed/parameter/result boundaries remain 16 bytes aligned to 8. Unsigned output uses the complete unsigned decimal value, including 18446744073709551615 for all-ones u64. Output budgets and single publication remain unchanged. Value7/Call11/Program6 and Checked schema4/semantic12 are the sole versions; old packets and entries reject. The source producer admits all eight names, concrete integer as, same-signedness widening of already typed arithmetic operands, width-preserving unary/increment operations, shared cells, module state and print. Nullable casts and bool/rune/float or unconstrained-T conversion reject. Direct integer literal contexts and assignment/parameter/return widening follow §17.22; full inference, floating point and containers remain OPEN.
 
 
 ### 17.22 Integer contexts and lossless widening
 
-Binding annotations, assignment targets, declared return types and direct/indirect call parameters (after explicit generic substitution) provide a unique context. Direct integer literals include parentheses and one direct negation. Without an integer context they default to i64; with one, the mathematical value is range checked before producing that type. The u64 maximum and i64 minimum avoid host signed overflow; negative zero can represent unsigned zero. Already typed expressions only widen within the same signedness, never implicitly narrow, change signedness or treat unconstrained T as an integer. Conversion becomes explicit CONVERT_INT and is rechecked by Checked. Inferred-result closures gain no unimplemented inference authority from an outer callable signature.
+Binding annotations, assignment targets, declared return types and direct/indirect call parameters (after explicit generic substitution) provide a unique context. Direct integer literals include parentheses and one direct negation. Without an integer context they default to i64; with one, the mathematical value is range checked before producing that type. The u64 maximum and i64 minimum avoid host signed overflow; negative zero can represent unsigned zero. Already typed expressions only widen within the same signedness, never implicitly narrow, change signedness or treat unconstrained T as an integer. Conversion becomes explicit CONVERT_NUMBER and is rechecked by Checked. Inferred-result closures gain no unimplemented inference authority from an outer callable signature.
 
 A direct literal in binary arithmetic/comparison uses the other typed operand's context. Two direct literals use an outer integer context, otherwise i64. Context does not penetrate arbitrary formed subexpressions to fold constants. A direct literal under complement can use the outer integer context; typed unary operations preserve the operand type. A direct shift-left operand can use outer context, but the count is typed independently and is not restricted by a narrow left operand: 256 and negative counts remain legal under §3.3.2. Non-shift compound RHS uses the binding type; read the left snapshot before evaluating the RHS and write only on success. Explicit as types its input independently, so `200 as i8` still wraps rather than becoming a literal range error. The sole exception is a direct positive literal above the i64 maximum but representable in u64 (including parentheses): it retains its complete u64 magnitude as the conversion source before reducing to the target width. Negative literals cannot bypass the i64 lower bound this way.
 
@@ -754,6 +765,17 @@ The common runtime floating core takes explicit IEEE binary32/binary64 bit patte
 
 Float-to-integer truncates toward zero before checking the complete target range; (-1,0) may produce unsigned zero. NaN, infinity and out-of-range truncated values return RANGE. Invalid widths/encodings return BAD_ARGUMENT; failures clear outputs. Comparison returns less/equal/greater/unordered, any NaN is unordered, and signed zeros compare equal. Negation flips a non-NaN sign and canonicalizes NaN. All operations use integer bits, allocate nothing, execute no host floating arithmetic or conversion, preserve host rounding/exception state, and depend on no legacy scalar tags or generated metadata.
 
-This only qualifies the common conversion/comparison/negation foundation. Float XIR types, packets, layout, source, arithmetic and typed output are not yet admitted; helper tests do not qualify VM/native float execution. Existing integer protocol/ABI versions stay unchanged. Full float and cross-platform qualification remain OPEN.
+This section defines the common conversion/comparison/negation foundation. XIR type, packet, layout and source execution admission is specified in 17.24; floating arithmetic and typed output remain unadmitted. Helper tests alone do not qualify VM/native execution. Section 17.24 revises the sole protocol/ABI versions. Full float and cross-platform qualification remain OPEN.
 
+
+### 17.24 XIR floating values and execution boundary
+
+f32/f64 use canonical IEEE encodings: f32 has zero high bits and NaN is only the positive canonical quiet NaN.
+Storage uses 4/8 bytes, SSA/frame payloads use 8 bytes, and boxed/parameter/result values use 16 bytes aligned to 8.
+CONST_FLOAT, NEG_FLOAT, six floating comparisons and the sole CONVERT_NUMBER run through the same Checked/Lowered pipeline.
+CONVERT_NUMBER atomically replaces the former integer-only conversion. Float-to-integer truncates then checks the full range; NUMERIC_RANGE faults clean up with a unit result.
+NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Conversions follow 17.23 without changing the host floating environment.
+Source admits explicit numeric casts, floating negation/comparison, implicit f32-to-f64 widening and conditional joins; integer/float mixing requires explicit casts.
+Copies, slots, cells, closures, generic instances and suspension preserve bits. Decimal literals, floating arithmetic and floating output remain unadmitted.
+The sole versions are Value8/Call12/Program7 and Checked schema4/semantic13; older versions reject without compatibility paths.
 <!-- /xr-spec:en -->

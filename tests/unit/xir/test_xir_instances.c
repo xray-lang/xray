@@ -274,7 +274,7 @@ static void failed_initialization(void) {
     }
 }
 static void seal_rejection(void) {
-    for (uint32_t invalid = 0; invalid < 10; ++invalid) {
+    for (uint32_t invalid = 0; invalid < 13; ++invalid) {
         Fixture f; fixture(&f, 0);
         uint32_t cycle = 0;
         switch (invalid) {
@@ -288,6 +288,9 @@ static void seal_rejection(void) {
         case 7: f.entries[3].resume = NULL; break;
         case 8: f.modules[1].dependencies = &cycle; f.modules[1].dependency_count = 1; break;
         case 9: break;
+        case 10: f.spec.abi_version = 6; break;
+        case 11: f.spec.target.abi_version = 7; break;
+        case 12: f.entries[3].abi_version = 11; break;
         }
         XrXirProgram *program = NULL;
         CHECK(xr_xir_program_seal(&f.spec, invalid == 9 ? 1 : 65536, &program) != XR_XIR_OK);

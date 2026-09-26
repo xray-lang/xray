@@ -132,3 +132,53 @@ XrXirNumericStatus xr_xir_float_negate(uint32_t bits, uint64_t input, uint64_t *
     if (!float_decode(bits, input, &parts) || !float_format(bits, &format)) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = parts.nan ? format.nan : input ^ format.sign; return XR_XIR_NUMERIC_OK;
 }
+
+static XrXirRunStatus floating_result(XrXirNumericStatus status) {
+    return status == XR_XIR_NUMERIC_OK ? XR_XIR_RUN_OK :
+        status == XR_XIR_NUMERIC_RANGE ? XR_XIR_RUN_NUMERIC_RANGE : XR_XIR_RUN_BAD_ARGUMENT;
+}
+XrXirRunStatus xr_xir_number_convert(XrXirType source, XrXirType target, int64_t input, int64_t *output) {
+    if (!output) return XR_XIR_RUN_BAD_ARGUMENT;
+    *output = 0;
+    if (!xr_xir_type_is_number(source) || !xr_xir_type_is_number(target)) return XR_XIR_RUN_BAD_ARGUMENT;
+    if (xr_xir_float_bits(source) && !xr_xir_float_payload_valid(source, input)) return XR_XIR_RUN_BAD_ARGUMENT;
+    if (!xr_xir_float_bits(source) && !xr_xir_float_bits(target))
+        return xr_xir_integer_convert(xr_xir_integer_format(source), xr_xir_integer_format(target), input, output);
+    if (!xr_xir_float_bits(target)) return floating_result(xr_xir_float_to_integer(
+        xr_xir_float_bits(source), xr_xir_integer_format(target), (uint64_t) input, output));
+    uint64_t bits = 0;
+    XrXirNumericStatus status = xr_xir_float_bits(source) ?
+        xr_xir_float_convert(xr_xir_float_bits(source), xr_xir_float_bits(target), (uint64_t) input, &bits) :
+        xr_xir_integer_to_float(xr_xir_integer_format(source), xr_xir_float_bits(target), input, &bits);
+    memcpy(output, &bits, sizeof(bits));
+    return floating_result(status);
+}
+XrXirRunStatus xr_xir_float_relation(XrXirType type, XrXirFloatRelation relation,
+    int64_t left, int64_t right, int64_t *output) {
+    if (!output) return XR_XIR_RUN_BAD_ARGUMENT;
+    *output = 0;
+    if (!xr_xir_float_payload_valid(type, left) || !xr_xir_float_payload_valid(type, right) ||
+        relation < XR_XIR_FLOAT_EQ || relation > XR_XIR_FLOAT_GE) return XR_XIR_RUN_BAD_ARGUMENT;
+    XrXirFloatOrder order;
+    XrXirNumericStatus status = xr_xir_float_compare(xr_xir_float_bits(type), (uint64_t) left, (uint64_t) right, &order);
+    if (status != XR_XIR_NUMERIC_OK) return floating_result(status);
+    if (order == XR_XIR_FLOAT_UNORDERED) { *output = relation == XR_XIR_FLOAT_NE; return XR_XIR_RUN_OK; }
+    switch (relation) {
+    case XR_XIR_FLOAT_EQ: *output = order == 0; break;
+    case XR_XIR_FLOAT_NE: *output = order != 0; break;
+    case XR_XIR_FLOAT_LT: *output = order < 0; break;
+    case XR_XIR_FLOAT_LE: *output = order <= 0; break;
+    case XR_XIR_FLOAT_GT: *output = order > 0; break;
+    case XR_XIR_FLOAT_GE: *output = order >= 0; break;
+    }
+    return XR_XIR_RUN_OK;
+}
+XrXirRunStatus xr_xir_float_negative(XrXirType type, int64_t input, int64_t *output) {
+    if (!output) return XR_XIR_RUN_BAD_ARGUMENT;
+    *output = 0;
+    if (!xr_xir_float_payload_valid(type, input)) return XR_XIR_RUN_BAD_ARGUMENT;
+    uint64_t bits = 0;
+    XrXirNumericStatus status = xr_xir_float_negate(xr_xir_float_bits(type), (uint64_t) input, &bits);
+    memcpy(output, &bits, sizeof(bits));
+    return floating_result(status);
+}

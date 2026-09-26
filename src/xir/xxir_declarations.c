@@ -123,7 +123,7 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, uint32_t func
         const XrXirSlot *slot = &d->slots[i];
         if (slot->module >= d->module_count || slot->mutable > 1 ||
             (slot->mutable && slot->module != d->root_module)) return XR_XIR_BAD_STRUCTURE;
-        if (xr_xir_type_is_cell(slot->type) || (slot->type != XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType) slot->type) && !xr_xir_type_is_owned(slot->type)))
+        if (xr_xir_type_is_cell(slot->type) || (slot->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(slot->type)))
             return XR_XIR_BAD_TYPE;
         if (slot->mutable && slot->type == XR_XIR_ATOMIC_I64) return XR_XIR_BAD_STRUCTURE;
     }

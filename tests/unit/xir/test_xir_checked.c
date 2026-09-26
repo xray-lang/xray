@@ -123,7 +123,9 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 4 && XR_XIR_CHECKED_CONTRACT == 12 && XR_XIR_OP_COUNT == 55, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 4 && XR_XIR_CHECKED_CONTRACT == 13 && XR_XIR_OP_COUNT == 63, "packet revision");
+    _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 54 &&
+        XR_XIR_CONST_FLOAT == 55 && XR_XIR_NEG_FLOAT == 56 && XR_XIR_EQ_FLOAT == 57 && XR_XIR_GE_FLOAT == 62, "numeric wire identities");
     _Static_assert(XR_XIR_FUNCTION_REF == 49 && XR_XIR_CALL_INDIRECT == 50, "callable wire operations");
     _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_ATOMIC_I64 == 4, "wire type identities");
     for (unsigned i = 0; i < 25; ++i) CHECK((unsigned) identities[i] == i + 1);
@@ -142,8 +144,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x22, 0x20, 0x3d, 0x00, 0xc7, 0xe9, 0x1e, 0x5f, 0xe7, 0x39, 0x07, 0xe9, 0x73, 0x1c, 0xfa, 0x7d,
-        0xd0, 0x1b, 0x33, 0x13, 0x30, 0x05, 0x11, 0x42, 0x24, 0xea, 0x95, 0x61, 0x0b, 0x54, 0xaa, 0xf8};
+        0xab, 0xac, 0x2e, 0xdc, 0x9a, 0x8f, 0x37, 0x1b, 0x58, 0xd1, 0x83, 0xb9, 0xa4, 0xb6, 0xcb, 0xc8,
+        0x11, 0x09, 0x7d, 0xb2, 0x87, 0xab, 0xd1, 0x22, 0x25, 0xdd, 0xbb, 0xba, 0x19, 0x45, 0xbd, 0x68};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[177]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
@@ -153,7 +155,7 @@ static void byte_order(void) {
     XrXirArtifact *narrow = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &narrow, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(narrow);
-    put32(packet.bytes + 12, 11); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 12); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].instructions[0].immediate == INT64_MIN);

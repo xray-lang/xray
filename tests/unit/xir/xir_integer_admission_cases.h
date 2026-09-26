@@ -30,10 +30,10 @@ static void integer_ir_rejections(void) {
         case 4: ops[0].op = XR_XIR_CONST_INT; ops[0].args[1] = 0; ops[0].immediate = -129; break;
         case 5: ops[0].op = XR_XIR_CONST_INT; ops[0].args[1] = 0; ops[0].type = XR_XIR_U8; ops[0].immediate = -1; break;
         case 6: ops[0].op = XR_XIR_SHL_INT; parameters[1] = XR_XIR_BOOL; break;
-        case 7: ops[0].op = XR_XIR_CONVERT_INT; ops[0].args[1] = 0; parameters[0] = XR_XIR_STRING; break;
-        case 8: ops[0].op = XR_XIR_CONVERT_INT; ops[0].args[1] = 0; ops[0].type = XR_XIR_BOOL; break;
+        case 7: ops[0].op = XR_XIR_CONVERT_NUMBER; ops[0].args[1] = 0; parameters[0] = XR_XIR_STRING; break;
+        case 8: ops[0].op = XR_XIR_CONVERT_NUMBER; ops[0].args[1] = 0; ops[0].type = XR_XIR_BOOL; break;
         case 9: ops[0].op = XR_XIR_EQ_INT; ops[0].type = XR_XIR_BOOL; parameters[1] = XR_XIR_U8; break;
-        case 10: parameters[0] = (XrXirType) 12; break;
+        case 10: parameters[0] = (XrXirType) 14; break;
         default: parameters[0] = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; module.generics = &generic; break;
         }
         function.result = ops[0].type;

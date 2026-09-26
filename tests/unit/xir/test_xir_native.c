@@ -21,6 +21,9 @@ DECLARE(9) DECLARE(10) DECLARE(11) DECLARE(12) DECLARE(13) DECLARE(14) DECLARE(1
 #define XIR_INTEGER_CASE(id, type, op, rhs, result, count, left, right, expected) DECLARE(id)
 #include "xir_integer_cases.def"
 #undef XIR_INTEGER_CASE
+#define XIR_FLOAT_FUNCTION(id, type, op, result, count, immediate) DECLARE(id)
+#include "xir_float_functions.def"
+#undef XIR_FLOAT_FUNCTION
 #undef DECLARE
 static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *context,
                          const XrXirValue *arguments, uint32_t count, XrXirValue *result) {
@@ -30,6 +33,9 @@ static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *conte
 #define XIR_INTEGER_CASE(id, type, op, rhs, result, count, left, right, expected) fixture_f##id,
 #include "xir_integer_cases.def"
 #undef XIR_INTEGER_CASE
+#define XIR_FLOAT_FUNCTION(id, type, op, result, count, immediate) fixture_f##id,
+#include "xir_float_functions.def"
+#undef XIR_FLOAT_FUNCTION
     };
     (void) owner;
     CHECK(function < sizeof(entries) / sizeof(entries[0]));

@@ -14,13 +14,13 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 7u
+#define XR_XIR_VALUE_ABI_VERSION 8u
 #define XR_XIR_CELL_TYPE_FLAG 0x40000000u
 #define XR_XIR_CALLABLE_TYPE_BASE 256u
 #define XR_XIR_CALLABLE_TYPE_LIMIT 65536u
 #define XR_XIR_ARCH_X86_64 1u
 typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64,
-    XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64 } XrXirType;
+    XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64 } XrXirType;
 static inline uint32_t xr_xir_integer_bits(XrXirType type) {
     switch (type) {
     case XR_XIR_I8: case XR_XIR_U8: return 8;
@@ -42,6 +42,22 @@ static inline bool xr_xir_integer_payload_valid(XrXirType type, int64_t payload)
     if (bits == 64) return true;
     int64_t bound = INT64_C(1) << (bits - (xr_xir_integer_signed(type) ? 1 : 0));
     return payload >= (xr_xir_integer_signed(type) ? -bound : 0) && payload < bound;
+}
+
+static inline uint32_t xr_xir_float_bits(XrXirType type) {
+    return type == XR_XIR_F32 ? 32 : type == XR_XIR_F64 ? 64 : 0;
+}
+static inline bool xr_xir_type_is_number(XrXirType type) {
+    return xr_xir_type_is_integer(type) || xr_xir_float_bits(type) != 0;
+}
+static inline bool xr_xir_float_payload_valid(XrXirType type, int64_t payload) {
+    uint64_t bits = (uint64_t) payload;
+    if (type == XR_XIR_F32) {
+        if (bits > UINT32_MAX) return false;
+        return (bits & UINT64_C(0x7fffffff)) <= UINT64_C(0x7f800000) || bits == UINT64_C(0x7fc00000);
+    }
+    return type == XR_XIR_F64 && ((bits & UINT64_C(0x7fffffffffffffff)) <= UINT64_C(0x7ff0000000000000) ||
+        bits == UINT64_C(0x7ff8000000000000));
 }
 
 typedef struct XrXirValue {

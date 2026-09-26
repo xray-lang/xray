@@ -23,7 +23,7 @@ XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
     if (!target || target->architecture != XR_XIR_ARCH_X86_64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
-        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType) type) && !xr_xir_type_is_owned(type)) ||
+        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) type) && !xr_xir_type_is_owned(type)) ||
         (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER))
         return XR_XIR_BAD_LAYOUT;
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
@@ -35,6 +35,8 @@ XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
         *layout = (XrXirLayout) {1, 1};
     else if (context == XR_XIR_LAYOUT_STORAGE && xr_xir_type_is_integer(type))
         *layout = (XrXirLayout) {xr_xir_integer_bits(type) / 8, xr_xir_integer_bits(type) / 8};
+    else if (context == XR_XIR_LAYOUT_STORAGE && xr_xir_float_bits(type))
+        *layout = (XrXirLayout) {xr_xir_float_bits(type) / 8, xr_xir_float_bits(type) / 8};
     else
         *layout = (XrXirLayout) {8, 8};
     return XR_XIR_OK;

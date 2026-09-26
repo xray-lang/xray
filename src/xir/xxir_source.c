@@ -209,6 +209,8 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
         case XR_NATIVE_U8: *type = XR_XIR_U8; return true;
         case XR_NATIVE_U16: *type = XR_XIR_U16; return true;
         case XR_NATIVE_U32: *type = XR_XIR_U32; return true;
+        case XR_NATIVE_F32: *type = XR_XIR_F32; return true;
+        case XR_NATIVE_F64: *type = XR_XIR_F64; return true;
         case XR_NATIVE_U64: *type = XR_XIR_U64; return true;
         default: break;
         }
@@ -261,11 +263,12 @@ static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool expression_in(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value);
 static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     if (!expected || value->type == expected) return true;
-    if (!xr_xir_type_is_integer(value->type) || !xr_xir_type_is_integer(expected) ||
-        xr_xir_integer_signed(value->type) != xr_xir_integer_signed(expected) ||
-        xr_xir_integer_bits(value->type) > xr_xir_integer_bits(expected))
+    if (!(value->type == XR_XIR_F32 && expected == XR_XIR_F64) &&
+        (!xr_xir_type_is_integer(value->type) || !xr_xir_type_is_integer(expected) ||
+         xr_xir_integer_signed(value->type) != xr_xir_integer_signed(expected) ||
+         xr_xir_integer_bits(value->type) > xr_xir_integer_bits(expected)))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "expression cannot satisfy its declared type");
-    return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, expected, {value->id, 0}, {0}, 0}, value);
+    return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_NUMBER, expected, {value->id, 0}, {0}, 0}, value);
 }
 typedef struct SourceInteger { bool present, negative; uint64_t magnitude; } SourceInteger;
 static bool source_direct_integer(SourceContext *ctx, AstNode *node, SourceInteger *literal) {
@@ -524,23 +527,41 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     body->ops[branch].targets[1] = conjunction ? join : rhs;
     return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0}, value);
 }
-static bool source_integer_cast(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *value) {
     AsExprNode *cast = &node->as.as_expr;
     XrXirType target; SourceValue input;
-    if (cast->is_safe || !source_type(ctx, cast->type, &target) || !xr_xir_type_is_integer(target))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete nonnullable integer target");
+    if (cast->is_safe || !source_type(ctx, cast->type, &target) || !xr_xir_type_is_number(target))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete nonnullable numeric target");
     SourceInteger literal;
     if (!source_direct_integer(ctx, cast->expr, &literal)) return false;
     XrXirType context = literal.present && !literal.negative && literal.magnitude > INT64_MAX ? XR_XIR_U64 : XR_XIR_UNIT;
     if (!expression_in(ctx, cast->expr, context, &input)) return false;
-    if (!xr_xir_type_is_integer(input.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete integer operand");
-    return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, target, {input.id, 0}, {0}, 0}, value);
+    if (!xr_xir_type_is_number(input.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete numeric operand");
+    return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_NUMBER, target, {input.id, 0}, {0}, 0}, value);
+}
+static bool source_float_compare(SourceContext *ctx, AstNode *node, AstNodeType operation,
+    SourceValue left, SourceValue right, SourceValue *value) {
+    XrXirType common = left.type == XR_XIR_F64 || right.type == XR_XIR_F64 ? XR_XIR_F64 : XR_XIR_F32;
+    if (!source_expect(ctx, node, common, &left) || !source_expect(ctx, node, common, &right)) return false;
+    XrXirOp op;
+    switch (operation) {
+    case AST_BINARY_EQ: op = XR_XIR_EQ_FLOAT; break;
+    case AST_BINARY_NE: op = XR_XIR_NE_FLOAT; break;
+    case AST_BINARY_LT: op = XR_XIR_LT_FLOAT; break;
+    case AST_BINARY_LE: op = XR_XIR_LE_FLOAT; break;
+    case AST_BINARY_GT: op = XR_XIR_GT_FLOAT; break;
+    case AST_BINARY_GE: op = XR_XIR_GE_FLOAT; break;
+    default: return source_fail(ctx, node, XR_XIR_BAD_TYPE, "floating arithmetic requires an implemented contract");
+    }
+    return emit(ctx, (XrXirInstruction) {op, XR_XIR_BOOL, {left.id, right.id}, {0}, 0}, value);
 }
 static bool source_binary(SourceContext *ctx, AstNode *node, AstNodeType operation,
                           SourceValue left, SourceValue right, SourceValue *value) {
     if (operation == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING)
         return emit(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {left.id, right.id}, {0}, 0}, value);
+    if (xr_xir_float_bits(left.type) && xr_xir_float_bits(right.type))
+        return source_float_compare(ctx, node, operation, left, right, value);
     if (!xr_xir_type_is_integer(left.type) || !xr_xir_type_is_integer(right.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator requires a declared concrete operand contract");
     bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
@@ -548,8 +569,8 @@ static bool source_binary(SourceContext *ctx, AstNode *node, AstNodeType operati
         if (xr_xir_integer_signed(left.type) != xr_xir_integer_signed(right.type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer signedness requires an explicit cast");
         XrXirType target = xr_xir_integer_bits(left.type) < xr_xir_integer_bits(right.type) ? right.type : left.type;
-        if (left.type != target && !emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, target, {left.id, 0}, {0}, 0}, &left)) return false;
-        if (right.type != target && !emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, target, {right.id, 0}, {0}, 0}, &right)) return false;
+        if (left.type != target && !emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_NUMBER, target, {left.id, 0}, {0}, 0}, &left)) return false;
+        if (right.type != target && !emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_NUMBER, target, {right.id, 0}, {0}, 0}, &right)) return false;
     }
     XrXirOp op;
     switch (operation) {
@@ -582,6 +603,8 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, XrXirType expec
         if (!source_direct_integer(ctx, node->as.unary.operand, &literal) ||
             !expression_in(ctx, node->as.unary.operand,
                 literal.present && xr_xir_type_is_integer(expected) ? expected : XR_XIR_UNIT, &right)) return false;
+        if (node->type == AST_UNARY_NEG && xr_xir_float_bits(right.type))
+            return emit(ctx, (XrXirInstruction) {XR_XIR_NEG_FLOAT, right.type, {right.id, 0}, {0}, 0}, value);
         if (!xr_xir_type_is_integer(right.type)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unary arithmetic requires an integer");
         int64_t initial = 0;
         if (node->type == AST_UNARY_BNOT) initial = xr_xir_integer_signed(right.type) || xr_xir_integer_bits(right.type) == 64 ?
@@ -653,7 +676,8 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, XrXirType expe
     if (!begin_block(ctx) || !expression_in(ctx, ternary->false_expr, expected, &no)) return false;
     XrXirType common = yes.type;
     if (yes.type != no.type) {
-        if (!xr_xir_type_is_integer(yes.type) || !xr_xir_type_is_integer(no.type) ||
+        if (xr_xir_float_bits(yes.type) && xr_xir_float_bits(no.type)) common = XR_XIR_F64;
+        else if (!xr_xir_type_is_integer(yes.type) || !xr_xir_type_is_integer(no.type) ||
             xr_xir_integer_signed(yes.type) != xr_xir_integer_signed(no.type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "conditional requires a common admitted type");
         if (xr_xir_integer_bits(no.type) > xr_xir_integer_bits(common)) common = no.type;
@@ -716,7 +740,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
     switch (node->type) {
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
         return source_literal(ctx, node, value);
-    case AST_AS_EXPR: return source_integer_cast(ctx, node, value);
+    case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, expected, value);
     case AST_GROUPING: return expression_in(ctx, node->as.grouping, expected, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);

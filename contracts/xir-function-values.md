@@ -6,8 +6,8 @@ explicit ownership operations. It conveys no Sendable or no_suspend proof.
 Constructing a value checks the full signature and existing module import,
 visibility and initializer restrictions. Describing a type never grants access.
 
-Program sealing owns a verified signature table. Boxed value ABI 7, call ABI 11
-and Program ABI 6 replace their predecessors without an alternate runtime path.
+Program sealing owns a verified signature table. Boxed value ABI 8, call ABI 12
+and Program ABI 7 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
 it does not own module slots, providers, active frames or instance allocations.
@@ -36,7 +36,7 @@ resolved before Program sealing. CALL_INDIRECT records an SSA callee ID in its
 immediate and the existing ordered argument range. Callee dominance, value role,
 full signature and result are checked without enumerating implementation targets.
 Both operations use the canonical owned frame layout and resumable ABI. Semantic
-contract 11 rejects previous packets; wire schema is 4. Function-valued root
+contract 13 rejects previous packets; wire schema is 4. Function-valued root
 slots are instance state; non-root ordinary callable slots have no Sendable proof.
 
 Source admission uses the existing fn(...) -> R spelling (unit omits the arrow).
@@ -96,7 +96,7 @@ can clean up. No borrowed environment survives independently of its owner.
 
 Last-reference destruction drains nested immutable environments without host
 recursion or allocation. stop/free revokes entry but not escaped value lifetime.
-Value7/Call11/Program6 and schema4/semantic12 replace earlier contracts.
+Value8/Call12/Program7 and schema4/semantic13 replace earlier contracts.
 Strong-cycle reclamation, full callable contracts and concurrency remain open;
 this contract never substitutes snapshot capture for shared mutable bindings.
 
@@ -121,4 +121,4 @@ the FUNCTION_REF capture prefix go through ordinary Checked validation,
 specialization and recheck. No source/AST retry occurs during instantiation.
 
 This producer adds no wire opcode or ABI revision: it consumes the current
-schema4/semantic12 and Value7/Call11/Program6 environment contract.
+schema4/semantic13 and Value8/Call12/Program7 environment contract.

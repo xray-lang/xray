@@ -245,13 +245,13 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
         if (!entry->resume || entry->parameter_count > 65536 ||
             (entry->parameter_count && !entry->parameters) ||
             (entry->result != XR_XIR_UNIT && entry->result != XR_XIR_BOOL &&
-             !xr_xir_type_is_integer((XrXirType) entry->result) && !xr_xir_type_is_owned(entry->result)))
+             !xr_xir_type_is_number((XrXirType) entry->result) && !xr_xir_type_is_owned(entry->result)))
             return XR_XIR_CALL_BAD_ARGUMENT;
         *bytes += (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
             return XR_XIR_CALL_LIMIT;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
-            if (entry->parameters[p] != XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType) entry->parameters[p]) &&
+            if (entry->parameters[p] != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
                 !xr_xir_type_is_owned(entry->parameters[p]))
                 return XR_XIR_CALL_BAD_ARGUMENT;
     }
@@ -359,7 +359,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_FAULT) {
         XrXirCallStatus reason = XR_XIR_CALL_BAD_STATE;
         if (boundary_value(action.value, XR_XIR_I64) &&
-            (action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
+            (action.value.payload == XR_XIR_CALL_NUMERIC_RANGE || action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
              action.value.payload == XR_XIR_CALL_LIMIT))
             reason = (XrXirCallStatus) action.value.payload;
         unwind(call, reason);

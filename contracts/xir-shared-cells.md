@@ -24,7 +24,7 @@ cycles remain possible and require explicit breaking while an owner remains.
 Unreachable strong-cycle reclamation is OPEN: no collector, automatic cycle
 reclamation or universal leak-freedom claim is introduced by this contract.
 
-Value7/Call11/Program6 and schema4/semantic12 replace previous admission versions
+Value8/Call12/Program7 and schema4/semantic13 replace previous admission versions
 without compatibility readers. Source var production must preserve aliases;
 capturing a snapshot in place of a cell is forbidden.
 

@@ -83,6 +83,13 @@ export fn update(value: i64, up: bool) -> i64 {
 
 export fn calculate(kind:i64, left:i64, right:i64)->i64 {
     var held = "arith" + "metic"
+    if (kind == 20) {
+        Coro.yield()
+        const narrowed = (left as f64) as i8
+        floatState = narrowed as f32
+        return floatState as i64
+    }
+    if (kind == 21) { return floatState as i64 }
     if (kind == 0) { return left + right }
     if (kind == 1) { return left - right }
     if (kind == 2) { return left * right }
@@ -309,5 +316,24 @@ fn inferredIntegerJoin() {
 inferredIntegerJoin()
 export fn numericPause(flag: bool) -> i64 {
     const selected = flag ? alpha.pause<i8>(-128) : alpha.pause<i16>(32767)
-    return selected
+    const floating = flag ? alpha.pause<f32>(-128 as f32) : alpha.pause<f64>(32767 as f64)
+    if (floating != (selected as f64)) { return 0 }
+    return floating as i64
 }
+
+var floatState: f32 = alpha.floatSeed()
+fn floatingValues() {
+    var cell: f32 = floatState
+    const update = fn(value: f32)->f64 { cell = value; return cell }
+    const read = fn()->f32 { return cell }
+    const first: f64 = alpha.identity<f32>(cell)
+    const second = update(-(7 as f32))
+    const joined = true ? read() : (9 as f64)
+    floatState = read()
+    print(first as i64, second as i64, joined as i64, floatState as i64,
+        first > second, second == joined, second != first, second <= joined)
+    print((18446744073709551615 as f64) > (9223372036854775807 as f64),
+        (16777217 as f64) > (16777217 as f32), (0 as f32) == -(0 as f64),
+        (127 as f64) as i8, (255 as f32) as u8)
+}
+floatingValues()

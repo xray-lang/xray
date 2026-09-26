@@ -62,7 +62,7 @@ int main(void) {
             (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "pack", 4)) ||
             (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) ||
             (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)) ||
-            i == fixture_source_numeric_pause)
+            i == fixture_source_numeric_pause || i == fixture_source_calculate)
             owner->entries[i] = fixture_source_program.entries[i];
         if (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)) {
             CHECK(owner->entries[i].resume == fixture_source_program.entries[i].resume); ++native_resumes;
@@ -70,13 +70,13 @@ int main(void) {
         if (module->functions[i].name_length > 6 && !memcmp(module->functions[i].name, "pause$", 6)) {
             XrXirType result = owner->entries[i].result;
             CHECK(owner->entries[i].parameter_count == 1);
-            CHECK(result == XR_XIR_STRING || result == XR_XIR_I8 || result == XR_XIR_I16);
-            unsigned bit = result == XR_XIR_STRING ? 1 : result == XR_XIR_I8 ? 2 : 4;
+            CHECK(result == XR_XIR_STRING || result == XR_XIR_I8 || result == XR_XIR_I16 || result == XR_XIR_F32 || result == XR_XIR_F64);
+            unsigned bit = result == XR_XIR_STRING ? 1 : result == XR_XIR_I8 ? 2 : result == XR_XIR_I16 ? 4 : result == XR_XIR_F32 ? 8 : 16;
             CHECK(!(pause_types & bit)); pause_types |= bit;
             CHECK(owner->entries[i].resume != fixture_source_program.entries[i].resume); ++vm_pauses;
         }
     }
-    CHECK(native_resumes == 1 && vm_pauses == 3 && pause_types == 7);
+    CHECK(native_resumes == 1 && vm_pauses == 5 && pause_types == 31);
     CHECK(owner->entries[fixture_source_numeric_pause].resume == fixture_source_program.entries[fixture_source_numeric_pause].resume);
     CHECK(owner->entries[fixture_source_resume_text].resume != fixture_source_program.entries[fixture_source_resume_text].resume);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,

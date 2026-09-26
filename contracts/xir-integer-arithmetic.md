@@ -25,7 +25,8 @@ Runtime failure clears the numeric output and returns its status.
 
 CONST_INT and the ADD/SUB/MUL/DIV/REM/AND/OR/XOR/SHL/SHR/EQ/NE/LT/LE/GT/GE_INT
 family atomically replace the former i64-specific names, with no alias. The new
-CONVERT_INT operation has one concrete integer operand and result. Arithmetic
+CONVERT_NUMBER has one concrete numeric operand and result; integer pairs follow
+this contract, while pairs involving f32/f64 follow `xir-floating-point.md`. Arithmetic
 operands/results share an exact integer type; comparisons require two equal
 integer types and return bool; shifts allow any integer count type. Every use
 retains SSA role and dominance checks. Unconstrained T gains no operation or
@@ -39,7 +40,7 @@ for all-ones u64. Groups validate and render entirely under budget before one
 sink publication. Display does not change the stored integer type.
 
 The source producer admits all eight names and concrete expr as T through
-CONVERT_INT, rejecting nullable casts and bool/rune/float or unconstrained-T
+CONVERT_NUMBER, rejecting nullable casts and bool/rune or unconstrained-T
 conversion. Binary evaluation remains once, left to right. Already typed
 same-signedness arithmetic operands widen explicitly to the wider type before
 the unique operation; shifts do not widen the left. Unary negation/complement
@@ -50,7 +51,7 @@ the same pipeline. Direct integer literals (parentheses and one direct negation)
 use binding, assignment, declared return and substituted direct/indirect call
 parameter contexts. Range is checked before canonical payload construction;
 u64 maximum, i64 minimum and unsigned negative zero are represented exactly.
-Already typed values only widen within the same signedness through CONVERT_INT.
+Already typed values only widen within the same signedness through CONVERT_NUMBER.
 Unconstrained T cannot be converted or contextualized as an integer.
 
 Binary direct literals use the other typed operand; two direct literals use
@@ -71,7 +72,7 @@ generic definitions remain checked. This producer extension retains the wire,
 operation and ABI versions. Full inference, floating point, checked/saturating
 library methods and numeric containers remain unqualified.
 
-Value7/Call11/Program6 and Checked schema4/semantic12 are the sole admission
+Value8/Call12/Program7 and Checked schema4/semantic13 are the sole admission
 versions. Old packets and native entries reject without readers/adapters. VM,
 portable generated-C leaf and resumable native consumers share the Lowered
 integer contract and runtime. Source witnesses and hand-authored packet fixtures
