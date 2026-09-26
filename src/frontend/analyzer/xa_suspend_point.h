@@ -16,6 +16,7 @@
 typedef enum XaSuspendPointKind {
     XA_SUSPEND_POINT_NONE = 0,
     XA_SUSPEND_POINT_COOPERATIVE_YIELD = 1,
+    XA_SUSPEND_POINT_GENERATOR_YIELD = 2,
 } XaSuspendPointKind;
 
 typedef struct XaSuspendPointFact {

@@ -9995,7 +9995,31 @@ static bool body_add_suspend_point(XgBodyCollect *bc, const AstNode *node,
     XgSuspendPointSummary row;
     if (out_is_suspend_point)
         *out_is_suspend_point = false;
-    if (!bc || !bc->producer || !bc->evidence || !node || node->type != AST_CALL_EXPR)
+    if (!bc || !bc->producer || !bc->evidence || !node)
+        return false;
+    if (node->type == AST_YIELD_STMT) {
+        if (out_is_suspend_point)
+            *out_is_suspend_point = true;
+        if (!bc->producer->analyzer || bc->owner_func_id == XG_NO_ID ||
+            !xa_analyzer_get_suspend_point(bc->producer->analyzer, node, &fact) ||
+            fact.kind != XA_SUSPEND_POINT_GENERATOR_YIELD || fact.may_suspend != 1 ||
+            fact.complete != 1)
+            return false;
+        memset(&row, 0, sizeof(row));
+        row.owner_func_id = bc->owner_func_id;
+        row.source_node_id = producer_source_node_id(bc->module_id, node);
+        row.source_span_id = (uint32_t) node->line;
+        row.body_ordinal = ++bc->suspend_point_count;
+        row.kind = XG_SUSPEND_POINT_GENERATOR_YIELD;
+        row.may_suspend = 1;
+        row.contract_complete = 1;
+        if (row.source_node_id == 0 || !xg_global_evidence_add_suspend_point(bc->evidence, &row))
+            return false;
+        bc->effect_bits |= XG_BODY_MAY_SUSPEND;
+        bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
+        return true;
+    }
+    if (node->type != AST_CALL_EXPR)
         return false;
     const CallExprNode *call = &node->as.call_expr;
     const AstNode *callee = call->callee;
@@ -10674,8 +10698,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.await_expr.into);
             break;
         case AST_YIELD_STMT:
-            bc->effect_bits |= XG_BODY_MAY_SUSPEND;
-            bc->capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
+            if (!body_add_suspend_point(bc, node, NULL)) {
+                bc->producer->failed = true;
+                break;
+            }
             walk_body_for_calls(bc, node->as.yield_stmt.value);
             break;
         case AST_GO_EXPR:

@@ -3432,6 +3432,22 @@ static void lower_yield_stmt(XiLower *l, AstNode *node) {
      * generator (suspendable coroutine); XI_GEN_YIELD suspends and hands the
      * value to the driving iterator. (Cooperative scheduling is Coro.yield().) */
     AstNode *value_node = node ? node->as.yield_stmt.value : NULL;
+    XaSuspendPointFact fact;
+    const XgSuspendPointSummary *row = NULL;
+    uint32_t source_node_id = xi_lower_source_node_id(l, node);
+    bool has_fact = xa_typed_program_suspend_point(l->typed_program, node, &fact);
+    if (l->global_evidence && l->func && l->func->xg_body_func_id != XG_NO_ID)
+        row = xg_global_evidence_find_suspend_point_at(
+            l->global_evidence, (XgFuncId) l->func->xg_body_func_id, source_node_id,
+            XG_SUSPEND_POINT_GENERATOR_YIELD);
+    if (!has_fact || !row || source_node_id == 0 ||
+        xg_global_evidence_find_suspend_point(l->global_evidence, row->use_id) != row ||
+        fact.kind != XA_SUSPEND_POINT_GENERATOR_YIELD || fact.may_suspend != 1 ||
+        fact.complete != 1 || row->kind != XG_SUSPEND_POINT_GENERATOR_YIELD ||
+        row->may_suspend != 1 || row->contract_complete != 1) {
+        l->had_error = true;
+        return;
+    }
     XiBlock *allocation_block = l->cur_block;
     uint32_t allocation_begin = allocation_block ? allocation_block->nvalues : 0;
     XiValue *value = value_node ? xi_lower_expr(l, value_node) : NULL;
@@ -3445,6 +3461,12 @@ static void lower_yield_stmt(XiLower *l, AstNode *node) {
         v->args[0] = value;
         v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
         v->line = node ? (uint32_t) node->line : 0;
+        v->xg_suspend_point_use_id = row->use_id;
+        v->xg_suspend_source_node_id = row->source_node_id;
+        v->xg_suspend_body_ordinal = row->body_ordinal;
+        v->xg_suspend_point_kind = row->kind;
+        v->xg_suspend_may_suspend = row->may_suspend;
+        v->xg_suspend_contract_complete = row->contract_complete;
     }
 }
 

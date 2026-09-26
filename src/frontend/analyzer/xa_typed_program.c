@@ -473,7 +473,8 @@ bool xa_typed_program_target_query(const XaTypedProgram *program,
 
 bool xa_typed_program_suspend_point(const XaTypedProgram *program, const struct AstNode *call_node,
                                     XaSuspendPointFact *out_fact) {
-    if (!xa_typed_program_is_current(program) || !call_node || call_node->type != AST_CALL_EXPR)
+    if (!xa_typed_program_is_current(program) || !call_node ||
+        (call_node->type != AST_CALL_EXPR && call_node->type != AST_YIELD_STMT))
         return false;
     uint32_t low = 0;
     uint32_t high = program->suspend_point_count;

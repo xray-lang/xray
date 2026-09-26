@@ -2836,6 +2836,218 @@
           "task": 300
         }
       }
+    },
+    {
+      "stable_id": 117,
+      "spelling": "core.generator.create",
+      "class": "generator-create",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "P..."
+        ],
+        "result": "C",
+        "immediates": {
+          "target": "exact-function-id"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "parameter-mode-transfer..."
+        ],
+        "result": "owned-generator-handle"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-generator-handle",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one fresh typed handle naming the exact closed target; no generator body step occurs"
+      },
+      "kat_validator": "generator-create",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 118,
+      "spelling": "core.generator.yield",
+      "class": "generator-terminator",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "V",
+          "suspend-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {
+          "safepoint_id": "function-local-safepoint-id"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": false,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": true
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "suspend"
+      ],
+      "capability_requirements": [
+        "runtime.cooperative-yield"
+      ],
+      "ownership": {
+        "operands": [
+          "publish-value",
+          "live-across-preserve..."
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-generator-publication",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one yielded value followed by at most one resume at the declared logical continuation"
+      },
+      "kat_validator": "generator-yield",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 119,
+      "spelling": "core.generator.resume",
+      "class": "generator-resume",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "C"
+        ],
+        "result": "V",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call"
+      ],
+      "capability_requirements": [
+        "runtime.cooperative-yield"
+      ],
+      "ownership": {
+        "operands": [
+          "borrow-generator-handle"
+        ],
+        "result": "owned-outcome"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-generator-outcome",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one step observing exactly one yielded, completed, error, panic or cancel outcome"
+      },
+      "kat_validator": "generator-resume",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
     }
   ]
 }

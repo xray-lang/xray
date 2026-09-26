@@ -15,6 +15,7 @@
 #include "../program/xr_program_callable_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
+#include "../program/xr_program_generator_fixture.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -33,6 +34,9 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_GENERATOR_CREATE == 117, "generator create stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_GENERATOR_YIELD == 118, "generator yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_GENERATOR_RESUME == 119, "generator resume stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -105,6 +109,19 @@ static XrValidatedProgram *build_coroutine_program(void) {
     XrProgramDiagnostic verify_diagnostic;
     char diagnostic[256] = {0};
     REQUIRE(xr_program_coroutine_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
+static XrValidatedProgram *build_generator_program(void) {
+    XrProgramArtifact artifact = {0};
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_generator_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
             XR_PROGRAM_BUILD_OK);
     REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
                                 &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
@@ -1491,6 +1508,35 @@ static void test_coroutine_suspend_resume_generation_lease(void) {
     xr_validated_program_free(program);
 }
 
+static void test_generator_private_frame_differential(void) {
+    XrValidatedProgram *program = build_generator_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestProviderBindings bindings;
+    build_provider_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 301u);
+
+    XrReferenceProfile reference_profile = {.pointer_width = 64u};
+    uint32_t entry = xr_validated_program_entry_function(program);
+    XrReferenceOutcome reference =
+        xr_reference_evaluate(program, entry, NULL, 0u, &reference_profile, NULL);
+    REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+    REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_BOOL && reference.value.as.boolean);
+
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic diagnostic;
+    XrVmCodeOptions options = xr_vm_code_default_options();
+    REQUIRE(xr_vm_code_build(instance, &options, &code, &diagnostic) == XR_VM_CODE_OK);
+    XrVmOutcome result = xr_vm_code_execute(code, instance, entry, NULL, 0u);
+    REQUIRE(result.kind == XR_VM_OUTCOME_RETURN);
+    REQUIRE(result.value.kind == XR_VM_VALUE_BOOL && result.value.as.boolean);
+    xr_vm_code_free(code);
+    retire_and_free(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 int main(void) {
     test_operation_semantics();
     test_sealed_invoke_and_cleanup_cfg();
@@ -1501,6 +1547,7 @@ int main(void) {
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();
     test_coroutine_suspend_resume_generation_lease();
+    test_generator_private_frame_differential();
     puts("task-299 typed XrProgram VM tests passed");
     return 0;
 }

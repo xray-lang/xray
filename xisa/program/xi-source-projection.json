@@ -233,6 +233,20 @@
       "projection_kind": "coroutine-yield",
       "core_operation": "core.coroutine.yield",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.gen.call",
+      "result_type": "any",
+      "projection_kind": "generator-create",
+      "core_operation": "core.generator.create",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.gen.yield",
+      "result_type": "void",
+      "projection_kind": "generator-yield",
+      "core_operation": "core.generator.yield",
+      "immediate_u32": 0
     }
   ],
   "semantic_mappings": [

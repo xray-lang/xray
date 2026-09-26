@@ -621,13 +621,17 @@ void xa_node_table_clear_target_query(XaNodeTable *t, const struct AstNode *node
 }
 
 static bool suspend_point_fact_valid(const XaSuspendPointFact *fact) {
-    return fact && fact->kind == XA_SUSPEND_POINT_COOPERATIVE_YIELD && fact->may_suspend == 1 &&
-           fact->complete == 1;
+    return fact &&
+           (fact->kind == XA_SUSPEND_POINT_COOPERATIVE_YIELD ||
+            fact->kind == XA_SUSPEND_POINT_GENERATOR_YIELD) &&
+           fact->may_suspend == 1 && fact->complete == 1;
 }
 
 bool xa_node_table_set_suspend_point(XaNodeTable *t, const struct AstNode *node,
                                      const XaSuspendPointFact *fact) {
-    if (!t || !node || node->type != AST_CALL_EXPR || !suspend_point_fact_valid(fact))
+    if (!t || !node ||
+        (node->type != AST_CALL_EXPR && node->type != AST_YIELD_STMT) ||
+        !suspend_point_fact_valid(fact))
         return false;
     XaNodeEntry *entry = find_or_create(t, node->node_id);
     if (!entry)
@@ -639,7 +643,7 @@ bool xa_node_table_set_suspend_point(XaNodeTable *t, const struct AstNode *node,
 
 bool xa_node_table_get_suspend_point(const XaNodeTable *t, const struct AstNode *node,
                                      XaSuspendPointFact *out_fact) {
-    if (!t || !node || node->type != AST_CALL_EXPR)
+    if (!t || !node || (node->type != AST_CALL_EXPR && node->type != AST_YIELD_STMT))
         return false;
     const XaNodeEntry *entry = find_entry(t, node->node_id);
     if (!entry || !entry->has_suspend_point)

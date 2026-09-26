@@ -786,6 +786,7 @@ add_xr_program_aot_native_case(existential existential 42)
 add_xr_program_aot_native_case(callable callable 42)
 add_xr_program_aot_native_case(pointer_width pointer-width 32)
 add_xr_program_aot_native_case(coroutine_yield coroutine-yield 42)
+add_xr_program_aot_native_case(generator generator 1)
 
 set(XR_PROGRAM_AOT_COROUTINE_STEP_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_coroutine_step.c)

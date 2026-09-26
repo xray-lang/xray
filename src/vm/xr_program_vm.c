@@ -115,6 +115,7 @@ typedef struct XrVmAggregateValue {
     uint32_t variant_ordinal;
     XrVmValue *fields;
     uint32_t field_count;
+    struct XrVmExecution *generator;
 } XrVmAggregateValue;
 
 typedef struct XrVmPlace {
@@ -141,6 +142,7 @@ struct XrVmExecution {
     XrVmRuntimeValue *values;
     bool *initialized;
     bool finished;
+    bool lease_required;
 };
 
 struct XrVmExistentialValue {
@@ -424,6 +426,7 @@ static bool clone_vm_value(XrVmContext *context, XrVmValue source, uint16_t type
 
 static void free_aggregates(XrVmContext *context) {
     for (uint32_t index = 0; index < context->aggregate_count; ++index) {
+        xr_vm_execution_free(context->aggregates[index]->generator);
         xr_free(context->aggregates[index]->fields);
         xr_free(context->aggregates[index]);
     }
@@ -910,6 +913,74 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.as.callable = carrier;
                     break;
                 }
+                case XR_CORE_OP_CORE_GENERATOR_CREATE: {
+                    XrVmAggregateValue *handle = allocate_aggregate(
+                        context, instruction.result_type_id, UINT32_MAX, 0u);
+                    XrVmExecution *generator = xr_calloc(1u, sizeof(*generator));
+                    const XrValidatedFunction *target =
+                        &context->code->program->functions[instruction.immediate.function_id];
+                    if (!handle || !generator || instruction.operand_count != 0u ||
+                        target->parameter_count != 0u) {
+                        xr_free(generator);
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    generator->context.code = context->code;
+                    generator->code = xr_vm_code_retain(context->code);
+                    generator->function_id = instruction.immediate.function_id;
+                    generator->block_id = target->entry_block;
+                    generator->values = xr_calloc(target->value_count ? target->value_count : 1u,
+                                                  sizeof(*generator->values));
+                    generator->initialized = xr_calloc(
+                        target->value_count ? target->value_count : 1u,
+                        sizeof(*generator->initialized));
+                    if (!generator->code || !generator->values || !generator->initialized) {
+                        xr_vm_execution_free(generator);
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    static const uint8_t generator_trace_domain[] =
+                        "xray-vm-generator-logical-trace-v1\0";
+                    xr_sha256_init(&generator->context.trace);
+                    xr_sha256_update(&generator->context.trace, generator_trace_domain,
+                                     sizeof(generator_trace_domain) - 1u);
+                    hash_u32(&generator->context.trace, instruction.immediate.function_id);
+                    handle->generator = generator;
+                    produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = handle;
+                    break;
+                }
+                case XR_CORE_OP_CORE_GENERATOR_RESUME: {
+                    XrVmAggregateValue *handle =
+                        (XrVmAggregateValue *) values[instruction.operands[0]]
+                            .as.value.as.aggregate;
+                    XrVmOutcome nested = {0};
+                    if (handle && handle->generator)
+                        nested = xr_vm_execution_step(handle->generator);
+                    else
+                        nested.kind = XR_VM_OUTCOME_INVALID_INVOCATION;
+                    uint32_t variant = nested.kind == XR_VM_OUTCOME_SUSPENDED ? 0u
+                                       : nested.kind == XR_VM_OUTCOME_RETURN ? 1u
+                                       : nested.kind == XR_VM_OUTCOME_ERROR  ? 2u
+                                       : nested.kind == XR_VM_OUTCOME_PANIC  ? 3u
+                                                                            : 4u;
+                    uint32_t fields = variant == 0u || variant == 2u || variant == 3u ? 1u : 0u;
+                    XrVmAggregateValue *generator_outcome = allocate_aggregate(
+                        context, instruction.result_type_id, variant, fields);
+                    if (!generator_outcome) {
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    if (variant == 0u)
+                        generator_outcome->fields[0] = nested.value;
+                    else if (variant == 2u)
+                        generator_outcome->fields[0] = nested.error_value;
+                    else if (variant == 3u)
+                        generator_outcome->fields[0] = nested.panic_value;
+                    produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = generator_outcome;
+                    break;
+                }
                 case XR_CORE_OP_CORE_OWNER_COPY:
                     if (!clone_vm_value(context, values[instruction.operands[0]].as.value,
                                         instruction.result_type_id, &produced.as.value)) {
@@ -1274,6 +1345,7 @@ static bool vm_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
            operation_id == XR_CORE_OP_CORE_ADD_I64 ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD ||
            operation_id == XR_CORE_OP_CORE_RETURN;
 }
 
@@ -1318,6 +1390,7 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
     }
     execution->context.code = code;
     execution->code = xr_vm_code_retain(code);
+    execution->lease_required = true;
     execution->function_id = function_id;
     execution->block_id = function->entry_block;
     execution->values =
@@ -1353,7 +1426,8 @@ bool xr_vm_execution_create(const XrVmCode *code, XrInstance *instance, uint32_t
 }
 
 XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
-    if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
+    if (!execution || execution->finished ||
+        (execution->lease_required && !xr_execution_lease_is_valid(&execution->lease)))
         return vm_execution_outcome(execution, XR_VM_OUTCOME_INVALID_INVOCATION);
     const XrValidatedFunction *function =
         &execution->context.code->program->functions[execution->function_id];
@@ -1429,6 +1503,25 @@ XrVmOutcome xr_vm_execution_step(XrVmExecution *execution) {
                 execution->block_id = instruction.successors[0];
                 execution->instruction_id = 0u;
                 XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_SUSPENDED);
+                result.safepoint_id = safepoint_id;
+                return result;
+            }
+            case XR_CORE_OP_CORE_GENERATOR_YIELD: {
+                uint32_t safepoint_id = instruction.immediate.u32;
+                const XrValidatedCoroutineSafepoint *safepoint =
+                    &function->coroutine_safepoints[safepoint_id];
+                const XrValidatedBlock *resume = &function->blocks[instruction.successors[0]];
+                for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+                    uint32_t target = resume->argument_ids[live];
+                    execution->values[target] =
+                        execution->values[instruction.operands[live + 1u]];
+                    execution->initialized[target] = true;
+                }
+                execution->state_id = safepoint->resume_state_id;
+                execution->block_id = instruction.successors[0];
+                execution->instruction_id = 0u;
+                XrVmOutcome result = vm_execution_outcome(execution, XR_VM_OUTCOME_SUSPENDED);
+                result.value = execution->values[instruction.operands[0]].as.value;
                 result.safepoint_id = safepoint_id;
                 return result;
             }

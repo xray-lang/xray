@@ -330,7 +330,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-test",
-            "coroutine-yield",
+            "coroutine-yield", "generator-create", "generator-yield", "generator-resume",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -663,6 +663,25 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("resume_state") == actual.get("continuation_state")
                 and isinstance(actual.get("live_values"), list)
                 and actual.get("live_values") == actual.get("edge_values"))
+    if validator == "generator-create":
+        return (actual.get("target_closed") is True
+                and actual.get("target_generator") is True
+                and actual.get("argument_types") == actual.get("parameter_types")
+                and actual.get("result_type") == actual.get("generator_handle_type")
+                and actual.get("frame_serialized") is False)
+    if validator == "generator-yield":
+        return (actual.get("result_type") == "void"
+                and actual.get("successor_count") == 1
+                and actual.get("yield_type") == actual.get("generator_element_type")
+                and actual.get("resume_state") == actual.get("continuation_state")
+                and isinstance(actual.get("live_values"), list)
+                and actual.get("live_values") == actual.get("edge_values"))
+    if validator == "generator-resume":
+        return (actual.get("operand_type") == actual.get("generator_handle_type")
+                and actual.get("result_type") == actual.get("generator_outcome_type")
+                and actual.get("outcomes") ==
+                    ["yielded", "completed", "error", "panic", "cancel"]
+                and actual.get("physical_frame_exposed") is False)
     raise CoreSpecError(f"KAT {case['id']} has no contract oracle for {validator}")
 
 

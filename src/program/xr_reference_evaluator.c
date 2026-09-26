@@ -42,6 +42,7 @@ typedef struct XrReferenceAggregateValue {
     uint32_t variant_ordinal;
     XrReferenceValue *fields;
     uint32_t field_count;
+    struct XrReferenceExecution *generator;
 } XrReferenceAggregateValue;
 
 typedef struct EvalPlace {
@@ -85,6 +86,7 @@ struct XrReferenceExecution {
     uint32_t state_id;
     uint64_t steps;
     bool finished;
+    bool lease_required;
 };
 
 static XrReferenceOutcome outcome(XrReferenceOutcomeKind kind, EvalContext *context) {
@@ -355,6 +357,7 @@ static bool clone_reference_value(EvalContext *context, XrReferenceValue source,
 
 static void free_aggregates(EvalContext *context) {
     for (uint32_t index = 0; index < context->aggregate_count; ++index) {
+        xr_reference_execution_free(context->aggregates[index]->generator);
         xr_free(context->aggregates[index]->fields);
         xr_free(context->aggregates[index]);
     }
@@ -804,6 +807,68 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value.as.callable = carrier;
                     break;
                 }
+                case XR_CORE_OP_CORE_GENERATOR_CREATE: {
+                    XrReferenceAggregateValue *handle = allocate_aggregate(
+                        context, instruction->result_type_id, UINT32_MAX, 0u);
+                    XrReferenceExecution *generator = xr_calloc(1u, sizeof(*generator));
+                    const XrValidatedFunction *target =
+                        &context->program->functions[instruction->immediate.function_id];
+                    if (!handle || !generator || instruction->operand_count != 0u ||
+                        target->parameter_count != 0u) {
+                        xr_free(generator);
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    generator->program = context->program;
+                    generator->budget = context->budget;
+                    generator->function_id = instruction->immediate.function_id;
+                    generator->block_id = target->entry_block;
+                    generator->values = xr_calloc(target->value_count ? target->value_count : 1u,
+                                                  sizeof(*generator->values));
+                    generator->initialized = xr_calloc(
+                        target->value_count ? target->value_count : 1u,
+                        sizeof(*generator->initialized));
+                    if (!generator->values || !generator->initialized) {
+                        xr_reference_execution_free(generator);
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    handle->generator = generator;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = handle;
+                    break;
+                }
+                case XR_CORE_OP_CORE_GENERATOR_RESUME: {
+                    XrReferenceAggregateValue *handle =
+                        (XrReferenceAggregateValue *) values[instruction->operands[0]]
+                            .as.value.as.aggregate;
+                    XrReferenceOutcome nested = {0};
+                    if (handle && handle->generator)
+                        nested = xr_reference_execution_step(handle->generator);
+                    else
+                        nested.kind = XR_REFERENCE_OUTCOME_INVALID_INVOCATION;
+                    uint32_t variant = nested.kind == XR_REFERENCE_OUTCOME_SUSPENDED ? 0u
+                                       : nested.kind == XR_REFERENCE_OUTCOME_RETURN ? 1u
+                                       : nested.kind == XR_REFERENCE_OUTCOME_ERROR  ? 2u
+                                       : nested.kind == XR_REFERENCE_OUTCOME_PANIC  ? 3u
+                                                                                     : 4u;
+                    uint32_t fields = variant == 0u || variant == 2u || variant == 3u ? 1u : 0u;
+                    XrReferenceAggregateValue *generator_outcome = allocate_aggregate(
+                        context, instruction->result_type_id, variant, fields);
+                    if (!generator_outcome) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    if (variant == 0u)
+                        generator_outcome->fields[0] = nested.value;
+                    else if (variant == 2u)
+                        generator_outcome->fields[0] = nested.error_value;
+                    else if (variant == 3u)
+                        generator_outcome->fields[0] = nested.panic_value;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = generator_outcome;
+                    break;
+                }
                 case XR_CORE_OP_CORE_OWNER_COPY:
                     if (!clone_reference_value(context, values[instruction->operands[0]].as.value,
                                                instruction->result_type_id, &produced.as.value)) {
@@ -993,6 +1058,7 @@ static bool reference_coroutine_operation_supported(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_CONSTANT_I64 ||
            operation_id == XR_CORE_OP_CORE_ADD_I64 ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD ||
            operation_id == XR_CORE_OP_CORE_RETURN;
 }
 
@@ -1029,6 +1095,7 @@ bool xr_reference_execution_create(XrInstance *instance, uint32_t function_id,
     if (!execution)
         goto reject;
     execution->lease = lease;
+    execution->lease_required = true;
     execution->values =
         xr_calloc(function->value_count ? function->value_count : 1u, sizeof(*execution->values));
     execution->initialized = xr_calloc(function->value_count ? function->value_count : 1u,
@@ -1061,7 +1128,8 @@ reject:
 }
 
 XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) {
-    if (!execution || execution->finished || !xr_execution_lease_is_valid(&execution->lease))
+    if (!execution || execution->finished ||
+        (execution->lease_required && !xr_execution_lease_is_valid(&execution->lease)))
         return execution_outcome(execution, XR_REFERENCE_OUTCOME_INVALID_INVOCATION);
     const XrValidatedFunction *function = &execution->program->functions[execution->function_id];
     for (;;) {
@@ -1133,6 +1201,25 @@ XrReferenceOutcome xr_reference_execution_step(XrReferenceExecution *execution) 
                 execution->instruction_id = 0u;
                 XrReferenceOutcome result =
                     execution_outcome(execution, XR_REFERENCE_OUTCOME_SUSPENDED);
+                result.safepoint_id = instruction->immediate.u32;
+                return result;
+            }
+            case XR_CORE_OP_CORE_GENERATOR_YIELD: {
+                const XrValidatedCoroutineSafepoint *safepoint =
+                    &function->coroutine_safepoints[instruction->immediate.u32];
+                const XrValidatedBlock *resume = &function->blocks[instruction->successors[0]];
+                for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+                    uint32_t target = resume->argument_ids[live];
+                    execution->values[target] =
+                        execution->values[instruction->operands[live + 1u]];
+                    execution->initialized[target] = true;
+                }
+                execution->state_id = safepoint->resume_state_id;
+                execution->block_id = instruction->successors[0];
+                execution->instruction_id = 0u;
+                XrReferenceOutcome result =
+                    execution_outcome(execution, XR_REFERENCE_OUTCOME_SUSPENDED);
+                result.value = execution->values[instruction->operands[0]];
                 result.safepoint_id = instruction->immediate.u32;
                 return result;
             }

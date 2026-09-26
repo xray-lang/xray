@@ -181,6 +181,70 @@ static bool type_is_nominal(const XrValidatedProgram *program, uint16_t type_id)
            type->nominal_kind != XR_CORE_IR_NOMINAL_NONE;
 }
 
+static bool generator_handle_type_is_valid(const XrValidatedProgram *program,
+                                           uint16_t type_id) {
+    const XrValidatedType *type = xr_validated_program_type(program, type_id);
+    return type && type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+           type->nominal_kind == XR_CORE_IR_NOMINAL_CLASS && type->field_count == 0u &&
+           type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+           type->copy_contract == XR_CORE_IR_COPY_FORBIDDEN;
+}
+
+static const XrValidatedFunction *generator_target_for_handle(const XrValidatedProgram *program,
+                                                              uint16_t handle_type,
+                                                              uint32_t *function_id_out) {
+    const XrValidatedFunction *match = NULL;
+    for (uint32_t function_id = 0u; program && function_id < program->function_count;
+         ++function_id) {
+        const XrValidatedFunction *candidate = &program->functions[function_id];
+        if ((candidate->flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u ||
+            candidate->result_type_id != handle_type)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+        if (function_id_out)
+            *function_id_out = function_id;
+    }
+    return match;
+}
+
+static bool generator_target_element_type(const XrValidatedFunction *target,
+                                          uint16_t *type_id_out) {
+    bool found = false;
+    uint16_t type_id = XR_CORE_TYPE_VOID;
+    for (uint32_t block = 0u; target && block < target->block_count; ++block) {
+        const XrValidatedBlock *row = &target->blocks[block];
+        for (uint32_t instruction = 0u; instruction < row->instruction_count; ++instruction) {
+            const XrValidatedInstruction *op = &row->instructions[instruction];
+            if (op->operation_id != XR_CORE_OP_CORE_GENERATOR_YIELD || op->operand_count == 0u)
+                continue;
+            uint16_t candidate = target->value_types[op->operands[0]];
+            if ((found && candidate != type_id) || candidate == XR_CORE_TYPE_VOID)
+                return false;
+            found = true;
+            type_id = candidate;
+        }
+    }
+    if (found && type_id_out)
+        *type_id_out = type_id;
+    return found;
+}
+
+static bool generator_outcome_type_is_valid(const XrValidatedProgram *program,
+                                            uint16_t type_id, uint16_t yielded_type) {
+    const XrValidatedType *type = xr_validated_program_type(program, type_id);
+    return type && type->kind == XR_CORE_IR_TYPE_VARIANT && type->variant_count == 5u &&
+           type->variants[0].payload_count == 1u &&
+           type->variants[0].payload_types[0] == yielded_type &&
+           type->variants[1].payload_count == 0u &&
+           type->variants[2].payload_count == 1u &&
+           type->variants[2].payload_types[0] == XR_CORE_TYPE_ERROR &&
+           type->variants[3].payload_count == 1u &&
+           type->variants[3].payload_types[0] == XR_CORE_TYPE_PANIC_INFO &&
+           type->variants[4].payload_count == 0u;
+}
+
 static bool parse_current_core_spec_fingerprint(uint8_t output[XR_PROGRAM_DIGEST_SIZE]) {
     const char *hex = XR_CORE_SPEC_SEMANTIC_SHA256;
     for (size_t index = 0; index < XR_PROGRAM_DIGEST_SIZE; ++index) {
@@ -1722,6 +1786,7 @@ static bool instruction_is_terminator(uint16_t operation_id) {
            operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
            operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
            operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+           operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD ||
            operation_id == XR_CORE_OP_CORE_RETURN || operation_id == XR_CORE_OP_CORE_TRAP ||
            operation_id == XR_CORE_OP_CORE_ERROR_PUBLISH ||
            operation_id == XR_CORE_OP_CORE_PANIC_PUBLISH;
@@ -2399,6 +2464,17 @@ static bool operation_consumes_operand(const VerifyContext *context,
         return function->value_ownerships[instruction->operands[0]] == XR_CORE_IR_OWNER;
     if (instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT)
         return function->value_ownerships[instruction->operands[operand_index]] == XR_CORE_IR_OWNER;
+    if (instruction->operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD && operand_index == 0u)
+        return function->value_ownerships[instruction->operands[0]] == XR_CORE_IR_OWNER;
+    if (instruction->operation_id == XR_CORE_OP_CORE_GENERATOR_CREATE) {
+        if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+            instruction->immediate.function_id >= context->program->function_count)
+            return false;
+        const XrValidatedFunction *target =
+            &context->program->functions[instruction->immediate.function_id];
+        return operand_index < target->parameter_count &&
+               target->parameter_modes[operand_index] == XR_PARAM_MOVE;
+    }
     if (instruction->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK && operand_index == 0u)
         return true;
     const XrValidatedSignature *callee =
@@ -2463,7 +2539,8 @@ static bool verify_owner_block_closure(VerifyContext *context, uint32_t function
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE ||
                      terminator->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
-                     terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD;
+                     terminator->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                     terminator->operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD;
     for (uint32_t value = 0; value < function->value_count; ++value) {
         if (function->value_blocks[value] != block_id ||
             function->value_ownerships[value] != XR_CORE_IR_OWNER || consumed[value])
@@ -2526,7 +2603,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT ||
-        instruction->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK;
+        instruction->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK ||
+        instruction->operation_id == XR_CORE_OP_CORE_GENERATOR_CREATE ||
+        instruction->operation_id == XR_CORE_OP_CORE_GENERATOR_RESUME;
     if (instruction->result_ownership == XR_CORE_IR_OWNER && !ownership_result_operation) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
@@ -2541,6 +2620,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                                 instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
                                 instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
                                 instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                                instruction->operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
@@ -2713,8 +2793,97 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             return true;
         }
+        case XR_CORE_OP_CORE_GENERATOR_CREATE: {
+            if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+                instruction->successor_count != 0u ||
+                instruction->immediate.function_id >= context->program->function_count ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+                !generator_handle_type_is_valid(context->program, instruction->result_type_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            const XrValidatedFunction *target =
+                &context->program->functions[instruction->immediate.function_id];
+            if ((target->flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u ||
+                target->result_type_id != instruction->result_type_id ||
+                instruction->operand_count != target->parameter_count ||
+                instruction->result_ownership != XR_CORE_IR_OWNER) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            for (uint32_t argument = 0u; argument < target->parameter_count; ++argument) {
+                XrCoreIrValueCategory category = target->parameter_modes[argument] == XR_PARAM_REF
+                                                     ? XR_CORE_IR_PLACE
+                                                     : XR_CORE_IR_VALUE;
+                if (!operand_type_is(function, instruction, argument,
+                                     target->parameter_types[argument]) ||
+                    !operand_category_is(function, instruction, argument, category) ||
+                    !call_operand_ownership_is(context->program, function, instruction, argument,
+                                               target->parameter_modes[argument],
+                                               target->parameter_types[argument])) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_GENERATOR_YIELD: {
+            if ((function->flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u ||
+                instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_VOID ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 ||
+                instruction->immediate.u32 >= function->coroutine_safepoint_count ||
+                instruction->successor_count != 1u || instruction->operand_count == 0u ||
+                instruction->successors[0] >= function->block_count) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                return false;
+            }
+            const XrValidatedCoroutineSafepoint *safepoint =
+                &function->coroutine_safepoints[instruction->immediate.u32];
+            if (safepoint->resume_state_id == 0u ||
+                safepoint->resume_state_id >= function->coroutine_state_count ||
+                function->coroutine_states[safepoint->resume_state_id].continuation_block !=
+                    instruction->successors[0] ||
+                instruction->operand_count != safepoint->live_value_count + 1u ||
+                safepoint->live_value_count !=
+                    function->blocks[instruction->successors[0]].argument_count ||
+                !verify_successor_arguments(context, function, instruction, 0u, 1u, location)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                return false;
+            }
+            for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+                if (instruction->operands[live + 1u] != safepoint->live_value_ids[live]) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+                    return false;
+                }
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_GENERATOR_RESUME: {
+            if (!expect_shape(context, instruction, location, 1u, 0u,
+                              XR_CORE_IR_IMMEDIATE_NONE, instruction->result_type_id, true))
+                return false;
+            uint16_t handle_type = function->value_types[instruction->operands[0]];
+            const XrValidatedFunction *target =
+                generator_target_for_handle(context->program, handle_type, NULL);
+            uint16_t yielded_type = XR_CORE_TYPE_VOID;
+            if (!generator_handle_type_is_valid(context->program, handle_type) || !target ||
+                !generator_target_element_type(target, &yielded_type) ||
+                !generator_outcome_type_is_valid(context->program, instruction->result_type_id,
+                                                 yielded_type) ||
+                instruction->result_ownership !=
+                    ownership_for_type(context->program, instruction->result_type_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
         case XR_CORE_OP_CORE_RETURN: {
-            uint32_t expected = function->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+            uint32_t expected =
+                function->result_type_id == XR_CORE_TYPE_VOID ||
+                        (function->flags & XR_PROGRAM_FUNCTION_GENERATOR) != 0u
+                    ? 0u
+                    : 1u;
             if (!expect_shape(context, instruction, location, expected, 0,
                               XR_CORE_IR_IMMEDIATE_NONE, XR_CORE_TYPE_VOID, false) ||
                 (expected == 1u &&
@@ -3543,7 +3712,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     XrProgramSemanticLocation location = no_location();
     location.section_id = XR_PROGRAM_SECTION_FUNCTIONS;
     location.function_id = function_id;
-    if ((function->flags & ~XR_PROGRAM_FUNCTION_ENTRY) != 0u ||
+    if ((function->flags & ~(XR_PROGRAM_FUNCTION_ENTRY | XR_PROGRAM_FUNCTION_GENERATOR)) != 0u ||
         (function->effect_mask & ~XR_CORE_EFFECT_ALL) != 0u ||
         (function->capability_mask & ~XR_CORE_CAPABILITY_ALL) != 0u ||
         ((function->error_type_id == XR_CORE_TYPE_VOID) !=
@@ -3565,7 +3734,10 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
         has_coroutine !=
             ((function->capability_mask & XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD) != 0u) ||
         (has_coroutine &&
-         (function->coroutine_state_count != 2u || function->coroutine_safepoint_count != 1u))) {
+         function->coroutine_state_count != function->coroutine_safepoint_count + 1u) ||
+        ((function->flags & XR_PROGRAM_FUNCTION_GENERATOR) != 0u &&
+         (!has_coroutine ||
+          !generator_handle_type_is_valid(context->program, function->result_type_id)))) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
         return false;
     }
@@ -3601,6 +3773,7 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     uint32_t local_effects = 0;
     uint32_t local_capabilities = 0;
     uint32_t yield_count = 0u;
+    uint32_t generator_yield_count = 0u;
     bool *consumed = xr_calloc(function->value_count ? function->value_count : 1u, sizeof(bool));
     if (!consumed) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
@@ -3621,6 +3794,10 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
              ++instruction_id) {
             if (block->instructions[instruction_id].operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD)
                 ++yield_count;
+            if (block->instructions[instruction_id].operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD) {
+                ++yield_count;
+                ++generator_yield_count;
+            }
             if (instruction_id + 1u != block->instruction_count &&
                 instruction_is_terminator(block->instructions[instruction_id].operation_id)) {
                 location.instruction_id = instruction_id;
@@ -3641,6 +3818,12 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     }
     xr_free(consumed);
     if (yield_count != function->coroutine_safepoint_count) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
+        return false;
+    }
+    if (((function->flags & XR_PROGRAM_FUNCTION_GENERATOR) != 0u) !=
+        (generator_yield_count != 0u) ||
+        (generator_yield_count != 0u && generator_yield_count != yield_count)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_COROUTINE, location);
         return false;
     }

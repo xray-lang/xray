@@ -127,6 +127,27 @@ static uint32_t outcome_value_kind(uint16_t type_id) {
     }
 }
 
+static bool type_is_generator_handle(const XrBackendIR *ir, uint16_t type_id) {
+    for (uint32_t function = 0u; ir && function < ir->function_count; ++function)
+        if ((ir->functions[function].flags & XR_PROGRAM_FUNCTION_GENERATOR) != 0u &&
+            ir->functions[function].result_type_id == type_id)
+            return true;
+    return false;
+}
+
+static uint32_t generator_target_for_handle(const XrBackendIR *ir, uint16_t type_id) {
+    uint32_t match = UINT32_MAX;
+    for (uint32_t function = 0u; ir && function < ir->function_count; ++function) {
+        if ((ir->functions[function].flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u ||
+            ir->functions[function].result_type_id != type_id)
+            continue;
+        if (match != UINT32_MAX)
+            return UINT32_MAX;
+        match = function;
+    }
+    return match;
+}
+
 static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_t index,
                                  uint8_t *state) {
     if (state[index] == 2u)
@@ -152,7 +173,11 @@ static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_
     if (!append_format(buffer, "struct XrAotType%u {\n", type->type_id))
         return false;
     if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
-        if (type->field_count == 0u && !append_text(buffer, "    uint8_t xr_unit;\n"))
+        if (type_is_generator_handle(ir, type->type_id) &&
+            !append_text(buffer, "    void *private_frame;\n    uint32_t function_id;\n"))
+            return false;
+        if (!type_is_generator_handle(ir, type->type_id) && type->field_count == 0u &&
+            !append_text(buffer, "    uint8_t xr_unit;\n"))
             return false;
         for (uint32_t field = 0; field < type->field_count; ++field) {
             char storage[32];
@@ -269,6 +294,7 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, b
                         *wrapping = true;
                 }
                 if (op->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
+                    op->operation_id == XR_CORE_OP_CORE_GENERATOR_CREATE ||
                     (op->operation_id == XR_CORE_OP_CORE_CALLABLE_PACK && op->operand_count != 0u))
                     *arena = true;
             }
@@ -416,7 +442,8 @@ static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *fu
         !append_format(buffer, ", XrAotCoroutineFrame%u *frame", function_id))
         return false;
     bool aggregate_result =
-        xr_validated_program_type(ir->program, function->result_type_id) != NULL;
+        xr_validated_program_type(ir->program, function->result_type_id) != NULL &&
+        (function->flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u;
     bool has_error = function->error_type_id != XR_CORE_TYPE_VOID;
     bool has_panic = function->panic_type_id != XR_CORE_TYPE_VOID;
     for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
@@ -1173,6 +1200,76 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  "        return xr_aot_make(5, UINT32_C(%u), 0);\n",
                                  safepoint->resume_state_id, safepoint_id);
         }
+        case XR_CORE_OP_CORE_GENERATOR_YIELD: {
+            uint32_t safepoint_id = instruction->immediate.u32;
+            const XrBackendCoroutineSafepoint *safepoint =
+                &function->coroutine_safepoints[safepoint_id];
+            if (instruction->operand_count != safepoint->live_value_count + 1u ||
+                function->value_types[instruction->operands[0]] != XR_CORE_TYPE_I64)
+                return false;
+            for (uint32_t live = 0u; live < safepoint->live_value_count; ++live) {
+                if (!append_format(buffer, "        frame->live_%u_%u = v%u;\n", safepoint_id,
+                                   live, instruction->operands[live + 1u]))
+                    return false;
+            }
+            return append_format(buffer,
+                                 "        frame->state = UINT32_C(%u);\n"
+                                 "        { XrAotOutcome yielded = xr_aot_make(5, "
+                                 "UINT32_C(%u), 0); yielded.i64 = v%u; return yielded; }\n",
+                                 safepoint->resume_state_id, safepoint_id,
+                                 instruction->operands[0]);
+        }
+        case XR_CORE_OP_CORE_GENERATOR_CREATE: {
+            uint32_t target = instruction->immediate.function_id;
+            if (target >= ir->function_count || instruction->operand_count != 0u ||
+                (ir->functions[target].flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u)
+                return false;
+            return append_format(
+                buffer,
+                "        XrAotCoroutineFrame%u *generator_frame_%u = "
+                "(XrAotCoroutineFrame%u *)xr_aot_alloc(xr_ctx, "
+                "sizeof(XrAotCoroutineFrame%u));\n"
+                "        if (!generator_frame_%u) return xr_aot_make(4, 0, 0);\n"
+                "        *generator_frame_%u = (XrAotCoroutineFrame%u){0};\n"
+                "        v%u.private_frame = (void *)generator_frame_%u;\n"
+                "        v%u.function_id = UINT32_C(%u);\n",
+                target, instruction->result_id, target, target, instruction->result_id,
+                instruction->result_id, target, instruction->result_id, instruction->result_id,
+                instruction->result_id, target);
+        }
+        case XR_CORE_OP_CORE_GENERATOR_RESUME: {
+            uint32_t handle_value = instruction->operands[0];
+            uint16_t handle_type = function->value_types[handle_value];
+            uint32_t target = generator_target_for_handle(ir, handle_type);
+            if (target == UINT32_MAX || instruction->result_type_id <
+                                            XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+                return false;
+            return append_format(
+                buffer,
+                "        if (v%u.function_id != UINT32_C(%u) || !v%u.private_frame) "
+                "return xr_aot_make(4, 0, 0);\n"
+                "        XrAotOutcome generator_step_%u = xr_aot_fn_%u_step("
+                "xr_ctx, (XrAotCoroutineFrame%u *)v%u.private_frame);\n"
+                "        if (generator_step_%u.kind == UINT32_C(5)) {\n"
+                "            v%u.tag = UINT32_C(0);\n"
+                "            v%u.payload.case_0.f0 = generator_step_%u.i64;\n"
+                "        } else if (generator_step_%u.kind == UINT32_C(0)) {\n"
+                "            v%u.tag = UINT32_C(1);\n"
+                "        } else if (generator_step_%u.kind == UINT32_C(2)) {\n"
+                "            v%u.tag = UINT32_C(2);\n"
+                "            v%u.payload.case_2.f0 = generator_step_%u.error;\n"
+                "        } else if (generator_step_%u.kind == UINT32_C(3)) {\n"
+                "            v%u.tag = UINT32_C(3);\n"
+                "            v%u.payload.case_3.f0 = generator_step_%u.trap;\n"
+                "        } else {\n"
+                "            v%u.tag = UINT32_C(4);\n"
+                "        }\n",
+                handle_value, target, handle_value, instruction_id, target, target, handle_value,
+                instruction_id, instruction->result_id, instruction->result_id, instruction_id,
+                instruction_id, instruction->result_id, instruction_id, instruction->result_id,
+                instruction->result_id, instruction_id, instruction_id, instruction->result_id,
+                instruction->result_id, instruction_id, instruction->result_id);
+        }
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
             return emit_call(buffer, ir, instruction, instruction_id);
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
@@ -1243,6 +1340,18 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
                                  instruction->operands[0]);
         case XR_CORE_OP_CORE_OWNER_DROP:
+            if (type_is_generator_handle(ir,
+                                         function->value_types[instruction->operands[0]])) {
+                uint32_t target = generator_target_for_handle(
+                    ir, function->value_types[instruction->operands[0]]);
+                if (target == UINT32_MAX)
+                    return false;
+                return append_format(
+                    buffer,
+                    "        if (v%u.private_frame) ((XrAotCoroutineFrame%u *)"
+                    "v%u.private_frame)->state = UINT32_MAX;\n",
+                    instruction->operands[0], target, instruction->operands[0]);
+            }
             return append_format(buffer, "        (void)v%u;\n", instruction->operands[0]);
         case XR_CORE_OP_CORE_PLACE_LOCAL:
             return append_format(buffer,

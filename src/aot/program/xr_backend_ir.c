@@ -40,6 +40,9 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
+        case XR_CORE_OP_CORE_GENERATOR_CREATE:
+        case XR_CORE_OP_CORE_GENERATOR_YIELD:
+        case XR_CORE_OP_CORE_GENERATOR_RESUME:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:

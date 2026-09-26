@@ -86,9 +86,15 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 <= 5u;
         case XR_CORE_OP_CORE_COROUTINE_YIELD:
+        case XR_CORE_OP_CORE_GENERATOR_YIELD:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 < function->coroutine_safepoint_count &&
                    instruction->successor_count == 1u;
+        case XR_CORE_OP_CORE_GENERATOR_CREATE:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
+                   instruction->immediate.function_id < ir->function_count;
+        case XR_CORE_OP_CORE_GENERATOR_RESUME:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
@@ -191,14 +197,14 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         bool coroutine =
             function->coroutine_state_count != 0u || function->coroutine_safepoint_count != 0u;
         if ((coroutine &&
-             (function->coroutine_state_count != 2u || function->coroutine_safepoint_count != 1u ||
+             (function->coroutine_state_count != function->coroutine_safepoint_count + 1u ||
               !function->coroutine_states || !function->coroutine_safepoints ||
               function->parameter_count != 0u ||
               function->coroutine_states[0].continuation_block != function->entry_block ||
               function->coroutine_states[1].continuation_block >= function->block_count ||
               function->coroutine_safepoints[0].resume_state_id != 1u ||
-              function->coroutine_safepoints[0].live_value_count == 0u ||
-              !function->coroutine_safepoints[0].live_value_ids)) ||
+              (function->coroutine_safepoints[0].live_value_count != 0u &&
+               !function->coroutine_safepoints[0].live_value_ids))) ||
             (!coroutine && (function->coroutine_states || function->coroutine_safepoints))) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                       function_id, 0u, 0u);
@@ -279,15 +285,24 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                                               instruction_id);
                     return false;
                 }
-                if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD) {
+                if (instruction->operation_id == XR_CORE_OP_CORE_COROUTINE_YIELD ||
+                    instruction->operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD) {
                     ++yield_count;
                     const XrBackendCoroutineSafepoint *point =
                         &function->coroutine_safepoints[instruction->immediate.u32];
                     if (instruction->successors[0] !=
                             function->coroutine_states[point->resume_state_id].continuation_block ||
-                        instruction->operand_count != point->live_value_count ||
-                        !array_u32_equal(instruction->operands, point->live_value_ids,
-                                         point->live_value_count)) {
+                        instruction->operand_count !=
+                            point->live_value_count +
+                                (instruction->operation_id == XR_CORE_OP_CORE_GENERATOR_YIELD
+                                     ? 1u
+                                     : 0u) ||
+                        !array_u32_equal(instruction->operands +
+                                            (instruction->operation_id ==
+                                                     XR_CORE_OP_CORE_GENERATOR_YIELD
+                                                 ? 1u
+                                                 : 0u),
+                                         point->live_value_ids, point->live_value_count)) {
                         xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED,
                                                   instruction->operation_id, function_id, block_id,
                                                   instruction_id);

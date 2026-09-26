@@ -121,6 +121,7 @@ typedef enum XgTargetQueryKind {
 typedef enum XgSuspendPointKind {
     XG_SUSPEND_POINT_NONE = 0,
     XG_SUSPEND_POINT_COOPERATIVE_YIELD = 1,
+    XG_SUSPEND_POINT_GENERATOR_YIELD = 2,
 } XgSuspendPointKind;
 
 typedef enum XgDeclKind {

@@ -7517,6 +7517,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
              * must be assignable to T. Mark the function as a generator so IR
              * lowering emits the generator entry. */
             YieldStmtNode *ys = &node->as.yield_stmt;
+            xa_analyzer_clear_suspend_point(ctx->analyzer, node);
             XrType *val_type = ys->value ? xa_visit_infer_expr(ctx, ys->value) : NULL;
             ctx->current_fn_has_yield = true;
             XrType *elem = NULL;
@@ -7549,6 +7550,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_check_boundary_transfer_arg(ctx, node, ys->value, val_type,
                                                    "generator yield");
                 }
+                XaSuspendPointFact fact = {
+                    .kind = XA_SUSPEND_POINT_GENERATOR_YIELD,
+                    .may_suspend = 1,
+                    .complete = 1,
+                };
+                (void) xa_analyzer_set_suspend_point(ctx->analyzer, node, &fact);
             }
             break;
         }

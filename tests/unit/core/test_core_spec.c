@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 38u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 41u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -64,6 +64,12 @@ static void test_operation_metadata(void) {
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_PROJECT);
     const XrCoreOperationSpec *yield =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COROUTINE_YIELD);
+    const XrCoreOperationSpec *generator_create =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_GENERATOR_CREATE);
+    const XrCoreOperationSpec *generator_yield =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_GENERATOR_YIELD);
+    const XrCoreOperationSpec *generator_resume =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_GENERATOR_RESUME);
 
     CHECK(constant != NULL);
     CHECK(constant->operand_arity == 0u);
@@ -107,6 +113,31 @@ static void test_operation_metadata(void) {
     CHECK(yield->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
     CHECK(strcmp(yield->profile_dependency, "scheduler-yield") == 0);
     CHECK(strcmp(yield->materialization, "logical-coroutine-control") == 0);
+
+    CHECK(generator_create != NULL);
+    CHECK(strcmp(generator_create->operation_class, "generator-create") == 0);
+    CHECK(generator_create->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
+    CHECK(generator_create->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
+    CHECK(generator_create->effect_mask == 0u);
+    CHECK(generator_create->capability_mask == 0u);
+    CHECK(strcmp(generator_create->materialization, "logical-generator-handle") == 0);
+
+    CHECK(generator_yield != NULL);
+    CHECK(strcmp(generator_yield->operation_class, "generator-terminator") == 0);
+    CHECK(generator_yield->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
+    CHECK(generator_yield->result_type == XR_CORE_TYPE_VOID);
+    CHECK(generator_yield->successor_mask == UINT8_C(16));
+    CHECK(generator_yield->effect_mask == XR_CORE_EFFECT_SUSPEND);
+    CHECK(generator_yield->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+    CHECK(strcmp(generator_yield->materialization, "logical-generator-publication") == 0);
+
+    CHECK(generator_resume != NULL);
+    CHECK(strcmp(generator_resume->operation_class, "generator-resume") == 0);
+    CHECK(generator_resume->operand_arity == 1u);
+    CHECK(generator_resume->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
+    CHECK(generator_resume->effect_mask == XR_CORE_EFFECT_CALL);
+    CHECK(generator_resume->capability_mask == XR_CORE_CAPABILITY_RUNTIME_COOPERATIVE_YIELD);
+    CHECK(strcmp(generator_resume->materialization, "logical-generator-outcome") == 0);
 }
 
 int main(void) {

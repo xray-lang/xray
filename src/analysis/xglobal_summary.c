@@ -2156,7 +2156,9 @@ xg_global_evidence_add_suspend_point(XgGlobalEvidence *evidence,
     XgSuspendPointUseId max_use_id = XG_NO_ID;
     if (!evidence || !summary || summary->owner_func_id == XG_NO_ID ||
         summary->source_node_id == 0 || summary->body_ordinal == 0 ||
-        summary->kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD || summary->may_suspend != 1 ||
+        (summary->kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD &&
+         summary->kind != XG_SUSPEND_POINT_GENERATOR_YIELD) ||
+        summary->may_suspend != 1 ||
         summary->contract_complete != 1)
         return NULL;
     use_id = summary->use_id;
@@ -2206,7 +2208,8 @@ xg_global_evidence_find_suspend_point_at(const XgGlobalEvidence *evidence, XgFun
                                          uint32_t source_node_id, uint8_t kind) {
     const XgSuspendPointSummary *match = NULL;
     if (!evidence || owner_func_id == XG_NO_ID || source_node_id == 0 ||
-        kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD)
+        (kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD &&
+         kind != XG_SUSPEND_POINT_GENERATOR_YIELD))
         return NULL;
     for (uint32_t i = 0; i < evidence->nsuspend_points; i++) {
         const XgSuspendPointSummary *row = &evidence->suspend_points[i];

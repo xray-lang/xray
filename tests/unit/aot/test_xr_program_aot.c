@@ -17,6 +17,7 @@
 #include "../program/xr_program_invoke_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
 #include "../program/xr_program_coroutine_fixture.h"
+#include "../program/xr_program_generator_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,9 @@ _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable 
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_COROUTINE_YIELD == 116, "coroutine yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_GENERATOR_CREATE == 117, "generator create stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_GENERATOR_YIELD == 118, "generator yield stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_GENERATOR_RESUME == 119, "generator resume stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -890,6 +894,19 @@ static XrValidatedProgram *build_coroutine_program(void) {
     return program;
 }
 
+static XrValidatedProgram *build_generator_program(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_generator_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
 static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile *profile,
                                    const TestBindings *bindings, uint64_t generation) {
     XrExecutionBindingInput input = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -966,6 +983,30 @@ static void test_coroutine_private_state_machine_lowering(void) {
     REQUIRE(strstr(generated.bytes, "xr_aot_entry_coroutine_descriptor") != NULL);
     REQUIRE(strstr(generated.bytes, "XrBackendNativeExecutionId execution_id") != NULL);
     REQUIRE(strstr(generated.bytes, "while (result.kind == UINT32_C(5))") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    retire_instance(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_generator_private_frame_lowering(void) {
+    XrValidatedProgram *program = build_generator_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestBindings bindings;
+    build_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 312u);
+    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "private_frame") != NULL);
+    REQUIRE(strstr(generated.bytes, "function_id") != NULL);
+    REQUIRE(strstr(generated.bytes, "_step(xr_ctx") != NULL);
+    REQUIRE(strstr(generated.bytes, "case UINT32_C(5)") != NULL);
+    REQUIRE(strstr(generated.bytes, "XR_CORE_OP_CORE_GENERATOR") == NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
     retire_instance(&instance);
@@ -1376,6 +1417,8 @@ int main(int argc, char **argv) {
         program = build_callable_program();
     else if (argc == 3 && (strcmp(argv[2], "coroutine-yield") == 0 || coroutine_object_mode))
         program = build_coroutine_program();
+    else if (argc == 3 && strcmp(argv[2], "generator") == 0)
+        program = build_generator_program();
     else if (pointer_width_mode)
         program = build_pointer_width_program();
     else if (invoke_object_mode || panic_object_mode) {
@@ -1416,6 +1459,7 @@ int main(int argc, char **argv) {
         test_existential_pack_test_project_lowering();
         test_callable_pack_and_indirect_call_lowering();
         test_coroutine_private_state_machine_lowering();
+        test_generator_private_frame_lowering();
         test_foreign_profile_and_translation_mutation();
         puts("canonical XrProgram AOT tests passed");
     }

@@ -569,7 +569,7 @@ static bool verify_suspend_point_contract(VerifyCtx *ctx, const XiFunc *f, const
                   value->xg_suspend_may_suspend != 0 || value->xg_suspend_contract_complete != 0);
     if (!value)
         return true;
-    if (value->op != XI_YIELD) {
+    if (value->op != XI_YIELD && value->op != XI_GEN_YIELD) {
         if (carries_contract) {
             verr(ctx, "func '%s': v%u %s in b%u carries suspend-point metadata", f->name, value->id,
                  xi_op_name(value->op), blk->id);
@@ -581,13 +581,20 @@ static bool verify_suspend_point_contract(VerifyCtx *ctx, const XiFunc *f, const
     // A yield cannot be reconstructed from spelling or opcode alone.
     if (f->xg_body_func_id == XG_NO_ID && !carries_contract)
         return true;
-    if (value->nargs != 0 || value->aux != NULL || value->aux_int != XI_YIELD_AUX_IMMEDIATE ||
+    bool cooperative = value->op == XI_YIELD;
+    uint8_t expected_kind = cooperative ? XG_SUSPEND_POINT_COOPERATIVE_YIELD
+                                        : XG_SUSPEND_POINT_GENERATOR_YIELD;
+    if ((cooperative &&
+         (value->nargs != 0 || value->aux != NULL ||
+          value->aux_int != XI_YIELD_AUX_IMMEDIATE)) ||
+        (!cooperative &&
+         (value->nargs != 1 || value->aux != NULL || value->aux_int != 0)) ||
         value->xg_suspend_point_use_id == XG_NO_ID || value->xg_suspend_source_node_id == 0 ||
         value->xg_suspend_body_ordinal == 0 ||
-        value->xg_suspend_point_kind != XG_SUSPEND_POINT_COOPERATIVE_YIELD ||
+        value->xg_suspend_point_kind != expected_kind ||
         value->xg_suspend_may_suspend != 1 || value->xg_suspend_contract_complete != 1) {
-        verr(ctx, "func '%s': v%u XI_YIELD in b%u lacks an exact suspend-point contract", f->name,
-             value->id, blk->id);
+        verr(ctx, "func '%s': v%u %s in b%u lacks an exact suspend-point contract", f->name,
+             value->id, xi_op_name(value->op), blk->id);
         return false;
     }
     return true;

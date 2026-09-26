@@ -245,6 +245,20 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         UINT32_C(0),
         XR_PROGRAM_XI_PROJECTION_COROUTINE_YIELD,
     },
+    {
+        XI_GEN_CALL,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_GENERATOR_CREATE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_GENERATOR_CREATE,
+    },
+    {
+        XI_GEN_YIELD,
+        XR_CORE_TYPE_VOID,
+        XR_CORE_OP_CORE_GENERATOR_YIELD,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_GENERATOR_YIELD,
+    },
 };
 
 static const XrProgramXiSemanticProjectionRow

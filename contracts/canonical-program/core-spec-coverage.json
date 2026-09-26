@@ -1,9 +1,9 @@
 {
   "schema": "xray-core-spec-coverage/1",
-  "semantic_sha256": "a668d4dfd7d779f6f6dbc7ed3af1bb2c1351bdfdc21ffccfefb88d709dc317fe",
+  "semantic_sha256": "06bd1e993a1481cd4a902188b414b2886c16007ef16c2dd5f2c8704379019b51",
   "epoch": 1,
-  "operation_count": 38,
-  "normative_kat_count": 101,
+  "operation_count": 41,
+  "normative_kat_count": 107,
   "operations": [
     {
       "stable_id": 1,
@@ -1118,6 +1118,96 @@
     {
       "stable_id": 116,
       "spelling": "core.coroutine.yield",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 117,
+      "spelling": "core.generator.create",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 118,
+      "spelling": "core.generator.yield",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 119,
+      "spelling": "core.generator.resume",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

@@ -1243,6 +1243,10 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK},
         {XI_TARGET_POINTER_BITS, XR_CORE_TYPE_U16, XR_CORE_OP_CORE_TARGET_POINTER_WIDTH, 0u,
          XR_PROGRAM_XI_PROJECTION_TARGET_QUERY},
+        {XI_GEN_CALL, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_GENERATOR_CREATE, 0u,
+         XR_PROGRAM_XI_PROJECTION_GENERATOR_CREATE},
+        {XI_GEN_YIELD, XR_CORE_TYPE_VOID, XR_CORE_OP_CORE_GENERATOR_YIELD, 0u,
+         XR_PROGRAM_XI_PROJECTION_GENERATOR_YIELD},
     };
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
         XrProgramXiProjection projection = {0};
@@ -1934,6 +1938,158 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
 
     xr_validated_program_free(validated);
     xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
+}
+
+TEST(e2e_program_generator_create_yield_closes_source_contract) {
+    static const char source[] =
+        "fn numbers() -> Iterator<i64> {\n"
+        "  yield 42\n"
+        "}\n"
+        "fn root() -> i64 {\n"
+        "  var stream = numbers()\n"
+        "  return 1\n"
+        "}\n";
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
+        &fixture, "xi-program-generator", source));
+    XiFunc *entry = NULL;
+    XiFunc *generator = NULL;
+    XiValue *generator_yield = NULL;
+    XiValue *generator_create = NULL;
+    for (uint16_t function_index = 0u;
+         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+        XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
+        if (function && function->name && strcmp(function->name, "root") == 0)
+            entry = function;
+        if (function && function->entry_type == 2)
+            generator = function;
+        for (uint32_t block_index = 0u; function && block_index < function->nblocks;
+             ++block_index) {
+            XiBlock *block = function->blocks[block_index];
+            for (uint32_t value_index = 0u; block && value_index < block->nvalues;
+                 ++value_index) {
+                XiValue *value = block->values[value_index];
+                if (value && value->op == XI_GEN_YIELD)
+                    generator_yield = value;
+                if (value && value->op == XI_GEN_CALL)
+                    generator_create = value;
+            }
+        }
+    }
+    PIPELINE_TEST_REQUIRE(entry != NULL && generator != NULL);
+    PIPELINE_TEST_REQUIRE(generator_create != NULL && generator_yield != NULL);
+    PIPELINE_TEST_REQUIRE(generator->coro_plan != NULL && generator->coro_plan->nstates == 1u);
+    PIPELINE_TEST_REQUIRE(generator_yield->xg_suspend_point_kind ==
+                          XG_SUSPEND_POINT_GENERATOR_YIELD);
+    PIPELINE_TEST_REQUIRE(generator_yield->xg_suspend_contract_complete == 1u);
+
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("generator-profile", strlen("generator-profile"));
+    const XiFunc *module_roots[] = {fixture.pipeline.ir};
+    XrProgramFromXiInput input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = entry,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact first = {0};
+    XrProgramBuildStatus build_status =
+        xr_program_write_from_xi(&input, &first, diagnostic, sizeof(diagnostic));
+    if (build_status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "generator Program build failed: %s\n", diagnostic);
+    PIPELINE_TEST_REQUIRE(build_status == XR_PROGRAM_BUILD_OK);
+    XrProgramArtifact repeated = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&input, &repeated, diagnostic,
+                                                   sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(first.size == repeated.size);
+    PIPELINE_TEST_REQUIRE(xr_program_id_equal(first.id, repeated.id));
+    PIPELINE_TEST_REQUIRE(memcmp(first.bytes, repeated.bytes, first.size) == 0);
+
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(first.bytes, first.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
+        validated, XR_CORE_OP_CORE_GENERATOR_CREATE));
+    PIPELINE_TEST_REQUIRE(validated_program_has_operation(
+        validated, XR_CORE_OP_CORE_GENERATOR_YIELD));
+    PIPELINE_TEST_REQUIRE(!validated_program_has_operation(
+        validated, XR_CORE_OP_CORE_GENERATOR_RESUME));
+    uint32_t generator_rows = 0u;
+    for (uint32_t function_index = 0u; function_index < validated->function_count;
+         ++function_index) {
+        const XrValidatedFunction *function = &validated->functions[function_index];
+        if ((function->flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u)
+            continue;
+        ++generator_rows;
+        PIPELINE_TEST_REQUIRE(function->coroutine.state_count == 2u);
+        PIPELINE_TEST_REQUIRE(function->coroutine.safepoint_count == 1u);
+    }
+    PIPELINE_TEST_REQUIRE(generator_rows == 1u);
+
+    XrReferenceOutcome reference = xr_reference_evaluate(
+        validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
+    PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64 &&
+                          reference.value.as.i64 == 1);
+
+    XiProgramProviderBindings bindings;
+    xi_program_build_provider_bindings(fixture.profile, &bindings);
+    XrExecutionBindingInput execution_input = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = validated,
+        .profile = fixture.profile,
+        .providers = bindings.count ? bindings.providers : NULL,
+        .provider_count = bindings.count,
+        .generation = 2u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
+                                                       &execution_diagnostic) == XR_EXECUTION_OK);
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &code, &vm_diagnostic) ==
+                          XR_VM_CODE_OK);
+    XrVmOutcome vm = xr_vm_code_execute(code, instance,
+                                        xr_validated_program_entry_function(validated), NULL, 0u);
+    PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(vm.value.kind == XR_VM_VALUE_I64 && vm.value.as.i64 == 1);
+    xr_vm_code_free(code);
+
+    XrBackendIR *backend = NULL;
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendOptions backend_options = xr_backend_default_options();
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(instance, &backend_options, &backend,
+                                              &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend, true, &generated,
+                                               &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "private_frame") != NULL);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "_step(xr_ctx") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+
+    uint8_t saved_complete = generator_yield->xg_suspend_contract_complete;
+    generator_yield->xg_suspend_contract_complete = 0u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_INVALID_INPUT, "exact yield contract", NULL));
+    generator_yield->xg_suspend_contract_complete = saved_complete;
+
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&repeated);
+    xr_program_artifact_free(&first);
     xi_canonical_program_test_fixture_cleanup(&fixture);
 }
 
@@ -4417,6 +4573,7 @@ int main(int argc, char **argv) {
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
     run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
+    run_e2e_program_generator_create_yield_closes_source_contract();
     run_e2e_program_target_query_closes_interface_slot_contract();
     run_e2e_program_move_direct_signatures_are_published_before_bodies();
     run_e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in();

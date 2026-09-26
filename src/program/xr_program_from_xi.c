@@ -20,6 +20,7 @@
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi.h"
 #include "../ir/xi_core_api.h"
+#include "../ir/xi_builtin_map_entry_iterator_shape.h"
 #include "../ir/xi_module.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/class/xenum.h"
@@ -75,6 +76,8 @@ typedef struct XrXiFunctionStorage {
     XrParamMode *parameter_modes;
     XrCoreIrBlockInput *blocks;
     XrXiBlockStorage *block_storage;
+    XrCoreIrCoroutineStateInput *coroutine_states;
+    XrCoreIrCoroutineSafepointInput *coroutine_safepoints;
     uint32_t local_effect_mask;
     uint32_t local_capability_mask;
     uint32_t closed_effect_mask;
@@ -1535,7 +1538,7 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                 bool elided = false;
                 if (argument == 0u &&
                     (consumer->op == XI_VARIANT_CONSTRUCT ||
-                     (consumer->op == XI_CALL &&
+                    ((consumer->op == XI_CALL || consumer->op == XI_GEN_CALL) &&
                       (resolved_direct_callee(context, function, consumer) ||
                        resolved_empty_class_allocation(context, function, consumer))) ||
                      resolved_empty_struct_literal(context, function, consumer) ||
@@ -1643,12 +1646,49 @@ static const XgClassSummary *find_xg_class_by_id(const XgGlobalEvidence *evidenc
 
 static const XiFunc *resolved_direct_callee(const XrXiBuildContext *context, const XiFunc *caller,
                                             const XiValue *call) {
-    if (!call || call->op != XI_CALL || call->nargs == 0u)
+    if (!call || (call->op != XI_CALL && call->op != XI_GEN_CALL) || call->nargs == 0u)
         return NULL;
     const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
     if (!row || row->kind != XG_CALL_DIRECT_FUNC || row->static_target_func_id == XG_NO_ID)
         return NULL;
     return find_xi_function_by_xg_id(context, row->static_target_func_id);
+}
+
+static bool map_generator_handle_type(XrXiBuildContext *context, const XiFunc *target,
+                                      uint16_t *type_id) {
+    const XrXiFunctionStorage *target_storage =
+        find_xi_function(context, target, NULL, NULL);
+    const XrType *element =
+        target && target->entry_type == 2 ? xi_builtin_iterator_element_type(target->return_type)
+                                         : NULL;
+    if (!context || !target_storage || !element || !type_id)
+        return false;
+    uint16_t element_type = XR_CORE_TYPE_VOID;
+    if (!map_type(context, element, &element_type) || element_type == XR_CORE_TYPE_VOID)
+        return false;
+    uint8_t material[2u + XR_CORE_IR_KEY_SIZE + 2u] = {UINT8_C(0x47), UINT8_C(1)};
+    memcpy(material + 2u, target_storage->key.bytes, XR_CORE_IR_KEY_SIZE);
+    material[2u + XR_CORE_IR_KEY_SIZE] = (uint8_t) (element_type >> 8u);
+    material[3u + XR_CORE_IR_KEY_SIZE] = (uint8_t) element_type;
+    XrCoreIrKey semantic_key = xr_core_ir_key(material, sizeof(material));
+    for (uint32_t index = 0u; index < context->type_count; ++index) {
+        if (!xr_core_ir_key_equal(context->type_storage[index].input.key, semantic_key))
+            continue;
+        *type_id = context->type_storage[index].input.local_id;
+        return true;
+    }
+    XrXiTypeStorage *storage = append_type_storage(context);
+    if (!storage)
+        return false;
+    storage->input.key = semantic_key;
+    storage->input.kind = XR_CORE_IR_TYPE_AGGREGATE;
+    storage->input.nominal_kind = XR_CORE_IR_NOMINAL_CLASS;
+    storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    storage->input.copy_contract = XR_CORE_IR_COPY_FORBIDDEN;
+    storage->input.field_count = 0u;
+    *type_id = storage->input.local_id;
+    ++context->type_count;
+    return true;
 }
 
 /* A source `C()` with no declared constructor still uses the runtime shared
@@ -3686,6 +3726,11 @@ static bool callable_signature_key_for_value(const XrXiBuildContext *context,
 static bool map_logical_value_type(XrXiBuildContext *context, const XiFunc *function,
                                    const XiValue *value, uint16_t *type_id) {
     const XrType *visible_type = value ? value->type : NULL;
+    if (value && value->op == XI_GEN_CALL) {
+        const XiFunc *target = resolved_direct_callee(context, function, value);
+        return target && target->entry_type == 2 &&
+               map_generator_handle_type(context, target, type_id);
+    }
     if (imported_callable_checktype_is_exact(context, function, value)) {
         uint64_t signature_key = 0u;
         return callable_signature_key_for_value(context, function, value->args[0], 1u,
@@ -3751,7 +3796,7 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
            value->xg_existential_kind == XI_EXISTENTIAL_PROJECT || value->op == XI_SUM_INJECT ||
            xi_copy_is_value_clone(value) || value->op == XI_SOURCE_MOVE ||
-           value->op == XI_OWNER_FORWARD || value->op == XI_CALL ||
+           value->op == XI_OWNER_FORWARD || value->op == XI_CALL || value->op == XI_GEN_CALL ||
            (value->op == XI_CALL_BUILTIN && value->aux && value->aux_kind == XI_AUX_KIND_NONE &&
             strcmp((const char *) value->aux, "copy") == 0);
 }
@@ -3950,6 +3995,13 @@ static void free_context(XrXiBuildContext *context) {
             xr_free(function->blocks);
             xr_free(function->parameter_types);
             xr_free(function->parameter_modes);
+            if (function->coroutine_safepoints) {
+                for (uint32_t point = 0u;
+                     point < module->functions[function_index].coroutine_safepoint_count; ++point)
+                    xr_free((void *) function->coroutine_safepoints[point].live_values);
+            }
+            xr_free(function->coroutine_safepoints);
+            xr_free(function->coroutine_states);
         }
         xr_free(module->function_storage);
         xr_free(module->functions);
@@ -4569,6 +4621,29 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         case XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL:
             return translate_call(context, module, function, value, block, &projection, instruction,
                                   diagnostic, diagnostic_size);
+        case XR_PROGRAM_XI_PROJECTION_GENERATOR_CREATE: {
+            const XiFunc *target = resolved_direct_callee(context, function->xi, value);
+            const XrXiFunctionStorage *target_storage =
+                find_xi_function(context, target, NULL, NULL);
+            uint16_t handle_type = XR_CORE_TYPE_VOID;
+            if (!target || target->entry_type != 2 || !target_storage || value->nargs != 1u ||
+                target->nparams != 0u ||
+                !map_generator_handle_type(context, target, &handle_type) ||
+                handle_type != result_type)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi generator create v%u is not an exact zero-parameter target",
+                            value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = handle_type;
+            instruction->result_ownership = XR_CORE_IR_OWNER;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
+            instruction->immediate.key = target_storage->key;
+            return XR_PROGRAM_BUILD_OK;
+        }
+        case XR_PROGRAM_XI_PROJECTION_GENERATOR_YIELD:
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi generator yield v%u must be a coroutine terminator", value->id);
         case XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT: {
             const XrXiTypeStorage *type = find_dynamic_type_by_id(context, result_type);
             if (!type || type->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
@@ -4963,7 +5038,7 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
             return status;
     }
     uint16_t begin = value->op == XI_VARIANT_CONSTRUCT ||
-                             (value->op == XI_CALL &&
+                             ((value->op == XI_CALL || value->op == XI_GEN_CALL) &&
                               (resolved_direct_callee(context, function->xi, value) != NULL ||
                                resolved_empty_class_allocation(context, function->xi, value))) ||
                              resolved_empty_struct_literal(context, function->xi, value) ||
@@ -5905,9 +5980,30 @@ close_logical_owner_lifetimes(const XrXiBuildContext *context, const XrXiFunctio
     return XR_PROGRAM_BUILD_OK;
 }
 
+static const XiCoroSuspendPoint *generator_suspend_point_for_block(const XiFunc *function,
+                                                                  const XiBlock *block) {
+    const XiCoroPlan *plan = function ? function->coro_plan : NULL;
+    const XiCoroSuspendPoint *match = NULL;
+    if (!plan || function->entry_type != 2 || !block)
+        return NULL;
+    for (uint32_t index = 0u; index < plan->nstates; ++index) {
+        const XiCoroSuspendPoint *point = &plan->points[index];
+        if (point->suspend_block != block)
+            continue;
+        if (match)
+            return NULL;
+        match = point;
+    }
+    return match;
+}
+
 static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildContext *context,
                                                              const XiFunc *function,
                                                              const XiBlock *block) {
+    const XiCoroSuspendPoint *generator_point =
+        generator_suspend_point_for_block(function, block);
+    if (generator_point && generator_point->op && generator_point->op->op == XI_GEN_YIELD)
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_GENERATOR_YIELD);
     const XiValue *invoke = block_typed_invoke_call(context, function, block);
     if (invoke && invoke->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE)
         return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE);
@@ -6197,7 +6293,9 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
     uint32_t parameter_offset = storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u;
     output->parameter_count = (uint32_t) xi->nparams + parameter_offset;
     bool result_mapped = false;
-    if (xi->return_type && xi->return_type->kind == XR_KIND_FUNCTION) {
+    if (xi->entry_type == 2) {
+        result_mapped = map_generator_handle_type(context, xi, &output->result_type_id);
+    } else if (xi->return_type && xi->return_type->kind == XR_KIND_FUNCTION) {
         uint64_t signature_key = 0u;
         bool found_return = false;
         bool exact_returns = true;
@@ -6276,6 +6374,8 @@ static XrProgramBuildStatus prepare_function_signature(XrXiBuildContext *context
         output->parameter_modes = storage->parameter_modes;
     }
     output->flags = xi == context->source->entry_function ? XR_PROGRAM_FUNCTION_ENTRY : 0u;
+    if (xi->entry_type == 2)
+        output->flags |= XR_PROGRAM_FUNCTION_GENERATOR;
 
     return XR_PROGRAM_BUILD_OK;
 }
@@ -6325,6 +6425,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
             const XiValue *value = xi_block->values[value_index];
             if (value_is_skipped(context, xi, value))
                 continue;
+            if (value->op == XI_GEN_YIELD)
+                continue;
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u)
                 ++emitted;
             if (value->xg_existential_kind == XI_EXISTENTIAL_PACK &&
@@ -6363,6 +6465,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
             if (value_is_skipped(context, xi, value))
+                continue;
+            if (value->op == XI_GEN_YIELD)
                 continue;
             if (value->op == XI_CLOSURE_NEW && value->nargs != 0u) {
                 XrCoreIrInstructionInput *capture =
@@ -6417,7 +6521,48 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         terminator->result_type_id = XR_CORE_TYPE_VOID;
         terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
         const XiValue *invoke_call = block_typed_invoke_call(context, xi, xi_block);
-        if (invoke_call) {
+        const XiCoroSuspendPoint *generator_point =
+            generator_suspend_point_for_block(xi, xi_block);
+        if (generator_point) {
+            const XiValue *yield = generator_point->op;
+            XrXiBlockStorage *successor =
+                find_block_storage(storage, generator_point->resume_block);
+            if (!yield || yield->op != XI_GEN_YIELD || yield->nargs != 1u || !yield->args ||
+                !yield->args[0] || !successor || generator_point->state_id == 0u ||
+                yield->xg_suspend_point_kind != XG_SUSPEND_POINT_GENERATOR_YIELD ||
+                yield->xg_suspend_may_suspend != 1 || yield->xg_suspend_contract_complete != 1)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi generator suspend block b%u lacks an exact yield contract",
+                            xi_block->id);
+            terminator->operation_id = XR_CORE_OP_CORE_GENERATOR_YIELD;
+            terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+            terminator->immediate.u32 = generator_point->state_id - 1u;
+            XrCoreIrKey *successors = xr_calloc(1u, sizeof(*successors));
+            if (!successors)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            successors[0] = block_key(storage, successor->xi);
+            terminator->successors = successors;
+            terminator->successor_count = 1u;
+            status = set_edge_operands(context, terminator, storage, block_storage, successor,
+                                       NULL, NULL, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+            uint32_t edge_count = terminator->operand_count;
+            XrCoreIrKey *operands = xr_calloc(edge_count + 1u, sizeof(*operands));
+            if (!operands)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            if (!value_operand_key(context, storage, block_storage, yield->args[0], &operands[0])) {
+                xr_free(operands);
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi generator yield v%u publication is unavailable", yield->id);
+            }
+            if (edge_count != 0u)
+                memcpy(operands + 1u, terminator->operands,
+                       (size_t) edge_count * sizeof(*operands));
+            xr_free((void *) terminator->operands);
+            terminator->operands = operands;
+            terminator->operand_count = edge_count + 1u;
+        } else if (invoke_call) {
             const XiFunc *callee = resolved_direct_callee(context, xi, invoke_call);
             bool witness = invoke_call->xg_existential_kind == XI_EXISTENTIAL_WITNESS_INVOKE;
             bool indirect = callee == NULL && !witness;
@@ -6510,7 +6655,8 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                                       diagnostic, diagnostic_size);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return status;
-            } else if (output->result_type_id != XR_CORE_TYPE_VOID) {
+            } else if (output->result_type_id != XR_CORE_TYPE_VOID &&
+                       (output->flags & XR_PROGRAM_FUNCTION_GENERATOR) == 0u) {
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi function %u has a value-less non-void return", function_index);
             }
@@ -6598,6 +6744,62 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function %u canonical block count changed during translation",
                     function_index);
+    if ((output->flags & XR_PROGRAM_FUNCTION_GENERATOR) != 0u) {
+        const XiCoroPlan *plan = xi->coro_plan;
+        if (!plan || !xi_coro_plan_is_current(xi, plan) || !plan->is_coroutine ||
+            plan->nstates == 0u || !plan->points || plan->nstates == UINT32_MAX)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi generator function %u lacks a current coroutine plan", function_index);
+        storage->coroutine_states =
+            xr_calloc(plan->nstates + 1u, sizeof(*storage->coroutine_states));
+        storage->coroutine_safepoints =
+            xr_calloc(plan->nstates, sizeof(*storage->coroutine_safepoints));
+        if (!storage->coroutine_states || !storage->coroutine_safepoints)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        storage->coroutine_states[0] = (XrCoreIrCoroutineStateInput) {
+            .state_id = 0u,
+            .continuation_block = block_key(storage, xi->entry),
+        };
+        for (uint32_t point_index = 0u; point_index < plan->nstates; ++point_index) {
+            const XiCoroSuspendPoint *point = &plan->points[point_index];
+            XrXiBlockStorage *suspend = find_block_storage(storage, point->suspend_block);
+            XrXiBlockStorage *resume = find_block_storage(storage, point->resume_block);
+            const XrCoreIrInstructionInput *yield =
+                suspend && suspend->instruction_count != 0u
+                    ? &suspend->instructions[suspend->instruction_count - 1u]
+                    : NULL;
+            if (!point->op || point->op->op != XI_GEN_YIELD ||
+                point->state_id != point_index + 1u || !suspend || !resume ||
+                !suspend->reachable || !resume->reachable || !yield ||
+                yield->operation_id != XR_CORE_OP_CORE_GENERATOR_YIELD ||
+                yield->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 ||
+                yield->immediate.u32 != point_index || yield->operand_count == 0u)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi generator coroutine point %u is not exact", point_index);
+            storage->coroutine_states[point_index + 1u] =
+                (XrCoreIrCoroutineStateInput) {
+                    .state_id = point_index + 1u,
+                    .continuation_block = block_key(storage, resume->xi),
+                };
+            uint32_t live_count = yield->operand_count - 1u;
+            XrCoreIrKey *live = live_count ? xr_calloc(live_count, sizeof(*live)) : NULL;
+            if (live_count && !live)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            if (live_count)
+                memcpy(live, yield->operands + 1u, (size_t) live_count * sizeof(*live));
+            storage->coroutine_safepoints[point_index] =
+                (XrCoreIrCoroutineSafepointInput) {
+                    .safepoint_id = point_index,
+                    .resume_state_id = point_index + 1u,
+                    .live_values = live,
+                    .live_value_count = live_count,
+                };
+        }
+        output->coroutine_states = storage->coroutine_states;
+        output->coroutine_state_count = plan->nstates + 1u;
+        output->coroutine_safepoints = storage->coroutine_safepoints;
+        output->coroutine_safepoint_count = plan->nstates;
+    }
     return XR_PROGRAM_BUILD_OK;
 }
 

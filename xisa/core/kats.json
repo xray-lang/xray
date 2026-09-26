@@ -1696,6 +1696,136 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "id": "generator-create-valid",
+      "operation": "core.generator.create",
+      "kind": "contract",
+      "actual": {
+        "target_closed": true,
+        "target_generator": true,
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "result_type": "Generator<i64>",
+        "generator_handle_type": "Generator<i64>",
+        "frame_serialized": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "generator-create-rejects-frame-contract",
+      "operation": "core.generator.create",
+      "kind": "contract",
+      "actual": {
+        "target_closed": true,
+        "target_generator": true,
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "result_type": "Generator<i64>",
+        "generator_handle_type": "Generator<i64>",
+        "frame_serialized": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "generator-yield-valid",
+      "operation": "core.generator.yield",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 1,
+        "yield_type": "i64",
+        "generator_element_type": "i64",
+        "resume_state": 1,
+        "continuation_state": 1,
+        "live_values": [
+          2
+        ],
+        "edge_values": [
+          2
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "generator-yield-rejects-type-mismatch",
+      "operation": "core.generator.yield",
+      "kind": "contract",
+      "actual": {
+        "result_type": "void",
+        "successor_count": 1,
+        "yield_type": "bool",
+        "generator_element_type": "i64",
+        "resume_state": 1,
+        "continuation_state": 1,
+        "live_values": [
+          2
+        ],
+        "edge_values": [
+          2
+        ]
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "generator-resume-valid",
+      "operation": "core.generator.resume",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Generator<i64>",
+        "generator_handle_type": "Generator<i64>",
+        "result_type": "GeneratorOutcome<i64>",
+        "generator_outcome_type": "GeneratorOutcome<i64>",
+        "outcomes": [
+          "yielded",
+          "completed",
+          "error",
+          "panic",
+          "cancel"
+        ],
+        "physical_frame_exposed": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "generator-resume-rejects-physical-frame",
+      "operation": "core.generator.resume",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Generator<i64>",
+        "generator_handle_type": "Generator<i64>",
+        "result_type": "GeneratorOutcome<i64>",
+        "generator_outcome_type": "GeneratorOutcome<i64>",
+        "outcomes": [
+          "yielded",
+          "completed",
+          "error",
+          "panic",
+          "cancel"
+        ],
+        "physical_frame_exposed": true
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }
