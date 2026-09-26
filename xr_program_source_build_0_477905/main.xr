@@ -1,0 +1,17 @@
+import { ReadCounter, LeftCounter, readCounter } from "./facade"
+import { GenericReader } from "./library"
+import "./facade" as counters
+struct LocalCounter implements ReadCounter {
+  value: i64
+  current() -> i64 { return this.value }
+}
+fn genericRead<T>(_counter: T) -> i64 { return 999 }
+fn answer() -> i64 {
+  var left = LeftCounter{value: 20}
+  var local = LocalCounter{value: 11}
+  var reader = GenericReader()
+  return readCounter<LeftCounter>(left) + readCounter<LocalCounter>(local) +
+         readCounter(local) + counters.readCounter(left) +
+         counters.readCounter(local) + reader.genericRead<LeftCounter>(left) +
+         reader.genericRead(local) - 62
+}

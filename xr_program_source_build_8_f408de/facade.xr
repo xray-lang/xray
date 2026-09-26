@@ -1,0 +1,1 @@
+export { genericRead as readCounter } from "./library"

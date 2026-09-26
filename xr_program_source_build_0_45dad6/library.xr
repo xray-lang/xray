@@ -1,0 +1,22 @@
+export interface ReadCounter { current() -> i64 }
+export struct LeftCounter implements ReadCounter {
+  value: i64
+  current() -> i64 { return this.value }
+}
+struct LocalCounter implements ReadCounter {
+  value: i64
+  current() -> i64 { return 999 }
+}
+fn nested<U>() -> i64 { return 1 }
+export fn genericRead<T: ReadCounter>(counter: T) -> i64 {
+  return counter.current() + nested<Array<T>>() - 1
+}
+export class GenericReader {
+  genericRead<T: ReadCounter>(counter: T) -> i64 {
+    return counter.current()
+  }
+  static staticRead<T: ReadCounter>(counter: T) -> i64 {
+    return counter.current()
+  }
+  token<T>() -> i64 { return 999 }
+}

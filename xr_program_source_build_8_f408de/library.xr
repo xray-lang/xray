@@ -1,0 +1,8 @@
+export interface ReadCounter { current() -> i64 }
+struct NotCounter implements ReadCounter {
+  value: i64
+  current() -> i64 { return 999 }
+}
+export fn genericRead<T: ReadCounter>(counter: T) -> i64 {
+  return counter.current()
+}

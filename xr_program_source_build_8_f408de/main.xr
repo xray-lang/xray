@@ -1,0 +1,4 @@
+import { readCounter } from "./facade"
+struct NotCounter { value: i64 }
+fn genericRead<T>(_value: T) -> i64 { return 999 }
+fn answer() -> i64 { return readCounter(NotCounter{value: 42}) }

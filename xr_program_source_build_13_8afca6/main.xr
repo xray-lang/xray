@@ -1,0 +1,13 @@
+struct Box<R> {
+  value: R
+  readAs<U>(_marker: U) -> R { return this.value }
+  forwardAs<U>(marker: U) -> R { return this.readAs<U>(marker) }
+}
+fn answer() -> i64 {
+  var left = Box<i64>{value: 40}
+  var right = Box<i64>{value: 1}
+  var flag = Box<bool>{value: true}
+  left.value = left.value + right.value
+  if (flag.forwardAs<i64>(0)) { return left.readAs(false) + 1 }
+  return 0
+}

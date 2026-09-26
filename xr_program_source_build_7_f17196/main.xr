@@ -1,0 +1,11 @@
+import { ReadCounter, LeftCounter } from "./facade"
+import "./facade" as counters
+struct LocalCounter implements ReadCounter {
+  value: i64
+  current() -> i64 { return this.value }
+}
+fn answer() -> i64 {
+  var left = LeftCounter{value: 41}
+  var local = LocalCounter{value: 1}
+  return counters.readCounter(left) + counters.readCounter(local)
+}
