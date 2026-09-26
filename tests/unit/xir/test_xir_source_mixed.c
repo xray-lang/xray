@@ -21,7 +21,7 @@
 #include "xir_source_runtime_allocations.h"
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
-XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth;
+XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause;
 typedef struct MixedSource {
     XrXirArtifact *artifact;
     XrXirCallEntry *entries;
@@ -51,7 +51,7 @@ int main(void) {
     owner->entries = xr_calloc(module->function_count, sizeof(*owner->entries));
     owner->bindings = xr_calloc(module->function_count, sizeof(*owner->bindings));
     CHECK(owner->entries && owner->bindings);
-    unsigned native_resumes = 0, vm_pauses = 0;
+    unsigned native_resumes = 0, vm_pauses = 0, pause_types = 0;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         CHECK(xr_xir_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);
         CHECK(owner->entries[i].result == fixture_source_program.entries[i].result);
@@ -61,17 +61,23 @@ int main(void) {
             (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "next", 4)) ||
             (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "pack", 4)) ||
             (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) ||
-            (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)))
+            (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)) ||
+            i == fixture_source_numeric_pause)
             owner->entries[i] = fixture_source_program.entries[i];
         if (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)) {
             CHECK(owner->entries[i].resume == fixture_source_program.entries[i].resume); ++native_resumes;
         }
         if (module->functions[i].name_length > 6 && !memcmp(module->functions[i].name, "pause$", 6)) {
-            CHECK(owner->entries[i].parameter_count == 1 && owner->entries[i].result == XR_XIR_STRING);
+            XrXirType result = owner->entries[i].result;
+            CHECK(owner->entries[i].parameter_count == 1);
+            CHECK(result == XR_XIR_STRING || result == XR_XIR_I8 || result == XR_XIR_I16);
+            unsigned bit = result == XR_XIR_STRING ? 1 : result == XR_XIR_I8 ? 2 : 4;
+            CHECK(!(pause_types & bit)); pause_types |= bit;
             CHECK(owner->entries[i].resume != fixture_source_program.entries[i].resume); ++vm_pauses;
         }
     }
-    CHECK(native_resumes == 1 && vm_pauses == 1);
+    CHECK(native_resumes == 1 && vm_pauses == 3 && pause_types == 7);
+    CHECK(owner->entries[fixture_source_numeric_pause].resume == fixture_source_program.entries[fixture_source_numeric_pause].resume);
     CHECK(owner->entries[fixture_source_resume_text].resume != fixture_source_program.entries[fixture_source_resume_text].resume);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,
         module->declarations, {owner, mixed_release}, module->callables};
@@ -79,8 +85,8 @@ int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth}, results);
-    runtime_source_failures(program, entry, fixture_source_resume_text);
+    source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause}, results);
+    runtime_source_failures(program, entry, fixture_source_resume_text, fixture_source_numeric_pause);
     CHECK(!released);
     xr_xir_program_drop(program); CHECK(released == 1);
     source_result_drop(&results[0]); source_result_drop(&results[1]);

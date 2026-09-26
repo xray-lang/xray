@@ -46,8 +46,64 @@ static void source_integer_bounds(const XrXirSourceRequest *request, const char 
         xr_xir_artifact_free(artifact);
     }
 }
+static void source_large_integer_casts(const XrXirSourceRequest *request, const char *root) {
+    for (unsigned i = 0; i < 8; ++i) {
+        char text[256];
+        int length = snprintf(text, sizeof(text), "const result=((18446744073709551615)) as %s\n", source_integer_types[i].name);
+        CHECK(length > 0 && (size_t) length < sizeof(text)); write_source(root, text);
+        XrXirArtifact *artifact = NULL;
+        CHECK(xr_xir_source_check(request, &artifact, NULL) == XR_XIR_OK && artifact);
+        const XrXirModule *module = xr_xir_artifact_module(artifact);
+        const XrXirInstruction *ops = module->functions[0].instructions;
+        CHECK(ops[0].op == XR_XIR_CONST_INT && ops[0].type == XR_XIR_U64 && ops[0].immediate == -1);
+        CHECK(ops[1].op == XR_XIR_CONVERT_INT && ops[1].type == source_integer_types[i].type && ops[1].args[0] == 0);
+        xr_xir_artifact_free(artifact);
+    }
+    puts("Large source integer casts: all 8 targets preserve the full u64 input");
+}
+static void source_integer_joins(const XrXirSourceRequest *request, const char *root) {
+    unsigned cases = 0;
+    for (unsigned first = 0; first < 8; ++first) for (unsigned last = first + 1; last < 8; ++last) {
+        if (first / 4 != last / 4) continue;
+        for (unsigned reverse = 0; reverse < 2; ++reverse) {
+            char text[256];
+            int length = snprintf(text, sizeof(text),
+                "fn choose(flag:bool,a:%s,b:%s)->%s { const selected=flag?%s:%s; return selected }\n",
+                source_integer_types[first].name, source_integer_types[last].name, source_integer_types[last].name,
+                reverse ? "b" : "a", reverse ? "a" : "b");
+            CHECK(length > 0 && (size_t) length < sizeof(text)); write_source(root, text);
+            XrXirArtifact *artifact = NULL;
+            CHECK(xr_xir_source_check(request, &artifact, NULL) == XR_XIR_OK && artifact);
+            const XrXirFunction *function = &xr_xir_artifact_module(artifact)->functions[1];
+            uint32_t conversion = UINT32_MAX, predecessor = UINT32_MAX, phi = UINT32_MAX, join = UINT32_MAX;
+            for (uint32_t b = 0; b < function->block_count; ++b) {
+                const XrXirBlock *block = &function->blocks[b];
+                for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+                    const XrXirInstruction *op = &function->instructions[i];
+                    if (op->op == XR_XIR_CONVERT_INT) {
+                        CHECK(conversion == UINT32_MAX && op->args[0] == 1 && op->type == source_integer_types[last].type);
+                        conversion = function->parameter_count + i; predecessor = b;
+                    }
+                    if (op->op == XR_XIR_PHI) { CHECK(phi == UINT32_MAX); phi = i; join = b; }
+                }
+            }
+            CHECK(conversion != UINT32_MAX && phi != UINT32_MAX && predecessor != join);
+            const XrXirInstruction *op = &function->instructions[phi];
+            CHECK(op->type == source_integer_types[last].type && op->args[1] == 4);
+            const uint32_t *inputs = function->operands + op->args[0];
+            CHECK(inputs[0] < inputs[2]);
+            unsigned offset = inputs[0] == predecessor ? 0 : 2;
+            CHECK(inputs[offset] == predecessor && inputs[offset + 1] == conversion);
+            ++cases; xr_xir_artifact_free(artifact);
+        }
+    }
+    CHECK(cases == 24);
+    puts("Integer source joins: 24 widening directions convert on their PHI predecessor");
+}
 static void source_integer_contexts(const XrXirSourceRequest *request, const char *root) {
     source_integer_bounds(request, root);
+    source_large_integer_casts(request, root);
+    source_integer_joins(request, root);
     unsigned cases = 0;
     for (unsigned first = 0; first < 8; ++first) for (unsigned last = first + 1; last < 8; ++last) {
         if (first / 4 != last / 4) continue;

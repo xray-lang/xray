@@ -289,3 +289,25 @@ fn contextOrder() {
     print(sum, left, right, call, nested, callback(), negativeZero, numericOrder)
 }
 contextOrder()
+print(18446744073709551615 as i8, (18446744073709551615) as i16,
+    18446744073709551615 as i32, 18446744073709551615 as i64,
+    18446744073709551615 as u8, 18446744073709551615 as u16,
+    18446744073709551615 as u32, 18446744073709551615 as u64)
+print(9223372036854775808 as i64, 9223372036854775937 as i8,
+    9223372036854775937 as u32, 9223372036854775937 as i64,
+    9223372036854775808 as u64, 200 as i8)
+fn inferredIntegerJoin() {
+    const first = true ? contextMin8 : contextMin16 / 0
+    const second = false ? contextMin32 / 0 : contextMin16
+    const nested = true ? (false ? (1 as u8) : (255 as u8)) : (65535 as u16)
+    numericOrder = 0
+    const yes = true ? smallNext() : wideNext()
+    const no = false ? smallNext() : wideNext()
+    print(first, second, nested, yes, no, numericOrder,
+        (true ? (1 as i8) : 1000), (false ? (1 as u8) : (65535 as u16)))
+}
+inferredIntegerJoin()
+export fn numericPause(flag: bool) -> i64 {
+    const selected = flag ? alpha.pause<i8>(-128) : alpha.pause<i16>(32767)
+    return selected
+}

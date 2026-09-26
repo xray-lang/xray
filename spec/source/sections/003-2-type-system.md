@@ -802,6 +802,8 @@ var n = x as i64?       // 失败返回 null（安全转换）
 
 数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 规范化为 Xray 的 canonical quiet NaN；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
 
+整数as操作数独立于目标定型；直接正字面量（允许括号）超过i64最大值但不超过u64最大值时，保留u64源幅度后再按目标取模。`18446744073709551615 as i8`为-1；`200 as i8`仍按显式转换环绕，不要求字面量先满足i8范围。
+
 `expr as T?` 仅用于可能失败的动态 / 结构化转换；它不是数值 checked-cast 语法。数值转换必须写 `expr as T`，并遵循上面的确定性规则。
 
 #### 2.10.3 `is` 检查
@@ -1954,6 +1956,8 @@ Applies to:
 - Parent → child (downcast).
 
 Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+
+An integer as operand is typed independently of the target. A direct positive literal (parentheses allowed) above the i64 maximum and at most the u64 maximum retains its u64 source magnitude before reducing to the target width. `18446744073709551615 as i8` is -1; `200 as i8` still wraps explicitly rather than first range-checking the literal as i8.
 
 `expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
 

@@ -58,8 +58,13 @@ outer integer context or default i64. Arbitrary formed subexpressions do not
 receive recursive literal context. Complement can contextualize its direct
 literal. Shift counts are independently typed and retain modulo-64 behavior.
 Non-shift compound RHS uses the binding type. Explicit as types its operand
-independently, preserving wrapping casts. Explicit conditional context applies
-inside each lazy branch; without context both branch types must still match.
+independently, preserving wrapping casts. A direct positive literal above i64
+maximum but within u64 (parentheses allowed) retains its full u64 source magnitude
+before conversion. This does not admit negative literals below i64 minimum.
+Explicit conditional context applies inside each lazy branch. Without outer
+context, independently typed same-signedness integer branches use the wider type,
+with conversion on each selected predecessor path before PHI. Direct branch
+literals still default to i64. Other types must match; union inference is open.
 Calls retain callee-before-arguments and left-to-right effects; only pure direct
 literals may defer emission to obtain the other operand type. Uncalled and
 generic definitions remain checked. This producer extension retains the wire,

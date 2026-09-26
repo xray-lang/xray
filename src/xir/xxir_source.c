@@ -529,7 +529,10 @@ static bool source_integer_cast(SourceContext *ctx, AstNode *node, SourceValue *
     XrXirType target; SourceValue input;
     if (cast->is_safe || !source_type(ctx, cast->type, &target) || !xr_xir_type_is_integer(target))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete nonnullable integer target");
-    if (!expression(ctx, cast->expr, &input)) return false;
+    SourceInteger literal;
+    if (!source_direct_integer(ctx, cast->expr, &literal)) return false;
+    XrXirType context = literal.present && !literal.negative && literal.magnitude > INT64_MAX ? XR_XIR_U64 : XR_XIR_UNIT;
+    if (!expression_in(ctx, cast->expr, context, &input)) return false;
     if (!xr_xir_type_is_integer(input.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete integer operand");
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, target, {input.id, 0}, {0}, 0}, value);
@@ -648,13 +651,31 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, XrXirType expe
     if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0}, NULL)) return false;
     uint32_t no_block = body->block_count;
     if (!begin_block(ctx) || !expression_in(ctx, ternary->false_expr, expected, &no)) return false;
-    if (yes.type != no.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "conditional branch types must match");
-    uint32_t no_end = body->block_count - 1, join = body->block_count;
-    if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {join}, 0}, NULL) || !begin_block(ctx)) return false;
+    XrXirType common = yes.type;
+    if (yes.type != no.type) {
+        if (!xr_xir_type_is_integer(yes.type) || !xr_xir_type_is_integer(no.type) ||
+            xr_xir_integer_signed(yes.type) != xr_xir_integer_signed(no.type))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "conditional requires a common admitted type");
+        if (xr_xir_integer_bits(no.type) > xr_xir_integer_bits(common)) common = no.type;
+    }
+    if (!source_expect(ctx, node, common, &no)) return false;
+    uint32_t no_end = body->block_count - 1, no_jump = body->count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0}, NULL)) return false;
+    if (yes.type != common) {
+        body->ops[yes_jump].targets[0] = body->block_count;
+        if (!begin_block(ctx) || !source_expect(ctx, node, common, &yes)) return false;
+        yes_end = body->block_count - 1; yes_jump = body->count;
+        if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0}, NULL)) return false;
+    }
+    uint32_t join = body->block_count;
+    if (!begin_block(ctx)) return false;
     body->ops[branch].targets[0] = yes_block; body->ops[branch].targets[1] = no_block;
-    body->ops[yes_jump].targets[0] = join;
+    body->ops[yes_jump].targets[0] = join; body->ops[no_jump].targets[0] = join;
     if (yes.type == XR_XIR_UNIT) { *value = (SourceValue) {0, XR_XIR_UNIT}; return true; }
     SourceValue inputs[] = {{yes_end, XR_XIR_UNIT}, yes, {no_end, XR_XIR_UNIT}, no};
+    if (yes_end > no_end) {
+        inputs[0].id = no_end; inputs[1] = no; inputs[2].id = yes_end; inputs[3] = yes;
+    }
     return emit_group(ctx, (XrXirInstruction) {XR_XIR_PHI, yes.type, {0}, {0}, 0}, inputs, 4, value);
 }
 static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName *symbol, SourceValue *value) {
