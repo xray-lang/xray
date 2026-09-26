@@ -40,7 +40,8 @@ Return values exactly match the declared result. Unused fields are canonical zer
 Budgets bound functions, parameters, blocks, instructions, metadata bytes, scratch
 memory, and verification work across the whole module. Counts are checked before
 traversal/allocation. Host view pointers must designate the advertised live arrays;
-the view API is not an untrusted byte decoder. Serialized admission is not provided.
+the view API is not an untrusted byte decoder. Owned Checked packet admission is
+governed separately by `xir-checked-packet.md`.
 Allocation failure, malformed data, and exhausted budgets are distinct failures.
 
 CALL and PRINT use args[0]/args[1] as a first/count range into the owning function's

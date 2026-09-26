@@ -4,40 +4,31 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_xir_source.c - Real source files through Checked and Lowered execution
+ * test_xir_packet_vm.c - Source-free Checked consumer and native fixture producer
  *
  * KEY CONCEPT:
- *   Destroy parser/session inputs before executing the owned artifact.
+ *   The consumer links neither parser nor source compiler and needs only a packet.
  */
-#include "xir/xxir_source.h"
-#include "xir/xxir_vm.h"
 #include "xir/xxir_checked.h"
-#include "toolchain/xcompiler_session.h"
+#include "xir/xxir_vm.h"
+#include "xir/xxir_emit_c.h"
+#include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_cases.h"
 int main(int argc, char **argv) {
-    XrCompilerSession *session = xr_compiler_session_new(NULL);
-    CHECK(session);
-    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB};
+    CHECK(argc >= 1 && argc <= 3);
+    FILE *file = fopen(argc == 3 ? argv[2] : XR_CHECKED_FIXTURE, "rb"); CHECK(file);
+    CHECK(fseek(file, 0, SEEK_END) == 0);
+    long size = ftell(file); CHECK(size > 0 && size < 262144);
+    CHECK(fseek(file, 0, SEEK_SET) == 0);
+    uint8_t *bytes = xr_malloc((size_t) size); CHECK(bytes);
+    CHECK(fread(bytes, 1, (size_t) size, file) == (size_t) size && fclose(file) == 0);
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    XrXirSourceDiagnostic diagnostic;
-    XrXirStatus status = xr_xir_source_check(&request, &checked, &diagnostic);
-    if (status != XR_XIR_OK) fprintf(stderr, "source %u:%d:%d: %s (%u)\n", diagnostic.module,
-        diagnostic.line, diagnostic.column, diagnostic.message, (unsigned) status);
-    CHECK(status == XR_XIR_OK && checked);
-    xr_compiler_session_delete(session);
-    XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    if (argc == 2) {
-        FILE *file = fopen(argv[1], "wb"); CHECK(file);
-        CHECK(fwrite(packet.bytes, 1, packet.length, file) == packet.length);
-        CHECK(fclose(file) == 0);
-    } else CHECK(argc == 1);
-    xr_xir_checked_packet_free(&packet);
+    CHECK(xr_xir_checked_read(bytes, (size_t) size, NULL, &checked, NULL) == XR_XIR_OK);
+    memset(bytes, 0xCC, (size_t) size); xr_free(bytes);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
@@ -49,12 +40,21 @@ int main(int argc, char **argv) {
     }
     CHECK(result != UINT32_MAX && advance != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
+    XrXirCSource source;
+    CHECK(xr_xir_emit_c(lowered, "fixture_source", 262144, &source) == XR_XIR_OK);
+    if (argc >= 2) {
+        file = fopen(argv[1], "wb"); CHECK(file);
+        CHECK(fwrite(source.text, 1, source.length, file) == source.length);
+        CHECK(fprintf(file, "\nconst uint32_t fixture_source_result = %uu;\nconst uint32_t fixture_source_advance = %uu;\n", result, advance) > 0);
+        CHECK(fclose(file) == 0);
+    }
+    xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, result, advance, results);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
-    puts("Real source modules, independent state and output passed in Lowered VM");
+    puts("Source-free Checked consumer matched independent VM expectations and emitted native C");
     return 0;
 }

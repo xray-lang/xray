@@ -152,6 +152,23 @@ writeStderr(string)->bool，只报告宿主typed provider接受结果。该模�
 文件路径、函数拼写或项目同名模块不能取得权限。此接口不承诺File的flush/短写行为，
 也不替代既有yieldable文件操作；同源Checked/native产物发布另行验收。
 
+### 17.10 自持有 Checked 产物边界
+
+当前已实现的封闭声明、类型与操作子集使用唯一的目标无关 Checked 包。
+头部绑定 schema 和语义合同版本、Checked 阶段、精确负载长度及 SHA-256 内容标识。
+摘要不是认证。固定小端字段编码不包含宿主指针、物理布局、native 代码、运行时状态
+或已验证标记。未知版本、非法长度、保留字段和尾随字节必须拒绝；不提供 Built、
+Lowered 或旧格式读取器。
+
+读取器在分配和遍历前限制字节数、累计计数、分配内存和工作量，自持有全部解码数据，
+发布前执行现有完整 Checked 语义与布局复验。重算摘要不能绕过类型、CFG/支配关系、
+可见性、import、初始化或槽权限。加载成功后输入存储可立即销毁；失败不发布产物，
+释放全部部分构造。VM 与 native 消费者继续使用同一复验后的 Lowered 转换。
+精确字段与预算合同见 `contracts/xir-checked-packet.md`。
+
+该封闭子集不代表泛型约束/模板、效应、诊断来源序列化、包链接、native 缓存配对、
+installer 发布或完整无源码标准库分发已经验收。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -342,5 +359,28 @@ __writeStdout/__writeStderr calls, lowered to WRITE_STREAM. Imports and bodies
 remain normally checked; matching local paths or names confer no privileges.
 This does not promise File flush/short-write behavior or replace yieldable file
 operations. Same-source Checked/native publication requires separate qualification.
+
+### 17.10 Owned Checked Packet Boundary
+
+The current closed declaration/type/op subset has one canonical target-neutral
+Checked packet format. Its header binds schema and semantic-contract revisions,
+the Checked stage, exact payload length and SHA-256 content identity. The digest
+is not authentication. Fixed little-endian field encoding excludes host pointers,
+physical layouts, native code, runtime state and cached verification decisions.
+Unknown revisions, malformed lengths, reserved fields and trailing bytes reject;
+there is no Built, Lowered or legacy format reader.
+
+The reader bounds wire bytes, aggregate counts, allocation bytes and work before
+allocation/traversal, owns every decoded buffer, and runs the existing full
+Checked semantic and layout verification before publication. Recomputed digests
+cannot bypass types, CFG/dominance, visibility, imports, initialization or slot
+permissions. Input storage may be destroyed immediately after loading. Failure
+publishes nothing and frees all partial storage. Both VM and native consumers
+then use the same reverified Lowered transition. The precise wire and budget
+contract is `contracts/xir-checked-packet.md`.
+
+This closed subset does not qualify serialized generic constraints/templates,
+effects, diagnostic provenance, package linking, native-cache pairing, installer
+publication or complete source-free standard-library distribution.
 
 <!-- /xr-spec:en -->

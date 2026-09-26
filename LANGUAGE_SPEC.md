@@ -6955,6 +6955,29 @@ remain normally checked; matching local paths or names confer no privileges.
 This does not promise File flush/short-write behavior or replace yieldable file
 operations. Same-source Checked/native publication requires separate qualification.
 
+### 17.10 Owned Checked Packet Boundary
+
+The current closed declaration/type/op subset has one canonical target-neutral
+Checked packet format. Its header binds schema and semantic-contract revisions,
+the Checked stage, exact payload length and SHA-256 content identity. The digest
+is not authentication. Fixed little-endian field encoding excludes host pointers,
+physical layouts, native code, runtime state and cached verification decisions.
+Unknown revisions, malformed lengths, reserved fields and trailing bytes reject;
+there is no Built, Lowered or legacy format reader.
+
+The reader bounds wire bytes, aggregate counts, allocation bytes and work before
+allocation/traversal, owns every decoded buffer, and runs the existing full
+Checked semantic and layout verification before publication. Recomputed digests
+cannot bypass types, CFG/dominance, visibility, imports, initialization or slot
+permissions. Input storage may be destroyed immediately after loading. Failure
+publishes nothing and frees all partial storage. Both VM and native consumers
+then use the same reverified Lowered transition. The precise wire and budget
+contract is `contracts/xir-checked-packet.md`.
+
+This closed subset does not qualify serialized generic constraints/templates,
+effects, diagnostic provenance, package linking, native-cache pairing, installer
+publication or complete source-free standard-library distribution.
+
 ---
 
 ## 18. Error Codes
