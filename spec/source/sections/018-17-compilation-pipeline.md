@@ -306,7 +306,16 @@ Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡�
 
 整数类型ID为i64=2、i8=5、i16=6、i32=7、u8=8、u16=9、u32=10、u64=11。唯一CONST_INT与算术/比较/移位INT操作族替代旧i64专用名称；CONVERT_INT显式转换具体整数，所有指令继续检查类型、值角色和支配。算术两侧及结果类型相同；比较两侧同类型并返回bool；移位保留左类型，计数可为任意整数。无约束T不能通过特化获得算术资格。
 
-常量和边界值保持规范payload；copy、phi、调用、模块槽、cell、callable签名和输出保留精确类型。存储宽度/对齐为1/2/4/8字节，frame仍为8字节，boxed/参数/结果仍16字节且8对齐。无符号输出按完整无符号十进制解释，u64全一位型为18446744073709551615。输出预算及一次发布不变。Value7/Call11/Program6、Checked schema4/语义12为唯一版本，旧包与条目拒绝。源码已接通八种类型名称、具体整数as、已定型操作数的同符号宽化、原宽度一元运算/增减、共享cell、模块状态及print。nullable cast、bool/rune/float与无约束T转换拒绝。完整字面量上下文、赋值/参数/返回处的上下文宽化、浮点和容器仍OPEN；显式cast的执行样例不能替代这些分母。
+常量和边界值保持规范payload；copy、phi、调用、模块槽、cell、callable签名和输出保留精确类型。存储宽度/对齐为1/2/4/8字节，frame仍为8字节，boxed/参数/结果仍16字节且8对齐。无符号输出按完整无符号十进制解释，u64全一位型为18446744073709551615。输出预算及一次发布不变。Value7/Call11/Program6、Checked schema4/语义12为唯一版本，旧包与条目拒绝。源码已接通八种类型名称、具体整数as、已定型操作数的同符号宽化、原宽度一元运算/增减、共享cell、模块状态及print。nullable cast、bool/rune/float与无约束T转换拒绝。直接整数字面量与赋值/参数/返回宽化见§17.22；完整推断、浮点和容器仍OPEN。
+
+
+### 17.22 整数上下文与无损宽化
+
+声明注解、赋值目标、已声明返回类型、普通/间接调用参数（显式泛型替换后）给出唯一上下文。直接整数字面量包含括号和一次直接负号；无整数上下文时默认i64，有上下文时先检查数学值范围再产生该类型常量。因此u64最大值与i64最小值不经过宿主有符号溢出；负零可表示为无符号零。已有类型的表达式仅同符号向更宽整数转换，不隐式窄化、改符号或把无约束T当整数。转换显式进入CONVERT_INT，仍由Checked复验。推断返回类型的闭包不从外部调用签名获得未经实现的推断权限。
+
+二元算术/比较中的直接字面量由另一已定型操作数获得上下文；两侧均为直接字面量时采用外层整数上下文，否则默认i64。上下文不穿透任意已成形子表达式做常量折叠。取反的直接字面量可用外层整数上下文，已定型一元操作保留其操作数类型。移位左侧直接字面量可用外层上下文，但计数独立定型，不因左侧窄类型而拒绝256或负数；结果仍按§3.3.2处理。复合赋值的非移位RHS采用绑定类型；先读取左侧快照，再执行RHS，成功才写回。显式as的输入独立定型，`200 as i8`继续环绕，不变为越界字面量错误。
+
+有明确上下文的条件表达式分别检查并宽化分支，在各自前驱块产生转换，运行时只执行选中分支；无上下文仍要求分支类型相同，本节不声称完成通用分支类型推断。普通/间接调用保持callee先于按序实参求值；仅无副作用的直接字面量允许延后产生IR以取得另一操作数类型。未调用函数和泛型定义体照常检查，不以实例化绕过约束。此批只扩展源码生产者，已有XIR操作语义、wire与ABI版本不变；浮点、完整推断和容器仍OPEN。
 
 <!-- /xr-spec:cn -->
 
@@ -718,6 +727,15 @@ The sole allocation-free integer core receives an explicit 8/16/32/64-bit width 
 
 Integer type IDs are i64=2, i8=5, i16=6, i32=7, u8=8, u16=9, u32=10 and u64=11. The sole CONST_INT and arithmetic/comparison/shift INT family replace the old i64-specific names. CONVERT_INT explicitly converts concrete integers. All instructions retain type, value-role and dominance checks. Arithmetic operands and results share an exact type; comparison operands share a type and return bool; shifts keep the left type and accept any integer count. Unconstrained T gains no arithmetic authority from specialization.
 
-Constants and boundaries preserve canonical payloads. Copy, phi, calls, module slots, cells, callable signatures and output retain exact type identity. Storage width/alignment is 1/2/4/8 bytes; frame slots remain 8 bytes, boxed/parameter/result boundaries remain 16 bytes aligned to 8. Unsigned output uses the complete unsigned decimal value, including 18446744073709551615 for all-ones u64. Output budgets and single publication remain unchanged. Value7/Call11/Program6 and Checked schema4/semantic12 are the sole versions; old packets and entries reject. The source producer admits all eight names, concrete integer as, same-signedness widening of already typed arithmetic operands, width-preserving unary/increment operations, shared cells, module state and print. Nullable casts and bool/rune/float or unconstrained-T conversion reject. Full literal contexts, contextual widening at assignment/parameter/return sites, floating point and containers remain OPEN; explicit-cast witnesses do not replace those requirements.
+Constants and boundaries preserve canonical payloads. Copy, phi, calls, module slots, cells, callable signatures and output retain exact type identity. Storage width/alignment is 1/2/4/8 bytes; frame slots remain 8 bytes, boxed/parameter/result boundaries remain 16 bytes aligned to 8. Unsigned output uses the complete unsigned decimal value, including 18446744073709551615 for all-ones u64. Output budgets and single publication remain unchanged. Value7/Call11/Program6 and Checked schema4/semantic12 are the sole versions; old packets and entries reject. The source producer admits all eight names, concrete integer as, same-signedness widening of already typed arithmetic operands, width-preserving unary/increment operations, shared cells, module state and print. Nullable casts and bool/rune/float or unconstrained-T conversion reject. Direct integer literal contexts and assignment/parameter/return widening follow §17.22; full inference, floating point and containers remain OPEN.
+
+
+### 17.22 Integer contexts and lossless widening
+
+Binding annotations, assignment targets, declared return types and direct/indirect call parameters (after explicit generic substitution) provide a unique context. Direct integer literals include parentheses and one direct negation. Without an integer context they default to i64; with one, the mathematical value is range checked before producing that type. The u64 maximum and i64 minimum avoid host signed overflow; negative zero can represent unsigned zero. Already typed expressions only widen within the same signedness, never implicitly narrow, change signedness or treat unconstrained T as an integer. Conversion becomes explicit CONVERT_INT and is rechecked by Checked. Inferred-result closures gain no unimplemented inference authority from an outer callable signature.
+
+A direct literal in binary arithmetic/comparison uses the other typed operand's context. Two direct literals use an outer integer context, otherwise i64. Context does not penetrate arbitrary formed subexpressions to fold constants. A direct literal under complement can use the outer integer context; typed unary operations preserve the operand type. A direct shift-left operand can use outer context, but the count is typed independently and is not restricted by a narrow left operand: 256 and negative counts remain legal under §3.3.2. Non-shift compound RHS uses the binding type; read the left snapshot before evaluating the RHS and write only on success. Explicit as types its input independently, so `200 as i8` still wraps rather than becoming a literal range error.
+
+A conditional with explicit context checks and widens each branch in its own predecessor block; only the selected branch executes. Without context, branch types must still match; general branch inference is not qualified here. Calls evaluate the callee then arguments in order. Only effect-free direct literals may defer IR emission to obtain the other operand's type. Uncalled functions and generic definitions are checked without specialization bypasses. This producer extension does not alter XIR operation semantics, wire or ABI versions. Floating point, full inference and containers remain OPEN.
 
 <!-- /xr-spec:en -->

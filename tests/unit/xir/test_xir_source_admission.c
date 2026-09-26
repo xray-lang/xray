@@ -132,6 +132,38 @@ static const char *const rejected[] = {
     "const x = (1 as i8) + (1 as u8)\n",
     "const x = (1 as u64) < (1 as i64)\n",
     "fn bad() { var x = 1 as i8; x += (1 as i16) }\n",
+    "const x:i8 = 128\n",
+    "const x:i8 = -129\n",
+    "const x:i16 = 32768\n",
+    "const x:i16 = -32769\n",
+    "const x:i32 = 2147483648\n",
+    "const x:i32 = -2147483649\n",
+    "const x = 9223372036854775808\n",
+    "const x = -9223372036854775809\n",
+    "const x:u8 = 256\n",
+    "const x:u16 = 65536\n",
+    "const x:u32 = 4294967296\n",
+    "const x:u64 = -1\n",
+    "const x:u64 = 18446744073709551616\n",
+    "const wide:i64 = 1; const x:i8 = wide\n",
+    "const signed:i8 = 1; const x:u64 = signed\n",
+    "fn unused() { var x:i8 = 1; x = 128 }\n",
+    "fn unused(x:i64) { var narrow:i8 = 1; narrow = x }\n",
+    "fn unused()->i8 { return 128 }\n",
+    "fn unused(x:i64)->i8 { return x }\n",
+    "fn unused()->u64 { return -1 }\n",
+    "fn f(x:u8) {} f(256)\n",
+    "fn f(x:i64) {} const x:u8 = 1; f(x)\n",
+    "fn id<T>(x:T)->T { return x } id<u8>(256)\n",
+    "fn f(x:i8) {} const g=f; g(128)\n",
+    "fn unused<T>()->T { return 1 }\n",
+    "fn unused<T>(x:T)->i64 { return x }\n",
+    "const narrow:i8=1; const wide:i64 = narrow + 128\n",
+    "const narrow:i8=1; const wide:i64 = 128 + narrow\n",
+    "const x:i8 = (1 + 2) + 3\n",
+    "const x:u8 = true ? 1 : -1\n",
+    "const x:i8 = false ? 128 : 1\n",
+    "fn unused() { var x:u8=0; x += -1 }\n",
     "const a = Atomic(true)\n",
     "const a = Atomic(1)\na.fetchAdd(false)\n",
     "const a = Atomic(1)\na.load(1)\n",
@@ -203,6 +235,7 @@ static const char *const rejected[] = {
     "fn unused()->bool { return \"x\" <= \"y\" }\n" ,
     "const a = \"unterminated\n"
 };
+#include "xir_source_integer_context.h"
 int main(void) {
     stdlib_resolution();
 
@@ -218,6 +251,7 @@ int main(void) {
     primitive_authority(session, absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB};
+    source_integer_contexts(&request, root);
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_source(root, rejected[i]);
         XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;

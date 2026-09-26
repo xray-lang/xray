@@ -46,10 +46,25 @@ the unique operation; shifts do not widen the left. Unary negation/complement
 and ++/-- retain the operand/binding type. Compound assignment reads the binding
 before its RHS, must retain the binding type, and stores only on success. Exact
 typed declarations, module state, closure cells, generic copy/call and print use
-the same pipeline. Full literal contexts and contextual widening at assignment,
-return and parameter sites remain open producer work. Explicit casts provide
-executable witnesses without claiming those missing contexts. Floating point,
-checked/saturating library methods and numeric containers remain unqualified.
+the same pipeline. Direct integer literals (parentheses and one direct negation)
+use binding, assignment, declared return and substituted direct/indirect call
+parameter contexts. Range is checked before canonical payload construction;
+u64 maximum, i64 minimum and unsigned negative zero are represented exactly.
+Already typed values only widen within the same signedness through CONVERT_INT.
+Unconstrained T cannot be converted or contextualized as an integer.
+
+Binary direct literals use the other typed operand; two direct literals use
+outer integer context or default i64. Arbitrary formed subexpressions do not
+receive recursive literal context. Complement can contextualize its direct
+literal. Shift counts are independently typed and retain modulo-64 behavior.
+Non-shift compound RHS uses the binding type. Explicit as types its operand
+independently, preserving wrapping casts. Explicit conditional context applies
+inside each lazy branch; without context both branch types must still match.
+Calls retain callee-before-arguments and left-to-right effects; only pure direct
+literals may defer emission to obtain the other operand type. Uncalled and
+generic definitions remain checked. This producer extension retains the wire,
+operation and ABI versions. Full inference, floating point, checked/saturating
+library methods and numeric containers remain unqualified.
 
 Value7/Call11/Program6 and Checked schema4/semantic12 are the sole admission
 versions. Old packets and native entries reject without readers/adapters. VM,

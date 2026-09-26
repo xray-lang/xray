@@ -240,3 +240,52 @@ fn integerControl() -> u64 {
     return alpha.identity<u64>(unsignedState)
 }
 print(integerControl(), (-32768) as i16, (-2147483648) as i32, 65535 as u16)
+
+const contextMin8: i8 = -128
+const contextMin16: i16 = -32768
+const contextMin32: i32 = -2147483648
+const contextMin64: i64 = -9223372036854775808
+const contextMax8: u8 = 255
+const contextMax16: u16 = 65535
+const contextMax32: u32 = 4294967295
+var contextMax64: u64 = 18446744073709551615
+print(contextMin8, contextMin16, contextMin32, contextMin64,
+    contextMax8, contextMax16, contextMax32, contextMax64)
+fn contextReturn(value: i8) -> i64 { return value }
+fn contextUnsigned() -> u64 { return 18446744073709551615 }
+fn contextArithmetic() {
+    var narrow: i8 = 100
+    const typed: i16 = narrow + 100
+    const literals: i16 = 100 + 100
+    var unsigned: u8 = 255
+    unsigned += 1
+    unsigned = 1
+    unsigned <<= 256
+    const complement: u8 = ~0
+    const lazy: i16 = true ? narrow : contextMin16 / 0
+    const other: i64 = false ? contextMin64 / 0 : contextMin8
+    var assigned: i64 = 0
+    assigned = contextMin8
+    contextMax64 = 18446744073709551615
+    const direct = alpha.identity<u64>(18446744073709551615)
+    const indirect = alpha.identity<u64>
+    print(typed, literals, unsigned, complement, lazy, other, assigned, 200 as i8)
+    print(contextReturn(-128), contextUnsigned(), direct, indirect(18446744073709551615))
+}
+contextArithmetic()
+var numericOrder = 0
+fn smallNext() -> i8 { numericOrder = numericOrder * 10 + 1; return 7 }
+fn wideNext() -> i16 { numericOrder = numericOrder * 10 + 2; return 9 }
+fn wideArgument(value: i64) -> i64 { return value }
+fn contextOrder() {
+    const sum = smallNext() + wideNext()
+    const left = 1 + smallNext()
+    const right = wideNext() + 2
+    const indirect = wideArgument
+    const call = indirect(smallNext())
+    const nested = alpha.first<i64,u64>(wideNext(), alpha.identity<u64>(18446744073709551615))
+    const callback = fn()->i16 { return contextMin8 }
+    const negativeZero: u64 = -0
+    print(sum, left, right, call, nested, callback(), negativeZero, numericOrder)
+}
+contextOrder()
