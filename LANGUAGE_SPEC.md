@@ -6863,7 +6863,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 3 replace the initial scalar boundary without aliases.
+Value ABI 3 and call ABI 4 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -6874,7 +6874,13 @@ Call admission owns argument copies. Resume views and return actions borrow valu
 The driver owns returns before child cleanup, and owns inboxes and terminal results.
 Poll borrows; take transfers a result exactly once. Untaken results are destroyed
 with the activation. Typed synchronous output carries an explicit stdout/stderr
-stream and bool/i64/string value to the configured provider without formatting.
+stream and a borrowed bool/i64/string group to the configured provider. Raw groups
+contain one value without separators or a newline. Print evaluates arguments left
+to right before one group call, renders one ASCII space between values and one
+final LF (also for zero arguments). Validation, budget checks and complete buffer
+allocation precede one byte-sink call; failures publish no partial group. The
+current fixed-operand PRINT admits 0–2 values, while the native group limit is
+65536. This does not qualify the complete variadic source print family.
 Missing/rejecting providers are runtime failures. Source admission and complete
 Program/Instance qualification remain separate from this internal contract.
 String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT

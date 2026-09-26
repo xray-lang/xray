@@ -104,12 +104,18 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return string_status(status);
     }
-    case XR_XIR_OUTPUT: {
-        uint32_t id = op->args[0];
-        XrXirType type = id < run->function->parameter_count ? run->function->parameters[id] :
-            run->function->instructions[id - run->function->parameter_count].type;
-        *action = (XrXirAction) {XR_XIR_ACTION_OUTPUT, (uint32_t) op->immediate, NULL, 0,
-            {(uint32_t) type, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[id])}};
+    case XR_XIR_OUTPUT:
+    case XR_XIR_PRINT: {
+        uint32_t count = op->op == XR_XIR_PRINT ? (uint32_t) op->immediate : 1;
+        for (uint32_t p = 0; p < count; ++p) {
+            uint32_t id = op->args[p];
+            XrXirType type = id < run->function->parameter_count ? run->function->parameters[id] :
+                run->function->instructions[id - run->function->parameter_count].type;
+            state->arguments[p] = (XrXirValue) {(uint32_t) type, 0,
+                xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
+        }
+        *action = (XrXirAction) {XR_XIR_ACTION_OUTPUT, op->op == XR_XIR_PRINT ? XR_XIR_OUTPUT_LINE :
+            (uint32_t) op->immediate, state->arguments, count, {0}};
         state->instruction = next;
         return XR_XIR_RUN_OK;
     }
@@ -312,7 +318,7 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_THROW || xr_xir_type_is_owned(body->instructions[i].type) ||
-            body->instructions[i].op == XR_XIR_OUTPUT)
+            body->instructions[i].op == XR_XIR_OUTPUT || body->instructions[i].op == XR_XIR_PRINT)
             return XR_XIR_RUN_BAD_ARTIFACT;
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if (body->instructions[i].op >= XR_XIR_CONST_STRING &&

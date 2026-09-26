@@ -67,6 +67,43 @@ static void *counted_realloc(void *pointer, size_t size) {
 
 #include "xir/xxir_value.c"
 #include "xir/xxir_call.c"
+#include "xir/xxir_output.c"
+static bool counted_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+    size_t *published = context;
+    CHECK(stream == XR_XIR_STDOUT && length == 12 && !memcmp(bytes, "false 0 123\n", 12));
+    ++*published;
+    return true;
+}
+static void output_allocation(void) {
+    XrXirValue values[] = {{XR_XIR_BOOL, 0, 0}, {XR_XIR_I64, 0, 0}, {XR_XIR_I64, 0, 123}};
+    XrXirOutputGroup group = {XR_XIR_STDOUT, values, 3, true};
+    size_t published = 0;
+    XrXirOutputSink sink = {counted_sink, &published, 12};
+    fail_at = calls;
+    CHECK(!xr_xir_output_render(&sink, &group) && !published && !live);
+    fail_at = SIZE_MAX;
+    CHECK(xr_xir_output_render(&sink, &group) && published == 1 && !live);
+    size_t before = calls;
+    sink.byte_limit = 10;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    sink.byte_limit = 12;
+    values[0].payload = 2;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    values[0].payload = 0; values[1].reserved = 1;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    values[1].reserved = 0; values[1].type = XR_XIR_UNIT;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    values[1].type = XR_XIR_I64;
+    group.stream = XR_XIR_STDERR;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    group.stream = XR_XIR_STDOUT; group.line = false;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    group.line = true; group.count = 65537;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    group.count = 3; group.values = NULL;
+    CHECK(!xr_xir_output_render(&sink, &group));
+    CHECK(calls == before && published == 1 && !live);
+}
 static XrXirAction identity_resume(XrXirCallView *view) {
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->arguments[0]};
 }
@@ -146,7 +183,7 @@ int main(void) {
     fail_at = SIZE_MAX; calls = 0; fail_sequence();
     size_t count = calls;
     for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }
-    fail_at = SIZE_MAX; saturation();
+    fail_at = SIZE_MAX; saturation(); output_allocation();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
     return 0;
 }

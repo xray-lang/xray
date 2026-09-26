@@ -24,7 +24,10 @@ static void string_bytes(const XrXirValue *value, const char *expected, size_t s
     CHECK(xr_xir_string_view(value, &bytes, &length));
     CHECK(length == size && !memcmp(bytes, expected, size));
 }
-static bool string_output(void *context, XrXirOutputStream stream, const XrXirValue *value) {
+static bool string_output(void *context, const XrXirOutputGroup *group) {
+    CHECK(group && !group->line && group->count == 1);
+    XrXirOutputStream stream = group->stream;
+    const XrXirValue *value = &group->values[0];
     StringOutput *output = context;
     string_bytes(value, string_expected, sizeof(string_expected) - 1);
     CHECK(stream == (output->mode == 5 || output->mode == 6 || output->calls ? XR_XIR_STDOUT : XR_XIR_STDERR));

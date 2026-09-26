@@ -29,7 +29,7 @@ in place when capacity permits and reallocates its byte buffer otherwise; shared
 storage separates. Self-append is valid. Failure preserves the original value,
 published copies, and live accounting. Capacity is an implementation detail.
 
-Call ABI 3 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
+Call ABI 4 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
 owned frame storage before publication. Resume arguments/inbox and action return
 values are borrowed views. The driver retains a return before child cleanup and
 owns each inbox and terminal result. Poll exposes a borrowed result; explicit
@@ -38,13 +38,25 @@ an untaken result. Taking a result needs no allocation and the resulting owned
 value survives activation and input destruction. Frame cleanup runs before its
 arguments and inbox are dropped. Failure/cancellation publishes no partial result.
 
-Typed output is an explicit synchronous provider effect. An OUTPUT action names
-stdout or stderr and borrows a canonical bool/i64/string value; it never performs
-implicit formatting. A per-activation callback consumes the stream and typed
-value during that call. Missing/rejecting providers fail with OUTPUT_ERROR, not a
+Typed output is an explicit synchronous provider effect. Call ABI 4 replaces
+the scalar callback with a borrowed typed group. Raw output has one value and
+names stdout or stderr. Line output names stdout and carries zero or more
+bool/i64/string values: arguments evaluate left to right before one provider call.
+Rendering inserts exactly one ASCII space between values and one final LF, as
+required by source print. A raw group adds neither spacing nor a newline.
+The renderer validates and allocates the complete group before calling its byte
+sink exactly once; malformed values, budget failure and OOM cause no sink call.
+Embedded NUL and UTF-8 bytes are length-delimited. Values remain typed until the
+provider chooses rendering. Missing/rejecting providers fail with OUTPUT_ERROR, not a
 language throw or fallback. Reentrant cancellation takes effect after the callback;
 already accepted output is not rolled back. The provider cannot suspend and must
 copy any value it retains. Provider context is borrowed for activation lifetime.
+The native group interface admits up to 65536 values. The current fixed-operand
+XIR PRINT instruction admits only zero, one or two values (its immediate count),
+and rejects greater arities before execution. This implementation bound does not
+qualify the complete variadic source print family. Each operand must dominate
+the instruction and have bool/i64/string type; unused operand fields are zero.
+Call ABI 3 providers and generated entries are rejected, with no adapter.
 
 verification-test: test_xir_values
 verification-test: test_xir_value_allocations
@@ -64,3 +76,6 @@ Literal tables are sealed with Program metadata. Source-to-XIR string production
 verification-test: test_xir_string_vm
 verification-test: test_xir_string_native
 verification-test: test_xir_emit_strings
+verification-test: test_xir_emit_output
+verification-test: test_xir_output_vm
+verification-test: test_xir_output_native

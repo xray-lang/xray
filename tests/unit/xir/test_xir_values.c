@@ -133,7 +133,10 @@ static void concurrent_copies(bool atomic) {
     xr_xir_domain_drop(domain);
 }
 typedef struct TypedOutput { uint32_t seen; bool reject; } TypedOutput;
-static bool typed_write(void *context, XrXirOutputStream stream, const XrXirValue *value) {
+static bool typed_write(void *context, const XrXirOutputGroup *group) {
+    CHECK(group && !group->line && group->count == 1);
+    XrXirOutputStream stream = group->stream;
+    const XrXirValue *value = &group->values[0];
     TypedOutput *output = context;
     CHECK(stream == (output->seen ? XR_XIR_STDERR : XR_XIR_STDOUT));
     CHECK(value->type == (uint32_t) (output->seen ? XR_XIR_I64 : XR_XIR_BOOL));
@@ -141,17 +144,22 @@ static bool typed_write(void *context, XrXirOutputStream stream, const XrXirValu
     ++output->seen;
     return !output->reject;
 }
+typedef struct TypedFrame { uint32_t pc; XrXirValue value; } TypedFrame;
 static XrXirAction typed_resume(XrXirCallView *view) {
-    uint32_t *pc = view->state;
-    if ((*pc)++ == 0)
-        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, NULL, 0, {XR_XIR_BOOL, 0, 1}};
-    if (*pc == 2)
-        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDERR, NULL, 0, {XR_XIR_I64, 0, INT64_MIN}};
+    TypedFrame *state = view->state;
+    if (state->pc++ == 0) {
+        state->value = (XrXirValue) {XR_XIR_BOOL, 0, 1};
+        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, &state->value, 1, {0}};
+    }
+    if (state->pc == 2) {
+        state->value = (XrXirValue) {XR_XIR_I64, 0, INT64_MIN};
+        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDERR, &state->value, 1, {0}};
+    }
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {0, 0, 0}};
 }
 static void typed_output(void) {
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
-        sizeof(uint32_t), typed_resume, NULL, NULL};
+        sizeof(TypedFrame), typed_resume, NULL, NULL};
     for (uint32_t mode = 0; mode < 3; ++mode) {
         TypedOutput output = {0, mode == 1};
         XrXirCallAccounting accounting = {0};
@@ -166,7 +174,7 @@ static void typed_output(void) {
     }
 }
 static XrXirAction atomic_output_resume(XrXirCallView *view) {
-    return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, NULL, 0, view->arguments[0]};
+    return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, view->arguments, 1, {0}};
 }
 static void atomic_boundaries(void) {
     XrXirDomain *domain = NULL;

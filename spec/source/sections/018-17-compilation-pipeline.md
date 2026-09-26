@@ -85,7 +85,7 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 
 ### 17.7 内部托管值与结果交接
 
-内部值 ABI 3 与调用 ABI 3 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
+内部值 ABI 3 与调用 ABI 4 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
 允许内嵌 NUL，不隐式归一化或替换；字节数、Unicode 标量数与字素数是不同概念。
 复制保留原子引用，修改执行独占窗口内的写时复制；共享副本不因其他副本修改而改变。
 所有分配属于显式、计费且可独立存活的域，字符串不依赖执行帧、实例或代码镜像寿命。
@@ -94,7 +94,11 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 调用参数在准入时复制到帧，恢复回调和 return action 的值是借用。调用驱动器在子帧清理前
 取得结果的拥有权；poll 返回借用结果，take 仅一次转移拥有权，未取走结果由调用销毁释放。
 独立结果在调用、输入和镜像释放后仍有效。typed output 按显式 stdout/stderr 流和真实
-bool/i64/string 类型调用实例配置的同步 provider；缺失或拒绝是运行时失败，不隐式格式化。
+bool/i64/string 类型以借用组调用实例配置的同步 provider；缺失或拒绝是运行时失败。
+原始输出组只有一个值，不加空格或换行；print 输出组在参数从左到右求值后一次发布，
+渲染时值间恰一个 ASCII 空格，末尾一个 LF，零参数也输出 LF。渲染器先完整验证、
+预算检查和分配，再调用字节 sink 一次，失败不发布部分组。当前固定操作数 PRINT
+只准入 0–2 个值，native group 上限 65536；这不是完整可变参数源码 print 的资格。
 
 以上仅冻结内部 C 边界；源码 string 声明、模块实例、泛型库发布和最终产品资格仍分别验收。
 实际预算、并发、失败原子性及释放义务见 `contracts/xir-managed-values.md`。
@@ -217,7 +221,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 3 replace the initial scalar boundary without aliases.
+Value ABI 3 and call ABI 4 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -228,7 +232,13 @@ Call admission owns argument copies. Resume views and return actions borrow valu
 The driver owns returns before child cleanup, and owns inboxes and terminal results.
 Poll borrows; take transfers a result exactly once. Untaken results are destroyed
 with the activation. Typed synchronous output carries an explicit stdout/stderr
-stream and bool/i64/string value to the configured provider without formatting.
+stream and a borrowed bool/i64/string group to the configured provider. Raw groups
+contain one value without separators or a newline. Print evaluates arguments left
+to right before one group call, renders one ASCII space between values and one
+final LF (also for zero arguments). Validation, budget checks and complete buffer
+allocation precede one byte-sink call; failures publish no partial group. The
+current fixed-operand PRINT admits 0–2 values, while the native group limit is
+65536. This does not qualify the complete variadic source print family.
 Missing/rejecting providers are runtime failures. Source admission and complete
 Program/Instance qualification remain separate from this internal contract.
 String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT

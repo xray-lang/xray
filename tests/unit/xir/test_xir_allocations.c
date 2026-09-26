@@ -86,7 +86,10 @@ static void *counted_realloc(void *pointer, size_t size) {
 
 #include "xir_string_fixture.h"
 
-static bool allocation_output(void *context, XrXirOutputStream stream, const XrXirValue *value) {
+static bool allocation_output(void *context, const XrXirOutputGroup *group) {
+    CHECK(group && !group->line && group->count == 1);
+    XrXirOutputStream stream = group->stream;
+    const XrXirValue *value = &group->values[0];
     (void) context; (void) stream;
     return value->type == XR_XIR_STRING;
 }
@@ -181,7 +184,10 @@ static size_t call_allocation_failures(void) {
 }
 
 #include "xir_program_fixture.h"
-static bool program_allocation_output(void *context, XrXirOutputStream stream, const XrXirValue *value) {
+static bool program_allocation_output(void *context, const XrXirOutputGroup *group) {
+    CHECK(group && !group->line && group->count == 1);
+    XrXirOutputStream stream = group->stream;
+    const XrXirValue *value = &group->values[0];
     (void) context; (void) stream; (void) value; return true;
 }
 static size_t program_allocation_failures(void) {

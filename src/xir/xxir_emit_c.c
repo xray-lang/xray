@@ -288,13 +288,18 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                "            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
                "{XR_XIR_I64, 0, status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT}}; }\n");
         break;
-    case XR_XIR_OUTPUT: {
-        uint32_t id = op->args[0];
-        XrXirType type = id < function->parameter_count ? function->parameters[id] :
-            function->instructions[id - function->parameter_count].type;
-        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, %uu, NULL, 0, "
-               "{%uu, 0, xr_xir_scalar_load(state->frame, %uu)}};\n",
-               (uint32_t) op->immediate, (uint32_t) type, layout->offsets[id]);
+    case XR_XIR_OUTPUT:
+    case XR_XIR_PRINT: {
+        uint32_t count = op->op == XR_XIR_PRINT ? (uint32_t) op->immediate : 1;
+        for (uint32_t p = 0; p < count; ++p) {
+            uint32_t id = op->args[p];
+            XrXirType type = id < function->parameter_count ? function->parameters[id] :
+                function->instructions[id - function->parameter_count].type;
+            append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+                   p, (uint32_t) type, layout->offsets[id]);
+        }
+        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, %uu, state->arguments, %uu, {0}};\n",
+            op->op == XR_XIR_PRINT ? 3u : (uint32_t) op->immediate, count);
         return;
     }
     case XR_XIR_ADD_I64:
@@ -488,7 +493,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 3u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 4u, \"XIR call ABI\");\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 3u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"

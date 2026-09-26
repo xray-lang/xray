@@ -163,10 +163,23 @@ add_executable(test_xir_string_native xir/test_xir_string_native.c ${XIR_STRING_
 target_link_libraries(test_xir_string_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_string_vm xir/test_xir_string_vm.c ${XIR_STRING_GENERATED})
 target_link_libraries(test_xir_string_vm PRIVATE xray_xir_vm)
+add_executable(test_xir_emit_output xir/test_xir_emit_output.c)
+target_link_libraries(test_xir_emit_output PRIVATE xray_xir_cgen)
+set(XIR_OUTPUT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_output_fixture.c)
+add_custom_command(OUTPUT ${XIR_OUTPUT_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_emit_output> ${XIR_OUTPUT_GENERATED}
+    DEPENDS test_xir_emit_output
+    VERBATIM)
+add_executable(test_xir_output_native xir/test_xir_output_native.c ${XIR_OUTPUT_GENERATED})
+target_link_libraries(test_xir_output_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_output_vm xir/test_xir_output_vm.c)
+target_link_libraries(test_xir_output_vm PRIVATE xray_xir_vm)
 foreach(xir_test IN ITEMS test_xir_execution test_xir_emit test_xir_native test_xir_calls
     test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
-    test_xir_emit_program test_xir_program_vm test_xir_program_native)
+    test_xir_emit_program test_xir_program_vm test_xir_program_native
+    test_xir_emit_output test_xir_output_vm test_xir_output_native)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()

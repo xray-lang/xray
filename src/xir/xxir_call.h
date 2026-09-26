@@ -14,7 +14,7 @@
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
 
-#define XR_XIR_CALL_ABI_VERSION 3u
+#define XR_XIR_CALL_ABI_VERSION 4u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -69,7 +69,15 @@ typedef struct XrXirCallAccounting {
 } XrXirCallAccounting;
 
 typedef enum XrXirOutputStream { XR_XIR_STDOUT = 1, XR_XIR_STDERR = 2 } XrXirOutputStream;
-typedef bool (*XrXirOutputEntry)(void *context, XrXirOutputStream stream, const XrXirValue *value);
+/* OUTPUT action callee: stream 1/2 for raw values, 3 for one stdout line. */
+#define XR_XIR_OUTPUT_LINE 3u
+typedef struct XrXirOutputGroup {
+    XrXirOutputStream stream;
+    const XrXirValue *values;
+    uint32_t count;
+    bool line;
+} XrXirOutputGroup;
+typedef bool (*XrXirOutputEntry)(void *context, const XrXirOutputGroup *group);
 typedef struct XrXirOutputProvider {
     XrXirOutputEntry write;
     void *context;

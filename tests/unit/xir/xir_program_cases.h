@@ -17,7 +17,10 @@ typedef struct ProgramLog {
     XrXirOutputStream streams[32];
     uint32_t outputs, releases[8], released;
 } ProgramLog;
-static bool program_write(void *context, XrXirOutputStream stream, const XrXirValue *value) {
+static bool program_write(void *context, const XrXirOutputGroup *group) {
+    CHECK(group && !group->line && group->count == 1);
+    XrXirOutputStream stream = group->stream;
+    const XrXirValue *value = &group->values[0];
     ProgramLog *log = context;
     CHECK(log->outputs < 32);
     log->streams[log->outputs] = stream;
