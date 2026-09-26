@@ -489,6 +489,13 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
         {XR_CORE_TYPE_TARGET_ARCH, 8u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_TARGET_ABI, 9u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_TARGET_ENDIAN, 10u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_F64, 11u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_ATOMIC_I64, 12u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+         XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_ATOMIC_BOOL, 13u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+         XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_ATOMIC_F64, 14u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+         XR_CORE_IR_COPY_TRIVIAL},
     };
     buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]) + program->type_count);
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {

@@ -26,7 +26,11 @@
       "7:TargetOs",
       "8:TargetArch",
       "9:TargetAbi",
-      "10:TargetEndian"
+      "10:TargetEndian",
+      "11:f64",
+      "12:AtomicI64",
+      "13:AtomicBool",
+      "14:AtomicF64"
     ],
     "dynamic_type_base": 16,
     "dynamic_kinds": [

@@ -60,6 +60,26 @@
     },
     {
       "stable_id": 11,
+      "name": "f64",
+      "description": "Exactly IEEE 754 binary64 floating-point semantics."
+    },
+    {
+      "stable_id": 12,
+      "name": "AtomicI64",
+      "description": "Shared atomic storage containing one exact i64 scalar."
+    },
+    {
+      "stable_id": 13,
+      "name": "AtomicBool",
+      "description": "Shared atomic storage containing one exact bool scalar."
+    },
+    {
+      "stable_id": 14,
+      "name": "AtomicF64",
+      "description": "Shared atomic storage containing one exact f64 scalar."
+    },
+    {
+      "stable_id": 15,
       "name": "type-variable",
       "description": "Registry meta-type resolved by a verified function or block signature."
     }
@@ -89,6 +109,11 @@
       "stable_id": 5,
       "name": "panic",
       "description": "Typed catchable panic continuation publication, distinct from business errors and hard traps."
+    },
+    {
+      "stable_id": 8,
+      "name": "atomic",
+      "description": "Perform one observable atomic memory operation."
     }
   ],
   "capabilities": [
@@ -116,6 +141,11 @@
       "stable_id": 5,
       "name": "profile.endianness",
       "description": "The bound target profile publishes one exact TargetEndian value."
+    },
+    {
+      "stable_id": 8,
+      "name": "profile.atomic",
+      "description": "The bound target profile admits the exact atomic scalar width and memory order."
     }
   ],
   "traps": [
@@ -3153,6 +3183,226 @@
         "allowed_trace": "one replacement of the place contents by the value operand"
       },
       "kat_validator": "place-store",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 130,
+      "spelling": "core.atomic.load",
+      "class": "concurrency",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A"
+        ],
+        "result": "T",
+        "immediates": {
+          "memory_order": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "atomic"
+      ],
+      "capability_requirements": [
+        "profile.atomic"
+      ],
+      "ownership": {
+        "operands": [
+          "borrow-shared-atomic"
+        ],
+        "result": "copied-scalar"
+      },
+      "profile_dependency": "atomic",
+      "materialization": "executor-private-atomic-load",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one value permitted by the CoreSpec atomic modification-order relation"
+      },
+      "kat_validator": "atomic-load",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 131,
+      "spelling": "core.atomic.store",
+      "class": "concurrency",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "T"
+        ],
+        "result": "void",
+        "immediates": {
+          "memory_order": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "atomic"
+      ],
+      "capability_requirements": [
+        "profile.atomic"
+      ],
+      "ownership": {
+        "operands": [
+          "borrow-shared-atomic",
+          "read-scalar"
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "atomic",
+      "materialization": "executor-private-atomic-store",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one write in the CoreSpec atomic modification order"
+      },
+      "kat_validator": "atomic-store",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 132,
+      "spelling": "core.atomic.rmw",
+      "class": "concurrency",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "T..."
+        ],
+        "result": "R?",
+        "immediates": {
+          "contract": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "atomic"
+      ],
+      "capability_requirements": [
+        "profile.atomic"
+      ],
+      "ownership": {
+        "operands": [
+          "borrow-shared-atomic",
+          "read-scalars"
+        ],
+        "result": "operation-defined-scalar-or-pair"
+      },
+      "profile_dependency": "atomic",
+      "materialization": "executor-private-atomic-rmw",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one indivisible read-modify-write in the CoreSpec atomic modification order"
+      },
+      "kat_validator": "atomic-rmw",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

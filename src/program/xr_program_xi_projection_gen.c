@@ -266,6 +266,27 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         UINT32_C(0),
         XR_PROGRAM_XI_PROJECTION_TARGET_QUERY,
     },
+    {
+        XI_ATOMIC_LOAD,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_ATOMIC_LOAD,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_ATOMIC,
+    },
+    {
+        XI_ATOMIC_STORE,
+        XR_CORE_TYPE_VOID,
+        XR_CORE_OP_CORE_ATOMIC_STORE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_ATOMIC,
+    },
+    {
+        XI_ATOMIC_RMW,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_ATOMIC_RMW,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_ATOMIC,
+    },
 };
 
 static const XrProgramXiSemanticProjectionRow

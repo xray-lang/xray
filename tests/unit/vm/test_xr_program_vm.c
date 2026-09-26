@@ -716,6 +716,84 @@ static XrValidatedProgram *build_target_enum_equality_program(void) {
     return validate_fixture(NULL, 0u, &function, 1u);
 }
 
+static XrValidatedProgram *build_atomic_fetch_add_program(void) {
+    uint16_t parameter_types[] = {XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64};
+    XrParamMode parameter_modes[] = {XR_PARAM_READ, XR_PARAM_READ};
+    XrCoreIrKey atomic = fixture_key("vm-atomic:carrier");
+    XrCoreIrKey delta = fixture_key("vm-atomic:delta");
+    XrCoreIrKey old = fixture_key("vm-atomic:old");
+    XrCoreIrKey loaded = fixture_key("vm-atomic:loaded");
+    XrCoreIrKey arguments[] = {atomic, delta};
+    XrCoreIrKey atomic_only[] = {atomic};
+    XrCoreIrKey returned[] = {loaded};
+    XrCoreIrValueInput block_arguments[] = {
+        {.key = atomic, .type_id = XR_CORE_TYPE_ATOMIC_I64},
+        {.key = delta, .type_id = XR_CORE_TYPE_I64},
+    };
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = arguments,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_ATOMIC_RMW,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = arguments,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = XR_ATOMIC_RMW_CONTRACT(
+             XR_ATOMIC_RMW_ADD, XR_ATOMIC_MEMORY_ORDER_ACQUIRE_RELEASE)},
+        {.operation_id = XR_CORE_OP_CORE_ATOMIC_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = arguments,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = XR_ATOMIC_MEMORY_ORDER_RELEASE},
+        {.operation_id = XR_CORE_OP_CORE_ATOMIC_RMW,
+         .result = old,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = arguments,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = XR_ATOMIC_RMW_CONTRACT(
+             XR_ATOMIC_RMW_FETCH_ADD, XR_ATOMIC_MEMORY_ORDER_ACQUIRE_RELEASE)},
+        {.operation_id = XR_CORE_OP_CORE_ATOMIC_LOAD,
+         .result = loaded,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = atomic_only,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = XR_ATOMIC_MEMORY_ORDER_ACQUIRE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("vm-atomic:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .arguments = block_arguments,
+        .argument_count = 2u,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("vm-atomic:function"),
+        .parameter_types = parameter_types,
+        .parameter_modes = parameter_modes,
+        .parameter_count = 2u,
+        .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = XR_CORE_EFFECT_ATOMIC,
+        .capability_mask = XR_CORE_CAPABILITY_PROFILE_ATOMIC,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_fixture(NULL, 0u, &function, 1u);
+}
+
 static XrValidatedProgram *build_call_program(void) {
     XrCoreIrConstantInput constant = {
         .key = fixture_key("call:42"),
@@ -1017,6 +1095,9 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
         case XR_REFERENCE_VALUE_I64:
             REQUIRE(reference.as.i64 == vm.as.i64);
             break;
+        case XR_REFERENCE_VALUE_F64:
+            REQUIRE(reference.as.f64 == vm.as.f64);
+            break;
         case XR_REFERENCE_VALUE_U32:
             REQUIRE(reference.as.u32 == vm.as.u32);
             break;
@@ -1038,6 +1119,10 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
         case XR_REFERENCE_VALUE_AGGREGATE:
         case XR_REFERENCE_VALUE_EXISTENTIAL:
         case XR_REFERENCE_VALUE_CALLABLE:
+        case XR_REFERENCE_VALUE_ATOMIC_I64_INITIAL:
+        case XR_REFERENCE_VALUE_ATOMIC_BOOL_INITIAL:
+        case XR_REFERENCE_VALUE_ATOMIC_F64_INITIAL:
+        case XR_REFERENCE_VALUE_ATOMIC_PRIVATE:
             REQUIRE(false);
             break;
         case XR_REFERENCE_VALUE_VOID:
@@ -1085,10 +1170,12 @@ static XrVmOutcome execute_differential(XrValidatedProgram *program, XrInstance 
         xr_target_profile_machine_facts(xr_execution_lease_profile(&lease));
     REQUIRE(machine != NULL);
     XrReferenceProfile profile = {.pointer_width = pointer_width,
-                                  .operating_system = machine->operating_system,
-                                  .architecture = machine->architecture,
-                                  .native_abi = machine->native_abi,
-                                  .endianness = machine->data_layout.endian};
+                                   .operating_system = machine->operating_system,
+                                   .architecture = machine->architecture,
+                                   .native_abi = machine->native_abi,
+                                   .endianness = machine->data_layout.endian,
+                                   .atomic_width_mask = machine->atomic_width_mask,
+                                   .atomic_order_mask = machine->atomic_order_mask};
     REQUIRE(xr_execution_lease_release(&lease));
     XrReferenceOutcome reference =
         xr_reference_evaluate(program, entry, reference_arguments, argument_count, &profile, NULL);
@@ -1367,6 +1454,40 @@ static void test_arithmetic_edges(void) {
     }
 }
 
+static void test_atomic_private_carrier_and_profile_gate(void) {
+    XrValidatedProgram *program = build_atomic_fetch_add_program();
+    XrReferenceValue reference_arguments[] = {
+        {.kind = XR_REFERENCE_VALUE_ATOMIC_I64_INITIAL, .as.i64 = 41},
+        {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = 2},
+    };
+    XrVmValue vm_arguments[] = {
+        {.kind = XR_VM_VALUE_ATOMIC_I64_INITIAL, .as.i64 = 41},
+        {.kind = XR_VM_VALUE_I64, .as.i64 = 2},
+    };
+    run_program(program, false, reference_arguments, vm_arguments, 2u,
+                XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 4u);
+
+    XrTestTargetProfileFixture fixture;
+    REQUIRE(xr_test_target_profile_fixture_init(
+        &fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    fixture.input.machine.atomic_width_mask &= ~XR_TARGET_ATOMIC_WIDTH_64;
+    XrTargetProfile *unsupported = NULL;
+    char error[256] = {0};
+    REQUIRE(xr_target_profile_build(&fixture.input, &unsupported, error, sizeof(error)));
+    TestProviderBindings bindings;
+    build_provider_bindings(unsupported, &bindings);
+    XrInstance *instance = create_instance(program, unsupported, &bindings, 73u);
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic diagnostic;
+    REQUIRE(xr_vm_code_build(instance, NULL, &code, &diagnostic) ==
+            XR_VM_CODE_POLICY_REJECTED);
+    REQUIRE(code == NULL);
+    REQUIRE(diagnostic.operation_id == XR_CORE_OP_CORE_ATOMIC_RMW);
+    retire_and_free(&instance);
+    xr_target_profile_free(unsupported);
+    xr_validated_program_free(program);
+}
+
 enum {
     VM_RACE_THREADS = 4
 };
@@ -1529,6 +1650,7 @@ int main(void) {
     test_existential_pack_test_project();
     test_callable_pack_and_indirect_calls();
     test_arithmetic_edges();
+    test_atomic_private_carrier_and_profile_gate();
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();
     puts("task-299 typed XrProgram VM tests passed");

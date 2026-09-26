@@ -257,6 +257,12 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
                 return true;
             }
             return false;
+        case XR_KIND_FLOAT:
+            if (type->scalar_rep == XR_NATIVE_F64) {
+                *type_id = XR_CORE_TYPE_F64;
+                return true;
+            }
+            return false;
         case XR_KIND_ENUM:
             if (!type->enum_type.enum_name)
                 return false;
@@ -272,6 +278,24 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
             return true;
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE:
+            if (type->instance.class_name && strcmp(type->instance.class_name, "Atomic") == 0) {
+                const XrClassInfo *atomic = type->instance.class_ref;
+                if (!atomic || !atomic->declaration_symbol ||
+                    !atomic->declaration_symbol->is_builtin || type->instance.type_arg_count != 1 ||
+                    !type->instance.type_args || !type->instance.type_args[0] ||
+                    type->instance.type_args[0]->is_nullable)
+                    return false;
+                const XrType *element = type->instance.type_args[0];
+                if (element->kind == XR_KIND_INT && element->scalar_rep == XR_NATIVE_I64)
+                    *type_id = XR_CORE_TYPE_ATOMIC_I64;
+                else if (element->kind == XR_KIND_BOOL)
+                    *type_id = XR_CORE_TYPE_ATOMIC_BOOL;
+                else if (element->kind == XR_KIND_FLOAT && element->scalar_rep == XR_NATIVE_F64)
+                    *type_id = XR_CORE_TYPE_ATOMIC_F64;
+                else
+                    return false;
+                return true;
+            }
             if (type->instance.class_name && strcmp(type->instance.class_name, "PanicInfo") == 0) {
                 *type_id = XR_CORE_TYPE_PANIC_INFO;
                 return true;

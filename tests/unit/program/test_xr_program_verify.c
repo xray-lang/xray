@@ -29,8 +29,8 @@ _Static_assert(XR_CORE_TYPE_TARGET_OS == 7, "TargetOs stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ARCH == 8, "TargetArch stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ABI == 9, "TargetAbi stable type id drifted");
 _Static_assert(XR_CORE_TYPE_TARGET_ENDIAN == 10, "TargetEndian stable type id drifted");
-_Static_assert(XR_CORE_TYPE_TYPE_VARIABLE == 11, "type-variable stable type id drifted");
-_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 11u,
+_Static_assert(XR_CORE_TYPE_TYPE_VARIABLE == 15, "type-variable stable type id drifted");
+_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 15u,
                "runtime builtin row count drifted");
 
 static int failures = 0;
@@ -3361,6 +3361,225 @@ static void test_callable_pack_and_indirect_calls(void) {
     }
 }
 
+static XrProgramBuildStatus write_atomic_operation(uint16_t operation_id, uint16_t atomic_type,
+                                                   uint16_t element_type, uint16_t result_type,
+                                                   uint32_t immediate, uint32_t operand_count,
+                                                   XrProgramArtifact *artifact) {
+    XrCoreIrKey block_key = key("atomic:block");
+    XrCoreIrKey argument_keys[] = {
+        key("atomic:argument:carrier"),
+        key("atomic:argument:first"),
+        key("atomic:argument:second"),
+    };
+    uint16_t parameter_types[] = {atomic_type, element_type, element_type};
+    XrParamMode parameter_modes[] = {XR_PARAM_READ, XR_PARAM_READ, XR_PARAM_READ};
+    XrCoreIrValueInput arguments[3] = {0};
+    for (uint32_t index = 0u; index < operand_count; ++index) {
+        arguments[index].key = argument_keys[index];
+        arguments[index].type_id = parameter_types[index];
+    }
+    XrCoreIrKey result_key = key("atomic:result");
+    XrCoreIrKey return_operand[] = {result_key};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = argument_keys,
+         .operand_count = operand_count,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = operation_id,
+         .result = result_type == XR_CORE_TYPE_VOID ? (XrCoreIrKey) {0} : result_key,
+         .result_type_id = result_type,
+         .operands = argument_keys,
+         .operand_count = operand_count,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = immediate},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = result_type == XR_CORE_TYPE_VOID ? NULL : return_operand,
+         .operand_count = result_type == XR_CORE_TYPE_VOID ? 0u : 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .arguments = arguments,
+        .argument_count = operand_count,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("atomic:function"),
+        .parameter_types = parameter_types,
+        .parameter_modes = parameter_modes,
+        .parameter_count = operand_count,
+        .result_type_id = result_type,
+        .effect_mask = XR_CORE_EFFECT_ATOMIC,
+        .capability_mask = XR_CORE_CAPABILITY_PROFILE_ATOMIC,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    uint16_t compare_exchange_fields[] = {element_type, XR_CORE_TYPE_BOOL};
+    XrCoreIrTypeInput compare_exchange_result = {
+        .key = key("atomic:compare-exchange-result"),
+        .local_id = XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL,
+        .copy_contract = XR_CORE_IR_COPY_TRIVIAL,
+        .field_types = compare_exchange_fields,
+        .field_count = 2u,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("atomic:module"),
+        .functions = &function,
+        .function_count = 1u,
+    };
+    return write_typed_modules(result_type == XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE
+                                   ? &compare_exchange_result
+                                   : NULL,
+                               result_type == XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? 1u : 0u, &module,
+                               1u, artifact);
+}
+
+static void test_atomic_operation_contracts(void) {
+    struct AtomicCase {
+        uint16_t operation_id;
+        uint16_t atomic_type;
+        uint16_t element_type;
+        uint16_t result_type;
+        uint32_t immediate;
+        uint32_t operand_count;
+    } accepted[] = {
+        {XR_CORE_OP_CORE_ATOMIC_LOAD, XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64,
+         XR_CORE_TYPE_I64, XR_ATOMIC_MEMORY_ORDER_ACQUIRE, 1u},
+        {XR_CORE_OP_CORE_ATOMIC_STORE, XR_CORE_TYPE_ATOMIC_BOOL, XR_CORE_TYPE_BOOL,
+         XR_CORE_TYPE_VOID, XR_ATOMIC_MEMORY_ORDER_RELEASE, 2u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64,
+         XR_CORE_TYPE_VOID,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_ADD, XR_ATOMIC_MEMORY_ORDER_RELAXED), 2u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_F64, XR_CORE_TYPE_F64,
+         XR_CORE_TYPE_VOID,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_SUB, XR_ATOMIC_MEMORY_ORDER_RELEASE), 2u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64,
+         XR_CORE_TYPE_I64,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_FETCH_ADD,
+                                XR_ATOMIC_MEMORY_ORDER_ACQUIRE_RELEASE),
+         2u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_F64, XR_CORE_TYPE_F64,
+         XR_CORE_TYPE_F64,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_FETCH_SUB, XR_ATOMIC_MEMORY_ORDER_ACQUIRE), 2u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_F64, XR_CORE_TYPE_F64,
+         XR_CORE_TYPE_F64,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_SWAP, XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL), 2u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64,
+         XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_COMPARE_EXCHANGE,
+                                XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL),
+         3u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_BOOL, XR_CORE_TYPE_BOOL,
+         XR_CORE_TYPE_BOOL,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_TOGGLE, XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL), 1u},
+    };
+    for (size_t index = 0u; index < sizeof(accepted) / sizeof(accepted[0]); ++index) {
+        XrProgramArtifact artifact = {0};
+        CHECK(write_atomic_operation(
+                  accepted[index].operation_id, accepted[index].atomic_type,
+                  accepted[index].element_type, accepted[index].result_type,
+                  accepted[index].immediate, accepted[index].operand_count, &artifact) ==
+              XR_PROGRAM_BUILD_OK);
+        XrValidatedProgram *program = validate_ok(&artifact);
+        if (program) {
+            XrReferenceValue arguments[3] = {0};
+            if (accepted[index].atomic_type == XR_CORE_TYPE_ATOMIC_I64) {
+                arguments[0].kind = XR_REFERENCE_VALUE_ATOMIC_I64_INITIAL;
+                arguments[0].as.i64 = 41;
+                arguments[1].kind = XR_REFERENCE_VALUE_I64;
+                arguments[1].as.i64 = 2;
+                arguments[2].kind = XR_REFERENCE_VALUE_I64;
+                arguments[2].as.i64 = 43;
+            } else if (accepted[index].atomic_type == XR_CORE_TYPE_ATOMIC_BOOL) {
+                arguments[0].kind = XR_REFERENCE_VALUE_ATOMIC_BOOL_INITIAL;
+                arguments[0].as.boolean = true;
+                arguments[1].kind = XR_REFERENCE_VALUE_BOOL;
+                arguments[1].as.boolean = false;
+                arguments[2].kind = XR_REFERENCE_VALUE_BOOL;
+                arguments[2].as.boolean = false;
+            } else {
+                arguments[0].kind = XR_REFERENCE_VALUE_ATOMIC_F64_INITIAL;
+                arguments[0].as.f64 = 1.5;
+                arguments[1].kind = XR_REFERENCE_VALUE_F64;
+                arguments[1].as.f64 = 0.5;
+                arguments[2].kind = XR_REFERENCE_VALUE_F64;
+                arguments[2].as.f64 = 2.0;
+            }
+            XrReferenceProfile profile = {
+                .atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 | XR_TARGET_ATOMIC_WIDTH_64,
+                .atomic_order_mask = XR_TARGET_ATOMIC_RELAXED | XR_TARGET_ATOMIC_ACQUIRE |
+                                     XR_TARGET_ATOMIC_RELEASE | XR_TARGET_ATOMIC_ACQ_REL |
+                                     XR_TARGET_ATOMIC_SEQ_CST,
+            };
+            XrReferenceOutcome outcome = xr_reference_evaluate(
+                program, xr_validated_program_entry_function(program), arguments,
+                accepted[index].operand_count, &profile, NULL);
+            bool compare_exchange = accepted[index].operation_id == XR_CORE_OP_CORE_ATOMIC_RMW &&
+                                    XR_ATOMIC_RMW_CONTRACT_KIND(accepted[index].immediate) ==
+                                        XR_ATOMIC_RMW_COMPARE_EXCHANGE;
+            CHECK(outcome.kind == (compare_exchange ? XR_REFERENCE_OUTCOME_INVALID_INVOCATION
+                                                    : XR_REFERENCE_OUTCOME_RETURN));
+            if (!compare_exchange && accepted[index].result_type == XR_CORE_TYPE_VOID)
+                CHECK(outcome.value.kind == XR_REFERENCE_VALUE_VOID);
+            else if (!compare_exchange && accepted[index].result_type == XR_CORE_TYPE_I64)
+                CHECK(outcome.value.kind == XR_REFERENCE_VALUE_I64 && outcome.value.as.i64 == 41);
+            else if (!compare_exchange && accepted[index].result_type == XR_CORE_TYPE_F64)
+                CHECK(outcome.value.kind == XR_REFERENCE_VALUE_F64 && outcome.value.as.f64 == 1.5);
+            else if (!compare_exchange && accepted[index].result_type == XR_CORE_TYPE_BOOL)
+                CHECK(outcome.value.kind == XR_REFERENCE_VALUE_BOOL && outcome.value.as.boolean);
+        }
+        xr_validated_program_free(program);
+        xr_program_artifact_free(&artifact);
+    }
+
+    struct AtomicCase rejected[] = {
+        {XR_CORE_OP_CORE_ATOMIC_LOAD, XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64,
+         XR_CORE_TYPE_I64, XR_ATOMIC_MEMORY_ORDER_RELEASE, 1u},
+        {XR_CORE_OP_CORE_ATOMIC_STORE, XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64,
+         XR_CORE_TYPE_VOID, XR_ATOMIC_MEMORY_ORDER_ACQUIRE, 2u},
+        {XR_CORE_OP_CORE_ATOMIC_RMW, XR_CORE_TYPE_ATOMIC_I64, XR_CORE_TYPE_I64,
+         XR_CORE_TYPE_BOOL,
+         XR_ATOMIC_RMW_CONTRACT(XR_ATOMIC_RMW_TOGGLE, XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL), 1u},
+    };
+    for (size_t index = 0u; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
+        XrProgramArtifact artifact = {0};
+        CHECK(write_atomic_operation(
+                  rejected[index].operation_id, rejected[index].atomic_type,
+                  rejected[index].element_type, rejected[index].result_type,
+                  rejected[index].immediate, rejected[index].operand_count, &artifact) ==
+              XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+    }
+
+    XrProgramArtifact unavailable_artifact = {0};
+    CHECK(write_atomic_operation(XR_CORE_OP_CORE_ATOMIC_LOAD, XR_CORE_TYPE_ATOMIC_I64,
+                                 XR_CORE_TYPE_I64, XR_CORE_TYPE_I64,
+                                 XR_ATOMIC_MEMORY_ORDER_RELAXED, 1u,
+                                 &unavailable_artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *unavailable_program = validate_ok(&unavailable_artifact);
+    if (unavailable_program) {
+        XrReferenceValue argument = {
+            .kind = XR_REFERENCE_VALUE_ATOMIC_I64_INITIAL,
+            .as.i64 = 42,
+        };
+        XrReferenceOutcome outcome = xr_reference_evaluate(
+            unavailable_program, xr_validated_program_entry_function(unavailable_program),
+            &argument, 1u, NULL, NULL);
+        CHECK(outcome.kind == XR_REFERENCE_OUTCOME_TRAP);
+        CHECK(outcome.trap == XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE);
+    }
+    xr_validated_program_free(unavailable_program);
+    xr_program_artifact_free(&unavailable_artifact);
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -3383,6 +3602,7 @@ int main(void) {
     test_witness_receiver_capability_and_interface_identity();
     test_existential_pack_test_project();
     test_callable_pack_and_indirect_calls();
+    test_atomic_operation_contracts();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

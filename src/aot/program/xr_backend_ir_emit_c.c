@@ -92,6 +92,14 @@ static const char *type_c_name(uint16_t type_id, char storage[32]) {
             return "uint8_t";
         case XR_CORE_TYPE_I64:
             return "int64_t";
+        case XR_CORE_TYPE_F64:
+            return "double";
+        case XR_CORE_TYPE_ATOMIC_I64:
+            return "XrAotAtomicI64 *";
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+            return "XrAotAtomicBool *";
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return "XrAotAtomicF64 *";
         case XR_CORE_TYPE_U32:
         case XR_CORE_TYPE_ERROR:
         case XR_CORE_TYPE_PANIC_INFO:
@@ -120,6 +128,12 @@ static uint32_t outcome_value_kind(uint16_t type_id) {
             return 1u;
         case XR_CORE_TYPE_I64:
             return 2u;
+        case XR_CORE_TYPE_F64:
+            return 7u;
+        case XR_CORE_TYPE_ATOMIC_I64:
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return 8u;
         case XR_CORE_TYPE_U32:
             return 3u;
         case XR_CORE_TYPE_ERROR:
@@ -233,6 +247,12 @@ static const char *outcome_field(uint16_t type_id) {
             return "boolean";
         case XR_CORE_TYPE_I64:
             return "i64";
+        case XR_CORE_TYPE_F64:
+            return "f64";
+        case XR_CORE_TYPE_ATOMIC_I64:
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return "atomic";
         case XR_CORE_TYPE_U32:
             return "u32";
         case XR_CORE_TYPE_U16:
@@ -288,15 +308,133 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, b
     }
 }
 
+typedef struct AtomicUsage {
+    bool i64;
+    bool boolean;
+    bool f64;
+    bool failure_order;
+    bool f64_fetch;
+} AtomicUsage;
+
+static AtomicUsage scan_atomic_usage(const XrBackendIR *ir) {
+    AtomicUsage usage = {0};
+    for (uint32_t function = 0; function < ir->function_count; ++function) {
+        const XrBackendFunction *fn = &ir->functions[function];
+        for (uint32_t value = 0; value < fn->value_count; ++value) {
+            usage.i64 |= fn->value_types[value] == XR_CORE_TYPE_ATOMIC_I64;
+            usage.boolean |= fn->value_types[value] == XR_CORE_TYPE_ATOMIC_BOOL;
+            usage.f64 |= fn->value_types[value] == XR_CORE_TYPE_ATOMIC_F64;
+        }
+        for (uint32_t block = 0; block < fn->block_count; ++block) {
+            const XrBackendBlock *row = &fn->blocks[block];
+            for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction) {
+                const XrBackendInstruction *operation = &row->instructions[instruction];
+                if (operation->operation_id != XR_CORE_OP_CORE_ATOMIC_RMW)
+                    continue;
+                XrAtomicRmwKind kind = XR_ATOMIC_RMW_CONTRACT_KIND(operation->immediate.u32);
+                usage.failure_order |= kind == XR_ATOMIC_RMW_COMPARE_EXCHANGE;
+                if (operation->operand_count != 0u &&
+                    fn->value_types[operation->operands[0]] == XR_CORE_TYPE_ATOMIC_F64 &&
+                    (kind == XR_ATOMIC_RMW_ADD || kind == XR_ATOMIC_RMW_SUB ||
+                     kind == XR_ATOMIC_RMW_FETCH_ADD || kind == XR_ATOMIC_RMW_FETCH_SUB)) {
+                    usage.f64_fetch = true;
+                    usage.failure_order = true;
+                }
+            }
+        }
+    }
+    return usage;
+}
+
+static const char *atomic_memory_order_name(uint32_t order) {
+    switch (order) {
+        case XR_ATOMIC_MEMORY_ORDER_RELAXED:
+            return "memory_order_relaxed";
+        case XR_ATOMIC_MEMORY_ORDER_ACQUIRE:
+            return "memory_order_acquire";
+        case XR_ATOMIC_MEMORY_ORDER_RELEASE:
+            return "memory_order_release";
+        case XR_ATOMIC_MEMORY_ORDER_ACQUIRE_RELEASE:
+            return "memory_order_acq_rel";
+        case XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL:
+            return "memory_order_seq_cst";
+        default:
+            return NULL;
+    }
+}
+
 static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
     bool checked = false;
     bool wrapping = false;
     bool arena = false;
+    AtomicUsage atomic = scan_atomic_usage(ir);
+    bool uses_atomic = atomic.i64 || atomic.boolean || atomic.f64;
     scan_helpers(ir, &checked, &wrapping, &arena);
     if (!append_text(buffer, "#include <stdint.h>\n"
                              "#include <limits.h>\n"
                              "#include <stddef.h>\n") ||
-        (arena && !append_text(buffer, "#include <stdlib.h>\n")) || !append_text(buffer, "\n"))
+        (arena && !append_text(buffer, "#include <stdlib.h>\n")) ||
+        (uses_atomic && !append_text(buffer, "#include <stdatomic.h>\n")) ||
+        ((atomic.i64 || atomic.f64) && !append_text(buffer, "#include <string.h>\n")) ||
+        !append_text(buffer, "\n"))
+        return false;
+    if ((atomic.i64 || atomic.f64) &&
+        !append_text(buffer, "_Static_assert(sizeof(uint_least64_t) == 8, "
+                             "\"64-bit atomic carrier required\");\n"))
+        return false;
+    if (atomic.boolean &&
+        !append_text(buffer, "_Static_assert(sizeof(unsigned char) == 1, "
+                             "\"8-bit atomic carrier required\");\n"))
+        return false;
+    if (atomic.i64 &&
+        !append_text(buffer, "typedef atomic_uint_least64_t XrAotAtomicI64;\n"))
+        return false;
+    if (atomic.boolean && !append_text(buffer, "typedef atomic_uchar XrAotAtomicBool;\n"))
+        return false;
+    if (atomic.f64 &&
+        !append_text(buffer, "typedef atomic_uint_least64_t XrAotAtomicF64;\n"))
+        return false;
+    if (uses_atomic && !append_text(buffer, "\n"))
+        return false;
+    if (atomic.i64 &&
+        !append_text(buffer,
+                     "static uint64_t xr_aot_atomic_i64_bits(int64_t value) {\n"
+                     "    uint64_t bits = 0; memcpy(&bits, &value, sizeof(bits)); return bits;\n"
+                     "}\n"
+                     "static int64_t xr_aot_atomic_i64_value(uint64_t bits) {\n"
+                     "    int64_t value = 0; memcpy(&value, &bits, sizeof(value)); return value;\n"
+                     "}\n\n"))
+        return false;
+    if (atomic.f64 &&
+        !append_text(buffer,
+                     "static uint64_t xr_aot_atomic_f64_bits(double value) {\n"
+                     "    uint64_t bits = 0; memcpy(&bits, &value, sizeof(bits)); return bits;\n"
+                     "}\n"
+                     "static double xr_aot_atomic_f64_value(uint64_t bits) {\n"
+                     "    double value = 0; memcpy(&value, &bits, sizeof(value)); return value;\n"
+                     "}\n\n"))
+        return false;
+    if (atomic.failure_order &&
+        !append_text(buffer,
+                     "static memory_order xr_aot_atomic_failure_order(memory_order order) {\n"
+                     "    if (order == memory_order_release) return memory_order_relaxed;\n"
+                     "    if (order == memory_order_acq_rel) return memory_order_acquire;\n"
+                     "    return order;\n"
+                     "}\n\n"))
+        return false;
+    if (atomic.f64_fetch &&
+        !append_text(buffer,
+                     "static double xr_aot_atomic_fetch_f64(XrAotAtomicF64 *value, double delta, "
+                     "int subtract, memory_order order) {\n"
+                     "    uint_least64_t observed = atomic_load_explicit(value, memory_order_relaxed);\n"
+                     "    for (;;) {\n"
+                     "        double current = xr_aot_atomic_f64_value((uint64_t)observed);\n"
+                     "        double desired_value = subtract ? current - delta : current + delta;\n"
+                     "        uint_least64_t desired = (uint_least64_t)xr_aot_atomic_f64_bits(desired_value);\n"
+                     "        if (atomic_compare_exchange_weak_explicit(value, &observed, desired, "
+                     "order, xr_aot_atomic_failure_order(order))) return current;\n"
+                     "    }\n"
+                     "}\n\n"))
         return false;
     if (arena) {
         if (!append_text(buffer,
@@ -342,8 +480,10 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
                              "    uint32_t error;\n"
                              "    uint8_t boolean;\n"
                              "    int64_t i64;\n"
+                             "    double f64;\n"
                              "    uint32_t u32;\n"
                              "    uint16_t u16;\n"
+                             "    void *atomic;\n"
                              "} XrAotOutcome;\n\n"
                              "static XrAotOutcome xr_aot_make(uint32_t kind, uint32_t value_kind, "
                              "uint32_t trap) {\n"
@@ -1062,6 +1202,174 @@ static bool emit_callable_copy(CBuffer *buffer, const XrBackendIR *ir,
                                "        }\n");
 }
 
+static bool emit_atomic_load(CBuffer *buffer, const XrBackendFunction *function,
+                             const XrBackendInstruction *instruction) {
+    uint32_t atomic_value = instruction->operands[0];
+    const char *order = atomic_memory_order_name(instruction->immediate.u32);
+    if (!order || !append_format(buffer,
+                                 "        if (!v%u) return xr_aot_make(1, 0, 4);\n",
+                                 atomic_value))
+        return false;
+    switch (function->value_types[atomic_value]) {
+        case XR_CORE_TYPE_ATOMIC_I64:
+            return append_format(buffer,
+                                 "        v%u = xr_aot_atomic_i64_value((uint64_t)"
+                                 "atomic_load_explicit(v%u, %s));\n",
+                                 instruction->result_id, atomic_value, order);
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+            return append_format(buffer,
+                                 "        v%u = (uint8_t)atomic_load_explicit(v%u, %s);\n",
+                                 instruction->result_id, atomic_value, order);
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return append_format(buffer,
+                                 "        v%u = xr_aot_atomic_f64_value((uint64_t)"
+                                 "atomic_load_explicit(v%u, %s));\n",
+                                 instruction->result_id, atomic_value, order);
+        default:
+            return false;
+    }
+}
+
+static bool emit_atomic_store(CBuffer *buffer, const XrBackendFunction *function,
+                              const XrBackendInstruction *instruction) {
+    uint32_t atomic_value = instruction->operands[0];
+    uint32_t source_value = instruction->operands[1];
+    const char *order = atomic_memory_order_name(instruction->immediate.u32);
+    if (!order || !append_format(buffer,
+                                 "        if (!v%u) return xr_aot_make(1, 0, 4);\n",
+                                 atomic_value))
+        return false;
+    switch (function->value_types[atomic_value]) {
+        case XR_CORE_TYPE_ATOMIC_I64:
+            return append_format(buffer,
+                                 "        atomic_store_explicit(v%u, (uint_least64_t)"
+                                 "xr_aot_atomic_i64_bits(v%u), %s);\n",
+                                 atomic_value, source_value, order);
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+            return append_format(buffer,
+                                 "        atomic_store_explicit(v%u, (unsigned char)v%u, %s);\n",
+                                 atomic_value, source_value, order);
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return append_format(buffer,
+                                 "        atomic_store_explicit(v%u, (uint_least64_t)"
+                                 "xr_aot_atomic_f64_bits(v%u), %s);\n",
+                                 atomic_value, source_value, order);
+        default:
+            return false;
+    }
+}
+
+static bool emit_atomic_compare_exchange(CBuffer *buffer, const XrBackendFunction *function,
+                                         const XrBackendInstruction *instruction,
+                                         uint32_t instruction_id, const char *order) {
+    uint32_t atomic_value = instruction->operands[0];
+    uint32_t expected_value = instruction->operands[1];
+    uint32_t desired_value = instruction->operands[2];
+    uint32_t result_value = instruction->result_id;
+    uint16_t atomic_type = function->value_types[atomic_value];
+    const char *carrier = atomic_type == XR_CORE_TYPE_ATOMIC_BOOL ? "unsigned char"
+                                                                  : "uint_least64_t";
+    const char *pack = atomic_type == XR_CORE_TYPE_ATOMIC_I64   ? "xr_aot_atomic_i64_bits"
+                       : atomic_type == XR_CORE_TYPE_ATOMIC_F64 ? "xr_aot_atomic_f64_bits"
+                                                                : NULL;
+    const char *unpack = atomic_type == XR_CORE_TYPE_ATOMIC_I64   ? "xr_aot_atomic_i64_value"
+                         : atomic_type == XR_CORE_TYPE_ATOMIC_F64 ? "xr_aot_atomic_f64_value"
+                                                                  : NULL;
+    if (atomic_type != XR_CORE_TYPE_ATOMIC_BOOL && (!pack || !unpack))
+        return false;
+    if (atomic_type == XR_CORE_TYPE_ATOMIC_BOOL) {
+        if (!append_format(buffer,
+                           "        %s atomic_expected_%u = (unsigned char)v%u;\n"
+                           "        uint8_t atomic_exchanged_%u = (uint8_t)"
+                           "atomic_compare_exchange_strong_explicit(v%u, &atomic_expected_%u, "
+                           "(unsigned char)v%u, %s, xr_aot_atomic_failure_order(%s));\n"
+                           "        v%u = (XrAotType%u){.f0 = (uint8_t)atomic_expected_%u, "
+                           ".f1 = atomic_exchanged_%u};\n",
+                           carrier, instruction_id, expected_value, instruction_id, atomic_value,
+                           instruction_id, desired_value, order, order, result_value,
+                           instruction->result_type_id, instruction_id, instruction_id))
+            return false;
+        return true;
+    }
+    return append_format(buffer,
+                         "        %s atomic_expected_%u = (%s)%s(v%u);\n"
+                         "        uint8_t atomic_exchanged_%u = (uint8_t)"
+                         "atomic_compare_exchange_strong_explicit(v%u, &atomic_expected_%u, "
+                         "(%s)%s(v%u), %s, xr_aot_atomic_failure_order(%s));\n"
+                         "        v%u = (XrAotType%u){.f0 = %s((uint64_t)atomic_expected_%u), "
+                         ".f1 = atomic_exchanged_%u};\n",
+                         carrier, instruction_id, carrier, pack, expected_value, instruction_id,
+                         atomic_value, instruction_id, carrier, pack, desired_value, order, order,
+                         result_value, instruction->result_type_id, unpack, instruction_id,
+                         instruction_id);
+}
+
+static bool emit_atomic_rmw(CBuffer *buffer, const XrBackendFunction *function,
+                            const XrBackendInstruction *instruction, uint32_t instruction_id) {
+    uint32_t contract = instruction->immediate.u32;
+    XrAtomicRmwKind kind = XR_ATOMIC_RMW_CONTRACT_KIND(contract);
+    const char *order = atomic_memory_order_name(XR_ATOMIC_RMW_CONTRACT_ORDER(contract));
+    uint32_t atomic_value = instruction->operands[0];
+    uint16_t atomic_type = function->value_types[atomic_value];
+    if (!order || !append_format(buffer,
+                                 "        if (!v%u) return xr_aot_make(1, 0, 4);\n",
+                                 atomic_value))
+        return false;
+    if (kind == XR_ATOMIC_RMW_COMPARE_EXCHANGE)
+        return emit_atomic_compare_exchange(buffer, function, instruction, instruction_id, order);
+    if (kind == XR_ATOMIC_RMW_TOGGLE)
+        return append_format(buffer,
+                             "        v%u = (uint8_t)atomic_fetch_xor_explicit(v%u, "
+                             "(unsigned char)1, %s);\n",
+                             instruction->result_id, atomic_value, order);
+    uint32_t source_value = instruction->operands[1];
+    if (kind == XR_ATOMIC_RMW_SWAP) {
+        if (atomic_type == XR_CORE_TYPE_ATOMIC_I64)
+            return append_format(buffer,
+                                 "        v%u = xr_aot_atomic_i64_value((uint64_t)"
+                                 "atomic_exchange_explicit(v%u, (uint_least64_t)"
+                                 "xr_aot_atomic_i64_bits(v%u), %s));\n",
+                                 instruction->result_id, atomic_value, source_value, order);
+        if (atomic_type == XR_CORE_TYPE_ATOMIC_BOOL)
+            return append_format(buffer,
+                                 "        v%u = (uint8_t)atomic_exchange_explicit(v%u, "
+                                 "(unsigned char)v%u, %s);\n",
+                                 instruction->result_id, atomic_value, source_value, order);
+        if (atomic_type == XR_CORE_TYPE_ATOMIC_F64)
+            return append_format(buffer,
+                                 "        v%u = xr_aot_atomic_f64_value((uint64_t)"
+                                 "atomic_exchange_explicit(v%u, (uint_least64_t)"
+                                 "xr_aot_atomic_f64_bits(v%u), %s));\n",
+                                 instruction->result_id, atomic_value, source_value, order);
+        return false;
+    }
+    bool subtract = kind == XR_ATOMIC_RMW_SUB || kind == XR_ATOMIC_RMW_FETCH_SUB;
+    bool fetch = kind == XR_ATOMIC_RMW_FETCH_ADD || kind == XR_ATOMIC_RMW_FETCH_SUB;
+    if (atomic_type == XR_CORE_TYPE_ATOMIC_I64) {
+        const char *operation = subtract ? "atomic_fetch_sub_explicit" : "atomic_fetch_add_explicit";
+        if (!fetch)
+            return append_format(buffer,
+                                 "        (void)%s(v%u, (uint_least64_t)"
+                                 "xr_aot_atomic_i64_bits(v%u), %s);\n",
+                                 operation, atomic_value, source_value, order);
+        return append_format(buffer,
+                             "        v%u = xr_aot_atomic_i64_value((uint64_t)%s(v%u, "
+                             "(uint_least64_t)xr_aot_atomic_i64_bits(v%u), %s));\n",
+                             instruction->result_id, operation, atomic_value, source_value, order);
+    }
+    if (atomic_type == XR_CORE_TYPE_ATOMIC_F64) {
+        if (!fetch)
+            return append_format(buffer,
+                                 "        (void)xr_aot_atomic_fetch_f64(v%u, v%u, %u, %s);\n",
+                                 atomic_value, source_value, subtract ? 1u : 0u, order);
+        return append_format(buffer,
+                             "        v%u = xr_aot_atomic_fetch_f64(v%u, v%u, %u, %s);\n",
+                             instruction->result_id, atomic_value, source_value,
+                             subtract ? 1u : 0u, order);
+    }
+    return false;
+}
+
 static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                              const XrBackendFunction *function,
                              const XrBackendInstruction *instruction, uint32_t function_id,
@@ -1182,6 +1490,12 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
             return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
                                  ir->endianness);
+        case XR_CORE_OP_CORE_ATOMIC_LOAD:
+            return emit_atomic_load(buffer, function, instruction);
+        case XR_CORE_OP_CORE_ATOMIC_STORE:
+            return emit_atomic_store(buffer, function, instruction);
+        case XR_CORE_OP_CORE_ATOMIC_RMW:
+            return emit_atomic_rmw(buffer, function, instruction, instruction_id);
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             uint32_t target_id = instruction->immediate.function_id;
             if (instruction->operand_count == 0u)
@@ -1448,6 +1762,16 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
         case XR_CORE_TYPE_I64:
             if (!append_text(buffer,
                              "        exit_code = (int)((uint64_t)result.i64 & UINT64_C(255));\n"))
+                return false;
+            break;
+        case XR_CORE_TYPE_F64:
+            if (!append_text(buffer, "        exit_code = result.f64 != 0.0 ? 1 : 0;\n"))
+                return false;
+            break;
+        case XR_CORE_TYPE_ATOMIC_I64:
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+        case XR_CORE_TYPE_ATOMIC_F64:
+            if (!append_text(buffer, "        exit_code = result.atomic ? 1 : 0;\n"))
                 return false;
             break;
         case XR_CORE_TYPE_U32:

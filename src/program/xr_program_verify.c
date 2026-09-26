@@ -111,10 +111,48 @@ static bool reader_done(const VerifyReader *reader) {
 }
 
 static bool type_is_runtime(const XrValidatedProgram *program, uint64_t type_id) {
-    bool builtin_has_representation = type_id <= XR_CORE_TYPE_TARGET_ENDIAN;
+    bool builtin_has_representation = type_id <= XR_CORE_TYPE_ATOMIC_F64;
     return builtin_has_representation ||
            (program && type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
             type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count);
+}
+
+static uint16_t atomic_element_type(uint16_t atomic_type) {
+    switch (atomic_type) {
+        case XR_CORE_TYPE_ATOMIC_I64:
+            return XR_CORE_TYPE_I64;
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+            return XR_CORE_TYPE_BOOL;
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return XR_CORE_TYPE_F64;
+        default:
+            return XR_CORE_TYPE_VOID;
+    }
+}
+
+static bool atomic_load_order_valid(uint32_t order) {
+    return order == XR_ATOMIC_MEMORY_ORDER_RELAXED ||
+           order == XR_ATOMIC_MEMORY_ORDER_ACQUIRE ||
+           order == XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL;
+}
+
+static bool atomic_store_order_valid(uint32_t order) {
+    return order == XR_ATOMIC_MEMORY_ORDER_RELAXED ||
+           order == XR_ATOMIC_MEMORY_ORDER_RELEASE ||
+           order == XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL;
+}
+
+static bool atomic_rmw_order_valid(uint32_t order) {
+    return order <= XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL;
+}
+
+static bool atomic_compare_exchange_result_valid(const XrValidatedProgram *program,
+                                                 uint16_t result_type, uint16_t element_type) {
+    const XrValidatedType *type = xr_validated_program_type(program, result_type);
+    return type && type->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+           type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
+           type->copy_contract == XR_CORE_IR_COPY_TRIVIAL && type->field_count == 2u &&
+           type->field_types[0] == element_type && type->field_types[1] == XR_CORE_TYPE_BOOL;
 }
 
 static bool type_is_view(const XrValidatedProgram *program, uint16_t type_id) {
@@ -783,8 +821,8 @@ static bool parse_signature(VerifyContext *context, VerifyReader *reader,
                     XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
             ? XR_CORE_IR_OWNER
             : XR_CORE_IR_NON_OWNER;
-    if ((signature->effect_mask & ~UINT32_C(0x1f)) != 0u ||
-        (signature->capability_mask & ~UINT32_C(0x1f)) != 0u ||
+    if ((signature->effect_mask & ~XR_CORE_EFFECT_MASK_ALL) != 0u ||
+        (signature->capability_mask & ~XR_CORE_CAPABILITY_MASK_ALL) != 0u ||
         ((signature->error_type_id == XR_CORE_TYPE_VOID) !=
          ((signature->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
         signature->error_type_id == XR_CORE_TYPE_PANIC_INFO ||
@@ -2912,6 +2950,94 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 return false;
             }
             return true;
+        case XR_CORE_OP_CORE_ATOMIC_LOAD: {
+            uint16_t atomic_type = instruction->operand_count == 1u
+                                       ? function->value_types[instruction->operands[0]]
+                                       : XR_CORE_TYPE_VOID;
+            uint16_t element_type = atomic_element_type(atomic_type);
+            if (element_type == XR_CORE_TYPE_VOID ||
+                !expect_shape(context, instruction, location, 1, 0,
+                              XR_CORE_IR_IMMEDIATE_U32, element_type, true) ||
+                !atomic_load_order_valid(instruction->immediate.u32)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_ATOMIC_STORE: {
+            uint16_t atomic_type = instruction->operand_count == 2u
+                                       ? function->value_types[instruction->operands[0]]
+                                       : XR_CORE_TYPE_VOID;
+            uint16_t element_type = atomic_element_type(atomic_type);
+            if (element_type == XR_CORE_TYPE_VOID ||
+                !expect_shape(context, instruction, location, 2, 0,
+                              XR_CORE_IR_IMMEDIATE_U32, XR_CORE_TYPE_VOID, false) ||
+                !operand_type_is(function, instruction, 1, element_type) ||
+                !atomic_store_order_valid(instruction->immediate.u32)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_ATOMIC_RMW: {
+            uint32_t contract = instruction->immediate.u32;
+            uint32_t order = contract & UINT32_C(0xff);
+            uint32_t kind = (contract >> 8u) & UINT32_C(0xff);
+            uint16_t atomic_type = instruction->operand_count != 0u
+                                       ? function->value_types[instruction->operands[0]]
+                                       : XR_CORE_TYPE_VOID;
+            uint16_t element_type = atomic_element_type(atomic_type);
+            if ((contract & UINT32_C(0xffff0000)) != 0u ||
+                element_type == XR_CORE_TYPE_VOID || !atomic_rmw_order_valid(order)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            if (kind == XR_ATOMIC_RMW_ADD || kind == XR_ATOMIC_RMW_SUB) {
+                if (atomic_type == XR_CORE_TYPE_ATOMIC_BOOL ||
+                    !expect_shape(context, instruction, location, 2, 0,
+                                  XR_CORE_IR_IMMEDIATE_U32, XR_CORE_TYPE_VOID, false) ||
+                    !operand_type_is(function, instruction, 1, element_type)) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+                return true;
+            }
+            if (kind == XR_ATOMIC_RMW_FETCH_ADD || kind == XR_ATOMIC_RMW_FETCH_SUB ||
+                kind == XR_ATOMIC_RMW_SWAP) {
+                if ((atomic_type == XR_CORE_TYPE_ATOMIC_BOOL && kind != XR_ATOMIC_RMW_SWAP) ||
+                    !expect_shape(context, instruction, location, 2, 0,
+                                  XR_CORE_IR_IMMEDIATE_U32, element_type, true) ||
+                    !operand_type_is(function, instruction, 1, element_type)) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+                return true;
+            }
+            if (kind == XR_ATOMIC_RMW_COMPARE_EXCHANGE) {
+                if (instruction->operand_count != 3u || instruction->successor_count != 0u ||
+                    instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 ||
+                    instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+                    !operand_type_is(function, instruction, 1, element_type) ||
+                    !operand_type_is(function, instruction, 2, element_type) ||
+                    !atomic_compare_exchange_result_valid(
+                        context->program, instruction->result_type_id, element_type)) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+                return true;
+            }
+            if (kind == XR_ATOMIC_RMW_TOGGLE) {
+                if (atomic_type != XR_CORE_TYPE_ATOMIC_BOOL ||
+                    !expect_shape(context, instruction, location, 1, 0,
+                                  XR_CORE_IR_IMMEDIATE_U32, XR_CORE_TYPE_BOOL, true)) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+                return true;
+            }
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+            return false;
+        }
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
                                 XR_CORE_TYPE_U16, true);
@@ -3455,8 +3581,8 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     location.section_id = XR_PROGRAM_SECTION_FUNCTIONS;
     location.function_id = function_id;
     if ((function->flags & ~XR_PROGRAM_FUNCTION_ENTRY) != 0u ||
-        (function->effect_mask & ~UINT32_C(0x1f)) != 0u ||
-        (function->capability_mask & ~UINT32_C(0x1f)) != 0u ||
+        (function->effect_mask & ~XR_CORE_EFFECT_MASK_ALL) != 0u ||
+        (function->capability_mask & ~XR_CORE_CAPABILITY_MASK_ALL) != 0u ||
         ((function->error_type_id == XR_CORE_TYPE_VOID) !=
          ((function->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
         function->error_type_id == XR_CORE_TYPE_PANIC_INFO ||

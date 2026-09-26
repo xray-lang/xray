@@ -23,7 +23,7 @@
 #define XR_PROGRAM_DIGEST_SIZE 32u
 #define XR_CORE_IR_KEY_SIZE 32u
 #define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
-#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 11u
+#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 15u
 #define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(16)
 
 typedef enum XrProgramTypeKind {
@@ -38,12 +38,43 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_TARGET_ARCH = 8,
     XR_PROGRAM_TYPE_KIND_TARGET_ABI = 9,
     XR_PROGRAM_TYPE_KIND_TARGET_ENDIAN = 10,
+    XR_PROGRAM_TYPE_KIND_F64 = 11,
+    XR_PROGRAM_TYPE_KIND_ATOMIC_I64 = 12,
+    XR_PROGRAM_TYPE_KIND_ATOMIC_BOOL = 13,
+    XR_PROGRAM_TYPE_KIND_ATOMIC_F64 = 14,
     XR_PROGRAM_TYPE_KIND_AGGREGATE = 16,
     XR_PROGRAM_TYPE_KIND_VARIANT = 17,
     XR_PROGRAM_TYPE_KIND_VIEW = 18,
     XR_PROGRAM_TYPE_KIND_CALLABLE = 19,
     XR_PROGRAM_TYPE_KIND_EXISTENTIAL = 20,
 } XrProgramTypeKind;
+
+/* Atomic ordering and RMW kind are logical CoreSpec immediates. Executors map
+ * these stable values to private host/backend representations only after
+ * profile validation. */
+typedef enum XrAtomicMemoryOrder {
+    XR_ATOMIC_MEMORY_ORDER_RELAXED = 0,
+    XR_ATOMIC_MEMORY_ORDER_ACQUIRE = 1,
+    XR_ATOMIC_MEMORY_ORDER_RELEASE = 2,
+    XR_ATOMIC_MEMORY_ORDER_ACQUIRE_RELEASE = 3,
+    XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL = 4,
+} XrAtomicMemoryOrder;
+
+typedef enum XrAtomicRmwKind {
+    XR_ATOMIC_RMW_ADD = 1,
+    XR_ATOMIC_RMW_SUB = 2,
+    XR_ATOMIC_RMW_FETCH_ADD = 3,
+    XR_ATOMIC_RMW_FETCH_SUB = 4,
+    XR_ATOMIC_RMW_SWAP = 5,
+    XR_ATOMIC_RMW_COMPARE_EXCHANGE = 6,
+    XR_ATOMIC_RMW_TOGGLE = 7,
+} XrAtomicRmwKind;
+
+#define XR_ATOMIC_RMW_CONTRACT(kind, order)                                                    \
+    ((((uint32_t) (kind)) << 8u) | ((uint32_t) (order)))
+#define XR_ATOMIC_RMW_CONTRACT_ORDER(contract) ((XrAtomicMemoryOrder) ((contract) & UINT32_C(0xff)))
+#define XR_ATOMIC_RMW_CONTRACT_KIND(contract)                                                   \
+    ((XrAtomicRmwKind) (((contract) >> 8u) & UINT32_C(0xff)))
 
 typedef struct XrCoreIrKey {
     uint8_t bytes[XR_CORE_IR_KEY_SIZE];

@@ -23,11 +23,18 @@ typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_TARGET_ARCH,
     XR_REFERENCE_VALUE_TARGET_ABI,
     XR_REFERENCE_VALUE_TARGET_ENDIAN,
+    XR_REFERENCE_VALUE_F64,
+    XR_REFERENCE_VALUE_ATOMIC_I64_INITIAL,
+    XR_REFERENCE_VALUE_ATOMIC_BOOL_INITIAL,
+    XR_REFERENCE_VALUE_ATOMIC_F64_INITIAL,
     XR_REFERENCE_VALUE_ERROR,
     XR_REFERENCE_VALUE_PANIC_INFO,
     XR_REFERENCE_VALUE_AGGREGATE,
     XR_REFERENCE_VALUE_EXISTENTIAL,
     XR_REFERENCE_VALUE_CALLABLE,
+    /* Evaluator-private carrier. External invocations must use one of the
+     * ATOMIC_*_INITIAL kinds; a forged private carrier is rejected. */
+    XR_REFERENCE_VALUE_ATOMIC_PRIVATE,
 } XrReferenceValueKind;
 
 typedef struct XrReferenceValue {
@@ -35,6 +42,7 @@ typedef struct XrReferenceValue {
     union {
         bool boolean;
         int64_t i64;
+        double f64;
         uint32_t u32;
         uint16_t u16;
         uint16_t target_enum;
@@ -43,6 +51,7 @@ typedef struct XrReferenceValue {
         const void *aggregate;
         const void *existential;
         const void *callable;
+        const void *atomic_private;
     } as;
 } XrReferenceValue;
 
@@ -52,6 +61,8 @@ typedef struct XrReferenceProfile {
     uint16_t architecture;
     uint16_t native_abi;
     uint16_t endianness;
+    uint64_t atomic_width_mask;
+    uint64_t atomic_order_mask;
 } XrReferenceProfile;
 
 typedef struct XrReferenceBudget {

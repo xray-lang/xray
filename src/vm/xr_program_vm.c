@@ -20,6 +20,7 @@
 
 typedef struct XrVmExistentialValue XrVmExistentialValue;
 typedef struct XrVmCallableValue XrVmCallableValue;
+typedef struct XrVmAtomicValue XrVmAtomicValue;
 
 typedef struct XrVmFixedInstruction {
     uint16_t operation_id;
@@ -67,6 +68,8 @@ struct XrVmCode {
     uint16_t architecture;
     uint16_t native_abi;
     uint16_t endianness;
+    uint64_t atomic_width_mask;
+    uint64_t atomic_order_mask;
     XrVmFixedFunction *fixed_functions;
     size_t private_size;
 };
@@ -111,6 +114,9 @@ typedef struct XrVmContext {
     XrVmCallableValue **callables;
     uint32_t callable_count;
     uint32_t callable_capacity;
+    XrVmAtomicValue **atomics;
+    uint32_t atomic_count;
+    uint32_t atomic_capacity;
 } XrVmContext;
 
 typedef struct XrVmAggregateValue {
@@ -147,6 +153,15 @@ struct XrVmCallableValue {
     uint32_t function_id;
     bool has_capture;
     XrVmValue capture;
+};
+
+struct XrVmAtomicValue {
+    uint16_t atomic_type;
+    union {
+        int64_t i64;
+        bool boolean;
+        double f64;
+    } value;
 };
 
 static XrVmOutcome vm_outcome(XrVmOutcomeKind kind, const XrVmContext *context) {
@@ -186,6 +201,13 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_TARGET_ABI;
         case XR_CORE_TYPE_TARGET_ENDIAN:
             return value.kind == XR_VM_VALUE_TARGET_ENDIAN;
+        case XR_CORE_TYPE_F64:
+            return value.kind == XR_VM_VALUE_F64;
+        case XR_CORE_TYPE_ATOMIC_I64:
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return value.kind == XR_VM_VALUE_ATOMIC_PRIVATE && value.as.atomic_private &&
+                   ((const XrVmAtomicValue *) value.as.atomic_private)->atomic_type == type_id;
         case XR_CORE_TYPE_ERROR:
             return value.kind == XR_VM_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
@@ -295,6 +317,33 @@ static XrVmCallableValue *allocate_callable(XrVmContext *context) {
     if (!value)
         return NULL;
     context->callables[context->callable_count++] = value;
+    ++context->aggregate_cell_count;
+    return value;
+}
+
+static XrVmAtomicValue *allocate_atomic(XrVmContext *context, uint16_t atomic_type) {
+    if (context->aggregate_cell_count == context->code->options.max_value_cells)
+        return NULL;
+    if (context->atomic_count == context->atomic_capacity) {
+        uint32_t capacity = context->atomic_capacity ? context->atomic_capacity * 2u : 8u;
+        if (capacity < context->atomic_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->atomics))
+            return NULL;
+#endif
+        XrVmAtomicValue **grown =
+            xr_realloc(context->atomics, (size_t) capacity * sizeof(*context->atomics));
+        if (!grown)
+            return NULL;
+        context->atomics = grown;
+        context->atomic_capacity = capacity;
+    }
+    XrVmAtomicValue *value = xr_calloc(1u, sizeof(*value));
+    if (!value)
+        return NULL;
+    value->atomic_type = atomic_type;
+    context->atomics[context->atomic_count++] = value;
     ++context->aggregate_cell_count;
     return value;
 }
@@ -432,6 +481,9 @@ static void free_aggregates(XrVmContext *context) {
     for (uint32_t index = 0; index < context->callable_count; ++index)
         xr_free(context->callables[index]);
     xr_free(context->callables);
+    for (uint32_t index = 0; index < context->atomic_count; ++index)
+        xr_free(context->atomics[index]);
+    xr_free(context->atomics);
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
@@ -469,6 +521,100 @@ static bool checked_mul(int64_t left, int64_t right, int64_t *result) {
     }
     *result = left * right;
     return true;
+}
+
+static bool atomic_profile_available(const XrVmCode *code, uint16_t atomic_type,
+                                     uint32_t order) {
+    uint64_t width = atomic_type == XR_CORE_TYPE_ATOMIC_BOOL ? XR_TARGET_ATOMIC_WIDTH_8
+                                                             : XR_TARGET_ATOMIC_WIDTH_64;
+    uint64_t order_bit = order <= XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL
+                             ? UINT64_C(1) << order
+                             : UINT64_C(0);
+    return (code->atomic_width_mask & width) != 0u && order_bit != 0u &&
+           (code->atomic_order_mask & order_bit) != 0u;
+}
+
+static bool program_atomic_profile_supported(const XrValidatedProgram *program,
+                                             const XrTargetMachineFacts *machine,
+                                             XrVmCodeDiagnostic *diagnostic) {
+    for (uint32_t function_id = 0u; function_id < program->function_count; ++function_id) {
+        const XrValidatedFunction *function = &program->functions[function_id];
+        for (uint32_t block_id = 0u; block_id < function->block_count; ++block_id) {
+            const XrValidatedBlock *block = &function->blocks[block_id];
+            for (uint32_t instruction_id = 0u; instruction_id < block->instruction_count;
+                 ++instruction_id) {
+                const XrValidatedInstruction *instruction = &block->instructions[instruction_id];
+                if (instruction->operation_id != XR_CORE_OP_CORE_ATOMIC_LOAD &&
+                    instruction->operation_id != XR_CORE_OP_CORE_ATOMIC_STORE &&
+                    instruction->operation_id != XR_CORE_OP_CORE_ATOMIC_RMW)
+                    continue;
+                uint16_t atomic_type =
+                    function->value_types[instruction->operands[0]];
+                uint64_t width = atomic_type == XR_CORE_TYPE_ATOMIC_BOOL
+                                     ? XR_TARGET_ATOMIC_WIDTH_8
+                                     : XR_TARGET_ATOMIC_WIDTH_64;
+                uint32_t order = instruction->operation_id == XR_CORE_OP_CORE_ATOMIC_RMW
+                                     ? instruction->immediate.u32 & UINT32_C(0xff)
+                                     : instruction->immediate.u32;
+                uint64_t order_bit = UINT64_C(1) << order;
+                if ((machine->atomic_width_mask & width) != 0u &&
+                    (machine->atomic_order_mask & order_bit) != 0u)
+                    continue;
+                if (diagnostic) {
+                    diagnostic->status = XR_VM_CODE_POLICY_REJECTED;
+                    diagnostic->operation_id = instruction->operation_id;
+                    diagnostic->function_id = function_id;
+                    diagnostic->block_id = block_id;
+                    diagnostic->instruction_id = instruction_id;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static XrVmValue atomic_scalar_value(const XrVmAtomicValue *atomic) {
+    XrVmValue result = {0};
+    if (atomic->atomic_type == XR_CORE_TYPE_ATOMIC_I64) {
+        result.kind = XR_VM_VALUE_I64;
+        result.as.i64 = atomic->value.i64;
+    } else if (atomic->atomic_type == XR_CORE_TYPE_ATOMIC_BOOL) {
+        result.kind = XR_VM_VALUE_BOOL;
+        result.as.boolean = atomic->value.boolean;
+    } else {
+        result.kind = XR_VM_VALUE_F64;
+        result.as.f64 = atomic->value.f64;
+    }
+    return result;
+}
+
+static void atomic_store_scalar(XrVmAtomicValue *atomic, XrVmValue value) {
+    if (atomic->atomic_type == XR_CORE_TYPE_ATOMIC_I64)
+        atomic->value.i64 = value.as.i64;
+    else if (atomic->atomic_type == XR_CORE_TYPE_ATOMIC_BOOL)
+        atomic->value.boolean = value.as.boolean;
+    else
+        atomic->value.f64 = value.as.f64;
+}
+
+static bool atomic_scalar_equal(const XrVmAtomicValue *atomic, XrVmValue value) {
+    if (atomic->atomic_type == XR_CORE_TYPE_ATOMIC_I64)
+        return atomic->value.i64 == value.as.i64;
+    if (atomic->atomic_type == XR_CORE_TYPE_ATOMIC_BOOL)
+        return atomic->value.boolean == value.as.boolean;
+    return atomic->value.f64 == value.as.f64;
+}
+
+static void atomic_add_scalar(XrVmAtomicValue *atomic, XrVmValue delta, bool subtract) {
+    if (atomic->atomic_type == XR_CORE_TYPE_ATOMIC_I64) {
+        uint64_t left = (uint64_t) atomic->value.i64;
+        uint64_t right = (uint64_t) delta.as.i64;
+        atomic->value.i64 = i64_from_bits(subtract ? left - right : left + right);
+    } else {
+        atomic->value.f64 = subtract ? atomic->value.f64 - delta.as.f64
+                                     : atomic->value.f64 + delta.as.f64;
+    }
 }
 
 static void hash_u32(XrSHA256Context *context, uint32_t value) {
@@ -901,6 +1047,77 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     result = vm_outcome(XR_VM_OUTCOME_PANIC, context);
                     result.panic_value = values[instruction.operands[0]].as.value;
                     goto done;
+                case XR_CORE_OP_CORE_ATOMIC_LOAD: {
+                    XrVmAtomicValue *atomic = (XrVmAtomicValue *)
+                        values[instruction.operands[0]].as.value.as.atomic_private;
+                    if (!atomic_profile_available(context->code, atomic->atomic_type,
+                                                  instruction.immediate.u32)) {
+                        result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
+                        goto done;
+                    }
+                    produced.as.value = atomic_scalar_value(atomic);
+                    break;
+                }
+                case XR_CORE_OP_CORE_ATOMIC_STORE: {
+                    XrVmAtomicValue *atomic = (XrVmAtomicValue *)
+                        values[instruction.operands[0]].as.value.as.atomic_private;
+                    if (!atomic_profile_available(context->code, atomic->atomic_type,
+                                                  instruction.immediate.u32)) {
+                        result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
+                        goto done;
+                    }
+                    atomic_store_scalar(atomic, values[instruction.operands[1]].as.value);
+                    break;
+                }
+                case XR_CORE_OP_CORE_ATOMIC_RMW: {
+                    XrVmAtomicValue *atomic = (XrVmAtomicValue *)
+                        values[instruction.operands[0]].as.value.as.atomic_private;
+                    uint32_t contract = instruction.immediate.u32;
+                    XrAtomicRmwKind kind = XR_ATOMIC_RMW_CONTRACT_KIND(contract);
+                    XrAtomicMemoryOrder order = XR_ATOMIC_RMW_CONTRACT_ORDER(contract);
+                    if (!atomic_profile_available(context->code, atomic->atomic_type, order)) {
+                        result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
+                        goto done;
+                    }
+                    XrVmValue old = atomic_scalar_value(atomic);
+                    if (kind == XR_ATOMIC_RMW_ADD || kind == XR_ATOMIC_RMW_SUB ||
+                        kind == XR_ATOMIC_RMW_FETCH_ADD || kind == XR_ATOMIC_RMW_FETCH_SUB) {
+                        bool subtract = kind == XR_ATOMIC_RMW_SUB ||
+                                        kind == XR_ATOMIC_RMW_FETCH_SUB;
+                        atomic_add_scalar(atomic, values[instruction.operands[1]].as.value,
+                                          subtract);
+                        if (kind == XR_ATOMIC_RMW_FETCH_ADD || kind == XR_ATOMIC_RMW_FETCH_SUB)
+                            produced.as.value = old;
+                    } else if (kind == XR_ATOMIC_RMW_SWAP) {
+                        atomic_store_scalar(atomic, values[instruction.operands[1]].as.value);
+                        produced.as.value = old;
+                    } else if (kind == XR_ATOMIC_RMW_COMPARE_EXCHANGE) {
+                        bool exchanged = atomic_scalar_equal(
+                            atomic, values[instruction.operands[1]].as.value);
+                        if (exchanged)
+                            atomic_store_scalar(atomic,
+                                                values[instruction.operands[2]].as.value);
+                        XrVmAggregateValue *pair = allocate_aggregate(
+                            context, instruction.result_type_id, UINT32_MAX, 2u);
+                        if (!pair) {
+                            result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                            goto done;
+                        }
+                        pair->fields[0] = old;
+                        pair->fields[1] = (XrVmValue) {
+                            .kind = XR_VM_VALUE_BOOL,
+                            .as.boolean = exchanged,
+                        };
+                        produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
+                        produced.as.value.as.aggregate = pair;
+                    } else if (kind == XR_ATOMIC_RMW_TOGGLE) {
+                        atomic->value.boolean = !atomic->value.boolean;
+                        produced.as.value = old;
+                    } else {
+                        goto done;
+                    }
+                    break;
+                }
                 case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
                     if (context->code->pointer_width != 32u &&
                         context->code->pointer_width != 64u) {
@@ -1207,6 +1424,8 @@ static void compute_private_digest(XrVmCode *code) {
     hash_u32(&context, code->architecture);
     hash_u32(&context, code->native_abi);
     hash_u32(&context, code->endianness);
+    hash_u64(&context, code->atomic_width_mask);
+    hash_u64(&context, code->atomic_order_mask);
     hash_u64(&context, (uint64_t) code->private_size);
     xr_sha256_final(&context, code->private_digest.bytes);
 }
@@ -1259,6 +1478,10 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
         return XR_VM_CODE_INSTANCE_UNAVAILABLE;
     }
+    if (!program_atomic_profile_supported(program, machine, diagnostic_out)) {
+        (void) xr_execution_lease_release(&lease);
+        return XR_VM_CODE_POLICY_REJECTED;
+    }
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
         (void) xr_execution_lease_release(&lease);
@@ -1274,6 +1497,8 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
     code->architecture = machine->architecture;
     code->native_abi = machine->native_abi;
     code->endianness = machine->data_layout.endian;
+    code->atomic_width_mask = machine->atomic_width_mask;
+    code->atomic_order_mask = machine->atomic_order_mask;
     if (selected.decode_policy == XR_VM_DECODE_FIXED_ROWS && !fixed_view_build(code)) {
         xr_vm_code_free(code);
         (void) xr_execution_lease_release(&lease);
@@ -1354,14 +1579,48 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
             return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
         }
         runtime_arguments[index].category = XR_CORE_IR_VALUE;
-        runtime_arguments[index].as.value = arguments[index];
+        uint16_t parameter_type = function->parameter_types[index];
+        if (parameter_type == XR_CORE_TYPE_ATOMIC_I64 ||
+            parameter_type == XR_CORE_TYPE_ATOMIC_BOOL ||
+            parameter_type == XR_CORE_TYPE_ATOMIC_F64) {
+            XrVmValueKind expected = parameter_type == XR_CORE_TYPE_ATOMIC_I64
+                                         ? XR_VM_VALUE_ATOMIC_I64_INITIAL
+                                     : parameter_type == XR_CORE_TYPE_ATOMIC_BOOL
+                                         ? XR_VM_VALUE_ATOMIC_BOOL_INITIAL
+                                         : XR_VM_VALUE_ATOMIC_F64_INITIAL;
+            if (arguments[index].kind != expected) {
+                xr_free(runtime_arguments);
+                free_aggregates(&context);
+                (void) xr_execution_lease_release(&lease);
+                return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
+            }
+            XrVmAtomicValue *atomic = allocate_atomic(&context, parameter_type);
+            if (!atomic) {
+                xr_free(runtime_arguments);
+                free_aggregates(&context);
+                (void) xr_execution_lease_release(&lease);
+                return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, &context);
+            }
+            if (parameter_type == XR_CORE_TYPE_ATOMIC_I64)
+                atomic->value.i64 = arguments[index].as.i64;
+            else if (parameter_type == XR_CORE_TYPE_ATOMIC_BOOL)
+                atomic->value.boolean = arguments[index].as.boolean;
+            else
+                atomic->value.f64 = arguments[index].as.f64;
+            runtime_arguments[index].as.value.kind = XR_VM_VALUE_ATOMIC_PRIVATE;
+            runtime_arguments[index].as.value.as.atomic_private = atomic;
+        } else {
+            runtime_arguments[index].as.value = arguments[index];
+        }
     }
     XrVmOutcome outcome =
         execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
     if (outcome.kind == XR_VM_OUTCOME_RETURN && (outcome.value.kind == XR_VM_VALUE_AGGREGATE ||
-                                                 outcome.value.kind == XR_VM_VALUE_EXISTENTIAL ||
-                                                 outcome.value.kind == XR_VM_VALUE_CALLABLE))
+                                                  outcome.value.kind == XR_VM_VALUE_EXISTENTIAL ||
+                                                  outcome.value.kind == XR_VM_VALUE_CALLABLE ||
+                                                  outcome.value.kind ==
+                                                      XR_VM_VALUE_ATOMIC_PRIVATE))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_ERROR &&
         (outcome.error_value.kind == XR_VM_VALUE_AGGREGATE ||

@@ -313,7 +313,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} lacks ownership contract")
         require(operation["profile_dependency"] in {
             "none", "pointer_width", "operating_system", "architecture", "native_abi",
-            "endianness",
+            "endianness", "atomic",
         },
                 f"operation {spelling} has unknown profile dependency")
         require(isinstance(operation["materialization"], str) and operation["materialization"],
@@ -331,7 +331,8 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "sealed-invoke", "indirect-call", "indirect-invoke", "witness-call",
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
-            "existential-project", "existential-test",
+            "existential-project", "existential-test", "atomic-load", "atomic-store",
+            "atomic-rmw",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -686,6 +687,46 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("place_category") == "place"
                 and actual.get("value_category") == "value"
                 and actual.get("result_type") == "void")
+    atomic_element = actual.get("element_type")
+    atomic_type = actual.get("atomic_type")
+    atomic_width = actual.get("width")
+    order = actual.get("memory_order")
+    atomic_types = {
+        "i64": ("AtomicI64", 64),
+        "bool": ("AtomicBool", 8),
+        "f64": ("AtomicF64", 64),
+    }
+    expected_atomic = atomic_types.get(atomic_element)
+    exact_atomic = (expected_atomic is not None and atomic_type == expected_atomic[0]
+                    and atomic_width == expected_atomic[1]
+                    and actual.get("profile_width_supported") is True
+                    and actual.get("profile_order_supported") is True)
+    if validator == "atomic-load":
+        return (exact_atomic and order in {"relaxed", "acquire", "seq-cst"}
+                and actual.get("operand_count") == 1
+                and actual.get("result_type") == atomic_element)
+    if validator == "atomic-store":
+        return (exact_atomic and order in {"relaxed", "release", "seq-cst"}
+                and actual.get("operand_count") == 2
+                and actual.get("value_type") == atomic_element
+                and actual.get("result_type") == "void")
+    if validator == "atomic-rmw":
+        operation = actual.get("operation")
+        operand_count = actual.get("operand_count")
+        result_type = actual.get("result_type")
+        valid_shape = False
+        if operation in {"add", "sub"}:
+            valid_shape = atomic_element in {"i64", "f64"} and operand_count == 2 \
+                and result_type == "void"
+        elif operation in {"fetch-add", "fetch-sub", "swap"}:
+            valid_shape = operand_count == 2 and result_type == atomic_element
+        elif operation == "compare-exchange":
+            valid_shape = operand_count == 3 and result_type == [atomic_element, "bool"]
+        elif operation == "toggle":
+            valid_shape = atomic_element == "bool" and operand_count == 1 \
+                and result_type == "bool"
+        return exact_atomic and order in {"relaxed", "acquire", "release", "acq-rel", "seq-cst"} \
+            and valid_shape
     raise CoreSpecError(f"KAT {case['id']} has no contract oracle for {validator}")
 
 
@@ -775,16 +816,20 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
     for row in registry["effects"]:
         lines.append(
             f"    XR_CORE_EFFECT_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
+    effect_mask_all = sum(1 << (row["stable_id"] - 1) for row in registry["effects"])
     lines.extend([
         "} XrCoreEffectMask;",
+        f"#define XR_CORE_EFFECT_MASK_ALL UINT32_C({effect_mask_all})",
         "",
         "typedef enum XrCoreCapabilityMask {",
     ])
     for row in registry["capabilities"]:
         lines.append(
             f"    XR_CORE_CAPABILITY_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
+    capability_mask_all = sum(1 << (row["stable_id"] - 1) for row in registry["capabilities"])
     lines.extend([
         "} XrCoreCapabilityMask;",
+        f"#define XR_CORE_CAPABILITY_MASK_ALL UINT32_C({capability_mask_all})",
         "",
         "typedef enum XrCoreFeatureId {",
     ])

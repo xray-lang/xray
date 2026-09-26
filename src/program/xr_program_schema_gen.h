@@ -7,7 +7,7 @@
 
 #define XR_PROGRAM_FORMAT_MAJOR 1u
 #define XR_PROGRAM_FORMAT_MINOR 0u
-#define XR_PROGRAM_SCHEMA_SHA256 "7d0b33c0aff340b56adbf507b54252ad04ad75f6c5607db5000fd1b4890e1604"
+#define XR_PROGRAM_SCHEMA_SHA256 "3ea0241b9e68cc0c87b817f4fb0aaab4dd3c7d946bc9afae899c7a5a0eaf0521"
 #define XR_PROGRAM_ID_DOMAIN "xray-program-id-v1"
 #define XR_PROGRAM_MAGIC_SIZE 8u
 /* clang-format off */

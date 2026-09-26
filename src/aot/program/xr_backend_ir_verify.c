@@ -49,6 +49,88 @@ static bool fingerprint_is_zero(XrFingerprint fingerprint) {
     return combined == 0u;
 }
 
+static uint16_t atomic_element_type(uint16_t atomic_type) {
+    switch (atomic_type) {
+        case XR_CORE_TYPE_ATOMIC_I64:
+            return XR_CORE_TYPE_I64;
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+            return XR_CORE_TYPE_BOOL;
+        case XR_CORE_TYPE_ATOMIC_F64:
+            return XR_CORE_TYPE_F64;
+        default:
+            return XR_CORE_TYPE_VOID;
+    }
+}
+
+static bool atomic_order_valid(uint32_t order) {
+    return order <= XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL;
+}
+
+static bool atomic_compare_exchange_result_valid(const XrBackendIR *ir, uint16_t result_type,
+                                                 uint16_t element_type) {
+    const XrValidatedType *pair = xr_validated_program_type(ir->program, result_type);
+    return pair && pair->kind == XR_CORE_IR_TYPE_AGGREGATE &&
+           pair->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
+           pair->copy_contract == XR_CORE_IR_COPY_TRIVIAL && pair->field_count == 2u &&
+           pair->field_types[0] == element_type && pair->field_types[1] == XR_CORE_TYPE_BOOL;
+}
+
+static bool atomic_instruction_shape_valid(const XrBackendIR *ir,
+                                           const XrBackendFunction *function,
+                                           const XrBackendInstruction *instruction) {
+    if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32 ||
+        instruction->successor_count != 0u || instruction->operand_count == 0u)
+        return false;
+    uint16_t atomic_type = function->value_types[instruction->operands[0]];
+    uint16_t element_type = atomic_element_type(atomic_type);
+    if (element_type == XR_CORE_TYPE_VOID)
+        return false;
+    if (instruction->operation_id == XR_CORE_OP_CORE_ATOMIC_LOAD)
+        return instruction->operand_count == 1u &&
+               instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
+               instruction->result_type_id == element_type &&
+               (instruction->immediate.u32 == XR_ATOMIC_MEMORY_ORDER_RELAXED ||
+                instruction->immediate.u32 == XR_ATOMIC_MEMORY_ORDER_ACQUIRE ||
+                instruction->immediate.u32 == XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL);
+    if (instruction->operation_id == XR_CORE_OP_CORE_ATOMIC_STORE)
+        return instruction->operand_count == 2u &&
+               function->value_types[instruction->operands[1]] == element_type &&
+               instruction->result_id == XR_PROGRAM_LOCATION_NONE &&
+               instruction->result_type_id == XR_CORE_TYPE_VOID &&
+               (instruction->immediate.u32 == XR_ATOMIC_MEMORY_ORDER_RELAXED ||
+                instruction->immediate.u32 == XR_ATOMIC_MEMORY_ORDER_RELEASE ||
+                instruction->immediate.u32 == XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL);
+    uint32_t contract = instruction->immediate.u32;
+    XrAtomicMemoryOrder order = XR_ATOMIC_RMW_CONTRACT_ORDER(contract);
+    XrAtomicRmwKind kind = XR_ATOMIC_RMW_CONTRACT_KIND(contract);
+    if ((contract & UINT32_C(0xffff0000)) != 0u || !atomic_order_valid(order))
+        return false;
+    if (kind == XR_ATOMIC_RMW_ADD || kind == XR_ATOMIC_RMW_SUB)
+        return atomic_type != XR_CORE_TYPE_ATOMIC_BOOL && instruction->operand_count == 2u &&
+               function->value_types[instruction->operands[1]] == element_type &&
+               instruction->result_id == XR_PROGRAM_LOCATION_NONE &&
+               instruction->result_type_id == XR_CORE_TYPE_VOID;
+    if (kind == XR_ATOMIC_RMW_FETCH_ADD || kind == XR_ATOMIC_RMW_FETCH_SUB ||
+        kind == XR_ATOMIC_RMW_SWAP)
+        return (atomic_type != XR_CORE_TYPE_ATOMIC_BOOL || kind == XR_ATOMIC_RMW_SWAP) &&
+               instruction->operand_count == 2u &&
+               function->value_types[instruction->operands[1]] == element_type &&
+               instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
+               instruction->result_type_id == element_type;
+    if (kind == XR_ATOMIC_RMW_COMPARE_EXCHANGE)
+        return instruction->operand_count == 3u &&
+               function->value_types[instruction->operands[1]] == element_type &&
+               function->value_types[instruction->operands[2]] == element_type &&
+               instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
+               atomic_compare_exchange_result_valid(ir, instruction->result_type_id,
+                                                    element_type);
+    if (kind == XR_ATOMIC_RMW_TOGGLE)
+        return atomic_type == XR_CORE_TYPE_ATOMIC_BOOL && instruction->operand_count == 1u &&
+               instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
+               instruction->result_type_id == XR_CORE_TYPE_BOOL;
+    return false;
+}
+
 static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFunction *function,
                                     const XrBackendInstruction *instruction) {
     if (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
@@ -99,6 +181,10 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
                        XR_CORE_TYPE_TARGET_ENDIAN &&
                    function->value_types[instruction->operands[0]] ==
                        function->value_types[instruction->operands[1]];
+        case XR_CORE_OP_CORE_ATOMIC_LOAD:
+        case XR_CORE_OP_CORE_ATOMIC_STORE:
+        case XR_CORE_OP_CORE_ATOMIC_RMW:
+            return atomic_instruction_shape_valid(ir, function, instruction);
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
@@ -191,6 +277,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         ir->operating_system != machine->operating_system ||
         ir->architecture != machine->architecture || ir->native_abi != machine->native_abi ||
         ir->endianness != machine->data_layout.endian ||
+        ir->atomic_width_mask != machine->atomic_width_mask ||
+        ir->atomic_order_mask != machine->atomic_order_mask ||
         memcmp(ir->backend_id.bytes, expected_backend_id.bytes, sizeof(ir->backend_id.bytes)) !=
             0 ||
         memcmp(ir->optimization_policy_id.bytes, expected_optimization_policy_id.bytes,

@@ -1855,6 +1855,118 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "id": "atomic-load-i64-acquire-valid",
+      "operation": "core.atomic.load",
+      "kind": "contract",
+      "actual": {
+        "atomic_type": "AtomicI64",
+        "element_type": "i64",
+        "width": 64,
+        "memory_order": "acquire",
+        "operand_count": 1,
+        "result_type": "i64",
+        "profile_width_supported": true,
+        "profile_order_supported": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "atomic-load-rejects-release",
+      "operation": "core.atomic.load",
+      "kind": "contract",
+      "actual": {
+        "atomic_type": "AtomicI64",
+        "element_type": "i64",
+        "width": 64,
+        "memory_order": "release",
+        "operand_count": 1,
+        "result_type": "i64",
+        "profile_width_supported": true,
+        "profile_order_supported": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "atomic-store-bool-release-valid",
+      "operation": "core.atomic.store",
+      "kind": "contract",
+      "actual": {
+        "atomic_type": "AtomicBool",
+        "element_type": "bool",
+        "width": 8,
+        "memory_order": "release",
+        "operand_count": 2,
+        "value_type": "bool",
+        "result_type": "void",
+        "profile_width_supported": true,
+        "profile_order_supported": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "atomic-store-rejects-acquire",
+      "operation": "core.atomic.store",
+      "kind": "contract",
+      "actual": {
+        "atomic_type": "AtomicI64",
+        "element_type": "i64",
+        "width": 64,
+        "memory_order": "acquire",
+        "operand_count": 2,
+        "value_type": "i64",
+        "result_type": "void",
+        "profile_width_supported": true,
+        "profile_order_supported": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "atomic-rmw-fetch-add-i64-valid",
+      "operation": "core.atomic.rmw",
+      "kind": "contract",
+      "actual": {
+        "atomic_type": "AtomicI64",
+        "element_type": "i64",
+        "width": 64,
+        "memory_order": "acq-rel",
+        "operation": "fetch-add",
+        "operand_count": 2,
+        "result_type": "i64",
+        "profile_width_supported": true,
+        "profile_order_supported": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "atomic-rmw-rejects-toggle-i64",
+      "operation": "core.atomic.rmw",
+      "kind": "contract",
+      "actual": {
+        "atomic_type": "AtomicI64",
+        "element_type": "i64",
+        "width": 64,
+        "memory_order": "seq-cst",
+        "operation": "toggle",
+        "operand_count": 1,
+        "result_type": "bool",
+        "profile_width_supported": true,
+        "profile_order_supported": true
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

@@ -46,11 +46,16 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_TARGET_ARCH,
     XR_VM_VALUE_TARGET_ABI,
     XR_VM_VALUE_TARGET_ENDIAN,
+    XR_VM_VALUE_F64,
+    XR_VM_VALUE_ATOMIC_I64_INITIAL,
+    XR_VM_VALUE_ATOMIC_BOOL_INITIAL,
+    XR_VM_VALUE_ATOMIC_F64_INITIAL,
     XR_VM_VALUE_ERROR,
     XR_VM_VALUE_PANIC_INFO,
     XR_VM_VALUE_AGGREGATE,
     XR_VM_VALUE_EXISTENTIAL,
     XR_VM_VALUE_CALLABLE,
+    XR_VM_VALUE_ATOMIC_PRIVATE,
 } XrVmValueKind;
 
 typedef struct XrVmValue {
@@ -58,6 +63,7 @@ typedef struct XrVmValue {
     union {
         bool boolean;
         int64_t i64;
+        double f64;
         uint32_t u32;
         uint16_t u16;
         uint16_t target_enum;
@@ -66,6 +72,7 @@ typedef struct XrVmValue {
         const void *aggregate;
         const void *existential;
         const void *callable;
+        const void *atomic_private;
     } as;
 } XrVmValue;
 

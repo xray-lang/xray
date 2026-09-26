@@ -45,6 +45,9 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
         case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
+        case XR_CORE_OP_CORE_ATOMIC_LOAD:
+        case XR_CORE_OP_CORE_ATOMIC_STORE:
+        case XR_CORE_OP_CORE_ATOMIC_RMW:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
@@ -65,6 +68,33 @@ static bool operation_is_supported(uint16_t operation_id) {
         default:
             return false;
     }
+}
+
+static bool atomic_operation_supported(const XrValidatedFunction *function,
+                                       const XrValidatedInstruction *instruction,
+                                       const XrTargetMachineFacts *machine) {
+    if (instruction->operation_id != XR_CORE_OP_CORE_ATOMIC_LOAD &&
+        instruction->operation_id != XR_CORE_OP_CORE_ATOMIC_STORE &&
+        instruction->operation_id != XR_CORE_OP_CORE_ATOMIC_RMW)
+        return true;
+    if (!machine || instruction->operand_count == 0u ||
+        instruction->operands[0] >= function->value_count)
+        return false;
+    uint16_t atomic_type = function->value_types[instruction->operands[0]];
+    uint64_t width = atomic_type == XR_CORE_TYPE_ATOMIC_BOOL
+                         ? XR_TARGET_ATOMIC_WIDTH_8
+                         : (atomic_type == XR_CORE_TYPE_ATOMIC_I64 ||
+                                    atomic_type == XR_CORE_TYPE_ATOMIC_F64
+                                ? XR_TARGET_ATOMIC_WIDTH_64
+                                : UINT64_C(0));
+    uint32_t order = instruction->operation_id == XR_CORE_OP_CORE_ATOMIC_RMW
+                         ? XR_ATOMIC_RMW_CONTRACT_ORDER(instruction->immediate.u32)
+                         : instruction->immediate.u32;
+    uint64_t order_bit = order <= XR_ATOMIC_MEMORY_ORDER_SEQUENTIAL
+                             ? UINT64_C(1) << order
+                             : UINT64_C(0);
+    return width != 0u && order_bit != 0u && (machine->atomic_width_mask & width) != 0u &&
+           (machine->atomic_order_mask & order_bit) != 0u;
 }
 
 static void hash_u16(XrSHA256Context *context, uint16_t value) {
@@ -167,11 +197,23 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
         case XR_CORE_TYPE_I64:
             representation = XR_BACKEND_VALUE_I64;
             break;
+        case XR_CORE_TYPE_F64:
+            representation = XR_BACKEND_VALUE_F64;
+            break;
         case XR_CORE_TYPE_U32:
             representation = XR_BACKEND_VALUE_U32;
             break;
         case XR_CORE_TYPE_U16:
             representation = XR_BACKEND_VALUE_U16;
+            break;
+        case XR_CORE_TYPE_ATOMIC_I64:
+            representation = XR_BACKEND_VALUE_ATOMIC_I64_PTR;
+            break;
+        case XR_CORE_TYPE_ATOMIC_BOOL:
+            representation = XR_BACKEND_VALUE_ATOMIC_BOOL_PTR;
+            break;
+        case XR_CORE_TYPE_ATOMIC_F64:
+            representation = XR_BACKEND_VALUE_ATOMIC_F64_PTR;
             break;
         case XR_CORE_TYPE_TARGET_OS:
         case XR_CORE_TYPE_TARGET_ARCH:
@@ -418,6 +460,8 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
     hash_u32(&context, ir->architecture);
     hash_u32(&context, ir->native_abi);
     hash_u32(&context, ir->endianness);
+    hash_u64(&context, ir->atomic_width_mask);
+    hash_u64(&context, ir->atomic_order_mask);
     hash_u32(&context, ir->entry_function);
     hash_u32(&context, ir->constant_count);
     for (uint32_t constant = 0; constant < ir->constant_count; ++constant) {
@@ -521,6 +565,8 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
     ir->architecture = machine ? machine->architecture : 0u;
     ir->native_abi = machine ? machine->native_abi : 0u;
     ir->endianness = machine ? machine->data_layout.endian : 0u;
+    ir->atomic_width_mask = machine ? machine->atomic_width_mask : 0u;
+    ir->atomic_order_mask = machine ? machine->atomic_order_mask : 0u;
     ir->constant_count = program->constant_count;
     if (program->function_count > options->max_functions ||
         (ir->pointer_width != 32u && ir->pointer_width != 64u)) {
@@ -573,6 +619,15 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
                 uint16_t operation_id =
                     source->blocks[block].instructions[instruction].operation_id;
                 if (!operation_is_supported(operation_id)) {
+                    (void) xr_execution_lease_release(&lease);
+                    xr_backend_ir_free(ir);
+                    xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION,
+                                              operation_id, function, block, instruction);
+                    return XR_BACKEND_UNSUPPORTED_OPERATION;
+                }
+                if (!atomic_operation_supported(source,
+                                                &source->blocks[block].instructions[instruction],
+                                                machine)) {
                     (void) xr_execution_lease_release(&lease);
                     xr_backend_ir_free(ir);
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_UNSUPPORTED_OPERATION,

@@ -131,6 +131,7 @@ PROJECTION_KINDS = {
     "place-store": "XR_PROGRAM_XI_PROJECTION_PLACE_STORE",
     "callable-pack": "XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK",
     "target-query": "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
+    "atomic": "XR_PROGRAM_XI_PROJECTION_ATOMIC",
 }
 SEMANTIC_MAPPING_KEYS = {
     "xi_operation",
@@ -197,6 +198,10 @@ CORE_TYPE_NAMES = {
     "error": "XR_CORE_TYPE_ERROR",
     "panic-info": "XR_CORE_TYPE_PANIC_INFO",
     "u16": "XR_CORE_TYPE_U16",
+    "f64": "XR_CORE_TYPE_F64",
+    "AtomicI64": "XR_CORE_TYPE_ATOMIC_I64",
+    "AtomicBool": "XR_CORE_TYPE_ATOMIC_BOOL",
+    "AtomicF64": "XR_CORE_TYPE_ATOMIC_F64",
     "TargetOs": "XR_CORE_TYPE_TARGET_OS",
     "TargetArch": "XR_CORE_TYPE_TARGET_ARCH",
     "TargetAbi": "XR_CORE_TYPE_TARGET_ABI",
@@ -280,7 +285,8 @@ def validate(schema: dict[str, Any]) -> None:
     require(type_system == {
         "builtin_rows": [
             "0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info", "6:u16",
-            "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian",
+            "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian", "11:f64",
+            "12:AtomicI64", "13:AtomicBool", "14:AtomicF64",
         ],
         "dynamic_type_base": 16,
         "dynamic_kinds": ["aggregate", "variant", "view", "callable", "existential"],
@@ -503,6 +509,7 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 15,",
         "    XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,",
         "    XR_PROGRAM_XI_PROJECTION_TARGET_QUERY = 17,",
+        "    XR_PROGRAM_XI_PROJECTION_ATOMIC = 18,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef enum XrProgramXiSemanticProjectionKind {",
@@ -846,7 +853,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         "",
         "## Logical type rows",
         "",
-        "The type section starts with the eleven fixed runtime builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
+        "The type section starts with the fifteen fixed runtime builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
         "",
         f"- Builtins: `{', '.join(type_system['builtin_rows'])}`",
         f"- Dynamic kinds: `{', '.join(type_system['dynamic_kinds'])}`",

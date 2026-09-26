@@ -254,6 +254,27 @@
       "projection_kind": "target-query",
       "core_operation": "core.target.endianness",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.atomic.load",
+      "result_type": "any",
+      "projection_kind": "atomic",
+      "core_operation": "core.atomic.load",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.atomic.store",
+      "result_type": "void",
+      "projection_kind": "atomic",
+      "core_operation": "core.atomic.store",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.atomic.rmw",
+      "result_type": "any",
+      "projection_kind": "atomic",
+      "core_operation": "core.atomic.rmw",
+      "immediate_u32": 0
     }
   ],
   "semantic_mappings": [

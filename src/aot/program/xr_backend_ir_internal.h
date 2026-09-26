@@ -18,8 +18,12 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_VOID = 0,
     XR_BACKEND_VALUE_BOOL_U8,
     XR_BACKEND_VALUE_I64,
+    XR_BACKEND_VALUE_F64,
     XR_BACKEND_VALUE_U32,
     XR_BACKEND_VALUE_U16,
+    XR_BACKEND_VALUE_ATOMIC_I64_PTR,
+    XR_BACKEND_VALUE_ATOMIC_BOOL_PTR,
+    XR_BACKEND_VALUE_ATOMIC_F64_PTR,
     XR_BACKEND_VALUE_TARGET_ENUM_U16,
     XR_BACKEND_VALUE_ERROR_U32,
     XR_BACKEND_VALUE_PANIC_U32,
@@ -102,6 +106,8 @@ struct XrBackendIR {
     uint16_t architecture;
     uint16_t native_abi;
     uint16_t endianness;
+    uint64_t atomic_width_mask;
+    uint64_t atomic_order_mask;
     size_t instruction_count;
     bool verified;
 };
