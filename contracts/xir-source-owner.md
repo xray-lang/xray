@@ -8,7 +8,8 @@ borrowed only during construction; Checked owns its complete snapshot.
 
 The admitted family is ordinary named functions with explicit read bool/i64/string/Atomic<i64>
 parameters and explicit results (absent annotation denotes unit in this subset),
-direct calls, blocks, local bindings, module bindings, returns, literals, string
+direct calls, blocks, if/else, while, unlabelled break/continue, typed mutable local places,
+module bindings, returns, literals, concrete i64 addition/equality/less-than, string
 concatenation, print and Atomic<i64> construction/load/fetchAdd. Integer arithmetic,
 ref/move, user aggregates, reflection, coroutine syntax, attributes and
 unimplemented declarations fail closed. Every function body is checked, including
@@ -68,3 +69,5 @@ verification-test: test_xir_source_native
 verification-test: test_xir_source_mixed
 verification-test: test_xir_source_admission
 verification-test: test_xir_source_allocations
+
+Structured control and local place semantics follow `xir-local-control-flow.md`.

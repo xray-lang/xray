@@ -34,9 +34,12 @@ typedef struct SourceFunction {
     XrXirType *parameters;
     uint32_t *operands, operand_count, operand_capacity;
     uint32_t type_capacity;
-    XrXirBlock block;
+    XrXirBlock *blocks;
+    uint32_t block_count, block_capacity;
     XrXirInstruction *ops;
 } SourceFunction;
+typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
+typedef struct SourceLoop { struct SourceLoop *parent; uint32_t condition; SourcePatch *breaks; } SourceLoop;
 typedef struct SourceValue { uint32_t id; XrXirType type; } SourceValue;
 typedef struct SourceContext {
     XrModuleGraph *graph;
@@ -54,6 +57,7 @@ typedef struct SourceContext {
     SourceName **names, *locals, *scope;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
     uint32_t function, module, depth;
+    SourceLoop *loop;
     bool returned, has_generics;
 } SourceContext;
 
@@ -130,8 +134,27 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     }
     return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type declaration is not admitted by XIR");
 }
+static bool begin_block(SourceContext *ctx) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    if (!ctx->budget.blocks) return source_fail(ctx, body->node, XR_XIR_BUDGET, "block budget exhausted");
+    if (body->block_count == body->block_capacity) {
+        uint32_t capacity = body->block_capacity ? body->block_capacity * 2 : 4;
+        if (capacity < body->block_capacity) return source_fail(ctx, NULL, XR_XIR_BUDGET, "block capacity overflow");
+        XrXirBlock *blocks = source_alloc(ctx, capacity, sizeof(*blocks));
+        if (!blocks) return false;
+        if (body->block_count) memcpy(blocks, body->blocks, body->block_count * sizeof(*blocks));
+        body->blocks = blocks; body->block_capacity = capacity;
+    }
+    body->blocks[body->block_count++] = (XrXirBlock) {body->count, 0};
+    --ctx->budget.blocks; ctx->returned = false; return true;
+}
 static bool emit(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     SourceFunction *body = &ctx->bodies[ctx->function];
+    if (!body->block_count) {
+        bool terminated = ctx->returned;
+        if (!begin_block(ctx)) return false;
+        ctx->returned = terminated;
+    }
     if (!ctx->budget.instructions) return source_fail(ctx, body->node, XR_XIR_BUDGET, "instruction budget exhausted");
     if (body->count == body->capacity) {
         uint32_t capacity = body->capacity ? body->capacity * 2 : 16;
@@ -142,7 +165,7 @@ static bool emit(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
         body->ops = ops; body->capacity = capacity;
     }
     if (result) *result = (SourceValue) {ctx->functions[ctx->function].parameter_count + body->count, op.type};
-    body->ops[body->count++] = op; --ctx->budget.instructions;
+    body->ops[body->count++] = op; ++body->blocks[body->block_count - 1].count; --ctx->budget.instructions;
     return true;
 }
 static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value);
@@ -325,15 +348,25 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
         SourceName *symbol = visible_name(ctx, node->as.variable.name);
         if (!symbol || (symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_LOCAL) || !symbol->type)
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
-        if (symbol->kind == SOURCE_LOCAL) { *value = (SourceValue) {symbol->index, symbol->type}; return true; }
+        if (symbol->kind == SOURCE_LOCAL) {
+            if (symbol->mutable) return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, symbol->type,
+                {symbol->index, 0}, {0}, 0}, value);
+            *value = (SourceValue) {symbol->index, symbol->type}; return true;
+        }
         return emit(ctx, (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0, 0}, {0, 0}, symbol->index}, value);
     }
-    case AST_BINARY_ADD: {
+    case AST_BINARY_EQ: case AST_BINARY_LT: case AST_BINARY_ADD: {
         SourceValue left, right;
         if (!expression(ctx, node->as.binary.left, &left) || !expression(ctx, node->as.binary.right, &right)) return false;
-        if (left.type != XR_XIR_STRING || right.type != XR_XIR_STRING)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "only string concatenation is admitted for source addition");
-        return emit(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {left.id, right.id}, {0, 0}, 0}, value);
+        XrXirOp op;
+        XrXirType type;
+        if (node->type == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING) {
+            op = XR_XIR_CONCAT_STRING; type = XR_XIR_STRING;
+        } else if (left.type == XR_XIR_I64 && right.type == XR_XIR_I64) {
+            op = node->type == AST_BINARY_ADD ? XR_XIR_ADD_I64 : node->type == AST_BINARY_EQ ? XR_XIR_EQ_I64 : XR_XIR_LT_I64;
+            type = node->type == AST_BINARY_ADD ? XR_XIR_I64 : XR_XIR_BOOL;
+        } else return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator requires a declared concrete operand contract");
+        return emit(ctx, (XrXirInstruction) {op, type, {left.id, right.id}, {0, 0}, 0}, value);
     }
     case AST_ASSIGNMENT: {
         SourceName *symbol = visible_name(ctx, node->as.assignment.name);
@@ -342,7 +375,10 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "assignment requires a mutable binding");
         if (!expression(ctx, node->as.assignment.value, &assigned)) return false;
         if (assigned.type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "assignment type mismatch");
-        if (symbol->kind == SOURCE_LOCAL) symbol->index = assigned.id;
+        if (symbol->kind == SOURCE_LOCAL) {
+            if (!emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT,
+                {symbol->index, assigned.id}, {0}, 0}, NULL)) return false;
+        }
         else if (!emit(ctx, (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {assigned.id, 0}, {0, 0}, symbol->index}, NULL)) return false;
         *value = assigned; return true;
     }
@@ -373,24 +409,104 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         symbol->type = initial.type; ctx->slots[symbol->index].type = initial.type;
         return emit(ctx, (XrXirInstruction) {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {initial.id, 0}, {0, 0}, symbol->index}, NULL);
     }
-    for (SourceName *p = ctx->locals; p != ctx->scope; p = p->next)
+    for (SourceName *p = ctx->locals; p != ctx->scope; p = p->next) {
+        if (!source_work(ctx, node)) return false;
         if (!strcmp(p->name, decl->name)) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate local name");
+    }
     symbol = source_alloc(ctx, 1, sizeof(*symbol));
     if (!symbol) return false;
+    if (!decl->is_const && !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_NEW, initial.type,
+        {initial.id, 0}, {0}, 0}, &initial)) return false;
     *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_LOCAL, initial.id, ctx->module, initial.type, !decl->is_const};
     ctx->locals = symbol;
     return true;
+}
+static bool scoped_statement(SourceContext *ctx, AstNode *node) {
+    if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source control depth exhausted");
+    SourceName *saved = ctx->locals, *scope = ctx->scope;
+    ctx->scope = saved; ++ctx->depth;
+    bool result = statement(ctx, node, false);
+    --ctx->depth; ctx->locals = saved; ctx->scope = scope; return result;
+}
+static bool source_if(SourceContext *ctx, AstNode *node) {
+    SourceValue condition;
+    if (!expression(ctx, node->as.if_stmt.condition, &condition)) return false;
+    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "if requires bool");
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    if (!body->block_count && !begin_block(ctx)) return false;
+    uint32_t branch = body->count, yes = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {0}, 0}, NULL) ||
+        !begin_block(ctx) || !scoped_statement(ctx, node->as.if_stmt.then_branch)) return false;
+    uint32_t yes_jump = UINT32_MAX, no_jump = UINT32_MAX;
+    if (!ctx->returned) {
+        yes_jump = body->count;
+        if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0}, NULL)) return false;
+    }
+    uint32_t no = body->block_count;
+    if (!begin_block(ctx)) return false;
+    if (node->as.if_stmt.else_branch && !scoped_statement(ctx, node->as.if_stmt.else_branch)) return false;
+    if (!ctx->returned) {
+        no_jump = body->count;
+        if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0}, NULL)) return false;
+    }
+    body->ops[branch].targets[0] = yes; body->ops[branch].targets[1] = no;
+    ctx->returned = yes_jump == UINT32_MAX && no_jump == UINT32_MAX;
+    if (!ctx->returned) {
+        uint32_t join = body->block_count;
+        if (!begin_block(ctx)) return false;
+        if (yes_jump != UINT32_MAX) body->ops[yes_jump].targets[0] = join;
+        if (no_jump != UINT32_MAX) body->ops[no_jump].targets[0] = join;
+    }
+    return true;
+}
+static bool source_while(SourceContext *ctx, AstNode *node) {
+    if (node->as.while_stmt.label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "labelled loops are not admitted");
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    if (!body->block_count && !begin_block(ctx)) return false;
+    uint32_t condition_block = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {condition_block, 0}, 0}, NULL) || !begin_block(ctx)) return false;
+    SourceValue condition;
+    if (!expression(ctx, node->as.while_stmt.condition, &condition)) return false;
+    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "while requires bool");
+    uint32_t branch = body->count, loop_body = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {loop_body, 0}, 0}, NULL) || !begin_block(ctx)) return false;
+    SourceLoop loop = {ctx->loop, condition_block, NULL}; ctx->loop = &loop;
+    bool ok = scoped_statement(ctx, node->as.while_stmt.body); ctx->loop = loop.parent;
+    if (!ok) return false;
+    if (!ctx->returned && !emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {condition_block, 0}, 0}, NULL)) return false;
+    uint32_t exit = body->block_count;
+    if (!begin_block(ctx)) return false;
+    body->ops[branch].targets[1] = exit;
+    for (SourcePatch *p = loop.breaks; p; p = p->next) {
+        if (!source_work(ctx, node)) return false;
+        body->ops[p->instruction].targets[0] = exit;
+    }
+    return true;
+}
+static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
+    bool stop = node->type == AST_BREAK_STMT;
+    const char *label = stop ? node->as.break_stmt.label : node->as.continue_stmt.label;
+    if (!ctx->loop || label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "loop exit requires an unlabelled enclosing while");
+    if (stop) {
+        SourcePatch *patch = source_alloc(ctx, 1, sizeof(*patch)); if (!patch) return false;
+        *patch = (SourcePatch) {ctx->loop->breaks, ctx->bodies[ctx->function].count}; ctx->loop->breaks = patch;
+    }
+    ctx->returned = true;
+    return emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {stop ? 0 : ctx->loop->condition, 0}, 0}, NULL);
 }
 static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     if (!node || !source_work(ctx, node)) return false;
     if (ctx->returned) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unreachable statements are not admitted");
     switch (node->type) {
+    case AST_IF_STMT: return source_if(ctx, node);
+    case AST_WHILE_STMT: return source_while(ctx, node);
+    case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
     case AST_IMPORT_STMT: case AST_FUNCTION_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_EXPR_STMT: { SourceValue value; return expression(ctx, node->as.expr_stmt, &value); }
     case AST_RETURN_STMT: {
-        if (top || node->as.return_stmt.value_count > 1)
+        if (top || !ctx->bodies[ctx->function].node || node->as.return_stmt.value_count > 1)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid return placement or arity");
         SourceValue value = {0};
         if (node->as.return_stmt.value_count && !expression(ctx, node->as.return_stmt.values[0], &value)) return false;
@@ -446,7 +562,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     if (decl->param_count && !body->parameters) return false;
     XrXirFunction *function = &ctx->functions[index];
     *function = (XrXirFunction) {decl->name, (uint32_t) strlen(decl->name), body->parameters,
-        (uint32_t) decl->param_count, XR_XIR_UNIT, &body->block, 1, NULL, 0, NULL, 0};
+        (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
     if (!source_type(ctx, decl->return_type, &function->result)) return false;
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
@@ -511,7 +627,7 @@ static bool collect_declarations(SourceContext *ctx) {
         for (int i = 0; i < spec->dep_count; ++i) deps[i] = (uint32_t) spec->dep_indices[i];
         ctx->modules[m] = (XrXirSourceModule) {spec->canonical, (uint32_t) strlen(spec->canonical), deps, (uint32_t) spec->dep_count, m};
         ctx->bodies[m].module = m;
-        ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, &ctx->bodies[m].block, 1, NULL, 0, NULL, 0};
+        ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
         ctx->identities[m].module = m;
         for (int i = 0; i < spec->ast->as.program.count; ++i) {
             AstNode *node = spec->ast->as.program.statements[i];
@@ -538,7 +654,7 @@ static bool finish_body(SourceContext *ctx) {
         if (function->result != XR_XIR_UNIT) return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "value function requires a return");
         if (!emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}, NULL)) return false;
     }
-    body->block = (XrXirBlock) {0, body->count};
+    function->blocks = body->blocks; function->block_count = body->block_count;
     function->instructions = body->ops; function->instruction_count = body->count;
     function->operands = body->operands; function->operand_count = body->operand_count;
     return true;
@@ -567,7 +683,7 @@ static bool build_bodies(SourceContext *ctx) {
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,
-        &ctx->bodies[ctx->function].block, 1, NULL, 0, NULL, 0};
+        NULL, 0, NULL, 0, NULL, 0};
     if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 0}, NULL) ||
         !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}, NULL)) return false;
     ctx->returned = true;

@@ -6999,8 +6999,8 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema/semantic-contract revision 2 preserves templates;
-revision 1 rejects. Loading rechecks definitions and forwarding proofs.
+dominance rules. Checked schema 2 preserves templates; semantic contract 3 also covers local
+places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
 declaration identity plus ordered concrete arguments, reusing recursive instances.
@@ -7018,6 +7018,30 @@ diagnostic provenance serialization and complete stdlib package/cache pairing ar
 still unavailable. Unadmitted effect/borrow/callable declarations continue to
 reject. The precise interface contract is `contracts/xir-generic-templates.md`;
 this family does not qualify all ordinary generic facilities.
+
+### 17.12 Mutable Local Places and Structured Control Flow
+
+A local var needs an initializer and denotes a typed activation-local place;
+const bindings and read parameters remain values. Reading makes an independent
+value snapshot; assignment evaluates its right side before replacement. Existing
+string copies remain unchanged, while Atomic copies preserve identity. Places
+cannot escape, be returned or serve directly as value arguments. Initialization
+dominates every access and types match exactly, including at generic definitions.
+Built/Checked carry LOCAL_NEW/READ/WRITE; Lowered alone selects scalar/owned
+storage actions and frame offsets. Owned writes retain before dropping. Every
+activation exit clears owned offsets; precise last-use release and noncopyable
+scope destructors are not qualified by this family.
+
+If/else and while require bool conditions. Only the selected branch executes and
+loop conditions are reevaluated. Local updates survive joins and backedges while
+block names stay scoped. Unlabelled break/continue target the innermost while.
+Every live path in a value function must return; unreachable statements reject.
+Concrete i64 addition/equality/less-than and existing string addition are admitted;
+unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
+budgets and runtime step/cancellation contracts continue to apply. Checked wire
+schema stays 2 and its semantic contract atomically becomes 3; older semantic
+revisions reject without a second checking path. The interface is frozen in
+`contracts/xir-local-control-flow.md`.
 
 ---
 

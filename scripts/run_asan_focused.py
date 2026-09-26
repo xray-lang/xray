@@ -90,7 +90,7 @@ EXACT_PROFILES = {
              "test_xir_source", "test_xir_source_native", "test_xir_source_admission",
              "test_xir_source_allocations", "test_xir_source_mixed",
              "test_xir_checked", "test_xir_checked_allocations", "test_xir_packet_vm",
-             "test_xir_generics", "test_xir_source_generics"),
+             "test_xir_generics", "test_xir_source_generics", "test_xir_locals", "test_xir_local_native"),
             ("test_xir_stages", "test_xir_allocations", "test_xir_execution",
              "test_xir_emit", "test_xir_native", "test_xir_calls", "test_xir_emit_calls", "test_xir_call_native",
              "test_xir_values", "test_xir_value_allocations", "test_xir_emit_strings",
@@ -100,7 +100,7 @@ EXACT_PROFILES = {
              "test_xir_source", "test_xir_source_native", "test_xir_source_admission",
              "test_xir_source_allocations", "test_xir_source_mixed",
              "test_xir_checked", "test_xir_checked_allocations", "test_xir_packet_vm",
-             "test_xir_generics", "test_xir_source_generics")),
+             "test_xir_generics", "test_xir_source_generics", "test_xir_locals", "test_xir_local_native")),
     "canonical-program": (
         canonical_profile.CTEST_NAMES,
         canonical_profile.BUILD_TARGETS,

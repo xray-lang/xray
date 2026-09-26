@@ -133,6 +133,8 @@ int main(void) {
     packet.bytes[8] = 1; packet.bytes[12] = 1; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
     packet.bytes[8] = 2; packet.bytes[12] = 2; rehash_generic(&packet);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
+    packet.bytes[12] = 3; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     xr_xir_checked_packet_free(&packet);
     XrXirBudget budget = xr_xir_default_budget(); budget.functions = 2;

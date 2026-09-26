@@ -168,10 +168,17 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
         for (uint32_t f = 0; f < copy->module.function_count; ++f) {
             const XrXirFunction *function = &copy->module.functions[f];
             XrXirInstruction *instructions = (XrXirInstruction *) function->instructions;
-            for (uint32_t i = 0; i < function->instruction_count; ++i)
+            for (uint32_t i = 0; i < function->instruction_count; ++i) {
                 if (instructions[i].op == XR_XIR_COPY)
                     instructions[i].op = xr_xir_type_is_owned(instructions[i].type) ?
                         XR_XIR_OWNED_RETAIN : XR_XIR_SCALAR_COPY;
+                else if (instructions[i].op >= XR_XIR_LOCAL_NEW && instructions[i].op <= XR_XIR_LOCAL_WRITE) {
+                    XrXirType type = instructions[i].op == XR_XIR_LOCAL_WRITE ?
+                        instructions[instructions[i].args[0] - function->parameter_count].type : instructions[i].type;
+                    instructions[i].op = (XrXirOp) ((xr_xir_type_is_owned(type) ? XR_XIR_OWNED_LOCAL_NEW :
+                        XR_XIR_SCALAR_LOCAL_NEW) + instructions[i].op - XR_XIR_LOCAL_NEW);
+                }
+            }
         }
         status = xr_xir_layout_build(copy, &limits);
         if (status != XR_XIR_OK) {

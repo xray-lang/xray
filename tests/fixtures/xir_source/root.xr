@@ -12,3 +12,32 @@ var suffix = "!"
 fn main() { print("main must not run implicitly") }
 export fn result() -> string { return alpha.forward<string>(alpha.first<string,i64>(alpha.tag(suffix), 0)) }
 export fn advance() -> i64 { return alpha.next() }
+
+fn choose<T>(flag: bool, left: T, right: T) -> T {
+    var selected = left
+    if (flag) { selected = right }
+    return selected
+}
+fn branch(flag: bool) -> i64 {
+    if (flag) { return 7 } else { return 9 }
+}
+fn control() -> string {
+    var acc = "s"
+    const snapshot = acc
+    var i = 0
+    while (i < 5) {
+        i = i + 1
+        if (i == 2) { continue }
+        var j = 0
+        while (j < 3) {
+            j = j + 1
+            if (j == 2) { break }
+            acc = acc + "x"
+        }
+        if (i == 4) { break }
+    }
+    if (i == 4) { acc = acc + "!" } else { acc = "bad" }
+    acc = acc
+    return snapshot + acc
+}
+print(choose<string>(true, "bad", control()), branch(true), branch(false), choose<bool>(false, true, false))

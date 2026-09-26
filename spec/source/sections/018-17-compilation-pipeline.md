@@ -184,8 +184,8 @@ installer 发布或完整无源码标准库分发已经验收。
 
 Built/Checked 使用函数局部类型参数 ID，保存约束和独立调用类型实参表。
 CALL 的类型实参范围与值实参范围分别规范化并复验；替换后的参数/结果须精确匹配，
-正常可见性、模块和支配关系规则仍有效。Checked 包 schema/语义合同版本为2，
-旧版本1直接拒绝。解码后重新验证模板定义与转发证明。
+正常可见性、模块和支配关系规则仍有效。Checked 包 schema为2，语义合同为3（局部存储见§17.12），
+旧schema或语义版本直接拒绝。解码后重新验证模板定义与转发证明。
 
 特化只读取 Checked，不访问 AST。按声明身份与有序具体类型实参建立有界工作队列，
 重复或递归实例复用同一条目；先完成实例闭包并复验，再进入唯一 Lowered 管线。
@@ -197,6 +197,20 @@ CALL 的类型实参范围与值实参范围分别规范化并复验；替换后
 成员见证、符号回调效应、泛型类型构造器、类型推断、诊断来源序列化与完整标准库包
 链接/缓存配对仍待实现；本族未准入的效应/借用/callable 声明仍拒绝。精确接口合同为
 `contracts/xir-generic-templates.md`，不得用本族通过代替普通泛型完整资格。
+
+### 17.12 局部可变存储与结构化控制流
+
+局部var必须有初始化值；它表示当前调用帧中的typed place，const与read参数仍是值。
+读取取得独立值快照，赋值先完整求值再替换，不改变之前保存的string副本；Atomic复制仍保留身份。
+place不能逃逸、返回或直接作为值实参。初始化支配每次访问，类型精确一致；泛型在定义处检查。
+Built/Checked保留LOCAL_NEW/READ/WRITE，Lowered唯一选择标量或托管存储动作和帧偏移。
+托管写入先retain后drop，帧所有退出路径负责清理；精确最后使用释放和不可复制资源析构尚未据此验收。
+
+if/else与while条件必须bool；只执行选中分支，循环每次重新求条件。局部更新跨分支与回边保存，
+块内名字不外泄；无标签break/continue指向最内层while。值函数每条存活路径必须返回，拒绝不可达语句。
+本族接通具体i64加法/相等/小于与既有string加法；不授予无约束T任何运算见证。
+块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema仍为2，语义合同原子升至3，
+旧语义版本拒绝；没有第二条兼容检查路径。精确接口见 `contracts/xir-local-control-flow.md`。
 
 <!-- /xr-spec:cn -->
 
@@ -433,8 +447,8 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema/semantic-contract revision 2 preserves templates;
-revision 1 rejects. Loading rechecks definitions and forwarding proofs.
+dominance rules. Checked schema 2 preserves templates; semantic contract 3 also covers local
+places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
 declaration identity plus ordered concrete arguments, reusing recursive instances.
@@ -452,5 +466,29 @@ diagnostic provenance serialization and complete stdlib package/cache pairing ar
 still unavailable. Unadmitted effect/borrow/callable declarations continue to
 reject. The precise interface contract is `contracts/xir-generic-templates.md`;
 this family does not qualify all ordinary generic facilities.
+
+### 17.12 Mutable Local Places and Structured Control Flow
+
+A local var needs an initializer and denotes a typed activation-local place;
+const bindings and read parameters remain values. Reading makes an independent
+value snapshot; assignment evaluates its right side before replacement. Existing
+string copies remain unchanged, while Atomic copies preserve identity. Places
+cannot escape, be returned or serve directly as value arguments. Initialization
+dominates every access and types match exactly, including at generic definitions.
+Built/Checked carry LOCAL_NEW/READ/WRITE; Lowered alone selects scalar/owned
+storage actions and frame offsets. Owned writes retain before dropping. Every
+activation exit clears owned offsets; precise last-use release and noncopyable
+scope destructors are not qualified by this family.
+
+If/else and while require bool conditions. Only the selected branch executes and
+loop conditions are reevaluated. Local updates survive joins and backedges while
+block names stay scoped. Unlabelled break/continue target the innermost while.
+Every live path in a value function must return; unreachable statements reject.
+Concrete i64 addition/equality/less-than and existing string addition are admitted;
+unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
+budgets and runtime step/cancellation contracts continue to apply. Checked wire
+schema stays 2 and its semantic contract atomically becomes 3; older semantic
+revisions reject without a second checking path. The interface is frozen in
+`contracts/xir-local-control-flow.md`.
 
 <!-- /xr-spec:en -->

@@ -91,13 +91,27 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_CONST_I64:
         value = op->immediate;
         break;
+    case XR_XIR_SCALAR_LOCAL_NEW:
+    case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_COPY:
         value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         break;
+    case XR_XIR_SCALAR_LOCAL_WRITE:
+        xr_xir_scalar_store(run->frame, run->layout->offsets[op->args[0]],
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));
+        break;
+    case XR_XIR_OWNED_LOCAL_WRITE: {
+        XrXirType type = run->function->instructions[op->args[0] - run->function->parameter_count].type;
+        XrXirValueStatus status = xr_xir_owned_slot_copy(run->frame, run->layout->offsets[op->args[0]], type,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));
+        state->instruction = next; return string_status(status);
+    }
+    case XR_XIR_OWNED_LOCAL_NEW:
+    case XR_XIR_OWNED_LOCAL_READ:
     case XR_XIR_OWNED_RETAIN:
     case XR_XIR_CONCAT_STRING: {
         int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
-        XrXirValueStatus status = op->op == XR_XIR_OWNED_RETAIN ?
+        XrXirValueStatus status = op->op != XR_XIR_CONCAT_STRING ?
             xr_xir_owned_slot_copy(run->frame, run->layout->offsets[result_id], op->type, left) :
             xr_xir_string_slot_concat(run->frame, run->layout->offsets[result_id], left,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));

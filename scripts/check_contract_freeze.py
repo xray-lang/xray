@@ -35,6 +35,7 @@ CONTRACT_SPECS = (
     ContractSpec("xir-source-owner.md", ()),
     ContractSpec("xir-checked-packet.md", ()),
     ContractSpec("xir-generic-templates.md", ()),
+    ContractSpec("xir-local-control-flow.md", ()),
     ContractSpec(
         "intrinsic-identity.md",
         (

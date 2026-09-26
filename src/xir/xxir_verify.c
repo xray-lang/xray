@@ -370,6 +370,30 @@ static XrXirStatus value_use(const XrXirFunction *function, const Graph *graph,
     return (bits & (UINT64_C(1) << (from % 64))) ? XR_XIR_OK : XR_XIR_BAD_DOMINANCE;
 }
 
+static bool local_place(XrXirOp op) {
+    return op == XR_XIR_LOCAL_NEW || op == XR_XIR_SCALAR_LOCAL_NEW || op == XR_XIR_OWNED_LOCAL_NEW;
+}
+static bool local_access(XrXirOp op) {
+    return op == XR_XIR_LOCAL_READ || op == XR_XIR_LOCAL_WRITE ||
+        op == XR_XIR_SCALAR_LOCAL_READ || op == XR_XIR_SCALAR_LOCAL_WRITE ||
+        op == XR_XIR_OWNED_LOCAL_READ || op == XR_XIR_OWNED_LOCAL_WRITE;
+}
+static bool local_write(XrXirOp op) {
+    return op == XR_XIR_LOCAL_WRITE || op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
+}
+static XrXirStatus local_operand(const XrXirFunction *function, const XrXirInstruction *op,
+                                  uint32_t id, uint32_t operand) {
+    bool place = id >= function->parameter_count && id - function->parameter_count < function->instruction_count &&
+        local_place(function->instructions[id - function->parameter_count].op);
+    if (place != (operand == 0 && local_access(op->op))) return XR_XIR_BAD_VALUE;
+    if (place) {
+        XrXirType type = function->instructions[id - function->parameter_count].type;
+        if ((op->op == XR_XIR_SCALAR_LOCAL_WRITE && !scalar(type)) ||
+            (op->op == XR_XIR_OWNED_LOCAL_WRITE && !xr_xir_type_is_owned(type))) return XR_XIR_BAD_TYPE;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -393,6 +417,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_WRITE_STREAM) expected = XR_XIR_STRING;
         if (op->op == XR_XIR_ATOMIC_I64_LOAD || op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
             expected = XR_XIR_ATOMIC_I64;
+        if (local_write(op->op)) {
+            if (op->args[0] < function->parameter_count ||
+                op->args[0] - function->parameter_count >= function->instruction_count) return XR_XIR_BAD_VALUE;
+            expected = function->instructions[op->args[0] - function->parameter_count].type;
+        }
         uint32_t count = operand_count(function, op, context->module);
         if (!spend(&context->remaining.work, count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a) {
@@ -410,7 +439,8 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             }
             uint32_t id = op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT ?
                 function->operands[op->args[0] + a] : op->args[a];
-            XrXirStatus status = value_use(function, graph, i, id, operand_type);
+            XrXirStatus status = local_operand(function, op, id, a);
+            if (status == XR_XIR_OK) status = value_use(function, graph, i, id, operand_type);
             if (status != XR_XIR_OK)
                 return status;
         }

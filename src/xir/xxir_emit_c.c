@@ -100,9 +100,15 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
         emit_constant(buffer, op->immediate);
         append(buffer, ");\n");
         break;
+    case XR_XIR_SCALAR_LOCAL_NEW:
+    case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_COPY:
         append(buffer, "    xr_xir_scalar_store(frame, %uu, xr_xir_scalar_load(frame, %uu));\n",
                destination, layout->offsets[op->args[0]]);
+        break;
+    case XR_XIR_SCALAR_LOCAL_WRITE:
+        append(buffer, "    xr_xir_scalar_store(frame, %uu, xr_xir_scalar_load(frame, %uu));\n",
+               layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
         break;
     case XR_XIR_ADD_I64:
         append(buffer, "    status = xr_xir_scalar_add(xr_xir_scalar_load(frame, %uu), "
@@ -272,15 +278,29 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         emit_constant(buffer, op->immediate);
         append(buffer, ");\n");
         break;
+    case XR_XIR_SCALAR_LOCAL_NEW:
+    case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_COPY:
         append(buffer, "        xr_xir_scalar_store(state->frame, %uu, "
                "xr_xir_scalar_load(state->frame, %uu));\n", destination, layout->offsets[op->args[0]]);
         break;
+    case XR_XIR_SCALAR_LOCAL_WRITE:
+        append(buffer, "        xr_xir_scalar_store(state->frame, %uu, xr_xir_scalar_load(state->frame, %uu));\n",
+               layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_OWNED_LOCAL_WRITE:
+        append(buffer, "        if (xr_xir_owned_slot_copy(state->frame, %uu, (XrXirType) %u, "
+               "xr_xir_scalar_load(state->frame, %uu)) != XR_XIR_VALUE_OK) goto limit;\n",
+               layout->offsets[op->args[0]], (uint32_t) function->instructions[op->args[0] - function->parameter_count].type,
+               layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_OWNED_LOCAL_NEW:
+    case XR_XIR_OWNED_LOCAL_READ:
     case XR_XIR_OWNED_RETAIN:
     case XR_XIR_CONCAT_STRING:
         append(buffer, "        { XrXirValueStatus status = %s(state->frame, %uu, ",
-               op->op == XR_XIR_OWNED_RETAIN ? "xr_xir_owned_slot_copy" : "xr_xir_string_slot_concat", destination);
-        if (op->op == XR_XIR_OWNED_RETAIN) append(buffer, "(XrXirType) %u, ", (uint32_t) op->type);
+               op->op != XR_XIR_CONCAT_STRING ? "xr_xir_owned_slot_copy" : "xr_xir_string_slot_concat", destination);
+        if (op->op != XR_XIR_CONCAT_STRING) append(buffer, "(XrXirType) %u, ", (uint32_t) op->type);
         append(buffer, "xr_xir_scalar_load(state->frame, %uu)", layout->offsets[op->args[0]]);
         if (op->op == XR_XIR_CONCAT_STRING)
             append(buffer, ", xr_xir_scalar_load(state->frame, %uu)", layout->offsets[op->args[1]]);

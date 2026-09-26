@@ -17,8 +17,9 @@ typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     SourceOutput *output = context;
     CHECK(stream == (output->calls == 6 ? XR_XIR_STDERR : XR_XIR_STDOUT));
-    CHECK(output->calls < 10);
+    CHECK(output->calls < 11);
     if (!output->calls) CHECK(length == 8 && !memcmp(bytes, "a\xE4\xB8\xAD 20\n", 8));
+    else if (output->calls == 10) CHECK(length == 16 && !memcmp(bytes, "ssxxx! 7 9 true\n", 16));
     else if (output->calls == 1) CHECK(length == 3 && !memcmp(bytes, "10\n", 3));
     else if (output->calls == 2) CHECK(length == 6 && !memcmp(bytes, "11 12\n", 6));
     else if (output->calls == 3) CHECK(length == 5 && !memcmp(bytes, "true\n", 5));
@@ -61,13 +62,13 @@ static void source_pair(XrXirProgram *program, uint32_t entry, uint32_t result_f
         CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 0);
-        CHECK(outputs[i].calls == 10);
+        CHECK(outputs[i].calls == 11);
     }
     source_failed_init(program, entry, config);
     for (int64_t expected = 15; expected < 17; ++expected) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], advance, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 10);
+        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 11);
     }
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], result_function, NULL, 0) == XR_XIR_CALL_READY);

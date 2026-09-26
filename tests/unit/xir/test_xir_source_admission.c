@@ -109,7 +109,18 @@ int main(void) {
         "const print = 1\nprint(1)\n",
         "const Atomic = 1\nAtomic(1)\n",
         "fn unused() { while true {} }\n",
-        "fn unused() -> i64 { return 1 + 2 }\n",
+        "fn unused() { if (1) {} }\n",
+        "fn unused() { while (1) {} }\n",
+        "fn unused(x: bool) -> i64 { if (x) { return 1 } }\n",
+        "fn unused(x: bool) { if (x) { var hidden = 1 } print(hidden) }\n",
+        "fn unused() { break }\n",
+        "fn unused() { continue }\n",
+        "fn unused() { while (true) { break; print(1) } }\n",
+        "fn unused(x: bool) { if (x) { return } else { return } print(1) }\n",
+        "if (true) { return }\n",
+        "fn unused<T>(x:T) { if (true) { print(x) } }\n",
+        "fn unused<T>(x:T) { var y=x; while (y < x) {} }\n",
+        "fn unused() -> i64 { return 1 + true }\n",
         "const a = \"unterminated\n"
     };
     char directory[XR_TEST_PATH_MAX] = "xir-source-admission-XXXXXX";
@@ -133,12 +144,13 @@ int main(void) {
     }
     const char *valid = "import { visible } from \"./lib\"\nprint(visible(), true)\n";
     write_source(root, valid);
-    for (unsigned mode = 0; mode < 4; ++mode) {
+    for (unsigned mode = 0; mode < 5; ++mode) {
         XrXirBudget budget = xr_xir_default_budget();
         if (mode == 0) budget.metadata_bytes = 1;
         if (mode == 1) budget.work = 0;
         if (mode == 2) budget.instructions = 1;
         if (mode == 3) budget.functions = 1;
+        if (mode == 4) budget.blocks = 0;
         request.budget = &budget;
         XrXirArtifact *artifact = NULL;
         CHECK(xr_xir_source_check(&request, &artifact, NULL) == XR_XIR_BUDGET && !artifact);

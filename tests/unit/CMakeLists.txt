@@ -105,6 +105,15 @@ add_test(NAME test_xir_allocations COMMAND test_xir_allocations)
 set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
 
 add_executable(test_xir_execution xir/test_xir_execution.c)
+add_executable(test_xir_locals xir/test_xir_locals.c)
+target_link_libraries(test_xir_locals PRIVATE xray_xir_vm xray_xir_cgen)
+set(XIR_LOCAL_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_local_fixture.c)
+add_custom_command(OUTPUT ${XIR_LOCAL_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_locals> ${XIR_LOCAL_GENERATED}
+    DEPENDS test_xir_locals VERBATIM)
+add_executable(test_xir_local_native xir/test_xir_local_native.c ${XIR_LOCAL_GENERATED})
+target_link_libraries(test_xir_local_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_generics xir/test_xir_generics.c)
 target_link_libraries(test_xir_generics PRIVATE xray_xir_vm)
 add_executable(test_xir_checked xir/test_xir_checked.c)
@@ -218,7 +227,7 @@ target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${C
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
-foreach(xir_test IN ITEMS test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_execution test_xir_emit test_xir_native test_xir_calls
+foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_execution test_xir_emit test_xir_native test_xir_calls
     test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
     test_xir_emit_program test_xir_program_vm test_xir_program_native

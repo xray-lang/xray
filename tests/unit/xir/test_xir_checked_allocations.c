@@ -41,8 +41,9 @@ static void packet_free(void *p) {
 #include "xir/xxir_specialize.c"
 #include "xir_checked_fixture.h"
 #include "xir_generic_fixture.h"
-static void packet_failures(bool generic) {
-    XrXirArtifact *checked = generic ? generic_fixture() : checked_fixture();
+#include "xir_local_fixture.h"
+static void packet_failures(unsigned kind) {
+    XrXirArtifact *checked = kind == 2 ? local_fixture() : kind == 1 ? generic_fixture() : checked_fixture();
     size_t baseline = live;
     XrXirCheckedPacket packet = {0};
     calls = 0;
@@ -79,7 +80,7 @@ static void packet_failures(bool generic) {
     }
     xr_xir_checked_packet_free(&packet); CHECK(!live);
     printf("%s packet physical release: %zu writer and %zu reader allocation sites\n",
-        generic ? "Generic" : "Closed", write_sites, read_sites);
+        kind == 2 ? "Local" : kind == 1 ? "Generic" : "Closed", write_sites, read_sites);
 }
 
 static void specialization_failures(void) {
@@ -100,6 +101,6 @@ static void specialization_failures(void) {
     printf("Generic physical release: %zu checking and %zu specialization allocation sites\n", sites[0], sites[1]);
 }
 int main(void) {
-    packet_failures(false); packet_failures(true); specialization_failures();
+    packet_failures(false); packet_failures(true); packet_failures(2); specialization_failures();
     return 0;
 }
