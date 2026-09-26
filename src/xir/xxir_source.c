@@ -218,7 +218,7 @@ static bool ordinary_call(SourceContext *ctx, AstNode *node, SourceName *target,
     uint32_t count = (uint32_t) call->type_arg_count;
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
     if (count && !types) return false;
-    XrXirModule view = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics};
+    XrXirModule view = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics, NULL};
     for (uint32_t i = 0; i < count; ++i) {
         if (!source_work(ctx, node) || !source_type(ctx, call->type_args[i], &types[i])) return false;
         if (!xr_xir_type_satisfies(&view, ctx->function, types[i], callee->constraints[i]))
@@ -885,7 +885,7 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     if (collect_declarations(&ctx) && build_bodies(&ctx)) {
         XrXirDeclarations declarations = {ctx.modules, (uint32_t) ctx.graph->spec_count, ctx.identities,
             ctx.slots, ctx.slot_count, ctx.literals, ctx.literal_count, (uint32_t) ctx.graph->entry_index, ctx.function_count - 1};
-        XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL};
+        XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, NULL};
         XrXirStatus status = xr_xir_check(&built, &checking, output, NULL);
         if (status != XR_XIR_OK) source_fail(&ctx, NULL, status, "constructed XIR failed checking");
     }

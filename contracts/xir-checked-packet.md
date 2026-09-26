@@ -6,8 +6,8 @@ linking, native cache admission or publication. There is one Checked reader and
 no Built, Lowered, legacy, or alternate executable format reader.
 
 All integers use fixed-width little endian, with no native struct padding.
-The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 2, semantic-contract
-u32 6, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
+The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 3, semantic-contract
+u32 7, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
 over header bytes 0..31 followed by the payload. Unknown versions, stage or
 reserved fields, length mismatch, trailing bytes and digest mismatch reject.
 The digest is content identity/integrity, not authentication. Schema or semantic
@@ -21,7 +21,10 @@ as two's-complement u64. A blob is u32 length followed by exactly those bytes.
 Declaration data, when present, is module/slot/literal counts, root/entry IDs,
 modules (name blob, dependency count/IDs, initializer), one module/exported pair
 per function, slots (module/type/mutable), and literal blobs. A generic-presence flag and per-function constraint/type-argument
-tables follow, governed by `xir-generic-templates.md`. Revision 1 rejects without
+tables follow, governed by `xir-generic-templates.md`. A callable count follows,
+then each signature contains parameter count, ordered type/mode u32 pairs, result
+type and flags. Zero count has no table owner. Nested identity and canonical
+contracts follow `xir-callable-types.md`. Earlier revisions reject without
 a compatibility reader. All IDs retain their
 Checked meaning. No source path, pointer, native code, target layout, runtime
 state or trusted verification result is persisted.

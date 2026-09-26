@@ -14,6 +14,7 @@
 
 #include "xxir_internal.h"
 #include "xxir_generic.h"
+#include "xxir_callable.h"
 #include "../base/xmalloc.h"
 #include <limits.h>
 
@@ -518,6 +519,10 @@ XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
     else if (module->function_count > context.remaining.functions ||
              !spend(&context.remaining.metadata_bytes, sizeof(XrXirArtifact)))
         status = XR_XIR_BUDGET;
+    if (status == XR_XIR_OK) {
+        status = module->stage == XR_XIR_LOWERED && module->callables ? XR_XIR_BAD_STAGE :
+            xr_xir_callable_types_verify(module->callables, &context.remaining);
+    }
     if (status == XR_XIR_OK) {
         status = xr_xir_generics_verify(module, &context.remaining);
     }

@@ -30,7 +30,7 @@ budgets. Block zero has no incoming edge. All stored blocks must be reachable;
 every block ends in exactly one terminator. Scope state must not leak between
 branches, functions or compiler-session requests. Loops obey the existing runtime
 step budget and cancellation boundary. Failures publish no partial artifact.
-Checked wire schema remains 2; semantic contract is 6. Older
+Checked wire schema is 3; semantic contract is 7. Older
 semantic revisions reject with no compatibility reader.
 
 verification-test: test_xir_locals

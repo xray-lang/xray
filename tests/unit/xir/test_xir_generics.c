@@ -62,7 +62,7 @@ static void forwarding(void) {
     for (unsigned i = 0; i < 3; ++i) ops[i].type = t;
     caller.instructions = ops;
     XrXirFunction views[] = {caller, functions[1]};
-    XrXirModule module = {XR_XIR_BUILT, views, 2, NULL, generics};
+    XrXirModule module = {XR_XIR_BUILT, views, 2, NULL, generics, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
     constraint = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
@@ -71,8 +71,8 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(valid, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(valid);
-    CHECK(packet.length > 40 && packet.bytes[packet.length - 32] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 32] = 0; rehash_generic(&packet);
+    CHECK(packet.length > 40 && packet.bytes[packet.length - 36] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[packet.length - 36] = 0; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_checked_packet_free(&packet);
     xr_xir_artifact_free(checked);
@@ -140,7 +140,9 @@ int main(void) {
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
     packet.bytes[12] = 5; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    packet.bytes[12] = XR_XIR_CHECKED_CONTRACT; rehash_generic(&packet);
+    packet.bytes[12] = 6; rehash_generic(&packet);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
+    packet.bytes[8] = XR_XIR_CHECKED_SCHEMA; packet.bytes[12] = XR_XIR_CHECKED_CONTRACT; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     xr_xir_checked_packet_free(&packet);
     XrXirBudget budget = xr_xir_default_budget(); budget.functions = 2;

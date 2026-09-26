@@ -49,7 +49,7 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
         {"minimum", 7, params, 2, XR_XIR_I64, sort_blocks, 3, sort, 4, operands, 2},
         {"compare", 7, params, 2, XR_XIR_BOOL, &compare_block, 1, compare, 3, NULL, 0}
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, 3, NULL, NULL};
+    const XrXirModule module = {XR_XIR_BUILT, functions, 3, NULL, NULL, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);

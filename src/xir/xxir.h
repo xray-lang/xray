@@ -114,12 +114,26 @@ typedef struct XrXirGeneric {
     uint32_t argument_count;
 } XrXirGeneric;
 
+#define XR_XIR_CALLABLE_TYPE_BASE 256u
+typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
+typedef struct XrXirCallableSignature {
+    const XrXirCallableParameter *parameters;
+    uint32_t parameter_count;
+    XrXirType result;
+    uint32_t flags;
+} XrXirCallableSignature;
+typedef struct XrXirCallableTypes {
+    const XrXirCallableSignature *signatures;
+    uint32_t count;
+} XrXirCallableTypes;
+
 typedef struct XrXirModule {
     XrXirStage stage;
     const XrXirFunction *functions;
     uint32_t function_count;
     const XrXirDeclarations *declarations;
     const XrXirGeneric *generics;
+    const XrXirCallableTypes *callables;
 } XrXirModule;
 
 typedef struct XrXirBudget {

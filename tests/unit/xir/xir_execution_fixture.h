@@ -167,7 +167,7 @@ static XrXirArtifact *fixture_checked(void) {
         {"bitwise4", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise4, 2, NULL, 0},
         phi_leaf_fixture()
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, 23, NULL, NULL};
+    const XrXirModule module = {XR_XIR_BUILT, functions, 23, NULL, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     return artifact;

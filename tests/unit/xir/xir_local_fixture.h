@@ -57,7 +57,7 @@ static XrXirArtifact *local_fixture(void) {
     const XrXirFunction functions[] = {function,
         {"fault", 5, fault_parameters, 3, XR_XIR_I64, &fault_block, 1, fault_ops, 5, NULL, 0},
         {"swap", 4, fault_parameters, 3, XR_XIR_STRING, phi_blocks, 4, phi_ops, 13, phi_inputs, 12}};
-    const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL, NULL};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL, NULL, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     return checked;

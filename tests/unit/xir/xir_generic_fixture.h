@@ -32,7 +32,7 @@ static XrXirArtifact *generic_fixture(void) {
         {"id", 2, &t, 1, t, blocks + 1, 1, body, 2, NULL, 0}
     };
     const XrXirGeneric generics[] = {{NULL, 0, types, 3}, {&sendable, 1, NULL, 0}};
-    const XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     return checked;

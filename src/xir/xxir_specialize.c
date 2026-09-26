@@ -165,7 +165,7 @@ XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *b
     for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
     XrXirDeclarations declarations = {0};
     if (!spec_declarations(&c, &declarations)) goto done;
-    XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL};
+    XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.source->callables};
     c.diagnostic.status = xr_xir_recheck(&specialized, &limits, output, &c.diagnostic);
 done:
     while (c.memory) { SpecMemory *next = c.memory->next; xr_free(c.memory); c.memory = next; }

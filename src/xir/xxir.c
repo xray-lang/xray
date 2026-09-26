@@ -13,6 +13,7 @@
 
 #include "xxir_internal.h"
 #include "xxir_generic.h"
+#include "xxir_callable.h"
 #include "../base/xmalloc.h"
 
 XrXirBudget xr_xir_default_budget(void) {
@@ -64,6 +65,7 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
     xr_free(artifact->layouts);
     xr_xir_generics_free((XrXirGeneric *) artifact->module.generics, artifact->module.function_count);
     xr_xir_declarations_free((XrXirDeclarations *) artifact->module.declarations);
+    xr_xir_callable_types_free((XrXirCallableTypes *) artifact->module.callables);
     xr_free(functions);
     xr_free(artifact);
 }
@@ -86,12 +88,17 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         xr_free(copy);
         return NULL;
     }
-    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL};
+    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL};
     XrXirGeneric *generics = NULL;
     if (xr_xir_generics_clone(source, &generics) != XR_XIR_OK) {
         xr_xir_artifact_free(copy); return NULL;
     }
     copy->module.generics = generics;
+    XrXirCallableTypes *callables = NULL;
+    if (xr_xir_callable_types_clone(source->callables, &callables) != XR_XIR_OK) {
+        xr_xir_artifact_free(copy); return NULL;
+    }
+    copy->module.callables = callables;
     XrXirDeclarations *declarations = NULL;
     if (xr_xir_declarations_clone(source->declarations, source->function_count, &declarations) != XR_XIR_OK) {
         xr_xir_artifact_free(copy);
@@ -150,7 +157,7 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
     XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
     if (source == XR_XIR_CHECKED) {
-        if (input->generics) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
+        if (input->generics || input->callables) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         XrXirLayout layout;
         if (xr_xir_layout(XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
             return transition_error(XR_XIR_BAD_LAYOUT, diagnostic);

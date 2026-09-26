@@ -10,16 +10,19 @@
  *   Unknown type arguments retain only the capabilities their declarations prove.
  */
 #include "xxir_generic.h"
+#include "xxir_callable.h"
 #include "../base/xmalloc.h"
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
     if (type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64) return true;
+    if (xr_xir_callable_signature(module->callables, type)) return true;
     return module->generics && (uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE &&
         (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < module->generics[function].parameter_count;
 }
 bool xr_xir_type_satisfies(const XrXirModule *module, uint32_t function, XrXirType type, uint32_t constraints) {
     if (constraints & ~XR_XIR_CONSTRAINT_SENDABLE || !xr_xir_type_in_context(module, function, type)) return false;
-    if ((uint32_t) type < XR_XIR_TYPE_PARAMETER_BASE) return true;
+    if ((uint32_t) type < XR_XIR_TYPE_PARAMETER_BASE)
+        return !xr_xir_callable_signature(module->callables, type) || !constraints;
     uint32_t declared = module->generics[function].constraints[(uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE];
     return (declared & constraints) == constraints;
 }

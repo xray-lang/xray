@@ -72,6 +72,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #define xr_free(pointer) counted_free(pointer)
 #define xr_realloc(pointer, size) counted_realloc(pointer, size)
 
+#include "xir/xxir_callable.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"
 #include "xir/xxir_declarations.c"
@@ -350,7 +351,7 @@ int main(void) {
         {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
         {"second", 6, &parameter, 1, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
     };
-    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirBudget exact = xr_xir_default_budget();
     exact.metadata_bytes = sizeof(XrXirArtifact);

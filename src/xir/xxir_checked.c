@@ -189,6 +189,32 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
         if (c->reading) generics[f] = g;
     }
 }
+static void checked_callables(CheckedCursor *c, XrXirModule *m) {
+    uint32_t count = checked_u32(c, m->callables ? m->callables->count : 0);
+    if (c->status != XR_XIR_OK || !count) return;
+    if (count > XR_XIR_TYPE_PARAMETER_BASE - XR_XIR_CALLABLE_TYPE_BASE) { c->status = XR_XIR_BUDGET; return; }
+    XrXirCallableTypes *types = checked_array(c, m->callables, 1, sizeof(*types), 12);
+    if (!types) return;
+    m->callables = types;
+    XrXirCallableSignature *signatures = checked_array(c, types->signatures, count, sizeof(*signatures), 12);
+    if (c->reading) { types->signatures = signatures; types->count = signatures ? count : 0; }
+    if (!signatures) return;
+    for (uint32_t i = 0; i < count && c->status == XR_XIR_OK; ++i) {
+        XrXirCallableSignature s = signatures[i];
+        s.parameter_count = checked_count(c, s.parameter_count, &c->remaining.parameters);
+        XrXirCallableParameter *parameters = checked_array(c, s.parameters, s.parameter_count, sizeof(*parameters), 8);
+        s.parameters = parameters;
+        for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
+            XrXirCallableParameter parameter = parameters[p];
+            parameter.type = (XrXirType) checked_u32(c, (uint32_t) parameter.type);
+            parameter.mode = checked_u32(c, parameter.mode);
+            if (c->reading) parameters[p] = parameter;
+        }
+        s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
+        s.flags = checked_u32(c, s.flags);
+        if (c->reading) signatures[i] = s;
+    }
+}
 static void checked_module(CheckedCursor *c, XrXirModule *m) {
     uint32_t count = checked_count(c, m->function_count, &c->remaining.functions);
     uint32_t declarations = checked_u32(c, m->declarations ? 1u : 0u);
@@ -210,6 +236,7 @@ static void checked_module(CheckedCursor *c, XrXirModule *m) {
         if (c->reading) *owned = d;
     }
     checked_generics(c, m);
+    checked_callables(c, m);
 }
 static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]) {
     XrSHA256Context sha;

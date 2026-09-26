@@ -32,6 +32,7 @@ static void packet_free(void *p) {
 #define xr_malloc(size) packet_malloc(size)
 #define xr_calloc(count, size) packet_calloc(count, size)
 #define xr_free(p) packet_free(p)
+#include "xir/xxir_callable.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"
 #include "xir/xxir_declarations.c"
@@ -42,8 +43,9 @@ static void packet_free(void *p) {
 #include "xir_checked_fixture.h"
 #include "xir_generic_fixture.h"
 #include "xir_local_fixture.h"
+#include "xir_callable_fixture.h"
 static void packet_failures(unsigned kind) {
-    XrXirArtifact *checked = kind == 2 ? local_fixture() : kind == 1 ? generic_fixture() : checked_fixture();
+    XrXirArtifact *checked = kind == 3 ? callable_fixture() : kind == 2 ? local_fixture() : kind == 1 ? generic_fixture() : checked_fixture();
     size_t baseline = live;
     XrXirCheckedPacket packet = {0};
     calls = 0;
@@ -80,11 +82,11 @@ static void packet_failures(unsigned kind) {
     }
     xr_xir_checked_packet_free(&packet); CHECK(!live);
     printf("%s packet physical release: %zu writer and %zu reader allocation sites\n",
-        kind == 2 ? "Local" : kind == 1 ? "Generic" : "Closed", write_sites, read_sites);
+        kind == 3 ? "Callable" : kind == 2 ? "Local" : kind == 1 ? "Generic" : "Closed", write_sites, read_sites);
 }
 
-static void specialization_failures(void) {
-    XrXirArtifact *checked = generic_fixture(), *output = NULL;
+static void specialization_failures(bool callable) {
+    XrXirArtifact *checked = callable ? callable_fixture() : generic_fixture(), *output = NULL;
     XrXirModule built = *xr_xir_artifact_module(checked); built.stage = XR_XIR_BUILT;
     size_t baseline = live, sites[2] = {0};
     for (unsigned mode = 0; mode < 2; ++mode) {
@@ -98,9 +100,9 @@ static void specialization_failures(void) {
         }
     }
     fail_at = SIZE_MAX; xr_xir_artifact_free(checked); CHECK(!live);
-    printf("Generic physical release: %zu checking and %zu specialization allocation sites\n", sites[0], sites[1]);
+    printf("%s physical release: %zu checking and %zu specialization allocation sites\n", callable ? "Callable" : "Generic", sites[0], sites[1]);
 }
 int main(void) {
-    packet_failures(false); packet_failures(true); packet_failures(2); specialization_failures();
+    packet_failures(false); packet_failures(true); packet_failures(2); packet_failures(3); specialization_failures(false); specialization_failures(true);
     return 0;
 }

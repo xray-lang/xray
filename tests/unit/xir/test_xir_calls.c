@@ -123,7 +123,7 @@ static XrXirArtifact *comparator_artifact(void) {
     };
     XrXirBlock block = {0, 2};
     XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);

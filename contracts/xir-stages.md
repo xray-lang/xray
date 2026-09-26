@@ -86,4 +86,4 @@ The edge is one indivisible activation step; each PHI still consumes its normal
 instruction step. There is no suspension/provider call inside edge capture. Frame
 and metadata budgets include scratch ownership, and cancellation/step exhaustion
 use normal frame cleanup. Checked serialization preserves the incoming table;
-semantic contract 6 rejects earlier versions. No separate executable PHI format.
+semantic contract 7 rejects earlier versions. No separate executable PHI format.
