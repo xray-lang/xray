@@ -138,6 +138,8 @@ int main(void) {
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
     packet.bytes[12] = 4; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
+    packet.bytes[12] = 5; rehash_generic(&packet);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
     packet.bytes[12] = XR_XIR_CHECKED_CONTRACT; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     xr_xir_checked_packet_free(&packet);

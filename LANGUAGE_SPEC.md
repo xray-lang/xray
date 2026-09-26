@@ -1991,7 +1991,7 @@ var max = a > b ? a : b
 ```
 
 - **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
-- The condition must be `bool`.
+- The condition must be `bool`. The condition is evaluated once and only the selected branch executes; both branches are statically checked, including branches skipped by a constant condition.
 - The two branches share a unified type (taken as the common supertype or a union).
 - **Narrowing (§2.13 N-7)**: the true fact of the condition applies to the then arm and the false fact to the else arm, exactly as in `if` — `a != null ? len(a) : 0` is legal.
 

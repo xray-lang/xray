@@ -34,7 +34,7 @@ block zero, and end in exactly one terminator. No edge targets the entry block.
 Parameter values precede instruction-result IDs; unit instructions define no
 usable value. Every use has a matching type and a strictly earlier definition in
 the same block, or a definition in a dominating block. Loop backedges are allowed
-outside the entry block; this subset has no block arguments or loop-carried values.
+outside the entry block. PHI is the sole edge-selected value merge, as specified below.
 Return values exactly match the declared result. Unused fields are canonical zero.
 
 Budgets bound functions, parameters, blocks, instructions, metadata bytes, scratch
@@ -44,11 +44,12 @@ the view API is not an untrusted byte decoder. Owned Checked packet admission is
 governed separately by `xir-checked-packet.md`.
 Allocation failure, malformed data, and exhausted budgets are distinct failures.
 
-CALL and PRINT use args[0]/args[1] as a first/count range into the owning function's
+CALL, PRINT and PHI use args[0]/args[1] as a first/count range into the owning function's
 operand table. CALL immediate names its callee; PRINT immediate is zero. Empty
 ranges are canonical zero/zero. Nonempty ranges partition the table exactly in
 instruction order; gaps, overlaps, trailing entries and overflow are rejected.
-Every referenced value is type-checked and dominance-checked at its instruction.
+CALL/PRINT values are type-checked and dominance-checked at their instruction.
+PHI inputs are checked at predecessor terminators as below.
 CALL range length equals the callee signature. Arity is bounded by the current
 native boundary's 65536-value limit and resource budgets, not a two-value format.
 Both stage transitions copy the operand table. Lowered layout freezes the maximum
@@ -59,3 +60,30 @@ them. The old inline CALL/PRINT operand encoding is not retained.
 
 verification-test: test_xir_stages
 verification-test: test_xir_allocations
+verification-test: test_xir_locals
+verification-test: test_xir_local_native
+verification-test: test_xir_execution
+verification-test: test_xir_native
+
+PHI defines a non-unit copyable value at the beginning of a non-entry block.
+Its args are a first/count range of u32 entries in the shared operand table;
+entries alternate predecessor block ID and incoming value ID. The nonempty even
+range (at most 65536 entries) lists each distinct predecessor exactly once, sorted by block ID. Duplicate
+branch successors count as one predecessor. Missing, extra, duplicated, unsorted
+and non-predecessor entries reject. All PHIs form a block prefix. Incoming values
+have the exact result type and dominate their predecessor terminator, not the
+join block. Local places are not values. Generic PHIs are checked at definition
+and specialized/rechecked with the same type identity. No implicit conversion,
+default construction, visibility exception or extra generic witness is granted.
+
+An edge captures every selected input before replacing any PHI destination.
+Lowered layout reserves a private adjacent frame slot per PHI; owned snapshots
+are retained before any destination is cleared. Publishing moves those snapshots
+into destinations and empties the private slots. Thus loop swaps, self edges and
+shared owned inputs preserve simultaneous assignment. Snapshot failure publishes
+no destination, faults the activation and clears every live destination/snapshot.
+The edge is one indivisible activation step; each PHI still consumes its normal
+instruction step. There is no suspension/provider call inside edge capture. Frame
+and metadata budgets include scratch ownership, and cancellation/step exhaustion
+use normal frame cleanup. Checked serialization preserves the incoming table;
+semantic contract 6 rejects earlier versions. No separate executable PHI format.

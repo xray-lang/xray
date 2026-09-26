@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirCSource source;
-    CHECK(xr_xir_emit_c(lowered, "fixture_source", 262144, &source) == XR_XIR_OK);
+    CHECK(xr_xir_emit_c(lowered, "fixture_source", 524288, &source) == XR_XIR_OK);
     if (argc >= 2) {
         file = fopen(argv[1], "wb"); CHECK(file);
         CHECK(fwrite(source.text, 1, source.length, file) == source.length);

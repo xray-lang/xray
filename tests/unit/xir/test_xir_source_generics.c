@@ -23,6 +23,15 @@ static void write_generic_source(const char *path, const char *text) {
 }
 int main(void) {
     const char *rejected[] = {
+        "fn unused<T>(x:T)->T { return true ? x : 0 }\n",
+        "fn unused<T,U>(x:T,y:U)->T { return true ? x : y }\n",
+        "fn unused<T>(x:T)->T { return true ? x : x + x }\n",
+        "fn unused<T>(x:T)->T { return 1 ? x : x }\n",
+        "const x = true ? 1 : false\n",
+        "const x = true ? 1 : missing\n",
+        "fn unused()->i64 { return false ? print() : 1 }\n",
+        "import \"./lib\" as lib\nfn unused<T>(x:T)->T { return true ? x : lib.required<T>(x) }\n",
+
         "fn unused<T>(x:T)->T { return true }\n",
         "fn unused<T>(x:T) { print(x) }\n",
         "fn unused<T:Sendable>(x:T) { print(x) }\n",
@@ -64,7 +73,7 @@ int main(void) {
     write_generic_source(root,
         "import \"./lib\" as lib\n"
         "fn relay<T>(value:T)->T where T:Sendable { return lib.required<T>(value) }\n"
-        "fn unused<T,U>(left:T,right:U)->T { const copy = left; return copy }\n"
+        "fn unused<T,U>(left:T,right:U)->T { const copy = left; return true ? copy : left }\n"
         "const text = relay<string>(\"yes\")\nconst number = relay<i64>(5)\n"
         "const flag = relay<bool>(true)\nconst atomic = relay<Atomic<i64>>(Atomic(7))\n");
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;

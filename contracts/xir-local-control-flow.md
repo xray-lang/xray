@@ -30,7 +30,7 @@ budgets. Block zero has no incoming edge. All stored blocks must be reachable;
 every block ends in exactly one terminator. Scope state must not leak between
 branches, functions or compiler-session requests. Loops obey the existing runtime
 step budget and cancellation boundary. Failures publish no partial artifact.
-Checked wire schema remains 2; semantic contract is 5. Older
+Checked wire schema remains 2; semantic contract is 6. Older
 semantic revisions reject with no compatibility reader.
 
 verification-test: test_xir_locals
@@ -63,3 +63,13 @@ expression value. Arithmetic wraps modulo 2^64 before replacing the binding. Con
 non-i64 bindings and use as expressions reject. Labels and for-in protocols remain
 unqualified. No packet or ABI revision changes: existing Checked CFG/place semantics
 fully describe these additional source constructs.
+
+Source conditional expressions evaluate the strict-bool condition once, then only
+the selected expression. Both expressions are checked, including constant-dead
+branches and unused generic definitions. The currently admitted types must match
+exactly; general union/nullable unification remains unqualified. Equal non-unit
+branches produce PHI; equal unit branches join control flow without a value.
+Nested conditionals use the actual final predecessor of each expression. Owned
+results are independent snapshots, including when the selected expression calls,
+suspends or mutates a local/module binding. A generic type parameter needs no
+construction or arithmetic witness to choose between two values of that type.

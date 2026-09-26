@@ -63,6 +63,8 @@ typedef struct XrXirLayout {
     uint32_t alignment;
 } XrXirLayout;
 
+/* PHI offsets name the result followed by a private eight-byte snapshot slot.
+ * Owned snapshot offsets participate in the same exhaustive cleanup list. */
 typedef struct XrXirFunctionLayout {
     uint32_t slot_count;
     uint32_t frame_bytes;

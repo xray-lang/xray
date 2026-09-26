@@ -110,10 +110,11 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         return XR_XIR_BAD_STAGE;
     XrXirStatus declared = declaration_instruction(function, op, module);
     if (declared != XR_XIR_OK) return declared;
-    bool range = op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT;
+    bool range = op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI;
     if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
+    if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
     if (op->op == XR_XIR_CALL) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
@@ -227,10 +228,12 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
                 if (op->targets[0] != type_end) return XR_XIR_BAD_STRUCTURE;
                 type_end += op->targets[1];
             }
-            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT) && op->args[1]) {
+            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI) && op->args[1]) {
                 if (op->args[0] != operand_end) return XR_XIR_BAD_STRUCTURE;
                 operand_end += op->args[1];
             }
+            if (op->op == XR_XIR_PHI && (!b || (i != block->first && function->instructions[i - 1].op != XR_XIR_PHI)))
+                return XR_XIR_BAD_STRUCTURE;
             if (op_rules[op->op].terminal != (i == end - 1))
                 return XR_XIR_BAD_STRUCTURE;
         }
@@ -394,6 +397,37 @@ static XrXirStatus local_operand(const XrXirFunction *function, const XrXirInstr
     return XR_XIR_OK;
 }
 
+static XrXirStatus phi_uses(const Graph *graph, const XrXirFunction *function,
+                           VerifyContext *context, uint32_t index) {
+    const XrXirInstruction *op = &function->instructions[index];
+    uint32_t block = graph->owner[index], predecessors = 0, previous = UINT32_MAX;
+    for (uint32_t edge = graph->head[block]; edge != UINT32_MAX; edge = graph->next[edge]) {
+        if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+        uint32_t from = graph->predecessor[edge];
+        if (from != previous) ++predecessors;
+        previous = from;
+    }
+    if (op->args[1] / 2 != predecessors) return XR_XIR_BAD_STRUCTURE;
+    previous = UINT32_MAX;
+    for (uint32_t a = 0; a < op->args[1]; a += 2) {
+        if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+        uint32_t from = function->operands[op->args[0] + a];
+        uint32_t value = function->operands[op->args[0] + a + 1];
+        if (from >= function->block_count || (a && from <= previous)) return XR_XIR_BAD_STRUCTURE;
+        previous = from;
+        const XrXirInstruction *end = terminator(function, from);
+        bool connected = false;
+        for (uint32_t e = 0; e < op_rules[end->op].edges; ++e)
+            if (end->targets[e] == block) connected = true;
+        if (!connected) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status = local_operand(function, op, value, 0);
+        if (status == XR_XIR_OK) status = value_use(function, graph,
+            function->blocks[from].first + function->blocks[from].count - 1, value, op->type);
+        if (status != XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -402,6 +436,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!spend(&context->remaining.work, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if (op->op == XR_XIR_PHI) {
+            XrXirStatus status = phi_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
         XrXirType expected = op->type;
         if (op->op == XR_XIR_RETURN)
             expected = function->result;

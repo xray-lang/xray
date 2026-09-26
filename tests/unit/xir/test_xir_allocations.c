@@ -88,6 +88,49 @@ static void *counted_realloc(void *pointer, size_t size) {
 
 #include "xir_string_fixture.h"
 #include "xir_output_fixture.h"
+#include "xir_local_fixture.h"
+
+static void phi_snapshot_failure(void) {
+    XrXirArtifact *checked = local_fixture(), *lowered = NULL;
+    size_t baseline = live, sites = 0;
+    for (size_t attempt = 0; attempt <= sites; ++attempt) {
+        calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+        XrXirStatus status = xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL);
+        if (!attempt) { CHECK(status == XR_XIR_OK); sites = calls; }
+        else CHECK(status == XR_XIR_OUT_OF_MEMORY && !lowered);
+        xr_xir_artifact_free(lowered); lowered = NULL;
+        CHECK(live == baseline);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked);
+    const XrXirModule *module = xr_xir_artifact_module(lowered);
+    const XrXirFunctionLayout *layout = xr_xir_artifact_layout(lowered, 2);
+    void *frame = xr_calloc(1, layout->frame_bytes); CHECK(frame);
+    XrXirDomain *domain = NULL; XrXirValue a = {0}, b = {0};
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, "a", 1, &a) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, "b", 1, &b) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[0], XR_XIR_STRING, a.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[1], XR_XIR_STRING, b.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[6], XR_XIR_STRING, b.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[7], XR_XIR_STRING, a.payload) == XR_XIR_VALUE_OK);
+    XirObject *object = object_pointer(&b);
+    uint32_t references = atomic_load(&object->references);
+    atomic_store(&object->references, UINT32_MAX);
+    ScalarRun run = {module, &module->functions[2], layout, frame, NULL};
+    CHECK(scalar_edge(&run, 2, 1) == XR_XIR_RUN_FRAME_LIMIT);
+    CHECK(xr_xir_scalar_load(frame, layout->offsets[6]) == b.payload);
+    CHECK(xr_xir_scalar_load(frame, layout->offsets[7]) == a.payload);
+    CHECK(xr_xir_scalar_load(frame, layout->offsets[6] + 8) == a.payload);
+    CHECK(xr_xir_scalar_load(frame, layout->offsets[7] + 8) == 0);
+    atomic_store(&object->references, references);
+    for (uint32_t i = layout->owned_count; i > 0; --i) xr_xir_owned_slot_clear(frame, layout->owned_offsets[i - 1]);
+    CHECK(atomic_load(&object_pointer(&a)->references) == 1 && atomic_load(&object_pointer(&b)->references) == 1);
+    xr_free(frame); xr_xir_value_drop(&a); xr_xir_value_drop(&b); xr_xir_domain_drop(domain);
+    xr_xir_artifact_free(lowered); CHECK(!live);
+    printf("PHI lower physical release: %zu allocation sites; partial snapshot failure leaves destinations unchanged\n", sites);
+}
 
 static bool allocation_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     size_t *published = context;
@@ -408,5 +451,6 @@ int main(void) {
     printf("Declaration stage/emission physical release: %zu allocation sites\n", declaration_allocation_failures());
     printf("Program seal, instance and initialization physical release: %zu allocation sites\n", program_allocation_failures());
     printf("Write-result activation and renderer physical release: %zu allocation sites\n", write_allocation_failures());
+    phi_snapshot_failure();
     return 0;
 }

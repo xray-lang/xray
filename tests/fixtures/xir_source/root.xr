@@ -14,9 +14,7 @@ export fn result() -> string { return alpha.forward<string>(alpha.first<string,i
 export fn advance() -> i64 { return alpha.next() }
 
 fn choose<T>(flag: bool, left: T, right: T) -> T {
-    var selected = left
-    if (flag) { selected = right }
-    return selected
+    return flag ? right : left
 }
 fn branch(flag: bool) -> i64 {
     if (flag) { return 7 } else { return 9 }
@@ -138,3 +136,22 @@ fn compoundText()->string {
     return before + text
 }
 print(operand() << operand(), hits, ~0, -7 >> 1, 1 << 64, bitControl(), compoundText())
+
+fn conditionalText(flag:bool)->string {
+    var text = "a"
+    const selected = flag ? (text = "b") : (false ? "bad" : (text = "c"))
+    return text + selected
+}
+fn conditionalBump() { hits++ }
+fn conditionalControl() {
+    hits = 0
+    const n = probe(true) ? operand() : 1 / 0
+    const m = probe(false) ? 1 / 0 : probe(true) ? operand() : 999
+    const a = false ? operand() : 7
+    var text = ""
+    for (var i = 0; i < 3; i++) { text += i < 2 ? "x" : "y" }
+    const atom = choose<Atomic<i64>>(true, Atomic(1), Atomic(9))
+    true ? conditionalBump() : conditionalBump()
+    print(n, m, a, hits, conditionalText(true), conditionalText(false), text, atom.load())
+}
+conditionalControl()

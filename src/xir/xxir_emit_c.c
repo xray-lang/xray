@@ -117,12 +117,68 @@ static void emit_constant(CBuffer *buffer, int64_t value) {
         append(buffer, "INT64_C(%llu)", (unsigned long long) value);
 }
 
+static void emit_edge(CBuffer *buffer, const XrXirFunction *function,
+                      const XrXirFunctionLayout *layout, uint32_t instruction,
+                      uint32_t target, bool resumable) {
+    uint32_t low = 0, high = function->block_count;
+    while (low + 1 < high) {
+        uint32_t middle = low + (high - low) / 2;
+        if (function->blocks[middle].first <= instruction) low = middle;
+        else high = middle;
+    }
+    const char *frame = resumable ? "state->frame" : "frame";
+    uint32_t first = function->blocks[target].first, end = first;
+    while (end < function->instruction_count && function->instructions[end].op == XR_XIR_PHI) {
+        const XrXirInstruction *phi = &function->instructions[end];
+        uint32_t source = UINT32_MAX;
+        for (uint32_t a = 0; a < phi->args[1]; a += 2)
+            if (function->operands[phi->args[0] + a] == low) {
+                source = function->operands[phi->args[0] + a + 1]; break;
+            }
+        if (source == UINT32_MAX) { buffer->status = XR_XIR_BAD_STRUCTURE; return; }
+        uint32_t scratch = layout->offsets[function->parameter_count + end] + 8;
+        if (xr_xir_type_is_owned(phi->type)) {
+            if (!resumable) { buffer->status = XR_XIR_BAD_STAGE; return; }
+            append(buffer, "        if (xr_xir_owned_slot_copy(%s, %uu, (XrXirType) %u, "
+                "xr_xir_scalar_load(%s, %uu)) != XR_XIR_VALUE_OK) goto limit;\n",
+                frame, scratch, (uint32_t) phi->type, frame, layout->offsets[source]);
+        } else append(buffer, "        xr_xir_scalar_store(%s, %uu, xr_xir_scalar_load(%s, %uu));\n",
+            frame, scratch, frame, layout->offsets[source]);
+        ++end;
+    }
+    for (uint32_t i = first; i < end; ++i) {
+        const XrXirInstruction *phi = &function->instructions[i];
+        uint32_t destination = layout->offsets[function->parameter_count + i];
+        if (xr_xir_type_is_owned(phi->type))
+            append(buffer, "        { XrXirValue value = {%uu, 0, xr_xir_scalar_load(%s, %uu)};\n"
+                "        xr_xir_scalar_store(%s, %uu, 0);\n"
+                "        xr_xir_owned_slot_move(%s, %uu, &value); }\n",
+                (uint32_t) phi->type, frame, destination + 8, frame, destination + 8, frame, destination);
+        else append(buffer, "        xr_xir_scalar_store(%s, %uu, xr_xir_scalar_load(%s, %uu));\n"
+            "        xr_xir_scalar_store(%s, %uu, 0);\n", frame, destination, frame, destination + 8, frame, destination + 8);
+    }
+    if (resumable) append(buffer, "        state->pc = %uu;\n", first);
+    else append(buffer, "        goto xr_block_%u;\n", target);
+}
+
+static void emit_branch(CBuffer *buffer, const XrXirFunction *function,
+                        const XrXirFunctionLayout *layout, uint32_t index, bool resumable) {
+    const XrXirInstruction *op = &function->instructions[index];
+    append(buffer, "    if (xr_xir_scalar_load(%s, %uu)) {\n",
+        resumable ? "state->frame" : "frame", layout->offsets[op->args[0]]);
+    emit_edge(buffer, function, layout, index, op->targets[0], resumable);
+    append(buffer, "    } else {\n");
+    emit_edge(buffer, function, layout, index, op->targets[1], resumable);
+    append(buffer, "    }\n");
+}
+
 static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
                              const XrXirFunctionLayout *layout, uint32_t index) {
     const XrXirInstruction *op = &function->instructions[index];
     uint32_t destination = layout->offsets[function->parameter_count + index];
     append(buffer, "    if (!xr_xir_scalar_step(context)) { status = XR_XIR_RUN_STEP_LIMIT; goto xr_done; }\n");
     switch (op->op) {
+    case XR_XIR_PHI: break;
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_I64:
         append(buffer, "    xr_xir_scalar_store(frame, %uu, ", destination);
@@ -158,12 +214,10 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
                layout->offsets[op->args[1]]);
         break;
     case XR_XIR_JUMP:
-        append(buffer, "    goto xr_block_%u;\n", op->targets[0]);
+        emit_edge(buffer, function, layout, index, op->targets[0], false);
         break;
     case XR_XIR_BRANCH:
-        append(buffer, "    if (xr_xir_scalar_load(frame, %uu)) goto xr_block_%u; "
-               "else goto xr_block_%u;\n", layout->offsets[op->args[0]],
-               op->targets[0], op->targets[1]);
+        emit_branch(buffer, function, layout, index, false);
         break;
     case XR_XIR_RETURN:
         append(buffer, "    result->type = %uu;\n", (uint32_t) function->result);
@@ -305,6 +359,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     }
     switch (op->op) {
+    case XR_XIR_PHI: break;
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_I64:
         append(buffer, "        xr_xir_scalar_store(state->frame, %uu, ", destination);
@@ -379,12 +434,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                layout->offsets[op->args[1]]);
         break;
     case XR_XIR_JUMP:
-        append(buffer, "        state->pc = %uu;\n", function->blocks[op->targets[0]].first);
+        emit_edge(buffer, function, layout, index, op->targets[0], true);
         break;
     case XR_XIR_BRANCH:
-        append(buffer, "        state->pc = xr_xir_scalar_load(state->frame, %uu) ? %uu : %uu;\n",
-               layout->offsets[op->args[0]], function->blocks[op->targets[0]].first,
-               function->blocks[op->targets[1]].first);
+        emit_branch(buffer, function, layout, index, true);
         break;
     case XR_XIR_CALL: {
         const XrXirFunction *callee = &module->functions[op->immediate];

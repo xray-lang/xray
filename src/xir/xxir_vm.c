@@ -91,6 +91,42 @@ static XrXirRunStatus instance_step(ScalarRun *run, const XrXirInstruction *op, 
     return XR_XIR_RUN_OK;
 }
 
+static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t target) {
+    const XrXirFunction *function = run->function;
+    uint32_t low = 0, high = function->block_count;
+    while (low + 1 < high) {
+        uint32_t middle = low + (high - low) / 2;
+        if (function->blocks[middle].first <= instruction) low = middle;
+        else high = middle;
+    }
+    uint32_t first = function->blocks[target].first, end = first;
+    while (end < function->instruction_count && function->instructions[end].op == XR_XIR_PHI) {
+        const XrXirInstruction *phi = &function->instructions[end];
+        uint32_t source = UINT32_MAX;
+        for (uint32_t a = 0; a < phi->args[1]; a += 2)
+            if (function->operands[phi->args[0] + a] == low) {
+                source = function->operands[phi->args[0] + a + 1]; break;
+            }
+        if (source == UINT32_MAX) return XR_XIR_RUN_BAD_ARTIFACT;
+        uint32_t scratch = run->layout->offsets[function->parameter_count + end] + 8;
+        int64_t value = xr_xir_scalar_load(run->frame, run->layout->offsets[source]);
+        if (xr_xir_type_is_owned(phi->type)) {
+            XrXirValueStatus status = xr_xir_owned_slot_copy(run->frame, scratch, phi->type, value);
+            if (status != XR_XIR_VALUE_OK) return string_status(status);
+        } else xr_xir_scalar_store(run->frame, scratch, value);
+        ++end;
+    }
+    for (uint32_t i = first; i < end; ++i) {
+        const XrXirInstruction *phi = &function->instructions[i];
+        uint32_t destination = run->layout->offsets[function->parameter_count + i];
+        XrXirValue value = {(uint32_t) phi->type, 0, xr_xir_scalar_load(run->frame, destination + 8)};
+        xr_xir_scalar_store(run->frame, destination + 8, 0);
+        if (xr_xir_type_is_owned(phi->type)) xr_xir_owned_slot_move(run->frame, destination, &value);
+        else xr_xir_scalar_store(run->frame, destination, value.payload);
+    }
+    return XR_XIR_RUN_OK;
+}
+
 static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *action) {
     uint32_t instruction = state->instruction;
     const XrXirInstruction *op = &run->function->instructions[instruction];
@@ -102,6 +138,13 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return instance_step(run, op, run->layout->offsets[result_id]);
     }
+    if (op->op == XR_XIR_JUMP || op->op == XR_XIR_BRANCH) {
+        uint32_t edge = op->op == XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) ? 1 : 0;
+        XrXirRunStatus status = scalar_edge(run, instruction, op->targets[edge]);
+        state->instruction = run->function->blocks[op->targets[edge]].first;
+        return status;
+    }
+    if (op->op == XR_XIR_PHI) { state->instruction = next; return XR_XIR_RUN_OK; }
     switch (op->op) {
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_I64:
@@ -188,14 +231,6 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) >=
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
         break;
-    case XR_XIR_JUMP:
-        next = run->function->blocks[op->targets[0]].first;
-        break;
-    case XR_XIR_BRANCH: {
-        int64_t condition = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
-        next = run->function->blocks[op->targets[condition ? 0 : 1]].first;
-        break;
-    }
     case XR_XIR_CALL: {
         const XrXirFunction *callee = &run->module->functions[op->immediate];
         for (uint32_t i = 0; i < callee->parameter_count; ++i)

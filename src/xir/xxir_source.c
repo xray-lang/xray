@@ -433,10 +433,34 @@ static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *valu
         (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {value->id, 0}, {0}, symbol->index};
     return emit(ctx, write, NULL);
 }
+static bool source_conditional(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    SourceValue condition, yes, no;
+    TernaryNode *ternary = &node->as.ternary;
+    if (!expression(ctx, ternary->condition, &condition)) return false;
+    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "conditional requires bool");
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    if (!body->block_count && !begin_block(ctx)) return false;
+    uint32_t branch = body->count, yes_block = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id}, {0}, 0}, NULL) ||
+        !begin_block(ctx) || !expression(ctx, ternary->true_expr, &yes)) return false;
+    uint32_t yes_end = body->block_count - 1, yes_jump = body->count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0}, NULL)) return false;
+    uint32_t no_block = body->block_count;
+    if (!begin_block(ctx) || !expression(ctx, ternary->false_expr, &no)) return false;
+    if (yes.type != no.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "conditional branch types must match");
+    uint32_t no_end = body->block_count - 1, join = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {join}, 0}, NULL) || !begin_block(ctx)) return false;
+    body->ops[branch].targets[0] = yes_block; body->ops[branch].targets[1] = no_block;
+    body->ops[yes_jump].targets[0] = join;
+    if (yes.type == XR_XIR_UNIT) { *value = (SourceValue) {0, XR_XIR_UNIT}; return true; }
+    SourceValue inputs[] = {{yes_end, XR_XIR_UNIT}, yes, {no_end, XR_XIR_UNIT}, no};
+    return emit_group(ctx, (XrXirInstruction) {XR_XIR_PHI, yes.type, {0}, {0}, 0}, inputs, 4, value);
+}
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *value) {
     switch (node->type) {
     case AST_LITERAL_INT: case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
         return source_literal(ctx, node, value);
+    case AST_TERNARY: return source_conditional(ctx, node, value);
     case AST_GROUPING: return expression(ctx, node->as.grouping, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
     case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);

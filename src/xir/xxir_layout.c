@@ -69,8 +69,8 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
             (uint64_t) function->block_count * sizeof(XrXirBlock) +
             (uint64_t) function->instruction_count * sizeof(XrXirInstruction) +
             (uint64_t) function->operand_count * sizeof(uint32_t) +
-            slots * sizeof(uint32_t) * 2;
-        if (slots > UINT32_MAX || required > SIZE_MAX ||
+            slots * sizeof(uint32_t) * 3;
+        if (slots > UINT32_MAX / 2 || required > SIZE_MAX ||
             !subtract_bytes(&bytes, required) || !subtract_bytes(&work, slots + 1))
             return XR_XIR_BUDGET;
     }
@@ -85,7 +85,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     if (create) {
         layout->slot_count = slots;
         layout->offsets = xr_calloc(slots, sizeof(*layout->offsets));
-        layout->owned_offsets = xr_calloc(slots, sizeof(*layout->owned_offsets));
+        layout->owned_offsets = xr_calloc((size_t) slots * 2, sizeof(*layout->owned_offsets));
         if (!layout->offsets || !layout->owned_offsets)
             return XR_XIR_OUT_OF_MEMORY;
         if (function->parameter_count) {
@@ -105,7 +105,11 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         XrXirStatus status = xr_xir_layout(type, &artifact->target, XR_XIR_LAYOUT_FRAME, &physical);
         if (status != XR_XIR_OK)
             return status;
+        bool phi = slot >= function->parameter_count &&
+            function->instructions[slot - function->parameter_count].op == XR_XIR_PHI;
         uint32_t offset = physical.size ? bytes : UINT32_MAX;
+        uint32_t stride = physical.size;
+        if (phi) physical.size *= 2;
         if (physical.size > UINT32_MAX - bytes ||
             (uint64_t) bytes + physical.size > budget->frame_bytes)
             return XR_XIR_BUDGET;
@@ -119,6 +123,12 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             else if (owned >= layout->owned_count || layout->owned_offsets[owned] != offset)
                 return XR_XIR_BAD_LAYOUT;
             ++owned;
+            if (phi) {
+                if (create) ((uint32_t *) layout->owned_offsets)[owned] = offset + stride;
+                else if (owned >= layout->owned_count || layout->owned_offsets[owned] != offset + stride)
+                    return XR_XIR_BAD_LAYOUT;
+                ++owned;
+            }
         }
         if (slot < function->parameter_count) {
             status = xr_xir_layout(type, &artifact->target, XR_XIR_LAYOUT_PARAMETER, &physical);

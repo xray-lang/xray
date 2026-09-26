@@ -256,7 +256,7 @@ var max = a > b ? a : b
 ```
 
 - **右结合**：`a ? b : c ? d : e` = `a ? b : (c ? d : e)`。
-- 条件必须是 `bool`。
+- 条件必须是 `bool`。条件恰好求值一次，只执行被选择的分支；两个分支都参与静态检查，包括常量条件未选中的分支。
 - 两分支类型统一：取共同超类型（或 union）。
 - **收窄（§2.13 N-7）**：条件的 true 事实在 `then` 分支生效，false 事实在 `else` 分支生效，与 `if` 一致：`a != null ? len(a) : 0` 合法。
 
@@ -933,7 +933,7 @@ var max = a > b ? a : b
 ```
 
 - **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
-- The condition must be `bool`.
+- The condition must be `bool`. The condition is evaluated once and only the selected branch executes; both branches are statically checked, including branches skipped by a constant condition.
 - The two branches share a unified type (taken as the common supertype or a union).
 - **Narrowing (§2.13 N-7)**: the true fact of the condition applies to the then arm and the false fact to the else arm, exactly as in `if` — `a != null ? len(a) : 0` is legal.
 

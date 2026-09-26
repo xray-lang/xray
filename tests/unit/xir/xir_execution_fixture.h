@@ -19,6 +19,27 @@
 #include <limits.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 
+static XrXirFunction phi_leaf_fixture(void) {
+    static const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64, XR_XIR_I64};
+    static const XrXirInstruction ops[] = {
+        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 0},
+        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 1},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {5}, {2, 2}, 0},
+        {XR_XIR_SUB_I64, XR_XIR_I64, {9, 10}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {7}, {0}, 0},
+        {XR_XIR_PHI, XR_XIR_I64, {0, 4}, {0}, 0},
+        {XR_XIR_PHI, XR_XIR_I64, {4, 4}, {0}, 0},
+        {XR_XIR_PHI, XR_XIR_I64, {8, 4}, {0}, 0},
+        {XR_XIR_ADD_I64, XR_XIR_I64, {11, 4}, {0}, 0},
+        {XR_XIR_LT_I64, XR_XIR_BOOL, {11, 2}, {0}, 0},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {13}, {2, 1}, 0}
+    };
+    static const uint32_t inputs[] = {0, 0, 2, 10, 0, 1, 2, 9, 0, 3, 2, 12};
+    static const XrXirBlock blocks[] = {{0, 4}, {4, 2}, {6, 6}};
+    return (XrXirFunction) {"phi", 3, parameters, 3, XR_XIR_I64, blocks, 3, ops, 12, inputs, 12};
+}
+
 static XrXirArtifact *fixture_checked(void) {
     const XrXirType add_parameters[] = {XR_XIR_BOOL, XR_XIR_I64, XR_XIR_I64};
     const XrXirType eq_parameters[] = {XR_XIR_I64, XR_XIR_I64};
@@ -143,9 +164,10 @@ static XrXirArtifact *fixture_checked(void) {
         {"bitwise1", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise1, 2, NULL, 0},
         {"bitwise2", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise2, 2, NULL, 0},
         {"bitwise3", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise3, 2, NULL, 0},
-        {"bitwise4", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise4, 2, NULL, 0}
+        {"bitwise4", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise4, 2, NULL, 0},
+        phi_leaf_fixture()
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, 22, NULL, NULL};
+    const XrXirModule module = {XR_XIR_BUILT, functions, 23, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     return artifact;

@@ -12,6 +12,43 @@
 #ifndef XIR_LOCAL_CASES_H
 #define XIR_LOCAL_CASES_H
 #include "xir/xxir_call.h"
+static void phi_cases(const XrXirCallEntry *entry) {
+    for (unsigned mode = 0; mode < 40; ++mode) {
+        XrXirDomain *domain = NULL;
+        CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+        XrXirDomainStats baseline = xr_xir_domain_stats(domain);
+        XrXirValue args[] = {{0}, {0}, {XR_XIR_I64, 0, mode < 6 ? mode : 3}}, result = {0};
+        CHECK(xr_xir_string_new(domain, "a", 1, &args[0]) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_new(domain, "b", 1, &args[1]) == XR_XIR_VALUE_OK);
+        XrXirCallAccounting accounting = {0};
+        XrXirCallConfig config = {entry, 1, NULL, 65536, mode > 6 ? mode - 6 : 100, 4, &accounting, {NULL, NULL}};
+        XrXirCall *call = NULL;
+        CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
+        xr_xir_value_drop(&args[0]); xr_xir_value_drop(&args[1]);
+        XrXirCallResult outcome = xr_xir_call_poll(call);
+        unsigned suspensions = 0;
+        while (outcome.status == XR_XIR_CALL_SUSPENDED) {
+            ++suspensions;
+            if (mode == 6) { CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED); break; }
+            CHECK(xr_xir_call_resume(call, outcome.wake) == XR_XIR_CALL_READY);
+            outcome = xr_xir_call_poll(call);
+        }
+        if (mode < 6) {
+            CHECK(outcome.status == XR_XIR_CALL_RETURNED && suspensions == mode);
+            CHECK(xr_xir_call_take_result(call, &result) == XR_XIR_CALL_RETURNED);
+        } else if (mode > 6) CHECK(outcome.status == XR_XIR_CALL_LIMIT);
+        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+        CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
+        if (mode < 6) {
+            const char *bytes = NULL; size_t length = 0;
+            CHECK(xr_xir_string_view(&result, &bytes, &length) && length == 2 && !memcmp(bytes, mode % 2 ? "ba" : "ab", 2));
+            xr_xir_value_drop(&result);
+        }
+        XrXirDomainStats stats = xr_xir_domain_stats(domain);
+        CHECK(stats.live_bytes == baseline.live_bytes && stats.allocations == stats.frees + 1);
+        xr_xir_domain_drop(domain);
+    }
+}
 static void numeric_cleanup(const XrXirCallEntry *entry) {
     for (unsigned mode = 0; mode < 2; ++mode) {
         XrXirDomain *domain = NULL;

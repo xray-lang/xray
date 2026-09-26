@@ -72,7 +72,17 @@ static void numeric_cases(FixtureRun run, void *owner) {
     }
 }
 
+static void phi_leaf_cases(FixtureRun run, void *owner) {
+    for (unsigned n = 0; n < 8; ++n) {
+        XrXirValue args[] = {{XR_XIR_I64, 0, 42}, {XR_XIR_I64, 0, 7}, {XR_XIR_I64, 0, n}}, result;
+        XrXirRunContext context = {100, 65536, 0, 0, 0, 0};
+        CHECK(run(owner, 22, &context, args, 3, &result) == XR_XIR_RUN_OK);
+        CHECK(result.type == XR_XIR_I64 && result.payload == (n % 2 ? -35 : 35));
+        CHECK(context.live_bytes == 0 && context.allocations == context.frees);
+    }
+}
 static void execution_cases(FixtureRun run, void *owner) {
+    phi_leaf_cases(run, owner);
     numeric_cases(run, owner);
     bitwise_execution(run, owner);
     struct AddCase { int64_t branch, left, right, expected; XrXirRunStatus status; };

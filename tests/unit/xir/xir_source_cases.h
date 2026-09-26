@@ -18,8 +18,9 @@ typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     SourceOutput *output = context;
     CHECK(stream == (output->calls == 6 ? XR_XIR_STDERR : XR_XIR_STDOUT));
-    CHECK(output->calls < 14);
+    CHECK(output->calls < 15);
     if (!output->calls) CHECK(length == 8 && !memcmp(bytes, "a\xE4\xB8\xAD 20\n", 8));
+    else if (output->calls == 14) CHECK(length == 20 && !memcmp(bytes, "2 5 7 6 bb cc xxy 9\n", 20));
     else if (output->calls == 13) CHECK(length == 25 && !memcmp(bytes, "1792 8 -1 -4 1 -35 aabab\n", 25));
     else if (output->calls == 12) CHECK(length == 13 && !memcmp(bytes, "-1 6 -2 -1 7\n", 13));
     else if (output->calls == 11) CHECK(length == 15 && !memcmp(bytes, "4 fxxx!dd 13 4\n", 15));
@@ -135,15 +136,16 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
     XrXirOutputSink sinks[2] = {{source_bytes, &outputs[0], 65536}, {source_bytes, &outputs[1], 65536}};
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     config.metadata_limit = 65536; config.value_limit = 65536; config.call_limit = 65536;
-    config.poll_limit = 1000; config.depth_limit = 16;
+    config.poll_limit = 2000; config.depth_limit = 16;
     XrXirInstance *instances[2] = {NULL, NULL};
     for (uint32_t i = 0; i < 2; ++i) {
         config.output = (XrXirOutputProvider) {xr_xir_output_render, &sinks[i]};
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
+        if (result.status != XR_XIR_CALL_RETURNED) fprintf(stderr, "source init status %u output %u\n", (unsigned) result.status, outputs[i].calls);
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 0);
-        CHECK(outputs[i].calls == 14);
+        CHECK(outputs[i].calls == 15);
     }
     source_failed_init(program, entry, config);
     for (unsigned i = 0; i < 2; ++i) source_compound_fault(instances[i], functions.calculate);
@@ -153,7 +155,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
     for (int64_t expected = 15; expected < 17; ++expected) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.advance, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 14);
+        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 15);
     }
     for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.result, NULL, 0) == XR_XIR_CALL_READY);
