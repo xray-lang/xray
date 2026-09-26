@@ -73,3 +73,22 @@ verification-test: test_xir_source_admission
 verification-test: test_xir_source_allocations
 
 Structured control and local place semantics follow `xir-local-control-flow.md`.
+
+The unshadowed compiler namespace Coro admits only Coro.yield() in this source
+family. It accepts no value/type arguments and returns unit. A lexical/module
+binding named Coro takes precedence; the builtin is never selected through a
+shadowing value, alias or similarly spelled member. Ordinary functions, generic
+definitions and module initializers may call it without an async annotation.
+Its Built/Checked representation is the existing SUSPEND operation, preserved
+through specialization, rechecking and Lowered. An ordinary call can therefore
+suspend transitively without changing type constraints or acquiring capabilities.
+
+The effect is cooperative scheduler suspension and a cancellation boundary, not
+generator value production, language throw or a blocking OS operation. The current
+single-host-thread driver observes SUSPENDED and resumes exactly once with the
+matching instance epoch and wake. It must not treat suspension as return, EOF or
+initialization completion. Unselected source branches do not yield; both branches
+are still checked. Unit return expressions execute their effect then use the
+canonical valueless RETURN encoding. No explicit no_suspend/no_blocking proof,
+work-stealing, generator/Task/source go or concurrent cancellation is certified by
+this admission. Existing refusal of unsupported function contracts remains.

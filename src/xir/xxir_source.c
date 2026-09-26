@@ -266,6 +266,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         MemberAccessNode *member = &callee->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ?
             visible_name(ctx, member->object->as.variable.name) : NULL;
+        if (!base && member->object->type == AST_VARIABLE && !strcmp(member->object->as.variable.name, "Coro") &&
+            !strcmp(member->name, "yield")) {
+            if (call->arg_count || call->type_arg_count)
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Coro.yield accepts no value or type arguments");
+            return emit(ctx, (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0}, value);
+        }
         if (base && base->kind == SOURCE_MODULE) target = imported_function(ctx, base, member->name);
         else {
             if (!expression(ctx, member->object, &receiver)) return false;
@@ -681,7 +687,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         if (value.type != ctx->functions[ctx->function].result)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "return type does not match declaration");
         ctx->returned = true;
-        return emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0, 0}, 0}, NULL);
+        return emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.type == XR_XIR_UNIT ? 0 : value.id, 0}, {0, 0}, 0}, NULL);
     }
     case AST_BLOCK: {
         if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source block depth exhausted");

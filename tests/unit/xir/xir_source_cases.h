@@ -42,13 +42,83 @@ static bool source_reject(void *context, const XrXirOutputGroup *group) {
     CHECK(group && group->line && group->stream == XR_XIR_STDOUT && group->count == 2);
     ++*calls; return false;
 }
+static void source_resume_once(XrXirInstance *instance, XrXirInstanceResult suspended) {
+    CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED && suspended.outcome.wake && suspended.epoch);
+    CHECK(suspended.outcome.value.type == XR_XIR_UNIT && !suspended.outcome.value.payload);
+    XrXirInstanceResult repeated = xr_xir_instance_poll(instance);
+    CHECK(repeated.epoch == suspended.epoch && repeated.outcome.wake == suspended.outcome.wake &&
+        repeated.outcome.status == XR_XIR_CALL_SUSPENDED);
+    CHECK(xr_xir_instance_resume(instance, suspended.epoch + 1, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_resume(instance, suspended.epoch, suspended.outcome.wake + 1) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_resume(instance, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_resume(instance, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
+}
+static XrXirCallResult source_drive(XrXirInstance *instance, unsigned expected_suspensions) {
+    XrXirInstanceResult result = xr_xir_instance_poll(instance);
+    for (unsigned i = 0; i < expected_suspensions; ++i) {
+        source_resume_once(instance, result);
+        result = xr_xir_instance_poll(instance);
+    }
+    CHECK(result.outcome.status != XR_XIR_CALL_SUSPENDED);
+    return result.outcome;
+}
+static void source_resume_pair(XrXirInstance **instances, uint32_t entry, XrXirValue *results) {
+    XrXirValue argument = {XR_XIR_BOOL, 0, 0};
+    for (unsigned i = 0; i < 2; ++i) {
+        argument.payload = i;
+        CHECK(xr_xir_instance_start(instances[i], entry, &argument, 1) == XR_XIR_CALL_READY);
+    }
+    for (unsigned step = 0; step < 3; ++step) for (unsigned i = 0; i < 2; ++i) {
+        XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
+        if (step < 2) source_resume_once(instances[i], result);
+        else {
+            CHECK(result.outcome.status == XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
+        }
+    }
+}
+static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t resume_text) {
+    for (unsigned mode = 0; mode < 5; ++mode) {
+        SourceOutput output = {0}; XrXirOutputSink sink = {source_bytes, &output, 65536};
+        XrXirInstanceConfig config = xr_xir_instance_defaults(); config.poll_limit = 2000;
+        config.output = (XrXirOutputProvider) {xr_xir_output_render, &sink};
+        XrXirInstance *instance = NULL;
+        CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
+        if (mode > 2) {
+            CHECK(source_drive(instance, 2).status == XR_XIR_CALL_RETURNED && output.calls == 15);
+            XrXirValue arg = {XR_XIR_BOOL, 0, 1};
+            CHECK(xr_xir_instance_start(instance, resume_text, &arg, 1) == XR_XIR_CALL_READY);
+        }
+        XrXirInstanceResult suspended = {0};
+        if (mode) {
+            suspended = xr_xir_instance_poll(instance);
+            CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
+            if (mode == 2 || mode == 4) {
+                source_resume_once(instance, suspended); suspended = xr_xir_instance_poll(instance);
+                CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
+            }
+        }
+        CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_CANCELLED);
+        CHECK(xr_xir_instance_resume(instance, suspended.epoch, suspended.outcome.wake) == XR_XIR_CALL_BAD_STATE);
+        CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
+        if (mode <= 2) {
+            CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_DRAINING && output.calls == 0);
+            XrXirValue failure = {0};
+            CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_CANCELLED && failure.type == XR_XIR_UNIT);
+            CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_CANCELLED);
+        } else CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_BAD_STATE);
+        CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    }
+}
 static void source_failed_init(XrXirProgram *program, uint32_t entry, XrXirInstanceConfig config) {
     uint32_t calls = 0;
     config.output = (XrXirOutputProvider) {source_reject, &calls};
     XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_OUTPUT_ERROR);
+    CHECK(source_drive(instance, 2).status == XR_XIR_CALL_OUTPUT_ERROR);
     CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED && calls == 1);
     CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_OUTPUT_ERROR && calls == 1);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
@@ -130,7 +200,7 @@ static void source_compound_fault(XrXirInstance *instance, uint32_t calculate) {
         CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == (i ? 3 : 0));
     }
 }
-typedef struct SourceFunctions { uint32_t result, advance, update, calculate; } SourceFunctions;
+typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text; } SourceFunctions;
 static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions functions, XrXirValue *results) {
     SourceOutput outputs[2] = {{0, false}, {0, true}};
     XrXirOutputSink sinks[2] = {{source_bytes, &outputs[0], 65536}, {source_bytes, &outputs[1], 65536}};
@@ -142,11 +212,20 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         config.output = (XrXirOutputProvider) {xr_xir_output_render, &sinks[i]};
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i], entry, NULL, 0) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
-        if (result.status != XR_XIR_CALL_RETURNED) fprintf(stderr, "source init status %u output %u\n", (unsigned) result.status, outputs[i].calls);
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 0);
-        CHECK(outputs[i].calls == 15);
     }
+    for (unsigned step = 0; step < 3; ++step) for (unsigned i = 0; i < 2; ++i) {
+        XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
+        if (step < 2) {
+            CHECK(xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_INITIALIZING && outputs[i].calls == 0);
+            source_resume_once(instances[i], result);
+        } else {
+            CHECK(result.outcome.status == XR_XIR_CALL_RETURNED && result.outcome.value.type == XR_XIR_I64 && !result.outcome.value.payload);
+            CHECK(outputs[i].calls == 15 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
+        }
+    }
+    source_cancel_cases(program, entry, functions.resume_text);
+    XrXirValue resumed[2] = {{0}, {0}};
+    source_resume_pair(instances, functions.resume_text, resumed);
     source_failed_init(program, entry, config);
     for (unsigned i = 0; i < 2; ++i) source_compound_fault(instances[i], functions.calculate);
     for (unsigned i = 0; i < 2; ++i) source_bitwise(instances[i], functions.calculate);
@@ -162,6 +241,9 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         CHECK(xr_xir_instance_poll(instances[i]).outcome.status == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
+        const char *bytes = NULL; size_t length = 0;
+        CHECK(xr_xir_string_view(&resumed[i], &bytes, &length) && length == 3 && !memcmp(bytes, i ? "ry!" : "rn!", 3));
+        xr_xir_value_drop(&resumed[i]);
     }
 }
 static void source_result_drop(XrXirValue *value) {

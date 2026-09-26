@@ -73,9 +73,29 @@ static void primitive_authority(XrCompilerSession *session, const char *director
     xr_xir_artifact_free(artifact);
     CHECK(xr_test_unlink(output) == 0 && xr_test_unlink(other) == 0 && xr_test_rmdir(io) == 0);
 }
+static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
+    write_source(root, "import \"./lib\" as Coro\nprint(Coro.visible())\n");
+    XrXirArtifact *artifact = NULL;
+    CHECK(xr_xir_source_check(request, &artifact, NULL) == XR_XIR_OK && artifact);
+    const XrXirModule *module = xr_xir_artifact_module(artifact);
+    for (uint32_t f = 0; f < module->function_count; ++f)
+        for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i)
+            CHECK(module->functions[f].instructions[i].op != XR_XIR_SUSPEND);
+    xr_xir_artifact_free(artifact);
+}
 int main(void) {
     stdlib_resolution();
     static const char *const rejected[] = {
+        "Coro.yield(1)\n",
+        "Coro.yield<i64>()\n",
+        "const x = Coro.yield()\n",
+        "const Coro = Atomic(1)\nCoro.yield()\n",
+        "fn unused(Coro:i64) { Coro.yield() }\n",
+        "Coro.missing()\n",
+        "const alias = Coro\nalias.yield()\n",
+        "fn unused()->i64 { return Coro.yield() }\n",
+        "fn unused<T>(value:T)->T { return true ? value : Coro.yield() }\n",
+
         "fn unused() -> i64 { return true }\n",
         "fn unused<T>(value: T) -> T { return value.missing() }\n",
         "fn value(x: i64) -> i64 { return x }\nvalue(true)\n",
@@ -201,6 +221,7 @@ int main(void) {
     write_source(library, "export fn visible() -> i64 { return 2 }\n");
     CHECK(xr_xir_source_check(&request, &artifact, NULL) == XR_XIR_OK && artifact);
     xr_xir_artifact_free(artifact);
+    shadowed_coro(&request, root);
     xr_compiler_session_delete(session);
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
     puts("Source declaration, visibility, type, graph and budget rejection passed");

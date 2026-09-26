@@ -441,6 +441,8 @@ for (i in 0..1000) {
 
 `Coro.yield()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
+此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Coro`，仍按该绑定解析，不能偷偷调用调度原语。新 XIR 源码入口按同一 SUSPEND/恢复协议执行，当前单宿主驱动的挂起结果须以匹配的实例 epoch/wake 恢复；完整多线程调度与生成器资格单独验收。
+
 两者共用词根但不是同一种挂起：`Coro.yield()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。**生成器体内不得调用 `Coro.yield()`**（`E0385`，见 §3.16.2）。
 
 ### 10.11 并发安全模型
@@ -919,6 +921,8 @@ for (i in 0..1000) {
 ```
 
 `Coro.yield()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
+
+The call accepts no value or type arguments and returns unit; ordinary functions need no async annotation. A lexical binding shadowing `Coro` is resolved normally and cannot silently invoke the scheduling primitive. The new XIR source entry uses the same SUSPEND/resume protocol: its current single-host driver resumes a suspension with the matching instance epoch/wake. Full multithreaded scheduling and generator qualification remain separate.
 
 The two share a word root but are not the same suspension: `Coro.yield()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. **A generator body must not call `Coro.yield()`** (`E0385`, see §3.16.2).
 

@@ -18,9 +18,10 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_source_runtime_allocations.h"
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
-XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate;
+XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text;
 typedef struct MixedSource {
     XrXirArtifact *artifact;
     XrXirCallEntry entries[64];
@@ -47,6 +48,7 @@ int main(void) {
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
     CHECK(module->function_count <= 64 && module->function_count == fixture_source_program.entry_count);
+    unsigned native_resumes = 0, vm_pauses = 0;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         CHECK(xr_xir_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);
         CHECK(owner->entries[i].result == fixture_source_program.entries[i].result);
@@ -55,19 +57,31 @@ int main(void) {
             !memcmp(module->functions[i].name, "writeStderr", 11))) ||
             (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "next", 4)) ||
             (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "pack", 4)) ||
-            (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)))
+            (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) ||
+            (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)))
             owner->entries[i] = fixture_source_program.entries[i];
+        if (module->functions[i].name_length == 13 && !memcmp(module->functions[i].name, "resumedNative", 13)) {
+            CHECK(owner->entries[i].resume == fixture_source_program.entries[i].resume); ++native_resumes;
+        }
+        if (module->functions[i].name_length > 6 && !memcmp(module->functions[i].name, "pause$", 6)) {
+            CHECK(owner->entries[i].parameter_count == 1 && owner->entries[i].result == XR_XIR_STRING);
+            CHECK(owner->entries[i].resume != fixture_source_program.entries[i].resume); ++vm_pauses;
+        }
     }
+    CHECK(native_resumes == 1 && vm_pauses == 1);
+    CHECK(owner->entries[fixture_source_resume_text].resume != fixture_source_program.entries[fixture_source_resume_text].resume);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,
         module->declarations, {owner, mixed_release}};
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate}, results);
+    source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text}, results);
+    runtime_source_failures(program, entry, fixture_source_resume_text);
     CHECK(!released);
     xr_xir_program_drop(program); CHECK(released == 1);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("VM to native and native to VM source calls shared instance state and ownership");
+    CHECK(!runtime_live && !runtime_bytes);
     return 0;
 }

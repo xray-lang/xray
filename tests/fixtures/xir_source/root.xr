@@ -155,3 +155,16 @@ fn conditionalControl() {
     print(n, m, a, hits, conditionalText(true), conditionalText(false), text, atom.load())
 }
 conditionalControl()
+
+fn sourceYield() { var held = "u" + "v"; return Coro.yield() }
+fn noYield() { return }
+fn resumedNative(flag:bool)->string {
+    true ? noYield() : sourceYield()
+    var text = "r"
+    const selected = flag ? alpha.pause<string>(text + "y") : alpha.pause<string>(text + "n")
+    sourceYield()
+    text = selected + "!"
+    return text
+}
+
+export fn resumeText(flag:bool)->string { return resumedNative(flag) }

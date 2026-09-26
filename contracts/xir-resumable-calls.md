@@ -51,3 +51,18 @@ rejects CALL/SUSPEND/THROW; it is never an execution fallback. The VM uses one
 instruction implementation for its leaf runner and resumable bindings. Bindings
 and immutable artifacts outlive activations. The trusted linker preserves module
 function indices; serialized/cache identity admission is not yet provided here.
+
+Source Coro.yield() now uses the same SUSPEND boundary under the source-owner
+contract. Source-built module initialization can suspend before or after publishing
+slots; progress and code/value owners survive until resume, cancellation or failure.
+Cancellation while initializing is sticky and never publishes READY. Cancellation
+of an ordinary suspended call stops the instance and rejects stale resumes. Test
+hosts drive two instances in alternating order and validate independent fixed
+results, exact wake consumption and physical release. This is not qualification of
+the multi-threaded scheduler or generator driving protocol.
+
+verification-test: test_xir_source
+verification-test: test_xir_source_native
+verification-test: test_xir_source_mixed
+verification-test: test_xir_packet_vm
+verification-test: test_xir_source_allocations

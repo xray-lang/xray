@@ -5618,6 +5618,8 @@ for (i in 0..1000) {
 
 `Coro.yield()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
 
+The call accepts no value or type arguments and returns unit; ordinary functions need no async annotation. A lexical binding shadowing `Coro` is resolved normally and cannot silently invoke the scheduling primitive. The new XIR source entry uses the same SUSPEND/resume protocol: its current single-host driver resumes a suspension with the matching instance epoch/wake. Full multithreaded scheduling and generator qualification remain separate.
+
 The two share a word root but are not the same suspension: `Coro.yield()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. **A generator body must not call `Coro.yield()`** (`E0385`, see §3.16.2).
 
 ### 10.11 Concurrency safety model
