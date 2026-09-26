@@ -23,7 +23,7 @@ fn _hexVal(c: i64) -> i64 {
 
 export fn hexEncode(data: Slice<u8>) -> string {
     var src = data
-    var alphabet: Slice<u8> = HEX.bytes()
+    var alphabet: const Slice<u8> = HEX.bytes()
     var out = StringBuilder()
     for (var i = 0; i < len(src); i++) {
         var b = src[i] as i64
@@ -34,7 +34,7 @@ export fn hexEncode(data: Slice<u8>) -> string {
 }
 
 export fn hexDecode(hex: string) -> Array<u8> {
-    var src: Slice<u8> = hex.bytes()
+    var src: const Slice<u8> = hex.bytes()
     var n = len(src)
     if (n % 2 != 0) { throw HexError.OddLength { length: n } }
     var out = Array<u8>(n / 2)
@@ -53,7 +53,7 @@ export fn hexDecode(hex: string) -> Array<u8> {
 }
 
 export fn hexValid(hex: string) -> bool {
-    var src: Slice<u8> = hex.bytes()
+    var src: const Slice<u8> = hex.bytes()
     if (len(src) % 2 != 0) { return false }
     for (var i = 0; i < len(src); i++) {
         if (_hexVal(src[i] as i64) < 0) { return false }

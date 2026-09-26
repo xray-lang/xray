@@ -134,7 +134,7 @@ export class NodeAddress {
 // rune loop would make every one of these rules quadratic in the length of a
 // name that is checked on every join and every publish.
 fn _asciiPrintable(s: string) -> bool {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     for (var i = 0; i < len(b); i++) {
         var c = b[i] as i64
         if (c < 0x20 || c > 0x7E) { return false }
@@ -153,7 +153,7 @@ export fn validNodeName(name: string) -> bool {
 // ========== Address grammar ==========
 
 fn _parsePort(raw: string) -> i64 {
-    var b: Slice<u8> = raw.bytes()
+    var b: const Slice<u8> = raw.bytes()
     if (len(b) == 0) { return 0 }
     var out = 0
     for (var i = 0; i < len(b); i++) {
@@ -194,7 +194,7 @@ export fn parseAddress(addr: string) -> NodeAddress {
 // ========== Topic language ==========
 
 fn _hasEmptyTopicSegment(s: string) -> bool {
-    var b: Slice<u8> = s.bytes()
+    var b: const Slice<u8> = s.bytes()
     if (len(b) == 0) { return true }
     if (b[0] == 0x2E || b[len(b) - 1] == 0x2E) { return true }
     for (var i = 1; i < len(b); i++) {
