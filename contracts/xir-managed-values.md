@@ -29,7 +29,7 @@ in place when capacity permits and reallocates its byte buffer otherwise; shared
 storage separates. Self-append is valid. Failure preserves the original value,
 published copies, and live accounting. Capacity is an implementation detail.
 
-Call ABI 5 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
+Call ABI 6 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
 owned frame storage before publication. Resume arguments/inbox and action return
 values are borrowed views. The driver retains a return before child cleanup and
 owns each inbox and terminal result. Poll exposes a borrowed result; explicit
@@ -38,7 +38,7 @@ an untaken result. Taking a result needs no allocation and the resulting owned
 value survives activation and input destruction. Frame cleanup runs before its
 arguments and inbox are dropped. Failure/cancellation publishes no partial result.
 
-Typed output is an explicit synchronous provider effect. Call ABI 5 replaces
+Typed output is an explicit synchronous provider effect. Call ABI 6 replaces
 the scalar callback with a borrowed typed group. Raw output has one value and
 names stdout or stderr. Line output names stdout and carries zero or more
 bool/i64/string values: arguments evaluate left to right before one provider call.

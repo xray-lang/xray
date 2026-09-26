@@ -13,6 +13,7 @@
  */
 
 #include "xxir_emit_c.h"
+#include "xxir_scalar.h"
 #include "../base/xmalloc.h"
 #include "../aot/xi_cgen_verify_output.h"
 #include <stdarg.h>
@@ -23,6 +24,29 @@ typedef struct CBuffer {
     size_t length, capacity, limit;
     XrXirStatus status;
 } CBuffer;
+
+static const char *comparison_symbol(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_EQ_I64: return "==";
+    case XR_XIR_NE_I64: return "!=";
+    case XR_XIR_LT_I64: return "<";
+    case XR_XIR_LE_I64: return "<=";
+    case XR_XIR_GT_I64: return ">";
+    case XR_XIR_GE_I64: return ">=";
+    default: return NULL;
+    }
+}
+
+static int emit_arithmetic_operation(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_ADD_I64: return XR_XIR_ARITH_ADD;
+    case XR_XIR_SUB_I64: return XR_XIR_ARITH_SUB;
+    case XR_XIR_MUL_I64: return XR_XIR_ARITH_MUL;
+    case XR_XIR_DIV_I64: return XR_XIR_ARITH_DIV;
+    case XR_XIR_REM_I64: return XR_XIR_ARITH_REM;
+    default: return -1;
+    }
+}
 
 static void append(CBuffer *buffer, const char *format, ...) {
     if (buffer->status != XR_XIR_OK)
@@ -110,18 +134,20 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
         append(buffer, "    xr_xir_scalar_store(frame, %uu, xr_xir_scalar_load(frame, %uu));\n",
                layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
         break;
-    case XR_XIR_ADD_I64:
-        append(buffer, "    status = xr_xir_scalar_add(xr_xir_scalar_load(frame, %uu), "
+    case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
+    case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
+        append(buffer, "    status = xr_xir_scalar_arithmetic((XrXirArithmetic) %d, xr_xir_scalar_load(frame, %uu), "
                "xr_xir_scalar_load(frame, %uu), &temporary);\n"
                "    if (status != XR_XIR_RUN_OK) goto xr_done;\n"
                "    xr_xir_scalar_store(frame, %uu, temporary);\n",
-               layout->offsets[op->args[0]], layout->offsets[op->args[1]], destination);
+               emit_arithmetic_operation(op->op), layout->offsets[op->args[0]], layout->offsets[op->args[1]], destination);
         break;
     case XR_XIR_EQ_I64:
-    case XR_XIR_LT_I64:
+    case XR_XIR_LT_I64: case XR_XIR_NE_I64: case XR_XIR_LE_I64:
+    case XR_XIR_GT_I64: case XR_XIR_GE_I64:
         append(buffer, "    xr_xir_scalar_store(frame, %uu, xr_xir_scalar_load(frame, %uu) %s "
                "xr_xir_scalar_load(frame, %uu));\n", destination,
-               layout->offsets[op->args[0]], op->op == XR_XIR_EQ_I64 ? "==" : "<",
+               layout->offsets[op->args[0]], comparison_symbol(op->op),
                layout->offsets[op->args[1]]);
         break;
     case XR_XIR_JUMP:
@@ -153,7 +179,7 @@ static void emit_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "const XrXirValue *arguments, uint32_t argument_count, XrXirValue *result) {\n"
            "    void *frame = NULL;\n    XrXirRunStatus status;\n", prefix, index);
     for (uint32_t i = 0; i < function->instruction_count; ++i)
-        if (function->instructions[i].op == XR_XIR_ADD_I64) {
+        if (emit_arithmetic_operation(function->instructions[i].op) >= 0) {
             append(buffer, "    int64_t temporary;\n");
             break;
         }
@@ -326,19 +352,21 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             op->op == XR_XIR_PRINT ? 3u : (uint32_t) op->immediate, count ? "state->arguments" : "NULL", count);
         return;
     }
-    case XR_XIR_ADD_I64:
-        append(buffer, "        if (xr_xir_scalar_add(xr_xir_scalar_load(state->frame, %uu), "
+    case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
+    case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
+        append(buffer, "        if (xr_xir_scalar_arithmetic((XrXirArithmetic) %d, xr_xir_scalar_load(state->frame, %uu), "
                "xr_xir_scalar_load(state->frame, %uu), &temporary) != XR_XIR_RUN_OK)\n"
                "            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
-               "{XR_XIR_I64, 0, XR_XIR_CALL_OVERFLOW}};\n"
+               "{XR_XIR_I64, 0, XR_XIR_CALL_DIVIDE_BY_ZERO}};\n"
                "        xr_xir_scalar_store(state->frame, %uu, temporary);\n",
-               layout->offsets[op->args[0]], layout->offsets[op->args[1]], destination);
+               emit_arithmetic_operation(op->op), layout->offsets[op->args[0]], layout->offsets[op->args[1]], destination);
         break;
     case XR_XIR_EQ_I64:
-    case XR_XIR_LT_I64:
+    case XR_XIR_LT_I64: case XR_XIR_NE_I64: case XR_XIR_LE_I64:
+    case XR_XIR_GT_I64: case XR_XIR_GE_I64:
         append(buffer, "        xr_xir_scalar_store(state->frame, %uu, "
                "xr_xir_scalar_load(state->frame, %uu) %s xr_xir_scalar_load(state->frame, %uu));\n",
-               destination, layout->offsets[op->args[0]], op->op == XR_XIR_EQ_I64 ? "==" : "<",
+               destination, layout->offsets[op->args[0]], comparison_symbol(op->op),
                layout->offsets[op->args[1]]);
         break;
     case XR_XIR_JUMP:
@@ -398,7 +426,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "XR_FUNC XrXirAction %s_f%u(XrXirCallView *view) {\n"
            "    %s_state_%u *state = view->state;\n", prefix, index, prefix, index);
     for (uint32_t i = 0; i < function->instruction_count; ++i)
-        if (function->instructions[i].op == XR_XIR_ADD_I64) {
+        if (emit_arithmetic_operation(function->instructions[i].op) >= 0) {
             append(buffer, "    int64_t temporary;\n");
             break;
         }
@@ -518,7 +546,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 5u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 6u, \"XIR call ABI\");\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 3u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"

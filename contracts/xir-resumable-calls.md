@@ -13,7 +13,7 @@ and one-shot result transfer are governed by `xir-managed-values.md`. ABI mismat
 
 Each entry is a bounded resume callback and optional non-suspending cleanup.
 It returns an explicit continue, call, return, throw, suspend, typed output, or runtime-fault
-action. Runtime overflow is distinct from language throw. Calls yield to a
+action. Runtime arithmetic faults are distinct from language throw. Calls yield to a
 trampoline; callers never retain child execution on the native C stack. The
 caller frame survives until the child completes. The caller then receives one
 typed return or throw inbox. There is no implicit blocking fallback.

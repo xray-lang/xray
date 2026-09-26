@@ -362,6 +362,36 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     body->ops[branch].targets[1] = conjunction ? join : rhs;
     return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0}, value);
 }
+static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    SourceValue left, right;
+    if (node->type == AST_UNARY_NEG) {
+        if (!expression(ctx, node->as.unary.operand, &right) ||
+            !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 0}, &left)) return false;
+    } else if (!expression(ctx, node->as.binary.left, &left) ||
+               !expression(ctx, node->as.binary.right, &right)) return false;
+    if (node->type == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING)
+        return emit(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {left.id, right.id}, {0}, 0}, value);
+    if (left.type != XR_XIR_I64 || right.type != XR_XIR_I64)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator requires a declared concrete operand contract");
+    XrXirOp op;
+    switch (node->type) {
+    case AST_BINARY_ADD: op = XR_XIR_ADD_I64; break;
+    case AST_UNARY_NEG: case AST_BINARY_SUB: op = XR_XIR_SUB_I64; break;
+    case AST_BINARY_MUL: op = XR_XIR_MUL_I64; break;
+    case AST_BINARY_DIV: op = XR_XIR_DIV_I64; break;
+    case AST_BINARY_MOD: op = XR_XIR_REM_I64; break;
+    case AST_BINARY_EQ: op = XR_XIR_EQ_I64; break;
+    case AST_BINARY_NE: op = XR_XIR_NE_I64; break;
+    case AST_BINARY_LT: op = XR_XIR_LT_I64; break;
+    case AST_BINARY_LE: op = XR_XIR_LE_I64; break;
+    case AST_BINARY_GT: op = XR_XIR_GT_I64; break;
+    case AST_BINARY_GE: op = XR_XIR_GE_I64; break;
+    default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unknown arithmetic operator");
+    }
+    bool comparison = node->type >= AST_BINARY_EQ && node->type <= AST_BINARY_GE;
+    return emit(ctx, (XrXirInstruction) {op, comparison ? XR_XIR_BOOL : XR_XIR_I64,
+        {left.id, right.id}, {0}, 0}, value);
+}
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *value) {
     switch (node->type) {
     case AST_LITERAL_INT: case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
@@ -380,19 +410,10 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
         }
         return emit(ctx, (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0, 0}, {0, 0}, symbol->index}, value);
     }
-    case AST_BINARY_EQ: case AST_BINARY_LT: case AST_BINARY_ADD: {
-        SourceValue left, right;
-        if (!expression(ctx, node->as.binary.left, &left) || !expression(ctx, node->as.binary.right, &right)) return false;
-        XrXirOp op;
-        XrXirType type;
-        if (node->type == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING) {
-            op = XR_XIR_CONCAT_STRING; type = XR_XIR_STRING;
-        } else if (left.type == XR_XIR_I64 && right.type == XR_XIR_I64) {
-            op = node->type == AST_BINARY_ADD ? XR_XIR_ADD_I64 : node->type == AST_BINARY_EQ ? XR_XIR_EQ_I64 : XR_XIR_LT_I64;
-            type = node->type == AST_BINARY_ADD ? XR_XIR_I64 : XR_XIR_BOOL;
-        } else return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator requires a declared concrete operand contract");
-        return emit(ctx, (XrXirInstruction) {op, type, {left.id, right.id}, {0, 0}, 0}, value);
-    }
+    case AST_UNARY_NEG: case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
+    case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_EQ: case AST_BINARY_NE:
+    case AST_BINARY_LT: case AST_BINARY_LE: case AST_BINARY_GT: case AST_BINARY_GE:
+        return source_arithmetic(ctx, node, value);
     case AST_ASSIGNMENT: {
         SourceName *symbol = visible_name(ctx, node->as.assignment.name);
         SourceValue assigned;

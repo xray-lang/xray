@@ -82,3 +82,21 @@ export fn update(value: i64, up: bool) -> i64 {
     if (up) { copy++ } else { copy-- }
     return copy
 }
+
+export fn calculate(kind:i64, left:i64, right:i64)->i64 {
+    var held = "arith" + "metic"
+    if (kind == 0) { return left + right }
+    if (kind == 1) { return left - right }
+    if (kind == 2) { return left * right }
+    if (kind == 3) { return left / right }
+    if (kind == 4) { return left % right }
+    if (kind == 5) { return -left }
+    if (kind == 6) { if (left == right) { return 1 } else { return 0 } }
+    if (kind == 7) { if (left != right) { return 1 } else { return 0 } }
+    if (kind == 8) { if (left < right) { return 1 } else { return 0 } }
+    if (kind == 9) { if (left <= right) { return 1 } else { return 0 } }
+    if (kind == 10) { if (left > right) { return 1 } else { return 0 } }
+    if (left >= right) { return 1 } else { return 0 }
+}
+fn operand()->i64 { hits++; return hits }
+print(operand() - operand(), hits, calculate(3, -7, 3), calculate(4, -7, 3), -(-7))

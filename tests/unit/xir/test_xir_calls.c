@@ -261,7 +261,7 @@ static void xir_instruction_calls(void) {
         }
         if (mode == 0) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 4);
         if (mode == 1) CHECK(result.status == XR_XIR_CALL_THROWN && result.value.payload == 91);
-        if (mode == 2) CHECK(result.status == XR_XIR_CALL_OVERFLOW && result.value.type == XR_XIR_UNIT);
+        if (mode == 2) CHECK(result.status == XR_XIR_CALL_DIVIDE_BY_ZERO && result.value.type == XR_XIR_UNIT);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
         xr_xir_artifact_free(artifact);
@@ -299,7 +299,7 @@ static void call_admission(void) {
     XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
     XrXirCall *call = NULL;
-    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, XR_XIR_CALL_ABI_VERSION + 1};
+    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, XR_XIR_CALL_ABI_VERSION + 1};
     for (size_t i = 0; i < sizeof(rejected_abis) / sizeof(rejected_abis[0]); ++i) {
         entries[1].abi_version = rejected_abis[i];
         CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_BAD_ABI);

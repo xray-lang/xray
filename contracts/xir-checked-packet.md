@@ -7,7 +7,7 @@ no Built, Lowered, legacy, or alternate executable format reader.
 
 All integers use fixed-width little endian, with no native struct padding.
 The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 2, semantic-contract
-u32 3, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
+u32 4, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
 over header bytes 0..31 followed by the payload. Unknown versions, stage or
 reserved fields, length mismatch, trailing bytes and digest mismatch reject.
 The digest is content identity/integrity, not authentication. Schema or semantic

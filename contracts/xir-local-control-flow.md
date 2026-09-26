@@ -30,7 +30,7 @@ budgets. Block zero has no incoming edge. All stored blocks must be reachable;
 every block ends in exactly one terminator. Scope state must not leak between
 branches, functions or compiler-session requests. Loops obey the existing runtime
 step budget and cancellation boundary. Failures publish no partial artifact.
-Checked wire schema remains 2; semantic contract becomes 3 atomically. Older
+Checked wire schema remains 2; semantic contract is 4. Older
 semantic revisions reject with no compatibility reader.
 
 verification-test: test_xir_locals
@@ -58,8 +58,8 @@ refund, leaving no unreachable executable blocks. Literals retain their existing
 whole-closure table policy. Source checking does not execute the step.
 
 Standalone name++/name-- and for steps require mutable i64 bindings; they use the
-same checked addition and local/module storage path as assignment, and produce no
-expression value. Overflow faults before replacing the binding. Const/read names,
+same wrapping addition and local/module storage path as assignment, and produce no
+expression value. Arithmetic wraps modulo 2^64 before replacing the binding. Const/read names,
 non-i64 bindings and use as expressions reject. Labels and for-in protocols remain
 unqualified. No packet or ABI revision changes: existing Checked CFG/place semantics
 fully describe these additional source constructs.

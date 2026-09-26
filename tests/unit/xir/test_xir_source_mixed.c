@@ -20,11 +20,11 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
-XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update;
+XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate;
 typedef struct MixedSource {
     XrXirArtifact *artifact;
-    XrXirCallEntry entries[32];
-    XrXirVmBinding bindings[32];
+    XrXirCallEntry entries[64];
+    XrXirVmBinding bindings[64];
 } MixedSource;
 static uint32_t released;
 static void mixed_release(void *pointer) {
@@ -46,7 +46,7 @@ int main(void) {
     CHECK(xr_xir_lower(checked, &target, NULL, &owner->artifact, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
-    CHECK(module->function_count <= 32 && module->function_count == fixture_source_program.entry_count);
+    CHECK(module->function_count <= 64 && module->function_count == fixture_source_program.entry_count);
     for (uint32_t i = 0; i < module->function_count; ++i) {
         CHECK(xr_xir_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);
         CHECK(owner->entries[i].result == fixture_source_program.entries[i].result);
@@ -64,7 +64,7 @@ int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, fixture_source_result, fixture_source_advance, fixture_source_update, results);
+    source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate}, results);
     CHECK(!released);
     xr_xir_program_drop(program); CHECK(released == 1);
     source_result_drop(&results[0]); source_result_drop(&results[1]);

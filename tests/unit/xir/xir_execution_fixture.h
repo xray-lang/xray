@@ -69,6 +69,38 @@ static XrXirArtifact *fixture_checked(void) {
         {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, INT64_MAX},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
     };
+    const XrXirInstruction numeric0[] = {
+        {XR_XIR_SUB_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction numeric1[] = {
+        {XR_XIR_MUL_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction numeric2[] = {
+        {XR_XIR_DIV_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction numeric3[] = {
+        {XR_XIR_REM_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction numeric4[] = {
+        {XR_XIR_NE_I64, XR_XIR_BOOL, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction numeric5[] = {
+        {XR_XIR_LE_I64, XR_XIR_BOOL, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction numeric6[] = {
+        {XR_XIR_GT_I64, XR_XIR_BOOL, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction numeric7[] = {
+        {XR_XIR_GE_I64, XR_XIR_BOOL, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
     const XrXirFunction functions[] = {
         {"add", 3, add_parameters, 3, XR_XIR_I64, add_blocks, 3, add, 6, NULL, 0},
         {"eq", 2, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, eq, 2, NULL, 0},
@@ -78,9 +110,17 @@ static XrXirArtifact *fixture_checked(void) {
         {"loop", 4, NULL, 0, XR_XIR_UNIT, loop_blocks, 2, loop, 2, NULL, 0},
         {"reverse", 7, NULL, 0, XR_XIR_BOOL, reverse_blocks, 3, reverse, 6, NULL, 0},
         {"false", 5, NULL, 0, XR_XIR_BOOL, pair_blocks, 1, boolean, 2, NULL, 0},
-        {"max", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, maximum, 2, NULL, 0}
+        {"max", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, maximum, 2, NULL, 0},
+        {"numeric0", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric0, 2, NULL, 0},
+        {"numeric1", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric1, 2, NULL, 0},
+        {"numeric2", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric2, 2, NULL, 0},
+        {"numeric3", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, numeric3, 2, NULL, 0},
+        {"numeric4", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric4, 2, NULL, 0},
+        {"numeric5", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric5, 2, NULL, 0},
+        {"numeric6", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric6, 2, NULL, 0},
+        {"numeric7", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric7, 2, NULL, 0}
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, 9, NULL, NULL};
+    const XrXirModule module = {XR_XIR_BUILT, functions, 17, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     return artifact;

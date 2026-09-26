@@ -286,7 +286,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_FAULT) {
         XrXirCallStatus reason = XR_XIR_CALL_BAD_STATE;
         if (boundary_value(action.value, XR_XIR_I64) &&
-            (action.value.payload == XR_XIR_CALL_OVERFLOW || action.value.payload == XR_XIR_CALL_OOM ||
+            (action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
              action.value.payload == XR_XIR_CALL_LIMIT))
             reason = (XrXirCallStatus) action.value.payload;
         unwind(call, reason);

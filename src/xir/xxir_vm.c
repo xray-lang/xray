@@ -30,6 +30,17 @@ typedef struct VmState {
     XrXirValue *arguments;
 } VmState;
 
+static int arithmetic_operation(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_ADD_I64: return XR_XIR_ARITH_ADD;
+    case XR_XIR_SUB_I64: return XR_XIR_ARITH_SUB;
+    case XR_XIR_MUL_I64: return XR_XIR_ARITH_MUL;
+    case XR_XIR_DIV_I64: return XR_XIR_ARITH_DIV;
+    case XR_XIR_REM_I64: return XR_XIR_ARITH_REM;
+    default: return -1;
+    }
+}
+
 static XrXirRunStatus string_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_OK) return XR_XIR_RUN_OK;
     if (status == XR_XIR_VALUE_OOM) return XR_XIR_RUN_OUT_OF_MEMORY;
@@ -138,10 +149,11 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return XR_XIR_RUN_OK;
     }
-    case XR_XIR_ADD_I64: {
+    case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
+    case XR_XIR_DIV_I64: case XR_XIR_REM_I64: {
         int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        XrXirRunStatus status = xr_xir_scalar_add(left, right, &value);
+        XrXirRunStatus status = xr_xir_scalar_arithmetic((XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
         if (status != XR_XIR_RUN_OK) return status;
         break;
     }
@@ -151,6 +163,22 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         break;
     case XR_XIR_LT_I64:
         value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) <
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_NE_I64:
+        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) !=
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_LE_I64:
+        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) <=
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_GT_I64:
+        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) >
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_GE_I64:
+        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) >=
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
         break;
     case XR_XIR_JUMP:
@@ -238,7 +266,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     XrXirRunStatus status = scalar_step(&run, state, &action);
     if (status != XR_XIR_RUN_OK)
         return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0,
-            status == XR_XIR_RUN_OVERFLOW ? XR_XIR_CALL_OVERFLOW :
+            status == XR_XIR_RUN_DIVIDE_BY_ZERO ? XR_XIR_CALL_DIVIDE_BY_ZERO :
             status == XR_XIR_RUN_OUT_OF_MEMORY ? XR_XIR_CALL_OOM :
             status == XR_XIR_RUN_FRAME_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE}};
     return action;

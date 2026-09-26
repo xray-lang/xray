@@ -136,6 +136,14 @@ int main(void) {
         "fn unused(i:i64) { i-- }\n",
         "fn unused() { var i=1; print(i++) }\n",
         "fn unused() { for (var i=1;; i++) { const i=true; i++ } }\n",
+        "fn unused<T>(x:T)->T { return x * x }\n" ,
+        "fn unused<T>(x:T)->T { return -x }\n" ,
+        "fn unused<T>(x:T)->bool { return x >= x }\n" ,
+        "fn unused()->i64 { return true - 1 }\n" ,
+        "fn unused()->i64 { return 1 / false }\n" ,
+        "fn unused()->i64 { return -true }\n" ,
+        "fn unused()->i64 { return \"x\" % 2 }\n" ,
+        "fn unused()->bool { return \"x\" <= \"y\" }\n" ,
         "const a = \"unterminated\n"
     };
     char directory[XR_TEST_PATH_MAX] = "xir-source-admission-XXXXXX";

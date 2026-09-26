@@ -144,6 +144,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 - 无唯一数值上下文的整数字面量默认 `i64`；有唯一整数上下文时直接取得该类型且必须落在其范围内（`var x: i8 = 200` 编译拒绝）。有唯一浮点上下文时也直接取得该浮点类型，但整数值必须能被它精确表示。
 - 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同类型整数运算保留该类型并按其宽度环绕（`u8 + u8 -> u8`）；同符号异宽整数使用唯一的较宽类型。不同符号、固定宽度与 `isize`/`usize`、整数与浮点之间不做隐式提升；移位结果取左操作数类型。
 - 静态类型为 `u8`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- 整数除法向零截断，非零余数与被除数同号；除数为零报错。`i64` 的 `INT64_MIN / -1` 按环绕规则为 `INT64_MIN`，`INT64_MIN % -1` 为零。
 - `i64` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `i64` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
 - 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持适当的 exact 无符号静态类型（`u8` / `u16` / `u32` / `u64`）。
@@ -1280,6 +1281,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 - An integer literal without a unique numeric context defaults to `i64`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
 - Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`u8 + u8 -> u8`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
 - Values with static type `u8`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- Integer division truncates toward zero; a nonzero remainder has the dividend's sign. A zero divisor faults. For i64, `INT64_MIN / -1` wraps to `INT64_MIN`, and `INT64_MIN % -1` is zero.
 - `i64.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `i64` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.

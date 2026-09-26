@@ -16,7 +16,7 @@ Neither a caller-supplied stage tag nor prior checking exempts input validation.
 The scalar subset has unit, bool, and signed i64. Function parameters are read
 bool/i64 values; unit is a result/terminator type and has no value ID in this
 internal subset. Copying a scalar preserves its value without resource ownership. Integer
-addition has checked signed overflow; equality and signed less-than return bool. Branch conditions
+addition wraps modulo 2^64; equality and signed less-than return bool. Branch conditions
 must be bool. Direct scalar CALL, SUSPEND, and THROW are separately governed by the resumable
 call contract. Calls carry a function-table index, a checked operand-table range, and an
 exact declared result type. Generic parameters and explicit CALL type arguments are governed by

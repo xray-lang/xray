@@ -279,7 +279,28 @@ static void reverse_storage_and_boolean_values(void) {
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
 }
 
+static void numeric_admission(void) {
+    for (XrXirOp op = XR_XIR_SUB_I64; op <= XR_XIR_GE_I64; op = (XrXirOp) (op + 1)) {
+        XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64};
+        XrXirType result = op >= XR_XIR_NE_I64 ? XR_XIR_BOOL : XR_XIR_I64;
+        XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
+        const XrXirBlock block = {0, 2};
+        XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};
+        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL};
+        CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+        parameters[1] = XR_XIR_BOOL;
+        CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
+        parameters[1] = XR_XIR_I64; ops[0].type = XR_XIR_STRING;
+        CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
+        ops[0].type = result; ops[0].immediate = 1;
+        CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+        ops[0].immediate = 0; ops[0].args[1] = 2;
+        CHECK(xr_xir_verify(&module, NULL, NULL) != XR_XIR_OK);
+    }
+}
+
 int main(void) {
+    numeric_admission();
     for (uint32_t op = 1; op < XR_XIR_OP_COUNT; ++op)
         CHECK(xr_xir_op_name((XrXirOp) op) != NULL);
     CHECK(xr_xir_op_name(XR_XIR_INVALID) == NULL);

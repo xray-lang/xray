@@ -12,6 +12,29 @@
 #ifndef XIR_LOCAL_CASES_H
 #define XIR_LOCAL_CASES_H
 #include "xir/xxir_call.h"
+static void numeric_cleanup(const XrXirCallEntry *entry) {
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        XrXirDomain *domain = NULL;
+        CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+        XrXirDomainStats baseline = xr_xir_domain_stats(domain);
+        XrXirValue args[] = {{0}, {0}, {XR_XIR_I64, 0, mode ? 3 : 0}};
+        CHECK(xr_xir_string_new(domain, "a", 1, &args[0]) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_new(domain, "b", 1, &args[1]) == XR_XIR_VALUE_OK);
+        XrXirCallAccounting accounting = {0};
+        XrXirCallConfig config = {entry, 1, NULL, 65536, 100, 4, &accounting, {NULL, NULL}};
+        XrXirCall *call = NULL;
+        CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
+        xr_xir_value_drop(&args[0]); xr_xir_value_drop(&args[1]);
+        XrXirCallResult result = xr_xir_call_poll(call);
+        CHECK(result.status == (mode ? XR_XIR_CALL_RETURNED : XR_XIR_CALL_DIVIDE_BY_ZERO));
+        CHECK(result.value.payload == (mode ? 2 : 0));
+        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+        CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
+        XrXirDomainStats stats = xr_xir_domain_stats(domain);
+        CHECK(stats.live_bytes == baseline.live_bytes && stats.allocations == stats.frees + 1);
+        xr_xir_domain_drop(domain);
+    }
+}
 static void local_cases(const XrXirCallEntry *entry) {
     for (unsigned mode = 0; mode < 4; ++mode) {
         XrXirDomain *domain = NULL;

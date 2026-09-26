@@ -28,7 +28,18 @@ static XrXirArtifact *local_fixture(void) {
     };
     const XrXirBlock blocks[] = {{0, 3}, {3, 2}, {5, 2}, {7, 4}};
     const XrXirFunction function = {"local", 5, parameters, 3, XR_XIR_STRING, blocks, 4, ops, 11, NULL, 0};
-    const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL};
+    const XrXirType fault_parameters[] = {XR_XIR_STRING, XR_XIR_STRING, XR_XIR_I64};
+    const XrXirInstruction fault_ops[] = {
+        {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {0, 1}, {0}, 0},
+        {XR_XIR_LOCAL_NEW, XR_XIR_STRING, {3}, {0}, 0},
+        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 7},
+        {XR_XIR_DIV_I64, XR_XIR_I64, {5, 2}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0}
+    };
+    const XrXirBlock fault_block = {0, 5};
+    const XrXirFunction functions[] = {function,
+        {"fault", 5, fault_parameters, 3, XR_XIR_I64, &fault_block, 1, fault_ops, 5, NULL, 0}};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     return checked;

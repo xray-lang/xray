@@ -23,8 +23,8 @@ construction and validation participate in metadata, work, and frame budgets.
 Scalar execution validates argument count, type, reserved fields, and canonical
 bool payloads before allocating a frame. Each attempted instruction consumes one
 step; zero remaining steps fails before the instruction. Frame admission is
-bounded and OOM fails without a partial result. Signed addition checks both
-overflow directions before using C signed arithmetic. Equality yields normalized
+bounded and OOM fails without a partial result. Signed arithmetic follows `xir-integer-arithmetic.md`, using unsigned operations
+and guarded division to avoid host undefined behavior. Equality yields normalized
 bool. Every return and error frees the scalar frame. Results own their inline
 payload independently of artifact and execution storage; failure clears output.
 Execution counters distinguish live bytes, peak bytes, allocations, and frees.
@@ -36,7 +36,7 @@ counts reject before frame allocation. Metadata budgets include the owned artifa
 header as well as copied tables and physical layouts.
 
 The C backend emits portable C11 from Lowered blocks and typed operations, using
-the same checked scalar runtime rules as the VM. It does not run an interpreter
+the same scalar runtime rules as the VM. It does not run an interpreter
 inside generated C, recover language semantics from C shape, or call the old
 executor. Every translation unit passes the existing always-on W1-W4 verifier
 before publication; malformed generated output remains an ICE. Generation is

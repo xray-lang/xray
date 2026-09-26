@@ -407,7 +407,8 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             expected = function->result;
         else if (op->op == XR_XIR_BRANCH)
             expected = XR_XIR_BOOL;
-        else if (op->op == XR_XIR_EQ_I64 || op->op == XR_XIR_LT_I64)
+        else if (op->op == XR_XIR_EQ_I64 || op->op == XR_XIR_LT_I64 ||
+                 (op->op >= XR_XIR_NE_I64 && op->op <= XR_XIR_GE_I64))
             expected = XR_XIR_I64;
         if (op->op == XR_XIR_THROW)
             expected = XR_XIR_I64;

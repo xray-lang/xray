@@ -55,7 +55,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 普通泛型定义按约束检查，单态化位于 Checked；显式派生的新内容重新检查。
 普通实例在不可变可执行 image 封存前完成，VM 只执行 Lowered。
 
-首个内部子集接受 `unit`、`bool`、`i64`，标量复制保持值，`i64` 加法溢出报错，
+首个内部子集接受 `unit`、`bool`、`i64`，标量复制保持值，`i64` 加法按二补码环绕，
 相等及有符号小于比较产生 `bool`，条件分支只接受 `bool`，返回类型须与声明相同。此内部子集参数
 只含 bool/i64；unit 可作结果和终结操作类型，不产生值 ID。
 此子集没有托管值、借用、泛型或新源码拼写；未实现操作必须拒绝。内部直接调用另见下文。
@@ -71,7 +71,7 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 帧槽偏移和边界布局，VM/C后端不得另行决定。bool/i64的SSA及帧槽为8字节，
 边界值为16字节（类型、零保留字段、i64载荷），bool载荷只准0/1，unit无帧槽。
 参数必须精确匹配，错误清空结果；每条指令消耗一步，帧和步骤均受预算限制。
-有符号加法须在计算前检查溢出，所有退出释放帧，标量结果独立存活。
+有符号算术须用无符号计算及受检除法避免宿主未定义行为，所有退出释放帧，标量结果独立存活。
 Checked不可执行；未知目标/ABI拒绝。此内部子集不授予模块、调用或可恢复ABI资格。
 
 内部可恢复调用受 `contracts/xir-resumable-calls.md` 约束。直接CALL引用模块函数身份，
@@ -85,7 +85,7 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 
 ### 17.7 内部托管值与结果交接
 
-内部值 ABI 3 与调用 ABI 5 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
+内部值 ABI 3 与调用 ABI 6 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
 允许内嵌 NUL，不隐式归一化或替换；字节数、Unicode 标量数与字素数是不同概念。
 复制保留原子引用，修改执行独占窗口内的写时复制；共享副本不因其他副本修改而改变。
 所有分配属于显式、计费且可独立存活的域，字符串不依赖执行帧、实例或代码镜像寿命。
@@ -184,7 +184,7 @@ installer 发布或完整无源码标准库分发已经验收。
 
 Built/Checked 使用函数局部类型参数 ID，保存约束和独立调用类型实参表。
 CALL 的类型实参范围与值实参范围分别规范化并复验；替换后的参数/结果须精确匹配，
-正常可见性、模块和支配关系规则仍有效。Checked 包 schema为2，语义合同为3（局部存储见§17.12），
+正常可见性、模块和支配关系规则仍有效。Checked 包 schema为2，语义合同为4（局部存储见§17.12，整数见§17.14），
 旧schema或语义版本直接拒绝。解码后重新验证模板定义与转发证明。
 
 特化只读取 Checked，不访问 AST。按声明身份与有序具体类型实参建立有界工作队列，
@@ -209,7 +209,7 @@ Built/Checked保留LOCAL_NEW/READ/WRITE，Lowered唯一选择标量或托管存�
 if/else与while条件必须bool；只执行选中分支，循环每次重新求条件。局部更新跨分支与回边保存，
 块内名字不外泄；无标签break/continue指向最内层while。值函数每条存活路径必须返回，拒绝不可达语句。
 本族接通具体i64加法/相等/小于与既有string加法；不授予无约束T任何运算见证。
-块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema仍为2，语义合同原子升至3，
+块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema仍为2，语义合同为4，
 旧语义版本拒绝；没有第二条兼容检查路径。精确接口见 `contracts/xir-local-control-flow.md`。
 
 ### 17.13 布尔短路与C风格for
@@ -222,8 +222,20 @@ for(init; condition; step)初始化一次，循环初始化绑定只在该循环
 正常迭代和continue先执行step再求条件，break/return跳过step；step看不到循环体内的绑定。
 嵌套while/for的无标签出口指向最内层。即使step没有入边也检查其源码类型，丢弃其临时指令/块及
 操作数、类型实参范围且不返还预算，最终CFG不保留不可达块；字面量仍按现有闭包表政策保留。
-独立语句及step中的name++/name--只接受可变i64，使用同一checked add与赋值路径，溢出在替换前失败，
+独立语句及step中的name++/name--只接受可变i64，使用同一环绕加法与赋值路径，
 不能用作表达式。标签、for-in协议与其他数值族仍待接通。现有Checked语义已完整表达这些构造，包与ABI版本不变。
+
+### 17.14 XIR i64算术与关系比较
+
+新源码族按§2.3.1统一采用二补码环绕：+、-、*、一元负号与增减均按2^64取模；
+取代早期内部checked-add子集。二元实参从左到右各求值一次，不因交换比较方向重排副作用。
+==、!=、<、<=、>、>=按有符号值比较并返回规范bool，不能通过减法比较。
+除法向零截断，非零余数与被除数同号；INT64_MIN/-1为INT64_MIN，INT64_MIN%-1为零。
+除数为零产生独立DIVIDE_BY_ZERO fault，没有结果并逆序清理所有帧；初始化中失败保持粘滞，
+已初始化实例的普通调用失败允许后续调用。生成C在宿主/和%之前检查特殊对，不执行有符号溢出。
+一元负号降为零减操作数，其他运算经同一Checked→Lowered→共享标量运行时。
+Checked schema 2/语义合同4、Call ABI 6原子替换旧版本，无reader或适配路径；Value3/Program1不变。
+具体i64能力不能通过实例化补给普通泛型；其他数值族与显式checked/saturating库方法尚未接通。
 
 <!-- /xr-spec:cn -->
 
@@ -282,7 +294,7 @@ specialized on Checked. Explicitly derived content is checked again. Ordinary
 instances close before immutable executable-image sealing; the VM executes Lowered.
 
 The initial internal subset admits unit, bool, and i64. Scalar copy preserves the
-value; signed i64 addition reports overflow; equality and signed less-than produce bool; branches
+value; signed i64 addition wraps modulo 2^64; equality and signed less-than produce bool; branches
 require bool; returns match their declaration. Parameters in this internal subset
 are bool/i64; unit is a result/terminator type without a value ID. Managed values, borrowing, generics, and new source spellings are absent;
 unsupported operations reject. Internal direct calls are defined below.
@@ -304,7 +316,7 @@ Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes
 (type, zero reserved field, i64 payload); bool payloads are zero or one and unit
 has no frame lane. Arguments match exactly and failures clear the result. Each
 instruction consumes one step; frames and steps are bounded. Signed addition
-checks overflow before computation, every exit releases its frame, and inline
+avoids host signed overflow, every exit releases its frame, and inline
 scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
 
@@ -325,7 +337,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 5 replace the initial scalar boundary without aliases.
+Value ABI 3 and call ABI 6 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -460,7 +472,7 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema 2 preserves templates; semantic contract 3 also covers local
+dominance rules. Checked schema 2 preserves templates; semantic contract 4 also covers local
 places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
@@ -500,7 +512,7 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema stays 2 and its semantic contract atomically becomes 3; older semantic
+schema stays 2 and its semantic contract is 4; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
 
@@ -520,9 +532,24 @@ while/for exits select the innermost loop. A step with no incoming path is still
 source-typechecked; temporary instructions, blocks, operand and type-argument
 ranges are discarded without refunding budgets, so executable CFG has no dead
 blocks. Literals keep the existing whole-closure table policy. Standalone and
-for-step name++/name-- require mutable i64 and use the same checked add/store path;
-overflow fails before replacement. They cannot be used as expressions. Labels,
+for-step name++/name-- require mutable i64 and use the same wrapping add/store path. They cannot be used as expressions. Labels,
 for-in protocols and other numeric families remain unqualified. Existing Checked
 semantics fully describe these constructs; packet and ABI revisions are unchanged.
+
+### 17.14 XIR i64 Arithmetic and Comparisons
+
+The admitted source family follows §2.3.1: +, -, *, unary negation and increment/decrement
+wrap modulo 2^64, replacing the initial internal checked-add subset. Binary operands
+evaluate once, left to right. Signed ==, !=, <, <=, > and >= return canonical bool;
+comparison never subtracts or reorders side effects. Division truncates toward zero,
+and a nonzero remainder has the dividend's sign. INT64_MIN/-1 wraps to INT64_MIN;
+INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result and
+unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
+after an arithmetic fault in an initialized instance. Generated C guards special pairs
+before host / or % and never executes signed overflow. Negation lowers to zero minus
+the operand. Checked schema 2 / semantic contract 4 and Call ABI 6 atomically replace
+older versions without a compatibility reader or adapter; Value3/Program1 are unchanged.
+Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
+and explicit checked/saturating library methods remain outside this admitted subset.
 
 <!-- /xr-spec:en -->

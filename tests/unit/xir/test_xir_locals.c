@@ -21,7 +21,7 @@
 static void rejected_places(const XrXirArtifact *artifact) {
     XrXirModule module = *xr_xir_artifact_module(artifact);
     XrXirFunction function = module.functions[0];
-    XrXirInstruction ops[11]; module.functions = &function; function.instructions = ops;
+    XrXirInstruction ops[11]; module.functions = &function; module.function_count = 1; function.instructions = ops;
     for (unsigned mode = 0; mode < 9; ++mode) {
         memcpy(ops, xr_xir_artifact_module(artifact)->functions[0].instructions, sizeof(ops));
         if (mode == 0) ops[10].args[0] = 3;
@@ -53,10 +53,12 @@ int main(int argc, char **argv) {
     XrXirVmBinding binding; XrXirCallEntry entry;
     CHECK(xr_xir_vm_bind(lowered, 0, &binding, &entry) == XR_XIR_OK);
     local_cases(&entry);
+    CHECK(xr_xir_vm_bind(lowered, 1, &binding, &entry) == XR_XIR_OK);
+    numeric_cleanup(&entry);
     XrXirModule changed = *xr_xir_artifact_module(lowered);
     XrXirFunction changed_function = *function;
     XrXirInstruction changed_ops[11]; memcpy(changed_ops, function->instructions, sizeof(changed_ops));
-    changed_function.instructions = changed_ops; changed.functions = &changed_function;
+    changed_function.instructions = changed_ops; changed.functions = &changed_function; changed.function_count = 1;
     changed_ops[3].op = XR_XIR_SCALAR_LOCAL_WRITE;
     CHECK(xr_xir_verify(&changed, NULL, NULL) == XR_XIR_BAD_TYPE);
     changed_ops[3] = function->instructions[3]; changed_ops[0].op = XR_XIR_SCALAR_LOCAL_NEW;

@@ -729,6 +729,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 - An integer literal without a unique numeric context defaults to `i64`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
 - Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`u8 + u8 -> u8`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
 - Values with static type `u8`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- Integer division truncates toward zero; a nonzero remainder has the dividend's sign. A zero divisor faults. For i64, `INT64_MIN / -1` wraps to `INT64_MIN`, and `INT64_MIN % -1` is zero.
 - `i64.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `i64` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
 - After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.
@@ -6821,7 +6822,7 @@ specialized on Checked. Explicitly derived content is checked again. Ordinary
 instances close before immutable executable-image sealing; the VM executes Lowered.
 
 The initial internal subset admits unit, bool, and i64. Scalar copy preserves the
-value; signed i64 addition reports overflow; equality and signed less-than produce bool; branches
+value; signed i64 addition wraps modulo 2^64; equality and signed less-than produce bool; branches
 require bool; returns match their declaration. Parameters in this internal subset
 are bool/i64; unit is a result/terminator type without a value ID. Managed values, borrowing, generics, and new source spellings are absent;
 unsupported operations reject. Internal direct calls are defined below.
@@ -6843,7 +6844,7 @@ Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes
 (type, zero reserved field, i64 payload); bool payloads are zero or one and unit
 has no frame lane. Arguments match exactly and failures clear the result. Each
 instruction consumes one step; frames and steps are bounded. Signed addition
-checks overflow before computation, every exit releases its frame, and inline
+avoids host signed overflow, every exit releases its frame, and inline
 scalar results survive independently. Checked cannot execute; unknown target/ABI
 rejects. This subset does not qualify module, call, or resumable ABI behavior.
 
@@ -6864,7 +6865,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 5 replace the initial scalar boundary without aliases.
+Value ABI 3 and call ABI 6 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -6999,7 +7000,7 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema 2 preserves templates; semantic contract 3 also covers local
+dominance rules. Checked schema 2 preserves templates; semantic contract 4 also covers local
 places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
@@ -7039,7 +7040,7 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema stays 2 and its semantic contract atomically becomes 3; older semantic
+schema stays 2 and its semantic contract is 4; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
 
@@ -7059,10 +7060,25 @@ while/for exits select the innermost loop. A step with no incoming path is still
 source-typechecked; temporary instructions, blocks, operand and type-argument
 ranges are discarded without refunding budgets, so executable CFG has no dead
 blocks. Literals keep the existing whole-closure table policy. Standalone and
-for-step name++/name-- require mutable i64 and use the same checked add/store path;
-overflow fails before replacement. They cannot be used as expressions. Labels,
+for-step name++/name-- require mutable i64 and use the same wrapping add/store path. They cannot be used as expressions. Labels,
 for-in protocols and other numeric families remain unqualified. Existing Checked
 semantics fully describe these constructs; packet and ABI revisions are unchanged.
+
+### 17.14 XIR i64 Arithmetic and Comparisons
+
+The admitted source family follows §2.3.1: +, -, *, unary negation and increment/decrement
+wrap modulo 2^64, replacing the initial internal checked-add subset. Binary operands
+evaluate once, left to right. Signed ==, !=, <, <=, > and >= return canonical bool;
+comparison never subtracts or reorders side effects. Division truncates toward zero,
+and a nonzero remainder has the dividend's sign. INT64_MIN/-1 wraps to INT64_MIN;
+INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result and
+unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
+after an arithmetic fault in an initialized instance. Generated C guards special pairs
+before host / or % and never executes signed overflow. Negation lowers to zero minus
+the operand. Checked schema 2 / semantic contract 4 and Call ABI 6 atomically replace
+older versions without a compatibility reader or adapter; Value3/Program1 are unchanged.
+Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
+and explicit checked/saturating library methods remain outside this admitted subset.
 
 ---
 

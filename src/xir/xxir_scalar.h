@@ -24,7 +24,7 @@ typedef enum XrXirRunStatus {
     XR_XIR_RUN_BAD_ARGUMENT,
     XR_XIR_RUN_BAD_ARTIFACT,
     XR_XIR_RUN_BAD_ABI,
-    XR_XIR_RUN_OVERFLOW,
+    XR_XIR_RUN_DIVIDE_BY_ZERO,
     XR_XIR_RUN_STEP_LIMIT,
     XR_XIR_RUN_FRAME_LIMIT,
     XR_XIR_RUN_OUT_OF_MEMORY
@@ -45,7 +45,11 @@ typedef XrXirRunStatus (*XrXirLeafEntry)(XrXirRunContext *context,
 XR_FUNC XrXirRunStatus xr_xir_scalar_frame_begin(XrXirRunContext *context,
                                                uint32_t bytes, void **frame);
 XR_FUNC void xr_xir_scalar_frame_end(XrXirRunContext *context, uint32_t bytes, void *frame);
-XR_FUNC XrXirRunStatus xr_xir_scalar_add(int64_t left, int64_t right, int64_t *result);
+typedef enum XrXirArithmetic {
+    XR_XIR_ARITH_ADD, XR_XIR_ARITH_SUB, XR_XIR_ARITH_MUL, XR_XIR_ARITH_DIV, XR_XIR_ARITH_REM
+} XrXirArithmetic;
+XR_FUNC XrXirRunStatus xr_xir_scalar_arithmetic(XrXirArithmetic operation,
+    int64_t left, int64_t right, int64_t *result);
 
 static inline bool xr_xir_scalar_step(XrXirRunContext *context) {
     if (!context->steps)

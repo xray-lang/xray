@@ -35,7 +35,7 @@ int main(void) {
             } else CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
             result = xr_xir_call_poll(call);
         }
-        if (mode == 2) CHECK(result.status == XR_XIR_CALL_OVERFLOW && result.value.type == XR_XIR_UNIT);
+        if (mode == 2) CHECK(result.status == XR_XIR_CALL_DIVIDE_BY_ZERO && result.value.type == XR_XIR_UNIT);
         else if (cancel) CHECK(result.status == XR_XIR_CALL_CANCELLED && result.value.type == XR_XIR_UNIT);
         else if (mode == 1) CHECK(result.status == XR_XIR_CALL_THROWN && result.value.payload == 91);
         else CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 4);
