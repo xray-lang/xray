@@ -7043,6 +7043,27 @@ schema stays 2 and its semantic contract atomically becomes 3; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
 
+### 17.13 Boolean Short Circuit and C-style For
+
+The new source owner requires bool for !, && and ||. Both operands are checked
+at definition time even if runtime evaluation necessarily skips the right side.
+The left side runs once first; && evaluates the right side only when true and ||
+only when false. ! negates its operand. Existing CFG and typed places express
+these forms without new runtime or IR operations. Nullable narrowing is not yet
+qualified by this implementation.
+
+For(init; condition; step) initializes once with loop-local bindings; an absent
+condition is true. Normal iteration and continue run the step before the next
+condition; break/return skip it. The step cannot see body-local bindings. Nested
+while/for exits select the innermost loop. A step with no incoming path is still
+source-typechecked; temporary instructions, blocks, operand and type-argument
+ranges are discarded without refunding budgets, so executable CFG has no dead
+blocks. Literals keep the existing whole-closure table policy. Standalone and
+for-step name++/name-- require mutable i64 and use the same checked add/store path;
+overflow fails before replacement. They cannot be used as expressions. Labels,
+for-in protocols and other numeric families remain unqualified. Existing Checked
+semantics fully describe these constructs; packet and ABI revisions are unchanged.
+
 ---
 
 ## 18. Error Codes

@@ -212,6 +212,19 @@ if/else与while条件必须bool；只执行选中分支，循环每次重新求�
 块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema仍为2，语义合同原子升至3，
 旧语义版本拒绝；没有第二条兼容检查路径。精确接口见 `contracts/xir-local-control-flow.md`。
 
+### 17.13 布尔短路与C风格for
+
+新源码入口的!、&&、||严格要求bool；定义处检查右侧，即使运行时必然跳过也不放松约束。
+左侧先且仅求值一次，&&在true时、||在false时才求右侧；!返回反值。统一降为已有CFG与typed place，
+没有新增运行时或IR分支。可空收窄尚未据此接通。
+
+for(init; condition; step)初始化一次，循环初始化绑定只在该循环内可见；省略条件为true。
+正常迭代和continue先执行step再求条件，break/return跳过step；step看不到循环体内的绑定。
+嵌套while/for的无标签出口指向最内层。即使step没有入边也检查其源码类型，丢弃其临时指令/块及
+操作数、类型实参范围且不返还预算，最终CFG不保留不可达块；字面量仍按现有闭包表政策保留。
+独立语句及step中的name++/name--只接受可变i64，使用同一checked add与赋值路径，溢出在替换前失败，
+不能用作表达式。标签、for-in协议与其他数值族仍待接通。现有Checked语义已完整表达这些构造，包与ABI版本不变。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -490,5 +503,26 @@ budgets and runtime step/cancellation contracts continue to apply. Checked wire
 schema stays 2 and its semantic contract atomically becomes 3; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
+
+### 17.13 Boolean Short Circuit and C-style For
+
+The new source owner requires bool for !, && and ||. Both operands are checked
+at definition time even if runtime evaluation necessarily skips the right side.
+The left side runs once first; && evaluates the right side only when true and ||
+only when false. ! negates its operand. Existing CFG and typed places express
+these forms without new runtime or IR operations. Nullable narrowing is not yet
+qualified by this implementation.
+
+For(init; condition; step) initializes once with loop-local bindings; an absent
+condition is true. Normal iteration and continue run the step before the next
+condition; break/return skip it. The step cannot see body-local bindings. Nested
+while/for exits select the innermost loop. A step with no incoming path is still
+source-typechecked; temporary instructions, blocks, operand and type-argument
+ranges are discarded without refunding budgets, so executable CFG has no dead
+blocks. Literals keep the existing whole-closure table policy. Standalone and
+for-step name++/name-- require mutable i64 and use the same checked add/store path;
+overflow fails before replacement. They cannot be used as expressions. Labels,
+for-in protocols and other numeric families remain unqualified. Existing Checked
+semantics fully describe these constructs; packet and ABI revisions are unchanged.
 
 <!-- /xr-spec:en -->

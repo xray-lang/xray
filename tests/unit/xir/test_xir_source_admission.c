@@ -121,6 +121,21 @@ int main(void) {
         "fn unused<T>(x:T) { if (true) { print(x) } }\n",
         "fn unused<T>(x:T) { var y=x; while (y < x) {} }\n",
         "fn unused() -> i64 { return 1 + true }\n",
+        "fn unused() { print(!1) }\n",
+        "fn unused() { print(false && 1) }\n",
+        "fn unused() { print(true || missing) }\n",
+        "fn unused<T>(x:T) { print(false && x) }\n",
+        "fn unused() { for (; 1;) { break } }\n",
+        "fn unused() { for (var i=0; i<1; i++) {} print(i) }\n",
+        "fn unused() { for (var i=0; true; i=hidden) { var hidden=1; break } }\n",
+        "fn unused() { for (;; missing()) { break } }\n",
+        "fn unused<T>(x:T) { for (;; x+1) { return } }\n",
+        "fn unused() { for (;;) { break; print(1) } }\n",
+        "fn unused() { const i=1; i++ }\n",
+        "fn unused() { var i=true; i++ }\n",
+        "fn unused(i:i64) { i-- }\n",
+        "fn unused() { var i=1; print(i++) }\n",
+        "fn unused() { for (var i=1;; i++) { const i=true; i++ } }\n",
         "const a = \"unterminated\n"
     };
     char directory[XR_TEST_PATH_MAX] = "xir-source-admission-XXXXXX";

@@ -46,17 +46,18 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
-    uint32_t result = UINT32_MAX, advance = UINT32_MAX;
+    uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX;
     for (uint32_t i = 0; i < module->function_count; ++i) {
         if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)) result = i;
+        if (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "update", 6)) update = i;
         if (module->functions[i].name_length == 7 && !memcmp(module->functions[i].name, "advance", 7)) advance = i;
     }
-    CHECK(result != UINT32_MAX && advance != UINT32_MAX);
+    CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, result, advance, results);
+    source_pair(program, entry, result, advance, update, results);
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Real source modules, independent state and output passed in Lowered VM");

@@ -39,7 +39,7 @@ typedef struct SourceFunction {
     XrXirInstruction *ops;
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
-typedef struct SourceLoop { struct SourceLoop *parent; uint32_t condition; SourcePatch *breaks; } SourceLoop;
+typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; } SourceLoop;
 typedef struct SourceValue { uint32_t id; XrXirType type; } SourceValue;
 typedef struct SourceContext {
     XrModuleGraph *graph;
@@ -339,11 +339,36 @@ static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0},
         node->as.literal.raw_value.bool_val}, value);
 }
+static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    bool negate = node->type == AST_UNARY_NOT;
+    SourceValue left, initial, place, right;
+    if (!expression(ctx, negate ? node->as.unary.operand : node->as.binary.left, &left)) return false;
+    if (left.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "logical operand must be bool");
+    initial = left;
+    if (negate && !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 0}, &initial)) return false;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_NEW, XR_XIR_BOOL, {initial.id, 0}, {0}, 0}, &place)) return false;
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    uint32_t branch = body->count, rhs = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {left.id, 0}, {0}, 0}, NULL) || !begin_block(ctx)) return false;
+    if (negate) {
+        if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1}, &right)) return false;
+    } else if (!expression(ctx, node->as.binary.right, &right)) return false;
+    if (right.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "logical operand must be bool");
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place.id, right.id}, {0}, 0}, NULL)) return false;
+    uint32_t join = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {join, 0}, 0}, NULL) || !begin_block(ctx)) return false;
+    bool conjunction = node->type == AST_BINARY_AND;
+    body->ops[branch].targets[0] = conjunction ? rhs : join;
+    body->ops[branch].targets[1] = conjunction ? join : rhs;
+    return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0}, value);
+}
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *value) {
     switch (node->type) {
     case AST_LITERAL_INT: case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
         return source_literal(ctx, node, value);
+    case AST_GROUPING: return expression(ctx, node->as.grouping, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
+    case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);
     case AST_VARIABLE: {
         SourceName *symbol = visible_name(ctx, node->as.variable.name);
         if (!symbol || (symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_LOCAL) || !symbol->type)
@@ -459,47 +484,101 @@ static bool source_if(SourceContext *ctx, AstNode *node) {
     }
     return true;
 }
-static bool source_while(SourceContext *ctx, AstNode *node) {
-    if (node->as.while_stmt.label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "labelled loops are not admitted");
+static bool source_increment(SourceContext *ctx, AstNode *node) {
+    const char *name = node->type == AST_INC ? node->as.inc.name : node->as.dec.name;
+    SourceName *symbol = visible_name(ctx, name);
+    if (!symbol || !symbol->mutable || symbol->type != XR_XIR_I64 ||
+        (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "increment requires a mutable i64 binding");
+    SourceValue old, one, result;
+    XrXirInstruction read = symbol->kind == SOURCE_LOCAL ?
+        (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_I64, {symbol->index, 0}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_SLOT_LOAD, XR_XIR_I64, {0}, {0}, symbol->index};
+    if (!emit(ctx, read, &old) ||
+        !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, node->type == AST_INC ? 1 : -1}, &one) ||
+        !emit(ctx, (XrXirInstruction) {XR_XIR_ADD_I64, XR_XIR_I64, {old.id, one.id}, {0}, 0}, &result)) return false;
+    XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?
+        (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {symbol->index, result.id}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {result.id, 0}, {0}, symbol->index};
+    return emit(ctx, write, NULL);
+}
+static bool source_step(SourceContext *ctx, AstNode *node) {
+    if (!node) return true;
+    if (!source_work(ctx, node)) return false;
+    if (node->type == AST_INC || node->type == AST_DEC) return source_increment(ctx, node);
+    SourceValue ignored; return expression(ctx, node, &ignored);
+}
+static bool check_dead_step(SourceContext *ctx, AstNode *node) {
+    if (!node) return true;
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    SourceFunction saved = *body;
+    XrXirGeneric generic = ctx->generics[ctx->function];
+    bool returned = ctx->returned;
+    bool result = begin_block(ctx) && source_step(ctx, node);
+    *body = saved; ctx->generics[ctx->function] = generic; ctx->returned = returned;
+    return result;
+}
+static bool patch_exits(SourceContext *ctx, SourcePatch *patch, uint32_t target) {
+    for (; patch; patch = patch->next) {
+        if (!source_work(ctx, NULL)) return false;
+        ctx->bodies[ctx->function].ops[patch->instruction].targets[0] = target;
+    }
+    return true;
+}
+static bool source_loop(SourceContext *ctx, AstNode *node, AstNode *condition_node, AstNode *loop_body, AstNode *step) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t condition_block = body->block_count;
     if (!emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {condition_block, 0}, 0}, NULL) || !begin_block(ctx)) return false;
     SourceValue condition;
-    if (!expression(ctx, node->as.while_stmt.condition, &condition)) return false;
-    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "while requires bool");
-    uint32_t branch = body->count, loop_body = body->block_count;
-    if (!emit(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {loop_body, 0}, 0}, NULL) || !begin_block(ctx)) return false;
-    SourceLoop loop = {ctx->loop, condition_block, NULL}; ctx->loop = &loop;
-    bool ok = scoped_statement(ctx, node->as.while_stmt.body); ctx->loop = loop.parent;
+    if (condition_node) { if (!expression(ctx, condition_node, &condition)) return false; }
+    else if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1}, &condition)) return false;
+    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "loop condition requires bool");
+    uint32_t branch = body->count, entry = body->block_count;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {entry, 0}, 0}, NULL) || !begin_block(ctx)) return false;
+    SourceLoop loop = {ctx->loop, NULL, NULL}; ctx->loop = &loop;
+    bool ok = scoped_statement(ctx, loop_body); ctx->loop = loop.parent;
     if (!ok) return false;
-    if (!ctx->returned && !emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {condition_block, 0}, 0}, NULL)) return false;
+    if (!ctx->returned || loop.continues) {
+        uint32_t next = step ? body->block_count : condition_block;
+        if (!ctx->returned && !emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {next, 0}, 0}, NULL)) return false;
+        if (!patch_exits(ctx, loop.continues, next)) return false;
+        if (step && (!begin_block(ctx) || !source_step(ctx, step) ||
+            !emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {condition_block, 0}, 0}, NULL))) return false;
+    } else if (!check_dead_step(ctx, step)) return false;
     uint32_t exit = body->block_count;
     if (!begin_block(ctx)) return false;
     body->ops[branch].targets[1] = exit;
-    for (SourcePatch *p = loop.breaks; p; p = p->next) {
-        if (!source_work(ctx, node)) return false;
-        body->ops[p->instruction].targets[0] = exit;
-    }
-    return true;
+    return patch_exits(ctx, loop.breaks, exit);
+}
+static bool source_for(SourceContext *ctx, AstNode *node) {
+    ForStmtNode *loop = &node->as.for_stmt;
+    if (loop->label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "labelled loops are not admitted");
+    SourceName *saved = ctx->locals, *scope = ctx->scope; ctx->scope = saved;
+    bool ok = !loop->initializer || statement(ctx, loop->initializer, false);
+    if (ok) ok = source_loop(ctx, node, loop->condition, loop->body, loop->increment);
+    ctx->locals = saved; ctx->scope = scope; return ok;
 }
 static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
     bool stop = node->type == AST_BREAK_STMT;
     const char *label = stop ? node->as.break_stmt.label : node->as.continue_stmt.label;
-    if (!ctx->loop || label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "loop exit requires an unlabelled enclosing while");
-    if (stop) {
-        SourcePatch *patch = source_alloc(ctx, 1, sizeof(*patch)); if (!patch) return false;
-        *patch = (SourcePatch) {ctx->loop->breaks, ctx->bodies[ctx->function].count}; ctx->loop->breaks = patch;
-    }
+    if (!ctx->loop || label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "loop exit requires an unlabelled enclosing loop");
+    SourcePatch **head = stop ? &ctx->loop->breaks : &ctx->loop->continues;
+    SourcePatch *patch = source_alloc(ctx, 1, sizeof(*patch)); if (!patch) return false;
+    *patch = (SourcePatch) {*head, ctx->bodies[ctx->function].count}; *head = patch;
     ctx->returned = true;
-    return emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {stop ? 0 : ctx->loop->condition, 0}, 0}, NULL);
+    return emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0}, NULL);
 }
 static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     if (!node || !source_work(ctx, node)) return false;
     if (ctx->returned) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unreachable statements are not admitted");
     switch (node->type) {
     case AST_IF_STMT: return source_if(ctx, node);
-    case AST_WHILE_STMT: return source_while(ctx, node);
+    case AST_WHILE_STMT:
+        if (node->as.while_stmt.label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "labelled loops are not admitted");
+        return source_loop(ctx, node, node->as.while_stmt.condition, node->as.while_stmt.body, NULL);
+    case AST_FOR_STMT: return source_for(ctx, node);
+    case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
     case AST_IMPORT_STMT: case AST_FUNCTION_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");

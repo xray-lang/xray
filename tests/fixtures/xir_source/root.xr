@@ -41,3 +41,44 @@ fn control() -> string {
     return snapshot + acc
 }
 print(choose<string>(true, "bad", control()), branch(true), branch(false), choose<bool>(false, true, false))
+
+var hits = 0
+fn probe(value: bool) -> bool { hits++; return value }
+fn shortControl() -> i64 {
+    const a = false && probe(true)
+    const b = true || probe(false)
+    const c = probe(false) || probe(true)
+    const d = probe(true) && probe(false)
+    if (!a && b && c && !d) { return hits }
+    return 999
+}
+fn forControl() -> string {
+    var text = "f"
+    var i = 99
+    for (var i = 0; i < 5 && !(i == 4); i++) {
+        if (i == 1) { continue }
+        var j = 0
+        while (j < 2) {
+            j++
+            if (j == 1) { continue }
+            text = text + "x"
+        }
+    }
+    if (i == 99) { text = text + "!" }
+    var down = 2
+    for (; !(down == 0); down--) { text = text + "d" }
+    for (var q = 0; q < 2;) { q++; continue }
+    return text
+}
+fn deadStep() -> i64 {
+    for (;; choose<bool>(true, probe(true), false)) { break }
+    for (;; false || choose<bool>(false, false, probe(true))) { return 13 }
+    return 99
+}
+print(shortControl(), forControl(), deadStep(), hits)
+
+export fn update(value: i64, up: bool) -> i64 {
+    var copy = value
+    if (up) { copy++ } else { copy-- }
+    return copy
+}

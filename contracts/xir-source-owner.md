@@ -8,7 +8,8 @@ borrowed only during construction; Checked owns its complete snapshot.
 
 The admitted family is ordinary named functions with explicit read bool/i64/string/Atomic<i64>
 parameters and explicit results (absent annotation denotes unit in this subset),
-direct calls, blocks, if/else, while, unlabelled break/continue, typed mutable local places,
+direct calls, blocks, if/else, while/for, unlabelled break/continue, bool short-circuit/not and
+grouping, mutable i64 increment/decrement statements, typed mutable local places,
 module bindings, returns, literals, concrete i64 addition/equality/less-than, string
 concatenation, print and Atomic<i64> construction/load/fetchAdd. Integer arithmetic,
 ref/move, user aggregates, reflection, coroutine syntax, attributes and

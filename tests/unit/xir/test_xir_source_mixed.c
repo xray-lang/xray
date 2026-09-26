@@ -20,7 +20,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
-XR_DATA const uint32_t fixture_source_result, fixture_source_advance;
+XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update;
 typedef struct MixedSource {
     XrXirArtifact *artifact;
     XrXirCallEntry entries[32];
@@ -64,7 +64,7 @@ int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
-    source_pair(program, entry, fixture_source_result, fixture_source_advance, results);
+    source_pair(program, entry, fixture_source_result, fixture_source_advance, fixture_source_update, results);
     CHECK(!released);
     xr_xir_program_drop(program); CHECK(released == 1);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
