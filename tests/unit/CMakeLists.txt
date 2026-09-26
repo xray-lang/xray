@@ -242,6 +242,11 @@ foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generic
     set_tests_properties(${xir_test} PROPERTIES LABELS "unit;xir;execution;ownership;abi")
 endforeach()
 
+if(UNIX)
+    target_link_libraries(test_xir_execution PRIVATE m)
+    target_link_libraries(test_xir_native PRIVATE m)
+endif()
+
 # Task 295 CoreSpec metadata is intentionally independent of xray_core and both
 # executors. This target compiles only the generated registry projection.
 add_executable(test_core_spec

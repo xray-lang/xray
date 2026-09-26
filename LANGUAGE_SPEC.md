@@ -7216,6 +7216,15 @@ A direct literal in binary arithmetic/comparison uses the other typed operand's 
 
 A conditional with explicit context checks and widens each branch in its own predecessor block; only the selected branch executes. Without outer context, both branches are first typed independently. Same-signedness integers use the wider type, converting on the corresponding predecessor path before PHI. Direct branch literals still default independently to i64 and do not infer a narrow type from the other arm. Other branch types must match; unions and general branch inference are not qualified here. Calls evaluate the callee then arguments in order. Only effect-free direct literals may defer IR emission to obtain the other operand's type. Uncalled functions and generic definitions are checked without specialization bypasses. This producer extension does not alter XIR operation semantics, wire or ABI versions. Floating point, full inference and containers remain OPEN.
 
+
+### 17.23 Binary floating conversion foundation
+
+The common runtime floating core takes explicit IEEE binary32/binary64 bit patterns (binary32 must have zero upper bits); integers retain explicit width/signedness and canonical payloads. Integer-to-float and f64-to-f32 conversions use round-to-nearest ties-to-even, overflow to signed infinity, preserve gradual subnormal underflow and signed zero, and widen f32 to f64 exactly. Every NaN pattern normalizes to positive canonical quiet NaN: 0x7fc00000 for f32 and 0x7ff8000000000000 for f64. Same-width conversion also normalizes NaN.
+
+Float-to-integer truncates toward zero before checking the complete target range; (-1,0) may produce unsigned zero. NaN, infinity and out-of-range truncated values return RANGE. Invalid widths/encodings return BAD_ARGUMENT; failures clear outputs. Comparison returns less/equal/greater/unordered, any NaN is unordered, and signed zeros compare equal. Negation flips a non-NaN sign and canonicalizes NaN. All operations use integer bits, allocate nothing, execute no host floating arithmetic or conversion, preserve host rounding/exception state, and depend on no legacy scalar tags or generated metadata.
+
+This only qualifies the common conversion/comparison/negation foundation. Float XIR types, packets, layout, source, arithmetic and typed output are not yet admitted; helper tests do not qualify VM/native float execution. Existing integer protocol/ABI versions stay unchanged. Full float and cross-platform qualification remain OPEN.
+
 ---
 
 ## 18. Error Codes

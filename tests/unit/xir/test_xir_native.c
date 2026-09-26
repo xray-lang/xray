@@ -13,6 +13,7 @@
 
 #include "xir_execution_cases.h"
 #include "xir_integer_runtime_cases.h"
+#include "xir_float_runtime_cases.h"
 #define DECLARE(n) XR_FUNC XrXirRunStatus fixture_f##n(XrXirRunContext *, const XrXirValue *, uint32_t, XrXirValue *);
 DECLARE(0) DECLARE(1) DECLARE(2) DECLARE(3) DECLARE(4)
 DECLARE(5) DECLARE(6) DECLARE(7) DECLARE(8)
@@ -36,6 +37,7 @@ static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *conte
 }
 int main(void) {
     integer_runtime_cases();
+    float_runtime_cases();
     execution_cases(run, NULL);
     puts("XIR native scalar expectations passed");
     return 0;
