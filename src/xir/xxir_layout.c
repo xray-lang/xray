@@ -134,7 +134,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     uint32_t outgoing = 0;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         const XrXirInstruction *op = &function->instructions[i];
-        uint32_t count = op->op == XR_XIR_OUTPUT ? 1 :
+        uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
             op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;
     }

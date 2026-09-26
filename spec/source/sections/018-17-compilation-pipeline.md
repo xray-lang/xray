@@ -85,7 +85,7 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 
 ### 17.7 内部托管值与结果交接
 
-内部值 ABI 3 与调用 ABI 4 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
+内部值 ABI 3 与调用 ABI 5 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
 允许内嵌 NUL，不隐式归一化或替换；字节数、Unicode 标量数与字素数是不同概念。
 复制保留原子引用，修改执行独占窗口内的写时复制；共享副本不因其他副本修改而改变。
 所有分配属于显式、计费且可独立存活的域，字符串不依赖执行帧、实例或代码镜像寿命。
@@ -105,6 +105,11 @@ bool/i64/string 类型以借用组调用实例配置的同步 provider；缺失�
 XIR准入string参数/结果、COPY→OWNED_RETAIN、CONCAT_STRING与OUTPUT；
 lowering保存并复验全部拥有槽，VM与生成C在覆盖和退出时按此清理。字面量表由Program封存，源码生产仍待接入。
 
+
+WRITE_STREAM借用一个string并以immediate 1/2选择stdout/stderr，结果为bool。
+已配置provider的拒绝返回false；缺失provider仍为运行时OUTPUT_ERROR。PRINT/OUTPUT的
+拒绝仍终止执行。provider重入取消优先于写入结果，已接受字节不回滚。该内部原语不代表
+源码stdlib绑定、host flush或文件短写策略已实现；旧调用ABI准入失败，无适配路径。
 
 ### 17.8 不可变Program与模块实例
 
@@ -241,7 +246,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 4 replace the initial scalar boundary without aliases.
+Value ABI 3 and call ABI 5 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -265,6 +270,13 @@ String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT
 consume a lowering-owned, reverified list of owned frame slots. Both backends
 release previous values on replacement and clear slots on all exits. Literal tables are sealed with Program metadata; source production remains to be connected.
 
+
+WRITE_STREAM borrows one string, selects stdout/stderr with immediate 1/2 and
+returns bool through a typed inbox. A configured provider's refusal returns false;
+a missing provider remains runtime OUTPUT_ERROR. PRINT/OUTPUT rejection still
+terminates execution. Reentrant cancellation takes precedence over the result;
+accepted bytes are not rolled back. This primitive does not qualify source stdlib
+binding, host flushing or filesystem short-write policy. Old call ABIs reject.
 
 ### 17.8 Immutable Programs and Module Instances
 

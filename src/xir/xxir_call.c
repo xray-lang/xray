@@ -228,8 +228,10 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
 }
 
 static void accept_action(XrXirCall *call, XrXirAction action) {
-    if (action.kind == XR_XIR_ACTION_OUTPUT) {
+    if (action.kind == XR_XIR_ACTION_OUTPUT || action.kind == XR_XIR_ACTION_WRITE_STREAM) {
+        bool writing = action.kind == XR_XIR_ACTION_WRITE_STREAM;
         if (action.callee < XR_XIR_STDOUT || action.callee > XR_XIR_OUTPUT_LINE ||
+            (writing && action.callee == XR_XIR_OUTPUT_LINE) ||
             !boundary_value(action.value, XR_XIR_UNIT) || action.argument_count > 65536 ||
             (action.argument_count && !action.arguments) ||
             (action.callee != XR_XIR_OUTPUT_LINE && action.argument_count != 1)) {
@@ -238,7 +240,8 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         }
         for (uint32_t i = 0; i < action.argument_count; ++i) {
             const XrXirValue *value = &action.arguments[i];
-            if ((value->type != XR_XIR_BOOL && value->type != XR_XIR_I64 && value->type != XR_XIR_STRING) ||
+            if ((writing && value->type != XR_XIR_STRING) ||
+                (value->type != XR_XIR_BOOL && value->type != XR_XIR_I64 && value->type != XR_XIR_STRING) ||
                 !xr_xir_value_argument(value, (XrXirType) value->type)) {
                 unwind(call, XR_XIR_CALL_BAD_STATE); return;
             }
@@ -248,6 +251,11 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         bool accepted = call->config.output.write && call->config.output.write(
             call->config.output.context, &group);
         if (call->cancel_requested) unwind(call, XR_XIR_CALL_CANCELLED);
+        else if (writing && call->config.output.write) {
+            xr_xir_value_drop(&call->top->inbox.value);
+            call->top->inbox = call_result(XR_XIR_CALL_RETURNED);
+            call->top->inbox.value = (XrXirValue) {XR_XIR_BOOL, 0, accepted ? 1 : 0};
+        }
         else if (!accepted) unwind(call, XR_XIR_CALL_OUTPUT_ERROR);
         return;
     }

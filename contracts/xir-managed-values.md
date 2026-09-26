@@ -29,7 +29,7 @@ in place when capacity permits and reallocates its byte buffer otherwise; shared
 storage separates. Self-append is valid. Failure preserves the original value,
 published copies, and live accounting. Capacity is an implementation detail.
 
-Call ABI 4 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
+Call ABI 5 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
 owned frame storage before publication. Resume arguments/inbox and action return
 values are borrowed views. The driver retains a return before child cleanup and
 owns each inbox and terminal result. Poll exposes a borrowed result; explicit
@@ -38,7 +38,7 @@ an untaken result. Taking a result needs no allocation and the resulting owned
 value survives activation and input destruction. Frame cleanup runs before its
 arguments and inbox are dropped. Failure/cancellation publishes no partial result.
 
-Typed output is an explicit synchronous provider effect. Call ABI 4 replaces
+Typed output is an explicit synchronous provider effect. Call ABI 5 replaces
 the scalar callback with a borrowed typed group. Raw output has one value and
 names stdout or stderr. Line output names stdout and carries zero or more
 bool/i64/string values: arguments evaluate left to right before one provider call.
@@ -57,7 +57,19 @@ immediate. Each operand must dominate the instruction and have bool/i64/string
 type. Empty ranges are canonical zero/zero; nonempty ranges partition the table
 in instruction order. Lowering reserves the exact maximum outgoing group capacity
 in the stable activation frame and includes it in physical-byte admission.
-Call ABI 3 providers and generated entries are rejected, with no adapter.
+Older call ABI providers and generated entries are rejected, with no adapter.
+
+WRITE_STREAM is bool-typed, borrows exactly one string and names stdout/stderr
+with immediate 1/2. It publishes one raw group through the instance output provider
+and receives a canonical bool inbox before execution continues. A configured
+provider's false result is an observable language value, while an absent provider
+remains OUTPUT_ERROR. PRINT and OUTPUT still fail on provider rejection.
+Cancellation requested by the provider takes precedence over either bool result;
+accepted bytes cannot be rolled back. Provider calls cannot suspend. Native action
+admission rejects line groups, non-string values, invalid streams/counts and dirty
+unit payloads before calling the provider. Old call ABI entries are rejected.
+This is the typed write-result primitive; source stdlib binding, host stream
+flushing and filesystem short-write policy require their own implementation.
 
 verification-test: test_xir_values
 verification-test: test_xir_value_allocations

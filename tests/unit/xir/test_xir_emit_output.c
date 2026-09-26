@@ -39,6 +39,24 @@ static void range_admission(XrXirArtifact *artifact) {
     --layout->outgoing_count;
     CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_OK);
 }
+static void write_admission(XrXirArtifact *artifact) {
+    const XrXirFunction *function = &xr_xir_artifact_module(artifact)->functions[1];
+    XrXirInstruction *ops = (XrXirInstruction *) function->instructions;
+    ops[0].immediate = 3;
+    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    ops[0].immediate = 2;
+    ops[0].type = XR_XIR_UNIT;
+    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_TYPE);
+    ops[0].type = XR_XIR_BOOL;
+    XrXirType *type = (XrXirType *) function->parameters;
+    *type = XR_XIR_I64;
+    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_TYPE);
+    *type = XR_XIR_STRING;
+    ops[0].args[1] = 1;
+    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    ops[0].args[1] = 0;
+    CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_OK);
+}
 static void wide_boundary(void) {
     uint32_t *operands = xr_calloc(65537, sizeof(*operands)); CHECK(operands);
     XrXirInstruction ops[] = {
@@ -72,6 +90,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && file));
     XrXirArtifact *artifact = output_fixture();
     range_admission(artifact);
+    write_admission(artifact);
     wide_boundary();
     XrXirInstruction *ops = (XrXirInstruction *) xr_xir_artifact_module(artifact)->functions[0].instructions;
     ops[0].immediate = -1;

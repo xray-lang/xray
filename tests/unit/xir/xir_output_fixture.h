@@ -24,8 +24,23 @@ static XrXirArtifact *output_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
     };
     const XrXirBlock blocks[] = {{0, 6}};
-    const XrXirFunction functions[] = {{"output", 6, parameters, 2, XR_XIR_UNIT, blocks, 1, ops, 6, operands, 3}};
-    const XrXirModule built = {XR_XIR_BUILT, functions, 1, NULL};
+    const XrXirType string = XR_XIR_STRING;
+    const XrXirInstruction write_ops[] = {
+        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 2},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0}
+    };
+    const XrXirInstruction continue_ops[] = {
+        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 1},
+        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 1},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}
+    };
+    const XrXirBlock write_block = {0, 2}, continue_block = {0, 3};
+    const XrXirFunction functions[] = {
+        {"output", 6, parameters, 2, XR_XIR_UNIT, blocks, 1, ops, 6, operands, 3},
+        {"write", 5, &string, 1, XR_XIR_BOOL, &write_block, 1, write_ops, 2, NULL, 0},
+        {"continued", 9, &string, 1, XR_XIR_BOOL, &continue_block, 1, continue_ops, 3, NULL, 0}
+    };
+    const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);

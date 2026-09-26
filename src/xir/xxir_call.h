@@ -14,7 +14,7 @@
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
 
-#define XR_XIR_CALL_ABI_VERSION 4u
+#define XR_XIR_CALL_ABI_VERSION 5u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -32,7 +32,7 @@ typedef struct XrXirCallResult {
 typedef enum XrXirActionKind {
     XR_XIR_ACTION_CALL = 1, XR_XIR_ACTION_RETURN, XR_XIR_ACTION_THROW,
     XR_XIR_ACTION_SUSPEND, XR_XIR_ACTION_CONTINUE, XR_XIR_ACTION_FAULT,
-    XR_XIR_ACTION_OUTPUT
+    XR_XIR_ACTION_OUTPUT, XR_XIR_ACTION_WRITE_STREAM
 } XrXirActionKind;
 typedef struct XrXirAction {
     XrXirActionKind kind;

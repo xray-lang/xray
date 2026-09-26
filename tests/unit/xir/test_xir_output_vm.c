@@ -18,10 +18,13 @@
 #include "xir_output_cases.h"
 int main(void) {
     XrXirArtifact *artifact = output_fixture();
-    XrXirCallEntry entry;
-    XrXirVmBinding binding;
-    CHECK(xr_xir_vm_bind(artifact, 0, &binding, &entry) == XR_XIR_OK);
-    output_cases(&entry);
+    XrXirCallEntry entries[3];
+    XrXirVmBinding bindings[3];
+    for (uint32_t i = 0; i < 3; ++i)
+        CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
+    output_cases(entries);
+    write_cases(entries);
+    write_action_admission();
     xr_xir_artifact_free(artifact);
     return 0;
 }

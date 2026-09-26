@@ -289,6 +289,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                "{XR_XIR_I64, 0, status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT}}; }\n");
         break;
     case XR_XIR_OUTPUT:
+    case XR_XIR_WRITE_STREAM:
     case XR_XIR_PRINT: {
         uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
         for (uint32_t p = 0; p < count; ++p) {
@@ -298,7 +299,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
                    p, (uint32_t) type, layout->offsets[id]);
         }
-        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, %uu, %s, %uu, {0}};\n",
+        if (op->op == XR_XIR_WRITE_STREAM)
+            append(buffer, "        state->waiting = true; state->destination = %uu; state->expected = XR_XIR_BOOL;\n", destination);
+        append(buffer, "        return (XrXirAction) {%s, %uu, %s, %uu, {0}};\n",
+            op->op == XR_XIR_WRITE_STREAM ? "XR_XIR_ACTION_WRITE_STREAM" : "XR_XIR_ACTION_OUTPUT",
             op->op == XR_XIR_PRINT ? 3u : (uint32_t) op->immediate, count ? "state->arguments" : "NULL", count);
         return;
     }
@@ -494,7 +498,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 4u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 5u, \"XIR call ABI\");\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 3u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"

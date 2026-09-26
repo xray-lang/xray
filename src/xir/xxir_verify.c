@@ -157,7 +157,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_CONST_BOOL) {
         if (op->immediate != 0 && op->immediate != 1)
             return XR_XIR_BAD_TYPE;
-    } else if (op->op == XR_XIR_OUTPUT) {
+    } else if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM) {
         if (op->immediate != 1 && op->immediate != 2) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_I64 && op->op != XR_XIR_CALL &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
@@ -382,6 +382,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
         if (op->op == XR_XIR_ATOMIC_I64_NEW) expected = XR_XIR_I64;
+        if (op->op == XR_XIR_WRITE_STREAM) expected = XR_XIR_STRING;
         if (op->op == XR_XIR_ATOMIC_I64_LOAD || op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
             expected = XR_XIR_ATOMIC_I64;
         uint32_t count = operand_count(function, op, context->module);

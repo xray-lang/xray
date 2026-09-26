@@ -6863,7 +6863,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 4 replace the initial scalar boundary without aliases.
+Value ABI 3 and call ABI 5 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -6887,6 +6887,13 @@ String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT
 consume a lowering-owned, reverified list of owned frame slots. Both backends
 release previous values on replacement and clear slots on all exits. Literal tables are sealed with Program metadata; source production remains to be connected.
 
+
+WRITE_STREAM borrows one string, selects stdout/stderr with immediate 1/2 and
+returns bool through a typed inbox. A configured provider's refusal returns false;
+a missing provider remains runtime OUTPUT_ERROR. PRINT/OUTPUT rejection still
+terminates execution. Reentrant cancellation takes precedence over the result;
+accepted bytes are not rolled back. This primitive does not qualify source stdlib
+binding, host flushing or filesystem short-write policy. Old call ABIs reject.
 
 ### 17.8 Immutable Programs and Module Instances
 

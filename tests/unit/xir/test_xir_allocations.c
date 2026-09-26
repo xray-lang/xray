@@ -83,8 +83,46 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_call.c"
 #include "xir/xxir_program.c"
 #include "xir/xxir_instance.c"
+#include "xir/xxir_output.c"
 
 #include "xir_string_fixture.h"
+#include "xir_output_fixture.h"
+
+static bool allocation_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+    size_t *published = context;
+    CHECK(stream == XR_XIR_STDERR && length == 1 && bytes[0] == 'x');
+    ++*published; return true;
+}
+static size_t write_allocation_failures(void) {
+    XrXirArtifact *artifact = output_fixture();
+    XrXirCallEntry entry; XrXirVmBinding binding;
+    CHECK(xr_xir_vm_bind(artifact, 1, &binding, &entry) == XR_XIR_OK);
+    XrXirDomain *domain = NULL; XrXirValue argument = {0};
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, "x", 1, &argument) == XR_XIR_VALUE_OK);
+    size_t baseline = live, sites = 0;
+    for (size_t attempt = 0; attempt <= sites; ++attempt) {
+        size_t published = 0;
+        XrXirOutputSink sink = {allocation_bytes, &published, 65536};
+        XrXirCallAccounting accounting = {0};
+        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {xr_xir_output_render, &sink}};
+        XrXirCall *call = NULL;
+        calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+        XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
+        if (status == XR_XIR_CALL_READY) {
+            XrXirCallResult result = xr_xir_call_poll(call);
+            CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_BOOL);
+            CHECK(result.value.payload == (attempt ? 0 : 1));
+        } else CHECK(attempt && status == XR_XIR_CALL_OOM && !call);
+        if (!attempt) sites = calls;
+        CHECK(published == (attempt ? 0u : 1u));
+        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+        CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees && live == baseline);
+    }
+    fail_at = SIZE_MAX;
+    xr_xir_value_drop(&argument); xr_xir_domain_drop(domain); xr_xir_artifact_free(artifact);
+    CHECK(!live); return sites;
+}
 
 static bool allocation_output(void *context, const XrXirOutputGroup *group) {
     CHECK(group && !group->line && group->count == 1);
@@ -368,5 +406,6 @@ int main(void) {
     printf("Managed VM admission and execution physical release: %zu allocation sites\n", managed_allocation_failures());
     printf("Declaration stage/emission physical release: %zu allocation sites\n", declaration_allocation_failures());
     printf("Program seal, instance and initialization physical release: %zu allocation sites\n", program_allocation_failures());
+    printf("Write-result activation and renderer physical release: %zu allocation sites\n", write_allocation_failures());
     return 0;
 }

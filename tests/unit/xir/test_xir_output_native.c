@@ -14,5 +14,5 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_output_cases.h"
-XR_DATA const XrXirCallEntry fixture_output_entries[1];
-int main(void) { output_cases(fixture_output_entries); return 0; }
+XR_DATA const XrXirCallEntry fixture_output_entries[3];
+int main(void) { output_cases(fixture_output_entries); write_cases(fixture_output_entries); write_action_admission(); return 0; }

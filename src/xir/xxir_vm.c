@@ -105,6 +105,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return string_status(status);
     }
     case XR_XIR_OUTPUT:
+    case XR_XIR_WRITE_STREAM:
     case XR_XIR_PRINT: {
         uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
         for (uint32_t p = 0; p < count; ++p) {
@@ -114,7 +115,11 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
             state->arguments[p] = (XrXirValue) {(uint32_t) type, 0,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
         }
-        *action = (XrXirAction) {XR_XIR_ACTION_OUTPUT, op->op == XR_XIR_PRINT ? XR_XIR_OUTPUT_LINE :
+        if (op->op == XR_XIR_WRITE_STREAM) {
+            state->waiting = true; state->destination = run->layout->offsets[result_id]; state->expected = XR_XIR_BOOL;
+        }
+        *action = (XrXirAction) {op->op == XR_XIR_WRITE_STREAM ? XR_XIR_ACTION_WRITE_STREAM : XR_XIR_ACTION_OUTPUT,
+            op->op == XR_XIR_PRINT ? XR_XIR_OUTPUT_LINE :
             (uint32_t) op->immediate, state->arguments, count, {0}};
         state->instruction = next;
         return XR_XIR_RUN_OK;
@@ -321,7 +326,8 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_THROW || xr_xir_type_is_owned(body->instructions[i].type) ||
-            body->instructions[i].op == XR_XIR_OUTPUT || body->instructions[i].op == XR_XIR_PRINT)
+            body->instructions[i].op == XR_XIR_OUTPUT || body->instructions[i].op == XR_XIR_PRINT ||
+            body->instructions[i].op == XR_XIR_WRITE_STREAM)
             return XR_XIR_RUN_BAD_ARTIFACT;
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if (body->instructions[i].op >= XR_XIR_CONST_STRING &&
