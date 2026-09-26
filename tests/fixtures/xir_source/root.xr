@@ -1,3 +1,4 @@
+import { writeStdout, writeStderr } from "std/io/output"
 import "./alpha" as alpha
 import { next as betaNext } from "./beta"
 print(alpha.tag("中"), betaNext())
@@ -5,6 +6,8 @@ print(alpha.next())
 print(alpha.next(), alpha.next())
 print(true)
 print(alpha.pack(alpha.tag("x"), alpha.next(), alpha.next(), "y"), true, 42, alpha.tag("z"))
+print(writeStderr(alpha.tag("err")))
+print(writeStdout(alpha.tag("out")))
 var suffix = "!"
 fn main() { print("main must not run implicitly") }
 export fn result() -> string { return alpha.tag(suffix) }

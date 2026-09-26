@@ -5705,10 +5705,11 @@ import { publicFn } from "./modules/mod_a"
 - JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
 - 动态导入 `import("module")`。所有导入必须是静态声明。
 
-**解析算法**：由 specifier 的**形状**决定，三种形状互不重叠，与是否带引号无关。
+**解析算法**：由 specifier 的**形状**决定，四种形状互不重叠，与是否带引号无关。
 1. **具名模块**：不含分隔符的名字 `import time` → 内置 stdlib 模块表与 `.xrd` 声明的原生模块共用这一命名空间。
 2. **路径**：`"./xxx"` 与 `"../xxx"` 相对当前文件解析（自动补 `.xr` 扩展名或 `index.xr` 目录入口）。
-3. **第三方包**：`"owner/name"` 由 `xray.toml` 的 `[dependencies]` 解析。
+3. **标准库源码子模块**：`"std/io/output"`由显式标准库源码根解析；路径各段为ASCII标识符，必须精确命中文件，不补index、不允许父路径或顶层模块别名。身份包含标准库namespace与逻辑路径；普通项目或包同名文件没有标准库权限。该入口不代表Checked包或native缓存发布已完成。
+4. **第三方包**：`"owner/name"`（`std/`为标准库保留前缀） 由 `xray.toml` 的 `[dependencies]` 解析。
 
 引号只是书写非标识符文本的手段，本身不表示任何含义——路径和包需要它，模块名不需要。
 解析不到的 import 是编译错误。
@@ -6877,6 +6878,12 @@ CALL/PRINT用args[0]/args[1]表示函数自有操作数表的起点/数量；非
 出站参数数量，稳定帧为其分配typed value暂存区并计入物理字节预算。
 泛型、完整stdlib、协程语法、foreign provider、parser完整
 OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口合同见 `contracts/xir-source-owner.md`。
+
+标准库源码子模块`std/io/output`以普通函数发布writeStdout(string)->bool和
+writeStderr(string)->bool，只报告宿主typed provider接受结果。该模块的精确stdlib身份
+才可调用私有__writeStdout/__writeStderr，降为WRITE_STREAM；导入与函数体仍正常检查。
+文件路径、函数拼写或项目同名模块不能取得权限。此接口不承诺File的flush/短写行为，
+也不替代既有yieldable文件操作；同源Checked/native产物发布另行验收。
 
 ---
 

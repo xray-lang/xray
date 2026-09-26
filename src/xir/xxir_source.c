@@ -160,19 +160,29 @@ static SourceName *imported_function(SourceContext *ctx, SourceName *symbol, con
     }
     return target;
 }
+static uint32_t stream_primitive(SourceContext *ctx, const char *name) {
+    const XrModuleSpec *spec = &ctx->graph->specs[ctx->module];
+    if (spec->authority.kind != XR_MODULE_IDENTITY_STDLIB || !spec->authority.namespace_id ||
+        strcmp(spec->authority.namespace_id, "io") || !spec->logical_path ||
+        strcmp(spec->logical_path, "io/output.xr")) return 0;
+    if (!strcmp(name, "__writeStdout")) return 1;
+    if (!strcmp(name, "__writeStderr")) return 2;
+    return 0;
+}
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count || call->default_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "call arity or type arguments are not admitted");
     SourceName *target = NULL;
     bool print = false, atomic = false;
+    uint32_t stream = 0;
     AstNode *callee = call->callee;
     SourceValue receiver = {0};
     XrXirOp method = XR_XIR_INVALID;
     if (callee->type == AST_VARIABLE) {
         const char *name = callee->as.variable.name;
         target = visible_name(ctx, name);
-        if (!target) { print = !strcmp(name, "print"); atomic = !strcmp(name, "Atomic"); }
+        if (!target) { print = !strcmp(name, "print"); atomic = !strcmp(name, "Atomic"); stream = stream_primitive(ctx, name); }
         if (target && target->kind == SOURCE_IMPORT) target = imported_function(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
@@ -188,7 +198,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         }
     }
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
-    if (!print && !atomic && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION))
+    if (!print && !atomic && !stream && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION))
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unresolved or unsupported callable");
     SourceValue *args = call->arg_count ? source_alloc(ctx, (size_t) call->arg_count, sizeof(*args)) : NULL;
     if (call->arg_count && !args) return false;
@@ -199,7 +209,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         if (args[i].type == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unit argument is not admitted");
     }
     XrXirInstruction op = {0};
-    if (print) {
+    if (stream) {
+        if (call->arg_count != 1 || args[0].type != XR_XIR_STRING)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "stream write requires one string");
+        op = (XrXirInstruction) {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {args[0].id, 0}, {0, 0}, stream};
+    } else if (print) {
         for (int i = 0; i < call->arg_count; ++i)
             if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_I64 && args[i].type != XR_XIR_STRING)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
@@ -496,7 +510,7 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     if (!request || !request->session || !request->entry_path || !request->authority || !output) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
-    XrModuleResolverConfig config = {0};
+    XrModuleResolverConfig config = {request->stdlib_path, NULL};
     resolver = xr_module_resolver_new(&config);
     ctx.graph = resolver ? xr_module_graph_new(request->session, resolver) : NULL;
     if (!ctx.graph) { source_fail(&ctx, NULL, XR_XIR_OUT_OF_MEMORY, "module graph allocation failed"); goto done; }

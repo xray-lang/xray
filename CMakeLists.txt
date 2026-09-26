@@ -1717,6 +1717,16 @@ else()
 endif()
 
 file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
+# The embedded entry table contains only namespace entry files. Source submodules
+# are resolved by exact logical path and are not independent native factories.
+foreach(XRAY_STDLIB_CANDIDATE IN LISTS XRAY_STDLIB_SCRIPT_SOURCES)
+    get_filename_component(XRAY_STDLIB_CANDIDATE_DIR "${XRAY_STDLIB_CANDIDATE}" DIRECTORY)
+    get_filename_component(XRAY_STDLIB_CANDIDATE_NAMESPACE "${XRAY_STDLIB_CANDIDATE_DIR}" NAME)
+    get_filename_component(XRAY_STDLIB_CANDIDATE_NAME "${XRAY_STDLIB_CANDIDATE}" NAME_WE)
+    if(NOT XRAY_STDLIB_CANDIDATE_NAME STREQUAL XRAY_STDLIB_CANDIDATE_NAMESPACE)
+        list(REMOVE_ITEM XRAY_STDLIB_SCRIPT_SOURCES "${XRAY_STDLIB_CANDIDATE}")
+    endif()
+endforeach()
 # Native type declarations are compiler inputs, not loadable source modules.
 list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX "stdlib/types/[^/]+\\.xr$")
 if(NOT XR_STDLIB_FULL)

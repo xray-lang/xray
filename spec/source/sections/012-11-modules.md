@@ -79,10 +79,11 @@ import { publicFn } from "./modules/mod_a"
 - JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
 - 动态导入 `import("module")`。所有导入必须是静态声明。
 
-**解析算法**：由 specifier 的**形状**决定，三种形状互不重叠，与是否带引号无关。
+**解析算法**：由 specifier 的**形状**决定，四种形状互不重叠，与是否带引号无关。
 1. **具名模块**：不含分隔符的名字 `import time` → 内置 stdlib 模块表与 `.xrd` 声明的原生模块共用这一命名空间。
 2. **路径**：`"./xxx"` 与 `"../xxx"` 相对当前文件解析（自动补 `.xr` 扩展名或 `index.xr` 目录入口）。
-3. **第三方包**：`"owner/name"` 由 `xray.toml` 的 `[dependencies]` 解析。
+3. **标准库源码子模块**：`"std/io/output"`由显式标准库源码根解析；路径各段为ASCII标识符，必须精确命中文件，不补index、不允许父路径或顶层模块别名。身份包含标准库namespace与逻辑路径；普通项目或包同名文件没有标准库权限。该入口不代表Checked包或native缓存发布已完成。
+4. **第三方包**：`"owner/name"`（`std/`为标准库保留前缀） 由 `xray.toml` 的 `[dependencies]` 解析。
 
 引号只是书写非标识符文本的手段，本身不表示任何含义——路径和包需要它，模块名不需要。
 解析不到的 import 是编译错误。
@@ -260,10 +261,11 @@ import { publicFn } from "./modules/mod_a"
 - JavaScript-style default import (`import name from "module"`). Use `import "module" as name`, `import module`, or `import { name } from module`.
 - Dynamic import (`import("module")`). All imports must be static declarations.
 
-**Resolution algorithm**: the specifier's **shape** decides, and the three shapes do not overlap. Quoting plays no part in it.
+**Resolution algorithm**: the specifier's **shape** decides, and the four shapes do not overlap. Quoting plays no part in it.
 1. **Named module**: a name with no separator, `import time` → the built-in stdlib module table; `.xrd`-declared native modules share this namespace.
 2. **Path**: `"./xxx"` and `"../xxx"` are resolved relative to the current file (auto-appends `.xr` extension or `index.xr` directory entry).
-3. **Third-party package**: `"owner/name"` is resolved through the `[dependencies]` section in `xray.toml`.
+3. **Standard-library source submodule**: `"std/io/output"` resolves under an explicit stdlib source root. ASCII identifier segments name one exact file without index fallback, parent traversal or top-level aliases. Identity includes the stdlib namespace and logical path; matching local/package names confer no privilege. Checked/native publication requires separate qualification.
+4. **Third-party package**: `"owner/name"` (`std/` is reserved for standard-library submodules) is resolved through the `[dependencies]` section in `xray.toml`.
 
 Quoting is only how text that is not an identifier gets written, which is why a path and a package need it and a module name does not. An import that resolves to nothing is a compile error.
 

@@ -36,6 +36,25 @@ Atomic construction infers i64 from the admitted argument; load and fetchAdd use
 default SeqCst ordering, fetchAdd returns the prior value and wraps as specified.
 Unsupported overloads/orderings are rejected rather than silently ignored.
 
+Standard-library source submodules use the explicit std/<namespace>/<path>
+specifier, with ASCII identifier path segments and no extension, index fallback,
+parent traversal or alias to the namespace's existing top-level entry. Resolution
+requires an explicit compiler-owned stdlib source root and a registered namespace.
+The canonical physical file must stay in that root and match the requested logical
+path. Its durable identity carries the stdlib namespace and root-relative path;
+package or local identities never gain standard-library privileges from filenames.
+
+The io/output.xr submodule exports writeStdout(string)->bool and
+writeStderr(string)->bool over the host typed-output capability. Only its exact
+stdlib identity admits the private __writeStdout/__writeStderr primitives. They
+require one read string and lower to WRITE_STREAM; ordinary local declarations
+still shadow primitive names. Imports require exported source functions, so users
+cannot import a private primitive. All wrapper bodies are checked normally.
+This capability reports provider acceptance; it neither opens File handles nor
+promises filesystem flush/short-write behavior. Existing yieldable File operations
+require separate migration. Source loading is an implementation step toward the
+same-source Checked/native package, not serialized/cache publication qualification.
+
 This admission work does not qualify complete parser OOM recovery, source input
 budgets, stdlib publication, default CLI migration, foreign output providers,
 ordinary generics or product cutover. The reused parser currently contains fatal

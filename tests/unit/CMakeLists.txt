@@ -191,12 +191,16 @@ add_custom_command(OUTPUT ${XIR_SOURCE_GENERATED}
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/alpha.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source/beta.xr
+        ${CMAKE_SOURCE_DIR}/stdlib/io/output.xr
     VERBATIM)
 add_executable(test_xir_source_native xir/test_xir_source_native.c ${XIR_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_native PRIVATE xray_xir_scalar)
 add_xray_bootstrap_executable(test_xir_source_mixed xir/test_xir_source_mixed.c ${XIR_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_mixed PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
+foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
+    target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
+endforeach()
 foreach(xir_test IN ITEMS test_xir_execution test_xir_emit test_xir_native test_xir_calls
     test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances

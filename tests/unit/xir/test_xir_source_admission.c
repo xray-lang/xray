@@ -11,6 +11,8 @@
  */
 #include "xir/xxir_source.h"
 #include "toolchain/xcompiler_session.h"
+#include "module/xmodule_resolver.h"
+#include "base/xmalloc.h"
 #include "../test_win_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +23,58 @@ static void write_source(const char *path, const char *source) {
     size_t length = strlen(source);
     CHECK(fwrite(source, 1, length, file) == length && fclose(file) == 0);
 }
+static void stdlib_resolution(void) {
+    XrModuleResolverConfig config = {XR_SOURCE_STDLIB, NULL};
+    XrModuleResolver *resolver = xr_module_resolver_new(&config); CHECK(resolver);
+    XrModuleId first = {0}, second = {0}; char *error = NULL;
+    CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &first, &error) == 0 && !error);
+    CHECK(first.kind == XR_MOD_STDLIB && first.authority.kind == XR_MODULE_IDENTITY_STDLIB);
+    CHECK(!strcmp(first.authority.namespace_id, "io") && !strcmp(first.logical_path, "io/output.xr"));
+    CHECK(xr_module_identity_valid(first.canonical, NULL));
+    CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &second, &error) == 0 && !error);
+    CHECK(!strcmp(first.canonical, second.canonical) && first.canonical != second.canonical);
+    xr_module_id_cleanup(&first); xr_module_id_cleanup(&second);
+    const char *invalid[] = {"std/io", "std/io/io", "std/io/../io/output", "std/io//output", "std/io/output.xr",
+        "std/io/output/", "std/io/output/index", "std/io/output:bad", "std/io/0output", "std/unknown/output"};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        CHECK(xr_module_resolver_resolve(resolver, invalid[i], NULL, NULL, &first, &error) != 0);
+        CHECK(!first.canonical && !first.source_path && !first.authority.physical_root);
+        xr_free(error); error = NULL;
+    }
+    xr_module_resolver_free(resolver);
+    config.stdlib_path = NULL; resolver = xr_module_resolver_new(&config); CHECK(resolver);
+    CHECK(xr_module_resolver_resolve(resolver, "std/io/output", NULL, NULL, &first, &error) != 0);
+    CHECK(error && !first.canonical); xr_free(error); xr_module_resolver_free(resolver);
+}
+static void primitive_authority(XrCompilerSession *session, const char *directory) {
+    char io[XR_TEST_PATH_MAX], output[XR_TEST_PATH_MAX], other[XR_TEST_PATH_MAX];
+    CHECK(snprintf(io, sizeof(io), "%s/io", directory) > 0 && xr_test_mkdir(io) == 0);
+    CHECK(snprintf(output, sizeof(output), "%s/output.xr", io) > 0);
+    CHECK(snprintf(other, sizeof(other), "%s/other.xr", io) > 0);
+    const char *body = "export fn emit(value: string) -> bool { return __writeStderr(value) }\n";
+    write_source(output, body); write_source(other, body);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, directory};
+    XrXirSourceRequest request = {session, output, &authority, NULL, XR_SOURCE_STDLIB};
+    XrXirArtifact *artifact = NULL;
+    CHECK(xr_xir_source_check(&request, &artifact, NULL) != XR_XIR_OK && !artifact);
+    authority.kind = XR_MODULE_IDENTITY_STDLIB; authority.namespace_id = "math";
+    CHECK(xr_xir_source_check(&request, &artifact, NULL) != XR_XIR_OK && !artifact);
+    authority.namespace_id = "io"; request.entry_path = other;
+    CHECK(xr_xir_source_check(&request, &artifact, NULL) != XR_XIR_OK && !artifact);
+    request.entry_path = output;
+    CHECK(xr_xir_source_check(&request, &artifact, NULL) == XR_XIR_OK && artifact);
+    xr_xir_artifact_free(artifact); artifact = NULL;
+    write_source(output, "export fn emit() -> bool { return __writeStderr(1) }\n");
+    CHECK(xr_xir_source_check(&request, &artifact, NULL) != XR_XIR_OK && !artifact);
+    write_source(output, "export fn emit() -> bool { return __writeStderr() }\n");
+    CHECK(xr_xir_source_check(&request, &artifact, NULL) != XR_XIR_OK && !artifact);
+    write_source(output, "fn __writeStderr(value: i64) -> i64 { return value }\nprint(__writeStderr(7))\n");
+    CHECK(xr_xir_source_check(&request, &artifact, NULL) == XR_XIR_OK && artifact);
+    xr_xir_artifact_free(artifact);
+    CHECK(xr_test_unlink(output) == 0 && xr_test_unlink(other) == 0 && xr_test_rmdir(io) == 0);
+}
 int main(void) {
+    stdlib_resolution();
     static const char *const rejected[] = {
         "fn unused() -> i64 { return true }\n",
         "fn unused<T>(value: T) -> T { return value }\n",
@@ -32,6 +85,10 @@ int main(void) {
         "const a = 1\nconst a = 2\n",
         "print(Atomic(1), 2, 3)\n",
         "print(Atomic(1))\n",
+        "__writeStderr(\"forbidden\")\n",
+        "import { __writeStderr } from \"std/io/output\"\n",
+        "import { writeStderr } from \"std/io/output\"\nwriteStderr(1)\n",
+        "import \"std/io/output\" as output\noutput.__writeStdout(\"forbidden\")\n",
         "const a = Atomic(true)\n",
         "const a = Atomic(1)\na.fetchAdd(false)\n",
         "const a = Atomic(1)\na.load(1)\n",
@@ -64,8 +121,9 @@ int main(void) {
     CHECK(snprintf(library, sizeof(library), "%s/lib.xr", absolute) > 0);
     write_source(library, "fn hidden() -> i64 { return 1 }\nexport fn visible() -> i64 { return 2 }\n");
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    primitive_authority(session, absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, NULL};
+    XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB};
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_source(root, rejected[i]);
         XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;

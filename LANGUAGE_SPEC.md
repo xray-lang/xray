@@ -5732,10 +5732,11 @@ import { publicFn } from "./modules/mod_a"
 - JavaScript-style default import (`import name from "module"`). Use `import "module" as name`, `import module`, or `import { name } from module`.
 - Dynamic import (`import("module")`). All imports must be static declarations.
 
-**Resolution algorithm**: the specifier's **shape** decides, and the three shapes do not overlap. Quoting plays no part in it.
+**Resolution algorithm**: the specifier's **shape** decides, and the four shapes do not overlap. Quoting plays no part in it.
 1. **Named module**: a name with no separator, `import time` → the built-in stdlib module table; `.xrd`-declared native modules share this namespace.
 2. **Path**: `"./xxx"` and `"../xxx"` are resolved relative to the current file (auto-appends `.xr` extension or `index.xr` directory entry).
-3. **Third-party package**: `"owner/name"` is resolved through the `[dependencies]` section in `xray.toml`.
+3. **Standard-library source submodule**: `"std/io/output"` resolves under an explicit stdlib source root. ASCII identifier segments name one exact file without index fallback, parent traversal or top-level aliases. Identity includes the stdlib namespace and logical path; matching local/package names confer no privilege. Checked/native publication requires separate qualification.
+4. **Third-party package**: `"owner/name"` (`std/` is reserved for standard-library submodules) is resolved through the `[dependencies]` section in `xray.toml`.
 
 Quoting is only how text that is not an identifier gets written, which is why a path and a package need it and a module name does not. An import that resolves to nothing is a compile error.
 
@@ -6945,6 +6946,14 @@ count; stable frames reserve typed-value staging and charge its physical bytes.
 Full generics, stdlib, coroutine
 syntax, foreign providers, parser OOM/input budgets, default CLI and product
 qualification remain separate. The interface contract is `contracts/xir-source-owner.md`.
+
+The standard-library source submodule std/io/output publishes ordinary
+writeStdout(string)->bool and writeStderr(string)->bool functions reporting host
+provider acceptance. Only its exact stdlib identity admits private
+__writeStdout/__writeStderr calls, lowered to WRITE_STREAM. Imports and bodies
+remain normally checked; matching local paths or names confer no privileges.
+This does not promise File flush/short-write behavior or replace yieldable file
+operations. Same-source Checked/native publication requires separate qualification.
 
 ---
 

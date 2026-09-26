@@ -266,6 +266,43 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
 }
 
 /* ========== Resolution: relative file/directory ========== */
+static bool stdlib_submodule_path(const char *path, char *name, size_t capacity) {
+    const char *slash = strchr(path, '/');
+    if (!slash || slash == path || (size_t) (slash - path) >= capacity) return false;
+    memcpy(name, path, (size_t) (slash - path)); name[slash - path] = '\0';
+    bool first = true;
+    for (const char *p = path; *p; ++p) {
+        if (*p == '/') { if (first) return false; first = true; continue; }
+        bool letter = (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_';
+        if (!letter && (first || *p < '0' || *p > '9')) return false;
+        first = false;
+    }
+    return !first && strcmp(slash + 1, name) && xr_stdlib_module_descriptor(name);
+}
+
+static int resolve_stdlib_submodule(XrModuleResolver *r, const char *specifier,
+                                    XrModuleId *out_id, char **err_buf) {
+    const char *relative = specifier + 4;
+    char name[256], logical[XR_PATH_MAX], path[XR_PATH_MAX];
+    if (!r->config.stdlib_path || !stdlib_submodule_path(relative, name, sizeof(name))) goto invalid;
+    int length = snprintf(logical, sizeof(logical), "%s.xr", relative);
+    if (length <= 0 || (size_t) length >= sizeof(logical)) goto invalid;
+    length = snprintf(path, sizeof(path), "%s/%s", r->config.stdlib_path, logical);
+    if (length <= 0 || (size_t) length >= sizeof(path) || !xr_fs_exists(path)) goto invalid;
+    out_id->kind = XR_MOD_STDLIB;
+    out_id->source_path = xr_realpath(path);
+    out_id->authority.kind = XR_MODULE_IDENTITY_STDLIB;
+    out_id->authority.namespace_id = xr_strdup(name);
+    out_id->authority.physical_root = xr_realpath(r->config.stdlib_path);
+    if (!out_id->source_path || !out_id->authority.namespace_id || !out_id->authority.physical_root ||
+        !xr_module_identity_from_source(&out_id->authority, out_id->source_path,
+            &out_id->canonical, &out_id->logical_path) || strcmp(out_id->logical_path, logical)) goto invalid;
+    return 0;
+invalid:
+    xr_module_id_cleanup(out_id);
+    if (err_buf) *err_buf = make_error("stdlib source submodule '%s' lacks an exact authorized source", specifier);
+    return -1;
+}
 
 static int resolve_relative(const char *specifier, const char *importer_path,
                             const XrModuleIdentityAuthority *importer_authority, XrModuleId *out_id,
@@ -507,7 +544,7 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
 
     int rc;
 
-    /* The specifier's shape decides what it is, and the three shapes do not
+    /* The specifier's shape decides what it is, and the four shapes do not
      * overlap. `is_bare_name` used to carry that decision from the caller and
      * disagreed with the text often enough to matter -- `"math"` arrived as
      * bare and resolved to the standard library.
@@ -519,6 +556,8 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
      * Nothing in the tree used it. */
     if (is_relative_specifier(specifier)) {
         rc = resolve_relative(specifier, importer_path, importer_authority, out_id, err_buf);
+    } else if (strncmp(specifier, "std/", 4) == 0) {
+        rc = resolve_stdlib_submodule(r, specifier, out_id, err_buf);
     } else if (strchr(specifier, '/') != NULL) {
         rc = resolve_package(r, specifier, out_id, err_buf);
     } else {

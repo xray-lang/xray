@@ -37,7 +37,7 @@ static void source_counted_free(void *pointer) {
 int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL};
+    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_source_check(&request, &artifact, NULL) == XR_XIR_OK && artifact && !live);
     xr_xir_artifact_free(artifact);

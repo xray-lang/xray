@@ -19,6 +19,7 @@ typedef struct XrXirSourceRequest {
     const char *entry_path;
     const XrModuleIdentityAuthority *authority;
     const XrXirBudget *budget;
+    const char *stdlib_path;
 } XrXirSourceRequest;
 typedef struct XrXirSourceDiagnostic {
     XrXirStatus status;

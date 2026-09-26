@@ -15,6 +15,7 @@
  *
  * RESOLUTION RULES:
  *   Bare name         -> stdlib native factory registry lookup
+ *   "std/name/path"   -> exact stdlib source submodule under an explicit root
  *   "./" or "../"     → relative file (.xr) or directory (index.xr)
  *   "owner/name"      → third-party package under ~/.xray/packages/
  *   other quoted path → project-relative file or directory

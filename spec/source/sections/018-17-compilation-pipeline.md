@@ -146,6 +146,12 @@ CALL/PRINT用args[0]/args[1]表示函数自有操作数表的起点/数量；非
 泛型、完整stdlib、协程语法、foreign provider、parser完整
 OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口合同见 `contracts/xir-source-owner.md`。
 
+标准库源码子模块`std/io/output`以普通函数发布writeStdout(string)->bool和
+writeStderr(string)->bool，只报告宿主typed provider接受结果。该模块的精确stdlib身份
+才可调用私有__writeStdout/__writeStderr，降为WRITE_STREAM；导入与函数体仍正常检查。
+文件路径、函数拼写或项目同名模块不能取得权限。此接口不承诺File的flush/短写行为，
+也不替代既有yieldable文件操作；同源Checked/native产物发布另行验收。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -328,5 +334,13 @@ count; stable frames reserve typed-value staging and charge its physical bytes.
 Full generics, stdlib, coroutine
 syntax, foreign providers, parser OOM/input budgets, default CLI and product
 qualification remain separate. The interface contract is `contracts/xir-source-owner.md`.
+
+The standard-library source submodule std/io/output publishes ordinary
+writeStdout(string)->bool and writeStderr(string)->bool functions reporting host
+provider acceptance. Only its exact stdlib identity admits private
+__writeStdout/__writeStderr calls, lowered to WRITE_STREAM. Imports and bodies
+remain normally checked; matching local paths or names confer no privileges.
+This does not promise File flush/short-write behavior or replace yieldable file
+operations. Same-source Checked/native publication requires separate qualification.
 
 <!-- /xr-spec:en -->

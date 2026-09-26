@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = xr_compiler_session_new(NULL);
     CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL};
+    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirSourceDiagnostic diagnostic;
     XrXirStatus status = xr_xir_source_check(&request, &checked, &diagnostic);
@@ -52,10 +52,10 @@ int main(int argc, char **argv) {
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
-    XrXirValue first = source_run(program, entry, result, advance);
-    XrXirValue second = source_run(program, entry, result, advance);
+    XrXirValue results[2] = {{0}, {0}};
+    source_pair(program, entry, result, advance, results);
     xr_xir_program_drop(program);
-    source_result_drop(&first); source_result_drop(&second);
+    source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Real source modules, independent state and output passed in Lowered VM");
     return 0;
 }

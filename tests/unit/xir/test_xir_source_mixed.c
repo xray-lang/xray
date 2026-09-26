@@ -33,7 +33,7 @@ static void mixed_release(void *pointer) {
 int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL};
+    XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_source_check(&request, &checked, NULL) == XR_XIR_OK);
     xr_compiler_session_delete(session);
@@ -47,7 +47,9 @@ int main(void) {
         CHECK(xr_xir_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);
         CHECK(owner->entries[i].result == fixture_source_program.entries[i].result);
         CHECK(owner->entries[i].parameter_count == fixture_source_program.entries[i].parameter_count);
-        if ((module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "next", 4)) ||
+        if ((module->functions[i].name_length == 11 && (!memcmp(module->functions[i].name, "writeStdout", 11) ||
+            !memcmp(module->functions[i].name, "writeStderr", 11))) ||
+            (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "next", 4)) ||
             (module->functions[i].name_length == 4 && !memcmp(module->functions[i].name, "pack", 4)) ||
             (module->functions[i].name_length == 6 && !memcmp(module->functions[i].name, "result", 6)))
             owner->entries[i] = fixture_source_program.entries[i];
@@ -57,11 +59,11 @@ int main(void) {
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);
-    XrXirValue first = source_run(program, entry, fixture_source_result, fixture_source_advance);
+    XrXirValue results[2] = {{0}, {0}};
+    source_pair(program, entry, fixture_source_result, fixture_source_advance, results);
     CHECK(!released);
-    XrXirValue second = source_run(program, entry, fixture_source_result, fixture_source_advance);
     xr_xir_program_drop(program); CHECK(released == 1);
-    source_result_drop(&first); source_result_drop(&second);
+    source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("VM to native and native to VM source calls shared instance state and ownership");
     return 0;
 }

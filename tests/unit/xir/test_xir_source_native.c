@@ -19,12 +19,11 @@ XR_DATA const uint32_t fixture_source_result, fixture_source_advance;
 int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&fixture_source_program, 262144, &program) == XR_XIR_OK);
-    XrXirValue first = source_run(program, fixture_source_program.declarations->entry_function,
-        fixture_source_result, fixture_source_advance);
-    XrXirValue second = source_run(program, fixture_source_program.declarations->entry_function,
-        fixture_source_result, fixture_source_advance);
+    XrXirValue results[2] = {{0}, {0}};
+    source_pair(program, fixture_source_program.declarations->entry_function,
+        fixture_source_result, fixture_source_advance, results);
     xr_xir_program_drop(program);
-    source_result_drop(&first); source_result_drop(&second);
+    source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Real source modules matched independent native expectations");
     return 0;
 }
