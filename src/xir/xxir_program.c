@@ -17,7 +17,7 @@
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
     if (xr_xir_type_is_cell(type)) type = xr_xir_cell_element(type);
-    return type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING ||
+    return type == XR_XIR_BOOL || xr_xir_type_is_integer(type) || type == XR_XIR_STRING ||
         type == XR_XIR_ATOMIC_I64 || xr_xir_callable_signature(spec->callables, type);
 }
 static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, uint64_t *work) {

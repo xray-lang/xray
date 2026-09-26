@@ -14,14 +14,14 @@
 #include "xir/xxir.h"
 static XrXirArtifact *program_fixture(uint32_t mode) {
     XrXirInstruction alpha[] = {
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 10},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 10},
         {XR_XIR_ATOMIC_I64_NEW, XR_XIR_ATOMIC_I64, {0}, {0}, 0},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {1}, {0}, 0},
         {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {3}, {0}, 2},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 2},
         {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 91},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 91},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
     };
     XrXirInstruction beta[9]; memcpy(beta, alpha, sizeof(beta));
@@ -36,7 +36,7 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
     };
     XrXirInstruction get_alpha[] = {
         {XR_XIR_SLOT_LOAD, XR_XIR_ATOMIC_I64, {0}, {0}, 0},
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 1},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1},
         {XR_XIR_ATOMIC_I64_FETCH_ADD, XR_XIR_I64, {0, 1}, {0}, 0},
         {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 2},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 1},
@@ -47,7 +47,7 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
     XrXirInstruction root[] = {
         {XR_XIR_CALL, XR_XIR_I64, {0}, {0}, 4},
         {XR_XIR_CALL, XR_XIR_I64, {0}, {0}, 5},
-        {XR_XIR_ADD_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_ADD_INT, XR_XIR_I64, {0, 1}, {0}, 0},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {2}, {0}, 1},
         {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {4}, {0}, 2},

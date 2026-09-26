@@ -15,6 +15,7 @@
 #include "xir_execution_cases.h"
 #include "xir/xxir_vm.h"
 #include "xir_integer_runtime_cases.h"
+#include "xir_integer_admission_cases.h"
 
 static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *context,
                          const XrXirValue *arguments, uint32_t count, XrXirValue *result) {
@@ -23,6 +24,7 @@ static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *conte
 
 int main(void) {
     integer_runtime_cases();
+    integer_ir_rejections();
     XrXirArtifact *artifact = fixture_lowered();
     execution_cases(run, artifact);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

@@ -14,12 +14,36 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 6u
+#define XR_XIR_VALUE_ABI_VERSION 7u
 #define XR_XIR_CELL_TYPE_FLAG 0x40000000u
 #define XR_XIR_CALLABLE_TYPE_BASE 256u
 #define XR_XIR_CALLABLE_TYPE_LIMIT 65536u
 #define XR_XIR_ARCH_X86_64 1u
-typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64 } XrXirType;
+typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64,
+    XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64 } XrXirType;
+static inline uint32_t xr_xir_integer_bits(XrXirType type) {
+    switch (type) {
+    case XR_XIR_I8: case XR_XIR_U8: return 8;
+    case XR_XIR_I16: case XR_XIR_U16: return 16;
+    case XR_XIR_I32: case XR_XIR_U32: return 32;
+    case XR_XIR_I64: case XR_XIR_U64: return 64;
+    default: return 0;
+    }
+}
+static inline bool xr_xir_type_is_integer(XrXirType type) {
+    return xr_xir_integer_bits(type) != 0;
+}
+static inline bool xr_xir_integer_signed(XrXirType type) {
+    return type == XR_XIR_I64 || (type >= XR_XIR_I8 && type <= XR_XIR_I32);
+}
+static inline bool xr_xir_integer_payload_valid(XrXirType type, int64_t payload) {
+    uint32_t bits = xr_xir_integer_bits(type);
+    if (!bits) return false;
+    if (bits == 64) return true;
+    int64_t bound = INT64_C(1) << (bits - (xr_xir_integer_signed(type) ? 1 : 0));
+    return payload >= (xr_xir_integer_signed(type) ? -bound : 0) && payload < bound;
+}
+
 typedef struct XrXirValue {
     uint32_t type, reserved;
     int64_t payload;

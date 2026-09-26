@@ -18,7 +18,7 @@ const XrXirCallableSignature *xr_xir_callable_signature(const XrXirCallableTypes
         id - XR_XIR_CALLABLE_TYPE_BASE < types->count ? &types->signatures[id - XR_XIR_CALLABLE_TYPE_BASE] : NULL;
 }
 static bool callable_component(XrXirType type, uint32_t earlier) {
-    return type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||
+    return type == XR_XIR_BOOL || xr_xir_type_is_integer(type) || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||
         ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < 65536) ||
         ((uint32_t) type >= XR_XIR_CALLABLE_TYPE_BASE && (uint32_t) type - XR_XIR_CALLABLE_TYPE_BASE < earlier);
 }

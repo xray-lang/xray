@@ -19,8 +19,10 @@ static bool output_piece(const XrXirValue *value, char *scalar, const char **byt
     if (value->type == XR_XIR_BOOL) {
         *bytes = value->payload ? "true" : "false"; *length = value->payload ? 4 : 5; return true;
     }
-    if (value->type != XR_XIR_I64) return false;
-    int count = snprintf(scalar, 32, "%lld", (long long) value->payload);
+    if (!xr_xir_type_is_integer((XrXirType) value->type)) return false;
+    int count = xr_xir_integer_signed((XrXirType) value->type) ?
+        snprintf(scalar, 32, "%lld", (long long) value->payload) :
+        snprintf(scalar, 32, "%llu", (unsigned long long) (uint64_t) value->payload);
     if (count <= 0 || count >= 32) return false;
     *bytes = scalar; *length = (size_t) count; return true;
 }

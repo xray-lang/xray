@@ -19,7 +19,7 @@ static XrXirArtifact *capture_checked(void) {
     XrXirCallableSignature signature = {&input,1,XR_XIR_STRING,0,0};
     XrXirCallableTypes types = {&signature,1};
     XrXirInstruction init[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
-    XrXirInstruction root[] = {{XR_XIR_CONST_I64,XR_XIR_I64,{0},{0},17},
+    XrXirInstruction root[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},17},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
     XrXirInstruction make[] = {{XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0},
         {XR_XIR_FUNCTION_REF,fn,{0,1},{0,1},5},

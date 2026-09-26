@@ -43,9 +43,9 @@ static void fixture_init(Fixture *fixture) {
         fixture->blocks[b] = (XrXirBlock) {b * 2, 2};
     fixture->instructions[0] = (XrXirInstruction) {XR_XIR_COPY, XR_XIR_I64, {1, 0}, {0, 0}, 0};
     fixture->instructions[1] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 2}, 0};
-    fixture->instructions[2] = (XrXirInstruction) {XR_XIR_ADD_I64, XR_XIR_I64, {2, 1}, {0, 0}, 0};
+    fixture->instructions[2] = (XrXirInstruction) {XR_XIR_ADD_INT, XR_XIR_I64, {2, 1}, {0, 0}, 0};
     fixture->instructions[3] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0};
-    fixture->instructions[4] = (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 9};
+    fixture->instructions[4] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 9};
     fixture->instructions[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {6, 0}, {0, 0}, 0};
     fixture->function = (XrXirFunction) {fixture->name, 5, fixture->parameters, 2,
         XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6, NULL, 0};
@@ -239,7 +239,7 @@ static void dominance_word_boundary(void) {
         blocks[b] = (XrXirBlock) {next, b == 65 ? 2 : 1};
         if (b == 65) {
             definition = next;
-            ops[next++] = (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 42};
+            ops[next++] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42};
         }
         if (b == 69)
             ops[next++] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {definition, 0}, {0, 0}, 0};
@@ -261,8 +261,8 @@ static void reverse_storage_and_boolean_values(void) {
     XrXirInstruction ops[] = {
         {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0},
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 7},
-        {XR_XIR_EQ_I64, XR_XIR_BOOL, {2, 2}, {0, 0}, 0},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 7},
+        {XR_XIR_EQ_INT, XR_XIR_BOOL, {2, 2}, {0, 0}, 0},
         {XR_XIR_COPY, XR_XIR_BOOL, {3, 0}, {0, 0}, 0},
         {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0},
     };
@@ -280,9 +280,9 @@ static void reverse_storage_and_boolean_values(void) {
 }
 
 static void numeric_admission(void) {
-    for (XrXirOp op = XR_XIR_SUB_I64; op <= XR_XIR_SHR_I64; op = (XrXirOp) (op + 1)) {
+    for (XrXirOp op = XR_XIR_SUB_INT; op <= XR_XIR_SHR_INT; op = (XrXirOp) (op + 1)) {
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64};
-        XrXirType result = op >= XR_XIR_NE_I64 && op <= XR_XIR_GE_I64 ? XR_XIR_BOOL : XR_XIR_I64;
+        XrXirType result = op >= XR_XIR_NE_INT && op <= XR_XIR_GE_INT ? XR_XIR_BOOL : XR_XIR_I64;
         XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
         const XrXirBlock block = {0, 2};
         XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};

@@ -355,7 +355,7 @@ static size_t declaration_allocation_failures(void) {
 int main(void) {
     segment_cases();
     XrXirInstruction ops[] = {
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 42},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42},
         {XR_XIR_COPY, XR_XIR_I64, {0, 0}, {0, 0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0},
     };

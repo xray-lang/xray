@@ -15,7 +15,7 @@
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
     if (xr_xir_type_is_cell(type)) type = xr_xir_cell_element(type);
-    if (type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64) return true;
+    if (type == XR_XIR_BOOL || xr_xir_type_is_integer(type) || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64) return true;
     if (xr_xir_callable_signature(module->callables, type))
         return xr_xir_callable_span(module->callables, type) <=
             (module->generics ? module->generics[function].parameter_count : 0);

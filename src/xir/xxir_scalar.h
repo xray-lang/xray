@@ -53,7 +53,10 @@ typedef struct XrXirIntegerFormat {
     uint32_t bits;
     bool is_signed;
 } XrXirIntegerFormat;
-/* Width and signedness describe canonical payloads, not wire type admission. */
+static inline XrXirIntegerFormat xr_xir_integer_format(XrXirType type) {
+    return (XrXirIntegerFormat) {xr_xir_integer_bits(type), xr_xir_integer_signed(type)};
+}
+/* Shift counts use all payload bits independently of the left operand format. */
 XR_FUNC XrXirRunStatus xr_xir_integer_arithmetic(XrXirIntegerFormat format,
     XrXirArithmetic operation, int64_t left, int64_t right, int64_t *result);
 XR_FUNC XrXirRunStatus xr_xir_integer_compare(XrXirIntegerFormat format,

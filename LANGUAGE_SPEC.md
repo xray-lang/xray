@@ -6893,7 +6893,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 6 and call ABI 10 replace the initial scalar boundary without aliases.
+Value ABI 7 and call ABI 11 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -7028,7 +7028,7 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema 4 preserves templates; semantic contract 11 also covers local
+dominance rules. Checked schema 4 preserves templates; semantic contract 12 also covers local
 places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
@@ -7068,7 +7068,7 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema is 4 and its semantic contract is 11; older semantic
+schema is 4 and its semantic contract is 12; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
 
@@ -7103,7 +7103,7 @@ INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result a
 unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
 after an arithmetic fault in an initialized instance. Generated C guards special pairs
 before host / or % and never executes signed overflow. Negation lowers to zero minus
-the operand. Current Checked schema 4 / semantic contract 11, Call ABI 10, Value6 and Program5 follow
+the operand. Current Checked schema 4 / semantic contract 12, Call ABI 11, Value7 and Program6 follow
 §17.16 without a compatibility reader or adapter.
 Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
 and explicit checked/saturating library methods remain outside this admitted subset.
@@ -7120,8 +7120,8 @@ to right. Bitwise operators reject bool, string, Atomic and unconstrained T. Var
 compound assignments read the old value before evaluating the RHS, compute, store
 and return the new value; an RHS assignment cannot change that earlier snapshot.
 Failure skips the store. String += also admits owned concat snapshots; other compound
-operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema4 / semantic contract11
-and Call10/Value6/Program5 follow §17.16 without compatibility paths. Other
+operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema4 / semantic contract12
+and Call11/Value7/Program6 follow §17.16 without compatibility paths. Other
 integer widths and conversions are not yet admitted.
 
 ### 17.16 XIR Owned Function Values and Indirect Calls
@@ -7152,7 +7152,7 @@ host-thread driver admits calls only in the originating instance. Another instan
 or Program rejects coincident numeric IDs. Cross-instance transfer and concurrent
 admission still require implementation and qualification.
 
-The unique packet is schema4/semantic11 with Value6/Call10/Program5; old versions reject
+The unique packet is schema4/semantic12 with Value7/Call11/Program6; old versions reject
 without readers, boxed adapters or alternate execution. Source/packet validation,
 independent VM/native expectations, suspension/cancellation, escaped results, code
 leases and individual allocation failures are covered by machine contracts. This
@@ -7174,7 +7174,7 @@ builds a fresh canonical closed type table and remaps parameters, results,
 instructions, explicit type arguments and slots before rechecking. No open
 signature may enter Lowered or an immutable Program. Traversal spends work and
 metadata budgets and admits at most 128 active structural substitution levels.
-Checked schema 4/semantic contract 11 and Program ABI 5 replace earlier versions.
+Checked schema 4/semantic contract 12 and Program ABI 6 replace earlier versions.
 Captures, other parameter modes, effect promises, inference and member witnesses
 remain outside this admitted subset and retain their independent gates.
 
@@ -7186,7 +7186,7 @@ Construction obtains a logical copy of every captured value and publishes no par
 
 An indirect call publishes the same resumable CALL action with a borrowed function value. The sole frame driver copies the environment prefix and explicit arguments into the new frame while the caller still owns the environment. Suspension, throw, cancellation and return use the existing cleanup path. Host function entry likewise retains captures and arguments before releasing a previous result. Instance stop/free revokes execution admission while escaped environments remain readable, copyable and releasable.
 
-This internal contract does not turn var captures into copies or grant Sendable, noescape or no_suspend. Shared mutable cells, cycle reclamation and the source closure producer require separate implementation and qualification. Internal construction does not certify source closures. Value ABI 6, Call ABI 10, Program ABI 5 and Checked schema4/semantic contract11 are the sole current versions; predecessors are rejected.
+This internal contract does not turn var captures into copies or grant Sendable, noescape or no_suspend. Shared mutable cells, cycle reclamation and the source closure producer require separate implementation and qualification. Internal construction does not certify source closures. Value ABI 7, Call ABI 11, Program ABI 6 and Checked schema4/semantic contract12 are the sole current versions; predecessors are rejected.
 
 ### 17.19 XIR shared capture cells
 
@@ -7194,10 +7194,16 @@ An internal cell type is `0x40000000 | element type`. Elements are non-unit ordi
 
 Ordinary var captures retain one shared storage identity; every alias observes updates while read results keep value semantics. Cell RC is atomic, but content access only has the current instance's single-host-thread admission, not a cross-worker or atomic-update promise. Function contents and captured cells belong to the same instance value domain, so cells cannot bypass callable instance isolation. Last-reference release queues contents on the existing allocation-free destruction worklist, without recursive environment destruction. Strong cycles remain possible and can be explicitly broken while an owner remains. Unreachable strong-cycle reclamation stays OPEN; this introduces no collector or universal leak-freedom claim.
 
-The unique versions are Value6/Call10/Program5 and Checked schema4/semantic11, without old readers or ABI adapters. Source var capture must not substitute snapshots for shared cells.
+The unique versions are Value7/Call11/Program6 and Checked schema4/semantic12, without old readers or ABI adapters. Source var capture must not substitute snapshots for shared cells.
 ### 17.20 Fixed-width integer runtime foundation
 
-The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and Call ABI10 rejects old native entries. Checked schema4/semantic11 and Value6/Program5 stay unchanged. This qualifies only the runtime foundation: narrow/unsigned XIR types, source contexts, widening, casts, output and containers remain OPEN.
+The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and Call ABI11 rejects old native entries. Checked schema4/semantic12 and Value7/Program6 stay unchanged. This section qualifies the runtime foundation. Typed XIR, explicit casts, same-signedness arithmetic widening and output follow §17.21; full contextual inference and containers remain OPEN.
+
+### 17.21 Typed fixed-width integer XIR
+
+Integer type IDs are i64=2, i8=5, i16=6, i32=7, u8=8, u16=9, u32=10 and u64=11. The sole CONST_INT and arithmetic/comparison/shift INT family replace the old i64-specific names. CONVERT_INT explicitly converts concrete integers. All instructions retain type, value-role and dominance checks. Arithmetic operands and results share an exact type; comparison operands share a type and return bool; shifts keep the left type and accept any integer count. Unconstrained T gains no arithmetic authority from specialization.
+
+Constants and boundaries preserve canonical payloads. Copy, phi, calls, module slots, cells, callable signatures and output retain exact type identity. Storage width/alignment is 1/2/4/8 bytes; frame slots remain 8 bytes, boxed/parameter/result boundaries remain 16 bytes aligned to 8. Unsigned output uses the complete unsigned decimal value, including 18446744073709551615 for all-ones u64. Output budgets and single publication remain unchanged. Value7/Call11/Program6 and Checked schema4/semantic12 are the sole versions; old packets and entries reject. The source producer admits all eight names, concrete integer as, same-signedness widening of already typed arithmetic operands, width-preserving unary/increment operations, shared cells, module state and print. Nullable casts and bool/rune/float or unconstrained-T conversion reject. Full literal contexts, contextual widening at assignment/parameter/return sites, floating point and containers remain OPEN; explicit-cast witnesses do not replace those requirements.
 
 ---
 

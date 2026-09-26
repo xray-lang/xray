@@ -24,6 +24,8 @@
 typedef XrXirRunStatus (*FixtureRun)(void *, uint32_t, XrXirRunContext *,
                                     const XrXirValue *, uint32_t, XrXirValue *);
 
+#include "xir_integer_execution_cases.h"
+
 static void bitwise_execution(FixtureRun run, void *owner) {
     for (unsigned i = 0; i < sizeof(bitwise_cases) / sizeof(bitwise_cases[0]); ++i) {
         const XirBitwiseCase *row = &bitwise_cases[i];
@@ -82,6 +84,7 @@ static void phi_leaf_cases(FixtureRun run, void *owner) {
     }
 }
 static void execution_cases(FixtureRun run, void *owner) {
+    integer_execution_cases(run, owner);
     phi_leaf_cases(run, owner);
     numeric_cases(run, owner);
     bitwise_execution(run, owner);

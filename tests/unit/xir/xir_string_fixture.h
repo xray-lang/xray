@@ -28,7 +28,7 @@ static XrXirArtifact *string_fixture(uint32_t mode) {
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {4, 3}, {0, 0}, 0},
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {5, 0}, {0, 0}, 2},
         {XR_XIR_SUSPEND, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 91},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 91},
         {XR_XIR_RETURN, XR_XIR_UNIT, {5, 0}, {0, 0}, 0}
     };
     XrXirInstruction loop[] = {

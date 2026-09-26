@@ -28,28 +28,28 @@ typedef struct CBuffer {
 
 static const char *comparison_symbol(XrXirOp op) {
     switch (op) {
-    case XR_XIR_EQ_I64: return "==";
-    case XR_XIR_NE_I64: return "!=";
-    case XR_XIR_LT_I64: return "<";
-    case XR_XIR_LE_I64: return "<=";
-    case XR_XIR_GT_I64: return ">";
-    case XR_XIR_GE_I64: return ">=";
+    case XR_XIR_EQ_INT: return "==";
+    case XR_XIR_NE_INT: return "!=";
+    case XR_XIR_LT_INT: return "<";
+    case XR_XIR_LE_INT: return "<=";
+    case XR_XIR_GT_INT: return ">";
+    case XR_XIR_GE_INT: return ">=";
     default: return NULL;
     }
 }
 
 static int emit_arithmetic_operation(XrXirOp op) {
     switch (op) {
-    case XR_XIR_ADD_I64: return XR_XIR_ARITH_ADD;
-    case XR_XIR_SUB_I64: return XR_XIR_ARITH_SUB;
-    case XR_XIR_MUL_I64: return XR_XIR_ARITH_MUL;
-    case XR_XIR_DIV_I64: return XR_XIR_ARITH_DIV;
-    case XR_XIR_REM_I64: return XR_XIR_ARITH_REM;
-    case XR_XIR_AND_I64: return XR_XIR_ARITH_AND;
-    case XR_XIR_OR_I64: return XR_XIR_ARITH_OR;
-    case XR_XIR_XOR_I64: return XR_XIR_ARITH_XOR;
-    case XR_XIR_SHL_I64: return XR_XIR_ARITH_SHL;
-    case XR_XIR_SHR_I64: return XR_XIR_ARITH_SHR;
+    case XR_XIR_ADD_INT: return XR_XIR_ARITH_ADD;
+    case XR_XIR_SUB_INT: return XR_XIR_ARITH_SUB;
+    case XR_XIR_MUL_INT: return XR_XIR_ARITH_MUL;
+    case XR_XIR_DIV_INT: return XR_XIR_ARITH_DIV;
+    case XR_XIR_REM_INT: return XR_XIR_ARITH_REM;
+    case XR_XIR_AND_INT: return XR_XIR_ARITH_AND;
+    case XR_XIR_OR_INT: return XR_XIR_ARITH_OR;
+    case XR_XIR_XOR_INT: return XR_XIR_ARITH_XOR;
+    case XR_XIR_SHL_INT: return XR_XIR_ARITH_SHL;
+    case XR_XIR_SHR_INT: return XR_XIR_ARITH_SHR;
     default: return -1;
     }
 }
@@ -93,6 +93,41 @@ static void append(CBuffer *buffer, const char *format, ...) {
         }
     }
     va_end(args);
+}
+
+static void emit_integer_step(CBuffer *buffer, const XrXirFunction *function,
+    const XrXirFunctionLayout *layout, uint32_t index, bool resumable) {
+    const XrXirInstruction *op = &function->instructions[index];
+    const char *frame = resumable ? "state->frame" : "frame";
+    uint32_t destination = layout->offsets[function->parameter_count + index];
+    uint32_t left = layout->offsets[op->args[0]];
+    const char *comparison = comparison_symbol(op->op);
+    XrXirType input = xr_xir_operand_type(function, op->args[0]);
+    append(buffer, "    {\n");
+    if (!comparison) append(buffer, "    int64_t temporary = 0;\n");
+    if (comparison) {
+        append(buffer, "    int ordering = 0;\n    XrXirRunStatus numeric_status = "
+            "xr_xir_integer_compare(xr_xir_integer_format((XrXirType) %uu), "
+            "xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &ordering);\n",
+            (uint32_t) input, frame, left, frame, layout->offsets[op->args[1]]);
+    } else if (op->op == XR_XIR_CONVERT_INT) {
+        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_integer_convert("
+            "xr_xir_integer_format((XrXirType) %uu), xr_xir_integer_format((XrXirType) %uu), "
+            "xr_xir_scalar_load(%s, %uu), &temporary);\n", (uint32_t) input, (uint32_t) op->type, frame, left);
+    } else {
+        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_integer_arithmetic("
+            "xr_xir_integer_format((XrXirType) %uu), (XrXirArithmetic) %d, "
+            "xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &temporary);\n",
+            (uint32_t) op->type, emit_arithmetic_operation(op->op), frame, left, frame, layout->offsets[op->args[1]]);
+    }
+    if (resumable) append(buffer, "    if (numeric_status != XR_XIR_RUN_OK) return (XrXirAction) "
+        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, numeric_status == XR_XIR_RUN_DIVIDE_BY_ZERO ? "
+        "XR_XIR_CALL_DIVIDE_BY_ZERO : XR_XIR_CALL_BAD_ARGUMENT}};\n");
+    else append(buffer, "    if (numeric_status != XR_XIR_RUN_OK) { status = numeric_status; goto xr_done; }\n");
+    append(buffer, "    xr_xir_scalar_store(%s, %uu, ", frame, destination);
+    if (comparison) append(buffer, "ordering %s 0", comparison);
+    else append(buffer, "temporary");
+    append(buffer, ");\n    }\n");
 }
 
 static bool symbol_prefix_valid(const char *prefix) {
@@ -181,7 +216,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     switch (op->op) {
     case XR_XIR_PHI: break;
     case XR_XIR_CONST_BOOL:
-    case XR_XIR_CONST_I64:
+    case XR_XIR_CONST_INT:
         append(buffer, "    xr_xir_scalar_store(frame, %uu, ", destination);
         emit_constant(buffer, op->immediate);
         append(buffer, ");\n");
@@ -196,23 +231,14 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
         append(buffer, "    xr_xir_scalar_store(frame, %uu, xr_xir_scalar_load(frame, %uu));\n",
                layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
         break;
-    case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
-    case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
-    case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
-    case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
-        append(buffer, "    status = xr_xir_integer_arithmetic((XrXirIntegerFormat) {64, true}, (XrXirArithmetic) %d, xr_xir_scalar_load(frame, %uu), "
-               "xr_xir_scalar_load(frame, %uu), &temporary);\n"
-               "    if (status != XR_XIR_RUN_OK) goto xr_done;\n"
-               "    xr_xir_scalar_store(frame, %uu, temporary);\n",
-               emit_arithmetic_operation(op->op), layout->offsets[op->args[0]], layout->offsets[op->args[1]], destination);
-        break;
-    case XR_XIR_EQ_I64:
-    case XR_XIR_LT_I64: case XR_XIR_NE_I64: case XR_XIR_LE_I64:
-    case XR_XIR_GT_I64: case XR_XIR_GE_I64:
-        append(buffer, "    xr_xir_scalar_store(frame, %uu, xr_xir_scalar_load(frame, %uu) %s "
-               "xr_xir_scalar_load(frame, %uu));\n", destination,
-               layout->offsets[op->args[0]], comparison_symbol(op->op),
-               layout->offsets[op->args[1]]);
+    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
+    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
+    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
+    case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
+    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
+    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
+    case XR_XIR_CONVERT_INT:
+        emit_integer_step(buffer, function, layout, index, false);
         break;
     case XR_XIR_JUMP:
         emit_edge(buffer, function, layout, index, op->targets[0], false);
@@ -240,11 +266,6 @@ static void emit_function(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "\nXR_FUNC XrXirRunStatus %s_f%u(XrXirRunContext *context, "
            "const XrXirValue *arguments, uint32_t argument_count, XrXirValue *result) {\n"
            "    void *frame = NULL;\n    XrXirRunStatus status;\n", prefix, index);
-    for (uint32_t i = 0; i < function->instruction_count; ++i)
-        if (emit_arithmetic_operation(function->instructions[i].op) >= 0) {
-            append(buffer, "    int64_t temporary;\n");
-            break;
-        }
     append(buffer, "    if (!result) return XR_XIR_RUN_BAD_ARGUMENT;\n"
            "    *result = (XrXirValue) {0, 0, 0};\n"
            "    if (!context || argument_count != %uu || (argument_count && !arguments)) "
@@ -291,7 +312,7 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_scalar.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 6u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 7u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");
@@ -404,7 +425,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     switch (op->op) {
     case XR_XIR_PHI: break;
     case XR_XIR_CONST_BOOL:
-    case XR_XIR_CONST_I64:
+    case XR_XIR_CONST_INT:
         append(buffer, "        xr_xir_scalar_store(state->frame, %uu, ", destination);
         emit_constant(buffer, op->immediate);
         append(buffer, ");\n");
@@ -457,24 +478,14 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             op->op == XR_XIR_PRINT ? 3u : (uint32_t) op->immediate, count ? "state->arguments" : "NULL", count);
         return;
     }
-    case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
-    case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
-    case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
-    case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
-        append(buffer, "        if (xr_xir_integer_arithmetic((XrXirIntegerFormat) {64, true}, (XrXirArithmetic) %d, xr_xir_scalar_load(state->frame, %uu), "
-               "xr_xir_scalar_load(state->frame, %uu), &temporary) != XR_XIR_RUN_OK)\n"
-               "            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
-               "{XR_XIR_I64, 0, XR_XIR_CALL_DIVIDE_BY_ZERO}};\n"
-               "        xr_xir_scalar_store(state->frame, %uu, temporary);\n",
-               emit_arithmetic_operation(op->op), layout->offsets[op->args[0]], layout->offsets[op->args[1]], destination);
-        break;
-    case XR_XIR_EQ_I64:
-    case XR_XIR_LT_I64: case XR_XIR_NE_I64: case XR_XIR_LE_I64:
-    case XR_XIR_GT_I64: case XR_XIR_GE_I64:
-        append(buffer, "        xr_xir_scalar_store(state->frame, %uu, "
-               "xr_xir_scalar_load(state->frame, %uu) %s xr_xir_scalar_load(state->frame, %uu));\n",
-               destination, layout->offsets[op->args[0]], comparison_symbol(op->op),
-               layout->offsets[op->args[1]]);
+    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
+    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
+    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
+    case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
+    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
+    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
+    case XR_XIR_CONVERT_INT:
+        emit_integer_step(buffer, function, layout, index, true);
         break;
     case XR_XIR_JUMP:
         emit_edge(buffer, function, layout, index, op->targets[0], true);
@@ -521,11 +532,6 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
     append(buffer, "XR_FUNC XrXirAction %s_f%u(XrXirCallView *view) {\n"
            "    %s_state_%u *state = view->state;\n", prefix, index, prefix, index);
-    for (uint32_t i = 0; i < function->instruction_count; ++i)
-        if (emit_arithmetic_operation(function->instructions[i].op) >= 0) {
-            append(buffer, "    int64_t temporary;\n");
-            break;
-        }
     append(buffer, "    if (!state->initialized) {\n"
            "        if (view->argument_count != %uu) goto invalid;\n", function->parameter_count);
     for (uint32_t p = 0; p < function->parameter_count; ++p) {
@@ -646,7 +652,7 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 5u, \"XIR program ABI\");\n"
+    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 6u, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         prefix, prefix, module->function_count, prefix);
@@ -666,8 +672,8 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 10u, \"XIR call ABI\");\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 6u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 11u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 7u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");

@@ -46,7 +46,7 @@ static XrXirArtifact *function_ir_fixture(void) {
     XrXirCallableTypes types = {&signature, 1};
     XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
     XrXirInstruction root[] = {{XR_XIR_FUNCTION_REF, (XrXirType) 256, {0}, {0,1}, 2},
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 7},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7},
         {XR_XIR_CALL_INDIRECT, XR_XIR_I64, {0, 1}, {0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
     XrXirInstruction target[] = {{XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0},

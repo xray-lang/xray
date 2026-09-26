@@ -33,16 +33,16 @@ typedef struct VmState {
 
 static int arithmetic_operation(XrXirOp op) {
     switch (op) {
-    case XR_XIR_ADD_I64: return XR_XIR_ARITH_ADD;
-    case XR_XIR_SUB_I64: return XR_XIR_ARITH_SUB;
-    case XR_XIR_MUL_I64: return XR_XIR_ARITH_MUL;
-    case XR_XIR_DIV_I64: return XR_XIR_ARITH_DIV;
-    case XR_XIR_REM_I64: return XR_XIR_ARITH_REM;
-    case XR_XIR_AND_I64: return XR_XIR_ARITH_AND;
-    case XR_XIR_OR_I64: return XR_XIR_ARITH_OR;
-    case XR_XIR_XOR_I64: return XR_XIR_ARITH_XOR;
-    case XR_XIR_SHL_I64: return XR_XIR_ARITH_SHL;
-    case XR_XIR_SHR_I64: return XR_XIR_ARITH_SHR;
+    case XR_XIR_ADD_INT: return XR_XIR_ARITH_ADD;
+    case XR_XIR_SUB_INT: return XR_XIR_ARITH_SUB;
+    case XR_XIR_MUL_INT: return XR_XIR_ARITH_MUL;
+    case XR_XIR_DIV_INT: return XR_XIR_ARITH_DIV;
+    case XR_XIR_REM_INT: return XR_XIR_ARITH_REM;
+    case XR_XIR_AND_INT: return XR_XIR_ARITH_AND;
+    case XR_XIR_OR_INT: return XR_XIR_ARITH_OR;
+    case XR_XIR_XOR_INT: return XR_XIR_ARITH_XOR;
+    case XR_XIR_SHL_INT: return XR_XIR_ARITH_SHL;
+    case XR_XIR_SHR_INT: return XR_XIR_ARITH_SHR;
     default: return -1;
     }
 }
@@ -192,7 +192,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     if (op->op == XR_XIR_PHI) { state->instruction = next; return XR_XIR_RUN_OK; }
     switch (op->op) {
     case XR_XIR_CONST_BOOL:
-    case XR_XIR_CONST_I64:
+    case XR_XIR_CONST_INT:
         value = op->immediate;
         break;
     case XR_XIR_SCALAR_LOCAL_NEW:
@@ -242,40 +242,41 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return XR_XIR_RUN_OK;
     }
-    case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
-    case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
-    case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
-    case XR_XIR_DIV_I64: case XR_XIR_REM_I64: {
+    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
+    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
+    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
+    case XR_XIR_DIV_INT: case XR_XIR_REM_INT: {
         int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        XrXirRunStatus status = xr_xir_integer_arithmetic((XrXirIntegerFormat) {64, true}, (XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
+        XrXirRunStatus status = xr_xir_integer_arithmetic(xr_xir_integer_format(op->type), (XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
         if (status != XR_XIR_RUN_OK) return status;
         break;
     }
-    case XR_XIR_EQ_I64:
-        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) ==
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
+    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
+    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT: {
+        int ordering = 0;
+        XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
+        XrXirRunStatus status = xr_xir_integer_compare(xr_xir_integer_format(type),
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]),
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), &ordering);
+        if (status != XR_XIR_RUN_OK) return status;
+        switch (op->op) {
+        case XR_XIR_EQ_INT: value = ordering == 0; break;
+        case XR_XIR_NE_INT: value = ordering != 0; break;
+        case XR_XIR_LT_INT: value = ordering < 0; break;
+        case XR_XIR_LE_INT: value = ordering <= 0; break;
+        case XR_XIR_GT_INT: value = ordering > 0; break;
+        default: value = ordering >= 0; break;
+        }
         break;
-    case XR_XIR_LT_I64:
-        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) <
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
+    }
+    case XR_XIR_CONVERT_INT: {
+        XrXirType from = xr_xir_operand_type(run->function, op->args[0]);
+        XrXirRunStatus status = xr_xir_integer_convert(xr_xir_integer_format(from), xr_xir_integer_format(op->type),
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &value);
+        if (status != XR_XIR_RUN_OK) return status;
         break;
-    case XR_XIR_NE_I64:
-        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) !=
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        break;
-    case XR_XIR_LE_I64:
-        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) <=
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        break;
-    case XR_XIR_GT_I64:
-        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) >
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        break;
-    case XR_XIR_GE_I64:
-        value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) >=
-                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        break;
+    }
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT:
         state->instruction = next;
         return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);

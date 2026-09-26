@@ -32,22 +32,22 @@ static XrXirArtifact *local_fixture(void) {
     const XrXirInstruction fault_ops[] = {
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {0, 1}, {0}, 0},
         {XR_XIR_LOCAL_NEW, XR_XIR_STRING, {3}, {0}, 0},
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 7},
-        {XR_XIR_DIV_I64, XR_XIR_I64, {5, 2}, {0}, 0},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7},
+        {XR_XIR_DIV_INT, XR_XIR_I64, {5, 2}, {0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0}
     };
     const XrXirBlock fault_block = {0, 5};
     const XrXirInstruction phi_ops[] = {
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 1},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1},
         {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
         {XR_XIR_PHI, XR_XIR_STRING, {0, 4}, {0}, 0},
         {XR_XIR_PHI, XR_XIR_STRING, {4, 4}, {0}, 0},
         {XR_XIR_PHI, XR_XIR_I64, {8, 4}, {0}, 0},
-        {XR_XIR_LT_I64, XR_XIR_BOOL, {8, 2}, {0}, 0},
+        {XR_XIR_LT_INT, XR_XIR_BOOL, {8, 2}, {0}, 0},
         {XR_XIR_BRANCH, XR_XIR_UNIT, {9}, {2, 3}, 0},
         {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0},
-        {XR_XIR_ADD_I64, XR_XIR_I64, {8, 4}, {0}, 0},
+        {XR_XIR_ADD_INT, XR_XIR_I64, {8, 4}, {0}, 0},
         {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {6, 7}, {0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {14}, {0}, 0}

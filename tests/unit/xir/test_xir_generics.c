@@ -38,7 +38,7 @@ static void rejected_templates(void) {
         if (mode == 4) ((XrXirType *) generics[0].arguments)[0] = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
         if (mode == 5) body[0].type = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1);
         if (mode == 6) body[0].op = XR_XIR_SCALAR_COPY;
-        if (mode == 7) body[0].op = XR_XIR_CONST_I64;
+        if (mode == 7) body[0].op = XR_XIR_CONST_INT;
         if (mode == 8) caller[0].type = XR_XIR_BOOL;
         if (mode == 9) generics[0].argument_count = 2;
         CHECK(xr_xir_artifact_verify(checked, NULL, NULL) != XR_XIR_OK);

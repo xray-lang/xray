@@ -26,7 +26,7 @@ argument; definition checking cannot gain a constraint from a future body.
 Checked transitions and packets own every descriptor and parameter record; parser
 arenas, borrowed construction buffers and input bytes may be destroyed afterwards.
 Specialization substitutes components, interns a fresh closed signature table and
-remaps all type uses before rechecking. Checked schema 4, semantic contract 11
+remaps all type uses before rechecking. Checked schema 4, semantic contract 12
 appends the canonical callable table after generic
 metadata; older schema/contract pairs are rejected without an alternate reader.
 Wire records contain only type/mode/flag integers, never code pointers or instances.
@@ -55,4 +55,4 @@ bodies or revisit AST during specialization. Read-only ordinary callable types
 still do not satisfy Sendable. Substitution and matching spend the aggregate work
 and memory budgets; recursive structural traversal is bounded to 128 levels.
 The wire record includes the verified span after flags. Schema 4/contract 11 and
-Program ABI 5 replace previous versions atomically, without an alternate reader.
+Program ABI 6 replace previous versions atomically, without an alternate reader.

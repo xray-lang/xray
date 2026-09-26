@@ -90,7 +90,7 @@ static XrXirValue string_value(XirString *string) {
 }
 bool xr_xir_value_argument(const XrXirValue *value, XrXirType type) {
     if (!value || value->reserved || value->type != (uint32_t) type) return false;
-    return type == XR_XIR_I64 ||
+    return xr_xir_integer_payload_valid(type, value->payload) ||
         (type == XR_XIR_BOOL && (value->payload == 0 || value->payload == 1)) ||
         (xr_xir_type_is_owned(type) && object_pointer(value) && object_pointer(value)->type == type);
 }

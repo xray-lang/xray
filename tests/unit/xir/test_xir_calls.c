@@ -118,7 +118,7 @@ static void cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 
 static XrXirArtifact *comparator_artifact(void) {
     XrXirInstruction instructions[] = {
-        {XR_XIR_LT_I64, XR_XIR_BOOL, {0, 1}, {0, 0}, 0},
+        {XR_XIR_LT_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0}
     };
     XrXirBlock block = {0, 2};
@@ -299,7 +299,7 @@ static void call_admission(void) {
     XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
     XrXirCall *call = NULL;
-    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, XR_XIR_CALL_ABI_VERSION + 1};
+    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, XR_XIR_CALL_ABI_VERSION + 1};
     for (size_t i = 0; i < sizeof(rejected_abis) / sizeof(rejected_abis[0]); ++i) {
         entries[1].abi_version = rejected_abis[i];
         CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_BAD_ABI);

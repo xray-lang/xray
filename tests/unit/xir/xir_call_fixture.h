@@ -33,15 +33,15 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
     };
     XrXirInstruction compare[] = {
         {XR_XIR_SUSPEND, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
-        {XR_XIR_LT_I64, XR_XIR_BOOL, {0, 1}, {0, 0}, 0},
+        {XR_XIR_LT_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {3, 0}, {0, 0}, 0}
     };
     if (mode == 1) {
-        compare[1] = (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 91};
+        compare[1] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 91};
         compare[2] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {3, 0}, {0, 0}, 0};
     } else if (mode == 2) {
-        compare[0] = (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 0};
-        compare[1] = (XrXirInstruction) {XR_XIR_DIV_I64, XR_XIR_I64, {0, 2}, {0, 0}, 0};
+        compare[0] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 0};
+        compare[1] = (XrXirInstruction) {XR_XIR_DIV_INT, XR_XIR_I64, {0, 2}, {0, 0}, 0};
         compare[2] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {3, 0}, {0, 0}, 0};
     }
     const XrXirFunction functions[] = {

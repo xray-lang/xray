@@ -224,3 +224,19 @@ fn closureScope()->i64 {
 fn passCallback(callback:fn(bool)->string)->fn(bool)->string { return callback }
 var activeCallback:fn(bool)->string = rightCallback
 fn flipCallback(flag:bool)->bool { activeCallback = rightCallback; return flag }
+
+
+var unsignedState: u64 = (-1) as u64
+fn integerControl() -> u64 {
+    var small: i8 = 127 as i8
+    const bump = fn() -> i8 { small++; return small }
+    const minimum = bump()
+    small--
+    small++
+    unsignedState -= 1 as u64
+    unsignedState += 1 as u64
+    print(minimum, small, (minimum as i16) + (1 as i8), (255 as u8) + (1 as u8),
+        (1 as u8) << 8, ~(0 as u32), unsignedState > (0 as u64))
+    return alpha.identity<u64>(unsignedState)
+}
+print(integerControl(), (-32768) as i16, (-2147483648) as i32, 65535 as u16)

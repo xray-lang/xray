@@ -201,7 +201,17 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
         break;
     }
     case XR_TREF_SCALAR:
-        if (ref->scalar_rep == XR_NATIVE_I64) { *type = XR_XIR_I64; return true; }
+        switch (ref->scalar_rep) {
+        case XR_NATIVE_I8: *type = XR_XIR_I8; return true;
+        case XR_NATIVE_I16: *type = XR_XIR_I16; return true;
+        case XR_NATIVE_I32: *type = XR_XIR_I32; return true;
+        case XR_NATIVE_I64: *type = XR_XIR_I64; return true;
+        case XR_NATIVE_U8: *type = XR_XIR_U8; return true;
+        case XR_NATIVE_U16: *type = XR_XIR_U16; return true;
+        case XR_NATIVE_U32: *type = XR_XIR_U32; return true;
+        case XR_NATIVE_U64: *type = XR_XIR_U64; return true;
+        default: break;
+        }
         break;
     case XR_TREF_GENERIC:
         if (ref->name && !strcmp(ref->name, "Atomic") && ref->nchildren == 1 &&
@@ -413,7 +423,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         op = (XrXirInstruction) {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {args[0].id, 0}, {0, 0}, stream};
     } else if (print) {
         for (int i = 0; i < call->arg_count; ++i)
-            if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_I64 && args[i].type != XR_XIR_STRING)
+            if (args[i].type != XR_XIR_BOOL && !xr_xir_type_is_integer(args[i].type) && args[i].type != XR_XIR_STRING)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
         op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0};
     } else if (atomic) {
@@ -451,7 +461,7 @@ static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value
     if (node->type == AST_LITERAL_INT) {
         if (node->as.literal.int_overflows_i64)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer literal exceeds i64");
-        return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0},
+        return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0},
             node->as.literal.raw_value.int_val}, value);
     }
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0},
@@ -480,41 +490,63 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     body->ops[branch].targets[1] = conjunction ? join : rhs;
     return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0}, value);
 }
+static bool source_integer_cast(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    AsExprNode *cast = &node->as.as_expr;
+    XrXirType target; SourceValue input;
+    if (cast->is_safe || !source_type(ctx, cast->type, &target) || !xr_xir_type_is_integer(target))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete nonnullable integer target");
+    if (!expression(ctx, cast->expr, &input)) return false;
+    if (!xr_xir_type_is_integer(input.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete integer operand");
+    return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, target, {input.id, 0}, {0}, 0}, value);
+}
 static bool source_binary(SourceContext *ctx, AstNode *node, AstNodeType operation,
                           SourceValue left, SourceValue right, SourceValue *value) {
     if (operation == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING)
         return emit(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {left.id, right.id}, {0}, 0}, value);
-    if (left.type != XR_XIR_I64 || right.type != XR_XIR_I64)
+    if (!xr_xir_type_is_integer(left.type) || !xr_xir_type_is_integer(right.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator requires a declared concrete operand contract");
+    bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
+    if (!shift) {
+        if (xr_xir_integer_signed(left.type) != xr_xir_integer_signed(right.type))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer signedness requires an explicit cast");
+        XrXirType target = xr_xir_integer_bits(left.type) < xr_xir_integer_bits(right.type) ? right.type : left.type;
+        if (left.type != target && !emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, target, {left.id, 0}, {0}, 0}, &left)) return false;
+        if (right.type != target && !emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_INT, target, {right.id, 0}, {0}, 0}, &right)) return false;
+    }
     XrXirOp op;
     switch (operation) {
-    case AST_BINARY_ADD: op = XR_XIR_ADD_I64; break;
-    case AST_UNARY_NEG: case AST_BINARY_SUB: op = XR_XIR_SUB_I64; break;
-    case AST_BINARY_MUL: op = XR_XIR_MUL_I64; break;
-    case AST_BINARY_DIV: op = XR_XIR_DIV_I64; break;
-    case AST_BINARY_MOD: op = XR_XIR_REM_I64; break;
-    case AST_BINARY_BAND: op = XR_XIR_AND_I64; break;
-    case AST_BINARY_BOR: op = XR_XIR_OR_I64; break;
-    case AST_UNARY_BNOT: case AST_BINARY_BXOR: op = XR_XIR_XOR_I64; break;
-    case AST_BINARY_LSHIFT: op = XR_XIR_SHL_I64; break;
-    case AST_BINARY_RSHIFT: op = XR_XIR_SHR_I64; break;
-    case AST_BINARY_EQ: op = XR_XIR_EQ_I64; break;
-    case AST_BINARY_NE: op = XR_XIR_NE_I64; break;
-    case AST_BINARY_LT: op = XR_XIR_LT_I64; break;
-    case AST_BINARY_LE: op = XR_XIR_LE_I64; break;
-    case AST_BINARY_GT: op = XR_XIR_GT_I64; break;
-    case AST_BINARY_GE: op = XR_XIR_GE_I64; break;
+    case AST_BINARY_ADD: op = XR_XIR_ADD_INT; break;
+    case AST_UNARY_NEG: case AST_BINARY_SUB: op = XR_XIR_SUB_INT; break;
+    case AST_BINARY_MUL: op = XR_XIR_MUL_INT; break;
+    case AST_BINARY_DIV: op = XR_XIR_DIV_INT; break;
+    case AST_BINARY_MOD: op = XR_XIR_REM_INT; break;
+    case AST_BINARY_BAND: op = XR_XIR_AND_INT; break;
+    case AST_BINARY_BOR: op = XR_XIR_OR_INT; break;
+    case AST_UNARY_BNOT: case AST_BINARY_BXOR: op = XR_XIR_XOR_INT; break;
+    case AST_BINARY_LSHIFT: op = XR_XIR_SHL_INT; break;
+    case AST_BINARY_RSHIFT: op = XR_XIR_SHR_INT; break;
+    case AST_BINARY_EQ: op = XR_XIR_EQ_INT; break;
+    case AST_BINARY_NE: op = XR_XIR_NE_INT; break;
+    case AST_BINARY_LT: op = XR_XIR_LT_INT; break;
+    case AST_BINARY_LE: op = XR_XIR_LE_INT; break;
+    case AST_BINARY_GT: op = XR_XIR_GT_INT; break;
+    case AST_BINARY_GE: op = XR_XIR_GE_INT; break;
     default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unknown arithmetic operator");
     }
     bool comparison = operation >= AST_BINARY_EQ && operation <= AST_BINARY_GE;
-    return emit(ctx, (XrXirInstruction) {op, comparison ? XR_XIR_BOOL : XR_XIR_I64,
+    return emit(ctx, (XrXirInstruction) {op, comparison ? XR_XIR_BOOL : left.type,
         {left.id, right.id}, {0}, 0}, value);
 }
 static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceValue *value) {
     SourceValue left, right;
     if (node->type == AST_UNARY_NEG || node->type == AST_UNARY_BNOT) {
-        if (!expression(ctx, node->as.unary.operand, &right) ||
-            !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, node->type == AST_UNARY_NEG ? 0 : -1}, &left)) return false;
+        if (!expression(ctx, node->as.unary.operand, &right)) return false;
+        if (!xr_xir_type_is_integer(right.type)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unary arithmetic requires an integer");
+        int64_t initial = 0;
+        if (node->type == AST_UNARY_BNOT) initial = xr_xir_integer_signed(right.type) || xr_xir_integer_bits(right.type) == 64 ?
+            -1 : (int64_t) ((UINT64_C(1) << xr_xir_integer_bits(right.type)) - 1);
+        if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, right.type, {0}, {0}, initial}, &left)) return false;
     } else if (!expression(ctx, node->as.binary.left, &left) ||
                !expression(ctx, node->as.binary.right, &right)) return false;
     return source_binary(ctx, node, node->type, left, right, value);
@@ -546,6 +578,7 @@ static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *valu
         (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0}, {0}, symbol->index};
     if (!emit(ctx, read, &left) || !expression(ctx, assignment->value, &right) ||
         !source_binary(ctx, node, operation, left, right, value)) return false;
+    if (value->type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment cannot narrow its result");
     XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?
         (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {symbol->index, value->id}, {0}, 0} :
         (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {value->id, 0}, {0}, symbol->index};
@@ -612,6 +645,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
     switch (node->type) {
     case AST_LITERAL_INT: case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
         return source_literal(ctx, node, value);
+    case AST_AS_EXPR: return source_integer_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, value);
     case AST_GROUPING: return expression(ctx, node->as.grouping, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
@@ -740,16 +774,16 @@ static bool source_if(SourceContext *ctx, AstNode *node) {
 static bool source_increment(SourceContext *ctx, AstNode *node) {
     const char *name = node->type == AST_INC ? node->as.inc.name : node->as.dec.name;
     SourceName *symbol = visible_name(ctx, name);
-    if (!symbol || !symbol->mutable || symbol->type != XR_XIR_I64 ||
+    if (!symbol || !symbol->mutable || !xr_xir_type_is_integer(symbol->type) ||
         (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "increment requires a mutable i64 binding");
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "increment requires a mutable integer binding");
     SourceValue old, one, result;
     XrXirInstruction read = symbol->kind == SOURCE_LOCAL ?
-        (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_I64, {symbol->index, 0}, {0}, 0} :
-        (XrXirInstruction) {XR_XIR_SLOT_LOAD, XR_XIR_I64, {0}, {0}, symbol->index};
+        (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type, {symbol->index, 0}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0}, {0}, symbol->index};
     if (!emit(ctx, read, &old) ||
-        !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, node->type == AST_INC ? 1 : -1}, &one) ||
-        !emit(ctx, (XrXirInstruction) {XR_XIR_ADD_I64, XR_XIR_I64, {old.id, one.id}, {0}, 0}, &result)) return false;
+        !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, symbol->type, {0}, {0}, 1}, &one) ||
+        !emit(ctx, (XrXirInstruction) {node->type == AST_INC ? XR_XIR_ADD_INT : XR_XIR_SUB_INT, symbol->type, {old.id, one.id}, {0}, 0}, &result)) return false;
     XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?
         (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {symbol->index, result.id}, {0}, 0} :
         (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {result.id, 0}, {0}, symbol->index};
@@ -1195,7 +1229,7 @@ static bool build_bodies(SourceContext *ctx) {
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,
         NULL, 0, NULL, 0, NULL, 0};
-    if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 0}, NULL) ||
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 0}, NULL) ||
         !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}, NULL)) return false;
     ctx->returned = true;
     return finish_body(ctx);
