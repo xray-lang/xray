@@ -21,8 +21,8 @@ int main(void) {
     const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries};
     for (uint32_t mode = 0; mode < 3; ++mode) for (uint32_t cancel = 0; cancel < 2; ++cancel) {
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {tables[mode], 3, NULL, 65536, 100, 10, &accounting};
-        XrXirScalar arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
+        XrXirCallConfig config = {tables[mode], 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
+        XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_call_poll(call);

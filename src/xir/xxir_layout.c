@@ -20,9 +20,9 @@ XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
         return XR_XIR_BAD_LAYOUT;
     *layout = (XrXirLayout) {0, 0};
     if (!target || target->architecture != XR_XIR_ARCH_X86_64 ||
-        target->abi_version != XR_XIR_SCALAR_ABI_VERSION ||
+        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
-        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_I64) ||
+        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_I64 && type != XR_XIR_STRING) ||
         (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER))
         return XR_XIR_BAD_LAYOUT;
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
@@ -65,7 +65,7 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
             (uint64_t) function->parameter_count * (sizeof(XrXirType) + sizeof(XrXirLayout)) +
             (uint64_t) function->block_count * sizeof(XrXirBlock) +
             (uint64_t) function->instruction_count * sizeof(XrXirInstruction) +
-            slots * sizeof(uint32_t);
+            slots * sizeof(uint32_t) * 2;
         if (slots > UINT32_MAX || required > SIZE_MAX ||
             !subtract_bytes(&bytes, required) || !subtract_bytes(&work, slots + 1))
             return XR_XIR_BUDGET;
@@ -81,19 +81,20 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     if (create) {
         layout->slot_count = slots;
         layout->offsets = xr_calloc(slots, sizeof(*layout->offsets));
-        if (!layout->offsets)
+        layout->owned_offsets = xr_calloc(slots, sizeof(*layout->owned_offsets));
+        if (!layout->offsets || !layout->owned_offsets)
             return XR_XIR_OUT_OF_MEMORY;
         if (function->parameter_count) {
             layout->parameters = xr_calloc(function->parameter_count, sizeof(*layout->parameters));
             if (!layout->parameters)
                 return XR_XIR_OUT_OF_MEMORY;
         }
-    } else if (layout->slot_count != slots || !layout->offsets ||
+    } else if (layout->slot_count != slots || !layout->offsets || !layout->owned_offsets ||
                (function->parameter_count && !layout->parameters) ||
                (!function->parameter_count && layout->parameters)) {
         return XR_XIR_BAD_LAYOUT;
     }
-    uint32_t bytes = 0;
+    uint32_t bytes = 0, owned = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
         XrXirLayout physical;
         XrXirType type = slot_type(function, slot);
@@ -109,6 +110,12 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             ((uint32_t *) layout->offsets)[slot] = offset;
         else if (layout->offsets[slot] != offset)
             return XR_XIR_BAD_LAYOUT;
+        if (type == XR_XIR_STRING) {
+            if (create) ((uint32_t *) layout->owned_offsets)[owned] = offset;
+            else if (owned >= layout->owned_count || layout->owned_offsets[owned] != offset)
+                return XR_XIR_BAD_LAYOUT;
+            ++owned;
+        }
         if (slot < function->parameter_count) {
             status = xr_xir_layout(type, &artifact->target, XR_XIR_LAYOUT_PARAMETER, &physical);
             if (status != XR_XIR_OK)
@@ -126,7 +133,9 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     if (create) {
         layout->result = result;
         layout->frame_bytes = bytes;
-    } else if (!layout_equal(layout->result, result) || layout->frame_bytes != bytes) {
+        layout->owned_count = owned;
+    } else if (!layout_equal(layout->result, result) || layout->frame_bytes != bytes ||
+               layout->owned_count != owned) {
         return XR_XIR_BAD_LAYOUT;
     }
     return XR_XIR_OK;

@@ -68,6 +68,8 @@ typedef struct XrXirFunctionLayout {
     const uint32_t *offsets;
     const XrXirLayout *parameters;
     XrXirLayout result;
+    uint32_t owned_count;
+    const uint32_t *owned_offsets;
 } XrXirFunctionLayout;
 
 typedef struct XrXirInstruction {

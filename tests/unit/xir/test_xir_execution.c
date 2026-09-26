@@ -16,14 +16,14 @@
 #include "xir/xxir_vm.h"
 
 static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *context,
-                         const XrXirScalar *arguments, uint32_t count, XrXirScalar *result) {
+                         const XrXirValue *arguments, uint32_t count, XrXirValue *result) {
     return xr_xir_vm_run(owner, function, context, arguments, count, result);
 }
 
 int main(void) {
     XrXirArtifact *artifact = fixture_lowered();
     execution_cases(run, artifact);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_SCALAR_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirLayout layout;
     CHECK(xr_xir_layout(XR_XIR_BOOL, &target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);
     CHECK(layout.size == 1 && layout.alignment == 1);
@@ -39,7 +39,7 @@ int main(void) {
     offsets[0] = 1;
     CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_LAYOUT);
     XrXirRunContext context = {10, 48, 0, 0, 0, 0};
-    XrXirScalar result;
+    XrXirValue result;
     CHECK(xr_xir_vm_run(artifact, 0, &context, NULL, 0, &result) == XR_XIR_RUN_BAD_ARTIFACT);
     CHECK(context.allocations == 0);
     offsets[0] = 0;
@@ -60,10 +60,10 @@ int main(void) {
 
     XrXirArtifact *checked = fixture_checked();
     CHECK(xr_xir_vm_run(checked, 0, &context, NULL, 0, &result) == XR_XIR_RUN_BAD_ARTIFACT);
-    XrXirTarget invalid = {0, XR_XIR_SCALAR_ABI_VERSION};
+    XrXirTarget invalid = {0, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(checked, &invalid, NULL, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
     CHECK(!artifact);
-    invalid = (XrXirTarget) {XR_XIR_ARCH_X86_64, XR_XIR_SCALAR_ABI_VERSION + 1};
+    invalid = (XrXirTarget) {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION + 1};
     CHECK(xr_xir_lower(checked, &invalid, NULL, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
     CHECK(!artifact);
     XrXirBudget budget = xr_xir_default_budget();

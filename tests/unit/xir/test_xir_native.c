@@ -12,13 +12,13 @@
  */
 
 #include "xir_execution_cases.h"
-#define DECLARE(n) XR_FUNC XrXirRunStatus fixture_f##n(XrXirRunContext *, const XrXirScalar *, uint32_t, XrXirScalar *);
+#define DECLARE(n) XR_FUNC XrXirRunStatus fixture_f##n(XrXirRunContext *, const XrXirValue *, uint32_t, XrXirValue *);
 DECLARE(0) DECLARE(1) DECLARE(2) DECLARE(3) DECLARE(4)
 DECLARE(5) DECLARE(6) DECLARE(7) DECLARE(8)
 #undef DECLARE
 static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *context,
-                         const XrXirScalar *arguments, uint32_t count, XrXirScalar *result) {
-    const XrXirScalarEntry entries[] = {fixture_f0, fixture_f1, fixture_f2, fixture_f3,
+                         const XrXirValue *arguments, uint32_t count, XrXirValue *result) {
+    const XrXirLeafEntry entries[] = {fixture_f0, fixture_f1, fixture_f2, fixture_f3,
         fixture_f4, fixture_f5, fixture_f6, fixture_f7, fixture_f8};
     (void) owner;
     CHECK(function < 9);

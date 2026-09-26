@@ -1,7 +1,8 @@
 # XIR stage and scalar control-flow contract
 
 This contract owns the initial XIR scalar subset. It does not certify source
-admission, generic specialization, managed values, or product cutover. Scalar
+admission, generic specialization, or product cutover. Managed strings extend this
+core through `xir-managed-values.md`. Scalar
 layout and execution are separately governed by `xir-scalar-execution.md`.
 Those surfaces remain unavailable until their corresponding contracts and tests
 are implemented. No existing executor or safety assertion is retired here.
@@ -18,14 +19,15 @@ internal subset. Copying a scalar preserves its value without resource ownership
 addition has checked signed overflow; equality and signed less-than return bool. Branch conditions
 must be bool. Direct scalar CALL, SUSPEND, and THROW are separately governed by the resumable
 call contract. Calls carry a function-table index, at most two arguments, and an
-exact declared result type. Generic, string, resource, and borrowing operations
+exact declared result type. Generic, resource, and borrowing operations
 are outside this subset and are rejected rather than guessed or lowered through
 an older representation. This subset introduces no new source spelling.
 
 The op definition table owns opcode identity, stage membership, operand count,
 result type rule, and successor count. Unknown stages, types, and ops fail closed.
 Abstract copy is restricted to Built/Checked; scalar copy is restricted to Lowered.
-Lowering preserves CFG and value identity and replaces only validated scalar copy.
+Lowering preserves CFG and value identity and replaces validated copy with scalar-copy or string-retain. Managed cleanup is
+frozen in the Lowered ownership layout and reverified before consumption.
 
 Blocks partition the instruction table exactly, are nonempty and reachable from
 block zero, and end in exactly one terminator. No edge targets the entry block.

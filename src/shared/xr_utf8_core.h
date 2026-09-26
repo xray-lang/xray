@@ -230,9 +230,9 @@ static inline size_t xr_utf8_core_lossy_write(char *out, const uint8_t *data, si
         if (step.consumed == 0)
             break;
         if (step.error != XR_UTF8_OK) {
-            out[dst++] = (char) 0xEF;
-            out[dst++] = (char) 0xBF;
-            out[dst++] = (char) 0xBD;
+            ((unsigned char *) out)[dst++] = 0xEF;
+            ((unsigned char *) out)[dst++] = 0xBF;
+            ((unsigned char *) out)[dst++] = 0xBD;
         } else {
             for (size_t i = 0; i < step.consumed; i++)
                 out[dst++] = (char) data[src + i];

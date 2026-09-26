@@ -6820,7 +6820,7 @@ specialized on Checked. Explicitly derived content is checked again. Ordinary
 instances close before immutable executable-image sealing; the VM executes Lowered.
 
 The initial internal subset admits unit, bool, and i64. Scalar copy preserves the
-value; signed i64 addition reports overflow; equality produces bool; branches
+value; signed i64 addition reports overflow; equality and signed less-than produce bool; branches
 require bool; returns match their declaration. Parameters in this internal subset
 are bool/i64; unit is a result/terminator type without a value ID. Managed values, borrowing, generics, and new source spellings are absent;
 unsupported operations reject. Internal direct calls are defined below.
@@ -6835,7 +6835,7 @@ and types reject. The exact internal fields and assertions are owned by
 `contracts/xir-stages.md`; this contract does not grant execution qualification.
 
 Internal scalar execution is governed by `contracts/xir-scalar-execution.md`.
-The initial target is little-endian x86_64, scalar boundary ABI version 1. Layout
+The initial target is little-endian x86_64, value boundary ABI version 2. Layout
 queries include type, target, context, and ABI. Lowering stores authoritative
 frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
 Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes
@@ -6857,9 +6857,30 @@ depth, physical bytes, and resume work have separate budgets. Wake tokens are
 single-use; reentrant drive/destruction rejects. Cancellation cleans children
 before parents after the running callback yields control. Cleanup cannot suspend
 or reopen completion arbitration. The current interface admits exclusive driving
-by one host thread; concurrent cancellation, segmented pools, managed values, and
+by one host thread; concurrent cancellation, segmented pools, and
 complete image/instance ownership remain unqualified. Verified closed scalar
 leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back to it.
+
+### 17.7 Internal Managed Values and Result Transfer
+
+Value ABI 2 and call ABI 2 replace the initial scalar boundary without aliases.
+Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
+atomic reference counts, and copy-on-write mutation under an exclusive handle
+borrow. Byte length and Unicode scalar count are distinct from grapheme count.
+A budgeted allocation domain outlives its host handle when strings still own it;
+strings never depend on activation, instance, or code-image lifetime.
+
+Call admission owns argument copies. Resume views and return actions borrow values.
+The driver owns returns before child cleanup, and owns inboxes and terminal results.
+Poll borrows; take transfers a result exactly once. Untaken results are destroyed
+with the activation. Typed synchronous output carries an explicit stdout/stderr
+stream and bool/i64/string value to the configured provider without formatting.
+Missing/rejecting providers are runtime failures. Source admission and complete
+Program/Instance qualification remain separate from this internal contract.
+String parameters/results, COPY to STRING_RETAIN, CONCAT_STRING and OUTPUT_STRING
+consume a lowering-owned, reverified list of owned frame slots. Both backends
+release previous values on replacement and clear slots on all exits. Literal
+tables and source production remain to be connected.
 
 ---
 

@@ -28,7 +28,7 @@ XR_FUNC XrXirStatus xr_xir_vm_bind(const XrXirArtifact *artifact, uint32_t funct
                                   XrXirVmBinding *binding, XrXirCallEntry *entry);
 
 XR_FUNC XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
-                                   XrXirRunContext *context, const XrXirScalar *arguments,
-                                   uint32_t argument_count, XrXirScalar *result);
+                                   XrXirRunContext *context, const XrXirValue *arguments,
+                                   uint32_t argument_count, XrXirValue *result);
 
 #endif // XXIR_VM_H

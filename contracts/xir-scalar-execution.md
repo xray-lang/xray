@@ -1,9 +1,10 @@
 # XIR scalar layout and execution contract
 
 This contract admits internal scalar leaf execution only. Source-language admission,
-managed values and module instances remain unimplemented. Resumable XIR calls are
+Managed string calls are governed by `xir-managed-values.md`; module instances
+remain unimplemented. Resumable XIR calls are
 governed separately by `xir-resumable-calls.md`; leaf tests do not certify them. The current
-target is x86_64 little-endian with scalar boundary ABI version 1. Other targets,
+target is x86_64 little-endian with value boundary ABI version 2. Other targets,
 ABI versions, and layout contexts reject explicitly.
 
 The layout service takes type, target, context, and ABI identity. Storage bool is

@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_SCALAR_ABI_VERSION};
+static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
 
 #define CHECK(condition) do { \
     if (!(condition)) { \

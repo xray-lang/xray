@@ -16,7 +16,7 @@
 #include "xir/xxir.h"
 #include <stdlib.h>
 
-static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_SCALAR_ABI_VERSION};
+static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
 
 #define CHECK(condition) do { \
     if (!(condition)) { \
@@ -75,17 +75,77 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
+#include "xir/xxir_value.c"
 #include "xir/xxir_scalar.c"
 #include "xir/xxir_vm.c"
 #include "xir/xxir_emit_c.c"
 #include "xir/xxir_call.c"
 
-typedef struct AllocationFrame { bool entered; XrXirScalar argument; } AllocationFrame;
+#include "xir_string_fixture.h"
+
+static bool allocation_output(void *context, XrXirOutputStream stream, const XrXirValue *value) {
+    (void) context; (void) stream;
+    return value->type == XR_XIR_STRING;
+}
+static void managed_allocation_run(XrXirArtifact *artifact) {
+    XrXirDomain *domain = NULL;
+    XrXirValue arguments[2] = {{0}, {0}}, owned = {0};
+    XrXirCall *call = NULL;
+    XrXirCallEntry entries[3];
+    XrXirVmBinding bindings[3];
+    XrXirCallAccounting accounting = {0};
+    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {allocation_output, NULL}};
+    for (uint32_t i = 0; i < 3; ++i) {
+        XrXirStatus status = xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]);
+        if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
+    }
+    XrXirValueStatus status = xr_xir_domain_new(65536, &domain);
+    if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
+    for (uint32_t i = 0; i < 2; ++i) {
+        status = xr_xir_string_new(domain, "x", 1, &arguments[i]);
+        if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
+    }
+    XrXirCallStatus admitted = xr_xir_call_new(&config, 0, arguments, 2, &call);
+    if (admitted != XR_XIR_CALL_READY) { CHECK(admitted == XR_XIR_CALL_OOM); goto done; }
+    XrXirCallResult result = xr_xir_call_poll(call);
+    if (result.status == XR_XIR_CALL_SUSPENDED) {
+        CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
+        result = xr_xir_call_poll(call);
+    }
+    if (result.status == XR_XIR_CALL_RETURNED)
+        CHECK(xr_xir_call_take_result(call, &owned) == XR_XIR_CALL_RETURNED);
+    else CHECK(result.status == XR_XIR_CALL_OOM);
+ done:
+    CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+    CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
+    xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]); xr_xir_value_drop(&owned);
+}
+static size_t managed_allocation_failures(void) {
+    fail_at = SIZE_MAX;
+    XrXirArtifact *artifact = string_fixture(0);
+    size_t baseline = live;
+    calls = 0;
+    managed_allocation_run(artifact);
+    size_t sites = calls;
+    CHECK(live == baseline);
+    for (size_t i = 0; i < sites; ++i) {
+        fail_at = i; calls = 0;
+        managed_allocation_run(artifact);
+        CHECK(live == baseline);
+    }
+    fail_at = SIZE_MAX;
+    xr_xir_artifact_free(artifact);
+    CHECK(!live);
+    return sites;
+}
+
+typedef struct AllocationFrame { bool entered; XrXirValue argument; } AllocationFrame;
 static XrXirAction allocation_resume(XrXirCallView *view) {
     AllocationFrame *frame = view->state;
     if (!frame->entered && view->arguments[0].payload) {
         frame->entered = true;
-        frame->argument = (XrXirScalar) {XR_XIR_I64, 0, view->arguments[0].payload - 1};
+        frame->argument = (XrXirValue) {XR_XIR_I64, 0, view->arguments[0].payload - 1};
         return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &frame->argument, 1, {0, 0, 0}};
     }
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0,
@@ -94,14 +154,14 @@ static XrXirAction allocation_resume(XrXirCallView *view) {
 
 static size_t call_allocation_failures(void) {
     XrXirType type = XR_XIR_I64;
-    XrXirCallEntry entry = {1, &type, 1, XR_XIR_I64, sizeof(AllocationFrame), allocation_resume, NULL, NULL};
+    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_I64, sizeof(AllocationFrame), allocation_resume, NULL, NULL};
     size_t expected_calls = 0;
     for (size_t attempt = 0; attempt <= expected_calls; ++attempt) {
         fail_at = attempt ? attempt - 1 : SIZE_MAX;
         calls = 0;
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting};
-        XrXirScalar argument = {XR_XIR_I64, 0, 3};
+        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
+        XrXirValue argument = {XR_XIR_I64, 0, 3};
         XrXirCall *call = NULL;
         XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
         if (status == XR_XIR_CALL_READY) {
@@ -181,7 +241,7 @@ int main(void) {
     size_t lowered_live = live;
     calls = 0;
     XrXirRunContext context = {3, 16, 0, 0, 0, 0};
-    XrXirScalar result;
+    XrXirValue result;
     CHECK(xr_xir_vm_run(lowered, 0, &context, NULL, 0, &result) == XR_XIR_RUN_OK);
     CHECK(result.payload == 42 && live == lowered_live);
     size_t run_calls = calls;
@@ -189,7 +249,7 @@ int main(void) {
         calls = 0;
         fail_at = i;
         context = (XrXirRunContext) {3, 16, 0, 0, 0, 0};
-        result = (XrXirScalar) {99, 99, 99};
+        result = (XrXirValue) {99, 99, 99};
         CHECK(xr_xir_vm_run(lowered, 0, &context, NULL, 0, &result) == XR_XIR_RUN_OUT_OF_MEMORY);
         CHECK(result.type == 0 && result.reserved == 0 && result.payload == 0);
         CHECK(context.live_bytes == 0 && context.allocations == context.frees);
@@ -228,5 +288,6 @@ int main(void) {
            check_calls, lower_calls, run_calls, emit_calls);
     printf("Resumable physical release passed at %zu emitter and %zu activation/frame allocation sites\n",
            resume_emit_calls, call_sites);
+    printf("Managed VM admission and execution physical release: %zu allocation sites\n", managed_allocation_failures());
     return 0;
 }

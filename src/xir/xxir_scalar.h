@@ -17,16 +17,7 @@
 #include "../base/xdefs.h"
 #include <string.h>
 
-#define XR_XIR_SCALAR_ABI_VERSION 1u
-#define XR_XIR_ARCH_X86_64 1u
-
-typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64 } XrXirType;
-
-typedef struct XrXirScalar {
-    uint32_t type;
-    uint32_t reserved;
-    int64_t payload;
-} XrXirScalar;
+#include "xxir_value.h"
 
 typedef enum XrXirRunStatus {
     XR_XIR_RUN_OK,
@@ -48,10 +39,9 @@ typedef struct XrXirRunContext {
     uint64_t frees;
 } XrXirRunContext;
 
-typedef XrXirRunStatus (*XrXirScalarEntry)(XrXirRunContext *context,
-    const XrXirScalar *arguments, uint32_t argument_count, XrXirScalar *result);
+typedef XrXirRunStatus (*XrXirLeafEntry)(XrXirRunContext *context,
+    const XrXirValue *arguments, uint32_t argument_count, XrXirValue *result);
 
-XR_FUNC bool xr_xir_scalar_argument(const XrXirScalar *argument, XrXirType type);
 XR_FUNC XrXirRunStatus xr_xir_scalar_frame_begin(XrXirRunContext *context,
                                                uint32_t bytes, void **frame);
 XR_FUNC void xr_xir_scalar_frame_end(XrXirRunContext *context, uint32_t bytes, void *frame);

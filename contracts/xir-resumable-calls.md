@@ -1,18 +1,18 @@
 # XIR resumable call boundary
 
-This internal x86_64 scalar ABI establishes control-flow and cleanup ownership.
-It does not certify source calls, generic caches, module instances, managed values,
+This internal x86_64 call ABI establishes control-flow and cleanup ownership.
+It does not certify source calls, generic caches, module instances,
 concurrent cancellation, segmented allocation, or product migration.
 
 A sealed call table contains typed entry descriptors. An activation owns a copied
 table, copied parameter types, and its nonmoving frames. Entry environments and
 the opaque instance context are explicitly borrowed for the activation lifetime.
 No process-global current instance is used. Inputs are copied before a call is
-accepted; scalar results own their inline payload. Unit, canonical bool, and i64
-are the only admitted boundary types. ABI mismatches fail before publication.
+accepted; scalar results own their inline payload. Unit, canonical bool, i64, and strings are admitted. Managed ownership, output
+and one-shot result transfer are governed by `xir-managed-values.md`. ABI mismatches fail before publication.
 
 Each entry is a bounded resume callback and optional non-suspending cleanup.
-It returns an explicit continue, call, return, throw, suspend, or runtime-fault
+It returns an explicit continue, call, return, throw, suspend, typed output, or runtime-fault
 action. Runtime overflow is distinct from language throw. Calls yield to a
 trampoline; callers never retain child execution on the native C stack. The
 caller frame survives until the child completes. The caller then receives one

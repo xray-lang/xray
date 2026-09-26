@@ -30,7 +30,7 @@ typedef struct Witness {
 static const uint32_t identities[] = {0, 1, 2};
 static const XrXirType types[] = {XR_XIR_I64, XR_XIR_I64, XR_XIR_I64};
 
-static XrXirAction returned(XrXirScalar value) {
+static XrXirAction returned(XrXirValue value) {
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, value};
 }
 static XrXirAction propagate(XrXirCallResult result) {
@@ -46,7 +46,7 @@ static XrXirAction root_resume(XrXirCallView *view) {
     return propagate(view->inbox);
 }
 typedef struct NativeSortState {
-    XrXirScalar values[3], arguments[2];
+    XrXirValue values[3], arguments[2];
     uint32_t index, cursor;
     bool initialized, waiting;
 } NativeSortState;
@@ -63,7 +63,7 @@ static XrXirAction native_sort_resume(XrXirCallView *view) {
             return propagate(view->inbox);
         CHECK(view->inbox.status == XR_XIR_CALL_RETURNED && view->inbox.value.type == XR_XIR_BOOL);
         if (view->inbox.value.payload) {
-            XrXirScalar swap = state->values[state->cursor];
+            XrXirValue swap = state->values[state->cursor];
             state->values[state->cursor] = state->values[state->cursor - 1];
             state->values[state->cursor - 1] = swap;
             --state->cursor;
@@ -74,7 +74,7 @@ static XrXirAction native_sort_resume(XrXirCallView *view) {
         state->cursor = ++state->index;
     if (state->index == 3) {
         int64_t encoded = state->values[0].payload * 100 + state->values[1].payload * 10 + state->values[2].payload;
-        return returned((XrXirScalar) {XR_XIR_I64, 0, encoded});
+        return returned((XrXirValue) {XR_XIR_I64, 0, encoded});
     }
     state->arguments[0] = state->values[state->cursor];
     state->arguments[1] = state->values[state->cursor - 1];
@@ -98,9 +98,9 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
     if (witness->mode == 3)
         CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCELLED);
     if (witness->mode == 4)
-        return returned((XrXirScalar) {XR_XIR_I64, 0, 7});
+        return returned((XrXirValue) {XR_XIR_I64, 0, 7});
     XrXirRunContext context = {2, 24, 0, 0, 0, 0};
-    XrXirScalar result;
+    XrXirValue result;
     CHECK(xr_xir_vm_run(witness->comparator, 0, &context, view->arguments, 2, &result) == XR_XIR_RUN_OK);
     CHECK(context.live_bytes == 0 && context.allocations == context.frees);
     return returned(result);
@@ -124,7 +124,7 @@ static XrXirArtifact *comparator_artifact(void) {
     XrXirBlock block = {0, 2};
     XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2};
     XrXirModule module = {XR_XIR_BUILT, &function, 1};
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_SCALAR_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
@@ -139,13 +139,13 @@ static void callback_cases(void) {
         witness.comparator = artifact;
         witness.mode = mode >= 6 ? 1 : mode;
         XrXirCallEntry entries[] = {
-            {1, types, 3, XR_XIR_I64, sizeof(uint32_t), root_resume, cleanup, &identities[0]},
-            {1, types, 3, XR_XIR_I64, sizeof(NativeSortState), native_sort_resume, cleanup, &identities[1]},
-            {1, types, 2, XR_XIR_BOOL, sizeof(uint32_t), comparator_resume, cleanup, &identities[2]}
+            {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(uint32_t), root_resume, cleanup, &identities[0]},
+            {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(NativeSortState), native_sort_resume, cleanup, &identities[1]},
+            {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_BOOL, sizeof(uint32_t), comparator_resume, cleanup, &identities[2]}
         };
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 3, &witness, 65536, 100, 10, &accounting};
-        XrXirScalar args[] = {{XR_XIR_I64, 0, 3}, {XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}};
+        XrXirCallConfig config = {entries, 3, &witness, 65536, 100, 10, &accounting, {NULL, NULL}};
+        XrXirValue args[] = {{XR_XIR_I64, 0, 3}, {XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
         memset(entries, 0xa5, sizeof(entries));
@@ -187,7 +187,7 @@ static void callback_cases(void) {
     xr_xir_artifact_free(artifact);
 }
 
-typedef struct RecursiveState { uint32_t entered; XrXirScalar child; } RecursiveState;
+typedef struct RecursiveState { uint32_t entered; XrXirValue child; } RecursiveState;
 static XrXirAction recursive_resume(XrXirCallView *view) {
     Witness *witness = view->instance;
     RecursiveState *state = view->state;
@@ -201,12 +201,12 @@ static XrXirAction recursive_resume(XrXirCallView *view) {
     if (!witness->stack_low || probe < witness->stack_low) witness->stack_low = probe;
     if (probe > witness->stack_high) witness->stack_high = probe;
     if (!state->entered++) {
-        if (view->arguments[0].payload == 0) return returned((XrXirScalar) {XR_XIR_I64, 0, 0});
-        state->child = (XrXirScalar) {XR_XIR_I64, 0, view->arguments[0].payload - 1};
+        if (view->arguments[0].payload == 0) return returned((XrXirValue) {XR_XIR_I64, 0, 0});
+        state->child = (XrXirValue) {XR_XIR_I64, 0, view->arguments[0].payload - 1};
         return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0, 0, 0}};
     }
     CHECK(view->inbox.status == XR_XIR_CALL_RETURNED);
-    return returned((XrXirScalar) {XR_XIR_I64, 0, view->inbox.value.payload + 1});
+    return returned((XrXirValue) {XR_XIR_I64, 0, view->inbox.value.payload + 1});
 }
 static void recursive_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     Witness *witness = view->instance;
@@ -215,13 +215,13 @@ static void recursive_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     ++witness->recursive_cleanups;
 }
 static void bounded_stack(void) {
-    XrXirCallEntry entry = {1, types, 1, XR_XIR_I64, sizeof(RecursiveState), recursive_resume, recursive_cleanup, NULL};
+    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, types, 1, XR_XIR_I64, sizeof(RecursiveState), recursive_resume, recursive_cleanup, NULL};
     for (uint32_t variant = 0; variant < 3; ++variant) {
         Witness witness = {0};
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {&entry, 1, &witness, 4 * 1024 * 1024, variant == 2 ? 5 : 30000,
-            variant == 1 ? 5 : 10001, &accounting};
-        XrXirScalar argument = {XR_XIR_I64, 0, 10000};
+            variant == 1 ? 5 : 10001, &accounting, {NULL, NULL}};
+        XrXirValue argument = {XR_XIR_I64, 0, 10000};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, &argument, 1, &call) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_call_poll(call);
@@ -249,8 +249,8 @@ static void xir_instruction_calls(void) {
             entries[1] = tables[mode][1];
         }
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting};
-        XrXirScalar args[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
+        XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
+        XrXirValue args[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 2, &call) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_call_poll(call);
@@ -269,7 +269,7 @@ static void xir_instruction_calls(void) {
 }
 static XrXirAction wrong_comparator(XrXirCallView *view) {
     (void) view;
-    return returned((XrXirScalar) {XR_XIR_I64, 0, 2});
+    return returned((XrXirValue) {XR_XIR_I64, 0, 2});
 }
 static void call_admission(void) {
     XrXirArtifact *artifact = call_fixture(0);
@@ -292,13 +292,13 @@ static void call_admission(void) {
     for (uint32_t i = 0; i < 3; ++i)
         CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting};
-    XrXirScalar arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
+    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
+    XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
     XrXirCall *call = NULL;
-    entries[1].abi_version = 2;
+    entries[1].abi_version = 1;
     CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_BAD_ABI);
     CHECK(!call && accounting.live_bytes == 0);
-    entries[1].abi_version = 1;
+    entries[1].abi_version = XR_XIR_CALL_ABI_VERSION;
     config.byte_limit = 1;
     CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_LIMIT);
     config.byte_limit = 65536;

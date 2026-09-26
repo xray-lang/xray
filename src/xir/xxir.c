@@ -56,6 +56,7 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
         if (artifact->layouts) {
             xr_free((void *) artifact->layouts[i].offsets);
             xr_free((void *) artifact->layouts[i].parameters);
+            xr_free((void *) artifact->layouts[i].owned_offsets);
         }
     }
     xr_free(artifact->layouts);
@@ -136,7 +137,8 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
             XrXirInstruction *instructions = (XrXirInstruction *) function->instructions;
             for (uint32_t i = 0; i < function->instruction_count; ++i)
                 if (instructions[i].op == XR_XIR_COPY)
-                    instructions[i].op = XR_XIR_SCALAR_COPY;
+                    instructions[i].op = instructions[i].type == XR_XIR_STRING ?
+                        XR_XIR_STRING_RETAIN : XR_XIR_SCALAR_COPY;
         }
         status = xr_xir_layout_build(copy, &limits);
         if (status != XR_XIR_OK) {

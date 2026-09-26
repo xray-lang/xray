@@ -21,7 +21,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 #endif
 typedef XrXirRunStatus (*FixtureRun)(void *, uint32_t, XrXirRunContext *,
-                                    const XrXirScalar *, uint32_t, XrXirScalar *);
+                                    const XrXirValue *, uint32_t, XrXirValue *);
 
 static void execution_cases(FixtureRun run, void *owner) {
     struct AddCase { int64_t branch, left, right, expected; XrXirRunStatus status; };
@@ -35,10 +35,10 @@ static void execution_cases(FixtureRun run, void *owner) {
         {0, INT64_MAX, 1, -7, XR_XIR_RUN_OK}
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
-        XrXirScalar args[] = {{XR_XIR_BOOL, 0, cases[i].branch},
+        XrXirValue args[] = {{XR_XIR_BOOL, 0, cases[i].branch},
             {XR_XIR_I64, 0, cases[i].left}, {XR_XIR_I64, 0, cases[i].right}};
         XrXirRunContext context = {10, 48, 0, 0, 0, 0};
-        XrXirScalar result = {99, 99, 99};
+        XrXirValue result = {99, 99, 99};
         CHECK(run(owner, 0, &context, args, 3, &result) == cases[i].status);
         CHECK(result.type == (uint32_t) (cases[i].status == XR_XIR_RUN_OK ? XR_XIR_I64 : XR_XIR_UNIT));
         CHECK(result.reserved == 0 && result.payload == cases[i].expected);
@@ -46,9 +46,9 @@ static void execution_cases(FixtureRun run, void *owner) {
         CHECK(context.allocations == 1 && context.frees == 1);
         CHECK(context.steps == (cases[i].status == XR_XIR_RUN_OVERFLOW ? 8u : cases[i].branch ? 6u : 7u));
     }
-    XrXirScalar args[] = {{XR_XIR_BOOL, 0, 1}, {XR_XIR_I64, 0, 40}, {XR_XIR_I64, 0, 2}};
+    XrXirValue args[] = {{XR_XIR_BOOL, 0, 1}, {XR_XIR_I64, 0, 40}, {XR_XIR_I64, 0, 2}};
     XrXirRunContext reused = {12, 48, 0, 0, 0, 0};
-    XrXirScalar reused_result = {99, 99, 99};
+    XrXirValue reused_result = {99, 99, 99};
     CHECK(run(owner, 0, NULL, args, 3, &reused_result) == XR_XIR_RUN_BAD_ARGUMENT);
     CHECK(reused_result.type == 0 && reused_result.payload == 0);
     CHECK(run(owner, 0, &reused, args, 3, NULL) == XR_XIR_RUN_BAD_ARGUMENT);
@@ -61,15 +61,15 @@ static void execution_cases(FixtureRun run, void *owner) {
     }
     for (uint32_t steps = 0; steps < 4; ++steps) {
         XrXirRunContext context = {steps, 48, 0, 0, 0, 0};
-        XrXirScalar result = {99, 99, 99};
+        XrXirValue result = {99, 99, 99};
         CHECK(run(owner, 0, &context, args, 3, &result) == XR_XIR_RUN_STEP_LIMIT);
         CHECK(result.type == 0 && result.reserved == 0 && result.payload == 0);
         CHECK(context.steps == 0 && context.live_bytes == 0 && context.allocations == context.frees);
     }
     for (uint32_t bad = 0; bad < 8; ++bad) {
-        XrXirScalar invalid[] = {{XR_XIR_BOOL, 0, 1}, {XR_XIR_I64, 0, 40}, {XR_XIR_I64, 0, 2}};
+        XrXirValue invalid[] = {{XR_XIR_BOOL, 0, 1}, {XR_XIR_I64, 0, 40}, {XR_XIR_I64, 0, 2}};
         XrXirRunContext context = {10, 48, 0, 0, 0, 0};
-        XrXirScalar result = {99, 99, 99};
+        XrXirValue result = {99, 99, 99};
         if (bad == 2) invalid[0].payload = 2;
         if (bad == 3) invalid[1].type = XR_XIR_BOOL;
         if (bad == 4) invalid[2].reserved = 1;
@@ -84,15 +84,15 @@ static void execution_cases(FixtureRun run, void *owner) {
     }
     const int64_t equal_values[] = {0, -1, INT64_MIN, INT64_MAX};
     for (size_t i = 0; i < 4; ++i) for (size_t j = 0; j < 4; ++j) {
-        XrXirScalar pair[] = {{XR_XIR_I64, 0, equal_values[i]}, {XR_XIR_I64, 0, equal_values[j]}};
+        XrXirValue pair[] = {{XR_XIR_I64, 0, equal_values[i]}, {XR_XIR_I64, 0, equal_values[j]}};
         XrXirRunContext context = {2, 24, 0, 0, 0, 0};
-        XrXirScalar result;
+        XrXirValue result;
         CHECK(run(owner, 1, &context, pair, 2, &result) == XR_XIR_RUN_OK);
         CHECK(result.type == XR_XIR_BOOL && result.payload == (i == j));
         CHECK(context.steps == 0 && context.live_bytes == 0 && context.frees == 1);
     }
     for (int64_t value = 0; value <= 1; ++value) {
-        XrXirScalar argument = {XR_XIR_BOOL, 0, value}, result;
+        XrXirValue argument = {XR_XIR_BOOL, 0, value}, result;
         XrXirRunContext context = {2, 16, 0, 0, 0, 0};
         CHECK(run(owner, 2, &context, &argument, 1, &result) == XR_XIR_RUN_OK);
         CHECK(result.type == XR_XIR_BOOL && result.payload == value);
@@ -109,7 +109,7 @@ static void execution_cases(FixtureRun run, void *owner) {
     };
     for (size_t i = 0; i < sizeof(nullary) / sizeof(nullary[0]); ++i) {
         XrXirRunContext context = {nullary[i].steps, nullary[i].bytes, 0, 0, 0, 0};
-        XrXirScalar result = {99, 99, 99};
+        XrXirValue result = {99, 99, 99};
         CHECK(run(owner, nullary[i].id, &context, NULL, 0, &result) == nullary[i].status);
         CHECK(result.type == nullary[i].type && result.reserved == 0 && result.payload == nullary[i].value);
         CHECK(context.steps == 0 && context.live_bytes == 0 && context.peak_bytes == nullary[i].bytes);

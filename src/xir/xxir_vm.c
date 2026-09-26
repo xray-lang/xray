@@ -25,8 +25,16 @@ typedef struct VmState {
     uint32_t instruction, destination;
     XrXirType expected;
     bool initialized, waiting;
-    XrXirScalar arguments[2];
+    XrXirValue arguments[2];
 } VmState;
+
+static XrXirRunStatus string_status(XrXirValueStatus status) {
+    if (status == XR_XIR_VALUE_OK) return XR_XIR_RUN_OK;
+    if (status == XR_XIR_VALUE_OOM) return XR_XIR_RUN_OUT_OF_MEMORY;
+    if (status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT)
+        return XR_XIR_RUN_FRAME_LIMIT;
+    return XR_XIR_RUN_BAD_ARTIFACT;
+}
 
 static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *action) {
     uint32_t instruction = state->instruction;
@@ -43,6 +51,21 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_SCALAR_COPY:
         value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         break;
+    case XR_XIR_STRING_RETAIN:
+    case XR_XIR_CONCAT_STRING: {
+        int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
+        XrXirValueStatus status = op->op == XR_XIR_STRING_RETAIN ?
+            xr_xir_string_slot_copy(run->frame, run->layout->offsets[result_id], left) :
+            xr_xir_string_slot_concat(run->frame, run->layout->offsets[result_id], left,
+                xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));
+        state->instruction = next;
+        return string_status(status);
+    }
+    case XR_XIR_OUTPUT_STRING:
+        *action = (XrXirAction) {XR_XIR_ACTION_OUTPUT, (uint32_t) op->immediate, NULL, 0,
+            {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}};
+        state->instruction = next;
+        return XR_XIR_RUN_OK;
     case XR_XIR_ADD_I64: {
         int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
@@ -69,7 +92,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_CALL: {
         const XrXirFunction *callee = &run->module->functions[op->immediate];
         for (uint32_t i = 0; i < callee->parameter_count; ++i)
-            state->arguments[i] = (XrXirScalar) {(uint32_t) callee->parameters[i], 0,
+            state->arguments[i] = (XrXirValue) {(uint32_t) callee->parameters[i], 0,
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[i]])};
         state->waiting = true;
         state->destination = run->layout->offsets[result_id];
@@ -112,10 +135,14 @@ static XrXirAction vm_resume(XrXirCallView *view) {
         if (view->argument_count != function->parameter_count)
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
         for (uint32_t i = 0; i < view->argument_count; ++i)
-            if (!xr_xir_scalar_argument(&view->arguments[i], function->parameters[i]))
+            if (!xr_xir_value_argument(&view->arguments[i], function->parameters[i]))
                 return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
-        for (uint32_t i = 0; i < view->argument_count; ++i)
-            xr_xir_scalar_store(run.frame, layout->offsets[i], view->arguments[i].payload);
+        for (uint32_t i = 0; i < view->argument_count; ++i) {
+            if (function->parameters[i] == XR_XIR_STRING) {
+                if (xr_xir_string_slot_copy(run.frame, layout->offsets[i], view->arguments[i].payload) != XR_XIR_VALUE_OK)
+                    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}};
+            } else xr_xir_scalar_store(run.frame, layout->offsets[i], view->arguments[i].payload);
+        }
         state->initialized = true;
     }
     if (state->waiting) {
@@ -126,17 +153,31 @@ static XrXirAction vm_resume(XrXirCallView *view) {
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
         if (state->expected == XR_XIR_UNIT ?
             (view->inbox.value.type != XR_XIR_UNIT || view->inbox.value.reserved || view->inbox.value.payload) :
-            !xr_xir_scalar_argument(&view->inbox.value, state->expected))
+            !xr_xir_value_argument(&view->inbox.value, state->expected))
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
-        if (state->destination != UINT32_MAX)
+        if (state->expected == XR_XIR_STRING) {
+            if (xr_xir_string_slot_copy(run.frame, state->destination, view->inbox.value.payload) != XR_XIR_VALUE_OK)
+                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}};
+        } else if (state->destination != UINT32_MAX)
             xr_xir_scalar_store(run.frame, state->destination, view->inbox.value.payload);
     }
     XrXirAction action;
     XrXirRunStatus status = scalar_step(&run, state, &action);
     if (status != XR_XIR_RUN_OK)
         return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0,
-            status == XR_XIR_RUN_OVERFLOW ? XR_XIR_CALL_OVERFLOW : XR_XIR_CALL_BAD_STATE}};
+            status == XR_XIR_RUN_OVERFLOW ? XR_XIR_CALL_OVERFLOW :
+            status == XR_XIR_RUN_OUT_OF_MEMORY ? XR_XIR_CALL_OOM :
+            status == XR_XIR_RUN_FRAME_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE}};
     return action;
+}
+
+static void vm_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
+    (void) reason;
+    const XrXirVmBinding *binding = view->environment;
+    const XrXirFunctionLayout *layout = xr_xir_artifact_layout(binding->artifact, binding->function);
+    VmState *state = view->state;
+    for (uint32_t i = layout->owned_count; i > 0; --i)
+        xr_xir_string_slot_clear(state + 1, layout->owned_offsets[i - 1]);
 }
 
 XrXirStatus xr_xir_vm_bind(const XrXirArtifact *artifact, uint32_t function,
@@ -154,16 +195,16 @@ XrXirStatus xr_xir_vm_bind(const XrXirArtifact *artifact, uint32_t function,
     if (layout->frame_bytes > UINT32_MAX - sizeof(VmState)) return XR_XIR_BUDGET;
     *binding = (XrXirVmBinding) {artifact, function};
     *entry = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, body->parameters, body->parameter_count,
-        body->result, (uint32_t) sizeof(VmState) + layout->frame_bytes, vm_resume, NULL, binding};
+        body->result, (uint32_t) sizeof(VmState) + layout->frame_bytes, vm_resume, vm_cleanup, binding};
     return XR_XIR_OK;
 }
 
 XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
-                           XrXirRunContext *context, const XrXirScalar *arguments,
-                           uint32_t argument_count, XrXirScalar *result) {
+                           XrXirRunContext *context, const XrXirValue *arguments,
+                           uint32_t argument_count, XrXirValue *result) {
     if (!result)
         return XR_XIR_RUN_BAD_ARGUMENT;
-    *result = (XrXirScalar) {0, 0, 0};
+    *result = (XrXirValue) {0, 0, 0};
     if (!context || (argument_count && !arguments))
         return XR_XIR_RUN_BAD_ARGUMENT;
     const XrXirModule *module = xr_xir_artifact_module(artifact);
@@ -173,14 +214,18 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
     if (verified != XR_XIR_OK)
         return verified == XR_XIR_OUT_OF_MEMORY ? XR_XIR_RUN_OUT_OF_MEMORY : XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunction *body = &module->functions[function];
+    if (body->result == XR_XIR_STRING) return XR_XIR_RUN_BAD_ARTIFACT;
+    for (uint32_t i = 0; i < body->parameter_count; ++i)
+        if (body->parameters[i] == XR_XIR_STRING) return XR_XIR_RUN_BAD_ARTIFACT;
     if (argument_count != body->parameter_count)
         return XR_XIR_RUN_BAD_ARGUMENT;
     for (uint32_t i = 0; i < argument_count; ++i)
-        if (!xr_xir_scalar_argument(&arguments[i], body->parameters[i]))
+        if (!xr_xir_value_argument(&arguments[i], body->parameters[i]))
             return XR_XIR_RUN_BAD_ARGUMENT;
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_SUSPEND ||
-            body->instructions[i].op == XR_XIR_THROW)
+            body->instructions[i].op == XR_XIR_THROW || body->instructions[i].type == XR_XIR_STRING ||
+            body->instructions[i].op == XR_XIR_OUTPUT_STRING)
             return XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, function);
     void *frame = NULL;
@@ -200,6 +245,6 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
     }
     xr_xir_scalar_frame_end(context, layout->frame_bytes, frame);
     if (status != XR_XIR_RUN_OK)
-        *result = (XrXirScalar) {0, 0, 0};
+        *result = (XrXirValue) {0, 0, 0};
     return status;
 }

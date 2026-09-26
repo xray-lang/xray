@@ -67,7 +67,7 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 精确内部字段及断言入口见 `contracts/xir-stages.md`；该合同不授予执行资格。
 
 内部标量执行按 `contracts/xir-scalar-execution.md` 冻结：首个目标为x86_64小端、
-标量边界ABI版本1。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
+值边界ABI版本2。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
 帧槽偏移和边界布局，VM/C后端不得另行决定。bool/i64的SSA及帧槽为8字节，
 边界值为16字节（类型、零保留字段、i64载荷），bool载荷只准0/1，unit无帧槽。
 参数必须精确匹配，错误清空结果；每条指令消耗一步，帧和步骤均受预算限制。
@@ -80,8 +80,27 @@ Checked不可执行；未知目标/ABI拒绝。此内部子集不授予模块、
 VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不把待恢复的子调用留在C栈上。
 帧地址稳定，深度、实际字节与恢复工作分别有预算；挂起token只可消费一次，重入驱动/销毁拒绝。
 取消在回调交还控制后按子帧到父帧清理；清理不能再次挂起或重新争取完成权。
-当前内部接口只允许单宿主线程独占驱动，不声称并发取消、分段池、托管值或完整image/instance已完成。
+当前内部接口只允许单宿主线程独占驱动，不声称并发取消、分段池或完整image/instance已完成；托管string扩展见17.7。
 闭合标量叶子可使用经明确验证的非挂起入口，但CALL/SUSPEND/THROW不能退回该入口。
+
+### 17.7 内部托管值与结果交接
+
+内部值 ABI 2 与调用 ABI 2 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
+允许内嵌 NUL，不隐式归一化或替换；字节数、Unicode 标量数与字素数是不同概念。
+复制保留原子引用，修改执行独占窗口内的写时复制；共享副本不因其他副本修改而改变。
+所有分配属于显式、计费且可独立存活的域，字符串不依赖执行帧、实例或代码镜像寿命。
+借用字节视图不能跨越所有者修改或释放。计数溢出拒绝，非法释放不因 Release 构建而忽略。
+
+调用参数在准入时复制到帧，恢复回调和 return action 的值是借用。调用驱动器在子帧清理前
+取得结果的拥有权；poll 返回借用结果，take 仅一次转移拥有权，未取走结果由调用销毁释放。
+独立结果在调用、输入和镜像释放后仍有效。typed output 按显式 stdout/stderr 流和真实
+bool/i64/string 类型调用实例配置的同步 provider；缺失或拒绝是运行时失败，不隐式格式化。
+
+以上仅冻结内部 C 边界；源码 string 声明、模块实例、泛型库发布和最终产品资格仍分别验收。
+实际预算、并发、失败原子性及释放义务见 `contracts/xir-managed-values.md`。
+XIR准入string参数/结果、COPY→STRING_RETAIN、CONCAT_STRING与OUTPUT_STRING；
+lowering保存并复验全部拥有槽，VM与生成C在覆盖和退出时按此清理。字面量表与源码生产仍待接入。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -154,7 +173,7 @@ and types reject. The exact internal fields and assertions are owned by
 `contracts/xir-stages.md`; this contract does not grant execution qualification.
 
 Internal scalar execution is governed by `contracts/xir-scalar-execution.md`.
-The initial target is little-endian x86_64, scalar boundary ABI version 1. Layout
+The initial target is little-endian x86_64, value boundary ABI version 2. Layout
 queries include type, target, context, and ABI. Lowering stores authoritative
 frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
 Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes
@@ -176,7 +195,29 @@ depth, physical bytes, and resume work have separate budgets. Wake tokens are
 single-use; reentrant drive/destruction rejects. Cancellation cleans children
 before parents after the running callback yields control. Cleanup cannot suspend
 or reopen completion arbitration. The current interface admits exclusive driving
-by one host thread; concurrent cancellation, segmented pools, managed values, and
+by one host thread; concurrent cancellation, segmented pools, and
 complete image/instance ownership remain unqualified. Verified closed scalar
 leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back to it.
+
+### 17.7 Internal Managed Values and Result Transfer
+
+Value ABI 2 and call ABI 2 replace the initial scalar boundary without aliases.
+Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
+atomic reference counts, and copy-on-write mutation under an exclusive handle
+borrow. Byte length and Unicode scalar count are distinct from grapheme count.
+A budgeted allocation domain outlives its host handle when strings still own it;
+strings never depend on activation, instance, or code-image lifetime.
+
+Call admission owns argument copies. Resume views and return actions borrow values.
+The driver owns returns before child cleanup, and owns inboxes and terminal results.
+Poll borrows; take transfers a result exactly once. Untaken results are destroyed
+with the activation. Typed synchronous output carries an explicit stdout/stderr
+stream and bool/i64/string value to the configured provider without formatting.
+Missing/rejecting providers are runtime failures. Source admission and complete
+Program/Instance qualification remain separate from this internal contract.
+String parameters/results, COPY to STRING_RETAIN, CONCAT_STRING and OUTPUT_STRING
+consume a lowering-owned, reverified list of owned frame slots. Both backends
+release previous values on replacement and clear slots on all exits. Literal
+tables and source production remain to be connected.
+
 <!-- /xr-spec:en -->

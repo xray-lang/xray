@@ -16,16 +16,9 @@
 #include "../base/xchecks.h"
 #include <limits.h>
 
-_Static_assert(sizeof(XrXirScalar) == 16, "scalar boundary size");
-_Static_assert(_Alignof(XrXirScalar) == 8, "scalar boundary alignment");
-_Static_assert(offsetof(XrXirScalar, payload) == 8, "scalar payload offset");
-
-bool xr_xir_scalar_argument(const XrXirScalar *argument, XrXirType type) {
-    if (!argument || argument->reserved || argument->type != (uint32_t) type)
-        return false;
-    return type == XR_XIR_I64 ||
-           (type == XR_XIR_BOOL && (argument->payload == 0 || argument->payload == 1));
-}
+_Static_assert(sizeof(XrXirValue) == 16, "scalar boundary size");
+_Static_assert(_Alignof(XrXirValue) == 8, "scalar boundary alignment");
+_Static_assert(offsetof(XrXirValue, payload) == 8, "scalar payload offset");
 
 XrXirRunStatus xr_xir_scalar_frame_begin(XrXirRunContext *context, uint32_t bytes,
                                        void **frame) {

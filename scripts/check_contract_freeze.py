@@ -30,6 +30,7 @@ CONTRACT_SPECS = (
     ContractSpec("xir-stages.md", ()),
     ContractSpec("xir-scalar-execution.md", ()),
     ContractSpec("xir-resumable-calls.md", ()),
+    ContractSpec("xir-managed-values.md", ()),
     ContractSpec(
         "intrinsic-identity.md",
         (

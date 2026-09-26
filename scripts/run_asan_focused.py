@@ -82,9 +82,13 @@ UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
 EXACT_PROFILES = {
     "xir": (("test_xir_stages", "test_xir_allocations", "test_xir_execution",
-             "test_xir_emit", "test_xir_native", "test_xir_calls", "test_xir_emit_calls", "test_xir_call_native"),
+             "test_xir_emit", "test_xir_native", "test_xir_calls", "test_xir_emit_calls", "test_xir_call_native",
+             "test_xir_values", "test_xir_value_allocations", "test_xir_emit_strings",
+             "test_xir_string_native", "test_xir_string_vm"),
             ("test_xir_stages", "test_xir_allocations", "test_xir_execution",
-             "test_xir_emit", "test_xir_native", "test_xir_calls", "test_xir_emit_calls", "test_xir_call_native")),
+             "test_xir_emit", "test_xir_native", "test_xir_calls", "test_xir_emit_calls", "test_xir_call_native",
+             "test_xir_values", "test_xir_value_allocations", "test_xir_emit_strings",
+             "test_xir_string_native", "test_xir_string_vm")),
     "canonical-program": (
         canonical_profile.CTEST_NAMES,
         canonical_profile.BUILD_TARGETS,

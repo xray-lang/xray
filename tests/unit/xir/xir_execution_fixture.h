@@ -88,7 +88,7 @@ static XrXirArtifact *fixture_checked(void) {
 
 static XrXirArtifact *fixture_lowered(void) {
     XrXirArtifact *checked = fixture_checked(), *lowered = NULL;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_SCALAR_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     return lowered;
