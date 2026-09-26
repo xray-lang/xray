@@ -119,7 +119,7 @@ static void saturation(void) {
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "x", 1, &value) == XR_XIR_VALUE_OK);
     XirString *string = string_pointer(&value);
-    atomic_store(&string->references, UINT32_MAX);
+    atomic_store(&string->object.references, UINT32_MAX);
     CHECK(xr_xir_value_copy(&value, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     XrXirValue first = {0};
     CHECK(xr_xir_string_new(domain, "first", 5, &first) == XR_XIR_VALUE_OK);
@@ -133,9 +133,9 @@ static void saturation(void) {
     size_t baseline = live;
     CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_LIMIT && !call);
     CHECK(live == baseline && !accounting.live_bytes && accounting.allocations == accounting.frees);
-    CHECK(atomic_load(&string_pointer(&first)->references) == 1);
+    CHECK(atomic_load(&string_pointer(&first)->object.references) == 1);
     xr_xir_value_drop(&first);
-    atomic_store(&string->references, 1);
+    atomic_store(&string->object.references, 1);
     atomic_store(&domain->references, UINT32_MAX);
     CHECK(xr_xir_string_new(domain, "y", 1, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     atomic_store(&domain->references, 2);

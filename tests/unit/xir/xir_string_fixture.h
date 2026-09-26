@@ -19,13 +19,13 @@ static XrXirArtifact *string_fixture(uint32_t mode) {
     XrXirInstruction root[] = {
         {XR_XIR_CALL, XR_XIR_STRING, {0, 1}, {0, 0}, 1},
         {XR_XIR_COPY, XR_XIR_STRING, {2, 0}, {0, 0}, 0},
-        {XR_XIR_OUTPUT_STRING, XR_XIR_UNIT, {3, 0}, {0, 0}, 1},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3, 0}, {0, 0}, 1},
         {XR_XIR_RETURN, XR_XIR_UNIT, {3, 0}, {0, 0}, 0}
     };
     XrXirInstruction child[] = {
         {XR_XIR_COPY, XR_XIR_STRING, {0, 0}, {0, 0}, 0},
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {2, 1}, {0, 0}, 0},
-        {XR_XIR_OUTPUT_STRING, XR_XIR_UNIT, {3, 0}, {0, 0}, 2},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3, 0}, {0, 0}, 2},
         {XR_XIR_SUSPEND, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
         {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 91},
         {XR_XIR_RETURN, XR_XIR_UNIT, {3, 0}, {0, 0}, 0}
@@ -33,7 +33,7 @@ static XrXirArtifact *string_fixture(uint32_t mode) {
     XrXirInstruction loop[] = {
         {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0},
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {0, 1}, {0, 0}, 0},
-        {XR_XIR_OUTPUT_STRING, XR_XIR_UNIT, {3, 0}, {0, 0}, 1},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3, 0}, {0, 0}, 1},
         {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0}
     };
     if (mode) child[5] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {6, 0}, {0, 0}, 0};
@@ -43,7 +43,7 @@ static XrXirArtifact *string_fixture(uint32_t mode) {
         {"child", 5, parameters, 2, XR_XIR_STRING, child_blocks, 1, child, 6},
         {"loop", 4, parameters, 2, XR_XIR_UNIT, loop_blocks, 2, loop, 4}
     };
-    const XrXirModule built = {XR_XIR_BUILT, functions, 3};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);

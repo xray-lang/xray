@@ -22,7 +22,7 @@ XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
     if (!target || target->architecture != XR_XIR_ARCH_X86_64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
-        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_I64 && type != XR_XIR_STRING) ||
+        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_I64 && !xr_xir_type_is_owned(type)) ||
         (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER))
         return XR_XIR_BAD_LAYOUT;
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
@@ -57,6 +57,9 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
     uint64_t bytes = budget->metadata_bytes, work = budget->work;
     if (!subtract_bytes(&bytes, sizeof(XrXirArtifact)))
         return XR_XIR_BUDGET;
+    XrXirStatus declaration_status = xr_xir_declarations_verify(module->declarations,
+        module->function_count, &bytes, &work);
+    if (declaration_status != XR_XIR_OK) return declaration_status;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         uint64_t slots = (uint64_t) function->parameter_count + function->instruction_count;
@@ -110,7 +113,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             ((uint32_t *) layout->offsets)[slot] = offset;
         else if (layout->offsets[slot] != offset)
             return XR_XIR_BAD_LAYOUT;
-        if (type == XR_XIR_STRING) {
+        if (xr_xir_type_is_owned(type)) {
             if (create) ((uint32_t *) layout->owned_offsets)[owned] = offset;
             else if (owned >= layout->owned_count || layout->owned_offsets[owned] != offset)
                 return XR_XIR_BAD_LAYOUT;

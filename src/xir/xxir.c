@@ -60,6 +60,7 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
         }
     }
     xr_free(artifact->layouts);
+    xr_xir_declarations_free((XrXirDeclarations *) artifact->module.declarations);
     xr_free(functions);
     xr_free(artifact);
 }
@@ -82,7 +83,13 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         xr_free(copy);
         return NULL;
     }
-    copy->module = (XrXirModule) {source->stage, functions, source->function_count};
+    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL};
+    XrXirDeclarations *declarations = NULL;
+    if (xr_xir_declarations_clone(source->declarations, source->function_count, &declarations) != XR_XIR_OK) {
+        xr_xir_artifact_free(copy);
+        return NULL;
+    }
+    copy->module.declarations = declarations;
     for (uint32_t i = 0; i < source->function_count; ++i) {
         const XrXirFunction *from = &source->functions[i];
         XrXirFunction *to = &functions[i];
@@ -137,8 +144,8 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
             XrXirInstruction *instructions = (XrXirInstruction *) function->instructions;
             for (uint32_t i = 0; i < function->instruction_count; ++i)
                 if (instructions[i].op == XR_XIR_COPY)
-                    instructions[i].op = instructions[i].type == XR_XIR_STRING ?
-                        XR_XIR_STRING_RETAIN : XR_XIR_SCALAR_COPY;
+                    instructions[i].op = xr_xir_type_is_owned(instructions[i].type) ?
+                        XR_XIR_OWNED_RETAIN : XR_XIR_SCALAR_COPY;
         }
         status = xr_xir_layout_build(copy, &limits);
         if (status != XR_XIR_OK) {

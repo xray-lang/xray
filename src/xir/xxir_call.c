@@ -32,6 +32,14 @@ struct XrXirCall {
     bool driving, cleaning, cancel_requested;
 };
 
+uint32_t xr_xir_call_current_entry(const XrXirCall *call) {
+    return call && call->driving && !call->cleaning && call->top ?
+        (uint32_t) (call->top->entry - call->config.entries) : UINT32_MAX;
+}
+XrXirCallStatus xr_xir_call_state(const XrXirCall *call) {
+    return !call ? XR_XIR_CALL_BAD_ARGUMENT : call->driving ? XR_XIR_CALL_BUSY : call->result.status;
+}
+
 static XrXirCallResult call_result(XrXirCallStatus status) {
     return (XrXirCallResult) {status, {XR_XIR_UNIT, 0, 0}, 0};
 }
@@ -165,14 +173,14 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
         if (!entry->resume || entry->parameter_count > 65536 ||
             (entry->parameter_count && !entry->parameters) ||
             (entry->result != XR_XIR_UNIT && entry->result != XR_XIR_BOOL &&
-             entry->result != XR_XIR_I64 && entry->result != XR_XIR_STRING))
+             entry->result != XR_XIR_I64 && !xr_xir_type_is_owned(entry->result)))
             return XR_XIR_CALL_BAD_ARGUMENT;
         *bytes += (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
             return XR_XIR_CALL_LIMIT;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
             if (entry->parameters[p] != XR_XIR_BOOL && entry->parameters[p] != XR_XIR_I64 &&
-                entry->parameters[p] != XR_XIR_STRING)
+                !xr_xir_type_is_owned(entry->parameters[p]))
                 return XR_XIR_CALL_BAD_ARGUMENT;
     }
     return XR_XIR_CALL_READY;
@@ -223,6 +231,8 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_OUTPUT) {
         if ((action.callee != XR_XIR_STDOUT && action.callee != XR_XIR_STDERR) ||
             action.arguments || action.argument_count ||
+            (action.value.type != XR_XIR_BOOL && action.value.type != XR_XIR_I64 &&
+             action.value.type != XR_XIR_STRING) ||
             !xr_xir_value_argument(&action.value, (XrXirType) action.value.type)) {
             unwind(call, XR_XIR_CALL_BAD_STATE);
             return;

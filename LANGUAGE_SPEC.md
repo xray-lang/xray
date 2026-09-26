@@ -6835,7 +6835,7 @@ and types reject. The exact internal fields and assertions are owned by
 `contracts/xir-stages.md`; this contract does not grant execution qualification.
 
 Internal scalar execution is governed by `contracts/xir-scalar-execution.md`.
-The initial target is little-endian x86_64, value boundary ABI version 2. Layout
+The initial target is little-endian x86_64, value boundary ABI version 3. Layout
 queries include type, target, context, and ABI. Lowering stores authoritative
 frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
 Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes
@@ -6863,7 +6863,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 2 and call ABI 2 replace the initial scalar boundary without aliases.
+Value ABI 3 and call ABI 3 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -6877,10 +6877,31 @@ with the activation. Typed synchronous output carries an explicit stdout/stderr
 stream and bool/i64/string value to the configured provider without formatting.
 Missing/rejecting providers are runtime failures. Source admission and complete
 Program/Instance qualification remain separate from this internal contract.
-String parameters/results, COPY to STRING_RETAIN, CONCAT_STRING and OUTPUT_STRING
+String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT
 consume a lowering-owned, reverified list of owned frame slots. Both backends
-release previous values on replacement and clear slots on all exits. Literal
-tables and source production remain to be connected.
+release previous values on replacement and clear slots on all exits. Literal tables are sealed with Program metadata; source production remains to be connected.
+
+
+### 17.8 Immutable Programs and Module Instances
+
+A Lowered module closure is sealed before execution. Programs own declaration,
+dependency, literal, initialization-order and code-environment metadata; instances
+own runtime slots and allocation domains. Dependencies initialize first, choosing
+the lexicographically smallest UTF-8 name among ready modules. Cycles, duplicate
+edges and modules outside the root closure reject. Private zero-argument unit
+initializers execute once; the zero-argument i64 root entry is a distinct function.
+
+CONST slots publish once from their declaring initializer. Module var is confined
+to the root module's execution flow. Const Atomic<i64> handles refer to per-instance
+synchronized identity objects; copies share identity instead of using string CoW.
+The initial SeqCst load and fetchAdd operations use two's-complement wrapping for
+fetchAdd and return the old value. Initialization retains one publisher across
+suspension, rejects unpublished reads and keeps failures sticky after reverse
+cleanup. Shutdown stops admission and drains execution; independent results do not
+retain unrelated module state. Resume matches both execution epoch and wake token.
+The initial instance interface admits exclusive driving by one host thread only.
+The precise internal contract is `contracts/xir-program-instance.md`; source and
+serialized/cache admission require separate qualification.
 
 ---
 

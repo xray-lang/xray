@@ -14,7 +14,7 @@
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
 
-#define XR_XIR_CALL_ABI_VERSION 2u
+#define XR_XIR_CALL_ABI_VERSION 3u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -91,4 +91,6 @@ XR_FUNC XrXirCallStatus xr_xir_call_take_result(XrXirCall *activation, XrXirValu
 XR_FUNC XrXirCallStatus xr_xir_call_resume(XrXirCall *activation, uint64_t wake);
 XR_FUNC XrXirCallStatus xr_xir_call_cancel(XrXirCall *activation);
 XR_FUNC XrXirCallStatus xr_xir_call_free(XrXirCall *activation);
+XR_FUNC uint32_t xr_xir_call_current_entry(const XrXirCall *activation);
+XR_FUNC XrXirCallStatus xr_xir_call_state(const XrXirCall *activation);
 #endif // XXIR_CALL_H

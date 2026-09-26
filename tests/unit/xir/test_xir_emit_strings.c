@@ -30,10 +30,10 @@ int main(int argc, char **argv) {
         CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_LAYOUT);
         offsets[0] = saved;
         XrXirInstruction *ops = (XrXirInstruction *) xr_xir_artifact_module(artifact)->functions[0].instructions;
-        CHECK(ops[1].op == XR_XIR_STRING_RETAIN);
+        CHECK(ops[1].op == XR_XIR_OWNED_RETAIN);
         ops[1].op = XR_XIR_SCALAR_COPY;
         CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_TYPE);
-        ops[1].op = XR_XIR_STRING_RETAIN;
+        ops[1].op = XR_XIR_OWNED_RETAIN;
         ops[2].immediate = 3;
         CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
         ops[2].immediate = 1;
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
         CHECK(xr_xir_emit_c(artifact, prefix, 1, &source) == XR_XIR_BUDGET);
         CHECK(!source.text && !source.length);
         CHECK(xr_xir_emit_c(artifact, prefix, 65536, &source) == XR_XIR_OK);
-        CHECK(strstr(source.text, "xr_xir_string_slot_clear") && !strstr(source.text, "({"));
+        CHECK(strstr(source.text, "xr_xir_owned_slot_clear") && !strstr(source.text, "({"));
         xr_xir_artifact_free(artifact);
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_c_source_free(&source);

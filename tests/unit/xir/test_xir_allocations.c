@@ -73,6 +73,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #define xr_realloc(pointer, size) counted_realloc(pointer, size)
 
 #include "xir/xxir.c"
+#include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
 #include "xir/xxir_value.c"
@@ -80,6 +81,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_vm.c"
 #include "xir/xxir_emit_c.c"
 #include "xir/xxir_call.c"
+#include "xir/xxir_program.c"
+#include "xir/xxir_instance.c"
 
 #include "xir_string_fixture.h"
 
@@ -177,6 +180,74 @@ static size_t call_allocation_failures(void) {
     return expected_calls;
 }
 
+#include "xir_program_fixture.h"
+static bool program_allocation_output(void *context, XrXirOutputStream stream, const XrXirValue *value) {
+    (void) context; (void) stream; (void) value; return true;
+}
+static size_t program_allocation_failures(void) {
+    size_t expected_calls = 0;
+    for (size_t attempt = 0; attempt <= expected_calls; ++attempt) {
+        fail_at = SIZE_MAX;
+        XrXirArtifact *artifact = program_fixture(0), *original = artifact;
+        XrXirProgram *program = NULL;
+        calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+        XrXirStatus sealed = xr_xir_vm_program_take(&artifact, 65536, &program);
+        if (sealed != XR_XIR_OK) {
+            CHECK(attempt && sealed == XR_XIR_OUT_OF_MEMORY && !program && artifact == original);
+        } else {
+            CHECK(!artifact);
+            XrXirInstanceConfig config = xr_xir_instance_defaults();
+            config.output.write = program_allocation_output;
+            XrXirInstance *instance = NULL;
+            XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
+            if (status != XR_XIR_CALL_READY) CHECK(attempt && status == XR_XIR_CALL_OOM && !instance);
+            else {
+                status = xr_xir_instance_start(instance, 3, NULL, 0);
+                if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll(instance).outcome.status;
+                CHECK(status == (attempt ? XR_XIR_CALL_OOM : XR_XIR_CALL_RETURNED));
+                if (xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED)
+                    CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_OOM);
+                CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+            }
+            xr_xir_program_drop(program);
+        }
+        if (!attempt) expected_calls = calls;
+        xr_xir_artifact_free(artifact);
+        CHECK(live == 0);
+    }
+    fail_at = SIZE_MAX;
+    return expected_calls;
+}
+static size_t declaration_allocation_failures(void) {
+    XrXirArtifact *fixture = program_fixture(0);
+    size_t baseline = live, total = 0;
+    for (uint32_t phase = 0; phase < 3; ++phase) {
+        size_t expected_calls = 0;
+        for (size_t attempt = 0; attempt <= expected_calls; ++attempt) {
+            calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+            XrXirArtifact *output = NULL;
+            XrXirCSource source = {0};
+            XrXirModule module = *xr_xir_artifact_module(fixture);
+            module.stage = XR_XIR_BUILT;
+            XrXirStatus status;
+            if (phase == 0) status = xr_xir_check(&module, NULL, &output, NULL);
+            else if (phase == 1) {
+                fixture->module.stage = XR_XIR_CHECKED;
+                status = xr_xir_lower(fixture, &fixture_target, NULL, &output, NULL);
+                fixture->module.stage = XR_XIR_LOWERED;
+            } else status = xr_xir_emit_c(fixture, "owned_program", 200000, &source);
+            CHECK(status == (attempt ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
+            if (!attempt) expected_calls = calls;
+            else CHECK(!output && !source.text);
+            xr_xir_artifact_free(output); xr_xir_c_source_free(&source);
+            CHECK(live == baseline);
+        }
+        fail_at = SIZE_MAX; total += expected_calls;
+    }
+    xr_xir_artifact_free(fixture); CHECK(live == 0);
+    return total;
+}
+
 int main(void) {
     XrXirInstruction ops[] = {
         {XR_XIR_CONST_I64, XR_XIR_I64, {0, 0}, {0, 0}, 42},
@@ -189,7 +260,7 @@ int main(void) {
         {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3},
         {"second", 6, &parameter, 1, XR_XIR_I64, &block, 1, ops, 3},
     };
-    XrXirModule module = {XR_XIR_BUILT, functions, 2};
+    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirBudget exact = xr_xir_default_budget();
     exact.metadata_bytes = sizeof(XrXirArtifact);
@@ -289,5 +360,7 @@ int main(void) {
     printf("Resumable physical release passed at %zu emitter and %zu activation/frame allocation sites\n",
            resume_emit_calls, call_sites);
     printf("Managed VM admission and execution physical release: %zu allocation sites\n", managed_allocation_failures());
+    printf("Declaration stage/emission physical release: %zu allocation sites\n", declaration_allocation_failures());
+    printf("Program seal, instance and initialization physical release: %zu allocation sites\n", program_allocation_failures());
     return 0;
 }

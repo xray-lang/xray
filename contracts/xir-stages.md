@@ -26,7 +26,7 @@ an older representation. This subset introduces no new source spelling.
 The op definition table owns opcode identity, stage membership, operand count,
 result type rule, and successor count. Unknown stages, types, and ops fail closed.
 Abstract copy is restricted to Built/Checked; scalar copy is restricted to Lowered.
-Lowering preserves CFG and value identity and replaces validated copy with scalar-copy or string-retain. Managed cleanup is
+Lowering preserves CFG and value identity and replaces validated copy with scalar-copy or owned-retain. Managed cleanup is
 frozen in the Lowered ownership layout and reverified before consumption.
 
 Blocks partition the instruction table exactly, are nonempty and reachable from

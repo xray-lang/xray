@@ -14,9 +14,9 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 2u
+#define XR_XIR_VALUE_ABI_VERSION 3u
 #define XR_XIR_ARCH_X86_64 1u
-typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING } XrXirType;
+typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64 } XrXirType;
 typedef struct XrXirValue {
     uint32_t type, reserved;
     int64_t payload;
@@ -42,8 +42,15 @@ XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *byte
 XR_FUNC XrXirValueStatus xr_xir_string_append(XrXirValue *destination, const XrXirValue *suffix);
 XR_FUNC bool xr_xir_string_view(const XrXirValue *value, const char **bytes, size_t *length);
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count);
-XR_FUNC void xr_xir_string_slot_clear(void *frame, uint32_t offset);
-XR_FUNC XrXirValueStatus xr_xir_string_slot_copy(void *frame, uint32_t offset, int64_t payload);
+XR_FUNC void xr_xir_owned_slot_clear(void *frame, uint32_t offset);
+XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, XrXirType type, int64_t payload);
 XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
                                                   int64_t left, int64_t right);
+XR_FUNC XrXirValueStatus xr_xir_atomic_i64_new(XrXirDomain *domain, int64_t initial, XrXirValue *output);
+XR_FUNC bool xr_xir_atomic_i64_load(const XrXirValue *value, int64_t *output);
+XR_FUNC bool xr_xir_atomic_i64_fetch_add(const XrXirValue *value, int64_t delta, int64_t *previous);
+XR_FUNC void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *owned);
+static inline bool xr_xir_type_is_owned(XrXirType type) {
+    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64;
+}
 #endif // XXIR_VALUE_H

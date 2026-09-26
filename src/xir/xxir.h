@@ -16,6 +16,7 @@
 #define XXIR_H
 
 #include "xxir_scalar.h"
+#include "xxir_declarations.h"
 
 typedef enum XrXirStage {
     XR_XIR_BUILT = 1,
@@ -103,6 +104,7 @@ typedef struct XrXirModule {
     XrXirStage stage;
     const XrXirFunction *functions;
     uint32_t function_count;
+    const XrXirDeclarations *declarations;
 } XrXirModule;
 
 typedef struct XrXirBudget {
@@ -143,5 +145,14 @@ XR_FUNC XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
 XR_FUNC XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact,
                                         const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_artifact_free(XrXirArtifact *artifact);
+XR_FUNC XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *declarations,
+    uint32_t functions, uint64_t *bytes, uint64_t *work);
+/* Internal snapshot helpers require successful declaration verification first. */
+XR_FUNC XrXirStatus xr_xir_declarations_order(const XrXirDeclarations *declarations,
+    uint32_t *order, uint64_t *work);
+XR_FUNC XrXirStatus xr_xir_declarations_clone(const XrXirDeclarations *source,
+    uint32_t functions, XrXirDeclarations **output);
+XR_FUNC void xr_xir_declarations_free(XrXirDeclarations *declarations);
+XR_FUNC bool xr_xir_module_imports(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);
 
 #endif // XXIR_H

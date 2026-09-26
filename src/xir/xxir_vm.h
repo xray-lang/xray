@@ -15,7 +15,7 @@
 #define XXIR_VM_H
 
 #include "xxir.h"
-#include "xxir_call.h"
+#include "xxir_program.h"
 
 typedef struct XrXirVmBinding {
     const XrXirArtifact *artifact;
@@ -26,6 +26,9 @@ typedef struct XrXirVmBinding {
  * artifact's function IDs; sealed image integration owns that correspondence. */
 XR_FUNC XrXirStatus xr_xir_vm_bind(const XrXirArtifact *artifact, uint32_t function,
                                   XrXirVmBinding *binding, XrXirCallEntry *entry);
+/* Success consumes and clears the Lowered artifact; failure preserves it. */
+XR_FUNC XrXirStatus xr_xir_vm_program_take(XrXirArtifact **artifact, uint64_t byte_limit,
+                                          XrXirProgram **output);
 
 XR_FUNC XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
                                    XrXirRunContext *context, const XrXirValue *arguments,

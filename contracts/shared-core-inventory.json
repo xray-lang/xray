@@ -1826,6 +1826,7 @@
         "src/runtime/object/xstring_methods.c",
         "src/shared/xr_string_core.h",
         "src/shared/xr_unicode_grapheme.c",
+        "src/xir/xxir_declarations.c",
         "src/xir/xxir_value.c"
       ],
       "profiles": [

@@ -6799,7 +6799,7 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 精确内部字段及断言入口见 `contracts/xir-stages.md`；该合同不授予执行资格。
 
 内部标量执行按 `contracts/xir-scalar-execution.md` 冻结：首个目标为x86_64小端、
-值边界ABI版本2。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
+值边界ABI版本3。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
 帧槽偏移和边界布局，VM/C后端不得另行决定。bool/i64的SSA及帧槽为8字节，
 边界值为16字节（类型、零保留字段、i64载荷），bool载荷只准0/1，unit无帧槽。
 参数必须精确匹配，错误清空结果；每条指令消耗一步，帧和步骤均受预算限制。
@@ -6817,7 +6817,7 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 
 ### 17.7 内部托管值与结果交接
 
-内部值 ABI 2 与调用 ABI 2 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
+内部值 ABI 3 与调用 ABI 3 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
 允许内嵌 NUL，不隐式归一化或替换；字节数、Unicode 标量数与字素数是不同概念。
 复制保留原子引用，修改执行独占窗口内的写时复制；共享副本不因其他副本修改而改变。
 所有分配属于显式、计费且可独立存活的域，字符串不依赖执行帧、实例或代码镜像寿命。
@@ -6830,8 +6830,24 @@ bool/i64/string 类型调用实例配置的同步 provider；缺失或拒绝是�
 
 以上仅冻结内部 C 边界；源码 string 声明、模块实例、泛型库发布和最终产品资格仍分别验收。
 实际预算、并发、失败原子性及释放义务见 `contracts/xir-managed-values.md`。
-XIR准入string参数/结果、COPY→STRING_RETAIN、CONCAT_STRING与OUTPUT_STRING；
-lowering保存并复验全部拥有槽，VM与生成C在覆盖和退出时按此清理。字面量表与源码生产仍待接入。
+XIR准入string参数/结果、COPY→OWNED_RETAIN、CONCAT_STRING与OUTPUT；
+lowering保存并复验全部拥有槽，VM与生成C在覆盖和退出时按此清理。字面量表由Program封存，源码生产仍待接入。
+
+
+### 17.8 不可变Program与模块实例
+
+内部多模块闭包在Lowered后封存；Program拥有模块/函数身份、依赖、声明槽、字面量、
+初始化顺序及代码环境租约，Instance拥有运行时状态和分配域。模块DAG依赖优先，
+同批可初始化模块按UTF-8名称字节序选最小者；循环、重复依赖与闭包外模块拒绝。
+每模块的私有无参unit initializer仅执行一次，入口为另一个无参i64函数。
+
+const槽仅由所属initializer发布一次；模块var仅准入根模块主执行流，不扩大库级var。
+const Atomic<i64>持有每实例创建的同步身份对象，复制保留同一对象；首批SeqCst load和
+fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。它不采用string CoW。
+初始化跨挂起保留单发布者；未发布读拒绝，失败清理逆序执行并保持失败粘滞。
+实例销毁禁止新准入并完成活动调用清理；独立结果不保留无关模块状态。
+恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
+精确准入、预算与租约责任见 `contracts/xir-program-instance.md`；这不授予源码或缓存格式资格。
 
 ---
 

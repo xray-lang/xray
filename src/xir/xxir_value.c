@@ -23,9 +23,17 @@ struct XrXirDomain {
     uint64_t limit;
     XrXirDomainStats stats;
 };
-typedef struct XirString {
+typedef struct XirObject {
     _Atomic(uint32_t) references;
     XrXirDomain *domain;
+    XrXirType type;
+} XirObject;
+typedef struct XirAtomicI64 {
+    XirObject object;
+    _Atomic(int64_t) value;
+} XirAtomicI64;
+typedef struct XirString {
+    XirObject object;
     char *bytes;
     size_t length, runes, capacity;
 } XirString;
@@ -57,10 +65,13 @@ static bool reference_release(_Atomic(uint32_t) *references) {
 static bool unit_value(const XrXirValue *value) {
     return value && !value->type && !value->reserved && !value->payload;
 }
-static XirString *string_pointer(const XrXirValue *value) {
-    XirString *string;
+static XirObject *object_pointer(const XrXirValue *value) {
+    XirObject *string;
     memcpy(&string, &value->payload, sizeof(string));
     return string;
+}
+static XirString *string_pointer(const XrXirValue *value) {
+    return (XirString *) object_pointer(value);
 }
 static XrXirValue string_value(XirString *string) {
     XrXirValue value = {XR_XIR_STRING, 0, 0};
@@ -71,7 +82,7 @@ bool xr_xir_value_argument(const XrXirValue *value, XrXirType type) {
     if (!value || value->reserved || value->type != (uint32_t) type) return false;
     return type == XR_XIR_I64 ||
         (type == XR_XIR_BOOL && (value->payload == 0 || value->payload == 1)) ||
-        (type == XR_XIR_STRING && string_pointer(value) != NULL);
+        (xr_xir_type_is_owned(type) && object_pointer(value) && object_pointer(value)->type == type);
 }
 XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output) {
     if (!output) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -128,7 +139,7 @@ static void domain_deallocate(XrXirDomain *domain, void *memory, size_t bytes) {
     domain_unlock(domain);
 }
 static XrXirValueStatus string_resize(XirString *string, size_t capacity) {
-    XrXirDomain *domain = string->domain;
+    XrXirDomain *domain = string->object.domain;
     domain_lock(domain);
     size_t extra = capacity - string->capacity;
     if (extra > domain->limit - domain->stats.live_bytes || domain->stats.reallocations == UINT64_MAX) {
@@ -164,8 +175,9 @@ static XrXirValueStatus string_allocate(XrXirDomain *domain, size_t length, XirS
         string->capacity = string_capacity(length + 1);
         string->bytes = domain_allocate(domain, string->capacity, &status);
         if (string->bytes) {
-            atomic_init(&string->references, 1);
-            string->domain = domain;
+            atomic_init(&string->object.references, 1);
+            string->object.domain = domain;
+            string->object.type = XR_XIR_STRING;
             string->length = length;
             string->runes = 0;
             string->bytes[length] = 0;
@@ -195,7 +207,7 @@ XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output)
     if (!unit_value(output) || !source ||
         (!unit_value(source) && !xr_xir_value_argument(source, (XrXirType) source->type)))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (source->type == XR_XIR_STRING && !reference_retain(&string_pointer(source)->references))
+    if (xr_xir_type_is_owned((XrXirType) source->type) && !reference_retain(&object_pointer(source)->references))
         return XR_XIR_VALUE_REFCOUNT_LIMIT;
     *output = *source;
     return XR_XIR_VALUE_OK;
@@ -204,12 +216,15 @@ void xr_xir_value_drop(XrXirValue *value) {
     if (!value) return;
     XR_CHECK(unit_value(value) || xr_xir_value_argument(value, (XrXirType) value->type),
              "invalid owned value release");
-    if (value->type == XR_XIR_STRING) {
-        XirString *string = string_pointer(value);
-        if (reference_release(&string->references)) {
-            XrXirDomain *domain = string->domain;
-            domain_deallocate(domain, string->bytes, string->capacity);
-            domain_deallocate(domain, string, sizeof(*string));
+    if (xr_xir_type_is_owned((XrXirType) value->type)) {
+        XirObject *object = object_pointer(value);
+        if (reference_release(&object->references)) {
+            XrXirDomain *domain = object->domain;
+            if (object->type == XR_XIR_STRING) {
+                XirString *string = (XirString *) object;
+                domain_deallocate(domain, string->bytes, string->capacity);
+                domain_deallocate(domain, string, sizeof(*string));
+            } else domain_deallocate(domain, object, sizeof(XirAtomicI64));
             xr_xir_domain_drop(domain);
         }
     }
@@ -222,7 +237,7 @@ XrXirValueStatus xr_xir_string_append(XrXirValue *destination, const XrXirValue 
     if (!right->length) return XR_XIR_VALUE_OK;
     if (right->length >= SIZE_MAX - left->length) return XR_XIR_VALUE_LIMIT;
     size_t length = left->length + right->length, runes = left->runes + right->runes;
-    if (atomic_load_explicit(&left->references, memory_order_acquire) == 1) {
+    if (atomic_load_explicit(&left->object.references, memory_order_acquire) == 1) {
         if (length + 1 > left->capacity) {
             XrXirValueStatus status = string_resize(left, string_capacity(length + 1));
             if (status != XR_XIR_VALUE_OK) return status;
@@ -234,7 +249,7 @@ XrXirValueStatus xr_xir_string_append(XrXirValue *destination, const XrXirValue 
         return XR_XIR_VALUE_OK;
     }
     XirString *replacement = NULL;
-    XrXirValueStatus status = string_allocate(left->domain, length, &replacement);
+    XrXirValueStatus status = string_allocate(left->object.domain, length, &replacement);
     if (status != XR_XIR_VALUE_OK) return status;
     memcpy(replacement->bytes, left->bytes, left->length);
     memcpy(replacement->bytes + left->length, right->bytes, right->length);
@@ -256,17 +271,21 @@ bool xr_xir_string_runes(const XrXirValue *value, size_t *count) {
     return true;
 }
 
-void xr_xir_string_slot_clear(void *frame, uint32_t offset) {
+void xr_xir_owned_slot_clear(void *frame, uint32_t offset) {
     XrXirValue old = {XR_XIR_STRING, 0, 0};
     memcpy(&old.payload, (char *) frame + offset, sizeof(old.payload));
-    if (old.payload) xr_xir_value_drop(&old);
+    if (old.payload) {
+        old.type = (uint32_t) object_pointer(&old)->type;
+        xr_xir_value_drop(&old);
+    }
     memset((char *) frame + offset, 0, sizeof(old.payload));
 }
-XrXirValueStatus xr_xir_string_slot_copy(void *frame, uint32_t offset, int64_t payload) {
-    XrXirValue borrowed = {XR_XIR_STRING, 0, payload}, owned = {0};
+XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, XrXirType type, int64_t payload) {
+    if (!xr_xir_type_is_owned(type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue borrowed = {(uint32_t) type, 0, payload}, owned = {0};
     XrXirValueStatus status = xr_xir_value_copy(&borrowed, &owned);
     if (status != XR_XIR_VALUE_OK) return status;
-    xr_xir_string_slot_clear(frame, offset);
+    xr_xir_owned_slot_clear(frame, offset);
     memcpy((char *) frame + offset, &owned.payload, sizeof(owned.payload));
     return XR_XIR_VALUE_OK;
 }
@@ -278,7 +297,41 @@ XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset, int64_t
         xr_xir_value_drop(&owned);
         return status;
     }
-    xr_xir_string_slot_clear(frame, offset);
+    xr_xir_owned_slot_clear(frame, offset);
     memcpy((char *) frame + offset, &owned.payload, sizeof(owned.payload));
     return XR_XIR_VALUE_OK;
+}
+
+XrXirValueStatus xr_xir_atomic_i64_new(XrXirDomain *domain, int64_t initial, XrXirValue *output) {
+    if (!domain || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!reference_retain(&domain->references)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
+    XirAtomicI64 *cell = domain_allocate(domain, sizeof(*cell), &status);
+    if (!cell) { xr_xir_domain_drop(domain); return status; }
+    atomic_init(&cell->object.references, 1);
+    cell->object.domain = domain;
+    cell->object.type = XR_XIR_ATOMIC_I64;
+    atomic_init(&cell->value, initial);
+    output->type = XR_XIR_ATOMIC_I64;
+    memcpy(&output->payload, &cell, sizeof(cell));
+    return XR_XIR_VALUE_OK;
+}
+bool xr_xir_atomic_i64_load(const XrXirValue *value, int64_t *output) {
+    if (!output || !xr_xir_value_argument(value, XR_XIR_ATOMIC_I64)) return false;
+    XirAtomicI64 *cell = (XirAtomicI64 *) object_pointer(value);
+    *output = atomic_load_explicit(&cell->value, memory_order_seq_cst);
+    return true;
+}
+bool xr_xir_atomic_i64_fetch_add(const XrXirValue *value, int64_t delta, int64_t *previous) {
+    if (!previous || !xr_xir_value_argument(value, XR_XIR_ATOMIC_I64)) return false;
+    XirAtomicI64 *cell = (XirAtomicI64 *) object_pointer(value);
+    *previous = atomic_fetch_add_explicit(&cell->value, delta, memory_order_seq_cst);
+    return true;
+}
+void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *owned) {
+    XR_CHECK(owned && xr_xir_type_is_owned((XrXirType) owned->type) &&
+             xr_xir_value_argument(owned, (XrXirType) owned->type), "moving non-owned frame value");
+    xr_xir_owned_slot_clear(frame, offset);
+    memcpy((char *) frame + offset, &owned->payload, sizeof(owned->payload));
+    *owned = (XrXirValue) {0};
 }
