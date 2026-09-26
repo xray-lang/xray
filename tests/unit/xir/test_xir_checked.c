@@ -123,7 +123,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_I64, XR_XIR_EQ_I64, XR_XIR_LT_I64, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 3 && XR_XIR_CHECKED_CONTRACT == 8 && XR_XIR_OP_COUNT == 51, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 4 && XR_XIR_CHECKED_CONTRACT == 9 && XR_XIR_OP_COUNT == 51, "packet revision");
     _Static_assert(XR_XIR_FUNCTION_REF == 49 && XR_XIR_CALL_INDIRECT == 50, "callable wire operations");
     _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_ATOMIC_I64 == 4, "wire type identities");
     for (unsigned i = 0; i < 25; ++i) CHECK((unsigned) identities[i] == i + 1);
@@ -142,8 +142,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0xdb, 0x77, 0xc0, 0x59, 0x3e, 0x01, 0xa6, 0x5f, 0x53, 0x4f, 0x8c, 0x77, 0xab, 0x0b, 0xbc, 0xd7,
-        0xdc, 0x3f, 0x8a, 0x54, 0x70, 0x9a, 0xee, 0x02, 0xfc, 0x9c, 0x21, 0x01, 0xa5, 0x26, 0x7f, 0xb5};
+        0xb9, 0xc8, 0x1c, 0x3b, 0xa5, 0x5a, 0x1a, 0x96, 0xfa, 0xfb, 0x55, 0x77, 0x73, 0x0f, 0x14, 0xa8,
+        0x33, 0x16, 0xf1, 0x50, 0x1b, 0x2b, 0x0a, 0x2b, 0x52, 0xba, 0xa7, 0xa4, 0xd2, 0x7c, 0x2e, 0x9d};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].instructions[0].immediate == INT64_MIN);
@@ -153,7 +153,7 @@ static void callable_contracts(void) {
     XrXirArtifact *checked = callable_fixture(), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    const uint32_t signature_wire[] = {3, 1, 2, 0, 3, 0, 1, 256, 0, 256, 0, 0, 0, 0};
+    const uint32_t signature_wire[] = {3, 1, 2, 0, 3, 0, 0, 1, 256, 0, 256, 0, 0, 0, 0, 0, 0};
     CHECK(packet.length >= sizeof(signature_wire));
     for (size_t i = 0; i < sizeof(signature_wire) / sizeof(signature_wire[0]); ++i)
         for (unsigned byte = 0; byte < 4; ++byte)
@@ -234,7 +234,63 @@ static void function_ir_rejections(void) {
     xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed);
     xr_xir_artifact_free(checked);
 }
+static void generic_callable_depth(void) {
+    XrXirArtifact *checked = generic_callable_fixture();
+    XrXirModule module = *xr_xir_artifact_module(checked);
+    XrXirCallableSignature signatures[258] = {0};
+    for (uint32_t i = 0; i < 129; ++i) {
+        signatures[i].result = (XrXirType) (i ? XR_XIR_CALLABLE_TYPE_BASE+i-1 : XR_XIR_TYPE_PARAMETER_BASE);
+        signatures[i].parameter_span = 1;
+        signatures[129+i].result = i ? (XrXirType)(XR_XIR_CALLABLE_TYPE_BASE+129+i-1) : XR_XIR_STRING;
+    }
+    XrXirCallableTypes table = {signatures,258}; module.callables = &table;
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_callable_types_verify(&table,&budget) == XR_XIR_OK);
+    const XrXirInstruction *call = &module.functions[0].instructions[0];
+    CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)256,(XrXirType)385,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)384,(XrXirType)513,&budget) == XR_XIR_BUDGET);
+    budget.work = 1;
+    CHECK(xr_xir_call_type_matches(&module,0,call,(XrXirType)256,(XrXirType)385,&budget) == XR_XIR_BUDGET);
+    xr_xir_artifact_free(checked);
+}
+static void generic_callable_contracts(void) {
+    XrXirArtifact *checked = generic_callable_fixture(), *decoded = NULL, *closed = NULL, *lowered = NULL;
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked);
+    /* Two one-parameter signatures; the first span is independently forged. */
+    CHECK(packet.length > 48 && wire32(packet.bytes + packet.length - 28) == 1);
+    put32(packet.bytes + packet.length - 28,0); digest_packet(&packet);
+    rejected(packet.bytes,packet.length);
+    put32(packet.bytes + packet.length - 28,1); digest_packet(&packet);
+    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) == XR_XIR_OK);
+    xr_xir_checked_packet_free(&packet);
+    XrXirModule module = *xr_xir_artifact_module(decoded);
+    XrXirFunction functions[2]; memcpy(functions,module.functions,sizeof(functions)); module.functions = functions;
+    XrXirType wrong[] = {(XrXirType)256,XR_XIR_STRING};
+    const XrXirType *saved = functions[0].parameters; functions[0].parameters = wrong;
+    CHECK(xr_xir_verify(&module,NULL,NULL) == XR_XIR_BAD_TYPE);
+    functions[0].parameters = saved;
+    XrXirCallableSignature signatures[2]; memcpy(signatures,module.callables->signatures,sizeof(signatures));
+    XrXirCallableTypes table = {signatures,2}; module.callables = &table;
+    XrXirCallableParameter bad = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0};
+    signatures[0].parameters = &bad; signatures[0].parameter_span = 2;
+    CHECK(xr_xir_verify(&module,NULL,NULL) == XR_XIR_BAD_TYPE);
+    XrXirBudget budget = xr_xir_default_budget(); budget.work = 0;
+    CHECK(xr_xir_call_type_matches(xr_xir_artifact_module(decoded),0,&functions[0].instructions[0],
+        (XrXirType)256,(XrXirType)257,&budget) == XR_XIR_BUDGET);
+    CHECK(xr_xir_specialize(decoded,NULL,&closed,NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded);
+    const XrXirModule *m = xr_xir_artifact_module(closed);
+    CHECK(!m->generics && m->callables->count == 1 && !m->callables->signatures[0].parameter_span);
+    CHECK(m->functions[0].parameters[0] == 256 && m->functions[1].parameters[0] == 256);
+    CHECK(m->functions[1].instructions[0].op == XR_XIR_CALL_INDIRECT && m->functions[1].instructions[0].type == XR_XIR_STRING);
+    XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed);
+}
 int main(void) {
+    generic_callable_contracts(); generic_callable_depth();
     callable_contracts(); function_ir_rejections();
     XrXirArtifact *checked = checked_fixture(), *decoded = NULL;
     XrXirCheckedPacket packet = {0}, second = {0};

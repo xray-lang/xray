@@ -20,3 +20,9 @@ export fn forward<T:Sendable>(value:T) -> T { return requireSendable<T>(value) }
 export fn first<T,U>(left:T,right:U)->T { return left }
 
 export fn pause<T>(value:T)->T { Coro.yield(); return value }
+
+export fn invoke<A,B>(callback:fn(A)->B,value:A)->B { return callback(value) }
+export fn keep<A,B>(callback:fn(A)->B)->fn(A)->B { return identity<fn(A)->B>(callback) }
+export fn nested<A,B>(transform:fn(fn(A)->B)->fn(A)->B,callback:fn(A)->B)->fn(A)->B {
+    return invoke<fn(A)->B,fn(A)->B>(transform, callback)
+}

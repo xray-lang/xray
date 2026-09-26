@@ -196,7 +196,7 @@ static void checked_callables(CheckedCursor *c, XrXirModule *m) {
     XrXirCallableTypes *types = checked_array(c, m->callables, 1, sizeof(*types), 12);
     if (!types) return;
     m->callables = types;
-    XrXirCallableSignature *signatures = checked_array(c, types->signatures, count, sizeof(*signatures), 12);
+    XrXirCallableSignature *signatures = checked_array(c, types->signatures, count, sizeof(*signatures), 16);
     if (c->reading) { types->signatures = signatures; types->count = signatures ? count : 0; }
     if (!signatures) return;
     for (uint32_t i = 0; i < count && c->status == XR_XIR_OK; ++i) {
@@ -212,6 +212,7 @@ static void checked_callables(CheckedCursor *c, XrXirModule *m) {
         }
         s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
         s.flags = checked_u32(c, s.flags);
+        s.parameter_span = checked_u32(c, s.parameter_span);
         if (c->reading) signatures[i] = s;
     }
 }

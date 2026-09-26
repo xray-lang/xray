@@ -120,6 +120,7 @@ typedef struct XrXirCallableSignature {
     uint32_t parameter_count;
     XrXirType result;
     uint32_t flags;
+    uint32_t parameter_span;
 } XrXirCallableSignature;
 typedef struct XrXirCallableTypes {
     const XrXirCallableSignature *signatures;

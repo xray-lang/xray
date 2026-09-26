@@ -15,7 +15,9 @@
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
     if (type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64) return true;
-    if (xr_xir_callable_signature(module->callables, type)) return true;
+    if (xr_xir_callable_signature(module->callables, type))
+        return xr_xir_callable_span(module->callables, type) <=
+            (module->generics ? module->generics[function].parameter_count : 0);
     return module->generics && (uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE &&
         (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < module->generics[function].parameter_count;
 }
@@ -88,10 +90,33 @@ XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller, cons
         if (!xr_xir_type_satisfies(module, caller, from->arguments[first + a], to->constraints[a])) return XR_XIR_BAD_TYPE;
     return XR_XIR_OK;
 }
-XrXirType xr_xir_call_type(const XrXirModule *module, uint32_t caller,
-    const XrXirInstruction *call, XrXirType type) {
-    if ((uint32_t) type < XR_XIR_TYPE_PARAMETER_BASE) return type;
-    uint32_t index = (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE;
-    if (!module->generics || index >= call->targets[1]) return (XrXirType) UINT32_MAX;
-    return module->generics[caller].arguments[call->targets[0] + index];
+typedef struct CallTypes {
+    const XrXirCallableTypes *table;
+    const XrXirType *arguments;
+    uint32_t count;
+    XrXirBudget *remaining;
+} CallTypes;
+static XrXirStatus call_type_matches(CallTypes *c, XrXirType type, XrXirType actual, uint32_t depth) {
+    if (!c->remaining->work || depth == 128) return XR_XIR_BUDGET;
+    --c->remaining->work;
+    if ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE) {
+        uint32_t index = (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE;
+        return index < c->count && c->arguments[index] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    }
+    const XrXirCallableSignature *from = xr_xir_callable_signature(c->table, type);
+    if (!from || !from->parameter_span) return type == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    const XrXirCallableSignature *to = xr_xir_callable_signature(c->table, actual);
+    if (!to || from->parameter_count != to->parameter_count || from->flags != to->flags) return XR_XIR_BAD_TYPE;
+    XrXirStatus status = call_type_matches(c, from->result, to->result, depth + 1);
+    for (uint32_t p = 0; p < from->parameter_count && status == XR_XIR_OK; ++p) {
+        if (from->parameters[p].mode != to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+        status = call_type_matches(c, from->parameters[p].type, to->parameters[p].type, depth + 1);
+    }
+    return status;
+}
+XrXirStatus xr_xir_call_type_matches(const XrXirModule *module, uint32_t caller,
+    const XrXirInstruction *call, XrXirType type, XrXirType actual, XrXirBudget *remaining) {
+    CallTypes c = {module->callables, NULL, call->targets[1], remaining};
+    if (c.count) c.arguments = module->generics[caller].arguments + call->targets[0];
+    return call_type_matches(&c, type, actual, 0);
 }

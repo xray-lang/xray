@@ -36,6 +36,8 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
     signature_budget.parameters = 65536;
     status = xr_xir_callable_types_verify(spec->callables, &signature_budget);
     if (status != XR_XIR_OK) return status;
+    if (spec->callables) for (uint32_t t = 0; t < spec->callables->count; ++t)
+        if (spec->callables->signatures[t].parameter_span) return XR_XIR_BAD_TYPE;
     *bytes = signature_budget.metadata_bytes; *work = signature_budget.work;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
         const XrXirSlot *slot = &spec->declarations->slots[s];

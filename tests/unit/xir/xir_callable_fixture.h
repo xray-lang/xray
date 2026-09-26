@@ -18,8 +18,8 @@ static XrXirArtifact *callable_fixture(void) {
     XrXirType fn1 = (XrXirType) (XR_XIR_CALLABLE_TYPE_BASE + 1);
     XrXirType generic = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter parameters[] = {{XR_XIR_I64, 0}, {fn0, 0}};
-    XrXirCallableSignature signatures[] = {{parameters, 1, XR_XIR_STRING, 0},
-        {parameters + 1, 1, fn0, 0}, {NULL, 0, XR_XIR_UNIT, 0}};
+    XrXirCallableSignature signatures[] = {{parameters, 1, XR_XIR_STRING, 0, 0},
+        {parameters + 1, 1, fn0, 0, 0}, {NULL, 0, XR_XIR_UNIT, 0, 0}};
     XrXirCallableTypes types = {signatures, 3};
     XrXirInstruction caller_ops[] = {{XR_XIR_CALL, fn1, {0, 1}, {0, 1}, 1},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0}};
@@ -42,7 +42,7 @@ static XrXirArtifact *function_ir_fixture(void) {
     uint32_t constraint = 0;
     XrXirGeneric generics[] = {{0}, {NULL,0,&concrete,1}, {&constraint,1,NULL,0}};
     XrXirCallableParameter input = {XR_XIR_I64, 0};
-    XrXirCallableSignature signature = {&input, 1, XR_XIR_I64, 0};
+    XrXirCallableSignature signature = {&input, 1, XR_XIR_I64, 0, 0};
     XrXirCallableTypes types = {&signature, 1};
     XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
     XrXirInstruction root[] = {{XR_XIR_FUNCTION_REF, (XrXirType) 256, {0}, {0,1}, 2},
@@ -64,6 +64,29 @@ static XrXirArtifact *function_ir_fixture(void) {
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK && checked);
+    return checked;
+}
+static XrXirArtifact *generic_callable_fixture(void) {
+    XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirCallableParameter components[] = {{t,0}, {XR_XIR_STRING,0}};
+    XrXirCallableSignature signatures[] = {{components,1,t,0,1}, {components+1,1,XR_XIR_STRING,0,0}};
+    XrXirCallableTypes table = {signatures,2};
+    XrXirType parameters[] = {(XrXirType)257,XR_XIR_STRING,(XrXirType)256,t}, argument = XR_XIR_STRING;
+    uint32_t constraint = 0, arguments[] = {0,1}, indirect = 1;
+    XrXirGeneric generics[] = {{NULL,0,&argument,1}, {&constraint,1,NULL,0}};
+    XrXirInstruction caller[] = {{XR_XIR_CALL,XR_XIR_STRING,{0,2},{0,1},1},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
+    XrXirInstruction body[] = {{XR_XIR_CALL_INDIRECT,t,{0,1},{0},0},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
+    XrXirBlock block = {0,2};
+    XrXirFunction functions[] = {
+        {"caller",6,parameters,2,XR_XIR_STRING,&block,1,caller,2,arguments,2},
+        {"apply",5,parameters+2,2,t,&block,1,body,2,&indirect,1}
+    };
+    XrXirModule built = {XR_XIR_BUILT,functions,2,NULL,generics,&table};
+    XrXirArtifact *checked = NULL;
+    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
+    memset(signatures,0xCC,sizeof(signatures)); memset(components,0xCC,sizeof(components));
     return checked;
 }
 #endif // XIR_CALLABLE_FIXTURE_H

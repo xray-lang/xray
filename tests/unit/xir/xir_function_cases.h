@@ -49,7 +49,7 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     XrXirSlot slot = {0, XR_XIR_STRING, 1};
     XrXirLiteral literal = {"owned callback result", 21};
     XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1};
-    XrXirCallableSignature signature = {NULL, 0, XR_XIR_STRING, 0};
+    XrXirCallableSignature signature = {NULL, 0, XR_XIR_STRING, 0, 0};
     XrXirCallableTypes types = {&signature, 1};
     XrXirType callback_type = (XrXirType) 256;
     XrXirCallEntry entries[5];
@@ -59,6 +59,11 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
         sizeof(FunctionCaseFrame), function_case_resume, function_case_cleanup, NULL};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         entries, 5, &declarations, {releases, function_case_release}, &types};
+    signature.result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; signature.parameter_span = 1;
+    XrXirStatus rejected = xr_xir_program_seal(&spec, 65536, program);
+    if (rejected == XR_XIR_OUT_OF_MEMORY) return rejected;
+    CHECK(rejected == XR_XIR_BAD_TYPE && !*program);
+    signature.result = XR_XIR_STRING; signature.parameter_span = 0;
     return xr_xir_program_seal(&spec, 65536, program);
 }
 static bool function_case_run(bool cancel) {

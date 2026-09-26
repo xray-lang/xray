@@ -40,7 +40,7 @@ and typed places; no wrapping/shift flags or alternate implementation is retaine
 
 Checked schema is 3; semantic contract is 8 and call ABI is 7. Old semantic
 packets and call entries reject before execution, without an old reader/adapter.
-Value ABI 4 and Program ABI 2 follow the owned function-value boundary. Compiler-generated C binds call ABI 7.
+Value ABI 4 and Program ABI 3 follow the owned function-value boundary. Compiler-generated C binds call ABI 7.
 The scalar leaf and resumable entry paths, packet consumer and source producer
 must all use this same contract. Wider numeric families remain unqualified.
 

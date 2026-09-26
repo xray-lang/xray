@@ -162,11 +162,11 @@ fn resumedNative(flag:bool)->string {
     true ? noYield() : sourceYield()
     var text = "r"
     const provider: fn(bool)->fn(bool)->string = chooseCallback
-    var callback = provider(flag)
+    var callback = alpha.invoke<bool,fn(bool)->string>(provider, flag)
     const kept = callback
     callback = rightCallback
-    activeCallback = passCallback(alpha.identity<fn(bool)->string>(kept))
-    const selected = activeCallback(flipCallback(flag))
+    activeCallback = alpha.nested<bool,string>(passCallback, alpha.keep<bool,string>(kept))
+    const selected = alpha.invoke<bool,string>(activeCallback, flipCallback(flag))
     const pause: fn() = sourceYield
     pause()
     text = selected + "!"

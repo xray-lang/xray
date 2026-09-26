@@ -109,12 +109,12 @@ static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *n
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *parameters,
     uint32_t count, XrXirType result, XrXirType *type) {
-    if ((uint32_t) result >= XR_XIR_TYPE_PARAMETER_BASE)
-        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable signature must be closed");
+    uint32_t span = xr_xir_callable_span(&ctx->callables, result);
     for (uint32_t p = 0; p < count; ++p) {
         if (!source_work(ctx, NULL)) return false;
-        if (!parameters[p].type || (uint32_t) parameters[p].type >= XR_XIR_TYPE_PARAMETER_BASE)
-            return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable parameter must be a closed value type");
+        if (!parameters[p].type) return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable parameter must be a value type");
+        uint32_t component = xr_xir_callable_span(&ctx->callables, parameters[p].type);
+        if (component > span) span = component;
     }
     for (uint32_t i = 0; i < ctx->callables.count; ++i) {
         const XrXirCallableSignature *s = &ctx->callables.signatures[i];
@@ -137,8 +137,29 @@ static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *p
         ctx->callables.signatures = table; ctx->callable_capacity = capacity;
     }
     XrXirCallableSignature *table = (XrXirCallableSignature *) ctx->callables.signatures;
-    table[ctx->callables.count] = (XrXirCallableSignature) {parameters, count, result, 0};
+    table[ctx->callables.count] = (XrXirCallableSignature) {parameters, count, result, 0, span};
     *type = (XrXirType) (XR_XIR_CALLABLE_TYPE_BASE + ctx->callables.count++); return true;
+}
+typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
+static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
+    XrXirType type, uint32_t depth, XrXirType *output) {
+    if (!source_work(ctx, NULL)) return false;
+    if (depth == 128) return source_fail(ctx, NULL, XR_XIR_BUDGET, "callable substitution depth exhausted");
+    if ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE) {
+        uint32_t index = (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE;
+        if (index >= sub->count) return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type parameter escapes declaration");
+        *output = sub->types[index]; return true;
+    }
+    const XrXirCallableSignature *found = xr_xir_callable_signature(&ctx->callables, type);
+    if (!found || !found->parameter_span) { *output = type; return true; }
+    XrXirCallableSignature signature = *found;
+    XrXirCallableParameter *parameters = source_alloc(ctx, signature.parameter_count, sizeof(*parameters));
+    if (signature.parameter_count && !parameters) return false;
+    for (uint32_t p = 0; p < signature.parameter_count; ++p)
+        if (!source_substitute(ctx, sub, signature.parameters[p].type, depth + 1, &parameters[p].type)) return false;
+    XrXirType result;
+    if (!source_substitute(ctx, sub, signature.result, depth + 1, &result)) return false;
+    return source_signature(ctx, parameters, signature.parameter_count, result, output);
 }
 static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     if (!ref->nchildren || !ref->children || ref->requires_nothrow || ref->borrow_origin_syntax || ref->borrow_origin_count)
@@ -295,10 +316,14 @@ static bool ordinary_call(SourceContext *ctx, AstNode *node, SourceName *target,
         {count ? caller->argument_count : 0, count}, target->index};
     if (count) memcpy((XrXirType *) caller->arguments + caller->argument_count, types, count * sizeof(*types));
     caller->argument_count = needed;
-    op.type = xr_xir_call_type(&view, ctx->function, &op, function->result);
-    for (uint32_t i = 0; i < function->parameter_count; ++i)
-        if (args[i].type != xr_xir_call_type(&view, ctx->function, &op, function->parameters[i]))
+    SourceSubstitution substitution = {types, count};
+    if (!source_substitute(ctx, &substitution, function->result, 0, &op.type)) return false;
+    for (uint32_t i = 0; i < function->parameter_count; ++i) {
+        XrXirType parameter;
+        if (!source_substitute(ctx, &substitution, function->parameters[i], 0, &parameter)) return false;
+        if (args[i].type != parameter)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "call argument type does not match declaration");
+    }
     return emit_group(ctx, op, args, (uint32_t) call->arg_count, value);
 }
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {

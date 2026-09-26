@@ -578,7 +578,7 @@ static void emit_callable_types(CBuffer *buffer, const XrXirCallableTypes *types
         append(buffer, "    {");
         if (s->parameter_count) append(buffer, "%s_callable_parameters_%u", prefix, i);
         else append(buffer, "NULL");
-        append(buffer, ", %uu, (XrXirType) %u, %uu},\n", s->parameter_count, (uint32_t) s->result, s->flags);
+        append(buffer, ", %uu, (XrXirType) %u, %uu, 0u},\n", s->parameter_count, (uint32_t) s->result, s->flags);
     }
     append(buffer, "};\nstatic const XrXirCallableTypes %s_callable_types = {%s_callable_signatures, %uu};\n",
         prefix, prefix, types->count);
@@ -629,7 +629,7 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 2u, \"XIR program ABI\");\n"
+    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 3u, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         prefix, prefix, module->function_count, prefix);

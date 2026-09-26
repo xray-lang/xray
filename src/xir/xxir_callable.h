@@ -13,6 +13,7 @@
 #define XXIR_CALLABLE_H
 #include "xxir.h"
 XR_FUNC const XrXirCallableSignature *xr_xir_callable_signature(const XrXirCallableTypes *types, XrXirType type);
+XR_FUNC uint32_t xr_xir_callable_span(const XrXirCallableTypes *types, XrXirType type);
 XR_FUNC XrXirStatus xr_xir_callable_types_verify(const XrXirCallableTypes *types, XrXirBudget *remaining);
 /* Snapshot cloning requires successful signature-table verification first. */
 XR_FUNC XrXirStatus xr_xir_callable_types_clone(const XrXirCallableTypes *types, XrXirCallableTypes **output);

@@ -7,7 +7,7 @@ Constructing a value checks the full signature and existing module import,
 visibility and initializer restrictions. Describing a type never grants access.
 
 Program sealing owns a verified signature table. Boxed value ABI 4, call ABI 7
-and Program ABI 2 replace their predecessors without an alternate runtime path.
+and Program ABI 3 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
 it does not own module slots, providers, active frames or instance allocations.
@@ -36,15 +36,15 @@ resolved before Program sealing. CALL_INDIRECT records an SSA callee ID in its
 immediate and the existing ordered argument range. Callee dominance, value role,
 full signature and result are checked without enumerating implementation targets.
 Both operations use the canonical owned frame layout and resumable ABI. Semantic
-contract 8 rejects previous packets; wire schema remains 3. Function-valued root
+contract 9 rejects previous packets; wire schema is 4. Function-valued root
 slots are instance state; non-root ordinary callable slots have no Sendable proof.
 
 Source admission uses the existing fn(...) -> R spelling (unit omits the arrow).
-Closed read-mode signatures, declared non-generic function values, imported public
+Read-mode signatures with Checked generic substitution, declared non-generic function values, imported public
 function values, nested return/parameter contracts, local and root-module storage,
 conditional selection and ordinary generic identity transmission are admitted.
 The callee value is captured before arguments. Function bodies remain checked at
-definition; unsupported capture forms, signature-internal type parameters, modes,
+definition; unsupported capture forms, modes,
 borrow origins and effects are rejected rather than inferred from a selected body.
 
 verification-test: test_xir_checked

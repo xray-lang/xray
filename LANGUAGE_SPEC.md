@@ -7002,7 +7002,7 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema 3 preserves templates; semantic contract 8 also covers local
+dominance rules. Checked schema 4 preserves templates; semantic contract 9 also covers local
 places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
@@ -7077,7 +7077,7 @@ INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result a
 unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
 after an arithmetic fault in an initialized instance. Generated C guards special pairs
 before host / or % and never executes signed overflow. Negation lowers to zero minus
-the operand. Current Checked schema 3 / semantic contract 8, Call ABI 7, Value4 and Program2 follow
+the operand. Current Checked schema 4 / semantic contract 9, Call ABI 7, Value4 and Program3 follow
 §17.16 without a compatibility reader or adapter.
 Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
 and explicit checked/saturating library methods remain outside this admitted subset.
@@ -7094,17 +7094,18 @@ to right. Bitwise operators reject bool, string, Atomic and unconstrained T. Var
 compound assignments read the old value before evaluating the RHS, compute, store
 and return the new value; an RHS assignment cannot change that earlier snapshot.
 Failure skips the store. String += also admits owned concat snapshots; other compound
-operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema3 / semantic contract8
-and Call7/Value4/Program2 follow §17.16 without compatibility paths. Other
+operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema4 / semantic contract9
+and Call7/Value4/Program3 follow §17.16 without compatibility paths. Other
 integer widths and conversions are not yet admitted.
 
 ### 17.16 XIR Owned Function Values and Indirect Calls
 
-This family uses the function-type spelling in §2.8: closed read parameters,
+This family uses the function-type spelling in §2.8: read parameters (including
+enclosing generic parameters under §17.17),
 ordinary named function values, nested callable parameters/results, mutable local
 storage, root-module slots, conditional selection and ordinary generic identity
-transmission. Unadmitted ref/move, captures, borrow origins, signature-internal type
-parameters, Sendable and explicit effects remain rejected. A selected body cannot
+transmission. Unadmitted ref/move, captures, borrow origins,
+Sendable and explicit effects remain rejected. A selected body cannot
 supply a missing proof. Module-owned canonical tables preserve ordered parameter
 types/modes, results and promises; nested references point strictly backwards.
 References enforce declaration visibility and imports and cannot name initializers.
@@ -7125,11 +7126,31 @@ host-thread driver admits calls only in the originating instance. Another instan
 or Program rejects coincident numeric IDs. Cross-instance transfer and concurrent
 admission still require implementation and qualification.
 
-The unique packet is schema3/semantic8 with Value4/Call7/Program2; old versions reject
+The unique packet is schema4/semantic9 with Value4/Call7/Program3; old versions reject
 without readers, boxed adapters or alternate execution. Source/packet validation,
 independent VM/native expectations, suspension/cancellation, escaped results, code
 leases and individual allocation failures are covered by machine contracts. This
 family does not certify the complete language or product.
+
+### 17.17 Enclosing generic parameters in callable signatures
+
+The admitted ordinary read callable family includes `fn(T)->T` and nested
+signatures in generic definitions. A free type ordinal is interpreted in the
+enclosing function, and every use is checked against its declared constraints
+before specialization. Calling a supplied function uses that signature alone.
+Explicit call type arguments substitute recursively through parameter and result
+signatures; structural equality neither grants Sendable nor inspects a body.
+
+Checked stores the exact free-parameter span of each canonical signature,
+including nested signatures. The verifier independently recomputes that span
+from backward references. Global slots require closed types. Specialization
+builds a fresh canonical closed type table and remaps parameters, results,
+instructions, explicit type arguments and slots before rechecking. No open
+signature may enter Lowered or an immutable Program. Traversal spends work and
+metadata budgets and admits at most 128 active structural substitution levels.
+Checked schema 4/semantic contract 9 and Program ABI 3 replace earlier versions.
+Captures, other parameter modes, effect promises, inference and member witnesses
+remain outside this admitted subset and retain their independent gates.
 
 ---
 

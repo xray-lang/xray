@@ -19,7 +19,13 @@ const XrXirCallableSignature *xr_xir_callable_signature(const XrXirCallableTypes
 }
 static bool callable_component(XrXirType type, uint32_t earlier) {
     return type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||
+        ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < 65536) ||
         ((uint32_t) type >= XR_XIR_CALLABLE_TYPE_BASE && (uint32_t) type - XR_XIR_CALLABLE_TYPE_BASE < earlier);
+}
+uint32_t xr_xir_callable_span(const XrXirCallableTypes *types, XrXirType type) {
+    if ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE) return (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE + 1;
+    const XrXirCallableSignature *s = xr_xir_callable_signature(types, type);
+    return s ? s->parameter_span : 0;
 }
 XrXirStatus xr_xir_callable_types_verify(const XrXirCallableTypes *types, XrXirBudget *remaining) {
     if (!types) return XR_XIR_OK;
@@ -39,6 +45,12 @@ XrXirStatus xr_xir_callable_types_verify(const XrXirCallableTypes *types, XrXirB
         if (s->flags || (s->result != XR_XIR_UNIT && !callable_component(s->result, i))) return XR_XIR_BAD_TYPE;
         for (uint32_t p = 0; p < s->parameter_count; ++p)
             if (s->parameters[p].mode || !callable_component(s->parameters[p].type, i)) return XR_XIR_BAD_TYPE;
+        uint32_t span = xr_xir_callable_span(types, s->result);
+        for (uint32_t p = 0; p < s->parameter_count; ++p) {
+            uint32_t component = xr_xir_callable_span(types, s->parameters[p].type);
+            if (component > span) span = component;
+        }
+        if (s->parameter_span != span) return XR_XIR_BAD_TYPE;
         for (uint32_t j = 0; j < i; ++j) {
             if (!remaining->work) return XR_XIR_BUDGET;
             --remaining->work;

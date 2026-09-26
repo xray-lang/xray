@@ -10,6 +10,7 @@
  *   Reusing a compiler session must not retain declarations from rejected input.
  */
 #include "xir/xxir_source.h"
+#include "xir/xxir_generic.h"
 #include "toolchain/xcompiler_session.h"
 #include "module/xmodule_resolver.h"
 #include "base/xmalloc.h"
@@ -90,7 +91,11 @@ static const char *const rejected[] = {
     "fn unused(f:fn(i64)->i64)->string { return f(1) }\n",
     "fn unused(f:fn(ref i64)->i64) {}\n",
     "fn unused(f:fn(move string)->string) {}\n",
-    "fn unused<T>(f:fn(T)->T) {}\n",
+    "fn unused<T>(f:fn(T)->T) { f(1) }\n",
+    "fn unused<T>(f:fn(T)->T,x:T)->T { return f(x)+x }\n",
+    "fn unused<T>(f:fn(T)->T,x:T)->bool { return f(x) }\n",
+    "fn apply<T>(f:fn(T)->T,x:T)->T { return f(x) } fn text(x:string)->string { return x } apply<i64>(text,1)\n",
+    "fn need<T:Sendable>(x:T) {} fn unused<T>(f:fn(T)->T) { need<fn(T)->T>(f) }\n",
     "fn f(x:i64)->i64 { return x } const g:fn(bool)->i64=f\n",
     "fn f<T>(x:T)->T { return x } const g=f\n",
     "import \"./lib\" as lib\nconst f=lib.hidden\n",
@@ -212,6 +217,12 @@ int main(void) {
         if (status == XR_XIR_OK) fprintf(stderr, "incorrectly admitted source case %zu\n", i);
         CHECK(status != XR_XIR_OK && !artifact && diagnostic.status == status && diagnostic.message[0]);
     }
+    write_source(root,"fn unused<T>(f:fn(T)->T) {}\n");
+    XrXirArtifact *unused = NULL, *closed_unused = NULL;
+    CHECK(xr_xir_source_check(&request,&unused,NULL) == XR_XIR_OK && unused);
+    CHECK(xr_xir_specialize(unused,NULL,&closed_unused,NULL) == XR_XIR_OK && closed_unused);
+    CHECK(!xr_xir_artifact_module(closed_unused)->callables);
+    xr_xir_artifact_free(closed_unused); xr_xir_artifact_free(unused);
     const char *valid = "import { visible } from \"./lib\"\nprint(visible(), true)\n";
     write_source(root, valid);
     for (unsigned mode = 0; mode < 5; ++mode) {

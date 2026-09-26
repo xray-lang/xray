@@ -29,7 +29,7 @@ the caller's type context before comparison and dominance checking. Initializers
 and the root entry cannot have type parameters.
 
 All metadata is owned, copied across stages and bounded by aggregate parameter,
-metadata and work budgets. Checked packet schema 3 / semantic contract 8 carries a generic-presence
+metadata and work budgets. Checked packet schema 4 / semantic contract 9 carries a generic-presence
 u32 after declarations, followed when present by each row's constraint count/
 u32 bits and argument count/u32 type IDs. Older schema or semantic revisions are rejected, with no reader
 or alias. Decode performs the same definition and forwarding checks.
@@ -52,3 +52,8 @@ implementation; this marker/template family does not qualify them.
 verification-test: test_xir_generics
 verification-test: test_xir_source_generics
 verification-test: test_xir_checked_allocations
+
+Callable components may use enclosing parameter ordinals under
+`xir-callable-types.md`. Calls compare signatures structurally under their
+explicit substitution; specialization interns closed descriptors and remaps
+all uses before rechecking. Signature identity alone supplies no Sendable proof.
