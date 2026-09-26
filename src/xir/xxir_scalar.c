@@ -68,6 +68,14 @@ XrXirRunStatus xr_xir_scalar_arithmetic(XrXirArithmetic operation,
     case XR_XIR_ARITH_ADD: bits = (uint64_t) left + (uint64_t) right; break;
     case XR_XIR_ARITH_SUB: bits = (uint64_t) left - (uint64_t) right; break;
     case XR_XIR_ARITH_MUL: bits = (uint64_t) left * (uint64_t) right; break;
+    case XR_XIR_ARITH_AND: bits = (uint64_t) left & (uint64_t) right; break;
+    case XR_XIR_ARITH_OR: bits = (uint64_t) left | (uint64_t) right; break;
+    case XR_XIR_ARITH_XOR: bits = (uint64_t) left ^ (uint64_t) right; break;
+    case XR_XIR_ARITH_SHL: bits = (uint64_t) left << ((uint64_t) right & 63); break;
+    case XR_XIR_ARITH_SHR:
+        bits = left < 0 ? ~((~(uint64_t) left) >> ((uint64_t) right & 63)) :
+            (uint64_t) left >> ((uint64_t) right & 63);
+        break;
     case XR_XIR_ARITH_DIV:
     case XR_XIR_ARITH_REM:
         if (!right) return XR_XIR_RUN_DIVIDE_BY_ZERO;

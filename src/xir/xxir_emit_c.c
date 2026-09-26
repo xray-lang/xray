@@ -44,6 +44,11 @@ static int emit_arithmetic_operation(XrXirOp op) {
     case XR_XIR_MUL_I64: return XR_XIR_ARITH_MUL;
     case XR_XIR_DIV_I64: return XR_XIR_ARITH_DIV;
     case XR_XIR_REM_I64: return XR_XIR_ARITH_REM;
+    case XR_XIR_AND_I64: return XR_XIR_ARITH_AND;
+    case XR_XIR_OR_I64: return XR_XIR_ARITH_OR;
+    case XR_XIR_XOR_I64: return XR_XIR_ARITH_XOR;
+    case XR_XIR_SHL_I64: return XR_XIR_ARITH_SHL;
+    case XR_XIR_SHR_I64: return XR_XIR_ARITH_SHR;
     default: return -1;
     }
 }
@@ -135,6 +140,8 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
                layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
         break;
     case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
+    case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
+    case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
     case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
         append(buffer, "    status = xr_xir_scalar_arithmetic((XrXirArithmetic) %d, xr_xir_scalar_load(frame, %uu), "
                "xr_xir_scalar_load(frame, %uu), &temporary);\n"
@@ -353,6 +360,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     }
     case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
+    case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
+    case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
     case XR_XIR_DIV_I64: case XR_XIR_REM_I64:
         append(buffer, "        if (xr_xir_scalar_arithmetic((XrXirArithmetic) %d, xr_xir_scalar_load(state->frame, %uu), "
                "xr_xir_scalar_load(state->frame, %uu), &temporary) != XR_XIR_RUN_OK)\n"

@@ -24,7 +24,21 @@ Division guards zero and the signed minimum/-1 pair before host / or %.
 NE_I64, LE_I64, GT_I64 and GE_I64 compare signed operands directly. Unary negation
 lowers to zero minus operand; no new unary operation or alternate execution path.
 
-Checked schema stays 2; semantic contract is 4 and call ABI is 6. Old semantic
+AND_I64, OR_I64 and XOR_I64 operate on the full 64-bit two's-complement pattern.
+SHL_I64 drops high bits and fills low bits with zero. SHR_I64 is arithmetic right
+shift, filling with the sign bit. Both counts are normalized modulo 64, including
+negative counts: -1 selects 63, -64 selects 0. The runtime shifts unsigned values
+only; a negative right-shift input uses complement/shift/complement so host signed
+right-shift behavior never defines the language. A zero effective count is identity.
+Unary ~ lowers to xor with -1 and produces i64. Bool/string/Atomic and unconstrained
+T reject in the definition. Variable compound assignments +=, -=, *=, /=, %=, &=, |=, ^=, <<= and >>= read
+the binding once before evaluating the RHS, compute, then store and return the new
+value. Failure skips the store. String += uses the existing owned concat/snapshot
+contract; all other admitted compound operators require i64. Const/read bindings,
+member/index targets and unsupported type pairs reject. These use the same operators
+and typed places; no wrapping/shift flags or alternate implementation is retained.
+
+Checked schema stays 2; semantic contract is 5 and call ABI is 6. Old semantic
 packets and call entries reject before execution, without an old reader/adapter.
 Value ABI 3 and Program ABI 1 are unchanged. Compiler-generated C binds call ABI 6.
 The scalar leaf and resumable entry paths, packet consumer and source producer

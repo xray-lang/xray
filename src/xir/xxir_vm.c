@@ -37,6 +37,11 @@ static int arithmetic_operation(XrXirOp op) {
     case XR_XIR_MUL_I64: return XR_XIR_ARITH_MUL;
     case XR_XIR_DIV_I64: return XR_XIR_ARITH_DIV;
     case XR_XIR_REM_I64: return XR_XIR_ARITH_REM;
+    case XR_XIR_AND_I64: return XR_XIR_ARITH_AND;
+    case XR_XIR_OR_I64: return XR_XIR_ARITH_OR;
+    case XR_XIR_XOR_I64: return XR_XIR_ARITH_XOR;
+    case XR_XIR_SHL_I64: return XR_XIR_ARITH_SHL;
+    case XR_XIR_SHR_I64: return XR_XIR_ARITH_SHR;
     default: return -1;
     }
 }
@@ -150,6 +155,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return XR_XIR_RUN_OK;
     }
     case XR_XIR_ADD_I64: case XR_XIR_SUB_I64: case XR_XIR_MUL_I64:
+    case XR_XIR_AND_I64: case XR_XIR_OR_I64: case XR_XIR_XOR_I64:
+    case XR_XIR_SHL_I64: case XR_XIR_SHR_I64:
     case XR_XIR_DIV_I64: case XR_XIR_REM_I64: {
         int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
         int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);

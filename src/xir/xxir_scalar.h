@@ -46,7 +46,8 @@ XR_FUNC XrXirRunStatus xr_xir_scalar_frame_begin(XrXirRunContext *context,
                                                uint32_t bytes, void **frame);
 XR_FUNC void xr_xir_scalar_frame_end(XrXirRunContext *context, uint32_t bytes, void *frame);
 typedef enum XrXirArithmetic {
-    XR_XIR_ARITH_ADD, XR_XIR_ARITH_SUB, XR_XIR_ARITH_MUL, XR_XIR_ARITH_DIV, XR_XIR_ARITH_REM
+    XR_XIR_ARITH_ADD, XR_XIR_ARITH_SUB, XR_XIR_ARITH_MUL, XR_XIR_ARITH_DIV, XR_XIR_ARITH_REM,
+    XR_XIR_ARITH_AND, XR_XIR_ARITH_OR, XR_XIR_ARITH_XOR, XR_XIR_ARITH_SHL, XR_XIR_ARITH_SHR
 } XrXirArithmetic;
 XR_FUNC XrXirRunStatus xr_xir_scalar_arithmetic(XrXirArithmetic operation,
     int64_t left, int64_t right, int64_t *result);

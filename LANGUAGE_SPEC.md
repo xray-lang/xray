@@ -7000,7 +7000,7 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema 2 preserves templates; semantic contract 4 also covers local
+dominance rules. Checked schema 2 preserves templates; semantic contract 5 also covers local
 places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
@@ -7040,7 +7040,7 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema stays 2 and its semantic contract is 4; older semantic
+schema stays 2 and its semantic contract is 5; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
 
@@ -7075,10 +7075,26 @@ INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result a
 unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
 after an arithmetic fault in an initialized instance. Generated C guards special pairs
 before host / or % and never executes signed overflow. Negation lowers to zero minus
-the operand. Checked schema 2 / semantic contract 4 and Call ABI 6 atomically replace
+the operand. Checked schema 2 / semantic contract 5 and Call ABI 6 atomically replace
 older versions without a compatibility reader or adapter; Value3/Program1 are unchanged.
 Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
 and explicit checked/saturating library methods remain outside this admitted subset.
+
+### 17.15 XIR i64 Bitwise Operations
+
+Concrete i64 &, | and ^ operate on 64-bit two's-complement patterns; ~ lowers to
+xor with -1. Left shift discards high bits and zero-fills. Right shift is arithmetic
+and sign-fills. Counts are normalized modulo 64, including negatives: -1 selects
+63, -64 selects 0, and an effective zero count preserves the value. The host only
+shifts unsigned patterns; complement transformations define negative right shift
+without depending on C signed right-shift behavior. Operands evaluate once, left
+to right. Bitwise operators reject bool, string, Atomic and unconstrained T. Variable
+compound assignments read the old value before evaluating the RHS, compute, store
+and return the new value; an RHS assignment cannot change that earlier snapshot.
+Failure skips the store. String += also admits owned concat snapshots; other compound
+operators require i64. Const/read, member and indexed targets are not admitted. Checked schema2 / semantic contract5
+atomically replaces older packets; Call6/Value3/Program1 stay unchanged. Other
+integer widths and conversions are not yet admitted.
 
 ---
 

@@ -101,6 +101,26 @@ static XrXirArtifact *fixture_checked(void) {
         {XR_XIR_GE_I64, XR_XIR_BOOL, {0, 1}, {0}, 0},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
     };
+    const XrXirInstruction bitwise0[] = {
+        {XR_XIR_AND_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction bitwise1[] = {
+        {XR_XIR_OR_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction bitwise2[] = {
+        {XR_XIR_XOR_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction bitwise3[] = {
+        {XR_XIR_SHL_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
+    const XrXirInstruction bitwise4[] = {
+        {XR_XIR_SHR_I64, XR_XIR_I64, {0, 1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+    };
     const XrXirFunction functions[] = {
         {"add", 3, add_parameters, 3, XR_XIR_I64, add_blocks, 3, add, 6, NULL, 0},
         {"eq", 2, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, eq, 2, NULL, 0},
@@ -118,9 +138,14 @@ static XrXirArtifact *fixture_checked(void) {
         {"numeric4", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric4, 2, NULL, 0},
         {"numeric5", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric5, 2, NULL, 0},
         {"numeric6", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric6, 2, NULL, 0},
-        {"numeric7", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric7, 2, NULL, 0}
+        {"numeric7", 8, eq_parameters, 2, XR_XIR_BOOL, pair_blocks, 1, numeric7, 2, NULL, 0},
+        {"bitwise0", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise0, 2, NULL, 0},
+        {"bitwise1", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise1, 2, NULL, 0},
+        {"bitwise2", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise2, 2, NULL, 0},
+        {"bitwise3", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise3, 2, NULL, 0},
+        {"bitwise4", 8, eq_parameters, 2, XR_XIR_I64, pair_blocks, 1, bitwise4, 2, NULL, 0}
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, 17, NULL, NULL};
+    const XrXirModule module = {XR_XIR_BUILT, functions, 22, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     return artifact;

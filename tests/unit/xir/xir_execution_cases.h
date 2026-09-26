@@ -14,6 +14,7 @@
 #ifndef XIR_EXECUTION_CASES_H
 #define XIR_EXECUTION_CASES_H
 #include "xir/xxir_scalar.h"
+#include "xir_bitwise_cases.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,17 @@
 #endif
 typedef XrXirRunStatus (*FixtureRun)(void *, uint32_t, XrXirRunContext *,
                                     const XrXirValue *, uint32_t, XrXirValue *);
+
+static void bitwise_execution(FixtureRun run, void *owner) {
+    for (unsigned i = 0; i < sizeof(bitwise_cases) / sizeof(bitwise_cases[0]); ++i) {
+        const XirBitwiseCase *row = &bitwise_cases[i];
+        XrXirRunContext context = {2, 24, 0, 0, 0, 0};
+        XrXirValue args[] = {{XR_XIR_I64, 0, row->left}, {XR_XIR_I64, 0, row->right}}, result;
+        CHECK(run(owner, 17 + row->operation, &context, args, 2, &result) == XR_XIR_RUN_OK);
+        CHECK(result.type == XR_XIR_I64 && result.payload == row->expected && result.reserved == 0);
+        CHECK(context.steps == 0 && context.live_bytes == 0 && context.allocations == 1 && context.frees == 1);
+    }
+}
 
 static void numeric_cases(FixtureRun run, void *owner) {
     struct NumericCase { uint32_t id; int64_t left, right, expected; XrXirRunStatus status; };
@@ -62,6 +74,7 @@ static void numeric_cases(FixtureRun run, void *owner) {
 
 static void execution_cases(FixtureRun run, void *owner) {
     numeric_cases(run, owner);
+    bitwise_execution(run, owner);
     struct AddCase { int64_t branch, left, right, expected; XrXirRunStatus status; };
     const struct AddCase cases[] = {
         {1, 40, 2, 42, XR_XIR_RUN_OK}, {1, -7, 2, -5, XR_XIR_RUN_OK},

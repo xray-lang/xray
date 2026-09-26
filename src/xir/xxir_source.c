@@ -362,24 +362,24 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     body->ops[branch].targets[1] = conjunction ? join : rhs;
     return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0}, value);
 }
-static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    SourceValue left, right;
-    if (node->type == AST_UNARY_NEG) {
-        if (!expression(ctx, node->as.unary.operand, &right) ||
-            !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, 0}, &left)) return false;
-    } else if (!expression(ctx, node->as.binary.left, &left) ||
-               !expression(ctx, node->as.binary.right, &right)) return false;
-    if (node->type == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING)
+static bool source_binary(SourceContext *ctx, AstNode *node, AstNodeType operation,
+                          SourceValue left, SourceValue right, SourceValue *value) {
+    if (operation == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING)
         return emit(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {left.id, right.id}, {0}, 0}, value);
     if (left.type != XR_XIR_I64 || right.type != XR_XIR_I64)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator requires a declared concrete operand contract");
     XrXirOp op;
-    switch (node->type) {
+    switch (operation) {
     case AST_BINARY_ADD: op = XR_XIR_ADD_I64; break;
     case AST_UNARY_NEG: case AST_BINARY_SUB: op = XR_XIR_SUB_I64; break;
     case AST_BINARY_MUL: op = XR_XIR_MUL_I64; break;
     case AST_BINARY_DIV: op = XR_XIR_DIV_I64; break;
     case AST_BINARY_MOD: op = XR_XIR_REM_I64; break;
+    case AST_BINARY_BAND: op = XR_XIR_AND_I64; break;
+    case AST_BINARY_BOR: op = XR_XIR_OR_I64; break;
+    case AST_UNARY_BNOT: case AST_BINARY_BXOR: op = XR_XIR_XOR_I64; break;
+    case AST_BINARY_LSHIFT: op = XR_XIR_SHL_I64; break;
+    case AST_BINARY_RSHIFT: op = XR_XIR_SHR_I64; break;
     case AST_BINARY_EQ: op = XR_XIR_EQ_I64; break;
     case AST_BINARY_NE: op = XR_XIR_NE_I64; break;
     case AST_BINARY_LT: op = XR_XIR_LT_I64; break;
@@ -388,9 +388,50 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceValue *va
     case AST_BINARY_GE: op = XR_XIR_GE_I64; break;
     default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unknown arithmetic operator");
     }
-    bool comparison = node->type >= AST_BINARY_EQ && node->type <= AST_BINARY_GE;
+    bool comparison = operation >= AST_BINARY_EQ && operation <= AST_BINARY_GE;
     return emit(ctx, (XrXirInstruction) {op, comparison ? XR_XIR_BOOL : XR_XIR_I64,
         {left.id, right.id}, {0}, 0}, value);
+}
+static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    SourceValue left, right;
+    if (node->type == AST_UNARY_NEG || node->type == AST_UNARY_BNOT) {
+        if (!expression(ctx, node->as.unary.operand, &right) ||
+            !emit(ctx, (XrXirInstruction) {XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, node->type == AST_UNARY_NEG ? 0 : -1}, &left)) return false;
+    } else if (!expression(ctx, node->as.binary.left, &left) ||
+               !expression(ctx, node->as.binary.right, &right)) return false;
+    return source_binary(ctx, node, node->type, left, right, value);
+}
+static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    CompoundAssignmentNode *assignment = &node->as.compound_assignment;
+    if (assignment->object || !assignment->name)
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "compound assignment requires a variable");
+    SourceName *symbol = visible_name(ctx, assignment->name);
+    if (!symbol || !symbol->mutable || (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment requires a mutable binding");
+    AstNodeType operation;
+    switch (assignment->op) {
+    case TK_PLUS_ASSIGN: operation = AST_BINARY_ADD; break;
+    case TK_MINUS_ASSIGN: operation = AST_BINARY_SUB; break;
+    case TK_MUL_ASSIGN: operation = AST_BINARY_MUL; break;
+    case TK_DIV_ASSIGN: operation = AST_BINARY_DIV; break;
+    case TK_MOD_ASSIGN: operation = AST_BINARY_MOD; break;
+    case TK_AND_ASSIGN: operation = AST_BINARY_BAND; break;
+    case TK_OR_ASSIGN: operation = AST_BINARY_BOR; break;
+    case TK_XOR_ASSIGN: operation = AST_BINARY_BXOR; break;
+    case TK_LSHIFT_ASSIGN: operation = AST_BINARY_LSHIFT; break;
+    case TK_RSHIFT_ASSIGN: operation = AST_BINARY_RSHIFT; break;
+    default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unknown compound assignment");
+    }
+    SourceValue left, right;
+    XrXirInstruction read = symbol->kind == SOURCE_LOCAL ?
+        (XrXirInstruction) {XR_XIR_LOCAL_READ, symbol->type, {symbol->index, 0}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0}, {0}, symbol->index};
+    if (!emit(ctx, read, &left) || !expression(ctx, assignment->value, &right) ||
+        !source_binary(ctx, node, operation, left, right, value)) return false;
+    XrXirInstruction write = symbol->kind == SOURCE_LOCAL ?
+        (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {symbol->index, value->id}, {0}, 0} :
+        (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {value->id, 0}, {0}, symbol->index};
+    return emit(ctx, write, NULL);
 }
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *value) {
     switch (node->type) {
@@ -410,10 +451,13 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
         }
         return emit(ctx, (XrXirInstruction) {XR_XIR_SLOT_LOAD, symbol->type, {0, 0}, {0, 0}, symbol->index}, value);
     }
+    case AST_UNARY_BNOT: case AST_BINARY_BAND: case AST_BINARY_BOR: case AST_BINARY_BXOR:
+    case AST_BINARY_LSHIFT: case AST_BINARY_RSHIFT:
     case AST_UNARY_NEG: case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
     case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_EQ: case AST_BINARY_NE:
     case AST_BINARY_LT: case AST_BINARY_LE: case AST_BINARY_GT: case AST_BINARY_GE:
         return source_arithmetic(ctx, node, value);
+    case AST_COMPOUND_ASSIGNMENT: return source_compound(ctx, node, value);
     case AST_ASSIGNMENT: {
         SourceName *symbol = visible_name(ctx, node->as.assignment.name);
         SourceValue assigned;

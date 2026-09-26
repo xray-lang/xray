@@ -280,9 +280,9 @@ static void reverse_storage_and_boolean_values(void) {
 }
 
 static void numeric_admission(void) {
-    for (XrXirOp op = XR_XIR_SUB_I64; op <= XR_XIR_GE_I64; op = (XrXirOp) (op + 1)) {
+    for (XrXirOp op = XR_XIR_SUB_I64; op <= XR_XIR_SHR_I64; op = (XrXirOp) (op + 1)) {
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64};
-        XrXirType result = op >= XR_XIR_NE_I64 ? XR_XIR_BOOL : XR_XIR_I64;
+        XrXirType result = op >= XR_XIR_NE_I64 && op <= XR_XIR_GE_I64 ? XR_XIR_BOOL : XR_XIR_I64;
         XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
         const XrXirBlock block = {0, 2};
         XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};

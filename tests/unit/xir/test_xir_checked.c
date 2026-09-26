@@ -122,7 +122,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_I64, XR_XIR_EQ_I64, XR_XIR_LT_I64, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 2 && XR_XIR_CHECKED_CONTRACT == 4 && XR_XIR_OP_COUNT == 43, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 2 && XR_XIR_CHECKED_CONTRACT == 5 && XR_XIR_OP_COUNT == 48, "packet revision");
     _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_ATOMIC_I64 == 4, "wire type identities");
     for (unsigned i = 0; i < 25; ++i) CHECK((unsigned) identities[i] == i + 1);
     XrXirInstruction ops[] = {{XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, INT64_MIN},
@@ -140,8 +140,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0xc1,0xe0,0x53,0x05,0xb8,0xa7,0x95,0x71,0x72,0x79,0x42,0x10,0x8b,0xaf,0x6a,0x6f,
-        0xd1,0x7b,0x1d,0xad,0x24,0x9f,0x4d,0x6e,0x0b,0x48,0xe6,0xc0,0x41,0xbc,0x46,0x4a};
+        0x0f,0xa4,0xa9,0x04,0x0b,0xc6,0xce,0x32,0x3c,0x94,0x8c,0x08,0x23,0x29,0x9d,0xdf,
+        0xae,0xb3,0xde,0x81,0x63,0x27,0xd6,0x3b,0xf9,0x2a,0x54,0xee,0x8e,0xe0,0x5d,0xf6};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].instructions[0].immediate == INT64_MIN);
