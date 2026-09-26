@@ -152,7 +152,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->literals[1] = (XrXirLiteral) {"independent", 11};
     f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}};
+        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL};
 }
 static XrXirInstance *new_instance(XrXirProgram *program, Trace *log) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
@@ -294,7 +294,9 @@ static void seal_rejection(void) {
         CHECK(!program && !f.witness.releases);
     }
 }
+#include "xir_function_cases.h"
 int main(void) {
+    CHECK(function_case_run(false) && function_case_run(true));
     isolation(); borrowed_restart(); failed_initialization(); seal_rejection();
     puts("Program leases, deterministic initialization, isolated cells, sticky failure and result lifetime passed");
     return 0;

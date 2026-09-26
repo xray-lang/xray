@@ -15,6 +15,10 @@
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 
+static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
+    return type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING ||
+        type == XR_XIR_ATOMIC_I64 || xr_xir_callable_signature(spec->callables, type);
+}
 static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, uint64_t *work) {
     if (!spec || !spec->entries || !spec->entry_count || spec->entry_count > 65535 ||
         !spec->declarations || (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
@@ -27,19 +31,28 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
     *bytes -= fixed;
     XrXirStatus status = xr_xir_declarations_verify(spec->declarations, spec->entry_count, bytes, work);
     if (status != XR_XIR_OK) return status;
+    XrXirBudget signature_budget = {0};
+    signature_budget.metadata_bytes = *bytes; signature_budget.work = *work;
+    signature_budget.parameters = 65536;
+    status = xr_xir_callable_types_verify(spec->callables, &signature_budget);
+    if (status != XR_XIR_OK) return status;
+    *bytes = signature_budget.metadata_bytes; *work = signature_budget.work;
+    for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
+        const XrXirSlot *slot = &spec->declarations->slots[s];
+        if (!program_value_type(spec, slot->type) || (xr_xir_type_is_callable(slot->type) &&
+            slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
+    }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
         if (!entry->resume || (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
-        if (entry->result != XR_XIR_UNIT && entry->result != XR_XIR_BOOL && entry->result != XR_XIR_I64 &&
-            !xr_xir_type_is_owned(entry->result)) return XR_XIR_BAD_TYPE;
+        if (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result)) return XR_XIR_BAD_TYPE;
         uint64_t parameter_bytes = (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (parameter_bytes > *bytes || parameter_bytes > SIZE_MAX || entry->parameter_count > *work)
             return XR_XIR_BUDGET;
         *bytes -= parameter_bytes; *work -= entry->parameter_count;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
-            if (entry->parameters[p] != XR_XIR_BOOL && entry->parameters[p] != XR_XIR_I64 &&
-                !xr_xir_type_is_owned(entry->parameters[p])) return XR_XIR_BAD_TYPE;
+            if (!program_value_type(spec, entry->parameters[p])) return XR_XIR_BAD_TYPE;
     }
     const XrXirDeclarations *d = spec->declarations;
     const XrXirCallEntry *entry = &spec->entries[d->entry_function];
@@ -55,6 +68,7 @@ static void program_dispose(XrXirProgram *program) {
     if (program->entries) for (uint32_t i = 0; i < program->entry_count; ++i)
         xr_free((void *) program->entries[i].parameters);
     xr_free(program->entries);
+    xr_xir_callable_types_free(program->callables);
     xr_xir_declarations_free(program->declarations);
     xr_free(program->order);
     xr_free(program->module_slots);
@@ -87,6 +101,8 @@ XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, uint64_t byte_limi
             program->entries[i].parameters = types;
         }
     }
+    status = xr_xir_callable_types_clone(spec->callables, &program->callables);
+    if (status != XR_XIR_OK) goto failed;
     status = xr_xir_declarations_clone(spec->declarations, spec->entry_count, &program->declarations);
     if (status != XR_XIR_OK) goto failed;
     status = xr_xir_declarations_order(program->declarations, program->order, &work);

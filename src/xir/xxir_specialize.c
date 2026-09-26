@@ -109,7 +109,7 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         c->diagnostic.instruction = i;
         if (!spec_work(c, 1)) return false;
         XrXirInstruction *op = &ops[i];
-        if (op->op != XR_XIR_CALL) continue;
+        if (op->op != XR_XIR_CALL && op->op != XR_XIR_FUNCTION_REF) continue;
         uint32_t count = op->targets[1];
         XrXirType *types = spec_alloc(c, count, sizeof(*types));
         if (count && !types) return false;

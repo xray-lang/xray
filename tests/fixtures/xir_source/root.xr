@@ -161,8 +161,14 @@ fn noYield() { return }
 fn resumedNative(flag:bool)->string {
     true ? noYield() : sourceYield()
     var text = "r"
-    const selected = flag ? alpha.pause<string>(text + "y") : alpha.pause<string>(text + "n")
-    sourceYield()
+    const provider: fn(bool)->fn(bool)->string = chooseCallback
+    var callback = provider(flag)
+    const kept = callback
+    callback = rightCallback
+    activeCallback = passCallback(alpha.identity<fn(bool)->string>(kept))
+    const selected = activeCallback(flipCallback(flag))
+    const pause: fn() = sourceYield
+    pause()
     text = selected + "!"
     return text
 }
@@ -174,3 +180,10 @@ export fn stackDepth(n:i64)->string {
     if (n == 0) { Coro.yield(); return held }
     return stackDepth(n - 1) + held
 }
+
+fn leftCallback(flag:bool)->string { return alpha.pause<string>(flag ? "ry" : "wrong") }
+fn rightCallback(flag:bool)->string { return alpha.pause<string>(flag ? "wrong" : "rn") }
+fn chooseCallback(flag:bool)->fn(bool)->string { return flag ? leftCallback : rightCallback }
+fn passCallback(callback:fn(bool)->string)->fn(bool)->string { return callback }
+var activeCallback:fn(bool)->string = rightCallback
+fn flipCallback(flag:bool)->bool { activeCallback = rightCallback; return flag }

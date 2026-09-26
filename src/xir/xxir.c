@@ -157,7 +157,7 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
     XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
     if (source == XR_XIR_CHECKED) {
-        if (input->generics || input->callables) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
+        if (input->generics) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         XrXirLayout layout;
         if (xr_xir_layout(XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
             return transition_error(XR_XIR_BAD_LAYOUT, diagnostic);

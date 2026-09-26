@@ -79,3 +79,9 @@ XrXirStatus xr_xir_callable_types_clone(const XrXirCallableTypes *types, XrXirCa
     }
     *output = copy; return XR_XIR_OK;
 }
+
+XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value) {
+    if (value < function->parameter_count) return function->parameters[value];
+    value -= function->parameter_count;
+    return value < function->instruction_count ? function->instructions[value].type : XR_XIR_UNIT;
+}

@@ -15,7 +15,7 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 1u
+#define XR_XIR_PROGRAM_ABI_VERSION 2u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
@@ -29,6 +29,7 @@ typedef struct XrXirProgramSpec {
     uint32_t entry_count;
     const XrXirDeclarations *declarations;
     XrXirCodeLease code;
+    const XrXirCallableTypes *callables;
 } XrXirProgramSpec;
 typedef enum XrXirInstanceState {
     XR_XIR_INSTANCE_NEW, XR_XIR_INSTANCE_INITIALIZING, XR_XIR_INSTANCE_READY,
@@ -66,6 +67,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrX
 XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance);
+XR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,
+    const XrXirValue *arguments, uint32_t count);
+XR_FUNC XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, uint32_t entry, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXirValue *function, uint32_t *entry);
 /* Execution helpers require a view from the instance's active callback. */
 XR_FUNC XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_atomic(XrXirCallView *view, int64_t initial, XrXirValue *output);

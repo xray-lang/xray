@@ -91,6 +91,20 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_output_fixture.h"
 #include "xir_local_fixture.h"
 #include "xir_segment_cases.h"
+#include "xir_function_cases.h"
+static void function_allocation_failures(void) {
+    for (unsigned cancel = 0; cancel < 2; ++cancel) {
+        calls = 0; fail_at = SIZE_MAX;
+        CHECK(function_case_run(cancel != 0) && !live);
+        size_t sites = calls;
+        for (size_t i = 0; i < sites; ++i) {
+            calls = 0; fail_at = i;
+            CHECK(!function_case_run(cancel != 0) && !live);
+        }
+        fail_at = SIZE_MAX;
+        printf("Function value physical release: %zu allocation failure sites (cancel=%u)\n", sites, cancel);
+    }
+}
 
 static void phi_snapshot_failure(void) {
     XrXirArtifact *checked = local_fixture(), *lowered = NULL;
@@ -455,5 +469,6 @@ int main(void) {
     printf("Program seal, instance and initialization physical release: %zu allocation sites\n", program_allocation_failures());
     printf("Write-result activation and renderer physical release: %zu allocation sites\n", write_allocation_failures());
     phi_snapshot_failure();
+    function_allocation_failures();
     return 0;
 }

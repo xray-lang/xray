@@ -114,7 +114,6 @@ typedef struct XrXirGeneric {
     uint32_t argument_count;
 } XrXirGeneric;
 
-#define XR_XIR_CALLABLE_TYPE_BASE 256u
 typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
 typedef struct XrXirCallableSignature {
     const XrXirCallableParameter *parameters;

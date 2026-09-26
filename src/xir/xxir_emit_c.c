@@ -13,6 +13,7 @@
  */
 
 #include "xxir_emit_c.h"
+#include "xxir_callable.h"
 #include "xxir_scalar.h"
 #include "../base/xmalloc.h"
 #include "../aot/xi_cgen_verify_output.h"
@@ -290,7 +291,7 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_scalar.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 3u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 4u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");
@@ -311,6 +312,9 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
                                uint32_t destination) {
     append(buffer, "        { XrXirValue value = {0}; XrXirCallStatus status = XR_XIR_CALL_READY;\n");
     switch (op->op) {
+    case XR_XIR_FUNCTION_REF:
+        append(buffer, "status = xr_xir_instance_function(view, (XrXirType) %u, %uu, &value);\n",
+            (uint32_t) op->type, (uint32_t) op->immediate); break;
     case XR_XIR_CONST_STRING:
     case XR_XIR_SLOT_LOAD:
         append(buffer, "        status = %s(view, %uu, &value);\n",
@@ -348,13 +352,35 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     append(buffer, "        }\n        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}};\n");
 }
 
+static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
+    const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
+    append(buffer, "        { uint32_t callee = %uu;\n", (uint32_t) op->immediate);
+    if (op->op == XR_XIR_CALL_INDIRECT) {
+        uint32_t id = (uint32_t) op->immediate;
+        append(buffer, "        XrXirValue function = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        XrXirCallStatus status = xr_xir_instance_resolve_function(view, &function, &callee);\n"
+            "        if (status != XR_XIR_CALL_READY) return (XrXirAction) "
+            "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}};\n",
+            (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+    }
+    append(buffer, "        state->waiting = true; state->destination = %uu; state->expected = %uu;\n",
+        destination, (uint32_t) op->type);
+    for (uint32_t p = 0; p < op->args[1]; ++p) {
+        uint32_t id = function->operands[op->args[0] + p];
+        append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+    }
+    append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_CALL, callee, %s, %uu, {0}}; }\n",
+        op->args[1] ? "state->arguments" : "NULL", op->args[1]);
+}
+
 static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                             const XrXirFunction *function, const XrXirFunctionLayout *layout,
                             uint32_t index) {
     const XrXirInstruction *op = &function->instructions[index];
     uint32_t destination = layout->offsets[function->parameter_count + index];
     append(buffer, "    case %uu:\n        state->pc = %uu;\n", index, index + 1);
-    if (op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) {
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF) {
         emit_instance_step(buffer, module, op, layout, destination);
         return;
     }
@@ -439,18 +465,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_BRANCH:
         emit_branch(buffer, function, layout, index, true);
         break;
-    case XR_XIR_CALL: {
-        const XrXirFunction *callee = &module->functions[op->immediate];
-        append(buffer, "        state->waiting = true; state->destination = %uu; state->expected = %uu;\n",
-               destination, (uint32_t) op->type);
-        for (uint32_t p = 0; p < callee->parameter_count; ++p)
-            append(buffer, "        state->arguments[%u] = (XrXirValue) {%uu, 0, "
-                   "xr_xir_scalar_load(state->frame, %uu)};\n", p, (uint32_t) callee->parameters[p],
-                   layout->offsets[function->operands[op->args[0] + p]]);
-        append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_CALL, %uu, %s, %uu, {0, 0, 0}};\n",
-               (uint32_t) op->immediate, callee->parameter_count ? "state->arguments" : "NULL", callee->parameter_count);
+    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT:
+        emit_resume_call(buffer, function, op, layout, destination);
         return;
-    }
     case XR_XIR_SUSPEND:
         append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}};\n");
         return;
@@ -545,9 +562,31 @@ static void emit_bytes(CBuffer *buffer, const char *bytes, uint32_t length) {
         append(buffer, "\\x%02x", (unsigned int) (unsigned char) bytes[i]);
     append(buffer, "\"");
 }
+static void emit_callable_types(CBuffer *buffer, const XrXirCallableTypes *types, const char *prefix) {
+    if (!types) return;
+    for (uint32_t i = 0; i < types->count; ++i) {
+        const XrXirCallableSignature *s = &types->signatures[i];
+        if (!s->parameter_count) continue;
+        append(buffer, "static const XrXirCallableParameter %s_callable_parameters_%u[] = {", prefix, i);
+        for (uint32_t p = 0; p < s->parameter_count; ++p)
+            append(buffer, "%s{(XrXirType) %u, %uu}", p ? ", " : "", (uint32_t) s->parameters[p].type, s->parameters[p].mode);
+        append(buffer, "};\n");
+    }
+    append(buffer, "static const XrXirCallableSignature %s_callable_signatures[] = {\n", prefix);
+    for (uint32_t i = 0; i < types->count; ++i) {
+        const XrXirCallableSignature *s = &types->signatures[i];
+        append(buffer, "    {");
+        if (s->parameter_count) append(buffer, "%s_callable_parameters_%u", prefix, i);
+        else append(buffer, "NULL");
+        append(buffer, ", %uu, (XrXirType) %u, %uu},\n", s->parameter_count, (uint32_t) s->result, s->flags);
+    }
+    append(buffer, "};\nstatic const XrXirCallableTypes %s_callable_types = {%s_callable_signatures, %uu};\n",
+        prefix, prefix, types->count);
+}
 static void emit_program(CBuffer *buffer, const XrXirModule *module, const char *prefix) {
     const XrXirDeclarations *d = module->declarations;
     if (!d) return;
+    emit_callable_types(buffer, module->callables, prefix);
     for (uint32_t m = 0; m < d->module_count; ++m) {
         const XrXirSourceModule *source = &d->modules[m];
         if (!source->dependency_count) continue;
@@ -590,10 +629,12 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 1u, \"XIR program ABI\");\n"
+    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 2u, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
-        "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}};\n",
+        "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         prefix, prefix, module->function_count, prefix);
+    if (module->callables) append(buffer, "&%s_callable_types", prefix); else append(buffer, "NULL");
+    append(buffer, "};\n");
 }
 
 XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_prefix,
@@ -608,8 +649,8 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 6u, \"XIR call ABI\");\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 3u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 7u, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 4u, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");

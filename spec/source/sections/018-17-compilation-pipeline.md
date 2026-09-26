@@ -85,7 +85,7 @@ VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不�
 
 ### 17.7 内部托管值与结果交接
 
-内部值 ABI 3 与调用 ABI 6 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
+内部值 ABI 4 与调用 ABI 7 取代首版标量边界，不保留别名。string 保存严格 UTF-8，
 允许内嵌 NUL，不隐式归一化或替换；字节数、Unicode 标量数与字素数是不同概念。
 复制保留原子引用，修改执行独占窗口内的写时复制；共享副本不因其他副本修改而改变。
 所有分配属于显式、计费且可独立存活的域，字符串不依赖执行帧、实例或代码镜像寿命。
@@ -184,7 +184,7 @@ installer 发布或完整无源码标准库分发已经验收。
 
 Built/Checked 使用函数局部类型参数 ID，保存约束和独立调用类型实参表。
 CALL 的类型实参范围与值实参范围分别规范化并复验；替换后的参数/结果须精确匹配，
-正常可见性、模块和支配关系规则仍有效。Checked 包 schema为2，语义合同为5（局部存储见§17.12，整数见§17.14），
+正常可见性、模块和支配关系规则仍有效。Checked 包 schema为3，语义合同为8（局部存储见§17.12，整数见§17.14），
 旧schema或语义版本直接拒绝。解码后重新验证模板定义与转发证明。
 
 特化只读取 Checked，不访问 AST。按声明身份与有序具体类型实参建立有界工作队列，
@@ -209,7 +209,7 @@ Built/Checked保留LOCAL_NEW/READ/WRITE，Lowered唯一选择标量或托管存�
 if/else与while条件必须bool；只执行选中分支，循环每次重新求条件。局部更新跨分支与回边保存，
 块内名字不外泄；无标签break/continue指向最内层while。值函数每条存活路径必须返回，拒绝不可达语句。
 本族接通具体i64加法/相等/小于与既有string加法；不授予无约束T任何运算见证。
-块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema仍为2，语义合同为5，
+块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema为3，语义合同为8，
 旧语义版本拒绝；没有第二条兼容检查路径。精确接口见 `contracts/xir-local-control-flow.md`。
 
 ### 17.13 布尔短路与C风格for
@@ -234,7 +234,7 @@ for(init; condition; step)初始化一次，循环初始化绑定只在该循环
 除数为零产生独立DIVIDE_BY_ZERO fault，没有结果并逆序清理所有帧；初始化中失败保持粘滞，
 已初始化实例的普通调用失败允许后续调用。生成C在宿主/和%之前检查特殊对，不执行有符号溢出。
 一元负号降为零减操作数，其他运算经同一Checked→Lowered→共享标量运行时。
-Checked schema 2/语义合同5、Call ABI 6原子替换旧版本，无reader或适配路径；Value3/Program1不变。
+当前Checked schema 3/语义合同8、Call ABI 7、Value4/Program2按§17.16替换旧版本，无reader或适配路径。
 具体i64能力不能通过实例化补给普通泛型；其他数值族与显式checked/saturating库方法尚未接通。
 
 ### 17.15 XIR i64位运算
@@ -245,7 +245,28 @@ Checked schema 2/语义合同5、Call ABI 6原子替换旧版本，无reader或�
 操作数从左到右各求值一次，位运算拒绝bool/string/Atomic及未约束T。变量复合赋值先读左值，
 再求右侧，计算后写回并返回新值；右侧即使修改同一变量也不能改变已读取的快照，失败不写回。
 +=另准入string拼接及快照，其余复合运算要求i64；const/read、成员与索引目标暂不准入。
-Checked schema2/语义合同5原子替换旧包，Call6/Value3/Program1不变。其他整数宽度和转换仍未准入。
+当前Checked schema3/语义合同8、Call7/Value4/Program2遵循§17.16，无旧包或ABI适配。其他整数宽度和转换仍未准入。
+
+### 17.16 XIR拥有式函数值与间接调用
+
+本族沿用§2.8的函数类型拼写，准入闭合read参数、普通具名函数值、嵌套函数参数/返回、
+局部可变存储、入口模块槽、条件选择及普通泛型身份传递。未准入的ref/move、捕获闭包、
+借用来源、签名内类型参数、Sendable和显式效应承诺继续拒绝，不能从选中的函数体补充证明。
+函数类型按有序参数type/mode、返回和承诺形成模块拥有的规范表；嵌套条目严格后向引用。
+函数引用检查声明可见性和import权限，不允许取initializer；间接调用先捕获callee，
+再从左到右求实参，验证callee的值角色、支配关系、完整签名及结果，不能枚举目标替代合同。
+
+Built→Checked深复制描述；普通特化和复验后，唯一Lowered布局把函数值纳入明确的copy/drop、
+局部place和PHI所有权。VM与生成native均使用相同可恢复CALL和结果协议。Program封存时拥有
+全部签名、入口和必要代码。函数值只保活分配域及独立准入记录；记录保活Program代码租约，
+但不强持有全部Instance槽、provider和执行帧，因而入口槽持有函数值不会构成Instance引用环。
+停止/释放Instance先撤销准入；外逃值仍可读取、复制和合法释放，最后租约释放代码。
+当前同一宿主线程的驱动器只接受原实例内调用；另一实例或Program即使数字ID相同也拒绝。
+跨实例转交及并发准入仍待完整资格，不能据当前拒绝边界缩减总任务。
+
+当前唯一包为schema3/语义合同8，Value ABI4/Call ABI7/Program ABI2原子取代旧版本；
+没有旧reader、boxed适配器或第二执行链。源码/包验证、VM/native独立预期、挂起/取消、
+结果外逃、代码租约和逐处分配失败测试按机器合同验证；这不构成完整语言或产品资格。
 
 <!-- /xr-spec:cn -->
 
@@ -347,7 +368,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 6 replace the initial scalar boundary without aliases.
+Value ABI 4 and call ABI 7 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -482,7 +503,7 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema 2 preserves templates; semantic contract 5 also covers local
+dominance rules. Checked schema 3 preserves templates; semantic contract 8 also covers local
 places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
@@ -522,7 +543,7 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema stays 2 and its semantic contract is 5; older semantic
+schema is 3 and its semantic contract is 8; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
 
@@ -557,8 +578,8 @@ INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result a
 unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
 after an arithmetic fault in an initialized instance. Generated C guards special pairs
 before host / or % and never executes signed overflow. Negation lowers to zero minus
-the operand. Checked schema 2 / semantic contract 5 and Call ABI 6 atomically replace
-older versions without a compatibility reader or adapter; Value3/Program1 are unchanged.
+the operand. Current Checked schema 3 / semantic contract 8, Call ABI 7, Value4 and Program2 follow
+§17.16 without a compatibility reader or adapter.
 Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
 and explicit checked/saturating library methods remain outside this admitted subset.
 
@@ -574,8 +595,41 @@ to right. Bitwise operators reject bool, string, Atomic and unconstrained T. Var
 compound assignments read the old value before evaluating the RHS, compute, store
 and return the new value; an RHS assignment cannot change that earlier snapshot.
 Failure skips the store. String += also admits owned concat snapshots; other compound
-operators require i64. Const/read, member and indexed targets are not admitted. Checked schema2 / semantic contract5
-atomically replaces older packets; Call6/Value3/Program1 stay unchanged. Other
+operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema3 / semantic contract8
+and Call7/Value4/Program2 follow §17.16 without compatibility paths. Other
 integer widths and conversions are not yet admitted.
+
+### 17.16 XIR Owned Function Values and Indirect Calls
+
+This family uses the function-type spelling in §2.8: closed read parameters,
+ordinary named function values, nested callable parameters/results, mutable local
+storage, root-module slots, conditional selection and ordinary generic identity
+transmission. Unadmitted ref/move, captures, borrow origins, signature-internal type
+parameters, Sendable and explicit effects remain rejected. A selected body cannot
+supply a missing proof. Module-owned canonical tables preserve ordered parameter
+types/modes, results and promises; nested references point strictly backwards.
+References enforce declaration visibility and imports and cannot name initializers.
+Indirect calls capture the callee before evaluating arguments left to right; value
+role, dominance, full signature and result checks never enumerate possible targets
+as a replacement for the declared contract.
+
+Built-to-Checked owns copied descriptions. After specialization and rechecking,
+the unique Lowered layout includes explicit function copy/drop, local places and
+PHI ownership. VM and generated native code use the same resumable CALL and result
+protocol. Sealed Programs own all signatures, entries and required code. Function
+values retain their allocation domain and a separate admission record; that record
+retains Program code but only observes its instance. It does not retain all module
+slots, providers or frames, so function-valued root slots create no instance cycle.
+Stopping/freeing the instance revokes admission before cleanup. Escaped values remain
+readable, copyable and releasable; the last lease releases code. The current single
+host-thread driver admits calls only in the originating instance. Another instance
+or Program rejects coincident numeric IDs. Cross-instance transfer and concurrent
+admission still require implementation and qualification.
+
+The unique packet is schema3/semantic8 with Value4/Call7/Program2; old versions reject
+without readers, boxed adapters or alternate execution. Source/packet validation,
+independent VM/native expectations, suspension/cancellation, escaped results, code
+leases and individual allocation failures are covered by machine contracts. This
+family does not certify the complete language or product.
 
 <!-- /xr-spec:en -->

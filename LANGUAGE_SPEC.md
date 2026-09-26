@@ -6867,7 +6867,7 @@ leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back t
 
 ### 17.7 Internal Managed Values and Result Transfer
 
-Value ABI 3 and call ABI 6 replace the initial scalar boundary without aliases.
+Value ABI 4 and call ABI 7 replace the initial scalar boundary without aliases.
 Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
 atomic reference counts, and copy-on-write mutation under an exclusive handle
 borrow. Byte length and Unicode scalar count are distinct from grapheme count.
@@ -7002,7 +7002,7 @@ retains, cleanup and layout are determined after specialization.
 Built/Checked retain function-local type parameter IDs, constraints and separate
 call type-argument tables. CALL type and value ranges are canonical and reverified;
 substituted parameters/results match exactly, with normal visibility, module and
-dominance rules. Checked schema 2 preserves templates; semantic contract 5 also covers local
+dominance rules. Checked schema 3 preserves templates; semantic contract 8 also covers local
 places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
 
 Specialization consumes only Checked, never AST. A bounded work queue interns
@@ -7042,7 +7042,7 @@ Every live path in a value function must return; unreachable statements reject.
 Concrete i64 addition/equality/less-than and existing string addition are admitted;
 unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
 budgets and runtime step/cancellation contracts continue to apply. Checked wire
-schema stays 2 and its semantic contract is 5; older semantic
+schema is 3 and its semantic contract is 8; older semantic
 revisions reject without a second checking path. The interface is frozen in
 `contracts/xir-local-control-flow.md`.
 
@@ -7077,8 +7077,8 @@ INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result a
 unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
 after an arithmetic fault in an initialized instance. Generated C guards special pairs
 before host / or % and never executes signed overflow. Negation lowers to zero minus
-the operand. Checked schema 2 / semantic contract 5 and Call ABI 6 atomically replace
-older versions without a compatibility reader or adapter; Value3/Program1 are unchanged.
+the operand. Current Checked schema 3 / semantic contract 8, Call ABI 7, Value4 and Program2 follow
+§17.16 without a compatibility reader or adapter.
 Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
 and explicit checked/saturating library methods remain outside this admitted subset.
 
@@ -7094,9 +7094,42 @@ to right. Bitwise operators reject bool, string, Atomic and unconstrained T. Var
 compound assignments read the old value before evaluating the RHS, compute, store
 and return the new value; an RHS assignment cannot change that earlier snapshot.
 Failure skips the store. String += also admits owned concat snapshots; other compound
-operators require i64. Const/read, member and indexed targets are not admitted. Checked schema2 / semantic contract5
-atomically replaces older packets; Call6/Value3/Program1 stay unchanged. Other
+operators require i64. Const/read, member and indexed targets are not admitted. Current Checked schema3 / semantic contract8
+and Call7/Value4/Program2 follow §17.16 without compatibility paths. Other
 integer widths and conversions are not yet admitted.
+
+### 17.16 XIR Owned Function Values and Indirect Calls
+
+This family uses the function-type spelling in §2.8: closed read parameters,
+ordinary named function values, nested callable parameters/results, mutable local
+storage, root-module slots, conditional selection and ordinary generic identity
+transmission. Unadmitted ref/move, captures, borrow origins, signature-internal type
+parameters, Sendable and explicit effects remain rejected. A selected body cannot
+supply a missing proof. Module-owned canonical tables preserve ordered parameter
+types/modes, results and promises; nested references point strictly backwards.
+References enforce declaration visibility and imports and cannot name initializers.
+Indirect calls capture the callee before evaluating arguments left to right; value
+role, dominance, full signature and result checks never enumerate possible targets
+as a replacement for the declared contract.
+
+Built-to-Checked owns copied descriptions. After specialization and rechecking,
+the unique Lowered layout includes explicit function copy/drop, local places and
+PHI ownership. VM and generated native code use the same resumable CALL and result
+protocol. Sealed Programs own all signatures, entries and required code. Function
+values retain their allocation domain and a separate admission record; that record
+retains Program code but only observes its instance. It does not retain all module
+slots, providers or frames, so function-valued root slots create no instance cycle.
+Stopping/freeing the instance revokes admission before cleanup. Escaped values remain
+readable, copyable and releasable; the last lease releases code. The current single
+host-thread driver admits calls only in the originating instance. Another instance
+or Program rejects coincident numeric IDs. Cross-instance transfer and concurrent
+admission still require implementation and qualification.
+
+The unique packet is schema3/semantic8 with Value4/Call7/Program2; old versions reject
+without readers, boxed adapters or alternate execution. Source/packet validation,
+independent VM/native expectations, suspension/cancellation, escaped results, code
+leases and individual allocation failures are covered by machine contracts. This
+family does not certify the complete language or product.
 
 ---
 

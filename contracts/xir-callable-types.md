@@ -25,16 +25,14 @@ argument; definition checking cannot gain a constraint from a future body.
 Checked transitions and packets own every descriptor and parameter record; parser
 arenas, borrowed construction buffers and input bytes may be destroyed afterwards.
 Specialization preserves closed signature identities and rechecks them. Checked
-schema 3, semantic contract 7 appends the canonical callable table after generic
+schema 3, semantic contract 8 appends the canonical callable table after generic
 metadata; older schema/contract pairs are rejected without an alternate reader.
 Wire records contain only type/mode/flag integers, never code pointers or instances.
 
-The metadata admission alone does not certify function-value execution. Lowered
-admission currently rejects a callable table until the shared runtime owner and
-indirect invocation consume it. No guessed integer callee or legacy executor is
-used to bypass this boundary. Function results must eventually retain required
-code and an execution-admission identity without retaining all instance slots;
-stopped instances cannot acquire new execution merely through an escaped value.
+Lowered consumes this same table for owned function values, reference construction
+and indirect calls. Layout, boxed ownership, Program sealing, execution admission
+and code-result leases follow `xir-function-values.md`. Target implementations are
+not substituted for signature contracts, and unsupported promises remain closed.
 
 verification-test: test_xir_checked
 verification-test: test_xir_checked_allocations

@@ -76,7 +76,7 @@ static bool scalar(XrXirType type) {
 static uint32_t operand_count(const XrXirFunction *function, const XrXirInstruction *op,
                               const XrXirModule *module) {
     (void) module;
-    if (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT) return op->args[1];
+    if (op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT) return op->args[1];
     return op->op == XR_XIR_RETURN ? (function->result != XR_XIR_UNIT) : op_rules[op->op].operands;
 }
 
@@ -111,22 +111,30 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         return XR_XIR_BAD_STAGE;
     XrXirStatus declared = declaration_instruction(function, op, module);
     if (declared != XR_XIR_OK) return declared;
-    bool range = op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI;
+    bool range = op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI;
     if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
-    if (op->op == XR_XIR_CALL) {
+    if (op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
             return XR_XIR_BAD_STRUCTURE;
         const XrXirFunction *callee = &module->functions[op->immediate];
-        if (callee->parameter_count != op->args[1] || (callee->parameter_count && !callee->parameters))
+        if ((op->op == XR_XIR_CALL && callee->parameter_count != op->args[1]) || (callee->parameter_count && !callee->parameters))
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus generic_status = xr_xir_generic_call(module, caller_id, op);
         if (generic_status != XR_XIR_OK) return generic_status;
-        if (op->type != xr_xir_call_type(module, caller_id, op, callee->result))
+        if (op->op == XR_XIR_CALL && op->type != xr_xir_call_type(module, caller_id, op, callee->result))
             return XR_XIR_BAD_TYPE;
+        if (op->op == XR_XIR_FUNCTION_REF) {
+            const XrXirCallableSignature *signature = xr_xir_callable_signature(module->callables, op->type);
+            if (!module->declarations || !signature || signature->parameter_count != callee->parameter_count ||
+                signature->result != xr_xir_call_type(module, caller_id, op, callee->result)) return XR_XIR_BAD_TYPE;
+            for (uint32_t p = 0; p < callee->parameter_count; ++p)
+                if (signature->parameters[p].type != xr_xir_call_type(module, caller_id, op, callee->parameters[p]))
+                    return XR_XIR_BAD_TYPE;
+        }
         if (module->declarations) {
             const XrXirDeclarations *d = module->declarations;
             uint32_t caller_module = d->functions[caller_id].module;
@@ -137,10 +145,18 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                 return XR_XIR_BAD_STRUCTURE;
         }
     }
+    if (op->op == XR_XIR_CALL_INDIRECT) {
+        if (op->immediate < 0 || (uint64_t) op->immediate >= (uint64_t) function->parameter_count + function->instruction_count)
+            return XR_XIR_BAD_VALUE;
+        XrXirType type = xr_xir_operand_type(function, (uint32_t) op->immediate);
+        const XrXirCallableSignature *signature = xr_xir_callable_signature(module->callables, type);
+        if (!signature || signature->parameter_count != op->args[1] || signature->result != op->type)
+            return XR_XIR_BAD_TYPE;
+    }
     if ((rule->result == RULE_UNIT && op->type != XR_XIR_UNIT) ||
         (rule->result == RULE_BOOL && op->type != XR_XIR_BOOL) ||
         (rule->result == RULE_I64 && op->type != XR_XIR_I64) ||
-        (rule->result == RULE_OWNED && !xr_xir_type_is_owned(op->type)) ||
+        (rule->result == RULE_OWNED && (!xr_xir_type_is_owned(op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
         (rule->result == RULE_ATOMIC && op->type != XR_XIR_ATOMIC_I64) ||
         (rule->result == RULE_VALUE && !xr_xir_type_in_context(module, caller_id, op->type)) ||
@@ -153,7 +169,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     for (uint32_t i = 0; i < rule->edges; ++i)
         if (!op->targets[i] || op->targets[i] >= function->block_count)
             return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t i = op->op == XR_XIR_CALL ? 2 : rule->edges; i < 2; ++i)
+    for (uint32_t i = op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF ? 2 : rule->edges; i < 2; ++i)
         if (op->targets[i])
             return XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_CONST_BOOL) {
@@ -162,6 +178,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM) {
         if (op->immediate != 1 && op->immediate != 2) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_I64 && op->op != XR_XIR_CALL &&
+               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
@@ -215,21 +232,25 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             if (!spend(&context->remaining.work, 1))
                 return XR_XIR_BUDGET;
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op == XR_XIR_CALL && !spend(&context->remaining.work, op->targets[1])) return XR_XIR_BUDGET;
-            if (op->op == XR_XIR_CALL && context->module->declarations) {
+            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) && !spend(&context->remaining.work, op->targets[1])) return XR_XIR_BUDGET;
+            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) && context->module->declarations) {
                 const XrXirDeclarations *d = context->module->declarations;
                 uint32_t caller = (uint32_t) (function - context->module->functions);
                 if (!spend(&context->remaining.work, d->modules[d->functions[caller].module].dependency_count))
                     return XR_XIR_BUDGET;
             }
+            if (op->op == XR_XIR_FUNCTION_REF && op->immediate >= 0 &&
+                (uint64_t) op->immediate < context->module->function_count &&
+                !spend(&context->remaining.work, context->module->functions[op->immediate].parameter_count))
+                return XR_XIR_BUDGET;
             XrXirStatus status = instruction_shape(function, op, stage, context->module);
             if (status != XR_XIR_OK)
                 return status;
-            if (op->op == XR_XIR_CALL && op->targets[1]) {
+            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) && op->targets[1]) {
                 if (op->targets[0] != type_end) return XR_XIR_BAD_STRUCTURE;
                 type_end += op->targets[1];
             }
-            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI) && op->args[1]) {
+            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI) && op->args[1]) {
                 if (op->args[0] != operand_end) return XR_XIR_BAD_STRUCTURE;
                 operand_end += op->args[1];
             }
@@ -463,12 +484,21 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 op->args[0] - function->parameter_count >= function->instruction_count) return XR_XIR_BAD_VALUE;
             expected = function->instructions[op->args[0] - function->parameter_count].type;
         }
+        const XrXirCallableSignature *indirect = NULL;
+        if (op->op == XR_XIR_CALL_INDIRECT) {
+            uint32_t callee = (uint32_t) op->immediate;
+            XrXirType type = xr_xir_operand_type(function, callee);
+            indirect = xr_xir_callable_signature(context->module->callables, type);
+            XrXirStatus status = local_operand(function, op, callee, 0);
+            if (status == XR_XIR_OK) status = value_use(function, graph, i, callee, type);
+            if (status != XR_XIR_OK) return status;
+        }
         uint32_t count = operand_count(function, op, context->module);
         if (!spend(&context->remaining.work, count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a) {
             XrXirType operand_type = op->op == XR_XIR_CALL ?
                 xr_xir_call_type(context->module, context->location.function, op,
-                    context->module->functions[op->immediate].parameters[a]) : expected;
+                    context->module->functions[op->immediate].parameters[a]) : indirect ? indirect->parameters[a].type : expected;
             if (op->op == XR_XIR_ATOMIC_I64_FETCH_ADD && a == 1) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {
                 uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + a] : op->args[a];
@@ -478,7 +508,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
                 if (!scalar(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
-            uint32_t id = op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT ?
+            uint32_t id = op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT ?
                 function->operands[op->args[0] + a] : op->args[a];
             XrXirStatus status = local_operand(function, op, id, a);
             if (status == XR_XIR_OK) status = value_use(function, graph, i, id, operand_type);
@@ -520,8 +550,7 @@ XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
              !spend(&context.remaining.metadata_bytes, sizeof(XrXirArtifact)))
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
-        status = module->stage == XR_XIR_LOWERED && module->callables ? XR_XIR_BAD_STAGE :
-            xr_xir_callable_types_verify(module->callables, &context.remaining);
+        status = xr_xir_callable_types_verify(module->callables, &context.remaining);
     }
     if (status == XR_XIR_OK) {
         status = xr_xir_generics_verify(module, &context.remaining);
@@ -532,6 +561,11 @@ XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
     }
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;
+        for (uint32_t s = 0; s < d->slot_count; ++s) {
+            const XrXirSlot *slot = &d->slots[s];
+            if (xr_xir_type_is_callable(slot->type) && (!xr_xir_callable_signature(module->callables, slot->type) ||
+                slot->module != d->root_module)) status = XR_XIR_BAD_TYPE;
+        }
         const XrXirFunction *entry = &module->functions[d->entry_function];
         if (entry->parameter_count || entry->result != XR_XIR_I64 ||
             (module->generics && module->generics[d->entry_function].parameter_count)) status = XR_XIR_BAD_TYPE;

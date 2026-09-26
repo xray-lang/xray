@@ -12,6 +12,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_callable.h"
 #include "../base/xmalloc.h"
 
 XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
@@ -60,6 +61,11 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
     XrXirStatus declaration_status = xr_xir_declarations_verify(module->declarations,
         module->function_count, &bytes, &work);
     if (declaration_status != XR_XIR_OK) return declaration_status;
+    XrXirBudget signature_budget = *budget;
+    signature_budget.metadata_bytes = bytes; signature_budget.work = work;
+    XrXirStatus signature_status = xr_xir_callable_types_verify(module->callables, &signature_budget);
+    if (signature_status != XR_XIR_OK) return signature_status;
+    bytes = signature_budget.metadata_bytes; work = signature_budget.work;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         uint64_t slots = (uint64_t) function->parameter_count + function->instruction_count;
@@ -145,7 +151,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         const XrXirInstruction *op = &function->instructions[i];
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
-            op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT ? op->args[1] : 0;
+            op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;
     }
     uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue);

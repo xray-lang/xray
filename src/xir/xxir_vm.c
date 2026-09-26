@@ -13,6 +13,7 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_callable.h"
 #include "../base/xmalloc.h"
 
 typedef struct ScalarRun {
@@ -58,6 +59,8 @@ static XrXirRunStatus instance_step(ScalarRun *run, const XrXirInstruction *op, 
     XrXirValue value = {0};
     XrXirCallStatus status = XR_XIR_CALL_READY;
     switch (op->op) {
+    case XR_XIR_FUNCTION_REF:
+        status = xr_xir_instance_function(run->view, op->type, (uint32_t) op->immediate, &value); break;
     case XR_XIR_CONST_STRING:
         status = xr_xir_instance_literal(run->view, (uint32_t) op->immediate, &value); break;
     case XR_XIR_SLOT_LOAD:
@@ -127,6 +130,28 @@ static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t
     return XR_XIR_RUN_OK;
 }
 
+static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
+    XrXirAction *action, uint32_t destination) {
+    uint32_t callee = (uint32_t) op->immediate;
+    if (op->op == XR_XIR_CALL_INDIRECT) {
+        XrXirValue value = {(uint32_t) xr_xir_operand_type(run->function, callee), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
+        XrXirCallStatus status = xr_xir_instance_resolve_function(run->view, &value, &callee);
+        if (status != XR_XIR_CALL_READY) {
+            *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}};
+            return XR_XIR_RUN_OK;
+        }
+    }
+    for (uint32_t i = 0; i < op->args[1]; ++i) {
+        uint32_t id = run->function->operands[op->args[0] + i];
+        state->arguments[i] = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
+    }
+    state->waiting = true; state->destination = destination; state->expected = op->type;
+    *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], {0}};
+    return XR_XIR_RUN_OK;
+}
+
 static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *action) {
     uint32_t instruction = state->instruction;
     const XrXirInstruction *op = &run->function->instructions[instruction];
@@ -134,7 +159,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     uint32_t next = instruction + 1;
     int64_t value = 0;
     *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}};
-    if (op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) {
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF) {
         state->instruction = next;
         return instance_step(run, op, run->layout->offsets[result_id]);
     }
@@ -231,19 +256,9 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         value = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]) >=
                 xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
         break;
-    case XR_XIR_CALL: {
-        const XrXirFunction *callee = &run->module->functions[op->immediate];
-        for (uint32_t i = 0; i < callee->parameter_count; ++i)
-            state->arguments[i] = (XrXirValue) {(uint32_t) callee->parameters[i], 0,
-                xr_xir_scalar_load(run->frame, run->layout->offsets[run->function->operands[op->args[0] + i]])};
-        state->waiting = true;
-        state->destination = run->layout->offsets[result_id];
-        state->expected = op->type;
-        *action = (XrXirAction) {XR_XIR_ACTION_CALL, (uint32_t) op->immediate,
-            state->arguments, callee->parameter_count, {0, 0, 0}};
+    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT:
         state->instruction = next;
-        return XR_XIR_RUN_OK;
-    }
+        return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);
     case XR_XIR_SUSPEND:
         action->kind = XR_XIR_ACTION_SUSPEND;
         break;
@@ -375,7 +390,7 @@ XrXirStatus xr_xir_vm_program_take(XrXirArtifact **artifact, uint64_t byte_limit
         if (status != XR_XIR_OK) goto finish;
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_artifact_target(*artifact),
-        entries, module->function_count, module->declarations, {owner, vm_program_release}};
+        entries, module->function_count, module->declarations, {owner, vm_program_release}, module->callables};
     status = xr_xir_program_seal(&spec, byte_limit - bytes, output);
     if (status == XR_XIR_OK) { owner->artifact = *artifact; *artifact = NULL; }
  finish:

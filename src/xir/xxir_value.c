@@ -32,6 +32,11 @@ typedef struct XirAtomicI64 {
     XirObject object;
     _Atomic(int64_t) value;
 } XirAtomicI64;
+typedef struct XirFunction {
+    XirObject object;
+    XrXirFunctionBinding binding;
+} XirFunction;
+
 typedef struct XirString {
     XirObject object;
     char *bytes;
@@ -224,6 +229,11 @@ void xr_xir_value_drop(XrXirValue *value) {
                 XirString *string = (XirString *) object;
                 domain_deallocate(domain, string->bytes, string->capacity);
                 domain_deallocate(domain, string, sizeof(*string));
+            } else if (xr_xir_type_is_callable(object->type)) {
+                XirFunction *function = (XirFunction *) object;
+                XrXirFunctionBinding binding = function->binding;
+                domain_deallocate(domain, function, sizeof(*function));
+                binding.release(binding.owner);
             } else domain_deallocate(domain, object, sizeof(XirAtomicI64));
             xr_xir_domain_drop(domain);
         }
@@ -334,4 +344,25 @@ void xr_xir_owned_slot_move(void *frame, uint32_t offset, XrXirValue *owned) {
     xr_xir_owned_slot_clear(frame, offset);
     memcpy((char *) frame + offset, &owned->payload, sizeof(owned->payload));
     *owned = (XrXirValue) {0};
+}
+
+XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirType type,
+    const XrXirFunctionBinding *binding, XrXirValue *output) {
+    if (!domain || !unit_value(output) || !xr_xir_type_is_callable(type) ||
+        !binding || !binding->owner || !binding->release) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!reference_retain(&domain->references)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
+    XirFunction *function = domain_allocate(domain, sizeof(*function), &status);
+    if (!function) { xr_xir_domain_drop(domain); return status; }
+    atomic_init(&function->object.references, 1);
+    function->object.domain = domain; function->object.type = type;
+    function->binding = *binding;
+    output->type = (uint32_t) type;
+    memcpy(&output->payload, &function, sizeof(function));
+    return XR_XIR_VALUE_OK;
+}
+const XrXirFunctionBinding *xr_xir_function_binding(const XrXirValue *value) {
+    if (!value || !xr_xir_type_is_callable((XrXirType) value->type) ||
+        !xr_xir_value_argument(value, (XrXirType) value->type)) return NULL;
+    return &((XirFunction *) object_pointer(value))->binding;
 }
