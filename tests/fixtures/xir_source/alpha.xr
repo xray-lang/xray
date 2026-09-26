@@ -30,3 +30,6 @@ export fn nested<A,B>(transform:fn(fn(A)->B)->fn(A)->B,callback:fn(A)->B)->fn(A)
     const apply = invoke<fn(A)->B,fn(A)->B>
     return apply(transform, callback)
 }
+export fn frozen<T:Sendable>(value:T)->fn()->T {
+    return fn()->T { Coro.yield(); return requireSendable<T>(value) }
+}

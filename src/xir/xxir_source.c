@@ -14,6 +14,7 @@
 #include "xxir_callable.h"
 #include "../module/xmodule_graph.h"
 #include "../frontend/parser/xast.h"
+#include "../frontend/parser/xast_walk.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
@@ -30,7 +31,8 @@ typedef struct SourceName {
     bool mutable;
 } SourceName;
 typedef struct SourceFunction {
-    AstNode *node;
+    AstNode *node, *type_owner;
+    bool infer_result, saw_return;
     uint32_t module, count, capacity;
     XrXirType *parameters;
     uint32_t *operands, operand_count, operand_capacity;
@@ -59,6 +61,7 @@ typedef struct SourceContext {
     XrXirLiteral *literals;
     SourceName **names, *locals, *scope;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
+    uint32_t first_closure, next_closure;
     uint32_t function, module, depth;
     SourceLoop *loop;
     bool returned, has_generics;
@@ -153,7 +156,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     const XrXirCallableSignature *found = xr_xir_callable_signature(&ctx->callables, type);
     if (!found || !found->parameter_span) { *output = type; return true; }
     XrXirCallableSignature signature = *found;
-    XrXirCallableParameter *parameters = source_alloc(ctx, signature.parameter_count, sizeof(*parameters));
+    XrXirCallableParameter *parameters = signature.parameter_count ? source_alloc(ctx, signature.parameter_count, sizeof(*parameters)) : NULL;
     if (signature.parameter_count && !parameters) return false;
     for (uint32_t p = 0; p < signature.parameter_count; ++p)
         if (!source_substitute(ctx, sub, signature.parameters[p].type, depth + 1, &parameters[p].type)) return false;
@@ -186,7 +189,7 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     case XR_TREF_BOOL: *type = XR_XIR_BOOL; return true;
     case XR_TREF_STRING: *type = XR_XIR_STRING; return true;
     case XR_TREF_NAMED: case XR_TREF_TYPE_PARAM: {
-        AstNode *node = ctx->bodies[ctx->function].node;
+        AstNode *node = ctx->bodies[ctx->function].type_owner;
         if (!node || !ref->name) break;
         FunctionDeclNode *decl = &node->as.function_decl;
         for (int i = 0; i < decl->type_param_count; ++i) {
@@ -288,19 +291,8 @@ typedef struct SourceTypeArguments {
     uint32_t count;
     SourceSubstitution substitution;
 } SourceTypeArguments;
-static bool source_instantiation(SourceContext *ctx, AstNode *node, const XrXirGeneric *callee,
-    SourceTypeArguments *arguments, XrXirInstruction *op) {
-    uint32_t count = arguments->count;
-    if (count > 65536 || count != callee->parameter_count || (count && !arguments->refs))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function requires its exact explicit type arguments");
-    XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
-    if (count && !types) return false;
-    XrXirModule view = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics, &ctx->callables};
-    for (uint32_t i = 0; i < count; ++i) {
-        if (!source_work(ctx, node) || !source_type(ctx, arguments->refs[i], &types[i])) return false;
-        if (!xr_xir_type_satisfies(&view, ctx->function, types[i], callee->constraints[i]))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type argument does not prove the declared constraint");
-    }
+static bool source_type_arguments(SourceContext *ctx, AstNode *node, const XrXirType *types,
+    uint32_t count, XrXirInstruction *op) {
     XrXirGeneric *caller = &ctx->generics[ctx->function];
     if (count > UINT32_MAX - caller->argument_count)
         return source_fail(ctx, node, XR_XIR_BUDGET, "type argument table overflow");
@@ -315,7 +307,23 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, const XrXirG
     }
     op->targets[0] = count ? caller->argument_count : 0; op->targets[1] = count;
     if (count) memcpy((XrXirType *) caller->arguments + caller->argument_count, types, count * sizeof(*types));
-    caller->argument_count = needed; arguments->substitution = (SourceSubstitution) {types,count}; return true;
+    caller->argument_count = needed; return true;
+}
+static bool source_instantiation(SourceContext *ctx, AstNode *node, const XrXirGeneric *callee,
+    SourceTypeArguments *arguments, XrXirInstruction *op) {
+    uint32_t count = arguments->count;
+    if (count > 65536 || count != callee->parameter_count || (count && !arguments->refs))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function requires its exact explicit type arguments");
+    XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
+    if (count && !types) return false;
+    XrXirModule view = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics, &ctx->callables};
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!source_work(ctx, node) || !source_type(ctx, arguments->refs[i], &types[i])) return false;
+        if (!xr_xir_type_satisfies(&view, ctx->function, types[i], callee->constraints[i]))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type argument does not prove the declared constraint");
+    }
+    arguments->substitution = (SourceSubstitution) {types,count};
+    return source_type_arguments(ctx,node,types,count,op);
 }
 static bool ordinary_call(SourceContext *ctx, AstNode *node, SourceName *target,
     const SourceValue *args, SourceValue *value) {
@@ -599,6 +607,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceV
     }
     return source_function_value(ctx,node,symbol,value);
 }
+static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *value) {
     switch (node->type) {
     case AST_LITERAL_INT: case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
@@ -607,6 +616,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceValue *valu
     case AST_GROUPING: return expression(ctx, node->as.grouping, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
     case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, value);
+    case AST_FUNCTION_EXPR: return source_closure(ctx, node, value);
     case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);
     case AST_MEMBER_ACCESS: {
         MemberAccessNode *member = &node->as.member_access;
@@ -831,6 +841,9 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid return placement or arity");
         SourceValue value = {0};
         if (node->as.return_stmt.value_count && !expression(ctx, node->as.return_stmt.values[0], &value)) return false;
+        SourceFunction *body = &ctx->bodies[ctx->function];
+        if (body->infer_result && !body->saw_return) ctx->functions[ctx->function].result = value.type;
+        body->saw_return = true;
         if (value.type != ctx->functions[ctx->function].result)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "return type does not match declaration");
         ctx->returned = true;
@@ -856,7 +869,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], decl->name, node);
     if (!symbol) return false;
     symbol->kind = SOURCE_FUNCTION; symbol->index = index;
-    SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = ctx->module;
+    SourceFunction *body = &ctx->bodies[index]; body->node = body->type_owner = node; body->module = ctx->module;
     ctx->function = index;
     uint32_t *constraints = decl->type_param_count ? source_alloc(ctx, (size_t) decl->type_param_count, sizeof(*constraints)) : NULL;
     if (decl->type_param_count && !constraints) return false;
@@ -917,10 +930,26 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
     }
     return true;
 }
+typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth; } SourceClosureCount;
+static bool count_closures(AstNode *node, void *pointer) {
+    SourceClosureCount *scan = pointer;
+    if (!node) return true;
+    if (!source_work(scan->ctx,node)) return false;
+    if (scan->depth == 128 || (node->type == AST_FUNCTION_EXPR && scan->count == scan->ctx->budget.functions))
+        return source_fail(scan->ctx,node,XR_XIR_BUDGET,"closure declaration budget exhausted");
+    if (node->type == AST_FUNCTION_EXPR) ++scan->count;
+    ++scan->depth;
+    bool ok = xr_ast_for_each_child(node,count_closures,scan);
+    --scan->depth;
+    return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source declaration shape");
+}
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + 1, slots = 0;
+    SourceClosureCount closures = {ctx,0,0};
     for (uint32_t m = 0; m < count; ++m) {
+        ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
+        if (!count_closures(ast,&closures)) return false;
         if (!ast || ast->type != AST_PROGRAM) return source_fail(ctx, ast, XR_XIR_BAD_STRUCTURE, "parsed module required");
         for (int i = 0; i < ast->as.program.count; ++i) {
             AstNode *node = ast->as.program.statements[i];
@@ -929,7 +958,10 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) ++slots;
         }
     }
-    if (functions > ctx->budget.functions) return source_fail(ctx, NULL, XR_XIR_BUDGET, "function budget exhausted");
+    if (functions > ctx->budget.functions || closures.count > ctx->budget.functions - functions)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"function budget exhausted");
+    ctx->first_closure = ctx->next_closure = functions - 1;
+    functions += closures.count;
     ctx->function_count = functions; ctx->slot_count = slots;
     ctx->functions = source_alloc(ctx, functions, sizeof(*ctx->functions));
     ctx->bodies = source_alloc(ctx, functions, sizeof(*ctx->bodies));
@@ -980,6 +1012,161 @@ static bool finish_body(SourceContext *ctx) {
     function->operands = body->operands; function->operand_count = body->operand_count;
     return true;
 }
+typedef struct SourceCapture {
+    struct SourceCapture *next;
+    SourceName *source;
+    uint32_t index;
+} SourceCapture;
+typedef struct SourceCaptureScan {
+    SourceContext *ctx;
+    SourceName *bound;
+    SourceCapture *captures;
+    uint32_t count, depth;
+} SourceCaptureScan;
+static bool capture_bind(SourceCaptureScan *scan, const char *name, AstNode *node) {
+    SourceName *binding = source_alloc(scan->ctx, 1, sizeof(*binding));
+    if (!binding) return false;
+    binding->name = name; binding->node = node; binding->next = scan->bound; scan->bound = binding;
+    return true;
+}
+static bool capture_name(SourceCaptureScan *scan, const char *name, AstNode *node) {
+    SourceContext *ctx = scan->ctx;
+    if (find_name(ctx, scan->bound, name)) return true;
+    SourceName *source = visible_name(ctx, name);
+    if (!source || source->kind != SOURCE_LOCAL) return ctx->diagnostic.status == XR_XIR_OK;
+    if (source->mutable)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "mutable capture requires a shared cell");
+    for (SourceCapture *p = scan->captures; p; p = p->next) {
+        if (!source_work(ctx, node)) return false;
+        if (p->source == source) return true;
+    }
+    SourceCapture *capture = source_alloc(ctx, 1, sizeof(*capture));
+    if (!capture) return false;
+    *capture = (SourceCapture) {scan->captures, source, scan->count++}; scan->captures = capture;
+    return true;
+}
+static bool capture_scan(AstNode *node, void *pointer);
+static bool capture_scope(SourceCaptureScan *scan, AstNode *node) {
+    SourceName *saved = scan->bound;
+    bool ok = capture_scan(node, scan); scan->bound = saved; return ok;
+}
+static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
+    switch (node->type) {
+    case AST_VARIABLE: return capture_name(scan, node->as.variable.name, node);
+    case AST_INC: return capture_name(scan, node->as.inc.name, node);
+    case AST_DEC: return capture_name(scan, node->as.dec.name, node);
+    case AST_ASSIGNMENT:
+        if (!capture_name(scan, node->as.assignment.name, node)) return false;
+        break;
+    case AST_COMPOUND_ASSIGNMENT:
+        if (node->as.compound_assignment.name && !capture_name(scan, node->as.compound_assignment.name, node)) return false;
+        break;
+    case AST_VAR_DECL: case AST_CONST_DECL:
+        return capture_scan(node->as.var_decl.initializer, scan) && capture_bind(scan, node->as.var_decl.name, node);
+    case AST_BLOCK: {
+        SourceName *saved = scan->bound;
+        for (int i = 0; i < node->as.block.count; ++i)
+            if (!capture_scan(node->as.block.statements[i], scan)) return false;
+        scan->bound = saved; return true;
+    }
+    case AST_FUNCTION_EXPR: {
+        SourceName *saved = scan->bound;
+        for (int i = 0; i < node->as.function_expr.param_count; ++i)
+            if (!capture_bind(scan, node->as.function_expr.params[i]->name, node)) return false;
+        bool ok = capture_scan(node->as.function_expr.body, scan); scan->bound = saved; return ok;
+    }
+    case AST_IF_STMT:
+        return capture_scan(node->as.if_stmt.condition, scan) && capture_scope(scan, node->as.if_stmt.then_branch) &&
+            capture_scope(scan, node->as.if_stmt.else_branch);
+    case AST_WHILE_STMT:
+        return capture_scan(node->as.while_stmt.condition, scan) && capture_scope(scan, node->as.while_stmt.body);
+    case AST_FOR_STMT: {
+        SourceName *saved = scan->bound;
+        ForStmtNode *loop = &node->as.for_stmt;
+        bool ok = capture_scan(loop->initializer, scan) && capture_scan(loop->condition, scan) &&
+            capture_scope(scan, loop->body) && capture_scope(scan, loop->increment);
+        scan->bound = saved; return ok;
+    }
+    default: break;
+    }
+    return xr_ast_for_each_child(node, capture_scan, scan) ||
+        source_fail(scan->ctx, node, XR_XIR_BAD_STRUCTURE, "unknown closure syntax");
+}
+static bool capture_scan(AstNode *node, void *pointer) {
+    SourceCaptureScan *scan = pointer;
+    if (!node) return true;
+    if (!source_work(scan->ctx, node)) return false;
+    if (scan->depth == 128) return source_fail(scan->ctx, node, XR_XIR_BUDGET, "capture scan depth exhausted");
+    ++scan->depth;
+    bool ok = capture_children(scan, node); --scan->depth; return ok;
+}
+static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
+    XrXirCallableParameter *parameters) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    for (SourceCapture *p = scan->captures; p; p = p->next) {
+        SourceName *symbol = add_name(ctx, &ctx->locals, p->source->name, node);
+        if (!symbol) return false;
+        symbol->kind = SOURCE_LOCAL; symbol->index = p->index; symbol->type = p->source->type;
+        body->parameters[p->index] = symbol->type;
+    }
+    FunctionDeclNode *decl = &node->as.function_expr;
+    for (int i = 0; i < decl->param_count; ++i) {
+        XrParamNode *param = decl->params[i];
+        XrXirType type;
+        if (!param->type || param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest ||
+            !source_type(ctx, param->type, &type) || type == XR_XIR_UNIT)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter contract is not implemented in XIR");
+        SourceName *symbol = add_name(ctx, &ctx->locals, param->name, node);
+        if (!symbol) return false;
+        symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t) i; symbol->type = type;
+        body->parameters[symbol->index] = type;
+        parameters[i] = (XrXirCallableParameter) {type, XR_PARAM_READ};
+    }
+    return true;
+}
+static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    FunctionDeclNode *decl = &node->as.function_expr;
+    if (decl->is_generator || decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_count ||
+        decl->borrow_origin_count || !decl->body || decl->param_count < 0 || decl->param_count > 65536)
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closure contract is not implemented in XIR");
+    SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0};
+    if (!capture_scan(node, &scan)) return false;
+    if (scan.count > 65536 - (uint32_t) decl->param_count || ctx->next_closure >= ctx->function_count - 1)
+        return source_fail(ctx, node, XR_XIR_BUDGET, "closure parameter or declaration budget exhausted");
+    uint32_t outer = ctx->function, index = ctx->next_closure++;
+    SourceFunction *body = &ctx->bodies[index];
+    body->node = node; body->type_owner = ctx->bodies[outer].type_owner; body->module = ctx->module;
+    body->infer_result = !decl->return_type;
+    ctx->generics[index].parameter_count = ctx->generics[outer].parameter_count;
+    ctx->generics[index].constraints = ctx->generics[outer].constraints;
+    char *name = source_alloc(ctx, 32, sizeof(*name));
+    body->parameters = source_alloc(ctx, scan.count + (uint32_t) decl->param_count, sizeof(*body->parameters));
+    XrXirCallableParameter *parameters = decl->param_count ? source_alloc(ctx, (uint32_t) decl->param_count, sizeof(*parameters)) : NULL;
+    SourceValue *captures = source_alloc(ctx, scan.count, sizeof(*captures));
+    if (!name || !body->parameters || (decl->param_count && !parameters) || !captures) return false;
+    snprintf(name, 32, "$closure%u", index);
+    ctx->functions[index] = (XrXirFunction) {name, (uint32_t) strlen(name), body->parameters,
+        scan.count + (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
+    ctx->identities[index].module = ctx->module;
+    SourceName *locals = ctx->locals, *scope = ctx->scope;
+    SourceLoop *loop = ctx->loop; bool returned = ctx->returned;
+    ctx->function = index; ctx->locals = ctx->scope = NULL; ctx->loop = NULL; ctx->returned = false;
+    XrXirType type = XR_XIR_UNIT;
+    bool ok = closure_parameters(ctx, node, &scan, parameters) &&
+        source_type(ctx, decl->return_type, &ctx->functions[index].result) &&
+        statement(ctx, decl->body, false) && finish_body(ctx) &&
+        source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type);
+    ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
+    if (!ok) return false;
+    for (SourceCapture *p = scan.captures; p; p = p->next)
+        captures[p->index] = (SourceValue) {p->source->index, p->source->type};
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, index};
+    uint32_t count = ctx->generics[index].parameter_count;
+    XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
+    if (count && !types) return false;
+    for (uint32_t i = 0; i < count; ++i) types[i] = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + i);
+    return source_type_arguments(ctx, node, types, count, &op) && emit_group(ctx, op, captures, scan.count, value);
+}
 static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
     for (int t = 0; t < ctx->graph->topo_count; ++t) {
@@ -989,7 +1176,7 @@ static bool build_bodies(SourceContext *ctx) {
         for (int i = 0; i < ast->as.program.count; ++i) if (!statement(ctx, ast->as.program.statements[i], true)) return false;
         if (!finish_body(ctx)) return false;
     }
-    for (uint32_t f = count; f + 1 < ctx->function_count; ++f) {
+    for (uint32_t f = count; f < ctx->first_closure; ++f) {
         ctx->function = f; ctx->module = ctx->bodies[f].module; ctx->returned = false;
         ctx->locals = ctx->scope = NULL;
         FunctionDeclNode *decl = &ctx->bodies[f].node->as.function_decl;
@@ -1000,6 +1187,8 @@ static bool build_bodies(SourceContext *ctx) {
         }
         if (!statement(ctx, decl->body, false) || !finish_body(ctx)) return false;
     }
+    if (ctx->next_closure != ctx->function_count - 1)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"closure declaration was not checked");
     ctx->function = ctx->function_count - 1; ctx->module = (uint32_t) ctx->graph->entry_index;
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
@@ -1033,8 +1222,14 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
         XrXirDeclarations declarations = {ctx.modules, (uint32_t) ctx.graph->spec_count, ctx.identities,
             ctx.slots, ctx.slot_count, ctx.literals, ctx.literal_count, (uint32_t) ctx.graph->entry_index, ctx.function_count - 1};
         XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, ctx.callables.count ? &ctx.callables : NULL};
-        XrXirStatus status = xr_xir_check(&built, &checking, output, NULL);
-        if (status != XR_XIR_OK) source_fail(&ctx, NULL, status, "constructed XIR failed checking");
+        XrXirDiagnostic location = {0};
+        XrXirStatus status = xr_xir_check(&built, &checking, output, &location);
+        if (status != XR_XIR_OK) {
+            char message[128];
+            snprintf(message, sizeof(message), "constructed XIR failed checking at function %u block %u instruction %u",
+                location.function, location.block, location.instruction);
+            source_fail(&ctx, NULL, status, message);
+        }
     }
 done:
     xr_free(error);

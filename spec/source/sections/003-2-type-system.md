@@ -1026,7 +1026,7 @@ fn rejected() {
 | `Ptr<T>` / `MutPtr<T>` | 指针绑定 | 到指针绑定的最后一次使用 |
 | **闭包捕获** | 闭包绑定 | 到闭包绑定的最后一次使用 |
 
-普通同步闭包**按引用捕获**外层绑定，因此捕获是一次借用，不是拷贝：
+普通同步闭包对外层可变 `var` **按共享cell引用捕获**，因此这类捕获形成借用；`const`与可复制非视图的普通read参数按值捕获，不形成该借用：
 
 ```xray
 fn rejected() {
@@ -2179,7 +2179,7 @@ Three loan forms share one loan record, one non-lexical liveness rule, and one s
 | `Ptr<T>` / `MutPtr<T>` | the pointer binding | that binding's last use |
 | **Closure capture** | the closure binding | that binding's last use |
 
-An ordinary synchronous closure captures an outer binding **by reference**, so a capture is a loan and not a copy:
+An ordinary synchronous closure captures an outer mutable var through a shared cell, so that capture is a loan. Const and ordinary read parameters of copyable non-view types are captured by value and do not form that loan:
 
 ```xray
 fn rejected() {

@@ -59,7 +59,7 @@ print(x)                     // 1
 
 #### 普通同步闭包
 
-默认按 **引用捕获**：
+可变 `var` 按 **共享 cell 引用捕获**，`const` 按值捕获：
 
 ```xray
 fn make_counter() -> (() -> i64) {
@@ -86,6 +86,14 @@ print(c())      // 2
 - 仅读 → 可能隐式复制（避免闭包转换）。
 - 读写 → 提升为闭包 box。
 - 详见 §17.5。
+
+#### XIR 源码闭包准入
+
+普通闭包按绑定类别捕获：局部 `const` 与可复制、非视图的普通 read 参数保存逻辑副本；局部 `var` 保持一个共享 cell。仅按实际词法使用收集自由变量，重复使用同一绑定只捕获一次；shadow、初始化前不可见以及for头作用域遵循普通名字解析。嵌套闭包需要的自由变量逐层传递。模块名字仍经原有模块状态与权限规则访问，不作为局部环境快照。
+
+XIR源码入口准入参数显式标注类型的 `fn(...) -> R { ... }` 与箭头闭包。没有返回标注时，在定义处从返回表达式推导唯一精确类型；所有返回必须一致，非unit结果必须覆盖所有路径。不从调用目标或一次实例化推断参数、约束或效应。闭包不能声明自己的一等泛型参数；外围T及其已冻结约束进入私有实现函数，在Checked上与捕获类型一起特化、复验并封存。
+
+此族先接通不可变按值捕获；使用到的var捕获在共享cell实现前明确拒绝，未使用的var不造成拒绝。ref/move/视图捕获、noescape及Sendable/效应承诺仍按尚未准入的合同拒绝，不将它们降成普通复制或静默添加承诺。源码生成的函数和捕获仅进入§17.18的唯一XIR/环境路径。
 
 ### 7.3 所有权与 move
 
@@ -249,7 +257,7 @@ A closure captures variables from outer scopes as **upvalues**.
 
 #### Plain synchronous closures
 
-The default capture mode is **by reference**:
+Ordinary `var` captures retain a shared cell; copyable non-view `const` and ordinary read parameters are captured by logical value copy:
 
 ```xray
 fn make_counter() -> (() -> i64) {
@@ -278,6 +286,14 @@ The compiler analyzes upvalues:
 - read-only → may be implicitly copied (avoiding closure conversion).
 - read/write → promoted to a closure box.
 - See §17.5 for details.
+
+#### XIR source closure admission
+
+Ordinary closures capture according to the binding: local const and ordinary read parameters of copyable, non-view types produce logical value copies; local var retains one shared cell. Only lexically used free bindings are collected, once per binding. Shadowing, invisibility before initialization and for-header scope obey ordinary name resolution. Free variables needed by nested closures pass through each enclosing closure. Module names continue to use module state and authority rules rather than local environment snapshots.
+
+The XIR source producer admits fn expressions and arrow closures with explicitly typed parameters. An omitted return annotation infers one exact type from return expressions at definition; all returns must agree and a non-unit result must cover every path. No parameter, constraint or effect is inferred from an invocation target or one instantiation. A closure cannot declare first-class generic parameters of its own. Enclosing type parameters and frozen constraints belong to its private implementation, specialized and rechecked with capture types on Checked before sealing.
+
+Immutable value captures are admitted first. Used var captures reject until shared cells are implemented; unused outer vars do not cause rejection. Ref/move/view captures and unadmitted noescape, Sendable or effect promises fail closed instead of becoming copies or implicit promises. Source functions and captures use only the XIR/environment path in section 17.18.
 
 ### 7.3 Ownership and `move`
 

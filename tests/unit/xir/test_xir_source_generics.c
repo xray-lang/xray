@@ -56,6 +56,7 @@ static void reference_syntax(void) {
     CHECK(!xr_parse(session,"identity<i64>\n"));
     xr_compiler_session_delete(session);
 }
+#include "xir_source_closure_cases.h"
 int main(void) {
     reference_syntax();
     const char *rejected[] = {
@@ -110,6 +111,7 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
+    source_closure_cases(&request);
     for (unsigned i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_generic_source(root, rejected[i]);
         XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;

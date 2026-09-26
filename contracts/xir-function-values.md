@@ -97,9 +97,28 @@ can clean up. No borrowed environment survives independently of its owner.
 Last-reference destruction drains nested immutable environments without host
 recursion or allocation. stop/free revokes entry but not escaped value lifetime.
 Value5/Call8/Program4 and schema4/semantic10 replace earlier contracts.
-Shared var cells, cycles, source closure production and concurrency remain open;
+Shared var cells, cycles, full callable contracts and concurrency remain open;
 this contract never substitutes snapshot capture for shared mutable bindings.
 
 verification-test: test_xir_program_vm
 verification-test: test_xir_program_native
 verification-test: test_xir_value_allocations
+
+## Source closure production
+
+AST_FUNCTION_EXPR produces a private implementation with ordered lexical
+value captures followed by explicit parameters. A bounded lexical scan observes
+block, parameter, declaration-initializer, branch and for-header scope; only
+used external local bindings become captures, with transitive nested capture.
+Used mutable locals reject until shared cells are admitted. Module references
+keep module authority rather than being snapshotted.
+
+Parameters require explicit supported read types; absent result annotation
+infers one exact result from returns at definition, with full return coverage.
+The private implementation inherits enclosing type parameters and constraints;
+it cannot declare its own first-class generic parameter list. Both its body and
+the FUNCTION_REF capture prefix go through ordinary Checked validation,
+specialization and recheck. No source/AST retry occurs during instantiation.
+
+This producer adds no wire opcode or ABI revision: it consumes the current
+schema4/semantic10 and Value5/Call8/Program4 environment contract.

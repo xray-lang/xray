@@ -184,7 +184,27 @@ export fn stackDepth(n:i64)->string {
 
 fn leftCallback(flag:bool)->string { const pause = alpha.pause<string>; return pause(flag ? "ry" : "wrong") }
 fn rightCallback(flag:bool)->string { const pause = alpha.pause<string>; return pause(flag ? "wrong" : "rn") }
-fn chooseCallback(flag:bool)->fn(bool)->string { return flag ? leftCallback : rightCallback }
+fn chooseCallback(flag:bool)->fn(bool)->string {
+    var unused = "mutable but not captured"
+    const prefix = closureScope() == 9 ? "r" : "bad"
+    const frozen = alpha.frozen<string>(flag ? "y" : "n")
+    const make = fn()->fn(bool)->string {
+        return (value:bool) -> prefix + frozen()
+    }
+    return make()
+}
+fn closureScope()->i64 {
+    const value = 3
+    const evaluate = fn() {
+        { const value = 99 }
+        const value = value + 1
+        const again = fn() { return value + value }
+        var ignored = 0
+        for (var value = 0; value < 2; value++) { ignored++ }
+        return again() + ignored - 1
+    }
+    return evaluate()
+}
 fn passCallback(callback:fn(bool)->string)->fn(bool)->string { return callback }
 var activeCallback:fn(bool)->string = rightCallback
 fn flipCallback(flag:bool)->bool { activeCallback = rightCallback; return flag }

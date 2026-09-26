@@ -1627,7 +1627,7 @@ Three loan forms share one loan record, one non-lexical liveness rule, and one s
 | `Ptr<T>` / `MutPtr<T>` | the pointer binding | that binding's last use |
 | **Closure capture** | the closure binding | that binding's last use |
 
-An ordinary synchronous closure captures an outer binding **by reference**, so a capture is a loan and not a copy:
+An ordinary synchronous closure captures an outer mutable var through a shared cell, so that capture is a loan. Const and ordinary read parameters of copyable non-view types are captured by value and do not form that loan:
 
 ```xray
 fn rejected() {
@@ -4198,7 +4198,7 @@ A closure captures variables from outer scopes as **upvalues**.
 
 #### Plain synchronous closures
 
-The default capture mode is **by reference**:
+Ordinary `var` captures retain a shared cell; copyable non-view `const` and ordinary read parameters are captured by logical value copy:
 
 ```xray
 fn make_counter() -> (() -> i64) {
@@ -4227,6 +4227,14 @@ The compiler analyzes upvalues:
 - read-only → may be implicitly copied (avoiding closure conversion).
 - read/write → promoted to a closure box.
 - See §17.5 for details.
+
+#### XIR source closure admission
+
+Ordinary closures capture according to the binding: local const and ordinary read parameters of copyable, non-view types produce logical value copies; local var retains one shared cell. Only lexically used free bindings are collected, once per binding. Shadowing, invisibility before initialization and for-header scope obey ordinary name resolution. Free variables needed by nested closures pass through each enclosing closure. Module names continue to use module state and authority rules rather than local environment snapshots.
+
+The XIR source producer admits fn expressions and arrow closures with explicitly typed parameters. An omitted return annotation infers one exact type from return expressions at definition; all returns must agree and a non-unit result must cover every path. No parameter, constraint or effect is inferred from an invocation target or one instantiation. A closure cannot declare first-class generic parameters of its own. Enclosing type parameters and frozen constraints belong to its private implementation, specialized and rechecked with capture types on Checked before sealing.
+
+Immutable value captures are admitted first. Used var captures reject until shared cells are implemented; unused outer vars do not cause rejection. Ref/move/view captures and unadmitted noescape, Sendable or effect promises fail closed instead of becoming copies or implicit promises. Source functions and captures use only the XIR/environment path in section 17.18.
 
 ### 7.3 Ownership and `move`
 
