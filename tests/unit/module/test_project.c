@@ -69,6 +69,64 @@ static void write_fixture_file(const char *name, const char *content) {
     fclose(f);
 }
 
+static XrProject *load_provider_project(const char *provider_table,
+                                        const char *additional_symbols) {
+    char manifest[8192];
+    setup_tmpdir();
+    write_fixture_file("oracle.c", "int x(void) { return 1; }\n");
+    snprintf(manifest, sizeof(manifest),
+             "[package]\n"
+             "name = \"provider-fixture\"\n"
+             "version = \"1.0.0\"\n"
+             "license = \"MIT\"\n"
+             "[native]\n"
+             "name = \"provider-native\"\n"
+             "version = \"1.0.0\"\n"
+             "license = \"MIT\"\n"
+             "source = \"vendored test fixture\"\n"
+             "audit_mode = \"shipping\"\n"
+             "vm = \"verified-dynamic\"\n"
+             "[[native.unit]]\n"
+             "name = \"oracle\"\n"
+             "kind = \"c\"\n"
+             "sources = [\"oracle.c\"]\n"
+             "source_hashes = "
+             "[\"1a4799e20d310b20da93ba33a23ec2cef063f5d0dd46e0d6c650f8c1b0499c16\"]\n"
+             "include_dirs = []\n"
+             "defines = []\n"
+             "system_links = []\n"
+             "c_standard = \"c11\"\n"
+             "optimization = \"release\"\n"
+             "visibility = \"hidden\"\n"
+             "warnings = \"strict\"\n"
+             "output = \"oracle.dll\"\n"
+             "purpose = \"provider fixture\"\n"
+             "[[native.symbol]]\n"
+             "xray = \"provider_tick\"\n"
+             "native = \"provider_tick\"\n"
+             "kind = \"function\"\n"
+             "calling_convention = \"c\"\n"
+             "unit = \"oracle\"\n"
+             "[native.symbol.contract]\n"
+             "params = [{ index = 0, access = \"read\", nullable = false, "
+             "escape = \"noescape\", ownership = \"value\", output = \"none\" }]\n"
+             "return = { ownership = \"value\", nullable = false, validity = \"i64\" }\n"
+             "effects = [\"foreign\"]\n"
+             "callbacks = []\n"
+             "failure = \"none\"\n"
+             "allocation = \"none\"\n"
+             "blocking = \"never\"\n"
+             "suspend = \"never\"\n"
+             "io = \"none\"\n"
+             "sync = \"none\"\n"
+             "panic = \"never\"\n"
+             "error = \"none\"\n"
+             "%s%s",
+             provider_table ? provider_table : "", additional_symbols ? additional_symbols : "");
+    write_project_file(manifest);
+    return xr_project_load(NULL, g_tmpdir);
+}
+
 TEST(load_target_config) {
     setup_tmpdir();
     write_project_file("[project]\n"
@@ -203,6 +261,82 @@ TEST(load_verified_native_package_plan) {
     ASSERT_STR_EQ(symbol->native_name, "x");
     ASSERT_TRUE(symbol->contract.complete);
     ASSERT_TRUE(strstr(xr_native_symbol_library(symbol), "liboracle.dylib") != NULL);
+    xr_project_free(project);
+    teardown_tmpdir();
+}
+
+TEST(provider_binding_manifest_is_versioned_and_fail_closed) {
+    static const char valid_provider[] = "[native.symbol.provider]\n"
+                                         "schema_version = 1\n"
+                                         "contract_key = \"service/clock/v1\"\n"
+                                         "operation_key = \"service/clock/increment/v1\"\n";
+    XrProject *project = load_provider_project(valid_provider, NULL);
+    ASSERT_NOT_NULL(project);
+    ASSERT_TRUE(project->initialized);
+    ASSERT_NOT_NULL(project->native_plan);
+    const XrNativeSymbol *symbol =
+        xr_native_package_find_symbol(project->native_plan, "provider_tick");
+    ASSERT_NOT_NULL(symbol);
+    ASSERT_TRUE(symbol->provider.complete);
+    ASSERT_EQ_INT(symbol->provider.schema_version, XR_NATIVE_PROVIDER_BINDING_SCHEMA_VERSION);
+    ASSERT_STR_EQ(symbol->provider.contract_key, "service/clock/v1");
+    ASSERT_STR_EQ(symbol->provider.operation_key, "service/clock/increment/v1");
+    xr_project_free(project);
+    teardown_tmpdir();
+
+    static const char *const rejected[] = {
+        "[native.symbol.provider]\nschema_version = 2\ncontract_key = "
+        "\"service/clock/v1\"\noperation_key = \"service/clock/increment/v1\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"Service/clock/v1\"\noperation_key = \"service/clock/increment/v1\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"service\\\\clock\\\\v1\"\noperation_key = \"service/clock/increment/v1\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"service//clock/v1\"\noperation_key = \"service/clock/increment/v1\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"service/./v1\"\noperation_key = \"service/clock/increment/v1\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"service/clock\"\noperation_key = \"service/clock/increment/v1\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"service/clock/v1\"\noperation_key = \"service/timer/increment/v1\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"service/clock/v1\"\noperation_key = \"service/clock/increment/v2\"\n",
+        "[native.symbol.provider]\nschema_version = 1\ncontract_key = "
+        "\"service/clock/v1\"\n",
+    };
+    for (size_t index = 0u; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
+        project = load_provider_project(rejected[index], NULL);
+        ASSERT_NOT_NULL(project);
+        ASSERT_FALSE(project->initialized);
+        ASSERT_NOT_NULL(project->native_plan);
+        ASSERT_FALSE(project->native_plan->valid);
+        ASSERT_TRUE(strstr(project->native_plan->error, "E-NATIVE-PROVIDER") != NULL);
+        xr_project_free(project);
+        teardown_tmpdir();
+    }
+
+    static const char duplicate[] =
+        "[[native.symbol]]\n"
+        "xray = \"provider_tock\"\n"
+        "native = \"provider_tock\"\n"
+        "kind = \"function\"\n"
+        "calling_convention = \"c\"\n"
+        "unit = \"oracle\"\n"
+        "[native.symbol.contract]\n"
+        "params = [{ index = 0, access = \"read\", nullable = false, escape = "
+        "\"noescape\", ownership = \"value\", output = \"none\" }]\n"
+        "return = { ownership = \"value\", nullable = false, validity = \"i64\" }\n"
+        "effects = [\"foreign\"]\ncallbacks = []\nfailure = \"none\"\n"
+        "allocation = \"none\"\nblocking = \"never\"\nsuspend = \"never\"\n"
+        "io = \"none\"\nsync = \"none\"\npanic = \"never\"\nerror = \"none\"\n"
+        "[native.symbol.provider]\n"
+        "schema_version = 1\n"
+        "contract_key = \"service/clock/v1\"\n"
+        "operation_key = \"service/clock/increment/v1\"\n";
+    project = load_provider_project(valid_provider, duplicate);
+    ASSERT_NOT_NULL(project);
+    ASSERT_FALSE(project->initialized);
+    ASSERT_TRUE(strstr(project->native_plan->error, "duplicate provider operation") != NULL);
     xr_project_free(project);
     teardown_tmpdir();
 }
@@ -343,6 +477,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Project Configuration");
 RUN_TEST(load_target_config);
 RUN_TEST(load_verified_native_package_plan);
+RUN_TEST(provider_binding_manifest_is_versioned_and_fail_closed);
 RUN_TEST(native_package_hash_mismatch_fails_closed);
 RUN_TEST(native_package_unknown_target_policy_fails_closed);
 RUN_TEST(c_export_prefix_and_exclude_shape_manifest_roots);

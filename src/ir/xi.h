@@ -1356,6 +1356,13 @@ typedef struct XiValue {
     uint64_t xg_callable_signature_key;    /* exact structural callable signature */
     uint32_t xg_callable_effect_union;     /* union of exact target implementation effects */
     uint32_t xg_callable_capability_union; /* union of exact target capabilities */
+    uint32_t xg_provider_source_decl_id;   /* exact extern declaration bound by Xglobal */
+    XrStableId xg_provider_contract_id;    /* target-neutral provider contract identity */
+    XrStableId xg_provider_operation_id;   /* target-neutral provider operation identity */
+    uint32_t xg_provider_effect_mask;      /* exact CoreSpec-visible effect contract */
+    uint32_t xg_provider_capability_mask;  /* exact CoreSpec-visible capability contract */
+    uint8_t xg_provider_call_abi;          /* XaProviderCallAbi */
+    uint8_t xg_provider_complete;          /* analyzer/Xglobal identity join is frozen */
     uint32_t xa_intrinsic_id;      /* stable XaIntrinsicId for canonical semantic operations */
     uint8_t array_intrinsic_kind;  /* XiArrayIntrinsicKind, or NONE */
     uint8_t array_member_kind;     /* XiArrayMemberKind, or NONE */
@@ -1490,6 +1497,13 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_callable_signature_key = src->xg_callable_signature_key;
     dst->xg_callable_effect_union = src->xg_callable_effect_union;
     dst->xg_callable_capability_union = src->xg_callable_capability_union;
+    dst->xg_provider_source_decl_id = src->xg_provider_source_decl_id;
+    dst->xg_provider_contract_id = src->xg_provider_contract_id;
+    dst->xg_provider_operation_id = src->xg_provider_operation_id;
+    dst->xg_provider_effect_mask = src->xg_provider_effect_mask;
+    dst->xg_provider_capability_mask = src->xg_provider_capability_mask;
+    dst->xg_provider_call_abi = src->xg_provider_call_abi;
+    dst->xg_provider_complete = src->xg_provider_complete;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->array_intrinsic_kind = src->array_intrinsic_kind;
     dst->array_member_kind = src->array_member_kind;

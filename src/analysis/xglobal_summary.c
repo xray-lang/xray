@@ -18,6 +18,34 @@
 #include <stdio.h>
 #include <string.h>
 
+static void xg_stable_id_hex(XrStableId id, char out[XR_STABLE_ID_BYTES * 2 + 1]) {
+    static const char digits[] = "0123456789abcdef";
+    for (size_t i = 0; i < XR_STABLE_ID_BYTES; ++i) {
+        out[i * 2] = digits[id.bytes[i] >> 4];
+        out[i * 2 + 1] = digits[id.bytes[i] & 0x0f];
+    }
+    out[XR_STABLE_ID_BYTES * 2] = '\0';
+}
+
+static bool xg_stable_id_parse(const char *text, XrStableId *out) {
+    if (!text || !out || strlen(text) != XR_STABLE_ID_BYTES * 2)
+        return false;
+    for (size_t i = 0; i < XR_STABLE_ID_BYTES; ++i) {
+        unsigned char hi = (unsigned char) text[i * 2];
+        unsigned char lo = (unsigned char) text[i * 2 + 1];
+        uint8_t h = hi >= '0' && hi <= '9'   ? (uint8_t) (hi - '0')
+                    : hi >= 'a' && hi <= 'f' ? (uint8_t) (hi - 'a' + 10)
+                                             : UINT8_MAX;
+        uint8_t l = lo >= '0' && lo <= '9'   ? (uint8_t) (lo - '0')
+                    : lo >= 'a' && lo <= 'f' ? (uint8_t) (lo - 'a' + 10)
+                                             : UINT8_MAX;
+        if (h == UINT8_MAX || l == UINT8_MAX)
+            return false;
+        out->bytes[i] = (uint8_t) ((h << 4) | l);
+    }
+    return true;
+}
+
 XR_FUNC uint32_t xg_name_id(const char *name) {
     if (!name || !name[0])
         return 0;
@@ -451,6 +479,14 @@ static uint64_t hash_callsite_summary(uint64_t hash, const XgCallsiteSummary *ro
     hash = hash_u64(hash, row->callable_signature_key);
     hash = hash_u32(hash, row->callable_effect_union);
     hash = hash_u32(hash, row->callable_capability_union);
+    hash = hash_u32(hash, row->provider_source_decl_id);
+    hash = hash_mix(hash, row->provider_contract_id.bytes, sizeof(row->provider_contract_id.bytes));
+    hash =
+        hash_mix(hash, row->provider_operation_id.bytes, sizeof(row->provider_operation_id.bytes));
+    hash = hash_u32(hash, row->provider_effect_mask);
+    hash = hash_u32(hash, row->provider_capability_mask);
+    hash = hash_u8(hash, row->provider_call_abi);
+    hash = hash_u8(hash, row->provider_complete);
     return hash_u32(hash, row->flags);
 }
 
@@ -929,6 +965,8 @@ XR_FUNC const char *xg_callsite_kind_name(uint8_t kind) {
             return "extern";
         case XG_CALL_CLASS_ALLOC:
             return "class_alloc";
+        case XG_CALL_PROVIDER:
+            return "provider";
         default:
             return "unknown";
     }
@@ -1283,6 +1321,8 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
             return "trap";
         case XG_BODY_TARGET_QUERY:
             return "target_query";
+        case XG_BODY_PROVIDER_CALL:
+            return "provider_call";
         default:
             return "unknown";
     }
@@ -1296,7 +1336,7 @@ XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count) {
         XG_BODY_MAY_READ_MEM,     XG_BODY_MAY_CALL,
         XG_BODY_MAY_SPAWN,        XG_BODY_ACCESSES_MUTABLE_MODULE,
         XG_BODY_OBSERVES_TASK_ID, XG_BODY_MAY_TRAP,
-        XG_BODY_TARGET_QUERY,
+        XG_BODY_TARGET_QUERY,     XG_BODY_PROVIDER_CALL,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(effects) / sizeof(effects[0]));
@@ -1415,6 +1455,8 @@ XR_FUNC const char *xg_capability_name(uint32_t capability) {
             return "parallel";
         case XG_CAP_PROFILE_POINTER_WIDTH:
             return "profile_pointer_width";
+        case XG_CAP_PROVIDER_BINDING:
+            return "provider_binding";
         default:
             return "unknown";
     }
@@ -1430,6 +1472,7 @@ XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count) {
         XG_CAP_RESULT_GROUP, XG_CAP_COUNTDOWN_LATCH, XG_CAP_SEMAPHORE,
         XG_CAP_EVENT_COUNT,  XG_CAP_GENERATOR,       XG_CAP_STACKTRACE,
         XG_CAP_PARALLEL,     XG_CAP_PROFILE_POINTER_WIDTH,
+        XG_CAP_PROVIDER_BINDING,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(capabilities) / sizeof(capabilities[0]));
@@ -2158,6 +2201,33 @@ XR_FUNC XgCallsiteSummary *xg_global_evidence_add_callsite(XgGlobalEvidence *evi
     if (!evidence || !summary ||
         !xg_global_evidence_reserve_callsites(evidence, evidence->ncallsites + 1))
         return NULL;
+    if (summary->kind == XG_CALL_PROVIDER) {
+        XrStableId zero = {{0}};
+        if (summary->callsite_id == XG_NO_ID || summary->owner_func_id == XG_NO_ID ||
+            summary->source_node_id == 0 || summary->provider_source_decl_id == XG_NO_ID ||
+            memcmp(summary->provider_contract_id.bytes, zero.bytes, sizeof(zero.bytes)) == 0 ||
+            memcmp(summary->provider_operation_id.bytes, zero.bytes, sizeof(zero.bytes)) == 0 ||
+            summary->provider_effect_mask != XG_PROVIDER_CALL_EFFECT_MASK ||
+            summary->provider_capability_mask != XG_PROVIDER_CALL_CAPABILITY_MASK ||
+            summary->provider_call_abi != XG_PROVIDER_CALL_ABI_I64_TO_I64 ||
+            summary->provider_complete != 1)
+            return NULL;
+        for (uint32_t i = 0; i < evidence->ncallsites; ++i) {
+            const XgCallsiteSummary *prior = &evidence->callsites[i];
+            if (prior->callsite_id == summary->callsite_id ||
+                (prior->owner_func_id == summary->owner_func_id &&
+                 prior->source_node_id == summary->source_node_id))
+                return NULL;
+        }
+    } else {
+        XrStableId zero = {{0}};
+        if (summary->provider_source_decl_id != XG_NO_ID ||
+            memcmp(summary->provider_contract_id.bytes, zero.bytes, sizeof(zero.bytes)) != 0 ||
+            memcmp(summary->provider_operation_id.bytes, zero.bytes, sizeof(zero.bytes)) != 0 ||
+            summary->provider_effect_mask != 0u || summary->provider_capability_mask != 0u ||
+            summary->provider_call_abi != 0u || summary->provider_complete != 0u)
+            return NULL;
+    }
     row = &evidence->callsites[evidence->ncallsites++];
     *row = *summary;
     return row;
@@ -3182,7 +3252,7 @@ static bool xg_callsite_effects_compose(const XgGlobalEvidence *evidence,
      * its composed effect set is empty for the same reason a sealed native or
      * extern call's is: there is no callee summary to compose. */
     if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN ||
-        call->kind == XG_CALL_CLASS_ALLOC) {
+        call->kind == XG_CALL_PROVIDER || call->kind == XG_CALL_CLASS_ALLOC) {
         *out_effect_bits = 0;
         return true;
     }
@@ -3359,6 +3429,7 @@ static bool xg_body_reachability_mark_call(const XgGlobalEvidence *evidence,
     if (!call)
         return false;
     if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN ||
+        call->kind == XG_CALL_PROVIDER ||
         call->kind == XG_CALL_CLASS_ALLOC)
         return true;
     if (call->kind == XG_CALL_DIRECT_FUNC) {
@@ -4333,17 +4404,27 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
     }
     for (uint32_t i = 0; i < evidence->ncallsites; i++) {
         const XgCallsiteSummary *c = &evidence->callsites[i];
+        char provider_contract[XR_STABLE_ID_BYTES * 2 + 1];
+        char provider_operation[XR_STABLE_ID_BYTES * 2 + 1];
+        xg_stable_id_hex(c->provider_contract_id, provider_contract);
+        xg_stable_id_hex(c->provider_operation_id, provider_operation);
         fprintf(
             out,
             "callsite id=%u owner=%u node=%u span=%u ordinal=%u kind=%u target=%u recv_class=%u "
             "recv_interface=%u method=%u name=%u sig=%u args=%u+%u callable=%u+%u "
-            "callable_sig=%016" PRIx64 " callable_effect=0x%x callable_caps=0x%x flags=0x%x\n",
+            "callable_sig=%016" PRIx64 " callable_effect=0x%x callable_caps=0x%x "
+            "provider_decl=%u provider_contract=%s provider_operation=%s "
+            "provider_effect=0x%x provider_caps=0x%x provider_abi=%u provider_complete=%u "
+            "flags=0x%x\n",
             c->callsite_id, c->owner_func_id, c->source_node_id, c->source_span_id, c->body_ordinal,
             (unsigned) c->kind, c->static_target_func_id, c->receiver_static_class_id,
             c->receiver_static_interface_id, c->method_id, c->method_name_id,
             c->method_signature_key, c->arg_type_key_start, (unsigned) c->arg_count,
             c->callable_target_start, (unsigned) c->callable_target_count,
             c->callable_signature_key, c->callable_effect_union, c->callable_capability_union,
+            c->provider_source_decl_id, provider_contract, provider_operation,
+            c->provider_effect_mask, c->provider_capability_mask, (unsigned) c->provider_call_abi,
+            (unsigned) c->provider_complete,
             c->flags);
     }
     for (uint32_t i = 0; i < evidence->ncallable_targets; i++) {
@@ -5217,6 +5298,10 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         uint32_t kind = 0;
         uint32_t arg_count = 0;
         uint32_t callable_target_count_row = 0;
+        uint32_t provider_abi = 0;
+        uint32_t provider_complete = 0;
+        char provider_contract[XR_STABLE_ID_BYTES * 2 + 1] = {0};
+        char provider_operation[XR_STABLE_ID_BYTES * 2 + 1] = {0};
         trailing = '\0';
         if (!evidence_cache_next_line(cursor, line, sizeof(line)))
             return false;
@@ -5227,18 +5312,27 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
                    " recv_interface=%" SCNu32 " method=%" SCNu32 " name=%" SCNu32 " sig=%" SCNu32
                    " args=%" SCNu32 "+%" SCNu32 " callable=%" SCNu32 "+%" SCNu32
                    " callable_sig=%" SCNx64 " callable_effect=0x%" SCNx32
-                   " callable_caps=0x%" SCNx32 " flags=0x%" SCNx32 " %c",
+                   " callable_caps=0x%" SCNx32 " provider_decl=%" SCNu32
+                   " provider_contract=%32s provider_operation=%32s"
+                   " provider_effect=0x%" SCNx32 " provider_caps=0x%" SCNx32
+                   " provider_abi=%" SCNu32 " provider_complete=%" SCNu32 " flags=0x%" SCNx32 " %c",
                    &row.callsite_id, &row.owner_func_id, &row.source_node_id, &row.source_span_id,
                    &row.body_ordinal, &kind, &row.static_target_func_id,
                    &row.receiver_static_class_id, &row.receiver_static_interface_id, &row.method_id,
                    &row.method_name_id, &row.method_signature_key, &row.arg_type_key_start,
                    &arg_count, &row.callable_target_start, &callable_target_count_row,
                    &row.callable_signature_key, &row.callable_effect_union,
-                   &row.callable_capability_union, &row.flags, &trailing) != 20)
+                   &row.callable_capability_union, &row.provider_source_decl_id, provider_contract,
+                   provider_operation, &row.provider_effect_mask, &row.provider_capability_mask,
+                   &provider_abi, &provider_complete, &row.flags, &trailing) != 27 ||
+            !xg_stable_id_parse(provider_contract, &row.provider_contract_id) ||
+            !xg_stable_id_parse(provider_operation, &row.provider_operation_id))
             return false;
         row.kind = (uint8_t) kind;
         row.arg_count = (uint16_t) arg_count;
         row.callable_target_count = callable_target_count_row;
+        row.provider_call_abi = (uint8_t) provider_abi;
+        row.provider_complete = (uint8_t) provider_complete;
         if (!xg_global_evidence_add_callsite(evidence, &row))
             return false;
     }

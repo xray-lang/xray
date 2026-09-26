@@ -31,6 +31,7 @@ struct XaAllocationInstancePlan;
 struct XaCallErrorEffectFact;
 struct XaFunctionExprEffectFact;
 struct XaTargetQueryFact;
+struct XaProviderCallFact;
 struct XaCallableTargetSetFact;
 
 typedef struct XaTypedProgram XaTypedProgram;
@@ -100,6 +101,9 @@ XR_FUNC bool xa_typed_program_function_expr_effect(const XaTypedProgram *program
 XR_FUNC bool xa_typed_program_target_query(const XaTypedProgram *program,
                                            const struct AstNode *member_access,
                                            struct XaTargetQueryFact *out_fact);
+XR_FUNC bool xa_typed_program_provider_call(const XaTypedProgram *program,
+                                            const struct AstNode *call_node,
+                                            struct XaProviderCallFact *out_fact);
 XR_FUNC bool xa_typed_program_callable_target_set(const XaTypedProgram *program,
                                                   const struct AstNode *call_node,
                                                   struct XaCallableTargetSetFact *out_fact);

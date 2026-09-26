@@ -86,6 +86,7 @@ typedef enum XaSemanticEffect {
     XA_SEM_EFFECT_SYNC = 1u << 8,
     XA_SEM_EFFECT_GEN_SUSPEND = 1u << 9,
     XA_SEM_EFFECT_TASK_SPAWN = 1u << 10,
+    XA_SEM_EFFECT_PROVIDER_CALL = 1u << 11,
 } XaSemanticEffect;
 
 /* Either kind of suspension means the frame is not a plain function activation.

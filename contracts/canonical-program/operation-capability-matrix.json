@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; existential pack/test/project, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; provider.call has a complete Program and executor foundation but remains IN_PROGRESS until manifest, analyzer, Xglobal, and Xi publish its exact identity; trap and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; existential pack/test/project, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; provider.call is complete through its versioned manifest, analyzer, Xglobal, Xi, Program, VM, and AOT foundation slice; trap and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 38 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; provider.call uses an exact dense provider requirement and operation reference; source publication remains fail closed until its owning slice activates it."
+    "note": "All 38 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; provider.call uses an exact dense provider requirement and operation reference published from a verified source manifest binding."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -424,17 +424,27 @@
       "decoder_verifier_evaluator": "bounded exact requirement/operation reference, declared effect/capability checks, complete import use, and independent callback evaluation",
       "vm_implementation": "invoke only the execution lease typed i64 adapter while its in-flight ticket pin keeps the instance binding alive",
       "aot_lowering": "FOUNDATION ONLY: emit a portable typed provider callback through the private execution context and normalize refusal to trap 7; the arbitrary-callback native harness does not prove exact-generation AOT closure",
-      "source_producer": "IN_PROGRESS: a versioned NativePackagePlan row must bind an existing extern C declaration to canonical contract and operation keys before hashing; analyzer, Xglobal, and Xi must publish the verified identity",
-      "old_owner_deletion": "IN_PROGRESS: direct native-call ownership remains excluded from the canonical provider path until source publication and cutover are complete",
-      "status": "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE",
+      "source_producer": "a versioned NativePackagePlan row binds one existing extern C declaration to canonical contract and operation keys; analyzer publishes exact stable IDs/effect/capability/ABI, Xglobal and Xi preserve the verified identity, and Program maps it to dense requirement indices",
+      "old_owner_deletion": "provider-bound extern calls are excluded from direct native-call ownership and have no legacy selector, address, or target-plan fallback in the canonical path",
+      "status": "COMPLETE_W7_WAVE5_PROVIDER",
       "evidence": [
         "xisa/core/registry.json",
         "xisa/program/schema.json",
         "src/program/xr_program_verify.c",
         "src/program/xr_reference_evaluator.c",
+        "src/module/xnative_package.c",
+        "src/frontend/analyzer/xa_provider_call.h",
+        "src/frontend/analyzer/xa_native_effect.c",
+        "src/analysis/xglobal_producer.c",
+        "src/analysis/xglobal_summary.h",
+        "src/ir/xi_lower.c",
+        "src/program/xr_program_from_xi.c",
         "src/execution/xr_execution.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/module/test_project.c",
+        "tests/unit/analysis/test_xglobal_summary.c",
+        "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/execution/test_xr_execution.c",
         "tests/unit/vm/test_xr_program_vm.c",
         "tests/unit/aot/test_xr_program_aot.c"
@@ -825,7 +835,7 @@
         "provider.call",
         "provider.refuse"
       ],
-      "status": "IN_PROGRESS_W7_WAVE5_PROVIDER_SOURCE"
+      "status": "COMPLETE_W7_WAVE5_PROVIDER"
     }
   ]
 }

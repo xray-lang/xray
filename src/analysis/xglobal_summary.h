@@ -14,6 +14,8 @@
 #include "../base/xdefs.h"
 #include "../base/xentry_plan.h"
 #include "../base/xstorage.h"
+#include "../base/xstable_id.h"
+#include "../core/xr_core_spec_gen.h"
 #include "../shared/xr_param_mode.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -58,6 +60,13 @@ typedef uint32_t XgMapEntryId;
 typedef uint32_t XgKeyAccessId;
 typedef uint32_t XgHashEqId;
 
+enum {
+    XG_PROVIDER_CALL_ABI_I64_TO_I64 = 1,
+    XG_PROVIDER_CALL_EFFECT_MASK =
+        XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_PROVIDER_CALL,
+    XG_PROVIDER_CALL_CAPABILITY_MASK = XR_CORE_CAPABILITY_PROVIDER_BINDING,
+};
+
 #define XG_LINK_DEP_NAME_MAX 512
 
 enum {
@@ -71,7 +80,7 @@ enum {
      * 44: nested bodies publish their frozen lexical-parent body identity.
      * 53: compiler-owned target queries publish stable source occurrence and
      * exact result contracts. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 53,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 54,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -221,6 +230,7 @@ typedef enum XgCallsiteKind {
      * unprovable and would otherwise make every such construction refuse the
      * whole-program effect and reachability proofs. */
     XG_CALL_CLASS_ALLOC,
+    XG_CALL_PROVIDER,
 } XgCallsiteKind;
 
 typedef enum XgBodyKind {
@@ -424,6 +434,7 @@ enum {
     XG_CAP_STACKTRACE = XR_CAP_STACKTRACE,
     XG_CAP_PARALLEL = XR_CAP_PARALLEL,
     XG_CAP_PROFILE_POINTER_WIDTH = 1u << 22,
+    XG_CAP_PROVIDER_BINDING = 1u << 23,
 };
 
 enum {
@@ -462,6 +473,7 @@ enum {
     XG_BODY_MAY_PANIC = XR_EFFECT_MAY_PANIC,
     XG_BODY_MAY_TRAP = 1u << 11,
     XG_BODY_TARGET_QUERY = 1u << 12,
+    XG_BODY_PROVIDER_CALL = 1u << 13,
 };
 
 enum {
@@ -984,6 +996,13 @@ typedef struct XgCallsiteSummary {
     uint64_t callable_signature_key;
     uint32_t callable_effect_union;
     uint32_t callable_capability_union;
+    XgDeclId provider_source_decl_id;
+    XrStableId provider_contract_id;
+    XrStableId provider_operation_id;
+    uint32_t provider_effect_mask;
+    uint32_t provider_capability_mask;
+    uint8_t provider_call_abi;
+    uint8_t provider_complete;
     uint32_t flags;
 } XgCallsiteSummary;
 

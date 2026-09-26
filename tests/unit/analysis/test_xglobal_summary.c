@@ -50,6 +50,47 @@ TEST(global_evidence_module_summary_requires_typed_identity) {
     ASSERT_TRUE(xg_module_summary_from_module_spec(&summary, 1, &spec));
 }
 
+TEST(global_evidence_provider_callsite_requires_exact_unique_fact) {
+    XgGlobalEvidence evidence;
+    XgBuildKey key = {0};
+    xg_global_evidence_init(&evidence, key);
+    XgCallsiteSummary row = {
+        .callsite_id = 1u,
+        .owner_func_id = 2u,
+        .source_node_id = 3u,
+        .kind = XG_CALL_PROVIDER,
+        .provider_source_decl_id = 4u,
+        .provider_effect_mask = XG_PROVIDER_CALL_EFFECT_MASK,
+        .provider_capability_mask = XG_PROVIDER_CALL_CAPABILITY_MASK,
+        .provider_call_abi = XG_PROVIDER_CALL_ABI_I64_TO_I64,
+        .provider_complete = 1u,
+    };
+    XrFingerprint digest;
+    ASSERT_TRUE(xr_stable_id_from_key("service/clock/v1", &row.provider_contract_id, &digest));
+    ASSERT_TRUE(
+        xr_stable_id_from_key("service/clock/increment/v1", &row.provider_operation_id, &digest));
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&evidence, &row));
+
+    XgCallsiteSummary duplicate = row;
+    duplicate.callsite_id = 5u;
+    ASSERT_NULL(xg_global_evidence_add_callsite(&evidence, &duplicate));
+    duplicate.source_node_id = 6u;
+    ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&evidence, &duplicate));
+
+    XgCallsiteSummary incomplete = row;
+    incomplete.callsite_id = 7u;
+    incomplete.source_node_id = 8u;
+    incomplete.provider_complete = 0u;
+    ASSERT_NULL(xg_global_evidence_add_callsite(&evidence, &incomplete));
+
+    XgCallsiteSummary stale_non_provider = row;
+    stale_non_provider.callsite_id = 9u;
+    stale_non_provider.source_node_id = 10u;
+    stale_non_provider.kind = XG_CALL_EXTERN;
+    ASSERT_NULL(xg_global_evidence_add_callsite(&evidence, &stale_non_provider));
+    xg_global_evidence_free(&evidence);
+}
+
 static void finalize_object_shape_fixture(XgObjectShapeSummary *shape) {
     if (!shape)
         return;
@@ -1136,7 +1177,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=53 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=54 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1510,15 +1551,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=53 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=53 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=54 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=54 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=53 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=54 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -14561,6 +14602,7 @@ TEST(address_plan_rejects_owner_pointer_field_escape) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_module_summary_requires_typed_identity);
+RUN_TEST(global_evidence_provider_callsite_requires_exact_unique_fact);
 RUN_TEST(global_evidence_publishes_exact_target_pointer_bits_query);
 RUN_TEST(global_evidence_rejects_ambiguous_target_query_identity);
 RUN_TEST(global_evidence_rejects_missing_target_query_fact_and_ignores_shadow);

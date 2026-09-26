@@ -309,6 +309,7 @@ def validate(root: Path) -> None:
         "core.trap",
     }
     wave_five_pointer = {"core.target.pointer_width"}
+    wave_five_provider = {"core.provider.call"}
     wave_three_slice_two = {
         "core.owner.move",
         "core.owner.drop",
@@ -341,6 +342,7 @@ def validate(root: Path) -> None:
         **{operation: "COMPLETE_W7_WAVE3_SLICE5" for operation in wave_three_slice_five},
         **{operation: "COMPLETE_W7_WAVE4" for operation in wave_four_executor},
         **{operation: "COMPLETE_W7_WAVE5_POINTER" for operation in wave_five_pointer},
+        **{operation: "COMPLETE_W7_WAVE5_PROVIDER" for operation in wave_five_provider},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,

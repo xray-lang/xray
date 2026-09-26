@@ -31,6 +31,7 @@
 #include "xconsteval.h"
 #include "xa_effect_db.h"
 #include "xa_target_query.h"
+#include "xa_provider_call.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_conversion.h"
 #include "../../runtime/value/xtype.h"
@@ -186,6 +187,15 @@ XR_FUNC bool xa_node_table_snapshot_target_queries(const XaNodeTable *t,
                                                    XaNodeTargetQueryEntry **out_entries,
                                                    uint32_t *out_count);
 XR_FUNC void xa_node_table_clear_target_query(XaNodeTable *t, const struct AstNode *node);
+
+XR_FUNC bool xa_node_table_set_provider_call(XaNodeTable *t, const struct AstNode *node,
+                                             const XaProviderCallFact *fact);
+XR_FUNC bool xa_node_table_get_provider_call(const XaNodeTable *t, const struct AstNode *node,
+                                             XaProviderCallFact *out_fact);
+XR_FUNC bool xa_node_table_snapshot_provider_calls(const XaNodeTable *t,
+                                                   XaNodeProviderCallEntry **out_entries,
+                                                   uint32_t *out_count);
+XR_FUNC void xa_node_table_clear_provider_call(XaNodeTable *t, const struct AstNode *node);
 
 XR_FUNC bool xa_node_table_set_callable_target_set(XaNodeTable *t, const struct AstNode *node,
                                                    const XaCallableTargetSetFact *fact);

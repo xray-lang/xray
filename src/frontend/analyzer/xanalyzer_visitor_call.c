@@ -24,6 +24,8 @@
 #include "xa_parallel_call_plan.h"
 #include "xa_resolved_call.h"
 #include "xa_intrinsic_registry.h"
+#include "xa_native_effect.h"
+#include "xa_node_table.h"
 #include "xbuiltin_receiver_registry.h"
 #include "xa_selection.h"
 #include "xaddressability.h"
@@ -6521,6 +6523,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
 
+    xa_node_table_clear_provider_call((XaNodeTable *) ctx->analyzer->node_table, node);
+
     CallExprNode *call = &node->as.call_expr;
     bool json_path_get = xa_call_is_json_static_method(call, "get");
     bool json_path_require = xa_call_is_json_static_method(call, "require");
@@ -8332,6 +8336,28 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (optional_function_call && final_type && !XR_TYPE_IS_UNKNOWN(final_type))
         final_type = xr_type_make_nullable(ctx->analyzer->isolate,
                                            xr_type_copy(ctx->analyzer->isolate, final_type));
+    XaSymbol *provider_symbol = fn_sym;
+    if (!provider_symbol && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, call->callee);
+        provider_symbol = selection ? selection->target_symbol : NULL;
+    }
+    XaProviderCallFact provider_fact;
+    XaProviderCallResolution provider_resolution = xa_native_provider_call_resolve(
+        ctx->analyzer, provider_symbol, callee_type, &provider_fact);
+    if (provider_resolution == XA_PROVIDER_CALL_INVALID) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "provider-bound extern calls require one READ i64 parameter and an i64 result", &loc);
+        final_type = xr_type_new_error(ctx->analyzer->isolate);
+    } else if (provider_resolution == XA_PROVIDER_CALL_VERIFIED &&
+               !xa_node_table_set_provider_call((XaNodeTable *) ctx->analyzer->node_table, node,
+                                                &provider_fact)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   "provider-call fact publication failed", &loc);
+        final_type = xr_type_new_error(ctx->analyzer->isolate);
+    }
     if (!resolved_intrinsic)
         (void) xa_record_resolved_source_function_call(ctx, node, call->callee, fn_sym);
     xr_free(effective_arg_types);

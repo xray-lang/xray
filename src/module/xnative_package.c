@@ -23,6 +23,76 @@
 #define XR_NATIVE_FNV_PRIME UINT64_C(1099511628211)
 
 static bool native_valid_c_identifier(const char *name);
+static bool native_validate_keys(XrNativePackagePlan *plan, XrTomlValue *table, const char *where,
+                                 const char *const *allowed, size_t allowed_count);
+static bool native_fail(XrNativePackagePlan *plan, const char *fmt, ...);
+static char *native_dup_string(XrTomlValue *table, const char *key);
+
+static bool native_provider_key(const char *key, const char **version_segment) {
+    if (version_segment)
+        *version_segment = NULL;
+    if (!key || !key[0] || key[0] == '/' || strchr(key, '\\'))
+        return false;
+    const char *segment = key;
+    const char *last = key;
+    for (const unsigned char *p = (const unsigned char *) key;; ++p) {
+        unsigned char ch = *p;
+        if (ch == '/' || ch == '\0') {
+            size_t width = (size_t) ((const char *) p - segment);
+            if (width == 0 || (width == 1 && segment[0] == '.') ||
+                (width == 2 && segment[0] == '.' && segment[1] == '.'))
+                return false;
+            last = segment;
+            if (ch == '\0')
+                break;
+            segment = (const char *) p + 1;
+            continue;
+        }
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' ||
+              ch == '.'))
+            return false;
+    }
+    if (last[0] != 'v' || last[1] < '1' || last[1] > '9')
+        return false;
+    for (const unsigned char *p = (const unsigned char *) last + 2; *p; ++p)
+        if (*p < '0' || *p > '9')
+            return false;
+    if (version_segment)
+        *version_segment = last;
+    return true;
+}
+
+static bool native_parse_provider_binding(XrNativePackagePlan *plan, XrTomlValue *table,
+                                          XrNativeProviderBinding *binding, const char *where) {
+    static const char *const keys[] = {"schema_version", "contract_key", "operation_key"};
+    if (!native_validate_keys(plan, table, where, keys, sizeof(keys) / sizeof(keys[0])))
+        return false;
+    int64_t schema = xtoml_get_int_or(table, "schema_version", -1);
+    binding->contract_key = native_dup_string(table, "contract_key");
+    binding->operation_key = native_dup_string(table, "operation_key");
+    const char *contract_version = NULL;
+    const char *operation_version = NULL;
+    if (schema != XR_NATIVE_PROVIDER_BINDING_SCHEMA_VERSION ||
+        !native_provider_key(binding->contract_key, &contract_version) ||
+        !native_provider_key(binding->operation_key, &operation_version))
+        return native_fail(plan,
+                           "E-NATIVE-PROVIDER: %s requires schema_version=1 and canonical "
+                           "lowercase contract/operation keys with explicit vN",
+                           where);
+    size_t contract_namespace = (size_t) (contract_version - binding->contract_key);
+    size_t operation_namespace = (size_t) (operation_version - binding->operation_key);
+    if (contract_namespace == 0 || operation_namespace <= contract_namespace ||
+        strncmp(binding->contract_key, binding->operation_key, contract_namespace) != 0 ||
+        binding->operation_key[contract_namespace] == '\0' ||
+        strcmp(contract_version, operation_version) != 0)
+        return native_fail(plan,
+                           "E-NATIVE-PROVIDER: %s operation must be inside the contract "
+                           "namespace and use the same explicit version",
+                           where);
+    binding->schema_version = (uint32_t) schema;
+    binding->complete = true;
+    return true;
+}
 
 static uint64_t native_hash_bytes(uint64_t hash, const void *data, size_t len) {
     const unsigned char *bytes = (const unsigned char *) data;
@@ -750,7 +820,7 @@ static bool native_parse_symbol_contract(XrNativePackagePlan *plan, XrTomlValue 
 
 static bool native_parse_symbols(XrNativePackagePlan *plan, XrTomlValue *native) {
     static const char *const symbol_keys[] = {"xray", "native",  "kind", "calling_convention",
-                                              "unit", "contract"};
+                                              "unit", "contract", "provider"};
     XrTomlValue *array = xtoml_get_array(native, "symbol");
     if (!array)
         return true;
@@ -791,7 +861,13 @@ static bool native_parse_symbols(XrNativePackagePlan *plan, XrTomlValue *native)
                                    symbol->xray_name);
         }
         XrTomlValue *contract = xtoml_get_table(table, "contract");
+        XrTomlValue *provider = xtoml_get_table(table, "provider");
         if (!contract) {
+            if (provider)
+                return native_fail(plan,
+                                   "E-NATIVE-PROVIDER: provider-bound symbol '%s' has no "
+                                   "complete contract",
+                                   symbol->xray_name);
             if (plan->audit_mode == XR_NATIVE_AUDIT_SHIPPING)
                 return native_fail(plan, "E-NATIVE-CONTRACT: shipping symbol '%s' has no contract",
                                    symbol->xray_name);
@@ -801,6 +877,23 @@ static bool native_parse_symbols(XrNativePackagePlan *plan, XrTomlValue *native)
         snprintf(contract_where, sizeof(contract_where), "%s.contract", where);
         if (!native_parse_symbol_contract(plan, contract, &symbol->contract, contract_where))
             return false;
+        if (provider) {
+            char provider_where[80];
+            snprintf(provider_where, sizeof(provider_where), "%s.provider", where);
+            if (symbol->kind != XR_NATIVE_SYMBOL_FUNCTION ||
+                !native_parse_provider_binding(plan, provider, &symbol->provider, provider_where))
+                return false;
+            for (int j = 0; j < i; ++j) {
+                const XrNativeProviderBinding *prior = &plan->symbols[j].provider;
+                if (prior->complete &&
+                    strcmp(prior->contract_key, symbol->provider.contract_key) == 0 &&
+                    strcmp(prior->operation_key, symbol->provider.operation_key) == 0)
+                    return native_fail(plan,
+                                       "E-NATIVE-PROVIDER: duplicate provider operation binding "
+                                       "'%s'",
+                                       symbol->provider.operation_key);
+            }
+        }
     }
     return true;
 }
@@ -1138,6 +1231,10 @@ static void native_refresh_plan_fingerprint(XrNativePackagePlan *plan) {
     for (uint32_t i = 0; i < plan->symbol_count; i++) {
         fingerprint = native_hash_text(fingerprint, plan->symbols[i].xray_name);
         fingerprint = native_hash_text(fingerprint, plan->symbols[i].native_name);
+        fingerprint = native_hash_bytes(fingerprint, &plan->symbols[i].provider.schema_version,
+                                        sizeof(plan->symbols[i].provider.schema_version));
+        fingerprint = native_hash_text(fingerprint, plan->symbols[i].provider.contract_key);
+        fingerprint = native_hash_text(fingerprint, plan->symbols[i].provider.operation_key);
     }
     for (uint32_t i = 0; i < plan->target_count; i++) {
         fingerprint = native_hash_text(fingerprint, plan->targets[i].triple);
@@ -1290,6 +1387,8 @@ void xr_native_package_plan_free(XrNativePackagePlan *plan) {
         xr_free(symbol->native_name);
         xr_free(symbol->calling_convention);
         xr_free(symbol->unit_name);
+        xr_free(symbol->provider.contract_key);
+        xr_free(symbol->provider.operation_key);
         native_symbol_contract_free(&symbol->contract);
     }
     xr_free(plan->symbols);

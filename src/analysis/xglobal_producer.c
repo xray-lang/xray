@@ -24,6 +24,9 @@
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
+#include "../module/xnative_package.h"
+#include "../toolchain/xcompiler_session.h"
+#include "../plan/semantic/xr_semantic_ids.h"
 #include "../shared/xr_core_intrinsic.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
@@ -44,6 +47,12 @@ _Static_assert((int) XA_TARGET_NAMESPACE_TARGET == (int) XG_TARGET_NAMESPACE_TAR
                "target namespace identity drifted between analyzer and Xglobal");
 _Static_assert((int) XA_TARGET_QUERY_POINTER_BITS == (int) XG_TARGET_QUERY_POINTER_BITS,
                "target query identity drifted between analyzer and Xglobal");
+_Static_assert((int) XA_PROVIDER_CALL_ABI_I64_TO_I64 == 1,
+               "provider call ABI identity drifted between analyzer and Xglobal");
+_Static_assert((int) XA_PROVIDER_CALL_EFFECT_MASK == (int) XG_PROVIDER_CALL_EFFECT_MASK,
+               "provider call effect identity drifted between analyzer and Xglobal");
+_Static_assert((int) XA_PROVIDER_CALL_CAPABILITY_MASK == (int) XG_PROVIDER_CALL_CAPABILITY_MASK,
+               "provider call capability identity drifted between analyzer and Xglobal");
 
 #define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000005)
 
@@ -9124,6 +9133,11 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgClassId generic_origin_class_id = XG_NO_ID;
     const char *generic_name = NULL;
     uint8_t generic_kind = XG_GENERIC_INST_FUNCTION;
+    XaProviderCallFact provider_fact;
+    bool has_provider_fact =
+        bc && bc->producer->analyzer && bc->producer->analyzer->node_table &&
+        xa_node_table_get_provider_call((const XaNodeTable *) bc->producer->analyzer->node_table,
+                                        call, &provider_fact);
     bc->effect_bits |= XG_BODY_MAY_CALL;
     if (body_call_is_sys_thread_spawn(&call->as.call_expr)) {
         bc->effect_bits |= XG_BODY_MAY_ALLOC;
@@ -9184,17 +9198,62 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
-            if (target->extern_dylib && target->extern_dylib[0])
-                (void) producer_add_link_dependency(
-                    bc->producer, target->module_id, target->decl_id, bc->owner_func_id,
-                    (uint32_t) call->line, XG_LINK_DEP_EXTERN_DYLIB, target->extern_dylib);
-            bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
-            bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;
-            if ((target->decl_flags & (XG_DECL_NAKED | XG_DECL_INTERRUPT)) == 0)
-                bc->capability_bits |= XG_CAP_EXTERN;
-            row.kind = XG_CALL_EXTERN;
-            row.method_id = (XgMethodId) callee_name_id;
-            row.method_name_id = callee_name_id;
+            const XrNativePackagePlan *native_plan = xr_compiler_session_native_package_plan(
+                bc->producer->analyzer ? bc->producer->analyzer->compiler_session : NULL);
+            const XrNativeSymbol *native_symbol =
+                native_plan && native_plan->valid
+                    ? xr_native_package_find_symbol(native_plan, callee_name)
+                    : NULL;
+            bool manifest_provider = native_symbol && native_symbol->provider.complete;
+            if (manifest_provider) {
+                XrStableId contract_id = {{0}};
+                XrStableId operation_id = {{0}};
+                XrFingerprint digest;
+                bool exact = has_provider_fact && provider_fact.complete == 1 &&
+                             provider_fact.source_symbol_id == callee->as.variable.symbol_id &&
+                             provider_fact.effect_mask == XA_PROVIDER_CALL_EFFECT_MASK &&
+                             provider_fact.capability_mask == XA_PROVIDER_CALL_CAPABILITY_MASK &&
+                             provider_fact.call_abi == XA_PROVIDER_CALL_ABI_I64_TO_I64 &&
+                             xr_stable_id_from_key(native_symbol->provider.contract_key,
+                                                   &contract_id, &digest) &&
+                             xr_stable_id_from_key(native_symbol->provider.operation_key,
+                                                   &operation_id, &digest) &&
+                             memcmp(contract_id.bytes, provider_fact.contract_id.bytes,
+                                    sizeof(contract_id.bytes)) == 0 &&
+                             memcmp(operation_id.bytes, provider_fact.operation_id.bytes,
+                                    sizeof(operation_id.bytes)) == 0;
+                if (!exact || target->decl_id == XG_NO_ID) {
+                    bc->producer->failed = true;
+                    xr_free(callable_target_func_ids);
+                    return;
+                }
+                row.kind = XG_CALL_PROVIDER;
+                row.provider_source_decl_id = target->decl_id;
+                row.provider_contract_id = provider_fact.contract_id;
+                row.provider_operation_id = provider_fact.operation_id;
+                row.provider_effect_mask = provider_fact.effect_mask;
+                row.provider_capability_mask = provider_fact.capability_mask;
+                row.provider_call_abi = provider_fact.call_abi;
+                row.provider_complete = provider_fact.complete;
+                bc->effect_bits |= XG_BODY_MAY_TRAP | XG_BODY_PROVIDER_CALL;
+                bc->capability_bits |= XG_CAP_PROVIDER_BINDING;
+            } else if (has_provider_fact) {
+                bc->producer->failed = true;
+                xr_free(callable_target_func_ids);
+                return;
+            } else {
+                if (target->extern_dylib && target->extern_dylib[0])
+                    (void) producer_add_link_dependency(
+                        bc->producer, target->module_id, target->decl_id, bc->owner_func_id,
+                        (uint32_t) call->line, XG_LINK_DEP_EXTERN_DYLIB, target->extern_dylib);
+                bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
+                bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;
+                if ((target->decl_flags & (XG_DECL_NAKED | XG_DECL_INTERRUPT)) == 0)
+                    bc->capability_bits |= XG_CAP_EXTERN;
+                row.kind = XG_CALL_EXTERN;
+                row.method_id = (XgMethodId) callee_name_id;
+                row.method_name_id = callee_name_id;
+            }
         } else if (target && (target->decl_flags & XG_DECL_NATIVE)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
@@ -9401,6 +9460,11 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             }
         }
     }
+    if (has_provider_fact && row.kind != XG_CALL_PROVIDER) {
+        bc->producer->failed = true;
+        xr_free(callable_target_func_ids);
+        return;
+    }
     if (row.kind == XG_CALL_CLOSURE) {
         /* A closure call never carries the old single-target field.  Its only
          *
@@ -9414,7 +9478,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         }
     }
     XaCallErrorEffectFact call_effect;
-    if (bc->producer->analyzer &&
+    if (row.kind == XG_CALL_PROVIDER) {
+        row.flags |= XG_CALL_ERROR_EFFECT_VERIFIED;
+    } else if (bc->producer->analyzer &&
         xa_analyzer_get_call_error_effect(bc->producer->analyzer, call, &call_effect)) {
         if (call_effect.throw_effect != XR_FN_EFFECT_NO_THROW)
             row.flags |= XG_CALL_MAY_ERROR;

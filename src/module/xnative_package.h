@@ -142,6 +142,20 @@ typedef struct XrNativeSymbolContract {
     bool complete;
 } XrNativeSymbolContract;
 
+enum {
+    XR_NATIVE_PROVIDER_BINDING_SCHEMA_VERSION = 1,
+};
+
+/* Target-neutral source binding for one canonical provider operation. The
+ * manifest owns only durable keys; later compiler/runtime authorities derive
+ * stable ids and executable contracts. */
+typedef struct XrNativeProviderBinding {
+    uint32_t schema_version;
+    char *contract_key;
+    char *operation_key;
+    bool complete;
+} XrNativeProviderBinding;
+
 typedef struct XrNativeUnit {
     char *name;
     XrNativeUnitKind kind;
@@ -173,6 +187,7 @@ typedef struct XrNativeSymbol {
     char *unit_name;
     const XrNativeUnit *unit; /* resolved, non-owning */
     XrNativeSymbolContract contract;
+    XrNativeProviderBinding provider;
 } XrNativeSymbol;
 
 typedef struct XrNativeLayoutAssertion {

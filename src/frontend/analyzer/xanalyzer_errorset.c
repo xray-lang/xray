@@ -4232,6 +4232,16 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
             if (callee_source && callee_source->type == AST_MEMBER_ACCESS)
                 apply_catch_aggregate_member_update(ctx, &member_update);
 
+            XaProviderCallFact provider_fact;
+            if (xa_node_table_get_provider_call((const XaNodeTable *) ctx->analyzer->node_table,
+                                                node, &provider_fact)) {
+                xa_effect_summary_add_semantic_effects(ctx->current_summary,
+                                                       XA_SEM_EFFECT_PROVIDER_CALL);
+                publish_call_error_effect_fact(ctx, node,
+                                               resolve_call_target(ctx, node->as.call_expr.callee));
+                break;
+            }
+
             if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee)) {
                 publish_call_error_effect_fact(ctx, node,
                                                resolve_call_target(ctx, node->as.call_expr.callee));
@@ -5409,13 +5419,19 @@ static void publish_call_error_effect_fact(ErrorSetCtx *ctx, AstNode *call_node,
         call_node->type != AST_CALL_EXPR)
         return;
 
-    publish_callable_target_set_fact(ctx, call_node, target);
+    XaProviderCallFact provider_fact;
+    bool provider_call = xa_node_table_get_provider_call(
+        (const XaNodeTable *) ctx->analyzer->node_table, call_node, &provider_fact);
+    if (!provider_call)
+        publish_callable_target_set_fact(ctx, call_node, target);
 
     XaEffectSummary summary;
     xa_effect_summary_init(&summary);
     const XaEffectContract *native_contract =
         es_native_call_effect_contract(ctx, call_node->as.call_expr.callee);
-    if (native_contract) {
+    if (provider_call) {
+        xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_PROVIDER_CALL);
+    } else if (native_contract) {
         XaEffectSummary *saved_summary = ctx->current_summary;
         ctx->current_summary = &summary;
         if (!es_apply_effect_contract(ctx, native_contract))

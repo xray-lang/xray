@@ -116,6 +116,11 @@ typedef struct XrXiConformanceStorage {
     XrCoreIrKey *slot_functions;
 } XrXiConformanceStorage;
 
+typedef struct XrXiProviderRequirementPair {
+    XrStableId contract_id;
+    XrStableId operation_id;
+} XrXiProviderRequirementPair;
+
 typedef struct XrXiBuildContext {
     const XrProgramFromXiInput *source;
     XrCoreIrModuleInput *modules;
@@ -132,6 +137,9 @@ typedef struct XrXiBuildContext {
     XrXiConformanceStorage *conformance_storage;
     uint32_t conformance_count;
     uint32_t conformance_capacity;
+    XrXiProviderRequirementPair *provider_requirements;
+    uint32_t provider_requirement_count;
+    uint32_t provider_requirement_capacity;
 } XrXiBuildContext;
 
 typedef struct XrXiCallableTargetSet {
@@ -1515,6 +1523,9 @@ static const XiEnumData *resolved_unit_enum_literal(const XrXiBuildContext *cont
                                                     const XiFunc *caller, const XiValue *load,
                                                     uint32_t *variant_ordinal);
 
+static bool resolved_provider_call(const XrXiBuildContext *context, const XiFunc *caller,
+                                   const XiValue *call);
+
 static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *context,
                                                    const XiFunc *function, const XiValue *value,
                                                    uint32_t depth) {
@@ -1537,7 +1548,8 @@ static bool value_is_only_elided_operand_recursive(const XrXiBuildContext *conte
                     (consumer->op == XI_VARIANT_CONSTRUCT ||
                      (consumer->op == XI_CALL &&
                       (resolved_direct_callee(context, function, consumer) ||
-                       resolved_empty_class_allocation(context, function, consumer))) ||
+                       resolved_empty_class_allocation(context, function, consumer) ||
+                       resolved_provider_call(context, function, consumer))) ||
                      resolved_empty_struct_literal(context, function, consumer) ||
                      resolved_unit_enum_literal(context, function, consumer, NULL))) {
                     elided = true;
@@ -1576,6 +1588,12 @@ static const XgCallsiteSummary *resolved_callsite(const XrXiBuildContext *contex
     if (!row || row->owner_func_id != (XgFuncId) caller->xg_body_func_id)
         return NULL;
     return row;
+}
+
+static bool resolved_provider_call(const XrXiBuildContext *context, const XiFunc *caller,
+                                   const XiValue *call) {
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    return row && row->kind == XG_CALL_PROVIDER;
 }
 
 static const XgCallsiteSummary *resolved_witness_callsite(const XrXiBuildContext *context,
@@ -1957,7 +1975,7 @@ interface_method_params(const XgGlobalEvidence *evidence, const XgInterfaceMetho
 
 static bool xg_effect_contract_to_core(uint32_t xg_effects, uint32_t *core_effects) {
     uint32_t supported = XG_BODY_MAY_ERROR | XG_BODY_MAY_PANIC | XG_BODY_MAY_CALL |
-                         XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY;
+                         XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY | XG_BODY_PROVIDER_CALL;
     if (!core_effects || (xg_effects & ~supported) != 0u)
         return false;
     uint32_t mapped = 0u;
@@ -1971,6 +1989,8 @@ static bool xg_effect_contract_to_core(uint32_t xg_effects, uint32_t *core_effec
         mapped |= XR_CORE_EFFECT_TRAP;
     if ((xg_effects & XG_BODY_TARGET_QUERY) != 0u)
         mapped |= XR_CORE_EFFECT_TARGET_QUERY;
+    if ((xg_effects & XG_BODY_PROVIDER_CALL) != 0u)
+        mapped |= XR_CORE_EFFECT_PROVIDER_CALL;
     *core_effects = mapped;
     return true;
 }
@@ -1978,13 +1998,81 @@ static bool xg_effect_contract_to_core(uint32_t xg_effects, uint32_t *core_effec
 static bool xg_capability_contract_to_core(uint32_t xg_capabilities,
                                            uint32_t *core_capabilities) {
     if (!core_capabilities ||
-        (xg_capabilities & ~XG_CAP_PROFILE_POINTER_WIDTH) != 0u)
+        (xg_capabilities & ~(XG_CAP_PROFILE_POINTER_WIDTH | XG_CAP_PROVIDER_BINDING)) != 0u)
         return false;
-    *core_capabilities =
-        (xg_capabilities & XG_CAP_PROFILE_POINTER_WIDTH) != 0u
-            ? XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH
-            : 0u;
+    *core_capabilities = 0u;
+    if ((xg_capabilities & XG_CAP_PROFILE_POINTER_WIDTH) != 0u)
+        *core_capabilities |= XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH;
+    if ((xg_capabilities & XG_CAP_PROVIDER_BINDING) != 0u)
+        *core_capabilities |= XR_CORE_CAPABILITY_PROVIDER_BINDING;
     return true;
+}
+
+static bool stable_id_nonzero(XrStableId id) {
+    const XrStableId zero = {{0}};
+    return memcmp(id.bytes, zero.bytes, sizeof(id.bytes)) != 0;
+}
+
+static bool provider_call_effect_contract(const XrXiBuildContext *context, const XiFunc *caller,
+                                          const XiValue *call, uint32_t *effect_mask,
+                                          uint32_t *capability_mask) {
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    if (!row || !call || row->kind != XG_CALL_PROVIDER || call->op != XI_CALL ||
+        row->provider_source_decl_id == XG_NO_ID || row->provider_complete != 1u ||
+        call->xg_provider_source_decl_id != row->provider_source_decl_id ||
+        call->xg_provider_complete != 1u ||
+        row->provider_effect_mask != XG_PROVIDER_CALL_EFFECT_MASK ||
+        call->xg_provider_effect_mask != row->provider_effect_mask ||
+        row->provider_capability_mask != XG_PROVIDER_CALL_CAPABILITY_MASK ||
+        call->xg_provider_capability_mask != row->provider_capability_mask ||
+        row->provider_call_abi != XG_PROVIDER_CALL_ABI_I64_TO_I64 ||
+        call->xg_provider_call_abi != row->provider_call_abi ||
+        !stable_id_nonzero(row->provider_contract_id) ||
+        !stable_id_nonzero(row->provider_operation_id) ||
+        memcmp(call->xg_provider_contract_id.bytes, row->provider_contract_id.bytes,
+               sizeof(row->provider_contract_id.bytes)) != 0 ||
+        memcmp(call->xg_provider_operation_id.bytes, row->provider_operation_id.bytes,
+               sizeof(row->provider_operation_id.bytes)) != 0)
+        return false;
+    if (effect_mask)
+        *effect_mask = row->provider_effect_mask;
+    if (capability_mask)
+        *capability_mask = row->provider_capability_mask;
+    return true;
+}
+
+static XrProgramBuildStatus append_provider_requirement(XrXiBuildContext *context,
+                                                        XrStableId contract_id,
+                                                        XrStableId operation_id) {
+    if (!context || !stable_id_nonzero(contract_id) || !stable_id_nonzero(operation_id))
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    for (uint32_t index = 0u; index < context->provider_requirement_count; ++index) {
+        const XrXiProviderRequirementPair *prior = &context->provider_requirements[index];
+        if (memcmp(prior->contract_id.bytes, contract_id.bytes, sizeof(contract_id.bytes)) == 0 &&
+            memcmp(prior->operation_id.bytes, operation_id.bytes, sizeof(operation_id.bytes)) == 0)
+            return XR_PROGRAM_BUILD_OK;
+    }
+    if (context->provider_requirement_count == context->provider_requirement_capacity) {
+        uint32_t capacity = context->provider_requirement_capacity
+                                ? context->provider_requirement_capacity * 2u
+                                : 4u;
+        size_t allocation_size = (size_t) capacity * sizeof(*context->provider_requirements);
+        if (capacity < context->provider_requirement_count ||
+            allocation_size / sizeof(*context->provider_requirements) != capacity)
+            return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
+        XrXiProviderRequirementPair *requirements =
+            xr_realloc(context->provider_requirements, allocation_size);
+        if (!requirements)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        context->provider_requirements = requirements;
+        context->provider_requirement_capacity = capacity;
+    }
+    context->provider_requirements[context->provider_requirement_count++] =
+        (XrXiProviderRequirementPair) {
+            .contract_id = contract_id,
+            .operation_id = operation_id,
+        };
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static bool witness_call_effect_contract(const XrXiBuildContext *context,
@@ -3485,6 +3573,13 @@ static XrProgramBuildStatus validate_callable_callsite_bindings(const XrXiBuildC
                         return fail(
                             diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
                             "Xi indirect call v%u has an unresolved callable target set", call->id);
+                    if (row->kind == XG_CALL_PROVIDER) {
+                        if (!provider_call_effect_contract(context, function, call, NULL, NULL))
+                            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                        "Xi provider call v%u has inconsistent source identity",
+                                        call->id);
+                        continue;
+                    }
                     if (row->kind != XG_CALL_CLOSURE ||
                         (row->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
                         return fail(
@@ -3988,6 +4083,7 @@ static void free_context(XrXiBuildContext *context) {
     xr_free(context->interfaces);
     xr_free(context->conformance_storage);
     xr_free(context->conformances);
+    xr_free(context->provider_requirements);
 }
 
 static XrProgramBuildStatus set_operands(const XrXiBuildContext *context,
@@ -4030,6 +4126,32 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
     if (!callsite)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi call v%u lacks matching global callsite evidence", value->id);
+    if (callsite->kind == XG_CALL_PROVIDER) {
+        uint16_t result_type = XR_CORE_TYPE_VOID;
+        uint16_t argument_type = XR_CORE_TYPE_VOID;
+        if (!provider_call_effect_contract(context, function->xi, value, NULL, NULL) ||
+            value->nargs != 2u || !value->args || !value->args[1] ||
+            !map_type(context, value->type, &result_type) || result_type != XR_CORE_TYPE_I64 ||
+            !map_type(context, value->args[1]->type, &argument_type) ||
+            argument_type != XR_CORE_TYPE_I64)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi provider call v%u lacks exact analyzer/Xglobal identity", value->id);
+        XrProgramBuildStatus requirement_status = append_provider_requirement(
+            context, value->xg_provider_contract_id, value->xg_provider_operation_id);
+        if (requirement_status != XR_PROGRAM_BUILD_OK)
+            return fail(diagnostic, diagnostic_size, requirement_status,
+                        "Xi provider call v%u could not publish its Program requirement",
+                        value->id);
+        instruction->operation_id = XR_CORE_OP_CORE_PROVIDER_CALL;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = XR_CORE_TYPE_I64;
+        instruction->result_ownership = XR_CORE_IR_NON_OWNER;
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION;
+        instruction->immediate.provider_operation.contract_id = value->xg_provider_contract_id;
+        instruction->immediate.provider_operation.operation_id = value->xg_provider_operation_id;
+        return set_operands(context, instruction, function, block, value->args + 1u, 1u, diagnostic,
+                            diagnostic_size);
+    }
     if (resolved_empty_class_allocation(context, function->xi, value)) {
         uint16_t result_type = XR_CORE_TYPE_VOID;
         if (!map_type(context, value->type, &result_type))
@@ -5980,7 +6102,12 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             ? xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_CONSTRUCT)
                             : NULL;
                     bool has_contract = false;
-                    if (value->xg_existential_kind != XI_EXISTENTIAL_NONE) {
+                    const XgCallsiteSummary *provider_call =
+                        value->op == XI_CALL ? resolved_callsite(context, function, value) : NULL;
+                    if (provider_call && provider_call->kind == XG_CALL_PROVIDER) {
+                        has_contract = provider_call_effect_contract(
+                            context, function, value, &value_effects, &value_capabilities);
+                    } else if (value->xg_existential_kind != XI_EXISTENTIAL_NONE) {
                         has_contract = xr_program_xi_semantic_operation_contract(
                             value->op, value->xg_existential_kind, &value_effects,
                             &value_capabilities);
@@ -6076,6 +6203,22 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             continue;
                         if (resolved_empty_class_allocation(context, storage->xi, value))
                             continue;
+                        const XgCallsiteSummary *provider_call =
+                            resolved_callsite(context, storage->xi, value);
+                        if (provider_call && provider_call->kind == XG_CALL_PROVIDER) {
+                            uint32_t provider_effects = 0u;
+                            uint32_t provider_capabilities = 0u;
+                            if (!provider_call_effect_contract(context, storage->xi, value,
+                                                               &provider_effects,
+                                                               &provider_capabilities))
+                                return fail(diagnostic, diagnostic_size,
+                                            XR_PROGRAM_BUILD_INVALID_INPUT,
+                                            "Xi function contract has inconsistent provider "
+                                            "identity");
+                            effects |= provider_effects;
+                            capabilities |= provider_capabilities;
+                            continue;
+                        }
                         const XiFunc *callee = resolved_direct_callee(context, storage->xi, value);
                         bool invoke = block_typed_invoke_call(context, storage->xi, block) == value;
                         if (witness) {
@@ -6644,6 +6787,22 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                             continue;
                         if (resolved_empty_class_allocation(context, function->xi, value))
                             continue;
+                        const XgCallsiteSummary *provider_call =
+                            resolved_callsite(context, function->xi, value);
+                        if (provider_call && provider_call->kind == XG_CALL_PROVIDER) {
+                            uint32_t provider_effects = 0u;
+                            uint32_t provider_capabilities = 0u;
+                            if (!provider_call_effect_contract(context, function->xi, value,
+                                                               &provider_effects,
+                                                               &provider_capabilities))
+                                return fail(diagnostic, diagnostic_size,
+                                            XR_PROGRAM_BUILD_INVALID_INPUT,
+                                            "Xi effect closure has inconsistent provider "
+                                            "identity");
+                            effects |= provider_effects;
+                            capabilities |= provider_capabilities;
+                            continue;
+                        }
                         const XiFunc *callee = resolved_direct_callee(context, function->xi, value);
                         bool invoke =
                             block_typed_invoke_call(context, function->xi, block) == value;
@@ -6984,6 +7143,23 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
     XrXiBuildContext context = {.source = input};
     XrProgramBuildStatus status = build_context(&context, diagnostic, diagnostic_size);
     XrCoreIrProgram *program = NULL;
+    XrCoreIrProviderRequirementInput *provider_requirements = NULL;
+    if (status == XR_PROGRAM_BUILD_OK) {
+        if (context.provider_requirement_count != 0u) {
+            provider_requirements =
+                xr_calloc(context.provider_requirement_count, sizeof(*provider_requirements));
+            if (!provider_requirements)
+                status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            for (uint32_t index = 0u;
+                 provider_requirements && index < context.provider_requirement_count; ++index) {
+                provider_requirements[index] = (XrCoreIrProviderRequirementInput) {
+                    .contract_id = context.provider_requirements[index].contract_id,
+                    .operation_ids = &context.provider_requirements[index].operation_id,
+                    .operation_count = 1u,
+                };
+            }
+        }
+    }
     if (status == XR_PROGRAM_BUILD_OK) {
         uint16_t feature = XR_CORE_FEATURE_CORE_BASE;
         XrCoreIrProgramInput core_input = {
@@ -6996,11 +7172,14 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
             .interface_count = context.interface_count,
             .conformances = context.conformance_count ? context.conformances : NULL,
             .conformance_count = context.conformance_count,
+            .provider_requirements = provider_requirements,
+            .provider_requirement_count = context.provider_requirement_count,
             .modules = context.modules,
             .module_count = input->module_count,
         };
         status = xr_core_ir_program_build(&core_input, &program, diagnostic, diagnostic_size);
     }
+    xr_free(provider_requirements);
     if (status == XR_PROGRAM_BUILD_OK)
         status = xr_program_write(program, artifact_out, diagnostic, diagnostic_size);
     if (status == XR_PROGRAM_BUILD_OK) {

@@ -40,6 +40,8 @@ typedef struct XaNodeEntry {
     XaFunctionExprEffectFact function_expr_effect;
     bool has_target_query;
     XaTargetQueryFact target_query;
+    bool has_provider_call;
+    XaProviderCallFact provider_call;
     bool has_callable_target_set;
     XaCallableTargetSetFact callable_target_set;
     struct XaNodeEntry *next;
@@ -173,6 +175,7 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 static bool entry_has_no_facts(const XaNodeEntry *e) {
     return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion &&
            !e->has_call_error_effect && !e->has_function_expr_effect && !e->has_target_query &&
+           !e->has_provider_call &&
            !e->has_callable_target_set;
 }
 
@@ -614,6 +617,111 @@ void xa_node_table_clear_target_query(XaNodeTable *t, const struct AstNode *node
         return;
     entry->has_target_query = false;
     entry->target_query = (XaTargetQueryFact) {0};
+    if (entry_has_no_facts(entry))
+        remove_entry_by_id(t, node->node_id);
+}
+
+static bool stable_id_nonzero(XrStableId id) {
+    XrStableId zero = {{0}};
+    return memcmp(id.bytes, zero.bytes, sizeof(id.bytes)) != 0;
+}
+
+static bool provider_call_fact_valid(const XaProviderCallFact *fact) {
+    return fact && fact->source_symbol_id != 0 && stable_id_nonzero(fact->contract_id) &&
+           stable_id_nonzero(fact->operation_id) &&
+           fact->effect_mask == XA_PROVIDER_CALL_EFFECT_MASK &&
+           fact->capability_mask == XA_PROVIDER_CALL_CAPABILITY_MASK &&
+           fact->call_abi == XA_PROVIDER_CALL_ABI_I64_TO_I64 && fact->complete == 1;
+}
+
+static bool provider_call_fact_equal(const XaProviderCallFact *left,
+                                     const XaProviderCallFact *right) {
+    return left && right && left->source_symbol_id == right->source_symbol_id &&
+           memcmp(left->contract_id.bytes, right->contract_id.bytes,
+                  sizeof(left->contract_id.bytes)) == 0 &&
+           memcmp(left->operation_id.bytes, right->operation_id.bytes,
+                  sizeof(left->operation_id.bytes)) == 0 &&
+           left->effect_mask == right->effect_mask &&
+           left->capability_mask == right->capability_mask && left->call_abi == right->call_abi &&
+           left->complete == right->complete;
+}
+
+bool xa_node_table_set_provider_call(XaNodeTable *t, const struct AstNode *node,
+                                     const XaProviderCallFact *fact) {
+    if (!t || !node || node->type != AST_CALL_EXPR || !provider_call_fact_valid(fact))
+        return false;
+    XaNodeEntry *entry = find_or_create(t, node->node_id);
+    if (!entry)
+        return false;
+    if (entry->has_provider_call)
+        return provider_call_fact_equal(&entry->provider_call, fact);
+    entry->has_provider_call = true;
+    entry->provider_call = *fact;
+    return true;
+}
+
+bool xa_node_table_get_provider_call(const XaNodeTable *t, const struct AstNode *node,
+                                     XaProviderCallFact *out_fact) {
+    if (!t || !node || node->type != AST_CALL_EXPR)
+        return false;
+    const XaNodeEntry *entry = find_entry(t, node->node_id);
+    if (!entry || !entry->has_provider_call)
+        return false;
+    if (out_fact)
+        *out_fact = entry->provider_call;
+    return true;
+}
+
+static int compare_node_provider_call_entry(const void *left, const void *right) {
+    const XaNodeProviderCallEntry *a = (const XaNodeProviderCallEntry *) left;
+    const XaNodeProviderCallEntry *b = (const XaNodeProviderCallEntry *) right;
+    return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
+}
+
+bool xa_node_table_snapshot_provider_calls(const XaNodeTable *t,
+                                           XaNodeProviderCallEntry **out_entries,
+                                           uint32_t *out_count) {
+    if (!out_entries || !out_count)
+        return false;
+    *out_entries = NULL;
+    *out_count = 0;
+    if (!t)
+        return false;
+    uint32_t count = 0;
+    for (int i = 0; i < t->bucket_count; ++i)
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next)
+            count += entry->has_provider_call ? 1u : 0u;
+    if (count == 0)
+        return true;
+    XaNodeProviderCallEntry *entries =
+        (XaNodeProviderCallEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
+    if (!entries)
+        return false;
+    uint32_t index = 0;
+    for (int i = 0; i < t->bucket_count; ++i) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (!entry->has_provider_call)
+                continue;
+            entries[index++] = (XaNodeProviderCallEntry) {
+                .node_id = entry->node_id,
+                .fact = entry->provider_call,
+            };
+        }
+    }
+    qsort(entries, count, sizeof(*entries), compare_node_provider_call_entry);
+    *out_entries = entries;
+    *out_count = count;
+    return true;
+}
+
+void xa_node_table_clear_provider_call(XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return;
+    XaNodeEntry *entry = (XaNodeEntry *) find_entry(t, node->node_id);
+    if (!entry || !entry->has_provider_call)
+        return;
+    entry->has_provider_call = false;
+    entry->provider_call = (XaProviderCallFact) {0};
     if (entry_has_no_facts(entry))
         remove_entry_by_id(t, node->node_id);
 }

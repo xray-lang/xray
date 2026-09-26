@@ -14,6 +14,8 @@
 #include "../parser/xast_nodes.h"
 #include "../../module/xnative_package.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../core/xr_core_spec_gen.h"
+#include "../../plan/semantic/xr_semantic_ids.h"
 #include <string.h>
 
 static bool native_text_equals(const char *text, const char *expected) {
@@ -48,6 +50,10 @@ XaNativeEffectAxioms xa_native_effect_axioms(XaAnalyzer *analyzer, const XaSymbo
 
     const XrNativeSymbolContract *contract = &native->contract;
     axioms.has_contract = true;
+    if (native->provider.complete) {
+        axioms.effects = XA_SEM_EFFECT_PROVIDER_CALL;
+        return axioms;
+    }
     /* Crossing the C boundary is itself an observable effect regardless of what
      * the callee does behind it. */
     axioms.effects = XA_SEM_EFFECT_FOREIGN;
@@ -70,4 +76,48 @@ XaNativeEffectAxioms xa_native_effect_axioms(XaAnalyzer *analyzer, const XaSymbo
     if (contract->sync && !native_text_equals(contract->sync, "none"))
         axioms.effects |= XA_SEM_EFFECT_SYNC;
     return axioms;
+}
+
+static bool provider_i64_type(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && !type->is_nullable &&
+           type->scalar_rep == XR_NATIVE_I64;
+}
+
+XaProviderCallResolution xa_native_provider_call_resolve(XaAnalyzer *analyzer,
+                                                         const XaSymbol *symbol,
+                                                         const XrType *function_type,
+                                                         XaProviderCallFact *out_fact) {
+    if (out_fact)
+        memset(out_fact, 0, sizeof(*out_fact));
+    if (!analyzer || !symbol || !symbol->name)
+        return XA_PROVIDER_CALL_NOT_BOUND;
+    const XrNativePackagePlan *plan =
+        xr_compiler_session_native_package_plan(analyzer->compiler_session);
+    if (!plan || !plan->valid)
+        return XA_PROVIDER_CALL_NOT_BOUND;
+    const XrNativeSymbol *native = xr_native_package_find_symbol(plan, symbol->name);
+    if (!native || !native->provider.complete)
+        return XA_PROVIDER_CALL_NOT_BOUND;
+    if (!xa_native_effect_is_bodyless_extern(symbol) || !native->contract.complete ||
+        native->kind != XR_NATIVE_SYMBOL_FUNCTION || !function_type ||
+        function_type->kind != XR_KIND_FUNCTION || function_type->function.is_variadic ||
+        function_type->function.param_count != 1 || function_type->function.min_params != 1 ||
+        xr_type_function_param_mode(function_type, 0) != XR_PARAM_READ ||
+        !provider_i64_type(xr_type_function_param_type(function_type, 0)) ||
+        !provider_i64_type(function_type->function.return_type))
+        return XA_PROVIDER_CALL_INVALID;
+    XaProviderCallFact fact = {
+        .source_symbol_id = symbol->id,
+        .effect_mask = XA_PROVIDER_CALL_EFFECT_MASK,
+        .capability_mask = XA_PROVIDER_CALL_CAPABILITY_MASK,
+        .call_abi = XA_PROVIDER_CALL_ABI_I64_TO_I64,
+        .complete = 1,
+    };
+    XrFingerprint digest;
+    if (!xr_stable_id_from_key(native->provider.contract_key, &fact.contract_id, &digest) ||
+        !xr_stable_id_from_key(native->provider.operation_key, &fact.operation_id, &digest))
+        return XA_PROVIDER_CALL_INVALID;
+    if (out_fact)
+        *out_fact = fact;
+    return XA_PROVIDER_CALL_VERIFIED;
 }

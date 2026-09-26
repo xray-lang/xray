@@ -560,6 +560,39 @@ static bool verify_target_query_contract(VerifyCtx *ctx, const XiFunc *f, const 
     return true;
 }
 
+static bool verify_provider_call_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                          const XiValue *value) {
+    XrStableId zero = {{0}};
+    bool carries_contract =
+        value &&
+        (value->xg_provider_source_decl_id != XG_NO_ID ||
+         memcmp(value->xg_provider_contract_id.bytes, zero.bytes, sizeof(zero.bytes)) != 0 ||
+         memcmp(value->xg_provider_operation_id.bytes, zero.bytes, sizeof(zero.bytes)) != 0 ||
+         value->xg_provider_effect_mask != 0 || value->xg_provider_capability_mask != 0 ||
+         value->xg_provider_call_abi != 0 || value->xg_provider_complete != 0);
+    if (!value)
+        return true;
+    if (!carries_contract)
+        return true;
+    if (value->op != XI_CALL || value->xg_callsite_id == XG_NO_ID ||
+        value->xg_provider_source_decl_id == XG_NO_ID || value->nargs != 2 || !value->args ||
+        !value->type || value->type->kind != XR_KIND_INT || value->type->is_nullable ||
+        value->type->scalar_rep != XR_NATIVE_I64 || !value->args[1] || !value->args[1]->type ||
+        value->args[1]->type->kind != XR_KIND_INT || value->args[1]->type->is_nullable ||
+        value->args[1]->type->scalar_rep != XR_NATIVE_I64 ||
+        memcmp(value->xg_provider_contract_id.bytes, zero.bytes, sizeof(zero.bytes)) == 0 ||
+        memcmp(value->xg_provider_operation_id.bytes, zero.bytes, sizeof(zero.bytes)) == 0 ||
+        value->xg_provider_effect_mask != XG_PROVIDER_CALL_EFFECT_MASK ||
+        value->xg_provider_capability_mask != XG_PROVIDER_CALL_CAPABILITY_MASK ||
+        value->xg_provider_call_abi != XG_PROVIDER_CALL_ABI_I64_TO_I64 ||
+        value->xg_provider_complete != 1) {
+        verr(ctx, "func '%s': v%u XI_CALL in b%u lacks an exact provider-call contract", f->name,
+             value->id, blk->id);
+        return false;
+    }
+    return true;
+}
+
 /* Check 4: value-level invariants */
 static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiValue *v) {
     if (ctx->failed)
@@ -644,6 +677,8 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
     if (!verify_existential_metadata_contract(ctx, f, blk, v))
         return;
     if (!verify_target_query_contract(ctx, f, blk, v))
+        return;
+    if (!verify_provider_call_contract(ctx, f, blk, v))
         return;
 
     // Assertion semantics belong only to an arena-owned typed plan.

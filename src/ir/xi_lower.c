@@ -1196,7 +1196,8 @@ static void xi_lower_bind_interface_return_ownership(const XgGlobalEvidence *ev,
     call->call_return_ownership.complete = true;
 }
 
-XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t source_node_id) {
+XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, const AstNode *source,
+                                       uint32_t source_node_id) {
     const XgGlobalEvidence *ev;
     const XgCallsiteSummary *match = NULL;
     if (!l || !call || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
@@ -1213,7 +1214,7 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
         if (call->op == XI_CALL) {
             if (row->kind != XG_CALL_DIRECT_FUNC && row->kind != XG_CALL_NATIVE &&
                 row->kind != XG_CALL_EXTERN && row->kind != XG_CALL_CLOSURE &&
-                row->kind != XG_CALL_CLASS_ALLOC)
+                row->kind != XG_CALL_CLASS_ALLOC && row->kind != XG_CALL_PROVIDER)
                 continue;
         } else {
             /* Namespace members lower through XI_CALL_METHOD even when the
@@ -1224,8 +1225,11 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
                 row->kind != XG_CALL_EXTERN && row->kind != XG_CALL_CLASS_ALLOC)
                 continue;
         }
-        if (match)
+        if (match) {
+            if (match->kind == XG_CALL_PROVIDER || row->kind == XG_CALL_PROVIDER)
+                l->had_error = true;
             return;
+        }
         match = row;
     }
     if (!match && (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
@@ -1234,8 +1238,40 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
         l->had_error = true;
         return;
     }
+    XaProviderCallFact typed_provider = {0};
+    bool has_typed_provider =
+        l->typed_program && source &&
+        xa_typed_program_provider_call(l->typed_program, source, &typed_provider);
+    if (!match && has_typed_provider) {
+        l->had_error = true;
+        return;
+    }
     if (match) {
         call->xg_callsite_id = match->callsite_id;
+        if (match->kind == XG_CALL_PROVIDER) {
+            if (!has_typed_provider || typed_provider.complete != 1 ||
+                match->provider_complete != 1 || match->provider_source_decl_id == XG_NO_ID ||
+                typed_provider.effect_mask != match->provider_effect_mask ||
+                typed_provider.capability_mask != match->provider_capability_mask ||
+                typed_provider.call_abi != match->provider_call_abi ||
+                memcmp(typed_provider.contract_id.bytes, match->provider_contract_id.bytes,
+                       sizeof(typed_provider.contract_id.bytes)) != 0 ||
+                memcmp(typed_provider.operation_id.bytes, match->provider_operation_id.bytes,
+                       sizeof(typed_provider.operation_id.bytes)) != 0) {
+                l->had_error = true;
+                return;
+            }
+            call->xg_provider_source_decl_id = match->provider_source_decl_id;
+            call->xg_provider_contract_id = match->provider_contract_id;
+            call->xg_provider_operation_id = match->provider_operation_id;
+            call->xg_provider_effect_mask = match->provider_effect_mask;
+            call->xg_provider_capability_mask = match->provider_capability_mask;
+            call->xg_provider_call_abi = match->provider_call_abi;
+            call->xg_provider_complete = match->provider_complete;
+        } else if (has_typed_provider) {
+            l->had_error = true;
+            return;
+        }
         if (match->kind == XG_CALL_CLOSURE) {
             uint32_t target_count = 0;
             if (xg_global_evidence_callable_targets(ev, match, NULL, &target_count)) {

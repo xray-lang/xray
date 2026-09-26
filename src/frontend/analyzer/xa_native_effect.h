@@ -20,12 +20,14 @@
 #define XA_NATIVE_EFFECT_H
 
 #include "xa_effect_db.h"
+#include "xa_provider_call.h"
 #include "../../base/xdefs.h"
 #include <stdbool.h>
 
 struct XaAnalyzer;
 struct XaSymbol;
 struct AstNode;
+struct XrType;
 
 /* Declared effect axioms for one extern symbol. */
 typedef struct XaNativeEffectAxioms {
@@ -34,6 +36,12 @@ typedef struct XaNativeEffectAxioms {
     bool allocates;              /* allocation = "may" */
     bool suspends;               /* suspend = "may" */
 } XaNativeEffectAxioms;
+
+typedef enum XaProviderCallResolution {
+    XA_PROVIDER_CALL_NOT_BOUND = 0,
+    XA_PROVIDER_CALL_VERIFIED,
+    XA_PROVIDER_CALL_INVALID,
+} XaProviderCallResolution;
 
 /* True when `symbol` is a bodyless extern "C" declaration, i.e. a symbol whose
  * effects can never be inferred from Xray source. */
@@ -44,5 +52,13 @@ XR_FUNC bool xa_native_effect_is_bodyless_extern(const struct XaSymbol *symbol);
  * in that case every effect conclusion about it is unknown. */
 XR_FUNC XaNativeEffectAxioms xa_native_effect_axioms(struct XaAnalyzer *analyzer,
                                                      const struct XaSymbol *symbol);
+
+/* Resolve a bodyless extern declaration to its manifest-bound provider
+ * identity. Bound declarations with any ABI/type drift return INVALID and
+ * never fall back to ordinary FFI lowering. */
+XR_FUNC XaProviderCallResolution xa_native_provider_call_resolve(struct XaAnalyzer *analyzer,
+                                                                 const struct XaSymbol *symbol,
+                                                                 const struct XrType *function_type,
+                                                                 XaProviderCallFact *out_fact);
 
 #endif /* XA_NATIVE_EFFECT_H */

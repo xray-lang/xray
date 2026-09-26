@@ -25,6 +25,7 @@
 #include "../../../src/ir/xi_import_resolve.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/module/xmodule_identity.h"
+#include "../../../src/module/xnative_package.h"
 #include "../../../src/module/xmodule_resolver.h"
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/program/xr_program_from_xi.h"
@@ -1710,9 +1711,9 @@ static void xi_canonical_program_test_fixture_cleanup(XiCanonicalProgramTestFixt
     memset(fixture, 0, sizeof(*fixture));
 }
 
-static bool xi_canonical_program_test_fixture_build(XiCanonicalProgramTestFixture *fixture,
-                                                    const char *namespace_id,
-                                                    const char *source) {
+static bool xi_canonical_program_test_fixture_build_with_native_plan(
+    XiCanonicalProgramTestFixture *fixture, const char *namespace_id, const char *source,
+    const XrNativePackagePlan *native_plan) {
     if (!fixture || !namespace_id || !source || !g_iso)
         return false;
     memset(fixture, 0, sizeof(*fixture));
@@ -1721,12 +1722,12 @@ static bool xi_canonical_program_test_fixture_build(XiCanonicalProgramTestFixtur
     fixture->session = xr_compiler_session_new(&session_config);
     if (!fixture->session)
         goto fail;
-    if (xr_compiler_session_attach_isolate(g_iso, fixture->session) !=
-        fixture->original_session)
+    xr_compiler_session_set_native_package_plan(fixture->session, native_plan);
+    if (xr_compiler_session_attach_isolate(g_iso, fixture->session) != fixture->original_session)
         goto fail;
     char diagnostic[512] = {0};
     if (!xr_runtime_target_profile_build_native_hosted(&fixture->profile, diagnostic,
-                                                        sizeof(diagnostic)) ||
+                                                       sizeof(diagnostic)) ||
         !xr_compiler_session_set_target_profile(fixture->session, fixture->profile) ||
         !xi_pipeline_fixture_analyze_source(&fixture->source, fixture->session, namespace_id,
                                             source) ||
@@ -1757,12 +1758,18 @@ fail:
     return false;
 }
 
+static bool xi_canonical_program_test_fixture_build(XiCanonicalProgramTestFixture *fixture,
+                                                    const char *namespace_id,
+                                                    const char *source) {
+    return xi_canonical_program_test_fixture_build_with_native_plan(fixture, namespace_id, source,
+                                                                    NULL);
+}
+
 TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
-    static const char source[] =
-        "fn pointer_bits() -> u16 {\n"
-        "  if (true) { return target.pointerBits }\n"
-        "  return target.pointerBits\n"
-        "}\n";
+    static const char source[] = "fn pointer_bits() -> u16 {\n"
+                                 "  if (true) { return target.pointerBits }\n"
+                                 "  return target.pointerBits\n"
+                                 "}\n";
     XiCanonicalProgramTestFixture fixture = {0};
     PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build(
         &fixture, "xi-program-target-pointer-bits", source));
@@ -1937,6 +1944,158 @@ TEST(e2e_program_target_pointer_bits_preserves_exact_source_identity) {
     xi_canonical_program_test_fixture_cleanup(&fixture);
 }
 
+TEST(e2e_program_provider_call_preserves_verified_source_identity) {
+    static const char source[] = "extern \"C\" { fn provider_tick(value: i64) -> i64 }\n"
+                                 "fn root() -> i64 { return unsafe { provider_tick(41) } }\n";
+    XrNativeParamContract parameter = {
+        .index = 0u,
+        .access = XR_NATIVE_ACCESS_READ,
+        .escape = XR_NATIVE_ESCAPE_NOESCAPE,
+        .ownership = XR_NATIVE_OWNERSHIP_VALUE,
+        .output = XR_NATIVE_OUTPUT_NONE,
+    };
+    XrNativeSymbol symbol = {
+        .xray_name = "provider_tick",
+        .native_name = "provider_tick",
+        .kind = XR_NATIVE_SYMBOL_FUNCTION,
+        .calling_convention = "c",
+        .unit_name = "provider-fixture",
+        .contract = {.params = &parameter, .param_count = 1u, .complete = true},
+        .provider =
+            {
+                .schema_version = XR_NATIVE_PROVIDER_BINDING_SCHEMA_VERSION,
+                .contract_key = "service/clock/v1",
+                .operation_key = "service/clock/increment/v1",
+                .complete = true,
+            },
+    };
+    XrNativePackagePlan native_plan = {
+        .symbols = &symbol,
+        .symbol_count = 1u,
+        .fingerprint = 1u,
+        .valid = true,
+    };
+    XiCanonicalProgramTestFixture fixture = {0};
+    PIPELINE_TEST_REQUIRE(xi_canonical_program_test_fixture_build_with_native_plan(
+        &fixture, "xi-program-provider-call", source, &native_plan));
+    PIPELINE_TEST_REQUIRE(fixture.evidence.ncallsites == 1u);
+    XgCallsiteSummary *callsite = &fixture.evidence.callsites[0];
+    PIPELINE_TEST_REQUIRE(callsite->kind == XG_CALL_PROVIDER);
+    PIPELINE_TEST_REQUIRE(callsite->provider_source_decl_id != XG_NO_ID);
+    PIPELINE_TEST_REQUIRE(callsite->provider_effect_mask == XG_PROVIDER_CALL_EFFECT_MASK);
+    PIPELINE_TEST_REQUIRE(callsite->provider_capability_mask == XG_PROVIDER_CALL_CAPABILITY_MASK);
+    PIPELINE_TEST_REQUIRE(callsite->provider_call_abi == XG_PROVIDER_CALL_ABI_I64_TO_I64);
+    PIPELINE_TEST_REQUIRE(callsite->provider_complete == 1u);
+
+    XrStableId expected_contract = {{0}};
+    XrStableId expected_operation = {{0}};
+    XrFingerprint digest;
+    PIPELINE_TEST_REQUIRE(
+        xr_stable_id_from_key(symbol.provider.contract_key, &expected_contract, &digest));
+    PIPELINE_TEST_REQUIRE(
+        xr_stable_id_from_key(symbol.provider.operation_key, &expected_operation, &digest));
+    PIPELINE_TEST_REQUIRE(memcmp(callsite->provider_contract_id.bytes, expected_contract.bytes,
+                                 sizeof(expected_contract.bytes)) == 0);
+    PIPELINE_TEST_REQUIRE(memcmp(callsite->provider_operation_id.bytes, expected_operation.bytes,
+                                 sizeof(expected_operation.bytes)) == 0);
+
+    XiFunc *entry =
+        xi_pipeline_find_module_function_by_xg_id(fixture.pipeline.ir, callsite->owner_func_id);
+    PIPELINE_TEST_REQUIRE(entry != NULL && entry->nparams == 0u && !entry->has_receiver);
+    XiValue *provider_call = NULL;
+    for (uint32_t block_index = 0u; block_index < entry->nblocks; ++block_index) {
+        XiBlock *block = entry->blocks[block_index];
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            XiValue *value = block->values[value_index];
+            if (!value || value->xg_callsite_id != callsite->callsite_id)
+                continue;
+            PIPELINE_TEST_REQUIRE(provider_call == NULL);
+            provider_call = value;
+        }
+    }
+    PIPELINE_TEST_REQUIRE(provider_call != NULL && provider_call->op == XI_CALL);
+    PIPELINE_TEST_REQUIRE(provider_call->xg_provider_source_decl_id ==
+                          callsite->provider_source_decl_id);
+    PIPELINE_TEST_REQUIRE(provider_call->xg_provider_complete == 1u);
+    PIPELINE_TEST_REQUIRE(memcmp(provider_call->xg_provider_contract_id.bytes,
+                                 expected_contract.bytes, sizeof(expected_contract.bytes)) == 0);
+    PIPELINE_TEST_REQUIRE(memcmp(provider_call->xg_provider_operation_id.bytes,
+                                 expected_operation.bytes, sizeof(expected_operation.bytes)) == 0);
+
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("provider-source-profile", strlen("provider-source-profile"));
+    const XiFunc *module_roots[] = {fixture.pipeline.ir};
+    XrProgramFromXiInput input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = entry,
+        .global_evidence = &fixture.evidence,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    char diagnostic[512] = {0};
+    XrProgramArtifact artifact = {0};
+    XrProgramBuildStatus build =
+        xr_program_write_from_xi(&input, &artifact, diagnostic, sizeof(diagnostic));
+    if (build != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "provider source Program build failed: %s\n", diagnostic);
+    PIPELINE_TEST_REQUIRE(build == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated != NULL);
+    PIPELINE_TEST_REQUIRE(validated->provider_requirement_count == 1u);
+    PIPELINE_TEST_REQUIRE(validated->provider_requirements[0].operation_count == 1u);
+    PIPELINE_TEST_REQUIRE(memcmp(validated->provider_requirements[0].contract_id.bytes,
+                                 expected_contract.bytes, sizeof(expected_contract.bytes)) == 0);
+    PIPELINE_TEST_REQUIRE(memcmp(validated->provider_requirements[0].operation_ids[0].bytes,
+                                 expected_operation.bytes, sizeof(expected_operation.bytes)) == 0);
+    PIPELINE_TEST_REQUIRE(
+        validated_program_operation_count(validated, XR_CORE_OP_CORE_PROVIDER_CALL) == 1u);
+    bool found_dense_call = false;
+    for (uint32_t function_index = 0u; function_index < validated->function_count;
+         ++function_index) {
+        const XrValidatedFunction *function = &validated->functions[function_index];
+        for (uint32_t block_index = 0u; block_index < function->block_count; ++block_index) {
+            const XrValidatedBlock *block = &function->blocks[block_index];
+            for (uint32_t instruction_index = 0u; instruction_index < block->instruction_count;
+                 ++instruction_index) {
+                const XrValidatedInstruction *instruction = &block->instructions[instruction_index];
+                if (instruction->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL)
+                    continue;
+                PIPELINE_TEST_REQUIRE(!found_dense_call);
+                PIPELINE_TEST_REQUIRE(instruction->immediate_kind ==
+                                      XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION);
+                PIPELINE_TEST_REQUIRE(instruction->immediate.provider_operation.requirement_index ==
+                                      0u);
+                PIPELINE_TEST_REQUIRE(instruction->immediate.provider_operation.operation_index ==
+                                      0u);
+                found_dense_call = true;
+            }
+        }
+    }
+    PIPELINE_TEST_REQUIRE(found_dense_call);
+    uint32_t entry_index = xr_validated_program_entry_function(validated);
+    PIPELINE_TEST_REQUIRE(entry_index < validated->function_count);
+    PIPELINE_TEST_REQUIRE(validated->functions[entry_index].effect_mask ==
+                          XG_PROVIDER_CALL_EFFECT_MASK);
+    PIPELINE_TEST_REQUIRE(validated->functions[entry_index].capability_mask ==
+                          XG_PROVIDER_CALL_CAPABILITY_MASK);
+
+    provider_call->xg_provider_complete = 0u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_INVALID_INPUT, "provider", NULL));
+    provider_call->xg_provider_complete = 1u;
+    provider_call->xg_provider_operation_id.bytes[0] ^= 1u;
+    PIPELINE_TEST_REQUIRE(xi_pipeline_program_write_has_status(
+        &input, XR_PROGRAM_BUILD_INVALID_INPUT, "provider", NULL));
+    provider_call->xg_provider_operation_id.bytes[0] ^= 1u;
+
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+    xi_canonical_program_test_fixture_cleanup(&fixture);
+}
+
 TEST(e2e_program_target_query_closes_interface_slot_contract) {
     static const char source[] =
         "interface PointerWidth { width() -> u16 }\n"
@@ -1950,8 +2109,8 @@ TEST(e2e_program_target_query_closes_interface_slot_contract) {
         &fixture, "xi-program-target-query-interface", source));
 
     XiFunc *entry = NULL;
-    for (uint16_t function_index = 0u;
-         function_index < fixture.pipeline.ir->module->nfuncs; ++function_index) {
+    for (uint16_t function_index = 0u; function_index < fixture.pipeline.ir->module->nfuncs;
+         ++function_index) {
         XiFunc *function = fixture.pipeline.ir->module->functions[function_index];
         if (!function || function->has_receiver || function->nparams != 0u)
             continue;
@@ -4417,6 +4576,7 @@ int main(int argc, char **argv) {
     run_e2e_status_str();
     run_e2e_program_xi_projection_is_exact_and_fail_closed();
     run_e2e_program_target_pointer_bits_preserves_exact_source_identity();
+    run_e2e_program_provider_call_preserves_verified_source_identity();
     run_e2e_program_target_query_closes_interface_slot_contract();
     run_e2e_program_move_direct_signatures_are_published_before_bodies();
     run_e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in();
