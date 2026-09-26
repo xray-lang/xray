@@ -44,7 +44,7 @@ static XrXirArtifact *string_fixture(uint32_t mode) {
         {"child", 5, parameters, 4, XR_XIR_STRING, child_blocks, 1, child, 6, NULL, 0},
         {"loop", 4, parameters, 2, XR_XIR_UNIT, loop_blocks, 2, loop, 4, NULL, 0}
     };
-    const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);

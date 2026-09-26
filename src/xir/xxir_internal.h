@@ -24,6 +24,8 @@ struct XrXirArtifact {
 };
 
 XR_FUNC XrXirStatus xr_xir_layout_build(XrXirArtifact *artifact, const XrXirBudget *budget);
+XR_FUNC XrXirStatus xr_xir_recheck(const XrXirModule *checked, const XrXirBudget *budget,
+    XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_layout_verify(const XrXirArtifact *artifact, const XrXirBudget *budget);
 
 #endif // XXIR_INTERNAL_H

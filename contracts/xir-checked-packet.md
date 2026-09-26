@@ -1,13 +1,13 @@
 # Owned Checked packet admission
 
-This format carries the implemented closed declaration/type/op subset only. It
-does not qualify generic templates, effect/diagnostic serialization, package
+This format carries the implemented declaration/type/op subset and marker-constrained
+generic templates. It does not qualify member witnesses, effect/diagnostic serialization, package
 linking, native cache admission or publication. There is one Checked reader and
 no Built, Lowered, legacy, or alternate executable format reader.
 
 All integers use fixed-width little endian, with no native struct padding.
-The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 1, semantic-contract
-u32 1, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
+The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 2, semantic-contract
+u32 2, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
 over header bytes 0..31 followed by the payload. Unknown versions, stage or
 reserved fields, length mismatch, trailing bytes and digest mismatch reject.
 The digest is content identity/integrity, not authentication. Schema or semantic
@@ -20,7 +20,9 @@ An instruction contains op/type/args[2]/targets[2] u32s and immediate i64 encode
 as two's-complement u64. A blob is u32 length followed by exactly those bytes.
 Declaration data, when present, is module/slot/literal counts, root/entry IDs,
 modules (name blob, dependency count/IDs, initializer), one module/exported pair
-per function, slots (module/type/mutable), and literal blobs. All IDs retain their
+per function, slots (module/type/mutable), and literal blobs. A generic-presence flag and per-function constraint/type-argument
+tables follow, governed by `xir-generic-templates.md`. Revision 1 rejects without
+a compatibility reader. All IDs retain their
 Checked meaning. No source path, pointer, native code, target layout, runtime
 state or trusted verification result is persisted.
 

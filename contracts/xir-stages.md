@@ -19,8 +19,8 @@ internal subset. Copying a scalar preserves its value without resource ownership
 addition has checked signed overflow; equality and signed less-than return bool. Branch conditions
 must be bool. Direct scalar CALL, SUSPEND, and THROW are separately governed by the resumable
 call contract. Calls carry a function-table index, a checked operand-table range, and an
-exact declared result type. Generic, resource, and borrowing operations
-are outside this subset and are rejected rather than guessed or lowered through
+exact declared result type. Generic parameters and explicit CALL type arguments are governed by
+`xir-generic-templates.md`. Resource and borrowing operations are outside this subset and are rejected rather than guessed or lowered through
 an older representation. This subset introduces no new source spelling.
 
 The op definition table owns opcode identity, stage membership, operand count,

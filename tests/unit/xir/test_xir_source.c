@@ -11,6 +11,7 @@
  */
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_generic.h"
 #include "xir/xxir_checked.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
@@ -38,6 +39,9 @@ int main(int argc, char **argv) {
         CHECK(fclose(file) == 0);
     } else CHECK(argc == 1);
     xr_xir_checked_packet_free(&packet);
+    XrXirArtifact *specialized = NULL;
+    CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked); checked = specialized;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);

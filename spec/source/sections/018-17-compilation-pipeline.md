@@ -166,8 +166,37 @@ Lowered 或旧格式读取器。
 释放全部部分构造。VM 与 native 消费者继续使用同一复验后的 Lowered 转换。
 精确字段与预算合同见 `contracts/xir-checked-packet.md`。
 
-该封闭子集不代表泛型约束/模板、效应、诊断来源序列化、包链接、native 缓存配对、
+该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
+
+### 17.11 定义处检查与 Checked 泛型特化
+
+普通类型参数准入域为可复制、可保存的值，不包括 unit、视图和 noncopyable 资源。
+当前具体类型为 bool/i64/string/Atomic<i64>。函数可以声明 `<T, U:Sendable>`，
+或使用该声明自身参数的 `where U:Sendable`；调用须显式给出全部类型实参。
+参数名不重复，Sendable 是保留标记名；首批每个参数最多一个 Sendable 约束，
+不准入默认类型参数、交叉/成员/条件方法约束或类型推断。
+
+每个模板体（包括未使用模板）在定义处检查。复制、读传参、保存与返回由普通准入域
+保证；Sendable 不授予成员、算术、显示或默认构造。无约束 T 不能调用要求 Sendable
+的泛型，即使当前具体类型恰好全都 Sendable。泛型转发必须从声明本身证明约束。
+复制保持 string 值语义、Atomic 身份语义；具体 retain/清理和布局在特化后确定。
+
+Built/Checked 使用函数局部类型参数 ID，保存约束和独立调用类型实参表。
+CALL 的类型实参范围与值实参范围分别规范化并复验；替换后的参数/结果须精确匹配，
+正常可见性、模块和支配关系规则仍有效。Checked 包 schema/语义合同版本为2，
+旧版本1直接拒绝。解码后重新验证模板定义与转发证明。
+
+特化只读取 Checked，不访问 AST。按声明身份与有序具体类型实参建立有界工作队列，
+重复或递归实例复用同一条目；先完成实例闭包并复验，再进入唯一 Lowered 管线。
+当前宿主函数 ID 接口保留所有普通定义为根；仅发射从这些根可达的泛型实例。
+模板独占包没有普通根时不能直接成为可执行程序。实例数、累计参数/块/指令、内存
+及工作量有预算，失败发布空结果并释放临时存储。Lowered 和不可变 Program 不保留
+开放类型参数，不在执行期追加实例。实例调试名字不是 native 缓存身份凭证。
+
+成员见证、符号回调效应、泛型类型构造器、类型推断、诊断来源序列化与完整标准库包
+链接/缓存配对仍待实现；本族未准入的效应/借用/callable 声明仍拒绝。精确接口合同为
+`contracts/xir-generic-templates.md`，不得用本族通过代替普通泛型完整资格。
 
 <!-- /xr-spec:cn -->
 
@@ -379,8 +408,49 @@ publishes nothing and frees all partial storage. Both VM and native consumers
 then use the same reverified Lowered transition. The precise wire and budget
 contract is `contracts/xir-checked-packet.md`.
 
-This closed subset does not qualify serialized generic constraints/templates,
+This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
 effects, diagnostic provenance, package linking, native-cache pairing, installer
 publication or complete source-free standard-library distribution.
+
+### 17.11 Definition Checking and Checked Generic Specialization
+
+Ordinary type parameters admit copyable, storable values, excluding unit, views
+and noncopyable resources. The current concrete domain is bool/i64/string/Atomic<i64>.
+Named functions can declare `<T, U:Sendable>` or an own-parameter `where U:Sendable`;
+calls supply all type arguments explicitly. Parameter names are distinct and
+Sendable is a reserved marker name. Each parameter currently admits at most one
+Sendable constraint; defaults, intersections, member/conditional constraints and
+inference remain unavailable.
+
+Every body, including unused templates, is checked at its definition. Copying,
+read passing, storage and return follow from the ordinary domain. Sendable adds
+no member, arithmetic, display or default-construction capability. Unconstrained
+T cannot be forwarded to a Sendable requirement merely because every currently
+implemented concrete type is Sendable. Forwarding proves constraints from the
+caller declaration. Copies preserve string values and Atomic identity; concrete
+retains, cleanup and layout are determined after specialization.
+
+Built/Checked retain function-local type parameter IDs, constraints and separate
+call type-argument tables. CALL type and value ranges are canonical and reverified;
+substituted parameters/results match exactly, with normal visibility, module and
+dominance rules. Checked schema/semantic-contract revision 2 preserves templates;
+revision 1 rejects. Loading rechecks definitions and forwarding proofs.
+
+Specialization consumes only Checked, never AST. A bounded work queue interns
+declaration identity plus ordered concrete arguments, reusing recursive instances.
+The instance closure is completed and reverified before the sole Lowered pipeline.
+The current host function-ID interface retains all ordinary definitions as roots;
+only generic instances reachable from these roots are emitted. A template-only
+package with no ordinary roots is not directly executable. Instance, aggregate
+parameter/block/instruction, memory and work budgets bound construction; failure
+publishes no result and releases temporary storage. Lowered and immutable Programs
+contain no open parameters and acquire no execution-time instances. Debug names
+are not native-cache identity proofs.
+
+Member witnesses, symbolic callback effects, generic type constructors, inference,
+diagnostic provenance serialization and complete stdlib package/cache pairing are
+still unavailable. Unadmitted effect/borrow/callable declarations continue to
+reject. The precise interface contract is `contracts/xir-generic-templates.md`;
+this family does not qualify all ordinary generic facilities.
 
 <!-- /xr-spec:en -->

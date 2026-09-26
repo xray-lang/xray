@@ -12,6 +12,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_generic.h"
 #include "../base/xmalloc.h"
 
 XrXirBudget xr_xir_default_budget(void) {
@@ -61,6 +62,7 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
         }
     }
     xr_free(artifact->layouts);
+    xr_xir_generics_free((XrXirGeneric *) artifact->module.generics, artifact->module.function_count);
     xr_xir_declarations_free((XrXirDeclarations *) artifact->module.declarations);
     xr_free(functions);
     xr_free(artifact);
@@ -84,7 +86,12 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         xr_free(copy);
         return NULL;
     }
-    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL};
+    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL};
+    XrXirGeneric *generics = NULL;
+    if (xr_xir_generics_clone(source, &generics) != XR_XIR_OK) {
+        xr_xir_artifact_free(copy); return NULL;
+    }
+    copy->module.generics = generics;
     XrXirDeclarations *declarations = NULL;
     if (xr_xir_declarations_clone(source->declarations, source->function_count, &declarations) != XR_XIR_OK) {
         xr_xir_artifact_free(copy);
@@ -117,6 +124,22 @@ static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnos
     return status;
 }
 
+XrXirStatus xr_xir_recheck(const XrXirModule *checked, const XrXirBudget *budget,
+    XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    if (!output) return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+    *output = NULL;
+    if (!checked || checked->stage != XR_XIR_CHECKED) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
+    XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
+    XrXirStatus status = xr_xir_verify(checked, &limits, diagnostic);
+    if (status != XR_XIR_OK) return status;
+    XrXirArtifact *copy = clone_module(checked);
+    if (!copy) return transition_error(XR_XIR_OUT_OF_MEMORY, diagnostic);
+    copy->budget = limits;
+    status = xr_xir_artifact_verify(copy, &limits, diagnostic);
+    if (status != XR_XIR_OK) { xr_xir_artifact_free(copy); return status; }
+    *output = copy; return XR_XIR_OK;
+}
+
 static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
                              const XrXirBudget *budget, XrXirArtifact **output,
                              XrXirDiagnostic *diagnostic, const XrXirTarget *target) {
@@ -127,6 +150,7 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
     XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
     if (source == XR_XIR_CHECKED) {
+        if (input->generics) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         XrXirLayout layout;
         if (xr_xir_layout(XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
             return transition_error(XR_XIR_BAD_LAYOUT, diagnostic);

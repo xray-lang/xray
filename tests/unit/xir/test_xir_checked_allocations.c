@@ -32,14 +32,17 @@ static void packet_free(void *p) {
 #define xr_malloc(size) packet_malloc(size)
 #define xr_calloc(count, size) packet_calloc(count, size)
 #define xr_free(p) packet_free(p)
+#include "xir/xxir_generic.c"
 #include "xir/xxir.c"
 #include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
 #include "xir/xxir_checked.c"
+#include "xir/xxir_specialize.c"
 #include "xir_checked_fixture.h"
-int main(void) {
-    XrXirArtifact *checked = checked_fixture();
+#include "xir_generic_fixture.h"
+static void packet_failures(bool generic) {
+    XrXirArtifact *checked = generic ? generic_fixture() : checked_fixture();
     size_t baseline = live;
     XrXirCheckedPacket packet = {0};
     calls = 0;
@@ -75,6 +78,28 @@ int main(void) {
         packet.bytes[i] ^= 0xFF;
     }
     xr_xir_checked_packet_free(&packet); CHECK(!live);
-    printf("Checked packet physical release: %zu writer and %zu reader allocation sites\n", write_sites, read_sites);
+    printf("%s packet physical release: %zu writer and %zu reader allocation sites\n",
+        generic ? "Generic" : "Closed", write_sites, read_sites);
+}
+
+static void specialization_failures(void) {
+    XrXirArtifact *checked = generic_fixture(), *output = NULL;
+    XrXirModule built = *xr_xir_artifact_module(checked); built.stage = XR_XIR_BUILT;
+    size_t baseline = live, sites[2] = {0};
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        for (size_t attempt = 0; attempt <= sites[mode]; ++attempt) {
+            calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+            XrXirStatus status = mode ? xr_xir_specialize(checked, NULL, &output, NULL) :
+                xr_xir_check(&built, NULL, &output, NULL);
+            if (!attempt) { CHECK(status == XR_XIR_OK && output); sites[mode] = calls; }
+            else CHECK(status == XR_XIR_OUT_OF_MEMORY && !output);
+            xr_xir_artifact_free(output); CHECK(live == baseline);
+        }
+    }
+    fail_at = SIZE_MAX; xr_xir_artifact_free(checked); CHECK(!live);
+    printf("Generic physical release: %zu checking and %zu specialization allocation sites\n", sites[0], sites[1]);
+}
+int main(void) {
+    packet_failures(false); packet_failures(true); specialization_failures();
     return 0;
 }

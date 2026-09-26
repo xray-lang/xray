@@ -11,6 +11,7 @@
  */
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_generic.h"
 #include "xir/xxir_emit_c.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -29,6 +30,9 @@ int main(int argc, char **argv) {
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_checked_read(bytes, (size_t) size, NULL, &checked, NULL) == XR_XIR_OK);
     memset(bytes, 0xCC, (size_t) size); xr_free(bytes);
+    XrXirArtifact *specialized = NULL;
+    CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked); checked = specialized;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);

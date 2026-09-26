@@ -80,7 +80,7 @@ static XrXirArtifact *fixture_checked(void) {
         {"false", 5, NULL, 0, XR_XIR_BOOL, pair_blocks, 1, boolean, 2, NULL, 0},
         {"max", 3, NULL, 0, XR_XIR_I64, pair_blocks, 1, maximum, 2, NULL, 0}
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, 9, NULL};
+    const XrXirModule module = {XR_XIR_BUILT, functions, 9, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     return artifact;

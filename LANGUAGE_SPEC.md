@@ -4892,7 +4892,7 @@ main()
 
 ## 9. Generics
 
-> Source of truth: `src/frontend/analyzer/xtype_ref_resolve.c`, `xanalyzer_mono.c`, `xanalyzer_builtin_interfaces.c`, and `src/runtime/value/xtype_generic.c`.
+> New XIR generic sources of truth: `src/xir/xxir_source.c`, `xxir_generic.c`, and `xxir_specialize.c`; the admitted subset is specified in §17.11. Other inference, class/interface and container facilities in this section still require migration; the legacy analyzer does not qualify the new pipeline.
 
 ### 9.1 Type Parameter Syntax `<T>`
 
@@ -5073,14 +5073,14 @@ var result = identity<f64>(0)            // the type argument supplies a unique 
 
 **Implementation strategy**: build-time monomorphization. **The source generic declaration identity and ordered concrete type-argument tuple jointly form the instance identity**, and the same rule applies to generic functions and to generic classes / structs alike; same-named generics in different modules remain distinct even for the same arguments. Every cross-module specialization—whether reached by direct selective import, a selective re-export alias, or a namespace through that re-export—binds to the exact instance owned by the defining module, never by falling back to a local alias, facade spelling, or bare function name. A facade's public export map contains only its declared source names; compiler-only specialization bindings remain private and never publish mangled names through the facade.
 
-- **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. The frontend never merges by representation, because a duck-typed generic body resolves `x.foo()` against the concrete type argument: until that resolution is done, two ABI-equivalent instances are not interchangeable.
+- **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. Generic bodies are checked at definition time against constraints; member identities cannot be rediscovered against a concrete argument. Equal ABI representation does not imply equal declarations, witnesses or ownership semantics.
 - **Nominal type-argument identity**: declaration-backed class / struct / interface / enum arguments are identified by their exact declarations, not by source spelling. A caller's `LocalCounter` and a same-named private type in the defining module must produce different specializations; explicit and inferred uses of the same caller type must merge into one specialization.
 - **Definition and call contexts**: the generic declaration body is always analyzed in its defining module's lexical context, while concrete type arguments resolved at a call site retain their exact semantic identities from the calling module. The compiler stores that binding outside syntax type references; if the declaration identity is missing or cannot be proven complete, the build is rejected rather than falling back to a bare type name.
 - **Code sharing is an AOT decision, not a frontend one**: size-driven merging happens after resolution, in the backend plan (`generic-body-plan` / `generic-code-size-plan` evidence rows decide `share_canonical_body` against a size threshold), and it carries evidence. The frontend keeps identity exact; the backend owns size.
 - Name mangling: `identity<i64>` → `identity$i64`, `Pair<string, i64>` → `Pair$str_i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
 - Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
+> Ordinary specialization operates on Checked XIR and is reverified; see §17.11. The legacy depth/instance budgets and advanced-interface table below remain migration obligations, not implemented XIR coverage.
 
 #### Monomorphization budgets
 
@@ -6974,9 +6974,50 @@ publishes nothing and frees all partial storage. Both VM and native consumers
 then use the same reverified Lowered transition. The precise wire and budget
 contract is `contracts/xir-checked-packet.md`.
 
-This closed subset does not qualify serialized generic constraints/templates,
+This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
 effects, diagnostic provenance, package linking, native-cache pairing, installer
 publication or complete source-free standard-library distribution.
+
+### 17.11 Definition Checking and Checked Generic Specialization
+
+Ordinary type parameters admit copyable, storable values, excluding unit, views
+and noncopyable resources. The current concrete domain is bool/i64/string/Atomic<i64>.
+Named functions can declare `<T, U:Sendable>` or an own-parameter `where U:Sendable`;
+calls supply all type arguments explicitly. Parameter names are distinct and
+Sendable is a reserved marker name. Each parameter currently admits at most one
+Sendable constraint; defaults, intersections, member/conditional constraints and
+inference remain unavailable.
+
+Every body, including unused templates, is checked at its definition. Copying,
+read passing, storage and return follow from the ordinary domain. Sendable adds
+no member, arithmetic, display or default-construction capability. Unconstrained
+T cannot be forwarded to a Sendable requirement merely because every currently
+implemented concrete type is Sendable. Forwarding proves constraints from the
+caller declaration. Copies preserve string values and Atomic identity; concrete
+retains, cleanup and layout are determined after specialization.
+
+Built/Checked retain function-local type parameter IDs, constraints and separate
+call type-argument tables. CALL type and value ranges are canonical and reverified;
+substituted parameters/results match exactly, with normal visibility, module and
+dominance rules. Checked schema/semantic-contract revision 2 preserves templates;
+revision 1 rejects. Loading rechecks definitions and forwarding proofs.
+
+Specialization consumes only Checked, never AST. A bounded work queue interns
+declaration identity plus ordered concrete arguments, reusing recursive instances.
+The instance closure is completed and reverified before the sole Lowered pipeline.
+The current host function-ID interface retains all ordinary definitions as roots;
+only generic instances reachable from these roots are emitted. A template-only
+package with no ordinary roots is not directly executable. Instance, aggregate
+parameter/block/instruction, memory and work budgets bound construction; failure
+publishes no result and releases temporary storage. Lowered and immutable Programs
+contain no open parameters and acquire no execution-time instances. Debug names
+are not native-cache identity proofs.
+
+Member witnesses, symbolic callback effects, generic type constructors, inference,
+diagnostic provenance serialization and complete stdlib package/cache pairing are
+still unavailable. Unadmitted effect/borrow/callable declarations continue to
+reject. The precise interface contract is `contracts/xir-generic-templates.md`;
+this family does not qualify all ordinary generic facilities.
 
 ---
 

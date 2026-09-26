@@ -164,6 +164,31 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         if (c->reading) literals[i] = literal;
     }
 }
+static void checked_generics(CheckedCursor *c, XrXirModule *m) {
+    uint32_t present = checked_u32(c, m->generics ? 1u : 0u);
+    if (c->status == XR_XIR_OK && present > 1) c->status = XR_XIR_BAD_STRUCTURE;
+    if (!present || c->status != XR_XIR_OK) return;
+    XrXirGeneric *generics = checked_array(c, m->generics, m->function_count, sizeof(*generics), 8);
+    m->generics = generics;
+    for (uint32_t f = 0; f < m->function_count && c->status == XR_XIR_OK; ++f) {
+        XrXirGeneric g = generics[f];
+        g.parameter_count = checked_count(c, g.parameter_count, &c->remaining.parameters);
+        uint32_t *constraints = checked_array(c, g.constraints, g.parameter_count, sizeof(*constraints), 4);
+        g.constraints = constraints;
+        for (uint32_t p = 0; p < g.parameter_count && c->status == XR_XIR_OK; ++p) {
+            uint32_t value = checked_u32(c, constraints[p]);
+            if (c->reading) constraints[p] = value;
+        }
+        g.argument_count = checked_u32(c, g.argument_count);
+        XrXirType *arguments = checked_array(c, g.arguments, g.argument_count, sizeof(*arguments), 4);
+        g.arguments = arguments;
+        for (uint32_t a = 0; a < g.argument_count && c->status == XR_XIR_OK; ++a) {
+            XrXirType type = (XrXirType) checked_u32(c, (uint32_t) arguments[a]);
+            if (c->reading) arguments[a] = type;
+        }
+        if (c->reading) generics[f] = g;
+    }
+}
 static void checked_module(CheckedCursor *c, XrXirModule *m) {
     uint32_t count = checked_count(c, m->function_count, &c->remaining.functions);
     uint32_t declarations = checked_u32(c, m->declarations ? 1u : 0u);
@@ -175,13 +200,16 @@ static void checked_module(CheckedCursor *c, XrXirModule *m) {
         checked_function(c, &f);
         if (c->reading) functions[i] = f;
     }
-    if (!declarations || c->status != XR_XIR_OK) return;
-    XrXirDeclarations *owned = checked_array(c, m->declarations, 1, sizeof(*owned), 20);
-    m->declarations = owned;
-    if (!owned) return;
-    XrXirDeclarations d = *owned;
-    checked_declarations(c, &d, count);
-    if (c->reading) *owned = d;
+    if (c->status != XR_XIR_OK) return;
+    if (declarations) {
+        XrXirDeclarations *owned = checked_array(c, m->declarations, 1, sizeof(*owned), 20);
+        m->declarations = owned;
+        if (!owned) return;
+        XrXirDeclarations d = *owned;
+        checked_declarations(c, &d, count);
+        if (c->reading) *owned = d;
+    }
+    checked_generics(c, m);
 }
 static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]) {
     XrSHA256Context sha;

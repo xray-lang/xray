@@ -87,7 +87,7 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
         {2, XR_XIR_STRING, 0}, {1, XR_XIR_STRING, 0}, {0, XR_XIR_STRING, 1}};
     const XrXirLiteral literals[] = {{"A\0\xe4\xb8\xad", 5}, {"B\xf0\x9f\x98\x80", 5}, {"root", 4}, {"updated", 7}, {NULL, 0}};
     const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3};
-    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations};
+    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);

@@ -10,9 +10,12 @@ The admitted family is ordinary named functions with explicit read bool/i64/stri
 parameters and explicit results (absent annotation denotes unit in this subset),
 direct calls, blocks, local bindings, module bindings, returns, literals, string
 concatenation, print and Atomic<i64> construction/load/fetchAdd. Integer arithmetic,
-generics, ref/move, user aggregates, reflection, coroutine syntax, attributes and
+ref/move, user aggregates, reflection, coroutine syntax, attributes and
 unimplemented declarations fail closed. Every function body is checked, including
-unreachable functions. No ordinary generic body is instantiated by duck typing.
+unreachable functions. Ordinary generic read functions with explicit type arguments and the optional
+Sendable marker follow `xir-generic-templates.md`. Unsupported constraints and
+members reject in the definition, including unused templates. No ordinary generic
+body is instantiated by duck typing.
 Calls and print use owned function operand tables, admitting up to 65536
 arguments within metadata, work, parameter and physical frame budgets. Arguments
 are evaluated left to right before appending the owning instruction range; nested

@@ -4869,7 +4869,7 @@ main()
 
 ## 9. 泛型 (Generics)
 
-> 真值源：`src/frontend/analyzer/xtype_ref_resolve.c`、`xanalyzer_mono.c`、`xanalyzer_builtin_interfaces.c` 与 `src/runtime/value/xtype_generic.c`。
+> 新 XIR 泛型真值源：`src/xir/xxir_source.c`、`xxir_generic.c` 与 `xxir_specialize.c`，已准入的具体子集见 §17.11。本节其他类型推断、类/接口与容器能力仍待迁移，不以旧 analyzer 的实现证明新链资格。
 
 ### 9.1 类型参数语法 `<T>`
 
@@ -5046,14 +5046,14 @@ var result = identity<f64>(0)            // 泛型实参提供唯一上下文，
 
 **实现策略**：构建期 monomorphization（单态化）。**泛型源声明身份与有序具体类型实参元组共同构成实例身份**，函数泛型与 class / struct 泛型适用同一条规则；两个模块中同名、同实参的泛型仍是不同实例。跨模块选择性导入的每个特化绑定到定义模块导出的精确实例，不按本地别名或裸函数名回退。
 
-- **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。前端不按表示合并，因为 duck-typed 的泛型体要针对具体类型实参解析 `x.foo()`：在解析完成之前，两个 ABI 等价的实例并不可互换。
+- **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。泛型体在定义处按约束检查；成员身份不能等具体类型实参到来后重新寻找。ABI 表示相同不意味着声明、约束见证或所有权语义相同。
 - **名义类型实参身份**：声明型 class / struct / interface / enum 实参由其精确声明身份标识，而不是由源码拼写标识。调用模块的 `LocalCounter` 与定义模块中同名的私有类型必须产生不同特化；显式和推断得到的同一调用方类型则必须合并为同一特化。
 - **定义上下文与调用上下文**：泛型声明体始终在定义模块的词法上下文分析，调用点解析出的具体类型实参则保留调用模块中的精确语义身份。编译器在语法类型引用之外保存该绑定；缺少或无法完整证明声明身份时必须拒绝构建，不得按裸类型名回退。
 - **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
 - 名字修饰（name mangling）：`identity<i64>` → `identity$i64`，`Pair<string, i64>` → `Pair$str_i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
 - 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
 
-> 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
+> 普通特化在 Checked XIR 上执行并复验，见 §17.11。下面旧链深度/实例预算与高级接口表保留为待迁移分母，不是新 XIR 已实现范围。
 
 #### 单态化预算
 
@@ -6899,8 +6899,37 @@ Lowered 或旧格式读取器。
 释放全部部分构造。VM 与 native 消费者继续使用同一复验后的 Lowered 转换。
 精确字段与预算合同见 `contracts/xir-checked-packet.md`。
 
-该封闭子集不代表泛型约束/模板、效应、诊断来源序列化、包链接、native 缓存配对、
+该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
+
+### 17.11 定义处检查与 Checked 泛型特化
+
+普通类型参数准入域为可复制、可保存的值，不包括 unit、视图和 noncopyable 资源。
+当前具体类型为 bool/i64/string/Atomic<i64>。函数可以声明 `<T, U:Sendable>`，
+或使用该声明自身参数的 `where U:Sendable`；调用须显式给出全部类型实参。
+参数名不重复，Sendable 是保留标记名；首批每个参数最多一个 Sendable 约束，
+不准入默认类型参数、交叉/成员/条件方法约束或类型推断。
+
+每个模板体（包括未使用模板）在定义处检查。复制、读传参、保存与返回由普通准入域
+保证；Sendable 不授予成员、算术、显示或默认构造。无约束 T 不能调用要求 Sendable
+的泛型，即使当前具体类型恰好全都 Sendable。泛型转发必须从声明本身证明约束。
+复制保持 string 值语义、Atomic 身份语义；具体 retain/清理和布局在特化后确定。
+
+Built/Checked 使用函数局部类型参数 ID，保存约束和独立调用类型实参表。
+CALL 的类型实参范围与值实参范围分别规范化并复验；替换后的参数/结果须精确匹配，
+正常可见性、模块和支配关系规则仍有效。Checked 包 schema/语义合同版本为2，
+旧版本1直接拒绝。解码后重新验证模板定义与转发证明。
+
+特化只读取 Checked，不访问 AST。按声明身份与有序具体类型实参建立有界工作队列，
+重复或递归实例复用同一条目；先完成实例闭包并复验，再进入唯一 Lowered 管线。
+当前宿主函数 ID 接口保留所有普通定义为根；仅发射从这些根可达的泛型实例。
+模板独占包没有普通根时不能直接成为可执行程序。实例数、累计参数/块/指令、内存
+及工作量有预算，失败发布空结果并释放临时存储。Lowered 和不可变 Program 不保留
+开放类型参数，不在执行期追加实例。实例调试名字不是 native 缓存身份凭证。
+
+成员见证、符号回调效应、泛型类型构造器、类型推断、诊断来源序列化与完整标准库包
+链接/缓存配对仍待实现；本族未准入的效应/借用/callable 声明仍拒绝。精确接口合同为
+`contracts/xir-generic-templates.md`，不得用本族通过代替普通泛型完整资格。
 
 ---
 

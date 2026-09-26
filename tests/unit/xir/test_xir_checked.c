@@ -122,26 +122,26 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_I64, XR_XIR_EQ_I64, XR_XIR_LT_I64, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 1 && XR_XIR_CHECKED_CONTRACT == 1 && XR_XIR_OP_COUNT == 26, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 2 && XR_XIR_CHECKED_CONTRACT == 2 && XR_XIR_OP_COUNT == 26, "packet revision");
     _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_ATOMIC_I64 == 4, "wire type identities");
     for (unsigned i = 0; i < 25; ++i) CHECK((unsigned) identities[i] == i + 1);
     XrXirInstruction ops[] = {{XR_XIR_CONST_I64, XR_XIR_I64, {0}, {0}, INT64_MIN},
                              {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
     XrXirBlock block = {0, 2};
     XrXirFunction function = {"n", 1, NULL, 0, XR_XIR_I64, &block, 1, ops, 2, NULL, 0};
-    XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL};
+    XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet;
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
-    CHECK(packet.length == 169 && packet.bytes[24] == 105);
+    CHECK(packet.length == 173 && packet.bytes[24] == 109);
     CHECK(packet.bytes[97] == 2 && packet.bytes[101] == XR_XIR_CONST_I64);
     for (unsigned i = 0; i < 7; ++i) CHECK(packet.bytes[125 + i] == 0);
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
-    const uint8_t expected_digest[32] = {0x04,0x2a,0x12,0x31,0x53,0x2c,0x05,0x54,
-        0x17,0x27,0x94,0x27,0x11,0xe3,0xd3,0x49,0x70,0x9f,0xe1,0xe0,0x03,0x32,0xb8,0x63,
-        0xcc,0xaf,0x5d,0x45,0x36,0x81,0x0a,0x59};
+    const uint8_t expected_digest[32] = {
+        0x35,0x95,0xf6,0xad,0x67,0xf7,0xb7,0x43,0xa4,0xab,0x17,0x85,0x18,0x9c,0xa8,0x3e,
+        0xfb,0x4b,0xb7,0x50,0x97,0x7a,0x91,0x2a,0x6d,0x60,0x2c,0xca,0xb0,0x00,0xab,0xdd};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].instructions[0].immediate == INT64_MIN);

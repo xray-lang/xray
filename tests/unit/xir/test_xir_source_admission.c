@@ -77,7 +77,7 @@ int main(void) {
     stdlib_resolution();
     static const char *const rejected[] = {
         "fn unused() -> i64 { return true }\n",
-        "fn unused<T>(value: T) -> T { return value }\n",
+        "fn unused<T>(value: T) -> T { return value.missing() }\n",
         "fn value(x: i64) -> i64 { return x }\nvalue(true)\n",
         "fn value(x: i64) -> i64 { return x }\nvalue()\n",
         "const a = 1\na = 2\n",

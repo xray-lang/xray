@@ -103,11 +103,21 @@ typedef struct XrXirFunction {
     uint32_t operand_count;
 } XrXirFunction;
 
+#define XR_XIR_TYPE_PARAMETER_BASE 65536u
+#define XR_XIR_CONSTRAINT_SENDABLE 1u
+typedef struct XrXirGeneric {
+    const uint32_t *constraints;
+    uint32_t parameter_count;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+} XrXirGeneric;
+
 typedef struct XrXirModule {
     XrXirStage stage;
     const XrXirFunction *functions;
     uint32_t function_count;
     const XrXirDeclarations *declarations;
+    const XrXirGeneric *generics;
 } XrXirModule;
 
 typedef struct XrXirBudget {

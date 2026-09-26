@@ -11,6 +11,7 @@
  */
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_generic.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -37,6 +38,9 @@ int main(void) {
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_source_check(&request, &checked, NULL) == XR_XIR_OK);
     xr_compiler_session_delete(session);
+    XrXirArtifact *specialized = NULL;
+    CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked); checked = specialized;
     MixedSource *owner = xr_calloc(1, sizeof(*owner)); CHECK(owner);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(checked, &target, NULL, &owner->artifact, NULL) == XR_XIR_OK);

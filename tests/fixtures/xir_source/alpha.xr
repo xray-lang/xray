@@ -1,11 +1,18 @@
 const counter = Atomic(10)
-export fn next() -> i64 { return counter.fetchAdd(1) }
+export fn next() -> i64 { return identity<Atomic<i64>>(counter).fetchAdd(1) }
 export fn tag(value: string) -> string {
     var text = "a"
     text = text + value
-    return text
+    return identity<string>(text)
 }
 export fn pack(left: string, first: i64, last: i64, right: string) -> string {
     print(first, last, left, right)
     return tag(left + right)
 }
+export fn identity<T>(value: T) -> T {
+    const copied = value
+    return copied
+}
+fn requireSendable<T:Sendable>(value:T) -> T { return identity<T>(value) }
+export fn forward<T:Sendable>(value:T) -> T { return requireSendable<T>(value) }
+export fn first<T,U>(left:T,right:U)->T { return left }

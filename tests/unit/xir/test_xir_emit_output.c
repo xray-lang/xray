@@ -66,7 +66,7 @@ static void wide_boundary(void) {
     XrXirType type = XR_XIR_I64;
     XrXirBlock block = {0, 2};
     XrXirFunction function = {"wide", 4, &type, 1, XR_XIR_UNIT, &block, 1, ops, 2, operands, 65536};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
     operands[65535] = 99;
