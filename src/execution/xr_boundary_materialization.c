@@ -34,8 +34,8 @@ typedef struct XrBoundaryTypeMetric {
 } XrBoundaryTypeMetric;
 
 typedef struct XrBoundaryLayoutBuilder {
-    const XrValidatedProgram *program;
-    const XrTargetProfile *profile;
+    XrValidatedProgram *program;
+    XrTargetProfile *profile;
     const XrBoundaryAbi *abi;
     XrMaterializedBoundaryKind boundary_kind;
     XrBoundaryMaterializationBudget budget;
@@ -396,8 +396,8 @@ static bool builder_init(XrBoundaryLayoutBuilder *builder, const XrExecutionLeas
     memset(builder, 0, sizeof(*builder));
     builder->budget = budget ? *budget : xr_boundary_materialization_default_budget();
     builder->boundary_kind = boundary_kind;
-    builder->program = xr_execution_lease_program(lease);
-    builder->profile = xr_execution_lease_profile(lease);
+    builder->program = xr_execution_lease_retain_program(lease);
+    builder->profile = xr_execution_lease_retain_profile(lease);
     builder->abi = xr_target_profile_boundary_abi(builder->profile);
     if (!builder->program || !builder->profile || !boundary_kind_valid(boundary_kind) ||
         !builder->budget.max_work || !builder->budget.max_type_visits ||
@@ -434,6 +434,8 @@ static bool builder_init(XrBoundaryLayoutBuilder *builder, const XrExecutionLeas
 
 static void builder_destroy(XrBoundaryLayoutBuilder *builder) {
     xr_free(builder->metrics);
+    xr_target_profile_free(builder->profile);
+    xr_validated_program_free(builder->program);
 }
 
 static bool allocate_layout_rows(XrBoundaryLayoutBuilder *builder, XrBoundaryTypeLayout *layout) {

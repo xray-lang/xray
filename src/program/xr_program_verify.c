@@ -783,8 +783,8 @@ static bool parse_signature(VerifyContext *context, VerifyReader *reader,
                     XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
             ? XR_CORE_IR_OWNER
             : XR_CORE_IR_NON_OWNER;
-    if ((signature->effect_mask & ~UINT32_C(0x1f)) != 0u ||
-        (signature->capability_mask & ~UINT32_C(0x1f)) != 0u ||
+    if ((signature->effect_mask & ~XR_CORE_EFFECT_ALL) != 0u ||
+        (signature->capability_mask & ~XR_CORE_CAPABILITY_ALL) != 0u ||
         ((signature->error_type_id == XR_CORE_TYPE_VOID) !=
          ((signature->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
         signature->error_type_id == XR_CORE_TYPE_PANIC_INFO ||
@@ -965,7 +965,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         instruction->operands[operand] = (uint32_t) value;
     }
     uint64_t immediate_kind = take_uvar(reader);
-    if (immediate_kind > XR_CORE_IR_IMMEDIATE_TYPE) {
+    if (immediate_kind > XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
         return false;
     }
@@ -1048,6 +1048,18 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
                 return false;
             }
             instruction->immediate.type_id = (uint16_t) value;
+            break;
+        }
+        case XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION: {
+            uint64_t provider = take_uvar(reader);
+            uint64_t operation = take_uvar(reader);
+            if (provider >= context->program->provider_requirement_count ||
+                operation >= context->program->provider_requirements[provider].operation_count) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            instruction->immediate.provider_operation.requirement_index = (uint32_t) provider;
+            instruction->immediate.provider_operation.operation_index = (uint32_t) operation;
             break;
         }
         default:
@@ -2927,6 +2939,18 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
                                 XR_CORE_TYPE_TARGET_ENDIAN, true);
+        case XR_CORE_OP_CORE_PROVIDER_CALL:
+            if (!expect_shape(context, instruction, location, 1, 0,
+                              XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION, XR_CORE_TYPE_I64, true) ||
+                !operand_type_is(function, instruction, 0, XR_CORE_TYPE_I64) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE) ||
+                !operand_ownership_is(function, instruction, 0, XR_CORE_IR_NON_OWNER) ||
+                instruction->result_category != XR_CORE_IR_VALUE ||
+                instruction->result_ownership != XR_CORE_IR_NON_OWNER) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             const XrValidatedType *callable =
                 xr_validated_program_type(context->program, instruction->result_type_id);
@@ -3455,8 +3479,8 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     location.section_id = XR_PROGRAM_SECTION_FUNCTIONS;
     location.function_id = function_id;
     if ((function->flags & ~XR_PROGRAM_FUNCTION_ENTRY) != 0u ||
-        (function->effect_mask & ~UINT32_C(0x1f)) != 0u ||
-        (function->capability_mask & ~UINT32_C(0x1f)) != 0u ||
+        (function->effect_mask & ~XR_CORE_EFFECT_ALL) != 0u ||
+        (function->capability_mask & ~XR_CORE_CAPABILITY_ALL) != 0u ||
         ((function->error_type_id == XR_CORE_TYPE_VOID) !=
          ((function->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
         function->error_type_id == XR_CORE_TYPE_PANIC_INFO ||
@@ -3587,6 +3611,55 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     return verify_existential_projection_guards(context, function_id);
 }
 
+static bool verify_provider_requirements_are_exact(VerifyContext *context) {
+    uint64_t operation_count = 0u;
+    for (uint32_t requirement = 0; requirement < context->program->provider_requirement_count;
+         ++requirement) {
+        operation_count += context->program->provider_requirements[requirement].operation_count;
+    }
+    if (operation_count == 0u)
+        return true;
+    if (operation_count > SIZE_MAX || !spend(context, operation_count, no_location())) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, no_location());
+        return false;
+    }
+    bool *used = xr_calloc((size_t) operation_count, sizeof(bool));
+    if (!used) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, no_location());
+        return false;
+    }
+    for (uint32_t function = 0; function < context->program->function_count; ++function) {
+        const XrValidatedFunction *function_row = &context->program->functions[function];
+        for (uint32_t block = 0; block < function_row->block_count; ++block) {
+            const XrValidatedBlock *block_row = &function_row->blocks[block];
+            for (uint32_t instruction = 0; instruction < block_row->instruction_count;
+                 ++instruction) {
+                const XrValidatedInstruction *op = &block_row->instructions[instruction];
+                if (op->operation_id != XR_CORE_OP_CORE_PROVIDER_CALL)
+                    continue;
+                size_t flat = op->immediate.provider_operation.operation_index;
+                for (uint32_t requirement = 0;
+                     requirement < op->immediate.provider_operation.requirement_index;
+                     ++requirement) {
+                    flat += context->program->provider_requirements[requirement].operation_count;
+                }
+                used[flat] = true;
+            }
+        }
+    }
+    bool exact = true;
+    for (size_t operation = 0; operation < (size_t) operation_count; ++operation) {
+        if (!used[operation]) {
+            exact = false;
+            break;
+        }
+    }
+    xr_free(used);
+    if (!exact)
+        reject(context, XR_PROGRAM_DIAGNOSTIC_PROVIDER_REQUIREMENT, no_location());
+    return exact;
+}
+
 XrProgramVerifyBudget xr_program_verify_default_budget(void) {
     XrProgramVerifyBudget budget = {
         .decode =
@@ -3676,6 +3749,8 @@ XrProgramVerifyStatus xr_program_validate(const uint8_t *bytes, size_t size,
         reject(&context, XR_PROGRAM_DIAGNOSTIC_ENTRY_POINT, no_location());
         goto rejected;
     }
+    if (!verify_provider_requirements_are_exact(&context))
+        goto rejected;
     context.program->verifier_work = context.work;
     *program_out = context.program;
     if (diagnostic_out)

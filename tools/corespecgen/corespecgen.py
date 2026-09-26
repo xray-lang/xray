@@ -313,7 +313,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} lacks ownership contract")
         require(operation["profile_dependency"] in {
             "none", "pointer_width", "operating_system", "architecture", "native_abi",
-            "endianness",
+            "endianness", "provider_contract",
         },
                 f"operation {spelling} has unknown profile dependency")
         require(isinstance(operation["materialization"], str) and operation["materialization"],
@@ -332,6 +332,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-test",
+            "provider-call",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -491,6 +492,14 @@ def scalar_oracle(case: dict[str, Any]) -> dict[str, Any]:
 def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     actual = case.get("actual")
     require(isinstance(actual, dict), f"KAT {case['id']} actual contract must be an object")
+    if validator == "provider-call":
+        return (actual.get("operand_type") == "i64"
+                and actual.get("result_type") == "i64"
+                and actual.get("operand_category") == "value"
+                and actual.get("result_category") == "value"
+                and actual.get("operand_ownership") == "non-owner"
+                and actual.get("result_ownership") == "non-owner"
+                and actual.get("provider_requirement") is True)
     if validator == "block-arguments":
         return actual.get("edge_types") == actual.get("parameter_types")
     if validator == "branch":
@@ -775,6 +784,8 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
     for row in registry["effects"]:
         lines.append(
             f"    XR_CORE_EFFECT_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
+    effect_mask = sum(1 << (row["stable_id"] - 1) for row in registry["effects"])
+    lines.append(f"    XR_CORE_EFFECT_ALL = UINT32_C({effect_mask}),")
     lines.extend([
         "} XrCoreEffectMask;",
         "",
@@ -783,6 +794,8 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
     for row in registry["capabilities"]:
         lines.append(
             f"    XR_CORE_CAPABILITY_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
+    capability_mask = sum(1 << (row["stable_id"] - 1) for row in registry["capabilities"])
+    lines.append(f"    XR_CORE_CAPABILITY_ALL = UINT32_C({capability_mask}),")
     lines.extend([
         "} XrCoreCapabilityMask;",
         "",
