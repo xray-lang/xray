@@ -11,17 +11,14 @@
  *   Published artifacts do not retain construction buffers or frontend arenas.
  */
 
-#include "xxir.h"
+#include "xxir_internal.h"
 #include "../base/xmalloc.h"
-
-struct XrXirArtifact {
-    XrXirModule module;
-};
 
 XrXirBudget xr_xir_default_budget(void) {
     return (XrXirBudget) {1024, 65536, 4096, 1048576,
                          UINT64_C(128) * 1024 * 1024,
-                         UINT64_C(16) * 1024 * 1024, UINT64_C(16000000)};
+                         UINT64_C(16) * 1024 * 1024, UINT64_C(16000000),
+                         UINT64_C(16) * 1024 * 1024};
 }
 
 const char *xr_xir_op_name(XrXirOp op) {
@@ -38,6 +35,15 @@ const XrXirModule *xr_xir_artifact_module(const XrXirArtifact *artifact) {
     return artifact ? &artifact->module : NULL;
 }
 
+const XrXirTarget *xr_xir_artifact_target(const XrXirArtifact *artifact) {
+    return artifact && artifact->module.stage == XR_XIR_LOWERED ? &artifact->target : NULL;
+}
+
+const XrXirFunctionLayout *xr_xir_artifact_layout(const XrXirArtifact *artifact, uint32_t function) {
+    return artifact && artifact->layouts && function < artifact->module.function_count ?
+        &artifact->layouts[function] : NULL;
+}
+
 void xr_xir_artifact_free(XrXirArtifact *artifact) {
     if (!artifact)
         return;
@@ -47,7 +53,12 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
         xr_free((void *) functions[i].parameters);
         xr_free((void *) functions[i].blocks);
         xr_free((void *) functions[i].instructions);
+        if (artifact->layouts) {
+            xr_free((void *) artifact->layouts[i].offsets);
+            xr_free((void *) artifact->layouts[i].parameters);
+        }
     }
+    xr_free(artifact->layouts);
     xr_free(functions);
     xr_free(artifact);
 }
@@ -98,20 +109,28 @@ static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnos
 
 static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
                              const XrXirBudget *budget, XrXirArtifact **output,
-                             XrXirDiagnostic *diagnostic) {
+                             XrXirDiagnostic *diagnostic, const XrXirTarget *target) {
     if (!output)
         return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     *output = NULL;
     if (!input || input->stage != source)
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
+    XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
+    if (source == XR_XIR_CHECKED) {
+        XrXirLayout layout;
+        if (xr_xir_layout(XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
+            return transition_error(XR_XIR_BAD_LAYOUT, diagnostic);
+    }
     XrXirStatus status = xr_xir_verify(input, budget, diagnostic);
     if (status != XR_XIR_OK)
         return status;
     XrXirArtifact *copy = clone_module(input);
     if (!copy)
         return transition_error(XR_XIR_OUT_OF_MEMORY, diagnostic);
+    copy->budget = limits;
     copy->module.stage = source == XR_XIR_BUILT ? XR_XIR_CHECKED : XR_XIR_LOWERED;
     if (copy->module.stage == XR_XIR_LOWERED) {
+        copy->target = *target;
         for (uint32_t f = 0; f < copy->module.function_count; ++f) {
             const XrXirFunction *function = &copy->module.functions[f];
             XrXirInstruction *instructions = (XrXirInstruction *) function->instructions;
@@ -119,8 +138,13 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
                 if (instructions[i].op == XR_XIR_COPY)
                     instructions[i].op = XR_XIR_SCALAR_COPY;
         }
+        status = xr_xir_layout_build(copy, &limits);
+        if (status != XR_XIR_OK) {
+            xr_xir_artifact_free(copy);
+            return transition_error(status, diagnostic);
+        }
     }
-    status = xr_xir_verify(&copy->module, budget, diagnostic);
+    status = xr_xir_artifact_verify(copy, budget, diagnostic);
     if (status != XR_XIR_OK) {
         xr_xir_artifact_free(copy);
         return status;
@@ -131,10 +155,21 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
 
 XrXirStatus xr_xir_check(const XrXirModule *built, const XrXirBudget *budget,
                        XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
-    return transition(built, XR_XIR_BUILT, budget, output, diagnostic);
+    return transition(built, XR_XIR_BUILT, budget, output, diagnostic, NULL);
 }
 
-XrXirStatus xr_xir_lower(const XrXirArtifact *checked, const XrXirBudget *budget,
+XrXirStatus xr_xir_lower(const XrXirArtifact *checked, const XrXirTarget *target,
+                       const XrXirBudget *budget,
                        XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
-    return transition(xr_xir_artifact_module(checked), XR_XIR_CHECKED, budget, output, diagnostic);
+    return transition(xr_xir_artifact_module(checked), XR_XIR_CHECKED, budget, output, diagnostic, target);
+}
+
+XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact, const XrXirBudget *budget,
+                                 XrXirDiagnostic *diagnostic) {
+    XrXirBudget limits = budget ? *budget : (artifact ? artifact->budget : xr_xir_default_budget());
+    XrXirStatus status = xr_xir_verify(xr_xir_artifact_module(artifact), &limits, diagnostic);
+    if (status != XR_XIR_OK)
+        return status;
+    status = xr_xir_layout_verify(artifact, &limits);
+    return status == XR_XIR_OK ? status : transition_error(status, diagnostic);
 }

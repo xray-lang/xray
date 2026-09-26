@@ -15,19 +15,13 @@
 #ifndef XXIR_H
 #define XXIR_H
 
-#include "../base/xdefs.h"
+#include "xxir_scalar.h"
 
 typedef enum XrXirStage {
     XR_XIR_BUILT = 1,
     XR_XIR_CHECKED = 2,
     XR_XIR_LOWERED = 4
 } XrXirStage;
-
-typedef enum XrXirType {
-    XR_XIR_UNIT,
-    XR_XIR_BOOL,
-    XR_XIR_I64
-} XrXirType;
 
 typedef enum XrXirOp {
     XR_XIR_INVALID,
@@ -45,8 +39,36 @@ typedef enum XrXirStatus {
     XR_XIR_BAD_VALUE,
     XR_XIR_BAD_DOMINANCE,
     XR_XIR_BUDGET,
-    XR_XIR_OUT_OF_MEMORY
+    XR_XIR_OUT_OF_MEMORY,
+    XR_XIR_BAD_LAYOUT
 } XrXirStatus;
+
+typedef struct XrXirTarget {
+    uint32_t architecture;
+    uint32_t abi_version;
+} XrXirTarget;
+
+typedef enum XrXirLayoutContext {
+    XR_XIR_LAYOUT_STORAGE = 1,
+    XR_XIR_LAYOUT_SSA,
+    XR_XIR_LAYOUT_PARAMETER,
+    XR_XIR_LAYOUT_RESULT,
+    XR_XIR_LAYOUT_BOXED,
+    XR_XIR_LAYOUT_FRAME
+} XrXirLayoutContext;
+
+typedef struct XrXirLayout {
+    uint32_t size;
+    uint32_t alignment;
+} XrXirLayout;
+
+typedef struct XrXirFunctionLayout {
+    uint32_t slot_count;
+    uint32_t frame_bytes;
+    const uint32_t *offsets;
+    const XrXirLayout *parameters;
+    XrXirLayout result;
+} XrXirFunctionLayout;
 
 typedef struct XrXirInstruction {
     XrXirOp op;
@@ -89,6 +111,7 @@ typedef struct XrXirBudget {
     uint64_t metadata_bytes;
     uint64_t scratch_bytes;
     uint64_t work;
+    uint64_t frame_bytes;
 } XrXirBudget;
 
 typedef struct XrXirDiagnostic {
@@ -106,9 +129,17 @@ XR_FUNC XrXirStatus xr_xir_verify(const XrXirModule *module,
                                 const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_check(const XrXirModule *built, const XrXirBudget *budget,
                                XrXirArtifact **output, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_lower(const XrXirArtifact *checked, const XrXirBudget *budget,
+XR_FUNC XrXirStatus xr_xir_lower(const XrXirArtifact *checked, const XrXirTarget *target,
+                               const XrXirBudget *budget,
                                XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC const XrXirModule *xr_xir_artifact_module(const XrXirArtifact *artifact);
+XR_FUNC const XrXirTarget *xr_xir_artifact_target(const XrXirArtifact *artifact);
+XR_FUNC const XrXirFunctionLayout *xr_xir_artifact_layout(const XrXirArtifact *artifact,
+                                                       uint32_t function);
+XR_FUNC XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
+                                XrXirLayoutContext context, XrXirLayout *layout);
+XR_FUNC XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact,
+                                        const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_artifact_free(XrXirArtifact *artifact);
 
 #endif // XXIR_H

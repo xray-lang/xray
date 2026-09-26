@@ -6834,6 +6834,18 @@ types, dominance, and verification work are bounded. Unknown stages, operations,
 and types reject. The exact internal fields and assertions are owned by
 `contracts/xir-stages.md`; this contract does not grant execution qualification.
 
+Internal scalar execution is governed by `contracts/xir-scalar-execution.md`.
+The initial target is little-endian x86_64, scalar boundary ABI version 1. Layout
+queries include type, target, context, and ABI. Lowering stores authoritative
+frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
+Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes
+(type, zero reserved field, i64 payload); bool payloads are zero or one and unit
+has no frame lane. Arguments match exactly and failures clear the result. Each
+instruction consumes one step; frames and steps are bounded. Signed addition
+checks overflow before computation, every exit releases its frame, and inline
+scalar results survive independently. Checked cannot execute; unknown target/ABI
+rejects. This subset does not qualify module, call, or resumable ABI behavior.
+
 ---
 
 ## 18. Error Codes

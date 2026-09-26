@@ -81,8 +81,10 @@ ASAN_OPTIONS = ("detect_leaks=0:abort_on_error=1:symbolize=1:"
 UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
 EXACT_PROFILES = {
-    "xir": (("test_xir_stages", "test_xir_allocations"),
-            ("test_xir_stages", "test_xir_allocations")),
+    "xir": (("test_xir_stages", "test_xir_allocations", "test_xir_execution",
+             "test_xir_emit", "test_xir_native"),
+            ("test_xir_stages", "test_xir_allocations", "test_xir_execution",
+             "test_xir_emit", "test_xir_native")),
     "canonical-program": (
         canonical_profile.CTEST_NAMES,
         canonical_profile.BUILD_TARGETS,

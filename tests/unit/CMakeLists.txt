@@ -93,7 +93,8 @@ else()
 endif()
 add_test(NAME test_xir_stages COMMAND test_xir_stages)
 set_tests_properties(test_xir_stages PROPERTIES LABELS "unit;xir;metadata;ownership")
-add_executable(test_xir_allocations xir/test_xir_allocations.c)
+add_executable(test_xir_allocations xir/test_xir_allocations.c
+    ${CMAKE_SOURCE_DIR}/src/aot/xi_cgen_verify_output.c)
 target_include_directories(test_xir_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 if(MSVC)
     target_compile_options(test_xir_allocations PRIVATE /W4 /WX)
@@ -102,6 +103,28 @@ else()
 endif()
 add_test(NAME test_xir_allocations COMMAND test_xir_allocations)
 set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
+
+add_executable(test_xir_execution xir/test_xir_execution.c)
+target_link_libraries(test_xir_execution PRIVATE xray_xir_vm)
+add_executable(test_xir_emit xir/test_xir_emit.c)
+target_link_libraries(test_xir_emit PRIVATE xray_xir_cgen)
+set(XIR_SCALAR_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_scalar_fixture.c)
+add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_emit> ${XIR_SCALAR_GENERATED}
+    DEPENDS test_xir_emit
+    VERBATIM)
+add_executable(test_xir_native xir/test_xir_native.c ${XIR_SCALAR_GENERATED})
+target_link_libraries(test_xir_native PRIVATE xray_xir_scalar)
+foreach(xir_test IN ITEMS test_xir_execution test_xir_emit test_xir_native)
+    if(MSVC)
+        target_compile_options(${xir_test} PRIVATE /W4 /WX)
+    else()
+        target_compile_options(${xir_test} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${xir_test} COMMAND ${xir_test})
+    set_tests_properties(${xir_test} PROPERTIES LABELS "unit;xir;execution;ownership;abi")
+endforeach()
 
 # Task 295 CoreSpec metadata is intentionally independent of xray_core and both
 # executors. This target compiles only the generated registry projection.

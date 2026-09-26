@@ -12,7 +12,7 @@
  *   control flow, never inferred from the order of blocks in storage.
  */
 
-#include "xxir.h"
+#include "xxir_internal.h"
 #include "../base/xmalloc.h"
 #include <limits.h>
 
@@ -338,7 +338,7 @@ XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
              module->stage != XR_XIR_LOWERED)
         status = XR_XIR_BAD_STAGE;
     else if (module->function_count > context.remaining.functions ||
-             !spend(&context.remaining.metadata_bytes, sizeof(*module)))
+             !spend(&context.remaining.metadata_bytes, sizeof(XrXirArtifact)))
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
         for (uint32_t f = 0; f < module->function_count; ++f) {

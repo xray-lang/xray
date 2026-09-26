@@ -1,7 +1,8 @@
 # XIR stage and scalar control-flow contract
 
 This contract owns the initial XIR scalar subset. It does not certify source
-admission, generic specialization, managed values, execution, or product cutover.
+admission, generic specialization, managed values, or product cutover. Scalar
+layout and execution are separately governed by `xir-scalar-execution.md`.
 Those surfaces remain unavailable until their corresponding contracts and tests
 are implemented. No existing executor or safety assertion is retired here.
 

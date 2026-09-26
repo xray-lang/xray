@@ -1,0 +1,77 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_scalar.h - Shared scalar execution boundary and checked arithmetic
+ *
+ * KEY CONCEPT:
+ *   Interpreter and native code share scalar rules and frame accounting.
+ */
+
+#ifndef XXIR_SCALAR_H
+#define XXIR_SCALAR_H
+
+#include "../base/xdefs.h"
+#include <string.h>
+
+#define XR_XIR_SCALAR_ABI_VERSION 1u
+#define XR_XIR_ARCH_X86_64 1u
+
+typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64 } XrXirType;
+
+typedef struct XrXirScalar {
+    uint32_t type;
+    uint32_t reserved;
+    int64_t payload;
+} XrXirScalar;
+
+typedef enum XrXirRunStatus {
+    XR_XIR_RUN_OK,
+    XR_XIR_RUN_BAD_ARGUMENT,
+    XR_XIR_RUN_BAD_ARTIFACT,
+    XR_XIR_RUN_BAD_ABI,
+    XR_XIR_RUN_OVERFLOW,
+    XR_XIR_RUN_STEP_LIMIT,
+    XR_XIR_RUN_FRAME_LIMIT,
+    XR_XIR_RUN_OUT_OF_MEMORY
+} XrXirRunStatus;
+
+typedef struct XrXirRunContext {
+    uint64_t steps;
+    uint64_t frame_limit;
+    uint64_t live_bytes;
+    uint64_t peak_bytes;
+    uint64_t allocations;
+    uint64_t frees;
+} XrXirRunContext;
+
+typedef XrXirRunStatus (*XrXirScalarEntry)(XrXirRunContext *context,
+    const XrXirScalar *arguments, uint32_t argument_count, XrXirScalar *result);
+
+XR_FUNC bool xr_xir_scalar_argument(const XrXirScalar *argument, XrXirType type);
+XR_FUNC XrXirRunStatus xr_xir_scalar_frame_begin(XrXirRunContext *context,
+                                               uint32_t bytes, void **frame);
+XR_FUNC void xr_xir_scalar_frame_end(XrXirRunContext *context, uint32_t bytes, void *frame);
+XR_FUNC XrXirRunStatus xr_xir_scalar_add(int64_t left, int64_t right, int64_t *result);
+
+static inline bool xr_xir_scalar_step(XrXirRunContext *context) {
+    if (!context->steps)
+        return false;
+    --context->steps;
+    return true;
+}
+
+static inline int64_t xr_xir_scalar_load(const void *frame, uint32_t offset) {
+    int64_t value;
+    memcpy(&value, (const unsigned char *) frame + offset, sizeof(value));
+    return value;
+}
+
+static inline void xr_xir_scalar_store(void *frame, uint32_t offset, int64_t value) {
+    memcpy((unsigned char *) frame + offset, &value, sizeof(value));
+}
+
+#endif // XXIR_SCALAR_H
