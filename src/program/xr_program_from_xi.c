@@ -12,6 +12,7 @@
 #include "ir/xi_string_slice.h"
 #include "ir/xi_array_default.h"
 #include "xr_program_from_xi.h"
+#include "xr_program_xi_prefix.h"
 #include "../runtime/core/xr_text_kernel.h"
 #include "xr_program_internal.h"
 #include "xr_program_xi_projection_gen.h"
@@ -4059,6 +4060,7 @@ static bool resolved_array_construction(const XiFunc *caller, const XiValue *all
     while (position < block->nvalues && block->values[position] != allocation)
         ++position;
     uint32_t initialized = 0u;
+    uint32_t definition_cursor = 0u;
     for (uint32_t i = position + 1u; i < block->nvalues; ++i) {
         const XiValue *store = block->values[i];
         bool initializer = store && store->op == XI_INDEX_SET && store->nargs == 3u && store->args &&
@@ -4079,9 +4081,8 @@ static bool resolved_array_construction(const XiFunc *caller, const XiValue *all
             !xr_type_equals(element->type, allocation->type->container.element_type))
             return false;
         const XiValue *definition = logical_value_identity(element);
-        bool before = definition && definition->block != block;
-        for (uint32_t prior = 0u; !before && prior < position; ++prior)
-            before = block->values[prior] == definition;
+        bool before = definition && (definition->block != block ||
+            xr_program_xi_prefix_contains(block, position, definition, &definition_cursor));
         if (!before)
             return false;
         if (elements) elements[initialized] = element;
@@ -4122,6 +4123,7 @@ static bool resolved_record_construction(const XiFunc *caller, const XiValue *al
     if (position == block->nvalues) return false;
     if (!count) return true;
     uint32_t initialized = 0u;
+    uint32_t definition_cursor = 0u;
     for (uint32_t index = position + 1u; index < block->nvalues; ++index) {
         const XiValue *store = block->values[index];
         bool initializer = store && store->op == XI_OBJECT_INIT_F && store->nargs == 2u && store->args &&
@@ -4148,9 +4150,8 @@ static bool resolved_record_construction(const XiFunc *caller, const XiValue *al
         XiValue *value = store->args[1];
         if (!expected || !xr_type_equals(expected, value->type)) return false;
         const XiValue *definition = logical_value_identity(value);
-        bool before = definition && definition->block != block;
-        for (uint32_t prior = 0u; !before && prior < position; ++prior)
-            before = block->values[prior] == definition;
+        bool before = definition && (definition->block != block ||
+            xr_program_xi_prefix_contains(block, position, definition, &definition_cursor));
         if (!before) return false;
         if (fields) fields[ordinal] = value;
         if (++initialized == count) {

@@ -3943,7 +3943,10 @@ TEST(source_owner_array_index_reads_and_replaces_elements) {
     xr_target_profile_free(profile);
 }
 
+#include "xr_program_xi_prefix_checks.inc.c"
+
 TEST(source_owner_narrow_array_elements_precede_allocation) {
+    assert_initializer_prefix_membership();
     static const char source[] =
         "const bytes: Array<u8> = [0, 255, 42]\n"
         "var visits: i64 = 0\n"
