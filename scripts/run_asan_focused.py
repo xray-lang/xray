@@ -116,6 +116,10 @@ XIR_TESTS = (
     "test_xir_array_packet_vm",
     "test_xir_source_array_native",
     "test_xir_source_array_mixed",
+    "test_xir_source_floats",
+    "test_xir_float_packet_vm",
+    "test_xir_source_float_native",
+    "test_xir_source_float_mixed",
     "test_xir_locals",
     "test_xir_local_native",
 )

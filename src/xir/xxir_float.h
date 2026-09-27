@@ -30,6 +30,13 @@ XR_FUNC XrXirNumericStatus xr_xir_float_to_integer(uint32_t source_bits,
 XR_FUNC XrXirNumericStatus xr_xir_float_compare(uint32_t bits,
     uint64_t left, uint64_t right, XrXirFloatOrder *output);
 XR_FUNC XrXirNumericStatus xr_xir_float_negate(uint32_t bits, uint64_t input, uint64_t *output);
+typedef enum XrXirFloatOperation {
+    XR_XIR_FLOAT_ADD, XR_XIR_FLOAT_SUBTRACT, XR_XIR_FLOAT_MULTIPLY, XR_XIR_FLOAT_DIVIDE
+} XrXirFloatOperation;
+XR_FUNC XrXirNumericStatus xr_xir_float_arithmetic(uint32_t bits, XrXirFloatOperation operation,
+    uint64_t left, uint64_t right, uint64_t *output);
+XR_FUNC bool xr_xir_float_format(uint32_t bits, uint64_t input,
+    char *bytes, size_t capacity, size_t *length);
 typedef enum XrXirFloatRelation {
     XR_XIR_FLOAT_EQ, XR_XIR_FLOAT_NE, XR_XIR_FLOAT_LT, XR_XIR_FLOAT_LE, XR_XIR_FLOAT_GT, XR_XIR_FLOAT_GE
 } XrXirFloatRelation;
@@ -37,4 +44,6 @@ XR_FUNC XrXirRunStatus xr_xir_number_convert(XrXirType source, XrXirType target,
 XR_FUNC XrXirRunStatus xr_xir_float_relation(XrXirType type, XrXirFloatRelation relation,
     int64_t left, int64_t right, int64_t *output);
 XR_FUNC XrXirRunStatus xr_xir_float_negative(XrXirType type, int64_t input, int64_t *output);
+XR_FUNC XrXirRunStatus xr_xir_float_binary(XrXirType type, XrXirFloatOperation operation,
+    int64_t left, int64_t right, int64_t *output);
 #endif

@@ -1,0 +1,17 @@
+import "./producer" as producer
+var sample: f32 = 3.0
+print(producer.adjust(sample), sample / 2.0)
+sample += 0.5
+print(producer.adjust(sample), sample / 2.0)
+print(1.0 / 0.0, -1.0 / 0.0, 0.0 / 0.0, -0.0)
+export fn result() -> string { return producer.text() }
+export fn advance() -> f32 { sample += 0.5; return sample }
+export fn current() -> f64 { return producer.adjust(sample) }
+export fn captured() -> f32 {
+    var value: f32 = 1.5
+    const update = fn() { value *= 2.0; value -= 0.5; value /= 2.0 }
+    update()
+    return value
+}
+fn rhs() -> f32 { sample = 100.0; Coro.yield(); return 0.5 }
+export fn suspended() -> f32 { sample = 3.0; sample += rhs(); return sample }

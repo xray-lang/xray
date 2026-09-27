@@ -21,6 +21,10 @@
         "expr-null-coalesce",
         "expr-optional-chain"
       ]
+    },
+    {
+      "heading": "Admitted XIR floating semantics",
+      "markdown": "The admitted new-XIR floating subset supports +, -, *, / and their compound assignments for f32/f64 (spec section 17.27). Each operation rounds once at its operand width, nearest with ties to even, including gradual underflow. Mixed f32/f64 widens before the operation; typed integer/float mixing, floating remainder and bitwise operations reject. Compound assignment reads the left value before evaluating the right, including suspension, and cannot narrow implicitly."
     }
   ]
 }

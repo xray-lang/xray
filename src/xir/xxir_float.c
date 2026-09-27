@@ -133,6 +133,9 @@ XrXirNumericStatus xr_xir_float_negate(uint32_t bits, uint64_t input, uint64_t *
     *output = parts.nan ? format.nan : input ^ format.sign; return XR_XIR_NUMERIC_OK;
 }
 
+#include "xxir_float_arithmetic.inc.c"
+#include "xxir_float_format.inc.c"
+
 static XrXirRunStatus floating_result(XrXirNumericStatus status) {
     return status == XR_XIR_NUMERIC_OK ? XR_XIR_RUN_OK :
         status == XR_XIR_NUMERIC_RANGE ? XR_XIR_RUN_NUMERIC_RANGE : XR_XIR_RUN_BAD_ARGUMENT;

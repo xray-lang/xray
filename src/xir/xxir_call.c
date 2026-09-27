@@ -379,7 +379,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         for (uint32_t i = 0; i < action.argument_count; ++i) {
             const XrXirValue *value = &action.arguments[i];
             if ((writing && value->type != XR_XIR_STRING) ||
-                (value->type != XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
+                (value->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
                 !xr_xir_value_argument(value, NULL, (XrXirType) value->type)) {
                 unwind(call, XR_XIR_CALL_BAD_STATE); return;
             }

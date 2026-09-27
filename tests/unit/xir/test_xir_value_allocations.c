@@ -69,8 +69,30 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_type_arena.c"
 #include "xir/xxir_value.c"
+#include "xir/xxir_scalar.c"
+#include "xir/xxir_float.c"
 #include "xir/xxir_call.c"
 #include "xir/xxir_output.c"
+static bool counted_float_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
+    size_t *published = context;
+    CHECK(stream == XR_XIR_STDOUT && length == 9 && !memcmp(bytes, "0.1 -0.0\n", 9));
+    ++*published;
+    return true;
+}
+static void float_output_allocation(void) {
+    XrXirValue values[] = {{XR_XIR_F32, 0, INT64_C(0x3dcccccd)}, {XR_XIR_F64, 0, INT64_MIN}};
+    XrXirOutputGroup group = {XR_XIR_STDOUT, values, 2, true};
+    size_t published = 0, before = calls;
+    XrXirOutputSink sink = {counted_float_sink, &published, 9};
+    fail_at = calls;
+    CHECK(!xr_xir_output_render(&sink, &group) && !published && !live);
+    CHECK(calls == before + 1);
+    fail_at = SIZE_MAX; before = calls;
+    CHECK(xr_xir_output_render(&sink, &group) && published == 1 && !live);
+    CHECK(calls == before + 1);
+    before = calls; sink.byte_limit = 8;
+    CHECK(!xr_xir_output_render(&sink, &group) && published == 1 && calls == before && !live);
+}
 static bool counted_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     size_t *published = context;
     CHECK(stream == XR_XIR_STDOUT && length == 12 && !memcmp(bytes, "false 0 123\n", 12));
@@ -351,7 +373,7 @@ int main(void) {
     fail_at = SIZE_MAX; calls = 0; fail_sequence();
     size_t count = calls;
     for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }
-    fail_at = SIZE_MAX; saturation(); output_allocation(); capture_ownership(); deep_capture_release();
+    fail_at = SIZE_MAX; saturation(); output_allocation(); float_output_allocation(); capture_ownership(); deep_capture_release();
     cell_allocation_cases(); cell_cycles_and_domains(); deep_cell_release();
     arena_allocation_cases(); deep_arena_release(); array_allocation_cases();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);

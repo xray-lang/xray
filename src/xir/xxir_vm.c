@@ -233,6 +233,9 @@ static XrXirRunStatus floating_step(ScalarRun *run, const XrXirInstruction *op, 
     XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
     int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
     if (op->op == XR_XIR_NEG_FLOAT) return xr_xir_float_negative(type, left, value);
+    if (op->op >= XR_XIR_ADD_FLOAT && op->op <= XR_XIR_DIV_FLOAT)
+        return xr_xir_float_binary(type, (XrXirFloatOperation) (op->op - XR_XIR_ADD_FLOAT), left,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), value);
     return xr_xir_float_relation(type, (XrXirFloatRelation) (op->op - XR_XIR_EQ_FLOAT), left,
         xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), value);
 }
@@ -263,7 +266,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return status;
     }
     if (op->op == XR_XIR_PHI) { state->instruction = next; return XR_XIR_RUN_OK; }
-    if (op->op >= XR_XIR_NEG_FLOAT && op->op <= XR_XIR_GE_FLOAT) {
+    if ((op->op >= XR_XIR_NEG_FLOAT && op->op <= XR_XIR_GE_FLOAT) ||
+        (op->op >= XR_XIR_ADD_FLOAT && op->op <= XR_XIR_DIV_FLOAT)) {
         XrXirRunStatus status = floating_step(run, op, &value);
         if (status != XR_XIR_RUN_OK) return status;
         xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], value);

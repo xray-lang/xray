@@ -47,7 +47,7 @@ resolved before Program sealing. CALL_INDIRECT records an SSA callee ID in its
 immediate and the existing ordered argument range. Callee dominance, value role,
 full signature and result are checked without enumerating implementation targets.
 Both operations use the canonical owned frame layout and resumable ABI. Semantic
-contract 15 rejects previous packets; wire schema is 5. Function-valued root
+contract 16 rejects previous packets; wire schema is 5. Function-valued root
 slots are instance state; non-root ordinary callable slots have no Sendable proof.
 
 Source admission uses the existing fn(...) -> R spelling (unit omits the arrow).
@@ -107,7 +107,7 @@ can clean up. No borrowed environment survives independently of its owner.
 
 Last-reference destruction drains nested immutable environments without host
 recursion or allocation. stop/free revokes entry but not escaped value lifetime.
-Value9/Call14/Program9 and schema5/semantic15 replace earlier contracts.
+Value9/Call14/Program9 and schema5/semantic16 replace earlier contracts.
 Strong-cycle reclamation, full callable contracts and concurrency remain open;
 this contract never substitutes snapshot capture for shared mutable bindings.
 
@@ -131,7 +131,7 @@ it cannot declare its own first-class generic parameter list. Both its body and
 the FUNCTION_REF capture prefix go through ordinary Checked validation,
 specialization and recheck. No source/AST retry occurs during instantiation.
 
-Source closure production consumes the current schema5/semantic15 and
+Source closure production consumes the current schema5/semantic16 and
 Value9/Call14/Program9 environment contract. Captured cells and callable signatures
 share the constructed pool; no standalone signature table or encoded cell type
 survives this cutover. ARRAY descriptors in that pool do not yet qualify runtime

@@ -13,7 +13,7 @@
 #define XIR_FLOAT_ADMISSION_CASES_H
 #include "xir/xxir_type_arena.h"
 static void floating_ir_rejections(void) {
-    for (unsigned test = 0; test < 13; ++test) {
+    for (unsigned test = 0; test < 17; ++test) {
         XrXirType types[] = {XR_XIR_F32, XR_XIR_F32};
         XrXirInstruction ops[] = {{XR_XIR_EQ_FLOAT, XR_XIR_BOOL, {0, 1}, {0}, 0},
             {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
@@ -31,9 +31,15 @@ static void floating_ir_rejections(void) {
         case 6: ops[0].op = XR_XIR_CONST_FLOAT; ops[0].args[1] = 0; ops[0].type = XR_XIR_F64; ops[0].immediate = INT64_C(0x7ff0000000000001); break;
         case 7: ops[0].op = XR_XIR_CONVERT_NUMBER; ops[0].args[1] = 0; ops[0].type = XR_XIR_STRING; break;
         case 8: ops[0].op = XR_XIR_CONVERT_NUMBER; ops[0].args[1] = 0; ops[0].type = XR_XIR_F32; types[0] = XR_XIR_BOOL; break;
-        case 9: ops[0].op = XR_XIR_OUTPUT; ops[0].type = XR_XIR_UNIT; ops[0].args[1] = 0; ops[0].immediate = 1; ops[1].args[0] = 0; break;
+        case 9: ops[0].op = XR_XIR_OUTPUT; ops[0].type = XR_XIR_UNIT; ops[0].args[1] = 0;
+            ops[0].immediate = 1; ops[1].args[0] = 0; types[0] = XR_XIR_ATOMIC_I64; break;
         case 10: ops[0].op = XR_XIR_EQ_FLOAT; types[0] = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; module.generics = &generic; break;
         case 11: types[0] = (XrXirType) 14; break;
+        case 12: ops[0].op = XR_XIR_ADD_FLOAT; ops[0].type = XR_XIR_F32; types[1] = XR_XIR_F64; break;
+        case 13: ops[0].op = XR_XIR_SUB_FLOAT; ops[0].type = XR_XIR_I32; break;
+        case 14: ops[0].op = XR_XIR_MUL_FLOAT; ops[0].type = XR_XIR_F32; types[0] = XR_XIR_I32; break;
+        case 15: ops[0].op = XR_XIR_DIV_FLOAT; ops[0].type = XR_XIR_F32;
+            types[0] = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; module.generics = &generic; break;
         default: ops[0].op = XR_XIR_CONST_INT; ops[0].args[1] = 0; ops[0].type = XR_XIR_F32; break;
         }
         function.result = ops[0].type;

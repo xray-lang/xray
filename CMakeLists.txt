@@ -5505,7 +5505,7 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    foreach(_xr_vector_family float decimal)
+    foreach(_xr_vector_family float decimal float_arithmetic float_format)
         add_test(
             NAME xir_${_xr_vector_family}_vectors_check
             COMMAND ${XRAY_PYTHON}

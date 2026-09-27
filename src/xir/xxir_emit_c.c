@@ -120,6 +120,10 @@ static void emit_numeric_step(CBuffer *buffer, const XrXirFunction *function,
     } else if (op->op == XR_XIR_NEG_FLOAT) {
         append(buffer, "    XrXirRunStatus numeric_status = xr_xir_float_negative((XrXirType) %uu, "
             "xr_xir_scalar_load(%s, %uu), &temporary);\n", (uint32_t) input, frame, left);
+    } else if (op->op >= XR_XIR_ADD_FLOAT && op->op <= XR_XIR_DIV_FLOAT) {
+        append(buffer, "    XrXirRunStatus numeric_status = xr_xir_float_binary((XrXirType) %uu, "
+            "(XrXirFloatOperation) %uu, xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &temporary);\n",
+            (uint32_t) input, (uint32_t) (op->op - XR_XIR_ADD_FLOAT), frame, left, frame, layout->offsets[op->args[1]]);
     } else if (op->op >= XR_XIR_EQ_FLOAT && op->op <= XR_XIR_GE_FLOAT) {
         append(buffer, "    XrXirRunStatus numeric_status = xr_xir_float_relation((XrXirType) %uu, "
             "(XrXirFloatRelation) %uu, xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &temporary);\n",
@@ -249,6 +253,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
     case XR_XIR_CONVERT_NUMBER:
         emit_numeric_step(buffer, function, layout, index, false);
         break;
@@ -570,6 +575,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
     case XR_XIR_CONVERT_NUMBER:
         emit_numeric_step(buffer, function, layout, index, true);
         break;

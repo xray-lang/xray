@@ -25,6 +25,10 @@
       "fences": [
         "builtin-typeOf-is"
       ]
+    },
+    {
+      "heading": "Admitted XIR floating semantics",
+      "markdown": "New-XIR typed print accepts f32/f64 (spec section 17.27). Finite values use the shortest round-tripping decimal at their original precision, with an even final digit on equal-distance ties. Decimal exponents in [-4,16) use fixed notation (integral values end in .0); others use lowercase e and a signed exponent. Special spellings are nan, inf, -inf, 0.0 and -0.0. A complete output group is prepared before one sink call; insufficient budget, allocation failure and rejected output retain OUTPUT_ERROR cleanup semantics."
     }
   ]
 }

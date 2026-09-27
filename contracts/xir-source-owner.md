@@ -67,7 +67,8 @@ direct calls, blocks, if/else, while/for, unlabelled break/continue, bool short-
 grouping, variable compound assignment, mutable i64 increment/decrement statements, typed mutable local places,
 module bindings, returns, literals, concrete i64 arithmetic and signed comparisons, string
 concatenation, print and Atomic<i64> construction/load/fetchAdd. The integer family
-follows `xir-integer-arithmetic.md`. Other numeric families,
+follows `xir-integer-arithmetic.md`; f32/f64 arithmetic and output follow
+`xir-floating-point.md`. Other numeric families,
 ref/move, user aggregates, reflection, coroutine syntax, attributes and
 unimplemented declarations fail closed. Every function body is checked, including
 unreachable functions. Ordinary generic read functions with explicit type arguments and the optional

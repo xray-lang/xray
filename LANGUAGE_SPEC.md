@@ -745,6 +745,15 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 
 Literals default to `f64`.
 
+Floating `+ - * /` rounds each operation at the common operand precision,
+nearest with ties to even; a mixed f32/f64 pair first widens f32 exactly to
+f64. Subnormals use gradual underflow and overflow produces signed infinity.
+Division by zero follows IEEE rules rather than raising an integer division
+fault. Invalid operations and NaN results produce the positive canonical quiet
+NaN. Operations are not implicitly fused or reassociated and neither depend on
+nor alter host rounding state or exception flags. Floating remainder and bitwise
+operations reject; already typed integer/float mixing still requires an explicit cast.
+
 #### 2.3.3 `bool`
 
 `true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: i64 = true` or `var b: bool = 1`).
@@ -7216,7 +7225,7 @@ The common runtime floating core takes explicit IEEE binary32/binary64 bit patte
 
 Float-to-integer truncates toward zero before checking the complete target range; (-1,0) may produce unsigned zero. NaN, infinity and out-of-range truncated values return RANGE. Invalid widths/encodings return BAD_ARGUMENT; failures clear outputs. Comparison returns less/equal/greater/unordered, any NaN is unordered, and signed zeros compare equal. Negation flips a non-NaN sign and canonicalizes NaN. All operations use integer bits, allocate nothing, execute no host floating arithmetic or conversion, preserve host rounding/exception state, and depend on no legacy scalar tags or generated metadata.
 
-This section defines the common conversion/comparison/negation foundation. XIR type, packet, layout and source execution admission is specified in 17.24; floating arithmetic and typed output remain unadmitted. Helper tests alone do not qualify VM/native execution. Section 17.24 revises the sole protocol/ABI versions. Full float and cross-platform qualification remain OPEN.
+This section defines the common conversion/comparison/negation foundation. XIR type, packet, layout and source execution admission is specified in 17.24; floating arithmetic and typed output follow §17.27. Helper tests alone do not qualify VM/native execution. Section 17.24 revises the sole protocol/ABI versions. Full float and cross-platform qualification remain OPEN.
 
 
 ### 17.24 XIR floating values and execution boundary
@@ -7227,13 +7236,13 @@ CONST_FLOAT, NEG_FLOAT, six floating comparisons and the sole CONVERT_NUMBER run
 CONVERT_NUMBER atomically replaces the former integer-only conversion. Float-to-integer truncates then checks the full range; NUMERIC_RANGE faults clean up with a unit result.
 NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Conversions follow 17.23 without changing the host floating environment.
 Source admits explicit numeric casts, floating negation/comparison, implicit f32-to-f64 widening and conditional joins; integer/float mixing requires explicit casts.
-Copies, slots, cells, closures, generic instances and suspension preserve bits. Decimal literals and exact contextual integers follow §17.25; floating arithmetic and floating output remain unadmitted.
+Copies, slots, cells, closures, generic instances and suspension preserve bits. Decimal literals and exact contextual integers follow §17.25; floating arithmetic and floating output follow §17.27.
 The sole current revisions follow §17.6; older versions reject without compatibility paths.
 
 ### 17.25 Exact decimal literals
 
 The AST owns each complete decimal floating token. Shared conversion never truncates input or uses strtod, locale or host floating instructions. It rounds once at the requested binary32/binary64 precision, ties to even; overflow produces signed infinity and gradual underflow preserves signed zero. Every exponent digit and separator is validated. A bounded integer rational with 1152 significant digits and a nonzero sticky tail distinguishes all IEEE rounding boundaries; buffer truncation never substitutes for mathematical rounding.
-Without a unique floating context the default is f64. Annotations, assignments, declared returns and substituted parameters directly select f32/f64; grouping and direct negation retain context. Formed f64 expressions never narrow implicitly. Direct integers in a floating context must be exactly representable in full; explicit as permits rounding. Generic definitions remain constraint checked. Formatting preserves spelling and AST cloning copies it into the destination owner. Existing CONST_FLOAT, Checked revalidation and the sole Lowered execution remain unchanged; floating arithmetic/output require separate admission.
+Without a unique floating context the default is f64. Annotations, assignments, declared returns and substituted parameters directly select f32/f64; grouping and direct negation retain context. Formed f64 expressions never narrow implicitly. Direct integers in a floating context must be exactly representable in full; explicit as permits rounding. Generic definitions remain constraint checked. Formatting preserves spelling and AST cloning copies it into the destination owner. Existing CONST_FLOAT, Checked revalidation and the sole Lowered execution remain unchanged; floating arithmetic/output follow §17.27.
 
 ### 17.26 XIR Array values and source boundary
 
@@ -7252,6 +7261,16 @@ Source query snapshots independently own Array type nodes, member signatures, ge
 The Windows source VM, native, mixed-entry and Checked-reload paths verify the two-module string program against independent expectations: `red\nblue\n2\ngreen\nblue\ngreen\n3\n`. Separate assertions cover instance isolation, result lifetime, sticky initialization bounds and physical release after allocation failure. The output golden does not replace OOM, retain, work-budget or full sanitizer gates. Complete batch qualification still requires fresh affected targets, regression, contract and sanitizer gates; this section does not claim those complete gates or macOS have passed.
 
 Array constructor calls, withCapacity/capacity, slices, ptr/mutPtr, map/filter, iteration and other unadmitted members explicitly reject. Source ref parameters, move, complete user structs, cross-Program structural import, stdlib Checked/native package publication, default CLI migration and final old-chain deletion are outside this subset. The sole current protocols remain defined by the implementation constants in §17.6, without old readers or compatibility interfaces.
+
+### 17.27 Floating arithmetic and typed output
+
+ADD/SUB/MUL/DIV_FLOAT append tags 70–73, with OP_COUNT=74, stage mask 7, two equal concrete f32/f64 operands, the same result type, and zero unused fields. The sole Checked semantic, schema and value/call/Program versions are defined by the implementation constants in §17.6. The new admission rejects older semantic packets while preserving existing value and call layouts. Ordinary generic definitions need concrete numeric proof; specialization and revalidation grant no additional permission. Source arithmetic and compound assignment preserve existing evaluation/commit order. Mixed f32/f64 widens exactly first; typed integer/float mixing, floating remainder and bitwise operations reject.
+
+Each operation rounds at its original width, nearest with ties to even, without fusion, reassociation or host FPU dependence. Wide multiplication and division remainders preserve final rounding information. Subnormals and signed zero survive; overflow yields signed infinity. Zero/zero, infinity/infinity, zero times infinity, opposite infinities added and NaN operands produce canonical NaN. Finite nonzero division by zero yields signed infinity, not an integer division fault.
+
+PRINT/OUTPUT admit canonical f32/f64 bits. Finite nonzero text uses the fewest significant decimal digits that round back at the original precision. Equal-length candidates choose the nearest exact decimal; an exact midpoint chooses an even last digit. Binary32 is not widened before formatting. The shortest coefficient has no trailing zeros. Decimal exponent k in [-4,16) uses ordinary notation, adding `.0` to integral results; other values use one leading digit, lowercase `e`, an explicit exponent sign and no redundant exponent zeros. Specials are exactly `nan`, `inf`, `-inf`, `0.0`, `-0.0`. Formatting uses ASCII and fixed integer workspace without heap allocation; 32 bytes suffice including termination. Locale, host rounding mode and exception flags do not affect results.
+
+All arguments still evaluate before complete-group budgeting/rendering and one publication. Failures publish no partial group and retain existing OUTPUT_ERROR/cleanup rules. These contracts do not establish complete source, default product, safety or cross-platform qualification: rebuilt independent VM/native/packet/mixed programs, ownership/physical release, fault injection and batch gates must prove those separately.
 
 ---
 

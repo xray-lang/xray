@@ -28,7 +28,7 @@ type and flags. ARRAY (kind 2) and CELL (kind 3) each carry one u32 element ID.
 Zero count has no pool owner. Nested identity, kind-specific payloads and canonical
 contracts follow `xir-constructed-types.md`; descriptor admission alone does not
 implement Array source syntax or runtime operations. `xir-array-values.md` owns
-the semantic-15 operation tags 63..69, exact operand roles and logical places.
+the semantic-16 Array tags 63..69 and floating arithmetic tags 70..73, exact operand roles and logical places.
 The fixed instruction/type-node wire shape stays schema 5. Projection IDs are
 ordinary instruction indices with restricted roles, never serialized addresses,
 physical offsets or capability proofs. NEW/SET operand-table ranges participate
