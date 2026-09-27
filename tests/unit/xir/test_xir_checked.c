@@ -94,10 +94,10 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
         if (!m) initializer = at;
         at += 4;
     }
-    size_t identities = at, slot_data = at + (size_t) functions * 12;
+    size_t identities = at, slot_data = at + (size_t) functions * 16;
     size_t literal_data = slot_data + (size_t) slots * 12;
     const size_t offsets[] = {declarations, declarations + 12, declarations + 16,
-        dependencies + 4, initializer, identities + 4 * 12 + 4, slot_data, literal_data + 4, identities + 4 * 12 + 8};
+        dependencies + 4, initializer, identities + 4 * 16 + 4, slot_data, literal_data + 4, identities + 4 * 16 + 8};
     const uint32_t values[] = {UINT32_MAX, 1, 0, 1, 3, 0, 1, UINT32_MAX, 1};
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         CHECK(offsets[i] + 4 <= packet->length);
@@ -125,7 +125,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 7 && XR_XIR_CHECKED_CONTRACT == 19 && XR_XIR_OP_COUNT == 77, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 20 && XR_XIR_OP_COUNT == 77, "packet revision");
     _Static_assert(XR_XIR_STRUCT_NEW == 74 && XR_XIR_STRUCT_GET == 75 && XR_XIR_STRUCT_SET == 76, "struct wire operations");
     _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 54 &&
         XR_XIR_CONST_FLOAT == 55 && XR_XIR_NEG_FLOAT == 56 && XR_XIR_EQ_FLOAT == 57 && XR_XIR_GE_FLOAT == 62, "numeric wire identities");
@@ -150,8 +150,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x21, 0x55, 0x7b, 0x61, 0x9c, 0x6d, 0x25, 0x0c, 0x6a, 0xce, 0x63, 0x0a, 0xa2, 0x14, 0x62, 0x01,
-        0xc1, 0xec, 0xbe, 0xa7, 0x8e, 0xfd, 0x31, 0x75, 0x4b, 0x60, 0x02, 0x15, 0xab, 0x68, 0xd6, 0x45};
+        0x36, 0xac, 0x34, 0x63, 0x8c, 0x6e, 0xe4, 0xb8, 0xaf, 0x91, 0x5c, 0xef, 0xc2, 0xb5, 0x1b, 0x24,
+        0x90, 0x33, 0xec, 0x4d, 0x4f, 0x3c, 0x71, 0x8f, 0xa7, 0x20, 0x37, 0xba, 0x48, 0x34, 0xb1, 0xfd};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);

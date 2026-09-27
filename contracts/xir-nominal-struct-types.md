@@ -2,7 +2,7 @@
 
 ## Abstract nominal expression admission
 
-Semantic contract 19 extends the sole schema 7 pool with nominal expressions
+Semantic contract 20 uses the sole schema 8 pool with nominal expressions
 whose ordered arguments may contain enclosing parameters and earlier nominal
 expressions. The exact parameter span is derived from the argument sequence.
 Declaration identity and ordered arguments form identity; derived field vectors
@@ -45,7 +45,7 @@ unsupported declarations rather than constructing a partially checked type.
 
 ### Specialization provenance and opaque substitution
 
-Checked wire admission now uses schema 7 / semantic 19. Program ABI 12 now requires complete specialized Checked evidence during sealing.
+Checked wire admission now uses schema 8 / semantic 20. Program ABI 13 now requires complete specialized Checked evidence during sealing.
 Ordinary generic specialization attaches the original definition and exact origins.
 Cross-module substitution reuses verified definition authority without adding imports.
 The complete cutover removes the preceding revisions; it adds no optional
@@ -91,9 +91,9 @@ Native descriptors need a verified signature-origin projection and bind it to
 the same Checked input/cache identity. Descriptor validation is not validation
 of arbitrary native machine code, and must not be described as such.
 
-Native Program 12 binds this projection to the complete specialized Checked
+Native Program 13 binds this projection to the complete specialized Checked
 packet retained at the Checked-to-Lowered boundary. The packet carries the
-original template and origins through schema 7; its digest is the cache content
+original template and origins through schema 8; its digest is the cache content
 identity, not authentication. Emitted C carries these bytes and their expected
 identity. Native sealing uses the same bounded Checked admission and lowering
 implementation, then compares target, function signatures/layouts, type pool,
@@ -109,7 +109,7 @@ dependencies. Retained packet bytes, temporary decoded/Lowered owners, relation
 checking and cleanup must be budgeted; descriptor publication and code-lease
 transfer happen only after verification. Temporary proof artifacts are released
 before sealing returns. Startup cost and physical failure cleanup require tests;
-neither the library split nor packet retention alone qualifies Program 12.
+neither the library split nor packet retention alone qualifies Program 13.
 
 Admission remains closed until compiler ownership, packet round trips and hostile
 re-signing, repeated specialization, Lowered remapping, native sealing, physical
@@ -484,8 +484,8 @@ allocation with physical accounting restored.
 
 Kind 4 is NOMINAL. Its explicit payload contains a declaration index, owned
 ordered argument and derived-field pointer/count pairs, and no callable/element/result/flags payload.
-Other kinds require an entirely zero nominal payload. Checked schema 7 /
-contract 19 encodes kind, parameter span, declaration index, argument count,
+Other kinds require an entirely zero nominal payload. Checked schema 8 /
+contract 20 encodes kind, parameter span, declaration index, argument count,
 then that many u32 type IDs, followed by the derived field vector described below.
 Declaration records follow the node sequence.
 Zero-argument instances use a null argument pointer. The count must exactly
@@ -502,10 +502,10 @@ The entire pool owns its argument arrays through clone, packet decode and
 cleanup, including every failed allocation prefix. Runtime projection owns its
 closed argument and field vectors instead of retaining compiler argument storage.
 
-The native descriptor and declaration authority require Program ABI 12; owned
+The native descriptor and declaration authority require Program ABI 13; owned
 nominal values require Value ABI 10, with Call ABI 14 unchanged. Older Program
 and Value admissions fail before descriptor dereference. The independent opaque
-TypeArena is reached through runtime helpers. Checked uses schema 7 / semantic 19.
+TypeArena is reached through runtime helpers. Checked uses schema 8 / semantic 20.
 Full generated-native regressions rebuild descriptors
 and their runtime together; old generated C must retain a failing ABI assertion.
 
@@ -531,8 +531,8 @@ work records instead of C recursion. Verification scratch is charged before
 allocation and freed on every path; output ownership is allocated only after
 validation succeeds.
 
-In schema7/semantic19, NOMINAL's argument sequence is followed by field-count
-and field-type u32 words. Current Value10/Call14/Program12 covers the owned
+In schema8/semantic20, NOMINAL's argument sequence is followed by field-count
+and field-type u32 words. Current Value10/Call14/Program13 covers the owned
 nominal value, expanded native descriptor and function declaration authority.
 The derived vector alone grants no construction, field access or runtime
 instantiation. Lowering performs the closed descriptor projection below,
@@ -558,7 +558,7 @@ IDs and keeps neither Checked storage nor source-module dependency tables alive.
 The identity payload and nominal argument/field arrays are independently cloned
 and packed into the runtime arena's single aligned, domain-charged allocation.
 Generated native C emits the same closed descriptors, including identity-only
-pools, and Program12 rejects older native layout contracts. The sole Checked
+pools, and Program13 rejects older native layout contracts. The sole Checked
 wire remains declaration-based; identity payloads cannot masquerade as Checked
 packages. Type metadata projection alone admits no new struct value operations.
 Closed nominal-valued fields follow the graph and layout validation below;
@@ -638,10 +638,10 @@ An owner must resolve in the same module as the function. Module initializers
 and the module entry have no nominal owner. Specialization preserves this
 declaration scope without granting additional generic constraints.
 
-Checked records encode module, exported and nominal_owner as three u32 words.
-The current schema7/semantic19 contract has only this representation. Native
-function identity layout changes Program ABI to11; Value10/Call14 remain.
-Old Program10 must reject before reading its declarations or type metadata.
+Checked records encode module, exported, nominal_owner and member_access as four u32 words.
+The current schema8/semantic20 contract has only this representation. Native
+function identity layout changes Program ABI to13; Value10/Call14 remain.
+Older Program layouts must reject before reading its declarations or type metadata.
 
 One verified-module permission query serves construction and member operations.
 Type access requires the declaring module or an explicit import of an exported
@@ -677,7 +677,7 @@ checked consumers of these representations.
 ## Explicit field construction and owned field reads
 
 STRUCT_NEW (tag74) and STRUCT_GET (tag75) are admitted in Built, Checked and
-Lowered within the schema7/semantic19 contract. NEW's result is a
+Lowered within the schema8/semantic20 contract. NEW's result is a
 closed nominal type; args name the canonical operand-table range containing
 exactly one value per declared field in declaration order. Its immediate and
 targets are zero. It requires construction access to every field; this is not
@@ -739,7 +739,35 @@ All method bodies are checked even when unused. Direct calls use declaration
 identity; field/method name collisions reject. Private field reads retain nominal
 owner checking and nested closures inherit that owner. Source query method
 signatures record the implicit receiver first. No caller acquires field authority.
-Private/protected, static, ref/move, method-local generics, accessors, operators,
+Static, ref/move, method-local generics, accessors, operators,
 default/rest parameters, bound method values and user constructors remain outside
 this initial admission. Reject these declarations explicitly; do not erase their
 receiver or access promises to fit READ. Their full contracts remain required.
+
+## Restricted struct method call authority (2026-09-28, qualification pending)
+
+Function identities add member_access: PUBLIC=0, PRIVATE=1, PROTECTED=2.
+This is independent of module export and nominal_owner. Restricted entries must
+have a valid nominal owner and cannot be exported; unknown access values reject.
+CALL and FUNCTION_REF both require the caller's exact declaration owner for a
+restricted target, in addition to existing module/import/initializer checks.
+Structs cannot inherit, so protected struct access has the same owner boundary
+as private. This does not define future class inheritance authority.
+
+The source producer admits private/protected READ instance methods and diagnoses
+unauthorized access before publishing Checked. Nested closures preserve lexical
+owner, including calls on another instance of the same declaration. Generic
+specialization preserves owner/access from the original definition and verifies
+that correspondence; concrete instantiation never grants extra permissions.
+
+The wire record becomes four u32 words under schema8/semantic20. Program ABI13
+updates native declaration layout atomically, rejecting earlier layouts before
+reading them. Value10/Call14 remain unchanged. Packet admission, canonical native
+matching and generated C must all preserve access. No compatibility reader.
+
+Required evidence: same-owner generic and nested closure calls; outside/same-module
+other-owner/cross-module rejection; forged access/owner/export and function-ref
+rejection; packet roundtrip, specialization and native proof correspondence;
+independent VM/native output, failed allocation release and full batch gates.
+Static/ref/move, method-local generics, bound method source syntax and user
+constructors remain separate obligations.

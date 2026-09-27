@@ -25,8 +25,12 @@ typedef struct XrXirSourceModule {
     uint32_t dependency_count;
     uint32_t initializer;
 } XrXirSourceModule;
+typedef enum XrXirMemberAccess {
+    XR_XIR_MEMBER_PUBLIC, XR_XIR_MEMBER_PRIVATE, XR_XIR_MEMBER_PROTECTED
+} XrXirMemberAccess;
+
 typedef struct XrXirFunctionIdentity {
-    uint32_t module, exported, nominal_owner;
+    uint32_t module, exported, nominal_owner, member_access;
 } XrXirFunctionIdentity;
 typedef struct XrXirSlot {
     uint32_t module;

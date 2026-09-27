@@ -845,7 +845,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     }
     append(buffer, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count; ++f)
-        append(buffer, "    {%uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner);
+        append(buffer, "    {%uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access);
     append(buffer, "};\n");
     if (d->slot_count) {
         append(buffer, "static const XrXirSlot %s_slots[] = {\n", prefix);

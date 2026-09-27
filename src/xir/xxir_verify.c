@@ -149,7 +149,9 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             const XrXirDeclarations *d = module->declarations;
             uint32_t caller_module = d->functions[caller_id].module;
             uint32_t callee_module = d->functions[op->immediate].module;
-            if ((uint32_t) op->immediate == d->modules[callee_module].initializer ||
+            if ((d->functions[op->immediate].member_access &&
+                    d->functions[caller_id].nominal_owner != d->functions[op->immediate].nominal_owner) ||
+                (uint32_t) op->immediate == d->modules[callee_module].initializer ||
                 !xr_xir_module_imports(d, caller_module, callee_module) ||
                 (caller_module != callee_module && !d->functions[op->immediate].exported))
                 return XR_XIR_BAD_STRUCTURE;

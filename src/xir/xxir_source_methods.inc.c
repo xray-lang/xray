@@ -17,6 +17,9 @@ static SourceName *source_method_find(SourceContext *ctx, XrXirType type, const 
 static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue receiver,
     SourceName *method, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
+    const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
+    if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its declaration owner");
     const XrXirFunction *function = &ctx->functions[method->index];
     if (call->type_arg_count || (uint32_t)call->arg_count + 1 != function->parameter_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its exact value arguments");
@@ -50,7 +53,7 @@ static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
             AstNode *node = decl->methods[m];
             if (!source_work(ctx, node) || node->type != AST_METHOD_DECL) return false;
             MethodDeclNode *method = &node->as.method_decl;
-            if (method->is_constructor || method->is_static || method->is_private || method->is_protected ||
+            if (method->is_constructor || method->is_static || (method->is_private && method->is_protected) ||
                 method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
                 method->is_variadic || method->is_operator || method->receiver_mode != XR_PARAM_READ ||
                 method->attr_count || method->type_param_count || method->borrow_origin_count ||
@@ -91,7 +94,10 @@ static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
                         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate method parameter");
                 }
             }
-            ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, ctx->nominals.declarations[d].exported, d + 1};
+            uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE :
+                method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
+            ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
+                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access};
             if (!source_query_parameters(ctx, symbol->declaration)) return false;
         }
     }

@@ -10,7 +10,7 @@ Program sealing owns an independently retained TypeArena for the verified closed
 constructed pool. A function's identity is its arena plus local type ID; the node
 must have kind CALLABLE. The function object owns its arena, independently of
 its execution gate. Boxed value ABI 10, call ABI 14
-and Program ABI 12 replace their predecessors without an alternate runtime path.
+and Program ABI 13 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
 it does not own module slots, providers, active frames or instance allocations.

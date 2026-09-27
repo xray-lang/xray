@@ -7,7 +7,7 @@ driving require their own qualification. No legacy artifact reader is admitted.
 A program seals a verified Lowered closure before execution. It owns copied
 module/function identities, exact signatures, dependency edges, slot declarations,
 literal bytes, a closed constructed-type arena, and a deterministic initialization
-order. Program ABI 12, Call ABI 14 and Value ABI 10 are admitted atomically. The
+order. Program ABI 13, Call ABI 14 and Value ABI 10 are admitted atomically. The
 ProgramSpec supplies the unique type pool; sealing verifies and deep-copies its
 descriptors into the arena before publishing the Program. Code environments are
 either explicitly process-static or transferred to the program with one release
@@ -55,7 +55,7 @@ detail, before releasing the activation and slots. The sole failure-copy API
 accepts an empty CallResult output (READY, unit, zero wake and detail), copies
 the value with independent ownership and copies detail by value. Failure leaves
 the output unchanged. The old value-only signature is removed atomically with
-Program ABI 9; current Program ABI 12 preserves this complete fault contract.
+Program ABI 9; current Program ABI 13 preserves this complete fault contract.
 Repeated failed polls/copies preserve the original index/length
 without rereading released storage or replaying initialization effects. An
 ordinary entry Bounds fault does not change an already-ready Instance into an
@@ -124,7 +124,7 @@ verification-test: test_xir_program_vm
 verification-test: test_xir_program_native
 verification-test: test_xir_allocations
 
-Program ABI 12 includes the native nominal type descriptors and the per-function
+Program ABI 13 includes the native nominal type descriptors and the per-function
 nominal_owner word. XrXirTypes owns a declaration/identity table, and each
 XrXirTypeNode includes ordered nominal arguments and substituted field types.
 Program ABI 11 and earlier reject before reading declarations or type metadata,
@@ -141,7 +141,7 @@ with naming authority rechecked through the mandatory Checked proof during seali
 nominal declaration; entry and initializer functions must have no nominal owner.
 The shared member authority rules are governed by `xir-nominal-struct-types.md`.
 
-Program ABI 12 adds a mandatory borrowed Checked packet, full-packet SHA-256
+Program ABI 12 introduced a mandatory borrowed Checked packet, full-packet SHA-256
 identity and canonical FunctionLayout array to ProgramSpec. CGen emits all fields;
 VM and mixed producers supply the same Lowered input evidence. Sealing uses the
 shared Checked decoder and lowering implementation, then compares target, exact

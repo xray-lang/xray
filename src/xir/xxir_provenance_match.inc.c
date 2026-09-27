@@ -98,7 +98,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             const XrXirFunctionIdentity *identity = &c->source->declarations->functions[origin->function];
             const XrXirFunctionIdentity *actual = &c->destination->declarations->functions[f];
             if (identity->module != actual->module || identity->exported != actual->exported ||
-                identity->nominal_owner != actual->nominal_owner) return XR_XIR_BAD_STRUCTURE;
+                identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access) return XR_XIR_BAD_STRUCTURE;
         }
         uint64_t work = (uint64_t)from->block_count + from->operand_count + from->instruction_count;
         if (work > c->remaining->work) return XR_XIR_BUDGET;

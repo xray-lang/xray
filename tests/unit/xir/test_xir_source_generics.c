@@ -138,6 +138,93 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
         xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
     }
 }
+static void member_call_authority(XrXirSourceRequest *request) {
+    write_generic_source(request->entry_path,
+        "struct S<T>{value:T;private hidden()->T{return this.value};get()->T{return this.hidden()}}\n"
+        "const s=S<i64>{value:7};const n=s.get()\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    XrXirModule *module = &result.checked->module;
+    uint32_t hidden = UINT32_MAX, public_method = UINT32_MAX;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (module->functions[f].name_length == 6 && !memcmp(module->functions[f].name, "hidden", 6)) hidden = f;
+        if (module->functions[f].name_length == 3 && !memcmp(module->functions[f].name, "get", 3)) public_method = f;
+    }
+    CHECK(hidden != UINT32_MAX && public_method != UINT32_MAX);
+    XrXirFunctionIdentity *identity = (XrXirFunctionIdentity *)&module->declarations->functions[hidden];
+    CHECK(identity->member_access == XR_XIR_MEMBER_PRIVATE && !identity->exported && identity->nominal_owner);
+    uint32_t owner = identity->nominal_owner;
+    identity->member_access = 3;
+    CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    identity->member_access = XR_XIR_MEMBER_PRIVATE; identity->exported = 1;
+    CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    identity->exported = 0; identity->nominal_owner = 0;
+    CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+    identity->nominal_owner = owner;
+    bool attacked = false;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (module->declarations->functions[f].nominal_owner) continue;
+        for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
+            XrXirInstruction *op = (XrXirInstruction *)&module->functions[f].instructions[i];
+            if (op->op != XR_XIR_CALL || op->immediate != public_method) continue;
+            op->immediate = hidden;
+            CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+            XrXirCheckedPacket bad = {0};
+            CHECK(xr_xir_checked_write(result.checked, NULL, &bad, NULL) == XR_XIR_BAD_STRUCTURE && !bad.bytes);
+            op->immediate = public_method; attacked = true;
+        }
+    }
+    CHECK(attacked && xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_OK);
+    XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
+    CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);
+    xr_xir_source_result_free(&result);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_checked_packet_free(&packet);
+    CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
+    bool specialized = false;
+    for (uint32_t f = 0; f < closed->module.function_count; ++f) {
+        identity = (XrXirFunctionIdentity *)&closed->module.declarations->functions[f];
+        if (identity->member_access != XR_XIR_MEMBER_PRIVATE) continue;
+        identity->member_access = XR_XIR_MEMBER_PUBLIC;
+        CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+        identity->member_access = XR_XIR_MEMBER_PRIVATE; specialized = true;
+    }
+    CHECK(specialized && xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
+}
+static void member_reference_authority(XrXirSourceRequest *request, const char *library) {
+    write_generic_source(request->entry_path,
+        "struct S{get()->fn()->i64{return fn()->i64{return 1}}}\n"
+        "const s=S();const f=s.get();const outsider=fn()->i64{return 2}\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    XrXirModule *module = &result.checked->module;
+    unsigned allowed = 0, denied = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
+            const XrXirInstruction *op = &module->functions[f].instructions[i];
+            if (op->op != XR_XIR_FUNCTION_REF) continue;
+            XrXirFunctionIdentity *id = (XrXirFunctionIdentity *)&module->declarations->functions[op->immediate];
+            XrXirFunctionIdentity saved = *id;
+            id->nominal_owner = 1; id->exported = 0; id->member_access = XR_XIR_MEMBER_PRIVATE;
+            bool same_owner = module->declarations->functions[f].nominal_owner == 1;
+            CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) ==
+                (same_owner ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE));
+            if (same_owner) ++allowed; else ++denied;
+            *id = saved;
+        }
+    }
+    CHECK(allowed == 1 && denied == 1);
+    xr_xir_source_result_free(&result);
+    write_generic_source(library, "export struct S{private secret()->i64{return 7};protected guarded()->i64{return 8}}\n");
+    const char *sources[] = {"import \"./lib\" as lib\nlib.S().secret()\n",
+        "import \"./lib\" as lib\nlib.S().guarded()\n"};
+    for (unsigned i = 0; i < 2; ++i) {
+        write_generic_source(request->entry_path, sources[i]);
+        CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_BAD_TYPE && !result.checked);
+        xr_xir_source_result_free(&result);
+    }
+}
 int main(void) {
     reference_syntax();
     const char *rejected[] = {
@@ -193,8 +280,11 @@ int main(void) {
         "struct S{x:i64;x()->i64{return 1}}\n",
         "struct S{get(x:i64)->i64{return x}}\nconst s=S();s.get(true)\n",
         "struct S{get()->i64{return 1}}\nconst s=S();s.get<i64>()\n",
-        "struct S{private get()->i64{return 1}}\n",
-        "struct S{get()->i64{return 1}}\nconst s=S();const f=s.get\n"
+        "struct S{private get()->i64{return 1}}\nconst s=S();s.get()\n",
+        "struct S{get()->i64{return 1}}\nconst s=S();const f=s.get\n",
+        "struct S{protected get()->i64{return 1}}\nS().get()\n",
+        "struct S{private get()->i64{return 1}}\nstruct U{read(s:S)->i64{return s.get()}}\n",
+        "struct S<T>{private get()->T{return missing}}\n"
     };
     char directory[XR_TEST_PATH_MAX] = "xir-source-generics-XXXXXX";
     CHECK(xr_test_mkdtemp(directory));
@@ -208,6 +298,8 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
+    member_reference_authority(&request, library);
+    member_call_authority(&request);
     nominal_specialization_authority(&request, library);
     write_generic_source(library,
         "export fn required<T:Sendable>(x:T)->T { return x }\n"

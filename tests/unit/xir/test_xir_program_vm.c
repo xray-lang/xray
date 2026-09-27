@@ -48,7 +48,7 @@ static void descriptor_correspondence(void) {
     uint64_t cost = 16000000 - work;
     work = cost; CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_OK && !work);
     work = cost - 1; CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BUDGET);
-    for (uint32_t attack = 0; attack < 6; ++attack) {
+    for (uint32_t attack = 0; attack < 7; ++attack) {
         XrXirTypeNode *node = (XrXirTypeNode *)&module->types->nodes[0];
         XrXirType saved = node->nominal.fields[0];
         XrXirFunctionIdentity *id = (XrXirFunctionIdentity *)&module->declarations->functions[0];
@@ -61,12 +61,14 @@ static void descriptor_correspondence(void) {
         case 3: name[0] ^= 1; break;
         case 4: --spec.entry_count; break;
         case 5: ++spec.target.abi_version; break;
+        case 6: id->member_access = XR_XIR_MEMBER_PRIVATE; break;
         }
         work = 16000000;
         CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BAD_STRUCTURE);
         entries[0].result = module->functions[0].result;
         ((XrXirType *)node->nominal.fields)[0] = saved; id->exported = exported;
         if (attack == 3) name[0] ^= 1;
+        id->member_access = XR_XIR_MEMBER_PUBLIC;
         spec.entry_count = 9; spec.target = *xr_xir_artifact_target(b);
     }
     work = 16000000;

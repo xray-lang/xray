@@ -123,6 +123,9 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
     if (status != XR_XIR_OK) return status;
     for (uint32_t i = 0; i < functions; ++i) {
         uint32_t owner = d->functions[i].nominal_owner;
+        uint32_t access = d->functions[i].member_access;
+        if (access > XR_XIR_MEMBER_PROTECTED ||
+            (access && (!owner || d->functions[i].exported))) return XR_XIR_BAD_STRUCTURE;
         if (!owner) continue;
         if (!types || !types->nominals || owner > types->nominals->count) return XR_XIR_BAD_STRUCTURE;
         const XrXirNominalTable *table = types->nominals;

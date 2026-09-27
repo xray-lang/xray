@@ -41,7 +41,7 @@ static XrXirArtifact *struct_ops_checked(unsigned invalid) {
         {"entry",5,NULL,0,XR_XIR_I64,&five,1,entry,5,operands,2},
         {"make",4,parameters,2,pair,&six,1,make,6,operands,2}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0};
-    XrXirFunctionIdentity identities[] = {{0,0,0},{0,1,0},{0,1,1}};
+    XrXirFunctionIdentity identities[] = {{0,0,0, 0},{0,1,0, 0},{0,1,1, 0}};
     XrXirLiteral literal = {"constructed",11};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL};

@@ -163,7 +163,7 @@ different definitions do not share generic authority. All runtime types and
 layout operands are closed before immutable Program sealing.
 
 Current admission uses Checked schema 7 / semantic contract 19, Value ABI 10,
-Call ABI 14 and Program ABI 12. Array operations and roles entered at semantic15;
+Call ABI 14 and Program ABI 13. Array operations and roles entered at semantic15;
 the current shared pool, nominal metadata and declaration ownership follow
 `xir-nominal-struct-types.md`. Typed Bounds detail retains its separately
 frozen call and Program behavior. Older or mixed semantic/call/program entries reject with

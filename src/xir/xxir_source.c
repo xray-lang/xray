@@ -1322,7 +1322,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
         }
     }
-    ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported, 0};
+    ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported, 0, 0};
     return source_query_parameters(ctx, symbol->declaration);
 }
 static bool source_same_text(const char *first, const char *second) {
