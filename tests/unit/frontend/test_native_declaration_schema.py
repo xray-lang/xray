@@ -1,6 +1,9 @@
 """Verify source-backed native value declarations before compiler admission."""
 from pathlib import Path
+import os
+import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -63,6 +66,50 @@ class NativeDeclarations(unittest.TestCase):
                        self.source.replace('// @native-type id=1', '')):
             with self.assertRaises(ValueError):
                 schema.parse_source(source, self.prelude)
+
+    def test_generation_preserves_unchanged_outputs(self):
+        with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
+            root = Path(directory)
+            for relative in ['stdlib/types/array.xr', 'stdlib/prelude/builtin_symbols.def']:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / relative).read_bytes())
+            outputs = schema.render(root)
+            for relative in outputs:
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+            command = [sys.executable, str(ROOT / 'scripts/gen_native_declarations.py'),
+                       '--root', str(root)]
+            subprocess.run(command, check=True, capture_output=True)
+            # --check already accepts equivalent line endings. Generating must
+            # not dirty a valid checkout or invalidate its compiler dependents.
+            first = root / next(iter(outputs))
+            first.write_bytes(first.read_bytes().replace(b'\n', b'\r\n'))
+            expected = {}
+            for relative in outputs:
+                target = root / relative
+                os.utime(target, ns=(1600000000123456700, 1600000000123456700))
+                expected[relative] = (target.read_bytes(), target.stat().st_mtime_ns)
+            subprocess.run(command + ['--check'], check=True, capture_output=True)
+            subprocess.run(command, check=True, capture_output=True)
+            for relative, (content, timestamp) in expected.items():
+                target = root / relative
+                self.assertEqual(target.read_bytes(), content, relative)
+                self.assertEqual(target.stat().st_mtime_ns, timestamp, relative)
+
+            source = root / 'stdlib/types/array.xr'
+            source.write_text('// Changed source provenance.\n' + self.source, encoding='utf-8')
+            wanted = schema.render(root)
+            self.assertNotEqual(wanted, outputs)
+            self.assertNotEqual(subprocess.run(command + ['--check'], capture_output=True).returncode, 0)
+            subprocess.run(command, check=True, capture_output=True)
+            subprocess.run(command + ['--check'], check=True, capture_output=True)
+            for relative, text in wanted.items():
+                target = root / relative
+                self.assertEqual(target.read_text(encoding='utf-8'), text)
+                if text == outputs[relative]:
+                    self.assertEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
+                else:
+                    self.assertNotEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
 
 
 if __name__ == '__main__':

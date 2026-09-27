@@ -316,7 +316,7 @@ def main():
             if args.check:
                 if not path.exists() or path.read_text(encoding='utf-8') != text:
                     raise ValueError('stale generated native declaration: ' + relative)
-            else:
+            elif not path.exists() or path.read_text(encoding='utf-8') != text:
                 path.write_text(text, encoding='utf-8', newline='\n')
     except (ValueError, OSError) as error:
         parser.exit(1, str(error) + '\n')
