@@ -24,7 +24,6 @@ static bool source_struct_defaultability(SourceContext *ctx) {
             if (!source_work(ctx, symbol->node)) return false;
             if (ctx->nominal_defaultable[d]) continue;
             const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[d];
-            if (decl->parameter_count) continue;
             bool available = true;
             for (uint32_t f = 0; f < decl->field_count; ++f) {
                 AstNode *field = symbol->node->as.struct_decl.fields[f];
@@ -54,6 +53,7 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
         ctx->functions[index] = (XrXirFunction) {"$default", 8, NULL, 0, symbol->type, NULL, 0, NULL, 0, NULL, 0};
         ctx->bodies[index].node = symbol->node; ctx->bodies[index].module = symbol->module;
         ctx->bodies[index].declaration = symbol->declaration;
+        source_struct_function_scope(ctx, index, symbol);
         ctx->identities[index] = (XrXirFunctionIdentity) {symbol->module, ctx->nominals.declarations[d].exported, d + 1};
     }
     return true;
@@ -69,7 +69,9 @@ static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType ty
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
     if (!found || found->kind != XR_XIR_TYPE_NOMINAL || !ctx->nominal_constructors[found->nominal.declaration])
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type has no admitted default initializer");
-    return emit(ctx, (XrXirInstruction) {XR_XIR_CALL, type, {0}, {0}, ctx->nominal_constructors[found->nominal.declaration]}, value);
+    XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, ctx->nominal_constructors[found->nominal.declaration]};
+    return source_type_arguments(ctx, node, found->nominal.arguments, found->nominal.argument_count, &op) &&
+        emit(ctx, op, value);
 }
 static bool source_struct_constructor_body(SourceContext *ctx) {
     uint32_t d = ctx->identities[ctx->function].nominal_owner - 1;
@@ -82,7 +84,10 @@ static bool source_struct_constructor_body(SourceContext *ctx) {
         if (!source_work(ctx, field)) return false;
         uint32_t function = ctx->nominal_defaults[d][f];
         if (function) {
-            if (!emit(ctx, (XrXirInstruction) {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, function}, &fields[f])) return false;
+            const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, symbol->type);
+            XrXirInstruction op = {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, function};
+            if (!source_type_arguments(ctx, field, type->nominal.arguments, type->nominal.argument_count, &op) ||
+                !emit(ctx, op, &fields[f])) return false;
         } else if (!source_default_value(ctx, field, decl->fields[f].type, &fields[f])) return false;
     }
     SourceValue value;

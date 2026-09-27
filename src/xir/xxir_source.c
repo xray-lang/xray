@@ -274,6 +274,15 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CELL, element,
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
+static XrGenericParam **source_type_parameters(SourceContext *ctx, int *count) {
+    AstNode *owner = ctx->bodies[ctx->function].type_owner;
+    ClassDeclNode *nominal = ctx->nominal_type_owner ? ctx->nominal_type_owner :
+        owner && owner->type == AST_STRUCT_DECL ? &owner->as.struct_decl : NULL;
+    if (nominal) { *count = nominal->type_param_count; return nominal->type_params; }
+    FunctionDeclNode *function = owner ? &owner->as.function_decl : NULL;
+    *count = function ? function->type_param_count : 0;
+    return function ? function->type_params : NULL;
+}
 #include "xxir_source_native.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
@@ -339,9 +348,8 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     case XR_TREF_NAMED: case XR_TREF_TYPE_PARAM: {
         AstNode *node = ctx->bodies[ctx->function].type_owner;
         if (!ref->name) break;
-        FunctionDeclNode *decl = node ? &node->as.function_decl : NULL;
-        XrGenericParam **parameters = ctx->nominal_type_owner ? ctx->nominal_type_owner->type_params : decl ? decl->type_params : NULL;
-        int count = ctx->nominal_type_owner ? ctx->nominal_type_owner->type_param_count : decl ? decl->type_param_count : 0;
+        int count;
+        XrGenericParam **parameters = source_type_parameters(ctx, &count);
         for (int i = 0; i < count; ++i) {
             if (!source_work(ctx, node)) return false;
             if (!strcmp(ref->name, parameters[i]->name)) {
@@ -650,10 +658,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     }
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
     if (target && target->kind == SOURCE_NOMINAL) {
-        if (call->arg_count || call->type_arg_count)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "default struct construction takes no arguments");
-        return source_query_reference(ctx, callee, binding, target, XR_XIR_SOURCE_CALL) &&
-            source_default_value(ctx, node, target->type, value);
+        if (call->arg_count || call->type_arg_count < 0)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "default struct construction takes no value arguments");
+        XrXirType type;
+        return source_nominal_apply(ctx, target, call->type_args, (uint32_t)call->type_arg_count, &type) &&
+            source_query_reference(ctx, callee, binding, target, XR_XIR_SOURCE_CALL) &&
+            source_default_value(ctx, node, type, value);
     }
     XrXirTypeNode signature = {0};
     if (!print && !atomic && !stream && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION)) {

@@ -178,7 +178,15 @@ int main(void) {
         "import \"./lib\" as lib\nfn open<T>(x:T)->T { return lib.required<T>(x) }\n",
         "import \"./lib\" as lib\nfn open<T>(x:T)->T { return lib.required<T>(x) }\nopen<i64>(1)\n",
         "import { hidden } from \"./lib\"\nhidden<string>(\"x\")\n",
-        "fn id<T>(x:T)->T { return x }\nid<()>(print())\n"
+        "fn id<T>(x:T)->T { return x }\nid<()>(print())\n",
+        "struct S<T>{value:T=0}\n",
+        "struct S<T>{value:T=0}\nconst s=S<i64>{value:7}\n",
+        "fn required<T:Sendable>(x:T)->T{return x}\nstruct S<T>{f:fn(T)->T=required<T>}\n",
+        "struct S<T>{value:T=caller}\nfn make()->S<i64>{const caller=7;return S<i64>{}}\n",
+        "struct S<T>{private value:i64=7}\nconst s=S<string>{}\n",
+        "struct S<T>{value:T}\nconst s=S<i64>()\n",
+        "struct S<T>{value:T}\nfn make<T>()->S<T>{return S<T>()}\n",
+        "struct S<T>{count:i64}\nconst s=S()\n"
     };
     char directory[XR_TEST_PATH_MAX] = "xir-source-generics-XXXXXX";
     CHECK(xr_test_mkdtemp(directory));

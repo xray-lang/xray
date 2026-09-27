@@ -120,8 +120,6 @@ static bool source_struct_fields(SourceContext *ctx) {
                 AstNode *node = decl->fields[f];
                 if (!source_work(ctx, node) || node->type != AST_FIELD_DECL) return false;
                 FieldDeclNode *field = &node->as.field_decl;
-                if (decl->type_param_count && field->initializer)
-                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic field defaults require a definition proof");
                 if (!field->field_type || field->is_static || field->is_final || field->is_flexible || field->is_weak)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "stored field contract is not admitted");
                 if (!source_type(ctx, field->field_type, &types[f]) || types[f] == XR_XIR_UNIT)
@@ -145,6 +143,14 @@ static bool source_struct_fields(SourceContext *ctx) {
     }
     return true;
 }
+static void source_struct_function_scope(SourceContext *ctx, uint32_t index, SourceName *symbol) {
+    const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
+    ctx->bodies[index].type_owner = symbol->node;
+    ctx->bodies[index].generic_owner = nominal->parameter_count ? symbol->declaration : 0;
+    ctx->generics[index].parameter_count = nominal->parameter_count;
+    ctx->generics[index].constraints = nominal->constraints;
+    ctx->has_generics |= nominal->parameter_count != 0;
+}
 static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) {
     for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
@@ -163,6 +169,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                 ctx->functions[index] = (XrXirFunction) {"$field_default", 14, NULL, 0,
                     nominal->fields[f].type, NULL, 0, NULL, 0, NULL, 0};
                 ctx->bodies[index].node = node; ctx->bodies[index].module = m;
+                source_struct_function_scope(ctx, index, symbol);
                 ctx->bodies[index].declaration = ctx->nominal_members[symbol->index][f];
                 bool visible = nominal->exported && !(nominal->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED));
                 ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1};
@@ -229,7 +236,13 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         bool owner = ctx->identities[ctx->function].nominal_owner == symbol->index + 1;
         if (!function || (!owner && (decl->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "omitted field requires an accessible declaration default");
-        if (!emit(ctx, (XrXirInstruction) {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, function}, &fields[f])) return false;
+        const XrXirTypeNode *instance = xr_xir_type_node(&ctx->types, instance_type);
+        SourceSubstitution substitution = {instance->nominal.arguments, instance->nominal.argument_count};
+        XrXirType field_type;
+        if (!source_substitute(ctx, &substitution, decl->fields[f].type, 0, &field_type)) return false;
+        XrXirInstruction op = {XR_XIR_CALL, field_type, {0}, {0}, function};
+        if (!source_type_arguments(ctx, node, substitution.types, substitution.count, &op) ||
+            !emit(ctx, op, &fields[f])) return false;
         if (!source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
             ctx->nominal_members[symbol->index][f], XR_XIR_SOURCE_READ)) return false;
     }

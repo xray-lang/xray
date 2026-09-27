@@ -130,9 +130,18 @@ the receiver arguments into the declared field type without gaining access right
 Declarations support the existing unconstrained and Sendable marker parameters;
 Checked proves every field and function use in its own constraint context.
 Generic bodies are checked once before Checked specialization, never cloned ASTs.
-Initial execution requires explicit values for every generic field. Generic field
-defaults and default construction remain rejected until their conditional
-definition proofs are implemented. This does not restrict non-generic defaults.
+Generic field defaults are ordinary generic functions checked under the owning
+struct parameters and constraints, even when unused or overridden. Omission calls
+the function with the receiver's exact ordered type arguments; the result type
+is substituted before operand admission. Closures inherit the same parameter
+scope and nominal owner. Explicit fields execute first in source order, then
+omitted defaults in declaration order. No concrete instance grants a missing
+definition constraint. A generic struct has an unconditional default constructor
+only when its fields are defaultable in its definition context. The constructor
+inherits its parameters and constraints and calls defaults with those parameters.
+Explicit type arguments and typed uninitialized bindings use this same function.
+Conditional default construction remains outside this admission; in particular
+unconstrained T has no implicit zero value even in an i64 instance.
 Query snapshots own the same parameterized nominal metadata, with each abstract
 field's generic owner identifying its struct declaration. Initial source tests
 exercise nested numeric/string instances; complete family qualification is OPEN.

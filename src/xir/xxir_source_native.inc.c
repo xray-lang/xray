@@ -69,9 +69,11 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
 static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
     if (find_name(ctx, ctx->locals, name) || find_name(ctx, ctx->names[ctx->module], name)) return true;
     AstNode *owner = ctx->bodies[ctx->function].type_owner;
-    if (owner) for (int i = 0; i < owner->as.function_decl.type_param_count; ++i) {
+    int count;
+    XrGenericParam **parameters = source_type_parameters(ctx, &count);
+    for (int i = 0; i < count; ++i) {
         if (!source_work(ctx, owner)) return true;
-        if (!strcmp(name, owner->as.function_decl.type_params[i]->name)) return true;
+        if (!strcmp(name, parameters[i]->name)) return true;
     }
     /* Module declarations are hoisted, including ones whose signatures follow this one. */
     AstNode *module = ctx->graph->specs[ctx->module].ast;

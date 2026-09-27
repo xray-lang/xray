@@ -69,3 +69,7 @@ export struct Complete {
     private hidden:i64=23
 }
 export struct GenericRecord<T> { value:T }
+
+export struct GenericDefault<T> { value:T; identity:fn(T)->T=fn(x:T)->T{return x}; label:string="generic" }
+export struct GenericEmpty<T>{identity:fn(T)->T=fn(x:T)->T{return x};count:i64}
+export struct GenericNested<T>{inner:GenericEmpty<T>}

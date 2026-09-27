@@ -439,3 +439,12 @@ print(genericNumber.inner.value,genericLibrary.value,genericOld.value)
 struct OpaquePrivate { value:i64 }
 const opaquePrivate=alpha.identity<OpaquePrivate>(OpaquePrivate{value:73})
 print(opaquePrivate.value)
+
+fn defaultWrap<T>(value:T)->alpha.GenericDefault<T>{return alpha.GenericDefault<T>{value:value}}
+const genericDefault=defaultWrap<string>("default-value")
+const genericOverride=alpha.GenericDefault<i64>{value:83,label:"explicit"}
+print(genericDefault.identity(genericDefault.value),genericDefault.label,genericOverride.label,genericOverride.identity(genericOverride.value))
+fn makeGenericEmpty<T>()->alpha.GenericEmpty<T>{return alpha.GenericEmpty<T>()}
+const genericEmpty=makeGenericEmpty<string>()
+var genericNested:alpha.GenericNested<i64>
+print(genericEmpty.identity("constructed"),genericEmpty.count,genericNested.inner.identity(89),genericNested.inner.count)
