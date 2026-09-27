@@ -356,7 +356,63 @@ static size_t declaration_allocation_failures(void) {
     return total;
 }
 
+#include "xir_nominal_fixture.h"
+static void nominal_allocation_failures(void) {
+    NominalFixture f; nominal_fixture(&f);
+    calls = 0; fail_at = SIZE_MAX;
+    XrXirBudget budget = xr_xir_default_budget();
+    XrXirNominalTable *copy = NULL;
+    CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_OK);
+    size_t count = calls;
+    CHECK(count >= 10 && live > 0);
+    xr_xir_nominal_free(copy); CHECK(live == 0);
+    for (size_t i = 0; i < count; ++i) {
+        calls = 0; fail_at = i;
+        budget = xr_xir_default_budget();
+        uint64_t bytes = budget.metadata_bytes, work = budget.work;
+        copy = (XrXirNominalTable *) (uintptr_t) 1;
+        CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(!copy && !live && budget.metadata_bytes == bytes && budget.work == work);
+    }
+    calls = 0; fail_at = SIZE_MAX;
+    budget = xr_xir_default_budget();
+    uint64_t initial_work = budget.work;
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &budget) == XR_XIR_OK);
+    uint64_t verify_work = initial_work - budget.work;
+    budget = xr_xir_default_budget(); budget.work = verify_work;
+    CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_BUDGET);
+    CHECK(!copy && calls == 0 && live == 0 && budget.work == verify_work);
+    budget = xr_xir_default_budget();
+    f.fields[0].type = XR_XIR_UNIT;
+    CHECK(xr_xir_nominal_clone(&f.table, NULL, &budget, &copy) == XR_XIR_BAD_TYPE);
+    CHECK(!copy && calls == 0 && live == 0);
+}
+
+static void nominal_pool_allocation_failures(void) {
+    NominalFixture f; nominal_fixture(&f);
+    XrXirType argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}}};
+    XrXirTypes types = {nodes, 2, &f.table};
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    calls = 0; fail_at = SIZE_MAX;
+    XrXirTypes *copy = NULL;
+    CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OK && copy->nominals);
+    size_t count = calls;
+    CHECK(count >= 10);
+    xr_xir_types_free(copy); CHECK(live == 0);
+    for (size_t i = 0; i < count; ++i) {
+        calls = 0; fail_at = i;
+        CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(!copy && !live);
+    }
+    calls = 0; fail_at = SIZE_MAX;
+}
+
 int main(void) {
+    nominal_pool_allocation_failures();
+    nominal_allocation_failures();
     segment_cases();
     XrXirInstruction ops[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42},

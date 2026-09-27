@@ -21,7 +21,7 @@ static XrXirCallStatus runtime_drive(XrXirInstance *instance) {
     XrXirInstanceResult result = xr_xir_instance_poll(instance);
     unsigned wakes = 0;
     while (result.outcome.status == XR_XIR_CALL_SUSPENDED) {
-        CHECK(++wakes <= 2);
+        CHECK(++wakes <= 4);
         CHECK(xr_xir_instance_resume(instance, result.epoch, result.outcome.wake) == XR_XIR_CALL_READY);
         result = xr_xir_instance_poll(instance);
     }

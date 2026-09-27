@@ -134,7 +134,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->modules[2] = (XrXirSourceModule) {"alpha", 5, NULL, 0, 2};
     uint32_t owners[] = {0, 1, 2, 0, 2, 1, 0, 0, 0, 2};
     for (uint32_t i = 0; i < 10; ++i) {
-        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4};
+        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0};
         f->entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
             sizeof(Frame), initializer, cleanup, &f->env[owners[i]]};
     }
@@ -287,7 +287,7 @@ static void failed_initialization(void) {
     }
 }
 static void seal_rejection(void) {
-    for (uint32_t invalid = 0; invalid < 15; ++invalid) {
+    for (uint32_t invalid = 0; invalid < 18; ++invalid) {
         Fixture f; fixture(&f, 0);
         uint32_t cycle = 0;
         switch (invalid) {
@@ -306,9 +306,23 @@ static void seal_rejection(void) {
         case 12: f.entries[3].abi_version = 11; break;
         case 13: f.spec.abi_version = 8; break;
         case 14: f.entries[3].abi_version = 13; break;
+        case 15:
+            f.spec.abi_version = 9;
+            f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
+            break;
+        case 16:
+            f.spec.target.abi_version = 9;
+            f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
+            break;
+        case 17:
+            f.spec.abi_version = 10;
+            f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
+            break;
         }
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&f.spec, invalid == 9 ? 1 : 65536, &program) != XR_XIR_OK);
+        XrXirStatus status = xr_xir_program_seal(&f.spec, invalid == 9 ? 1 : 65536, &program);
+        CHECK(status != XR_XIR_OK);
+        if (invalid >= 15) CHECK(status == XR_XIR_BAD_LAYOUT);
         CHECK(!program && !f.witness.releases);
     }
 }

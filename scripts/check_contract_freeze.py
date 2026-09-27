@@ -38,6 +38,7 @@ CONTRACT_SPECS = (
     ContractSpec("xir-local-control-flow.md", ()),
     ContractSpec("xir-callable-types.md", ()),
     ContractSpec("xir-constructed-types.md", ()),
+    ContractSpec("xir-nominal-struct-types.md", ()),
     ContractSpec("xir-array-values.md", ()),
     ContractSpec("xir-array-storage.md", ()),
     ContractSpec("xir-array-source.md", ()),

@@ -16,9 +16,43 @@
 #include "xir_program_fixture.h"
 #include "xir_capture_fixture.h"
 #include "xir_array_program_fixture.h"
+#include "xir_nominal_checked_fixture.h"
+#include "xir_nominal_generic_fixture.h"
+#include "xir_nominal_chain_fixture.h"
+#include "xir_nominal_transport_fixture.h"
+#include "xir_struct_ops_fixture.h"
+#include "xir_struct_set_fixture.h"
 int main(int argc, char **argv) {
     FILE *file = argc == 2 ? fopen(argv[1], "wb") : NULL;
     CHECK(argc == 1 || (argc == 2 && file));
+    XrXirArtifact *struct_set = struct_set_lowered();
+    XrXirCSource set_source = {0};
+    CHECK(xr_xir_emit_c(struct_set,"struct_set",200000,&set_source) == XR_XIR_OK);
+    xr_xir_artifact_free(struct_set);
+    CHECK(!strstr(set_source.text,"xr_xir_vm") && !strstr(set_source.text,"({"));
+    if (file) CHECK(fwrite(set_source.text,1,set_source.length,file) == set_source.length);
+    xr_xir_c_source_free(&set_source);
+    XrXirArtifact *struct_ops = struct_ops_lowered();
+    XrXirCSource struct_source = {0};
+    CHECK(xr_xir_emit_c(struct_ops,"struct_ops",200000,&struct_source) == XR_XIR_OK);
+    xr_xir_artifact_free(struct_ops);
+    CHECK(!strstr(struct_source.text,"xr_xir_vm") && !strstr(struct_source.text,"({"));
+    if (file) CHECK(fwrite(struct_source.text,1,struct_source.length,file) == struct_source.length);
+    xr_xir_c_source_free(&struct_source);
+    XrXirArtifact *transport = nominal_transport_fixture();
+    XrXirCSource transport_source = {0};
+    CHECK(xr_xir_emit_c(transport,"nominal_transport",200000,&transport_source) == XR_XIR_OK);
+    xr_xir_artifact_free(transport);
+    CHECK(!strstr(transport_source.text,"xr_xir_vm") && !strstr(transport_source.text,"({"));
+    if (file) CHECK(fwrite(transport_source.text,1,transport_source.length,file) == transport_source.length);
+    xr_xir_c_source_free(&transport_source);
+    XrXirArtifact *combined = nominal_generic_lowered();
+    XrXirCSource combined_source = {0};
+    CHECK(xr_xir_emit_c(combined, "nominal_generic", 200000, &combined_source) == XR_XIR_OK);
+    xr_xir_artifact_free(combined);
+    CHECK(!strstr(combined_source.text, "xr_xir_vm") && !strstr(combined_source.text, "({"));
+    if (file) CHECK(fwrite(combined_source.text, 1, combined_source.length, file) == combined_source.length);
+    xr_xir_c_source_free(&combined_source);
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *artifact = program_fixture(mode);
         char prefix[32]; CHECK(snprintf(prefix, sizeof(prefix), "program%u", mode) > 0);
@@ -37,14 +71,24 @@ int main(int argc, char **argv) {
     CHECK(!strstr(capture_source.text,"xr_xir_vm") && !strstr(capture_source.text,"({"));
     if (file) CHECK(fwrite(capture_source.text,1,capture_source.length,file) == capture_source.length);
     xr_xir_c_source_free(&capture_source);
-    for (uint32_t mode = 0; mode < 2; ++mode) {
-        XrXirArtifact *array = array_program_fixture(mode != 0);
+    for (uint32_t mode = 0; mode < 3; ++mode) {
+        XrXirArtifact *array = array_program_fixture(mode == 1, mode == 2);
         XrXirCSource source = {0}; char prefix[32];
         CHECK(snprintf(prefix,sizeof(prefix),"array_program%u",mode) > 0);
         CHECK(xr_xir_emit_c(array,prefix,200000,&source) == XR_XIR_OK);
         xr_xir_artifact_free(array);
         CHECK(!strstr(source.text,"xr_xir_vm") && !strstr(source.text,"({"));
         if (file) CHECK(fwrite(source.text,1,source.length,file) == source.length);
+        xr_xir_c_source_free(&source);
+    }
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        XrXirArtifact *nominal = mode == 2 ? nominal_chain_lowered() : nominal_lowered_fixture(mode ? 3 : 0);
+        XrXirCSource source = {0};
+        CHECK(xr_xir_emit_c(nominal, mode == 2 ? "nominal_chain" : mode ? "nominal3" : "nominal0", 200000, &source) == XR_XIR_OK);
+        xr_xir_artifact_free(nominal);
+        CHECK(strstr(source.text, "XrXirNominalIdentity") && !strstr(source.text, "XrXirNominalDeclaration"));
+        CHECK(!strstr(source.text, "xr_xir_vm") && !strstr(source.text, "({"));
+        if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_c_source_free(&source);
     }
     if (file) CHECK(fclose(file) == 0);

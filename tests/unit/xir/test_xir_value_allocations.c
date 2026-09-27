@@ -223,7 +223,7 @@ static XrXirTypeArena *allocation_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 260},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
-    XrXirTypes types = {nodes, 7};
+    XrXirTypes types = {nodes, 7, NULL};
     XrXirBudget budget = {0}; budget.metadata_bytes = 65536; budget.work = 65536;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
@@ -295,7 +295,7 @@ static void arena_allocation_cases(void) {
     XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter,
         .parameter_count = 1, .result = XR_XIR_I64};
-    XrXirTypes types = {&node, 1};
+    XrXirTypes types = {&node, 1, NULL};
     XrXirBudget budget = {0}; budget.parameters = 10; budget.metadata_bytes = 65536; budget.work = 100;
     XrXirBudget before = budget;
     XrXirTypeArena *arena = NULL;
@@ -355,7 +355,7 @@ static void deep_arena_release(void) {
         nodes[i].kind = XR_XIR_TYPE_ARRAY;
         nodes[i].element = i ? (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i - 1) : XR_XIR_STRING;
     }
-    XrXirTypes types = {nodes, count};
+    XrXirTypes types = {nodes, count, NULL};
     XrXirBudget budget = {0}; budget.metadata_bytes = 1024 * 1024; budget.work = 8 * 1024 * 1024;
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1024 * 1024, &domain) == XR_XIR_VALUE_OK);
@@ -369,7 +369,82 @@ static void deep_arena_release(void) {
 }
 #include "xir_cell_allocation_cases.h"
 #include "xir_array_allocation_cases.h"
+#include "xir_nominal_fixture.h"
+static void nominal_arena_allocation(void) {
+    NominalIdentityFixture f; nominal_identity_fixture(&f);
+    XrXirType field_types[] = {XR_XIR_I64, XR_XIR_STRING};
+    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, field_types, 2}};
+    XrXirTypes types = {&node, 1, &f.table};
+    calls = 0; fail_at = SIZE_MAX;
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    size_t baseline = live;
+    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrXirTypeArena *arena = NULL;
+    for (size_t i = 0; i < 2; ++i) {
+        calls = 0; fail_at = i;
+        CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OOM);
+        CHECK(!arena && live == baseline && budget.metadata_bytes == 65536 && budget.work == 10000);
+    }
+    calls = 0; fail_at = SIZE_MAX;
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(calls == 2 && live == baseline + 1);
+    memset(&f, 0xCC, sizeof(f)); memset(field_types, 0xCC, sizeof(field_types)); memset(&node, 0xCC, sizeof(node));
+    CHECK(xr_xir_type_arena_types(arena)->nodes[0].nominal.fields[0] == XR_XIR_I64);
+    CHECK(xr_xir_type_arena_types(arena)->nodes[0].nominal.fields[1] == XR_XIR_STRING);
+    xr_xir_domain_drop(domain);
+    CHECK(!memcmp(xr_xir_type_arena_types(arena)->nominals->identities[0].name.bytes, "Pair", 4));
+    size_t allocations = calls; fail_at = calls;
+    xr_xir_type_arena_drop(arena);
+    CHECK(live == 0 && calls == allocations);
+    fail_at = SIZE_MAX; calls = 0;
+}
+
+#include "xir_struct_value_cases.h"
+static void struct_allocation_failures(void) {
+    XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    XrXirTypeArena *arena = struct_value_arena(domain);
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, 100000, 65536};
+    XrXirValue fields[2] = {{XR_XIR_I64, 0, 7}, {0}}, leaf = {0}, parent = {0};
+    CHECK(xr_xir_string_new(domain, "label", 5, &fields[1]) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_struct_new((XrXirType)256, fields, 2, &admission, &leaf) == XR_XIR_VALUE_OK);
+    XrXirValue outer[] = {leaf, fields[1]};
+    CHECK(xr_xir_struct_new((XrXirType)257, outer, 2, &admission, &parent) == XR_XIR_VALUE_OK);
+    size_t baseline = live;
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        size_t sites = 0;
+        for (size_t attempt = 0; attempt <= sites; ++attempt) {
+            XrXirValue destination = {0}, output = {0};
+            CHECK(xr_xir_value_copy(&parent, &destination) == XR_XIR_VALUE_OK);
+            admission.work = 100000; calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+            XrXirValueStatus status = mode == 0 ? xr_xir_struct_new((XrXirType)257, outer, 2, &admission, &output) :
+                mode == 1 ? xr_xir_struct_get(&parent, 0, &admission, &output) :
+                xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) destination.type, &destination.payload}, 0, &leaf, &admission);
+            if (!attempt) { CHECK(status == XR_XIR_VALUE_OK); sites = calls; }
+            else {
+                CHECK(status == XR_XIR_VALUE_OOM && !output.type && destination.payload == parent.payload);
+                CHECK(live == baseline && admission.scratch_bytes == 65536);
+            }
+            fail_at = SIZE_MAX;
+            xr_xir_value_drop(&output); xr_xir_value_drop(&destination); CHECK(live == baseline);
+        }
+    }
+    XrXirValue rejected = {0};
+    XirObject *string = object_pointer(&fields[1]);
+    uint32_t references = atomic_load(&string->references);
+    atomic_store(&string->references, UINT32_MAX); admission.work = 100000;
+    CHECK(xr_xir_struct_new((XrXirType)257, outer, 2, &admission, &rejected) == XR_XIR_VALUE_REFCOUNT_LIMIT);
+    CHECK(!rejected.type && live == baseline);
+    atomic_store(&string->references, references);
+    xr_xir_value_drop(&parent); xr_xir_value_drop(&leaf); xr_xir_value_drop(&fields[1]);
+    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); CHECK(!live);
+    XrXirValue deep = struct_deep_value(); size_t before = calls; fail_at = calls;
+    xr_xir_value_drop(&deep); CHECK(!live && calls == before); fail_at = SIZE_MAX;
+}
 int main(void) {
+    struct_allocation_failures();
+    struct_value_cases(); CHECK(!live);
+    nominal_arena_allocation();
     fail_at = SIZE_MAX; calls = 0; fail_sequence();
     size_t count = calls;
     for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }

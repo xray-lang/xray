@@ -17,7 +17,7 @@ remove those broader language capabilities from the roadmap.
 
 Type IDs 256 through 65535 name nodes in the module-owned constructed pool under
 `xir-constructed-types.md`. Only a node with kind CALLABLE authorizes signature
-interpretation; that numeric range also contains ARRAY and internal CELL nodes.
+interpretation; that numeric range also contains ARRAY, internal CELL and NOMINAL nodes.
 Constructed child references point strictly backwards. Exact kind, ordered
 parameter contracts, flags and result identity are interned once; duplicate nodes,
 unit or CELL parameters, forward/self references, invalid types and noncanonical
@@ -29,7 +29,7 @@ argument; definition checking cannot gain a constraint from a future body.
 Checked transitions and packets own every descriptor and parameter record; parser
 arenas, borrowed construction buffers and input bytes may be destroyed afterwards.
 Specialization substitutes components, interns a fresh closed constructed pool and
-remaps all type uses before rechecking. Checked schema 5, semantic contract 16
+remaps all type uses before rechecking. Checked schema 6, semantic contract 17
 places the unified tagged pool after generic metadata; earlier schema/contract
 pairs reject without an alternate reader. The exact record layout belongs to
 `xir-checked-packet.md`. Wire records contain only bounded IDs and descriptor

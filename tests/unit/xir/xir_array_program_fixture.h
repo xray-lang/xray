@@ -13,12 +13,26 @@
 #ifndef XIR_ARRAY_PROGRAM_FIXTURE_H
 #define XIR_ARRAY_PROGRAM_FIXTURE_H
 #include "xir/xxir_types.h"
-static XrXirArtifact *array_program_fixture(bool fail_init) {
-    XrXirType a = (XrXirType) 256, cell = (XrXirType) 257;
-    XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0},
-        {XR_XIR_TYPE_CELL, a, NULL, 0, XR_XIR_UNIT, 0, 0}};
-    XrXirTypes types = {nodes, 2};
+#include "xir/xxir_generic.h"
+#include "xir_nominal_fixture.h"
+static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
+    XrXirType a = (XrXirType) (nominal ? 257 : 256), cell = (XrXirType) (nominal ? 258 : 257);
+    XrXirTypeNode nodes[4] = {
+        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {XR_XIR_TYPE_CELL, a, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
+    NominalFixture f; nominal_fixture(&f);
+    XrXirType argument = XR_XIR_STRING;
+    if (nominal) {
+        nodes[2] = nodes[1]; nodes[1] = nodes[0];
+        nodes[0].element = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
+        nodes[0].parameter_span = 1;
+        nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0,
+            XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}};
+        f.declarations[0].module = (XrXirLiteral) {"root", 4};
+        f.declarations[1].module = (XrXirLiteral) {"library", 7};
+        f.fields[0].type = (XrXirType) 256;
+    }
+    XrXirTypes types = {nodes, nominal ? 4 : 2, nominal ? &f.table : NULL};
     XrXirInstruction init[] = {
         {XR_XIR_CALL, a, {0}, {0}, 3},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 1},
@@ -97,7 +111,7 @@ static XrXirArtifact *array_program_fixture(bool fail_init) {
         {"captured",8,NULL,0,XR_XIR_STRING,&blocks[5],1,captured,8,captured_operands,3}};
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"root",4,&dependency,1,0},{"library",7,NULL,0,1}};
-    XrXirFunctionIdentity identities[] = {{0,0},{1,0},{0,0},{1,1},{0,1},{0,1},{0,1},{0,1}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0},{1,0, 0},{0,0, 0},{1,1, 0},{0,1, 0},{0,1, 0},{0,1, 0},{0,1, 0}};
     XrXirSlot slots[] = {{1,a,0},{0,a,1},{0,a,1}};
     XrXirLiteral literals[] = {{"red",3},{"blue",4},{"green",5}};
     XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2};
@@ -108,6 +122,11 @@ static XrXirArtifact *array_program_fixture(bool fail_init) {
     if (status != XR_XIR_OK) fprintf(stderr,"Array check %u function %u instruction %u\n",
         (unsigned) status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK);
+    if (nominal) {
+        XrXirArtifact *specialized = NULL;
+        CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);
+        xr_xir_artifact_free(checked); checked = specialized;
+    }
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(checked,&target,NULL,&lowered,NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);

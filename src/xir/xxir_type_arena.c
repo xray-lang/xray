@@ -22,9 +22,12 @@ struct XrXirTypeArena {
     XrXirTypes types;
 };
 
+#include "xxir_type_arena_nominal.inc.c"
+
 static XrXirValueStatus arena_pool_size(const XrXirTypes *types, XrXirBudget *budget,
                                        size_t *output) {
     XrXirBudget remaining = *budget;
+    if (types && types->nominals && types->nominals->declarations) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirStatus verified = xr_xir_types_verify(types, &remaining);
     if (verified != XR_XIR_OK)
         return verified == XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT :
@@ -43,6 +46,12 @@ static XrXirValueStatus arena_pool_size(const XrXirTypes *types, XrXirBudget *bu
         if (payload > UINT64_MAX - bytes) return XR_XIR_VALUE_LIMIT;
         bytes += payload;
     }
+    uint64_t limit = budget->metadata_bytes < SIZE_MAX ? budget->metadata_bytes : SIZE_MAX;
+    ArenaNominalCursor nominal = {NULL, bytes, limit, remaining.work, XR_XIR_VALUE_OK};
+    arena_nominal_nodes(&nominal, types, NULL);
+    arena_nominals(&nominal, types ? types->nominals : NULL);
+    if (nominal.status != XR_XIR_VALUE_OK) return nominal.status;
+    bytes = nominal.offset; remaining.work = nominal.work;
     if (bytes > SIZE_MAX || bytes > budget->metadata_bytes) return XR_XIR_VALUE_LIMIT;
     remaining.metadata_bytes = budget->metadata_bytes - bytes;
     *budget = remaining;
@@ -68,7 +77,7 @@ XR_FUNC XrXirValueStatus xr_xir_type_arena_new(XrXirDomain *domain, const XrXirT
     uint32_t count = types ? types->count : 0;
     XrXirTypeNode *nodes = (XrXirTypeNode *) (arena + 1);
     XrXirCallableParameter *parameters = (XrXirCallableParameter *) (nodes + count);
-    arena->types = (XrXirTypes) {count ? nodes : NULL, count};
+    arena->types = (XrXirTypes) {count ? nodes : NULL, count, NULL};
     for (uint32_t i = 0; i < count; ++i) {
         nodes[i] = types->nodes[i];
         nodes[i].parameters = nodes[i].parameter_count ? parameters : NULL;
@@ -76,7 +85,11 @@ XR_FUNC XrXirValueStatus xr_xir_type_arena_new(XrXirDomain *domain, const XrXirT
         if (parameter_bytes) memcpy(parameters, types->nodes[i].parameters, parameter_bytes);
         parameters += nodes[i].parameter_count;
     }
-    XR_CHECK((char *) parameters == (char *) arena + bytes, "type arena allocation mismatch");
+    ArenaNominalCursor nominal = {(char *) arena, (uint64_t) ((char *) parameters - (char *) arena),
+        bytes, UINT64_MAX, XR_XIR_VALUE_OK};
+    arena_nominal_nodes(&nominal, types, nodes);
+    arena->types.nominals = arena_nominals(&nominal, types ? types->nominals : NULL);
+    XR_CHECK(nominal.status == XR_XIR_VALUE_OK && nominal.offset == bytes, "type arena allocation mismatch");
     *budget = remaining;
     *output = arena;
     return XR_XIR_VALUE_OK;

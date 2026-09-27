@@ -10,6 +10,7 @@
  *   Queries survive source destruction without granting rejected capabilities.
  */
 #include "xir/xxir_source.h"
+#include "xir/xxir_source_query_internal.h"
 #include "xir/xxir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
@@ -316,7 +317,7 @@ static void native_array_type_rejections(XrXirSourceRequest *request) {
         if (i >= 4) {
             const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
             const XrXirSourceDeclaration *bad = declaration(view, "bad", 0);
-            CHECK(bad && !bad->type.known);
+            CHECK(i >= 6 ? !bad : (bad && !bad->type.known));
             for (uint32_t d = 0; d < view->declaration_count; ++d)
                 CHECK(view->declarations[d].kind != XR_XIR_SOURCE_TYPE || !view->declarations[d].native_identity);
             for (uint32_t r = 0; r < view->reference_count; ++r)
@@ -365,7 +366,80 @@ static void native_array_binding_decisions(XrXirSourceRequest *request, const ch
     CHECK(loads == 2 && gets == 1); xr_xir_source_result_free(&result);
     write_source(library, "export fn visible(value:i64)->i64 { return value }\nfn hidden(value:i64)->i64 { return value }\n");
 }
+static void nominal_query_boundary(void) {
+    XrXirNominalIdentity identity = {0};
+    XrXirNominalTable declarations = {NULL, 1, &identity};
+    XrXirTypes types = {NULL, 0, &declarations};
+    XrXirSourceView view = {0}; view.types = &types;
+    XrXirBudget budget = xr_xir_default_budget(), original = budget;
+    XrXirSourceSnapshot *snapshot = (XrXirSourceSnapshot *) (uintptr_t) 1;
+    CHECK(xr_xir_source_snapshot_copy(&view, &budget, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
+    CHECK(!memcmp(&budget, &original, sizeof(budget)));
+}
+static void source_struct_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path, "struct Pair { value:i64\n label:string }\n"
+        "var p=Pair{label:\"owned\",value:7}\nconst old=p\np.value=23\n"
+        "fn read(p:Pair)->i64{return p.value}\nprint(read(p),old.value,p.label)\n"
+        "struct Defaults { n:i64=17; text:string=\"default\" }\nvar d=Defaults{}\n"
+        "struct Secret { private n:i64=7; callback:fn()->i64=fn()->i64{"
+        "return Secret{n:11,callback:fn()->i64{return 0}}.n} }\n"
+        "var defaulted:Defaults\nvar constructed=Defaults()\nvar secret=Secret()\nvar integer:i16\nvar flag:bool\nvar decimal:f32\n"
+        "struct Empty{}\nvar empty=Empty()\n");
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr, "struct %u: %s\n", status, diagnostic.message);
+    CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    CHECK(view->types && view->types->nominals && view->types->nominals->count == 4);
+    const XrXirSourceDeclaration *pair = declaration(view, "Pair", 0);
+    CHECK(pair && pair->kind == XR_XIR_SOURCE_TYPE && pair->type.known);
+    CHECK(declaration(view, "value", pair->id) && declaration(view, "label", pair->id));
+    xr_xir_source_result_free(&result);
+    static const char *const invalid[] = {
+        "struct S{x:i64}\nvar s=S{}", "struct S{x:i64}\nvar s=S{y:1}",
+        "struct S{x:i64;y:i64}\nvar s=S{x:1,x:2}", "struct S{x:i64}\nvar s=S{x:\"bad\"}",
+        "struct S{private x:i64}\nvar s=S{x:1}", "struct S{x:i64}\nconst s=S{x:1}\ns.x=2",
+        "struct S{const x:i64}\nvar s=S{x:1}\ns.x=2", "struct S{x:S}",
+        "struct S{x:i64=\"bad\"}", "struct S<T>{x:T}", "struct S{x:Unknown}"
+    };
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
+        write_source(request->entry_path, invalid[i]);
+        CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BAD_TYPE && !result.checked);
+        xr_xir_source_result_free(&result);
+    }
+    static const struct { const char *source; XrXirStatus status; } defaults[] = {
+        {"struct S{x:i64=missing}", XR_XIR_BAD_VALUE},
+        {"struct S{x:i64=caller}\nfn make()->S{const caller=7;return S{}}", XR_XIR_BAD_VALUE},
+        {"struct S{x:i64=\"bad\"}\nvar s=S{x:1}", XR_XIR_BAD_TYPE},
+        {"struct S{private x:i64=1}\nvar s=S{}", XR_XIR_BAD_TYPE},
+        {"struct S{x:i64=1;y:i64}\nvar s=S{}", XR_XIR_BAD_TYPE},
+        {"struct S{x:string}\nvar s=S()", XR_XIR_BAD_TYPE},
+        {"struct S{x:Array<i64>}\nvar s:S", XR_XIR_BAD_TYPE},
+        {"var s:string", XR_XIR_BAD_TYPE}, {"var f:fn()->i64", XR_XIR_BAD_TYPE},
+        {"var a:Atomic<i64>", XR_XIR_BAD_TYPE}, {"struct S{x:S}\nvar s:S", XR_XIR_BAD_TYPE},
+        {"struct S{x:i64}\nvar s=S(1)", XR_XIR_BAD_TYPE},
+        {"struct S{x:i64}\nvar s=S<i64>()", XR_XIR_BAD_TYPE}
+    };
+    for (size_t i = 0; i < sizeof(defaults) / sizeof(*defaults); ++i) {
+        write_source(request->entry_path, defaults[i].source);
+        status = xr_xir_source_check(request, &result, &diagnostic);
+        if (status != defaults[i].status) fprintf(stderr, "default rejection %zu: %u %s\n", i, status, diagnostic.message);
+        CHECK(status == defaults[i].status && !result.checked);
+        xr_xir_source_result_free(&result);
+    }
+    write_source(request->entry_path, "struct S{x:i64}\nvar s:S\n");
+    XrXirBudget budget = xr_xir_default_budget(); budget.functions = 2;
+    request->budget = &budget;
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BUDGET && !result.checked && !result.snapshot);
+    CHECK(strstr(diagnostic.message, "default constructor function budget"));
+    xr_xir_source_result_free(&result);
+    budget.functions = 3;
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_OK && result.checked);
+    xr_xir_source_result_free(&result); request->budget = NULL;
+}
+
 int main(void) {
+    nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory, absolute, sizeof(absolute)));
     char root[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
@@ -375,6 +449,7 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
+    source_struct_facts(&request);
     failures(&request);
     publication_budgets(&request);
     multiline_declaration(&request);

@@ -352,3 +352,73 @@ fn decimalValues() {
         negative() < -2, exact32 == 16777216.0, exact64 == 9_007_199_254_740_992.0, alpha.decimalSeed() == 1.25)
 }
 decimalValues()
+
+var pair=alpha.Pair{label:"struct",value:7}
+const pairOld=pair
+pair.value=23
+fn typedPair(p:alpha.Pair)->i64 { return p.value }
+fn localPair()->i64 {
+    var p=alpha.Pair{value:31,label:"local"}
+    const old=p
+    p.value=41
+    return typedPair(old)+typedPair(p)
+}
+fn replacePair()->i64 {
+    pair=alpha.Pair{value:73,label:"rebound"}
+    Coro.yield()
+    return 41
+}
+pair.value=replacePair()
+const assigned=(pair.label="assigned")
+var structTrace=0
+fn structField(n:i64)->i64 { structTrace=structTrace*10+n; return n }
+struct Ordered { first:i64; second:i64 }
+var ordered=Ordered{second:structField(2),first:structField(1)}
+print(alpha.pairValue(pair),pairOld.value,pair.label,localPair(),structTrace,ordered.first,ordered.second,assigned)
+
+import { Defaulted as Config } from "./alpha"
+fn defaultLabel()->string { return "caller" }
+var defaults=Config{b:alpha.defaultValue(9)}
+var explicitDefaults=Config{a:7,b:8,label:"explicit"}
+print(defaults.a,defaults.b,defaults.label,alpha.defaultTrace(),explicitDefaults.label)
+
+struct Callback { run:fn()->i64=fn()->i64{return 5} }
+var callbackStruct=Callback{}
+var receiverCalls=0
+fn selectCallback()->Callback { receiverCalls+=1; return callbackStruct }
+print(selectCallback().run(),receiverCalls)
+
+var implicitComplete:alpha.Complete
+var explicitComplete=alpha.Complete()
+var defaultNumber:i16
+var defaultBoolean:bool
+print(implicitComplete.nested.integer,explicitComplete.nested.decimal==0.0,
+    implicitComplete.nested.flag,implicitComplete.text,implicitComplete.values[0],
+    explicitComplete.callback(),defaultNumber,defaultBoolean)
+
+struct Init0 { next:Init1 }
+struct Init1 { next:Init2 }
+struct Init2 { next:Init3 }
+struct Init3 { next:Init4 }
+struct Init4 { next:Init5 }
+struct Init5 { next:Init6 }
+struct Init6 { next:Init7 }
+struct Init7 { next:Init8 }
+struct Init8 { next:Init9 }
+struct Init9 { next:Init10 }
+struct Init10 { next:Init11 }
+struct Init11 { next:Init12 }
+struct Init12 { next:Init13 }
+struct Init13 { next:Init14 }
+struct Init14 { next:Init15 }
+struct Init15 { next:Init16 }
+struct Init16 { next:Init17 }
+struct Init17 { next:Init18 }
+struct Init18 { next:Init19 }
+struct Init19 { next:Init20 }
+struct Init20 { next:Init21 }
+struct Init21 { next:Init22 }
+struct Init22 { next:Init23 }
+struct Init23 { value:i64 }
+var deepDefault:Init0
+print(deepDefault.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.value)

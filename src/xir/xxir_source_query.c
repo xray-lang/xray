@@ -10,6 +10,7 @@
  *   The snapshot owns facts and strings, never parser or construction state.
  */
 #include "xxir_source_query_internal.h"
+#include "xxir_nominal.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
@@ -60,22 +61,51 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
             decls[i].parameter_count, sizeof(*decls[i].parameters));
     }
 }
+static void query_literal(SourceQueryCopy *copy, XrXirLiteral *literal) {
+    literal->bytes = query_copy(copy, literal->bytes, literal->length, 1);
+}
+static void query_nominals(SourceQueryCopy *copy, XrXirTypes *types) {
+    const XrXirNominalTable *source = types->nominals;
+    if (!source) return;
+    XrXirNominalTable *table = query_copy(copy, source, 1, sizeof(*table));
+    types->nominals = table;
+    if (!table) return;
+    XrXirNominalDeclaration *decls = query_copy(copy, source->declarations, source->count, sizeof(*decls));
+    table->declarations = decls;
+    if (!decls) return;
+    for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i) {
+        query_literal(copy, &decls[i].module); query_literal(copy, &decls[i].name);
+        decls[i].constraints = query_copy(copy, decls[i].constraints, decls[i].parameter_count, sizeof(*decls[i].constraints));
+        XrXirNominalField *fields = query_copy(copy, decls[i].fields, decls[i].field_count, sizeof(*fields));
+        decls[i].fields = fields;
+        if (!fields) continue;
+        for (uint32_t j = 0; j < decls[i].field_count && copy->status == XR_XIR_OK; ++j)
+            query_literal(copy, &fields[j].name);
+    }
+}
 static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {
-    if (!source || !source->count) { copy->snapshot->view.types = NULL; return; }
+    if (!source) { copy->snapshot->view.types = NULL; return; }
     XrXirTypes *types = query_copy(copy, source, 1, sizeof(*types));
     if (!types) return;
     copy->snapshot->view.types = types;
+    query_nominals(copy, types);
     XrXirTypeNode *nodes = query_copy(copy, source->nodes, source->count, sizeof(*nodes));
     types->nodes = nodes;
     if (!nodes) return;
-    for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i)
+    for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i) {
         nodes[i].parameters = query_copy(copy, source->nodes[i].parameters,
             nodes[i].parameter_count, sizeof(*nodes[i].parameters));
+        nodes[i].nominal.arguments = query_copy(copy, source->nodes[i].nominal.arguments,
+            nodes[i].nominal.argument_count, sizeof(*nodes[i].nominal.arguments));
+        nodes[i].nominal.fields = query_copy(copy, source->nodes[i].nominal.fields,
+            nodes[i].nominal.field_count, sizeof(*nodes[i].nominal.fields));
+    }
 }
 XrXirStatus xr_xir_source_snapshot_copy(const XrXirSourceView *view,
     XrXirBudget *remaining, XrXirSourceSnapshot **output) {
     if (output) *output = NULL;
     if (!view || !remaining || !output) return XR_XIR_BAD_STRUCTURE;
+    if (view->types && view->types->nominals && view->types->nominals->identities) return XR_XIR_BAD_STAGE;
     if (remaining->metadata_bytes < sizeof(XrXirSourceSnapshot) || !remaining->work) return XR_XIR_BUDGET;
     XrXirSourceSnapshot *snapshot = xr_calloc(1, sizeof(*snapshot));
     if (!snapshot) return XR_XIR_OUT_OF_MEMORY;

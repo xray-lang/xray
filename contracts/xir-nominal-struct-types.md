@@ -1,0 +1,581 @@
+# XIR nominal struct declarations and field type ownership
+
+This owns the declaration/type boundary for user structs. Registration of assertion owners is not implementation or
+qualification. Closed value transport and STRUCT_NEW/GET/SET follow the contracts
+below. Source struct admission is limited to the concrete family recorded below;
+complete struct qualification remains OPEN. Existing source admission must continue to reject
+unsupported declarations rather than constructing a partially checked type.
+
+## Identity and the sole owner
+
+### Concrete source family
+
+The source owner hoists non-generic struct identities across the parsed module
+closure before checking stored field annotations and ordinary function signatures.
+Names resolve through the same lexical/module/import tables. Exported types may
+be named through a module alias or a named import. Distinct declarations never
+collapse by field shape. Every declaration's fields are checked, including unused
+types; the final Checked verifier proves field graphs, visibility and storage.
+
+Admitted fields have explicit admitted value types, normal alignment, ordinary
+value storage, and public/private/protected plus const/mutable access metadata.
+Methods, user-declared constructors, inheritance/interfaces, generic
+struct declarations, layout attributes, static/weak/flexible fields and nested
+declarations remain errors. This admission does not silently synthesize defaults
+or authorize ordinary constructors or methods.
+
+`Type{field: expression, ...}` requires each required field exactly once. The
+source path must resolve to an admitted nominal declaration, including qualified
+brace syntax represented by the reused parser's enum-construction AST shape.
+That AST shape does not grant enum admission. Expressions run in written order;
+only the completed operand vector is permuted into declaration order. Unknown,
+duplicate, inaccessible, missing and incorrectly typed fields reject.
+
+An explicit declaration default is compiled once as an ordinary zero-parameter
+XIR function in the declaring module with that nominal owner. Its result is the
+declared field type and its body is checked even if no literal uses it. It cannot
+capture caller locals, acquire generic facts from a future instance, or bypass
+field construction permissions. Omitted fields call these Checked functions
+after all explicit values, in field declaration order. Explicit fields suppress
+their defaults. Ordinary calls and suspension follow the existing execution
+pipeline; failure publishes no partial struct and existing cleanup drops prepared
+values. Hidden initializer functions have no source-addressable name; a default
+for a public field of an exported type is callable across the admitted module
+edge, while inaccessible fields retain their construction restriction.
+Nested closures inherit their lexical nominal owner; an external caller of the
+closure acquires no field access or construction authority. Calling a stored
+function field evaluates its receiver and reads the callable once before arguments.
+For a struct without a user constructor, `S()` and `var value:S` use the same
+ordinary member-owned default constructor, with the visibility of S. Availability
+requires every field to have an explicit declaration default or an admitted
+default-initializable type. Numeric fields start at zero, bool at false; nested
+nominal fields call their own proven default constructor. Non-nullable strings,
+Arrays, callable values and identity handles never acquire an implicit zero value.
+The availability proof is a budgeted fixed point over the concrete field graph,
+not C recursion or a fixed nesting limit. It does not replace the independent
+finite-layout proof. Default constructors initialize fields in declaration order
+and publish a value only after all fields succeed. Private fields are initialized
+under declaration ownership; callers gain no direct field authority. Typed mutable
+bindings may omit their initializer only through this same proof; const still
+requires an explicit initializer. Unit/nullable and other unadmitted source type
+families are not broadened by this concrete admission. Literal omission keeps
+the separate explicit-default rule and cannot request zero values implicitly.
+
+Field reads operate on an evaluated owned value. Direct field assignment admits
+a mutable named module/local root, records that logical root before evaluating
+the RHS, and commits to its current value after RHS calls or suspension. Existing
+STRUCT_SET performs ownership admission and COW before publishing. The assignment
+expression returns the evaluated RHS value already owned in SSA. Const bindings,
+READ parameters and immutable/inaccessible fields cannot grant write authority.
+Nested writable access paths and compound field assignment remain unimplemented.
+
+The source query owns nominal declarations and fields and records admitted field
+references without conferring runtime access. The existing source program fixture
+checks independently fixed typed and rendered output in VM, packet VM, native AOT
+and mixed execution, including separate instances, reordered literals, local COW,
+root replacement across suspension and string assignment results. Runtime fault
+injection and counted physical release exercise this actual source closure.
+
+A named struct has a declaration identity in its declaring module. A concrete
+instantiation is that identity plus the ordered, exact type arguments. Field
+shape, layout, spelling without its module, an AST address, source position, or
+the order of imports cannot substitute for declaration identity. Two named
+structs with identical fields remain different types. Anonymous records retain
+their separate structural contract; this does not make them nominal structs.
+
+The existing owned XIR type metadata is extended with nominal declaration and
+field records. It is not accompanied by a second analyzer type database,
+runtime class object, legacy layout reader, or process-global type registry.
+Built views may borrow input metadata. Checked snapshots, specialized snapshots,
+packets, Lowered artifacts and runtime TypeArena snapshots own everything that
+outlives their producer, including names, ordered fields, type expressions and
+generic constraints. An independently retained runtime type arena must not
+retain an Instance, a Program, compiler storage, or an entire module graph.
+
+Each declaration records its module identity, name, visibility, ordered generic
+parameters and constraints, and ordered stored fields. Each field records its
+declaration identity/ordinal, name, declared type and visibility/mutability.
+Default expressions and constructors have separately checked function bodies;
+neither a name nor a metadata flag authorizes their execution or field access.
+References to modules, declarations and fields must resolve in the verified
+owning artifact. Duplicate nominal identities, duplicate field names, invalid
+ordinals, unknown flags, missing storage and noncanonical empty ranges reject.
+
+Runtime identity remains the pair of owning TypeArena and local type identity.
+Matching numeric IDs, declaration spellings or field shapes from another arena
+do not authorize host value import. Explicit structural import across Programs
+remains separately governed. Debug/type-description queries expose no field
+read/write, invocation or construction permission.
+
+## Generic definitions and specialization
+
+Every field type is checked in the declaration's own type-parameter and module
+scope, including unused declarations. It cannot capture an unrelated function's
+type parameters merely because their numeric ordinals match. Fields must meet
+their declared storage and copying obligations; a declaration with noncopyable
+fields must follow the noncopyable declaration contract before it is admitted.
+Unit, internal CELL and views do not become ordinary storable fields through a
+nominal wrapper. A field's class or synchronization identity remains an identity
+reference when its containing value is copied.
+
+Ordinary constraints remain definition-site authority. Instantiating a struct
+checks each declared constraint against the ordered argument at that position.
+Knowing a field's name or reflecting on a concrete future instance cannot add
+an absent generic constraint. A known `Box<T>` field of type T permits the
+already admitted copying/storage of T, not arithmetic, comparison, formatting,
+default construction or Sendable without the corresponding proof.
+
+Checked specialization substitutes field types and nested nominal arguments,
+interns exact resulting identities, and rechecks the result before layout or
+execution. The instance cache includes the declaration and complete argument
+list. There is no source-AST monomorphization path or runtime instantiation.
+All ordinary executable instances and their required closed type descriptors
+must be present before immutable Program sealing.
+
+## Recursive type dependencies and bounded work
+
+The existing CALLABLE/ARRAY/CELL expression nodes remain canonically interned;
+adding nominal declarations does not permit arbitrary unverified forward edges
+in the existing expression pool. A declaration reference and a physical field
+layout dependency are different edges and are verified as such.
+
+An infinitely recursive by-value field layout rejects. An indirect dependency
+through an admitted Array or class carrier must not be rejected solely because
+the nominal declaration graph has a cycle. A closed regular recursive instance
+is represented once per exact identity, with bounded graph traversal rather
+than unbounded C recursion. An expanding chain of distinct generic instances
+must spend the same cumulative instantiation/metadata/work budgets; exceeding
+them reports the budget failure and publishes no partial artifact.
+
+Cached parameter spans, copyability, storability, Sendable and contained-owned
+facts are derived and reverified, including dependencies through nominal fields.
+A cycle alone does not prove or disprove Sendable; the admitted field and
+identity contracts determine it. Hash matches do not replace exact equality.
+Validation must account for repeated edges, deep nesting, cycle discovery,
+substitution, duplicate checks and error cleanup. The old default-initializer
+helper's fixed depth of sixteen is not a language rule or a replacement for
+these budgets.
+
+## Layout and ownership
+
+The existing target/context/ABI-bound XIR layout service remains the only owner
+of size and alignment. Closed field layout determines each offset, padding,
+aggregate size/alignment and relevant copy/drop obligation. Checked packets do
+not supply trusted physical offsets. Cached layout is recomputed or verified
+against the same service. Generic field layout cannot be guessed before
+specialization. Boxed carriers, frame lanes and parameter/result representations
+must not silently define Array element or aggregate field stride.
+
+Copying a struct preserves a logical copy of each value field and retains the
+identity of each class/synchronization field. It does not deep-copy a class
+object graph. COW is an implementation choice with the same observable rules;
+RC uniqueness does not grant mutability. Const/READ access cannot modify a
+value field. A successful field read owns the resulting logical value with a
+lifetime independent of the aggregate storage it came from.
+
+Construction publishes only a fully initialized value. On failure, every
+successfully initialized field is released exactly once, in the cleanup order
+frozen for the construction operation. Earlier expression side effects are not
+rolled back. Field replacement prepares every fallible ownership/layout step
+before publishing the replacement, then releases the replaced owner. Aliasing,
+self-assignment and independently retained copies remain valid.
+
+Nested mutation follows the checked access path and writes modified value
+layers back to their root while stopping value copying at identity fields.
+Neither a field index nor a reflective description grants access permission.
+No raw field/Array-element address may survive a call, suspension, relocation
+or root rebinding without the separately verified borrowing/lifetime contract.
+Receiver effects, evaluation order, root resolution and failure order must be
+frozen for the actual field operations before those operations are implemented.
+
+## Construction admission and staged implementation
+
+The actual language rules remain in spec sections 2, 5.1 and 5.4. An omitted
+constructor is not authority to zero-initialize arbitrary fields. A field
+literal is not an omitted-initializer declaration: required explicit fields
+cannot be silently filled with numeric zero. Unknown, duplicate and missing
+fields, visibility and construction permission each require rejection cases.
+The respective default-expression and constructor bodies need ordinary type,
+ownership and effect checking before source admission is broadened.
+
+The metadata foundation may precede executable struct values, but it must keep
+unsupported signatures, instructions and source forms fail-closed. Internal
+type tests do not establish source execution. Before adding executable struct
+operations, the companion instruction/operand, callable/receiver, initialization
+and concrete wire/ABI cutover contracts must be frozen and implemented atomically
+with all their consumers. There is no old packet reader or compatibility alias.
+No current protocol version is changed by this preparatory contract alone.
+
+## Concrete metadata representation and admission order
+
+The nominal extension belongs to `XrXirTypes`. It adds an owned declaration
+sequence; each declaration owns its module identity bytes, declaration name,
+visibility, ordered generic constraints and ordered field records. A field owns
+its name and stores its declared type expression and access flags. Field ordinal
+is its position in that sequence, not a second caller-authored identity. The
+module identity bytes must resolve to the module declaration when verifying a
+complete compiler artifact. The independently retained runtime arena copies the
+identity bytes without retaining source-module dependency or function tables.
+Duplicate module/name declaration pairs reject; names and module names cannot
+contain embedded NUL. Zero-length names and unknown flags reject.
+
+A NOMINAL node stores a declaration index and an ordered type-argument sequence.
+Its other kind-specific payloads are canonically empty. Existing kinds keep their
+payloads and have no nominal payload. Equality compares the declaration and each
+argument exactly. The derived parameter span describes the node's argument
+expressions only; fields are checked in their declaration's parameter scope.
+Array, callable and nominal argument expression edges still point to earlier
+nodes. Declaration-to-field-expression references are a separate relation and
+may point anywhere in the verified pool. This permits a finite expression pool
+for `Node` with an `Array<Node>` field without admitting arbitrary node cycles.
+A pool containing declarations but no expression nodes is valid when its fields
+use only admitted primitive or declaration-local parameter types; a completely
+empty non-null pool remains noncanonical.
+
+Verification first checks table bounds and canonical payloads, then declaration
+identity uniqueness, field names, flags, field parameter scope, and argument
+constraints. All declarations are checked, including declarations not reachable
+from an executable entry. It then evaluates instantiated field dependencies with
+explicit work records. A closed instance is interned by declaration plus exact
+ordered arguments before following its fields. Revisiting the same instance
+through Array is not an infinitely sized layout; revisiting through only stored
+by-value fields is rejected. An expanding sequence of distinct instances spends
+cumulative metadata and work budgets and cannot publish a partial pool.
+Declaration-level cycle detection alone is insufficient: substituted field types
+must be considered, including cycles introduced through generic arguments.
+
+Owned cloning and packet decoding use zero-initialized destination records and
+publish counts only for cleanup-safe storage. Every string, argument sequence,
+constraint sequence and field table has one receiving owner. Failure may expose
+neither a borrowed producer pointer nor a partially validated output. Runtime
+arena sizing includes aligned table spans and name bytes before its domain
+allocation; it must not keep compiler-side auxiliary allocations outside the
+charged arena. Poisoning producer storage and failing each allocation prefix
+are required before claiming this metadata boundary complete.
+
+The existing Checked type traversal must be extended in the same change that
+admits NOMINAL nodes. Schema 6 and semantic contract 17 carry the declaration table and reject the
+previous schema 5 / semantic contract 16. Exact-byte fixtures and protocol
+reference checks follow the same sole reader/writer. Closed NOMINAL expression
+nodes use the explicit kind-4 wire rule below. Closed fields are substituted and
+reverified; abstract nominal expressions and recursive instance expansion remain
+unimplemented.
+No protocol constant changes during preparation alone. Executable value/call/VM
+and native ABI changes are separately frozen with struct operations; merely
+recognizing metadata cannot make a struct signature, layout or opcode executable.
+
+## Metadata helper implementation boundary
+
+`XrXirNominalTable` is the declaration-table component owned by
+`XrXirTypes`; it is not another type registry or an executable artifact. Its
+current helper API is `xr_xir_nominal_verify`, `xr_xir_nominal_clone`, and
+`xr_xir_nominal_free`. The verifier checks an accompanying constructed pool
+before interpreting field type IDs. It admits only the existing field type
+kinds at this boundary; closed NOMINAL expression nodes have separate validation
+below. Direct closed nominal dependencies and the concrete executable source
+family follow the later sections; recursive generic instance expansion remains
+unavailable.
+
+The declaration record carries length-delimited module/name bytes, exported
+boolean, constraint pointer/count and field pointer/count. Field visibility uses
+PRIVATE=1 or PROTECTED=2, with neither meaning public; MUTABLE=4 is independent.
+The two visibility bits together and every other bit reject. Recording these
+bits grants no access, construction or inheritance permission. Empty pointer
+ranges are canonical, names are nonempty without embedded NUL, and name copies
+include an owned terminator outside their identity length.
+
+Verification and clone leave the caller budget unchanged on failure. Clone
+clears its output before validation and publishes it only after all declarations
+are copied. A malformed declaration table rejects before output ownership allocation;
+bounded type-validation scratch may allocate. The independently
+owned helper copy does not copy the accompanying expression pool; its IDs only
+have meaning with that owning pool. Full artifact integration must attach both
+components to the same receiving owner before publishing an artifact.
+
+## Required evidence
+
+The following existing owners must gain explicit assertions for this family;
+their existing passing tests alone are not proof of the new obligations.
+
+verification-test: test_xir_stages
+verification-test: test_xir_allocations
+verification-test: test_xir_generics
+verification-test: test_xir_checked
+verification-test: test_xir_checked_allocations
+verification-test: test_xir_values
+verification-test: test_xir_value_allocations
+verification-test: test_xir_source_admission
+verification-test: test_xir_source_query
+
+Required metadata cases include same-shaped distinct declarations, same names
+from different modules, ordered generic argument identity, field substitution,
+invalid module/field references, duplicate names, noncanonical payloads,
+by-value cycles, guarded regular recursion, expanding instantiation budgets,
+deep graphs and every allocation-failure prefix. Producer buffers are poisoned
+or freed before using each owned snapshot, packet and runtime arena.
+
+The executable family additionally needs independently expected VM, native,
+Checked-reload and mixed programs with scalar/string/Array/class fields,
+cross-module visibility, initialized-prefix failure, nested COW, instance
+isolation, suspension/cancellation, escaped results and final physical release.
+Complete struct methods, constructors, interfaces and noncopyable values remain
+requirements of the overall task and cannot be replaced by a scalar-field demo.
+
+## Closed declaration arena projection
+
+The runtime arena stores the projected nominal identity table in the same domain-charged
+allocation as expression nodes and callable parameters. One aligned span walker
+owns both sizing and copying: nominal table, identity records, per-declaration
+field records, then owned module/declaration/field name bytes including terminators.
+Padding, tables and names all count toward allocation bytes; copy traversal spends
+work before allocating. Rejected admission and allocation failure preserve the
+caller budget and publish no arena. A domain allocation failure releases its
+extra domain reference. Releasing the last arena reference frees that allocation
+without allocating or visiting a Program, Instance or compiler object.
+
+Runtime projection requires complete closed instance field vectors and owns only
+identity records; generic declaration constraints and field expressions remain
+Checked-only. The original declaration arity is retained for identity validation.
+Projection grants no struct construction or field access authority. Tests must
+poison producer storage, exercise retain/drop after dropping the original domain
+reference, reject one-byte/work-short budgets, and fail the actual domain
+allocation with physical accounting restored.
+
+## Nominal expression payload and current closed admission
+
+Kind 4 is NOMINAL. Its explicit payload contains a declaration index, owned
+ordered argument and derived-field pointer/count pairs, and no callable/element/result/flags payload.
+Other kinds require an entirely zero nominal payload. Checked schema 6 /
+contract 17 encodes kind, parameter span, declaration index, argument count,
+then that many u32 type IDs, followed by the derived field vector described below.
+Declaration records follow the node sequence.
+Zero-argument instances use a null argument pointer. The count must exactly
+match the referenced declaration. Identity compares declaration and every
+argument; a hash or equal field shape cannot collapse distinct declarations.
+
+The current node admission uses closed arguments from the existing
+copyable/storable scalar, Array or callable types, have zero parameter span,
+and satisfy the declaration's constraints. Unit, CELL, unknown types, forward
+expression edges, and abstract arguments reject. This is an implementation
+boundary, not the final language domain: abstract nominal expressions and nominal
+arguments remain closed until context-sensitive constraint proof and recursive
+instance closure are implemented. Direct closed nominal field dependencies,
+value operations, Lowered projection and runtime ownership follow the sections
+below. Nominal components of callable signatures remain unavailable.
+The entire pool owns its argument arrays through clone, packet decode and
+cleanup, including every failed allocation prefix. Runtime projection owns its
+closed argument and field vectors instead of retaining compiler argument storage.
+
+The native descriptor and declaration authority require Program ABI 11; owned
+nominal values require Value ABI 10, with Call ABI 14 unchanged. Older Program
+and Value admissions fail before descriptor dereference. The independent opaque
+TypeArena is reached through runtime helpers. Checked uses schema 6 / semantic 17.
+Full generated-native regressions rebuild descriptors
+and their runtime together; old generated C must retain a failing ABI assertion.
+
+## Derived closed field vectors in Checked
+
+A closed NOMINAL node may carry an owned ordered field-type vector. Empty
+means unresolved when its declaration has fields; a present vector has exactly
+the declaration field count. The vector is derived data, excluded from nominal
+identity. Each field must be closed, storable, and exactly equal to substitution
+of that declaration's field expression under the node's ordered arguments.
+Verification recomputes this relationship; a packet cannot certify it. Field
+vector references may point anywhere in the pool because they are dependency
+edges, not expression-construction edges. Current admission still rejects
+nominal-valued fields pending recursive instance and layout closure.
+
+The single Checked specializer uses its existing bounded substitution stack
+and exact constructed-type interner to fill these vectors. It keeps definition
+metadata during Checked rechecking, independently owns the published result,
+and never retains a source AST. Unresolved fields, allocation failure or budget
+exhaustion publish no result. The same type-layer substitution matcher checks
+ordinary function-call contracts and derived fields, using explicit bounded
+work records instead of C recursion. Verification scratch is charged before
+allocation and freed on every path; output ownership is allocated only after
+validation succeeds.
+
+In schema6/semantic17, NOMINAL's argument sequence is followed by field-count
+and field-type u32 words. Current Value10/Call14/Program11 covers the owned
+nominal value, expanded native descriptor and function declaration authority.
+The derived vector alone grants no construction, field access or runtime
+instantiation. Lowering performs the closed descriptor projection below,
+removing template expressions and validating recursive layout.
+
+## Checked definitions and Lowered identity projection
+
+The sole nominal table has exactly one active payload: Checked declaration
+records, or Lowered identity records. Identity records own module/name bytes,
+exported visibility, original arity and ordered field names/access flags. They
+have no constraints or field type expressions. This is a stage projection, not
+a second registry. Built/Checked reject identity payloads; Lowered rejects
+declaration payloads. Runtime arenas accept only the identity payload.
+
+Before projection, every nominal instance must have a completely reverified
+field vector. Lowering removes all abstract expression nodes, preserves the
+relative order of closed nodes, and remaps every function signature, instruction
+type, slot type, nominal argument and field type to the compacted pool. A mapped
+reference to a removed or missing node rejects. Zero-expression identity tables
+remain valid metadata. The projected owner contains no template type-parameter
+IDs and keeps neither Checked storage nor source-module dependency tables alive.
+
+The identity payload and nominal argument/field arrays are independently cloned
+and packed into the runtime arena's single aligned, domain-charged allocation.
+Generated native C emits the same closed descriptors, including identity-only
+pools, and Program11 rejects older native layout contracts. The sole Checked
+wire remains declaration-based; identity payloads cannot masquerade as Checked
+packages. Type metadata projection alone admits no new struct value operations.
+Closed nominal-valued fields follow the graph and layout validation below;
+abstract nominal expressions and recursive instance expansion remain closed.
+
+## Closed nominal field dependencies
+
+A stored field may reference an already closed nominal expression in the same
+pool, including a later node. Its target declaration must be exported or belong
+to the field declaration's module. This permission is checked for every
+declaration, including unused declarations; it grants no value/member access.
+All target constraints retain their ordinary instance checks.
+
+Direct nominal fields form a separate by-value dependency graph. Verify it in
+Checked before field vectors exist, again after substitution, and for closed
+runtime identities. Use verified declaration expressions for unresolved Checked
+fields and the reverified field vectors otherwise. An active-path revisit
+rejects an infinite layout; revisiting a completed node is valid sharing.
+Traversal has explicit pool-bounded storage, charges edges/work and allocation
+bytes, and releases scratch on success, budget exhaustion and failure. An
+indirect Array/callable carrier is not a direct field-layout edge. This does not
+yet admit nominal arguments or Array<Nominal>, abstract nominal expressions,
+recursive instance expansion or executable struct operations.
+
+## Nominal storage layout service
+
+The existing target-bound layout service gains a budgeted nominal field entry.
+It accepts a verified closed nominal instance with complete substituted fields,
+computes direct nominal children inline, and obtains every non-nominal field's
+storage size/alignment from the existing scalar/handle layout function. Fields
+retain declaration order. Each offset is rounded up to the field alignment;
+aggregate alignment is the maximum field alignment, and size includes final
+alignment padding. Empty structs have storage size zero and alignment one.
+
+The current x86_64/Value10 target uses 32-bit sizes/offsets; unrepresentable
+addition or padding rejects rather than wrapping. Shared child layouts are
+computed once per query with explicit pool-bounded scratch. Work and metadata
+are charged, and failure publishes no offsets or layout and leaves the caller's
+budget unchanged. The caller owns the exact-count offset buffer. No physical
+offset enters the Checked wire or becomes independent type identity. This entry
+does not by itself admit nominal frame/call representations or executable
+instructions; the boxed runtime owner below is a separate consumer.
+
+## Boxed nominal value owner
+
+Value ABI 10 introduces owned NOMINAL carriers without changing XrXirValue's
+16-byte tagged layout. The carrier pins its domain and exact TypeArena, and
+holds an ordered vector of owned boxed field values. This internal boxed object
+representation is not compact field storage: the nominal storage layout service
+alone determines inline offsets/stride when a consumer requests compact storage.
+No sizeof(boxed field) may substitute for that storage layout.
+
+Construction validates exact type/arena/count and execution admission for all
+fields before publication, copies each owner, and rolls back every initialized
+field on failure. Copy retains the immutable snapshot. Reads return independent
+owned values. A mutable field update prepares ownership first, detaches a shared
+snapshot, publishes once, then releases the replaced owner. Compiler-checked
+construction/member authority is a precondition of these trusted runtime helpers;
+metadata queries do not confer that authority. Source/opcode consumers apply the
+same declaration-scope permissions specified below.
+
+Nested nominal admission uses a budgeted explicit stack and validates each
+contained callable through the existing execution gate. Exact arena identity
+remains mandatory; pure values may move between instance domains just as arrays
+do, while contained callable authority is never inferred from type names.
+Destruction queues fields on the existing non-recursive release worklist, performs
+no allocation, and drops the metadata/domain only after its owned fields have
+been queued. Failed construction or detachment publishes no partial value.
+
+## Function declaration ownership and member authority
+
+Each function identity owns a nominal_owner word: zero for ordinary functions,
+or the nominal declaration index plus one for its member/constructor bodies.
+An owner must resolve in the same module as the function. Module initializers
+and the module entry have no nominal owner. Specialization preserves this
+declaration scope without granting additional generic constraints.
+
+Checked records encode module, exported and nominal_owner as three u32 words.
+The current schema6/semantic17 contract has only this representation. Native
+function identity layout changes Program ABI to11; Value10/Call14 remain.
+Old Program10 must reject before reading its declarations or type metadata.
+
+One verified-module permission query serves construction and member operations.
+Type access requires the declaring module or an explicit import of an exported
+type. Public fields follow that type access; private/protected struct fields
+require exactly that declaration owner, even for another same-module function.
+Writes additionally require the mutable field flag. Explicit field construction
+checks every field's access; defaults or named constructors require their checked
+function bodies and are not conferred by this query. Invalid indices, absent
+scope, exhausted work or forged owner records reject. No runtime metadata query
+or ordinary type parameter gains this authority.
+
+## Closed nominal transport through executable frames
+
+A closed nominal type may be an ordinary parameter, result, root-module slot,
+copy, local or PHI value once its pool is verified. Referencing the type in a
+function requires same-module visibility or an explicit import of its exported
+declaration; this type-use check grants no field or construction authority.
+Specialization must produce complete field vectors before Lowered publication.
+Nominal Sendable proofs and Array/callable components containing nominal types
+remain unavailable until their separate dependency proof is implemented. Internal
+CELL roots follow the checked closed-nominal rule below.
+
+Executable SSA/frame payloads use the existing eight-byte owned carrier;
+parameter/result/boxed boundaries use the existing sixteen-byte tagged value.
+Copies, PHI snapshots, suspended calls, returns and failure/cancellation cleanup
+use the same retain/drop authority as other managed values. The unbudgeted leaf
+layout API rejects nominal STORAGE requests; the budgeted nominal storage API
+is the sole inline layout authority. A transport descriptor never substitutes
+handle width for compact aggregate storage. No alternate executor or entry ABI
+is introduced. Source constructors and member instructions remain separately
+checked consumers of these representations.
+
+## Explicit field construction and owned field reads
+
+STRUCT_NEW (tag74) and STRUCT_GET (tag75) are admitted in Built, Checked and
+Lowered within the schema6/semantic17 contract. NEW's result is a
+closed nominal type; args name the canonical operand-table range containing
+exactly one value per declared field in declaration order. Its immediate and
+targets are zero. It requires construction access to every field; this is not
+default initialization or permission to call a named constructor.
+
+GET takes one ordinary owned value operand and a nonnegative field ordinal in
+immediate; unused args/targets are zero. It checks the receiver's exact nominal
+identity, field read authority and result type. A place is not a value operand:
+read the local/cell/slot through its ordinary checked load before GET. NEW inputs
+are also values. Both instructions apply ordinary dominance and operand rules.
+Definition-field expressions are matched under the nominal arguments at Checked;
+Lowered uses the completely substituted field vector. Neither instruction may
+infer a missing generic capability from a later concrete field type.
+
+VM and generated C consume the same verified contract and trusted runtime value
+helpers through the current call admission. NEW publishes one complete owner or
+none; GET returns its own field owner. Result storage and every failure exit use
+the ordinary frame cleanup list. Metadata, domain and callable admission are
+still checked by the runtime helpers. Mutable field writeback follows the root
+contract below; source syntax requires its own declaration admission.
+
+## Mutable fields and owned roots
+
+STRUCT_SET (tag76) has unit result, a writable receiver place in args[0], an
+ordinary field value in args[1], and the field ordinal in immediate. Targets
+are zero. It requires exact nominal identity, field WRITE authority, matching
+substituted field type and dominance. A bare value or READ parameter is not a
+write root. Root-module mutable slots, local owners and admitted cell projections
+share one root resolver with Array mutation; no parallel struct root authority.
+
+The resolver obtains the current root payload after argument evaluation and
+checks cell domain, frame bounds or published same-module slot authority.
+The runtime setter consumes a typed payload place, prepares the incoming owner,
+detaches a shared snapshot, publishes a replacement payload once, then drops old
+owners. Failure leaves the true root unchanged. It does not retain a raw element
+pointer across calls. The same place/receiver types replace Array-specific root
+carriers without aliases. Internal CELL may contain an earlier closed nominal
+node; this does not admit Array<Nominal>, callable nominal components, nominal
+Sendable or CELL as an ordinary stored struct field.

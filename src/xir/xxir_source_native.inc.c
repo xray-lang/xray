@@ -9,17 +9,17 @@
  * KEY CONCEPT:
  *   Generated declaration identities grant authority only after lexical lookup.
  */
-static const char *source_native_owned_text(SourceContext *ctx, const char *text) {
+static const char *source_owned_text(SourceContext *ctx, const char *text) {
     size_t length = strlen(text);
     if (length == SIZE_MAX || length + 1 > ctx->budget.work) {
-        source_fail(ctx, NULL, XR_XIR_BUDGET, "native declaration text budget exhausted"); return NULL;
+        source_fail(ctx, NULL, XR_XIR_BUDGET, "source declaration text budget exhausted"); return NULL;
     }
     ctx->budget.work -= length + 1;
     char *copy = source_alloc(ctx, length + 1, 1);
     if (copy) memcpy(copy, text, length + 1);
     return copy;
 }
-static bool source_query_native_reference(SourceContext *ctx, XrXirSourceRange range,
+static bool source_query_target_reference(SourceContext *ctx, XrXirSourceRange range,
     uint32_t declaration, XrXirSourceAccess access) {
     XrXirSourceReference *records = source_query_append(ctx, ctx->query.references,
         &ctx->query.reference_count, &ctx->reference_capacity, sizeof(*records));
@@ -43,7 +43,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     ctx->query.modules = modules; ctx->array_module = ctx->query.module_count - 1;
     modules[ctx->array_module] = (XrXirSourceQueryModule) {
         native->identity, native->source_path, native->source_fingerprint};
-    SourceName symbol = {0}; symbol.name = source_native_owned_text(ctx, native->name);
+    SourceName symbol = {0}; symbol.name = source_owned_text(ctx, native->name);
     if (!symbol.name) return false;
     XrXirSourceRange range = {ctx->array_module, (int) native->line, (int) native->column,
         (int) native->line, (int) (native->column + strlen(native->name))};
@@ -51,7 +51,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     ctx->array_declaration = symbol.declaration;
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
     record->native_identity = native->id; record->exported = true;
-    symbol = (SourceName) {0}; symbol.name = source_native_owned_text(ctx, native->parameter_name);
+    symbol = (SourceName) {0}; symbol.name = source_owned_text(ctx, native->parameter_name);
     if (!symbol.name) return false;
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE_PARAMETER, ctx->array_declaration,
         (XrXirSourceRange) {ctx->array_module, 0, 0, 0, 0})) return false;
@@ -64,7 +64,7 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
     XrXirStatus status = xr_xir_type_satisfies(&module, ctx->function, element, 0, &ctx->budget);
     if (status != XR_XIR_OK)
         return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
-    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0}, type);
+    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
 static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
     if (find_name(ctx, ctx->locals, name) || find_name(ctx, ctx->names[ctx->module], name)) return true;
@@ -109,5 +109,5 @@ static bool source_native_array_type(SourceContext *ctx, XrTypeRef *ref, XrXirTy
     XrXirSourceRange range = {ctx->module, ref->line, ref->column, ref->line, 0};
     if (range.column > 0 && strlen(ref->name) <= (size_t) (INT_MAX - range.column))
         range.end_column = range.column + (int) strlen(ref->name);
-    return source_query_native_reference(ctx, range, ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
+    return source_query_target_reference(ctx, range, ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
 }

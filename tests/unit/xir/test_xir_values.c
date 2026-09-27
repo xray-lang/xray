@@ -99,7 +99,7 @@ static void *thread_entry(void *pointer) { copy_worker(pointer); return NULL; }
 #endif
 static XrXirTypeArena *string_cell_arena(XrXirDomain *domain) {
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING};
-    XrXirTypes types = {&node, 1};
+    XrXirTypes types = {&node, 1, NULL};
     XrXirBudget budget = {0}; budget.metadata_bytes = 65536; budget.work = 100;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
@@ -245,7 +245,7 @@ static void arena_identity_and_revocation(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 258},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
-    XrXirTypes types = {nodes, 5};
+    XrXirTypes types = {nodes, 5, NULL};
     XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
     XrXirTypeArena *arena = NULL, *foreign = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
@@ -299,7 +299,84 @@ static void arena_identity_and_revocation(void) {
     xr_xir_domain_drop(domain);
 }
 #include "xir_array_value_cases.h"
+#include "xir_nominal_fixture.h"
+static void nominal_arena_admission(void) {
+    NominalFixture f; nominal_fixture(&f);
+    XrXirTypes types = {NULL, 0, &f.table};
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    XrXirDomainStats initial = xr_xir_domain_stats(domain);
+    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
+    uint64_t bytes = budget.metadata_bytes, work = budget.work;
+    XrXirTypeArena *arena = (XrXirTypeArena *) (uintptr_t) 1;
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(!arena && budget.metadata_bytes == bytes && budget.work == work);
+    CHECK(xr_xir_domain_stats(domain).live_bytes == initial.live_bytes);
+    for (uint32_t i = 0; i < 2; ++i) {
+        f.declarations[i].parameter_count = 0; f.declarations[i].constraints = NULL;
+    }
+    f.fields[0].type = XR_XIR_I64;
+    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+    types.nodes = &node; types.count = 1;
+    XrXirBudget proof = budget;
+    CHECK(xr_xir_types_verify(&types, &proof) == XR_XIR_OK);
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(!arena && budget.metadata_bytes == bytes && budget.work == work);
+    CHECK(xr_xir_domain_stats(domain).allocations == initial.allocations);
+    xr_xir_domain_drop(domain);
+}
+
+static void nominal_arena_ownership(void) {
+    NominalIdentityFixture f; nominal_identity_fixture(&f);
+    XrXirType field_types[] = {XR_XIR_I64, XR_XIR_STRING};
+    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, field_types, 2}};
+    XrXirTypes types = {&node, 1, &f.table};
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
+    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrXirTypeArena *arena = NULL;
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    uint64_t bytes = 65536 - budget.metadata_bytes, work = 10000 - budget.work;
+    CHECK(xr_xir_domain_stats(domain).live_bytes == baseline + bytes);
+    const XrXirNominalTable *table = xr_xir_type_arena_types(arena)->nominals;
+    CHECK(table && table != &f.table && table->identities != f.identities && table->count == 2);
+    CHECK((uintptr_t) table->identities % _Alignof(XrXirNominalIdentity) == 0);
+    CHECK((uintptr_t) table->identities[1].fields % _Alignof(XrXirNominalFieldIdentity) == 0);
+    CHECK(table->identities[0].fields != table->identities[1].fields);
+    CHECK(xr_xir_type_arena_retain(arena));
+    xr_xir_type_arena_drop(arena);
+    CHECK(!memcmp(table->identities[0].module.bytes, "alpha", 5));
+    xr_xir_type_arena_drop(arena);
+    CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        budget.metadata_bytes = mode ? 65536 : bytes - 1;
+        budget.work = mode ? work - 1 : 10000;
+        uint64_t before_bytes = budget.metadata_bytes, before_work = budget.work;
+        CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_LIMIT);
+        CHECK(!arena && budget.metadata_bytes == before_bytes && budget.work == before_work);
+        CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
+    }
+    budget.metadata_bytes = bytes; budget.work = work;
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(!budget.metadata_bytes && !budget.work);
+    memset(&f, 0xCC, sizeof(f)); memset(field_types, 0xCC, sizeof(field_types)); memset(&node, 0xCC, sizeof(node));
+    CHECK(xr_xir_type_arena_types(arena)->nodes[0].nominal.fields[0] == XR_XIR_I64);
+    CHECK(xr_xir_type_arena_types(arena)->nodes[0].nominal.fields[1] == XR_XIR_STRING);
+    table = xr_xir_type_arena_types(arena)->nominals;
+    CHECK(!memcmp(table->identities[0].fields[0].name.bytes, "value", 5));
+    CHECK(table->identities[0].fields[0].name.bytes[5] == 0);
+    CHECK(table->identities[1].fields[0].flags == XR_XIR_FIELD_MUTABLE);
+    xr_xir_type_arena_drop(arena);
+    CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
+    xr_xir_domain_drop(domain);
+}
+
+#include "xir_struct_value_cases.h"
 int main(void) {
+    struct_value_cases();
+    nominal_arena_ownership();
+    nominal_arena_admission();
     array_value_cases();
     arena_identity_and_revocation(); unicode_cases(); cow_cases(); concurrent_copies(0); concurrent_copies(1); concurrent_copies(2); typed_output(); atomic_boundaries();
     puts("Strict Unicode, CoW growth, independent lifetime and concurrent owned copies passed");

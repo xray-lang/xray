@@ -10,6 +10,7 @@
  *   Compact storage and compiler frames consume the same physical authority.
  */
 #include "xxir_types.h"
+#include "../base/xmalloc.h"
 
 XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
                         XrXirLayoutContext context, XrXirLayout *layout) {
@@ -20,6 +21,7 @@ XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTa
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
         (type != XR_XIR_UNIT && type != XR_XIR_BOOL && !xr_xir_type_is_number(type) && !xr_xir_type_is_owned(types, type)) ||
+        (xr_xir_type_is_nominal(types, type) && context == XR_XIR_LAYOUT_STORAGE) ||
         (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER) || xr_xir_type_span(types, type))
         return XR_XIR_BAD_LAYOUT;
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
@@ -37,3 +39,5 @@ XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTa
         *layout = (XrXirLayout) {8, 8};
     return XR_XIR_OK;
 }
+
+#include "xxir_nominal_storage.inc.c"

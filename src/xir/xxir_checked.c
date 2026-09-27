@@ -11,6 +11,7 @@
  *   independent semantic verification of fully owned data.
  */
 #include "xxir_checked.h"
+#include "xxir_nominal.h"
 #include "xxir_internal.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
@@ -140,11 +141,12 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         m.initializer = checked_u32(c, m.initializer);
         if (c->reading) modules[i] = m;
     }
-    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 8);
+    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 12);
     d->functions = identities;
     for (uint32_t i = 0; i < functions && c->status == XR_XIR_OK; ++i) {
         XrXirFunctionIdentity id = identities[i];
         id.module = checked_u32(c, id.module); id.exported = checked_u32(c, id.exported);
+        id.nominal_owner = checked_u32(c, id.nominal_owner);
         if (c->reading) identities[i] = id;
     }
     XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 12);
@@ -189,16 +191,63 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
         if (c->reading) generics[f] = g;
     }
 }
+static XrXirLiteral checked_nominal_name(CheckedCursor *c, XrXirLiteral name) {
+    name.length = checked_u32(c, name.length);
+    if (!checked_room(c, name.length)) return (XrXirLiteral) {0};
+    if (c->reading) {
+        if (name.length == UINT32_MAX) { c->status = XR_XIR_BUDGET; return (XrXirLiteral) {0}; }
+        char *bytes = checked_array(c, NULL, name.length + 1, 1, 1);
+        if (!bytes) return (XrXirLiteral) {0};
+        memcpy(bytes, c->input + c->position, name.length);
+        name.bytes = bytes;
+    } else if (c->output && name.length) memcpy(c->output + c->position, name.bytes, name.length);
+    c->position += name.length;
+    return name;
+}
+static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count) {
+    if (!count || c->status != XR_XIR_OK) return;
+    XrXirNominalTable *table = checked_array(c, types->nominals, 1, sizeof(*table), 20);
+    if (c->reading) types->nominals = table;
+    if (!table) return;
+    XrXirNominalDeclaration *declarations = checked_array(c, table->declarations, count, sizeof(*declarations), 20);
+    if (c->reading) { table->declarations = declarations; table->count = declarations ? count : 0; }
+    if (!declarations) return;
+    for (uint32_t i = 0; i < count && c->status == XR_XIR_OK; ++i) {
+        XrXirNominalDeclaration d = declarations[i];
+        d.module = checked_nominal_name(c, d.module);
+        d.name = checked_nominal_name(c, d.name);
+        d.exported = checked_u32(c, d.exported);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
+        uint32_t *constraints = checked_array(c, d.constraints, parameters, sizeof(*constraints), 4);
+        d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
+        for (uint32_t j = 0; j < d.parameter_count && c->status == XR_XIR_OK; ++j) {
+            uint32_t value = checked_u32(c, constraints[j]);
+            if (c->reading) constraints[j] = value;
+        }
+        uint32_t fields = checked_u32(c, d.field_count);
+        XrXirNominalField *members = checked_array(c, d.fields, fields, sizeof(*members), 12);
+        d.fields = members; d.field_count = members ? fields : 0;
+        for (uint32_t j = 0; j < d.field_count && c->status == XR_XIR_OK; ++j) {
+            XrXirNominalField field = members[j];
+            field.name = checked_nominal_name(c, field.name);
+            field.type = (XrXirType) checked_u32(c, (uint32_t) field.type);
+            field.flags = checked_u32(c, field.flags);
+            if (c->reading) members[j] = field;
+        }
+        if (c->reading) declarations[i] = d;
+    }
+}
 static void checked_types(CheckedCursor *c, XrXirModule *m) {
     uint32_t count = checked_u32(c, m->types ? m->types->count : 0);
-    if (c->status != XR_XIR_OK || !count) return;
+    uint32_t nominals = checked_u32(c, m->types && m->types->nominals ? m->types->nominals->count : 0);
+    if (c->status != XR_XIR_OK || (!count && !nominals)) return;
     if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE) { c->status = XR_XIR_BUDGET; return; }
     XrXirTypes *types = checked_array(c, m->types, 1, sizeof(*types), 12);
     if (!types) return;
     m->types = types;
     XrXirTypeNode *signatures = checked_array(c, types->nodes, count, sizeof(*signatures), 12);
     if (c->reading) { types->nodes = signatures; types->count = signatures ? count : 0; }
-    if (!signatures) return;
+    if (count && !signatures) return;
     for (uint32_t i = 0; i < count && c->status == XR_XIR_OK; ++i) {
         XrXirTypeNode s = signatures[i];
         s.kind = checked_u32(c, s.kind);
@@ -217,11 +266,28 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.flags = checked_u32(c, s.flags);
         } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
+        } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
+            s.nominal.declaration = checked_u32(c, s.nominal.declaration);
+            s.nominal.argument_count = checked_count(c, s.nominal.argument_count, &c->remaining.parameters);
+            XrXirType *arguments = checked_array(c, s.nominal.arguments, s.nominal.argument_count, sizeof(*arguments), 4);
+            s.nominal.arguments = arguments;
+            for (uint32_t a = 0; a < s.nominal.argument_count && c->status == XR_XIR_OK; ++a) {
+                XrXirType argument = (XrXirType) checked_u32(c, (uint32_t) arguments[a]);
+                if (c->reading) arguments[a] = argument;
+            }
+            s.nominal.field_count = checked_count(c, s.nominal.field_count, &c->remaining.parameters);
+            XrXirType *fields = checked_array(c, s.nominal.fields, s.nominal.field_count, sizeof(*fields), 4);
+            s.nominal.fields = fields;
+            for (uint32_t f = 0; f < s.nominal.field_count && c->status == XR_XIR_OK; ++f) {
+                XrXirType field = (XrXirType) checked_u32(c, (uint32_t) fields[f]);
+                if (c->reading) fields[f] = field;
+            }
         } else if (c->status == XR_XIR_OK) {
             c->status = XR_XIR_BAD_TYPE;
         }
         if (c->reading) signatures[i] = s;
     }
+    checked_nominals(c, types, nominals);
 }
 static void checked_module(CheckedCursor *c, XrXirModule *m) {
     uint32_t count = checked_count(c, m->function_count, &c->remaining.functions);

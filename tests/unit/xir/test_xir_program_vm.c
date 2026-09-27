@@ -20,6 +20,16 @@
 #include "xir_capture_cases.h"
 #include "xir_array_program_fixture.h"
 #include "xir_array_program_cases.h"
+#include "xir_nominal_generic_fixture.h"
+#include "xir_nominal_generic_cases.h"
+#include "xir_nominal_chain_fixture.h"
+#include "xir_nominal_checked_fixture.h"
+#include "xir_nominal_transport_fixture.h"
+#include "xir_nominal_transport_cases.h"
+#include "xir_struct_ops_fixture.h"
+#include "xir_struct_ops_cases.h"
+#include "xir_struct_set_fixture.h"
+#include "xir_struct_set_cases.h"
 static void admission(void) {
     for (uint32_t invalid = 0; invalid < 23; ++invalid) {
         XrXirArtifact *artifact = program_fixture(0), *saved = artifact;
@@ -109,7 +119,7 @@ static void array_mixed(void) {
     for (uint32_t mode = 0; mode < 2; ++mode) {
         for (uint32_t parity = 0; parity < 2; ++parity) {
             ArrayMixedOwner *owner = xr_calloc(1,sizeof(*owner)); CHECK(owner);
-            owner->artifact = array_program_fixture(mode != 0);
+            owner->artifact = array_program_fixture(mode != 0, false);
             const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
             for (uint32_t i = 0; i < 8; ++i) {
                 CHECK(xr_xir_vm_bind(owner->artifact,i,&owner->bindings[i],&owner->entries[i]) == XR_XIR_OK);
@@ -128,12 +138,38 @@ static void array_mixed(void) {
     }
 }
 int main(void) {
+    XrXirArtifact *struct_set = struct_set_lowered(); XrXirProgram *set_program = NULL;
+    CHECK(xr_xir_vm_program_take(&struct_set,65536,&set_program) == XR_XIR_OK && !struct_set);
+    struct_set_cases(set_program);
+    XrXirArtifact *struct_ops = struct_ops_lowered(); XrXirProgram *struct_program = NULL;
+    CHECK(xr_xir_vm_program_take(&struct_ops,65536,&struct_program) == XR_XIR_OK && !struct_ops);
+    struct_ops_cases(struct_program);
+    for (unsigned mode = 0; mode < 3; ++mode) for (unsigned branch = 0; branch < 2; ++branch) {
+        XrXirArtifact *transport = nominal_transport_fixture();
+        XrXirCallEntry entries[4]; XrXirVmBinding bindings[4];
+        for (uint32_t i = 0; i < 4; ++i)
+            CHECK(xr_xir_vm_bind(transport,i,&bindings[i],&entries[i]) == XR_XIR_OK);
+        XrXirValue escaped = nominal_transport_cases(entries,xr_xir_artifact_module(transport)->types,mode,branch != 0);
+        xr_xir_artifact_free(transport);
+        nominal_transport_escaped(&escaped);
+    }
+    XrXirArtifact *combined_artifact = nominal_generic_lowered();
+    XrXirProgram *combined = NULL;
+    CHECK(xr_xir_vm_program_take(&combined_artifact, 65536, &combined) == XR_XIR_OK && !combined_artifact);
+    nominal_generic_cases(combined);
+    for (unsigned i = 0; i < 3; ++i) {
+        XrXirArtifact *nominal = i == 2 ? nominal_chain_lowered() : nominal_lowered_fixture(i ? 3 : 0);
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_vm_program_take(&nominal, 65536, &program) == XR_XIR_OK && !nominal);
+        program_cases(program, 0);
+    }
+
     array_mixed();
-    for (uint32_t mode = 0; mode < 2; ++mode) {
-        XrXirArtifact *array = array_program_fixture(mode != 0);
+    for (uint32_t mode = 0; mode < 3; ++mode) {
+        XrXirArtifact *array = array_program_fixture(mode == 1, mode == 2);
         XrXirProgram *program = NULL;
         CHECK(xr_xir_vm_program_take(&array,65536,&program) == XR_XIR_OK);
-        array_program_cases(program,mode != 0);
+        array_program_cases(program,mode == 1);
     }
     admission(); capture_mixed();
     for (uint32_t mode = 0; mode < 3; ++mode) {

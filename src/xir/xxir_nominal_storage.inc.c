@@ -1,0 +1,92 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_nominal_storage.inc.c - Checked inline nominal field storage layout
+ *
+ * KEY CONCEPT:
+ *   One query computes shared children once and publishes complete offsets.
+ */
+typedef struct NominalStorageNode {
+    XrXirLayout layout;
+    uint32_t next, state;
+} NominalStorageNode;
+static bool nominal_storage_align(uint32_t size, uint32_t alignment, uint32_t *output) {
+    if (!alignment || (alignment & (alignment - 1))) return false;
+    uint32_t padding = (alignment - (size & (alignment - 1))) & (alignment - 1);
+    if (size > UINT32_MAX - padding) return false;
+    *output = size + padding; return true;
+}
+XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType type,
+    const XrXirTarget *target, XrXirBudget *remaining, XrXirLayout *layout,
+    uint32_t *field_offsets, uint32_t field_count) {
+    if (!layout) return XR_XIR_BAD_LAYOUT;
+    *layout = (XrXirLayout) {0, 0};
+    if (!remaining || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
+        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
+        (field_count != 0) != (field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
+    XrXirBudget budget = *remaining;
+    XrXirStatus status = xr_xir_types_verify(types, &budget);
+    if (status != XR_XIR_OK) return status;
+    const XrXirTypeNode *root = xr_xir_type_node(types, type);
+    if (!root || root->kind != XR_XIR_TYPE_NOMINAL || root->parameter_span ||
+        root->nominal.field_count != field_count) return XR_XIR_BAD_LAYOUT;
+    uint64_t bytes = (uint64_t) types->count * (sizeof(NominalStorageNode) + sizeof(uint32_t)) +
+        (uint64_t) field_count * sizeof(uint32_t);
+    if (bytes > SIZE_MAX || bytes > budget.metadata_bytes || types->count > budget.work) return XR_XIR_BUDGET;
+    budget.metadata_bytes -= bytes; budget.work -= types->count;
+    NominalStorageNode *nodes = xr_calloc(1, (size_t) bytes);
+    if (!nodes) return XR_XIR_OUT_OF_MEMORY;
+    uint32_t *stack = (uint32_t *) (nodes + types->count), *offsets = stack + types->count;
+    uint32_t root_index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE, depth = 1;
+    stack[0] = root_index;
+    nodes[root_index].state = 1; nodes[root_index].layout.alignment = 1;
+    while (depth && status == XR_XIR_OK) {
+        if (!budget.work) { status = XR_XIR_BUDGET; break; }
+        --budget.work;
+        uint32_t index = stack[depth - 1];
+        NominalStorageNode *current = &nodes[index];
+        const XrXirNominalType *nominal = &types->nodes[index].nominal;
+        uint32_t declared = types->nominals->declarations ?
+            types->nominals->declarations[nominal->declaration].field_count :
+            types->nominals->identities[nominal->declaration].field_count;
+        if (nominal->field_count != declared) { status = XR_XIR_BAD_LAYOUT; break; }
+        if (current->next == nominal->field_count) {
+            if (!nominal_storage_align(current->layout.size, current->layout.alignment, &current->layout.size)) {
+                status = XR_XIR_BAD_LAYOUT; break;
+            }
+            current->state = 2; --depth; continue;
+        }
+        XrXirType field = nominal->fields[current->next];
+        const XrXirTypeNode *child = xr_xir_type_node(types, field);
+        XrXirLayout physical = {0};
+        if (child && child->kind == XR_XIR_TYPE_NOMINAL) {
+            uint32_t child_index = (uint32_t) field - XR_XIR_CONSTRUCTED_TYPE_BASE;
+            if (nodes[child_index].state == 1) { status = XR_XIR_BAD_LAYOUT; break; }
+            if (!nodes[child_index].state) {
+                if (depth >= types->count) { status = XR_XIR_BAD_LAYOUT; break; }
+                nodes[child_index].state = 1; nodes[child_index].layout.alignment = 1;
+                stack[depth++] = child_index; continue;
+            }
+            physical = nodes[child_index].layout;
+        } else {
+            status = xr_xir_layout(types, field, target, XR_XIR_LAYOUT_STORAGE, &physical);
+            if (status != XR_XIR_OK) break;
+        }
+        uint32_t offset = 0;
+        if (!nominal_storage_align(current->layout.size, physical.alignment, &offset) ||
+            physical.size > UINT32_MAX - offset) { status = XR_XIR_BAD_LAYOUT; break; }
+        if (index == root_index) offsets[current->next] = offset;
+        current->layout.size = offset + physical.size;
+        if (physical.alignment > current->layout.alignment) current->layout.alignment = physical.alignment;
+        ++current->next;
+    }
+    if (status == XR_XIR_OK) {
+        *layout = nodes[root_index].layout;
+        if (field_count) memcpy(field_offsets, offsets, (size_t) field_count * sizeof(*offsets));
+        *remaining = budget;
+    }
+    xr_free(nodes); return status;
+}

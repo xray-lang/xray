@@ -243,19 +243,20 @@ authentication or semantic authority. A packet with a recomputed digest but an
 invalid graph or forged span must still fail.
 
 The unified-pool foundation established schema 5, semantic 14, Value9, Call13
-and Program8. The Array operation/fault cutover replaces its current admission
+and Program8. Subsequent Array, floating and nominal admissions replace that
 boundary atomically as follows; there is only one current reader/executor.
 
 | Revision | Current cutover value | Reason |
 |---|---:|---|
-| Checked schema | 5 (unchanged) | Tagged pool and fixed instruction records retain their exact wire traversal. |
-| Checked semantic contract | 16 | Includes Array tags 63..69 and floating arithmetic tags 70..73 with exact operand/result types. |
-| Value ABI | 9 (unchanged) | The carrier and `(TypeArena, local type ID)` identity stay fixed; Array objects obey that existing owned identity. |
+| Checked schema | 6 | The unified pool includes owned nominal declarations, arguments and substituted fields. |
+| Checked semantic contract | 17 | Includes Array, floating arithmetic and struct tags 74..76 with exact types and declaration authority. |
+| Value ABI | 10 | Owned nominal values extend the same TypeArena identity and value ownership boundary. |
 | Call ABI | 14 | Typed Bounds detail crosses actions, results and unwind under `xir-resumable-calls.md`. |
-| Program ABI | 9 | Instance initialization/sticky failure copy preserves the full fault under `xir-program-instance.md`. |
+| Program ABI | 11 | Native descriptors include nominal metadata and each function's declaration ownership; typed faults remain preserved. |
 
-Semantic15/Call14/Program9 land together with target/native entry checks, cache
-identities, emitters, consumers and tests. Reject older and mixed versions,
+Array faults entered at semantic15/Call14/Program9. The current nominal cutover
+updates target/native entry checks, cache identities, emitters, consumers and tests
+together under `xir-nominal-struct-types.md`. Reject older and mixed versions,
 rather than adapting them. A matching digest, local node index or carrier width
 is insufficient. No physical Array backing, place address or cached layout is
 serialized. Pool allocation strategy, hashing, arena clone/sharing, COW capacity
@@ -341,7 +342,7 @@ side effects remain. Assignment's returned T is independently owned.
 Bounds are i64 0 <= index < length and map to E0430 in the panic/fault channel,
 with the signed index and observed length preserved. They must not be reported as
 NUMERIC_RANGE, BAD_STATE, business throw or allocation failure. The Call14 and
-Program9 detail representation, action verification and sticky propagation are
+current Program11 detail representation, action verification and sticky propagation are
 owned by `xir-resumable-calls.md` and `xir-program-instance.md`; both VM and native
 must use that same boundary. Allocation, retain-limit and admission-work failures
 retain their distinct existing channels.

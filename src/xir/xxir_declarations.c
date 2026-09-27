@@ -32,6 +32,7 @@ bool xr_xir_module_imports(const XrXirDeclarations *d, uint32_t from, uint32_t t
         if (module->dependencies[i] == target) return true;
     return false;
 }
+#include "xxir_nominal_access.inc.c"
 XrXirStatus xr_xir_declarations_order(const XrXirDeclarations *d, uint32_t *order, uint64_t *work) {
     uint8_t *done = xr_calloc(d->module_count, 1);
     if (!done) return XR_XIR_OUT_OF_MEMORY;
@@ -86,7 +87,7 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
             xr_utf8_core_scan_strict((const uint8_t *) module->name, module->name_length).error != XR_UTF8_OK)
             return XR_XIR_BAD_STRUCTURE;
         if (d->functions[module->initializer].module != m || d->functions[module->initializer].exported ||
-            module->initializer == d->entry_function) return XR_XIR_BAD_STRUCTURE;
+            d->functions[module->initializer].nominal_owner || module->initializer == d->entry_function) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < m; ++p) {
             if (!declaration_spend(work, module->name_length)) return XR_XIR_BUDGET;
             if (module_name_compare(module, &d->modules[p]) == 0) return XR_XIR_BAD_STRUCTURE;
@@ -116,9 +117,22 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
         (d->slot_count && !d->slots) || (d->literal_count && !d->literals)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1) return XR_XIR_BAD_STRUCTURE;
-    if (d->functions[d->entry_function].module != d->root_module) return XR_XIR_BAD_STRUCTURE;
+    if (d->functions[d->entry_function].module != d->root_module ||
+        d->functions[d->entry_function].nominal_owner) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions, bytes, work);
     if (status != XR_XIR_OK) return status;
+    for (uint32_t i = 0; i < functions; ++i) {
+        uint32_t owner = d->functions[i].nominal_owner;
+        if (!owner) continue;
+        if (!types || !types->nominals || owner > types->nominals->count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirNominalTable *table = types->nominals;
+        if (!table->declarations && !table->identities) return XR_XIR_BAD_STRUCTURE;
+        XrXirLiteral name = table->declarations ? table->declarations[owner - 1].module :
+            table->identities[owner - 1].module;
+        const XrXirSourceModule *module = &d->modules[d->functions[i].module];
+        if (!declaration_spend(work, name.length)) return XR_XIR_BUDGET;
+        if (!name.bytes || name.length != module->name_length || memcmp(name.bytes, module->name, name.length)) return XR_XIR_BAD_STRUCTURE;
+    }
     for (uint32_t i = 0; i < d->slot_count; ++i) {
         const XrXirSlot *slot = &d->slots[i];
         if (slot->module >= d->module_count || slot->mutable > 1 ||

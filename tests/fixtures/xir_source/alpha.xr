@@ -41,3 +41,30 @@ const floatingSeed: f32 = 16777217 as f32
 export fn floatSeed()->f32 { return floatingSeed }
 const decimalState:f32 = 1.25
 export fn decimalSeed()->f32 { return decimalState }
+
+export struct Pair { value:i64
+ label:string }
+export fn pairValue(p:Pair)->i64{return p.value}
+
+const defaultState=Atomic(0)
+export fn defaultValue(n:i64)->i64 {
+    const prior=defaultState.load()
+    defaultState.fetchAdd(prior*9+n)
+    return n
+}
+fn defaultLabel()->string { Coro.yield(); return "default" }
+export struct Defaulted {
+    a:i64=defaultValue(1)
+    b:i64=defaultValue(2)
+    label:string=defaultLabel()
+}
+export fn defaultTrace()->i64 { return defaultState.load() }
+
+export struct Zero { integer:i64; decimal:f32; flag:bool }
+export struct Complete {
+    nested:Zero
+    text:string="complete"
+    values:Array<i64>=[17]
+    callback:fn()->i64=fn()->i64{return 19}
+    private hidden:i64=23
+}

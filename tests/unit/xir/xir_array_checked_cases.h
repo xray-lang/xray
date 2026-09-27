@@ -21,10 +21,10 @@ static void array_checked_cases(void) {
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked); memset(&f, 0xCC, sizeof(f));
     /* Schema-derived offsets: first record of entry, its operand table, slot. */
-    const size_t entry = 237, operands = 689, slot = 872;
-    CHECK(packet.length == 936 && packet.bytes[entry] == XR_XIR_CONST_INT &&
+    const size_t entry = 237, operands = 689, slot = 884;
+    CHECK(packet.length == 952 && packet.bytes[entry] == XR_XIR_CONST_INT &&
         packet.bytes[entry + 2 * 32] == XR_XIR_ARRAY_NEW && packet.bytes[operands + 8] == 3);
-    uint8_t original[936]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[952]; memcpy(original, packet.bytes, sizeof(original));
     for (uint32_t attack = 0; attack < 20; ++attack) {
         if (attack == 0) put32(packet.bytes + entry + 2 * 32, XR_XIR_OP_COUNT);
         if (attack == 1) put32(packet.bytes + entry + 2 * 32 + 4, 257);
@@ -50,7 +50,7 @@ static void array_checked_cases(void) {
             put32(packet.bytes + entry + 11 * 32 + 12, 5);
         }
         if (attack == 14) put32(packet.bytes + entry + 13 * 32 + 8, 5);
-        if (attack == 15) put32(packet.bytes + 900, 257);
+        if (attack == 15) put32(packet.bytes + 916, 257);
         if (attack == 16) { put32(packet.bytes + slot + 8, 0); put32(packet.bytes + operands + 8, 6); }
         if (attack == 17) put32(packet.bytes + 12, 14);
         if (attack == 18) put32(packet.bytes + entry + 6 * 32 + 8, 1);

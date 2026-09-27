@@ -13,8 +13,8 @@
 #define XIR_ARRAY_GENERIC_FIXTURE_H
 static XrXirArtifact *array_generic_fixture(void) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, array = (XrXirType) 256;
-    XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1};
-    XrXirTypes types = {&node, 1};
+    XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1, {0}};
+    XrXirTypes types = {&node, 1, NULL};
     XrXirInstruction entry[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7},
         {XR_XIR_CONST_INT, XR_XIR_U8, {0}, {0}, 9},

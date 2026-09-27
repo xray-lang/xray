@@ -19,6 +19,8 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
+/* Lowering frees abstract type payloads allocated by the counted type clone. */
+#include "xir/xxir.c"
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
 XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause;

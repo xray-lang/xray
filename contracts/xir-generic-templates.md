@@ -37,7 +37,7 @@ the caller's type context before comparison and dominance checking. Initializers
 and the root entry cannot have type parameters.
 
 All metadata is owned, copied across stages and bounded by aggregate parameter,
-metadata and work budgets. Checked packet schema 5 / semantic contract 16 carries a generic-presence
+metadata and work budgets. Checked packet schema 6 / semantic contract 17 carries a generic-presence
 u32 after declarations, followed when present by each row's constraint count/
 u32 bits and argument count/u32 type IDs. Older schema or semantic revisions are rejected, with no reader
 or alias. Decode performs the same definition and forwarding checks.
@@ -72,3 +72,25 @@ rechecked for element equality, place permission and closure before lowering.
 Each instance's node cache remains bound to its ordered arguments and declaration
 identity. Signature identity alone supplies
 no Sendable proof.
+
+Constructed-type substitution uses an explicit pending-node stack bounded by the
+verified source pool size and charged to metadata budget. It spends work on
+component visits and exact interning comparisons; there is no additional fixed
+C-recursion depth limit in specialization. Earlier-index component edges bound
+the stack. Closed-node caches are shared, parameterized caches remain per
+instance, and partially substituted nodes are never published. Allocation or
+work exhaustion returns no artifact. Definition-site call matching and derived nominal field verification share
+the type-layer substitution matcher, with budgeted explicit stack storage and
+no fixed C-recursion limit. Deep local type expressions exercise specialization;
+deep generic call contracts independently exercise matching.
+
+Closed nominal instances and ordinary function templates may coexist in one
+Checked package. Their specialization shares one context, type interner and
+resource budget. Nominal definitions retain source expression IDs until the
+combined result is rechecked; concrete fields and function bodies reuse equal
+closed constructed nodes. Each declaration's parameter cache stays independent.
+No intermediate field-only artifact is published and no second specialization
+pipeline is introduced. Lowering alone removes remaining declaration expressions
+and remaps all uses. This coexistence does not admit abstract nominal expressions. Closed nominal
+value transport follows `xir-nominal-struct-types.md`; its struct constructors
+and member instructions require separate executable admission.

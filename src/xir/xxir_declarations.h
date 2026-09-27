@@ -26,7 +26,7 @@ typedef struct XrXirSourceModule {
     uint32_t initializer;
 } XrXirSourceModule;
 typedef struct XrXirFunctionIdentity {
-    uint32_t module, exported;
+    uint32_t module, exported, nominal_owner;
 } XrXirFunctionIdentity;
 typedef struct XrXirSlot {
     uint32_t module;

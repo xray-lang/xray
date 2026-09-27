@@ -41,7 +41,7 @@ conversion uses the rules above; out-of-range float-to-integer raises a distinct
 NUMERIC_RANGE execution fault with canonical unit result and normal cleanup.
 NEG_FLOAT and six float comparisons accept equal-width concrete float operands;
 NaN makes EQ false, NE true, and every ordered relation false. No host FPU state
-changes occur. Checked schema5/semantic16, Value9/Call14/Program9 reject older
+changes occur. Checked schema6/semantic17, Value10/Call14/Program11 reject older
 versions, including otherwise integer-only artifacts.
 
 Source admits f32/f64 annotations, explicit numeric casts, float negation and
@@ -101,13 +101,13 @@ evidence, not a product dependency or a substitute for Xray execution tests.
 
 ## Arithmetic pipeline and source contract
 
-Append ADD_FLOAT=70, SUB_FLOAT=71, MUL_FLOAT=72 and DIV_FLOAT=73, giving
-OP_COUNT=74. All have stage mask 7, two operands, no successors, zero immediate
+Append ADD_FLOAT=70, SUB_FLOAT=71, MUL_FLOAT=72 and DIV_FLOAT=73, introduced at
+OP_COUNT=74; the current table also includes the separately governed struct operations. All have stage mask 7, two operands, no successors, zero immediate
 and unused fields, and a FLOAT result with both operand types exactly equal to
 that result. A type parameter cannot satisfy FLOAT merely through marker
 constraints. Checked specialization uses these same rules; no later executor
-may reinterpret or admit a rejected instruction. Checked semantic identity is
-16; schema5 and Value9/Call14/Program9 remain unchanged. Older semantic packets
+may reinterpret or admit a rejected instruction. Arithmetic was introduced at semantic16; current admission requires
+schema6/semantic17 and Value10/Call14/Program11. Older semantic packets
 reject before use, including artifacts without arithmetic instructions.
 
 Source admits `+ - * /` and corresponding compound assignments for concrete
@@ -145,7 +145,7 @@ group. Source print remains an ordinary resolved call. All argument evaluation
 precedes rendering; the complete group is budgeted before one sink publication.
 Malformed values, buffer exhaustion, allocation failure or rejected output
 retain existing OUTPUT_ERROR/cleanup semantics and never publish a partial
-group. This changes admission and bytes, not the Value9/Call14/Program9 layout.
+group. This changes admission and bytes, not the Value10/Call14/Program11 layout.
 The semantic-16 family includes this output admission.
 
 ## Complete source execution evidence

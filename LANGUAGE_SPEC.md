@@ -3247,7 +3247,7 @@ class Vector2 {
 - Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise it is inferred from the call-site argument type.
 - The constructor implicitly returns `this` (compiler-injected).
 - Derived class constructors must call `super(...)` first.
-- A `struct` may have **no** constructor (`Point()` produces a zero-initialized instance which is then assigned manually; see §5.4).
+- A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 
 #### 5.3.5 Operator overloading
 
@@ -3452,6 +3452,7 @@ b.x = 99.0
 
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Struct field defaults are checked in the declaring module and type-parameter scope, including unused declarations; they cannot capture a construction caller's locals. Literals evaluate explicit fields in written order, followed by omitted fields' defaults in declaration order. An explicitly supplied field does not run its default. Defaults permit ordinary admitted function effects; failure preserves earlier side effects but publishes no partial struct value.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
 - **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 

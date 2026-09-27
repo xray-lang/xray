@@ -72,7 +72,7 @@ generic definitions remain checked. This producer extension retains the wire,
 operation and ABI versions. Full inference, floating point, checked/saturating
 library methods and numeric containers remain unqualified.
 
-Value9/Call14/Program9 and Checked schema5/semantic16 are the sole admission
+Value10/Call14/Program11 and Checked schema6/semantic17 are the sole admission
 versions. Old packets and native entries reject without readers/adapters. VM,
 portable generated-C leaf and resumable native consumers share the Lowered
 integer contract and runtime. Source witnesses and hand-authored packet fixtures

@@ -16,8 +16,8 @@
 static XrXirArtifact *capture_checked(void) {
     XrXirType fn = (XrXirType) 256, t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter input = {XR_XIR_STRING,0};
-    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,0,0};
-    XrXirTypes types = {&signature,1};
+    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,0,0, {0}};
+    XrXirTypes types = {&signature,1, NULL};
     XrXirInstruction init[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
     XrXirInstruction root[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},17},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
@@ -46,7 +46,7 @@ static XrXirArtifact *capture_checked(void) {
     };
     XrXirGeneric generics[] = {{0},{0},{NULL,0,&concrete,1},{0},{0},{&constraint,1,NULL,0}};
     XrXirSourceModule source = {"root",4,NULL,0,0};
-    XrXirFunctionIdentity identities[] = {{0,0},{0,1},{0,1},{0,0},{0,1},{0,0}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0},{0,1, 0},{0,1, 0},{0,0, 0},{0,1, 0},{0,0, 0}};
     XrXirLiteral literal = {"captured",8};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1};
     XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types};

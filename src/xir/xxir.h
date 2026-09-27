@@ -117,8 +117,16 @@ typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCa
 typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CALLABLE = 1,
     XR_XIR_TYPE_ARRAY = 2,
-    XR_XIR_TYPE_CELL = 3
+    XR_XIR_TYPE_CELL = 3,
+    XR_XIR_TYPE_NOMINAL = 4
 } XrXirTypeKind;
+typedef struct XrXirNominalType {
+    uint32_t declaration;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+    const XrXirType *fields;
+    uint32_t field_count;
+} XrXirNominalType;
 typedef struct XrXirTypeNode {
     uint32_t kind;
     XrXirType element;
@@ -127,10 +135,14 @@ typedef struct XrXirTypeNode {
     XrXirType result;
     uint32_t flags;
     uint32_t parameter_span;
+    XrXirNominalType nominal;
 } XrXirTypeNode;
+typedef struct XrXirNominalTable XrXirNominalTable;
+
 typedef struct XrXirTypes {
     const XrXirTypeNode *nodes;
     uint32_t count;
+    const XrXirNominalTable *nominals;
 } XrXirTypes;
 
 typedef struct XrXirModule {

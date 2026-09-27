@@ -125,6 +125,8 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
     return copy;
 }
 
+#include "xxir_types_lower.inc.c"
+
 static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnostic) {
     if (diagnostic)
         *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX};
@@ -157,7 +159,8 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
     XrXirBudget limits = budget ? *budget : xr_xir_default_budget();
     if (source == XR_XIR_CHECKED) {
-        if (input->generics) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
+        if (input->generics)
+            return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         XrXirLayout layout;
         if (xr_xir_layout(NULL, XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
             return transition_error(XR_XIR_BAD_LAYOUT, diagnostic);
@@ -171,6 +174,9 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
     copy->budget = limits;
     copy->module.stage = source == XR_XIR_BUILT ? XR_XIR_CHECKED : XR_XIR_LOWERED;
     if (copy->module.stage == XR_XIR_LOWERED) {
+        XrXirBudget projection_budget = limits;
+        status = lower_nominal_types(&copy->module, &projection_budget);
+        if (status != XR_XIR_OK) { xr_xir_artifact_free(copy); return transition_error(status, diagnostic); }
         copy->target = *target;
         for (uint32_t f = 0; f < copy->module.function_count; ++f) {
             const XrXirFunction *function = &copy->module.functions[f];

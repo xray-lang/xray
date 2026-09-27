@@ -19,6 +19,8 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
+/* Lowering frees abstract type payloads allocated by the counted type clone. */
+#include "xir/xxir.c"
 #include "xir_source_cases.h"
 int main(int argc, char **argv) {
     CHECK(argc >= 1 && argc <= 3);

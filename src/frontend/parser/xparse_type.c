@@ -27,24 +27,31 @@
 
 /* ========== Helper Functions ========== */
 
-/* Consume '>' in generic type context, handling '>>' (TK_RSHIFT) split.
- * When parsing Array<Array<i64>>, the lexer tokenizes '>>' as TK_RSHIFT;
- * this function splits it into two '>' tokens. */
+/* Consume one type-closing '>' while preserving an adjacent closer or assignment.
+ * Expression parsing retains the lexer's ordinary comparison and shift tokens. */
 static bool consume_gt_in_generic(Parser *parser) {
     XR_DCHECK(parser != NULL, "consume_gt_in_generic: NULL parser");
     if (xr_parser_match(parser, TK_GT))
         return true;
 
-    if (parser->current.type == TK_RSHIFT) {
+    if (parser->current.type == TK_RSHIFT || parser->current.type == TK_GE ||
+        parser->current.type == TK_RSHIFT_ASSIGN) {
+        XrTokenType remainder = parser->current.type == TK_RSHIFT ? TK_GT :
+            parser->current.type == TK_GE ? TK_ASSIGN : TK_GE;
         parser->previous = parser->current;
         parser->previous.type = TK_GT;
-        parser->current.type = TK_GT;
+        parser->previous.length = 1;
+        parser->previous.trailing_trivia = NULL;
+        parser->current.type = remainder;
         parser->current.start++;
-        parser->current.length = 1;
+        parser->current.column++;
+        parser->current.length--;
+        parser->current.has_leading_space = false;
+        parser->current.leading_trivia = NULL;
         return true;
     }
 
-    xr_parser_error(parser, "expected '>' (at '>>')");
+    xr_parser_error(parser, "expected '>' to close generic type");
     return false;
 }
 

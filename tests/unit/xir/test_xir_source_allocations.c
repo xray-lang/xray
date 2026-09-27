@@ -57,14 +57,70 @@ static int source_fault_resolve(XrModuleResolver *resolver, const char *specifie
 #define xr_module_resolver_resolve source_fault_resolve
 #include "xir/xxir_source.c"
 #undef xr_module_resolver_resolve
+#include "xir_nominal_fixture.h"
+static void snapshot_nominal_allocations(void) {
+    for (unsigned declaration_only = 0; declaration_only < 2; ++declaration_only) {
+        size_t sites = 0;
+        for (size_t attempt = 0; attempt <= sites; ++attempt) {
+            NominalFixture fixture; nominal_fixture(&fixture);
+            XrXirType argument = XR_XIR_I64, fields[] = {XR_XIR_I64, XR_XIR_STRING};
+            XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
+            node.nominal = (XrXirNominalType) {0, &argument, 1, fields, 2};
+            XrXirTypes types = {declaration_only ? NULL : &node, declaration_only ? 0 : 1, &fixture.table};
+            XrXirSourceView view = {0}; view.types = &types; view.diagnostic.status = XR_XIR_BAD_TYPE;
+            XrXirBudget budget = xr_xir_default_budget();
+            attempts = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+            XrXirSourceSnapshot *snapshot = NULL;
+            XrXirStatus status = xr_xir_source_snapshot_copy(&view, &budget, &snapshot);
+            if (!attempt) {
+                CHECK(status == XR_XIR_OK && snapshot); sites = attempts;
+                XrXirBudget required = xr_xir_default_budget();
+                required.work -= budget.work; required.metadata_bytes -= budget.metadata_bytes;
+                for (unsigned kind = 0; kind < 3; ++kind) {
+                    XrXirBudget limit = required;
+                    if (kind == 0) --limit.work;
+                    if (kind == 1) --limit.metadata_bytes;
+                    XrXirSourceSnapshot *bounded = NULL;
+                    XrXirStatus bounded_status = xr_xir_source_snapshot_copy(&view, &limit, &bounded);
+                    CHECK(bounded_status == (kind == 2 ? XR_XIR_OK : XR_XIR_BUDGET));
+                    CHECK((bounded != NULL) == (kind == 2));
+                    xr_xir_source_snapshot_free(bounded);
+                }
+                memset(&fixture, 0xcc, sizeof(fixture)); memset(&node, 0xcc, sizeof(node));
+                argument = XR_XIR_UNIT; fields[0] = fields[1] = XR_XIR_UNIT;
+                const XrXirSourceView *copy = xr_xir_source_snapshot_view(snapshot);
+                CHECK(!copy->complete && copy->diagnostic.status == XR_XIR_BAD_TYPE);
+                CHECK(copy->types->count == (declaration_only ? 0u : 1u));
+                const XrXirNominalTable *table = copy->types->nominals;
+                CHECK(table && table->count == 2 && !table->identities);
+                const XrXirNominalDeclaration *decl = table->declarations;
+                CHECK(decl[0].module.length == 5 && !memcmp(decl[0].module.bytes, "alpha", 5));
+                CHECK(decl[0].name.length == 4 && !memcmp(decl[0].name.bytes, "Pair", 4));
+                CHECK(decl[0].constraints[0] == XR_XIR_CONSTRAINT_SENDABLE);
+                CHECK(decl[0].fields[0].type == XR_XIR_TYPE_PARAMETER_BASE);
+                CHECK(decl[0].fields[0].flags == XR_XIR_FIELD_MUTABLE);
+                CHECK(!memcmp(decl[0].fields[0].name.bytes, "value", 5));
+                CHECK(decl[1].fields[1].flags == XR_XIR_FIELD_PRIVATE);
+                if (!declaration_only) {
+                    CHECK(copy->types->nodes[0].nominal.arguments[0] == XR_XIR_I64);
+                    CHECK(copy->types->nodes[0].nominal.fields[0] == XR_XIR_I64);
+                    CHECK(copy->types->nodes[0].nominal.fields[1] == XR_XIR_STRING);
+                }
+            } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
+            xr_xir_source_snapshot_free(snapshot); CHECK(!live);
+        }
+        fail_at = SIZE_MAX;
+        printf("Nominal query snapshot (%u): %zu allocation failure sites\n", declaration_only, sites);
+    }
+}
 static void snapshot_type_allocations(void) {
     const XrXirCallableParameter parameter = {XR_XIR_I64, 0};
     const XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, XR_XIR_STRING, 0, 0},
-        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0},
-        {XR_XIR_TYPE_CELL, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, NULL, 0, XR_XIR_UNIT, 0, 0}
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, XR_XIR_STRING, 0, 0, {0}},
+        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {XR_XIR_TYPE_CELL, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}
     };
-    const XrXirTypes types = {nodes, 3};
+    const XrXirTypes types = {nodes, 3, NULL};
     XrXirSourceView view = {0}; view.types = &types;
     view.diagnostic.status = XR_XIR_BAD_TYPE;
     XrXirBudget budget = xr_xir_default_budget();
@@ -121,6 +177,7 @@ static void array_source_allocations(XrCompilerSession *session) {
     printf("Array source and owned native facts: %zu OOM sites; no partial publication\n", sites);
 }
 int main(void) {
+    snapshot_nominal_allocations();
     snapshot_type_allocations();
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};

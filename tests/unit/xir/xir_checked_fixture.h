@@ -29,7 +29,7 @@ static XrXirArtifact *checked_fixture(void) {
     functions[8] = (XrXirFunction) {"args", 4, parameters, 2, XR_XIR_I64, &block, 1, ops, 3, operands, 2};
     XrXirFunctionIdentity identities[9];
     memcpy(identities, built.declarations->functions, 8 * sizeof(*identities));
-    identities[8] = (XrXirFunctionIdentity) {0, 0};
+    identities[8] = (XrXirFunctionIdentity) {0, 0, 0};
     XrXirDeclarations declarations = *built.declarations;
     declarations.functions = identities;
     built.functions = functions; built.function_count = 9; built.declarations = &declarations;

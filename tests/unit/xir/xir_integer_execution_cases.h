@@ -54,8 +54,8 @@ static void integer_value_boundaries(void) {
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     for (unsigned i = 0; i < 8; ++i) {
         XrXirType type = (XrXirType) values[i].type;
-        XrXirTypeNode node = {XR_XIR_TYPE_CELL,type,NULL,0,XR_XIR_UNIT,0,0};
-        XrXirTypes types = {&node,1};
+        XrXirTypeNode node = {XR_XIR_TYPE_CELL,type,NULL,0,XR_XIR_UNIT,0,0, {0}};
+        XrXirTypes types = {&node,1, NULL};
         XrXirBudget budget = {.parameters = 16, .metadata_bytes = 4096, .work = 64};
         XrXirTypeArena *arena = NULL;
         CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena) == XR_XIR_VALUE_OK);

@@ -19,6 +19,42 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_generic_fixture.h"
+#include "xir_nominal_generic_fixture.h"
+static void nominal_function_closure(void) {
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        XrXirArtifact *checked = nominal_generic_fixture(mode != 0), *closed = NULL, *again = NULL, *lowered = NULL;
+        CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
+        xr_xir_artifact_free(checked);
+        const XrXirModule *m = xr_xir_artifact_module(closed);
+        CHECK(!m->generics && m->function_count == 4 && m->types->nominals->declarations);
+        CHECK(m->declarations->modules[0].initializer == 1 && m->declarations->entry_function == 0);
+        CHECK(m->declarations->functions[2].nominal_owner == 1 && !m->declarations->functions[3].nominal_owner);
+        XrXirType first = m->functions[2].instructions[0].type, second = m->functions[3].instructions[0].type;
+        CHECK(first != second && xr_xir_array_element(m->types, first) == XR_XIR_I64);
+        CHECK(xr_xir_array_element(m->types, second) == XR_XIR_U8);
+        if (mode) {
+            CHECK(m->types->count == 5);
+            CHECK(m->types->nodes[1].nominal.fields[0] == first);
+            CHECK(m->types->nodes[2].nominal.fields[0] == second);
+        }
+        CHECK(xr_xir_specialize(closed, NULL, &again, NULL) == XR_XIR_OK);
+        XrXirCheckedPacket a = {0}, b = {0};
+        CHECK(xr_xir_checked_write(closed, NULL, &a, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_checked_write(again, NULL, &b, NULL) == XR_XIR_OK);
+        CHECK(a.length == b.length && !memcmp(a.bytes, b.bytes, a.length));
+        xr_xir_checked_packet_free(&a); xr_xir_checked_packet_free(&b);
+        xr_xir_artifact_free(again);
+        const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+        CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+        xr_xir_artifact_free(closed);
+        CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
+        m = xr_xir_artifact_module(lowered);
+        CHECK(m->types->nominals->identities && m->types->count == (mode ? 4u : 2u));
+        CHECK(xr_xir_array_element(m->types, m->functions[2].instructions[0].type) == XR_XIR_I64);
+        CHECK(xr_xir_array_element(m->types, m->functions[3].instructions[0].type) == XR_XIR_U8);
+        xr_xir_artifact_free(lowered);
+    }
+}
 static void rehash_generic(XrXirCheckedPacket *packet) {
     XrSHA256Context sha; xr_sha256_init(&sha);
     xr_sha256_update(&sha, packet->bytes, 32);
@@ -74,8 +110,8 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(valid, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(valid);
-    CHECK(packet.length > 40 && packet.bytes[packet.length - 36] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 36] = 0; rehash_generic(&packet);
+    CHECK(packet.length > 44 && packet.bytes[packet.length - 40] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[packet.length - 40] = 0; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_checked_packet_free(&packet);
     xr_xir_artifact_free(checked);
@@ -128,11 +164,11 @@ static void recursive_closure(void) {
 static void array_definition_constraints(void) {
     XrXirArtifact *fixture = generic_fixture(), *checked = NULL, *closed = NULL;
     XrXirModule built = *xr_xir_artifact_module(fixture); built.stage = XR_XIR_BUILT;
-    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0},
-        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_I64,0,0},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0}};
-    XrXirTypes types = {nodes,4}; built.types = &types;
+    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}},
+        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_I64,0,0, {0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}}};
+    XrXirTypes types = {nodes,4, NULL}; built.types = &types;
     XrXirFunction functions[2]; memcpy(functions,built.functions,sizeof(functions)); built.functions = functions;
     XrXirGeneric generics[2]; memcpy(generics,built.generics,sizeof(generics)); built.generics = generics;
     XrXirInstruction ops[4]; memcpy(ops,functions[0].instructions,sizeof(ops)); functions[0].instructions = ops;
@@ -162,7 +198,54 @@ static void array_definition_constraints(void) {
 }
 #include "xir_array_generic_cases.h"
 
+static void deep_body_substitution(void) {
+    enum { DEPTH = 160 };
+    XrXirArtifact *fixture = generic_fixture(), *checked = NULL, *closed = NULL;
+    XrXirModule built = *xr_xir_artifact_module(fixture); built.stage = XR_XIR_BUILT;
+    XrXirTypeNode nodes[DEPTH];
+    for (uint32_t i = 0; i < DEPTH; ++i)
+        nodes[i] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY,
+            (XrXirType) (i ? XR_XIR_CONSTRUCTED_TYPE_BASE + i - 1 : XR_XIR_TYPE_PARAMETER_BASE),
+            NULL, 0, XR_XIR_UNIT, 0, 1, {0}};
+    XrXirTypes types = {nodes, DEPTH, NULL}; built.types = &types;
+    XrXirFunction functions[2]; memcpy(functions, built.functions, sizeof(functions)); built.functions = functions;
+    XrXirInstruction body[] = {
+        {XR_XIR_ARRAY_NEW, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + DEPTH - 1), {0}, {0}, 0},
+        functions[1].instructions[0], functions[1].instructions[1]};
+    body[2].args[0] = 2;
+    XrXirBlock block = {0, 3};
+    functions[1].instructions = body; functions[1].instruction_count = 3; functions[1].blocks = &block;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(fixture); memset(nodes, 0xCC, sizeof(nodes));
+    XrXirBudget budget = xr_xir_default_budget(); budget.work = 20000;
+    XrXirBudget original = budget;
+    CHECK(xr_xir_artifact_verify(checked, &budget, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_specialize(checked, &budget, &closed, NULL) == XR_XIR_BUDGET && !closed);
+    CHECK(!memcmp(&budget, &original, sizeof(budget)));
+    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked);
+    const XrXirModule *module = xr_xir_artifact_module(closed);
+    CHECK(module->function_count == 3 && module->types->count == DEPTH * 2);
+    for (uint32_t f = 1; f < 3; ++f) {
+        XrXirType type = module->functions[f].instructions[0].type;
+        for (uint32_t i = 0; i < DEPTH; ++i) {
+            CHECK(xr_xir_type_is_array(module->types, type) && !xr_xir_type_span(module->types, type));
+            type = xr_xir_array_element(module->types, type);
+        }
+        CHECK(type == (f == 1 ? XR_XIR_I64 : XR_XIR_STRING));
+    }
+    CHECK(module->functions[0].instructions[1].immediate == module->functions[0].instructions[2].immediate);
+    XrXirArtifact *lowered = NULL;
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(closed);
+    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(lowered);
+}
+
 int main(void) {
+    nominal_function_closure();
+    deep_body_substitution();
     array_generic_cases();
     array_definition_constraints();
     rejected_templates(); forwarding(); recursive_closure();

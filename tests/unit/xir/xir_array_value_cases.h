@@ -19,7 +19,7 @@ static XrXirTypeArena *array_value_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 259},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 257},
     };
-    XrXirTypes types = {nodes, 6};
+    XrXirTypes types = {nodes, 6, NULL};
     XrXirBudget budget = {0}; budget.metadata_bytes = 65536; budget.work = 10000;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
@@ -43,7 +43,7 @@ static void array_strings_and_bounds(void) {
     CHECK(xr_xir_string_new(domain, "green", 5, &elements[2]) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType) 257, elements, 2, &admission, &array) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
-    XrXirArrayPlace place = {(XrXirType) 257, &array.payload};
+    XrXirValuePlace place = {(XrXirType) 257, &array.payload};
     XrXirFaultDetail fault = {0};
     CHECK(xr_xir_array_set(&place, 1, elements + 2, &admission, &fault) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_fault_empty(fault) && array.payload != copy.payload);
@@ -87,8 +87,8 @@ static void array_arena_domain_and_cell(void) {
     CHECK(xr_xir_array_new((XrXirType) 257, &string, 1, &admission, &array) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType) 258, &array, 1, &admission, &nested) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_new(origin, arena, (XrXirType) 261, &array, &admission, &cell) == XR_XIR_VALUE_OK);
-    XrXirArrayPlace place = {0};
-    CHECK(xr_xir_cell_array_place(&cell, &admission, &place) == XR_XIR_VALUE_OK);
+    XrXirValuePlace place = {0};
+    CHECK(xr_xir_cell_value_place(&cell, &admission, &place) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_push(&place, &string, &admission) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_read(&cell, &copy) == XR_XIR_VALUE_OK);
     int64_t length = -1;
@@ -96,7 +96,7 @@ static void array_arena_domain_and_cell(void) {
     CHECK(xr_xir_array_len(&array, &admission, &length) == XR_XIR_VALUE_OK && length == 1);
     admission.domain = receiver;
     CHECK(xr_xir_value_admit(&array, (XrXirType) 257, &admission) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_cell_array_place(&cell, &admission, &place) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_cell_value_place(&cell, &admission, &place) == XR_XIR_VALUE_BAD_ARGUMENT);
     admission.arena = foreign;
     CHECK(xr_xir_value_admit(&array, (XrXirType) 257, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
     admission.arena = arena; admission.domain = NULL;
@@ -133,7 +133,7 @@ static void array_function_gates(void) {
     admission.context = &receiving_gate;
     CHECK(xr_xir_function_new(receiver, arena, (XrXirType) 256, &receiving_binding,
         &admission, &received) == XR_XIR_VALUE_OK);
-    XrXirArrayPlace place = {(XrXirType) 259, &empty.payload};
+    XrXirValuePlace place = {(XrXirType) 259, &empty.payload};
     CHECK(xr_xir_array_push(&place, &received, &admission) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_admit(&empty, (XrXirType) 259, &admission) == XR_XIR_VALUE_OK);
     admission.domain = domain; admission.context = &gate;

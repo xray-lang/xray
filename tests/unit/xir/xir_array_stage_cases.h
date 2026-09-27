@@ -12,7 +12,7 @@
 #ifndef XIR_ARRAY_STAGE_CASES_H
 #define XIR_ARRAY_STAGE_CASES_H
 #include "xir_array_metadata_fixture.h"
-#include "xir/xxir_array_helpers.h"
+#include "xir/xxir_operand_roles.h"
 
 static void array_stage_layout(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);

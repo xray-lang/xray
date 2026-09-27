@@ -523,7 +523,7 @@ class Vector2 {
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况推断为调用位点的实参类型。
 - 构造器隐式返回 `this`（编译期注入）。
 - 派生类构造器必须首行调 `super(...)`。
-- struct 可以**没有**构造器（`Point()` 创建隐式零值实例，后续手动赋值；详见 §5.4）。
+- struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
 #### 5.3.5 运算符重载
 
@@ -728,6 +728,7 @@ b.x = 99.0
 
 - 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
 - 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
+- struct 字段默认表达式在声明模块和声明类型参数作用域内检查，包括未使用的声明；不能捕获构造调用方的局部变量。字面量先按书写顺序求值显式字段，再按字段声明顺序求值被省略字段的默认表达式；显式提供的字段不执行其默认表达式。默认表达式允许普通已准入函数效应，失败不撤销之前的副作用，但不发布部分结构体值。
 - 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
 - **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
 
@@ -1703,7 +1704,7 @@ class Vector2 {
 - Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise it is inferred from the call-site argument type.
 - The constructor implicitly returns `this` (compiler-injected).
 - Derived class constructors must call `super(...)` first.
-- A `struct` may have **no** constructor (`Point()` produces a zero-initialized instance which is then assigned manually; see §5.4).
+- A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 
 #### 5.3.5 Operator overloading
 
@@ -1908,6 +1909,7 @@ b.x = 99.0
 
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Struct field defaults are checked in the declaring module and type-parameter scope, including unused declarations; they cannot capture a construction caller's locals. Literals evaluate explicit fields in written order, followed by omitted fields' defaults in declaration order. An explicitly supplied field does not run its default. Defaults permit ordinary admitted function effects; failure preserves earlier side effects but publishes no partial struct value.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
 - **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 

@@ -41,6 +41,7 @@
 
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
+#include "frontend/parser/xtype_ref.h"
 #include "base/xarena.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
@@ -184,6 +185,32 @@ TEST(clean_source_no_errors) {
     ASSERT_EQ_INT(program_decl_count(ast), 3);
     release_arena(arena);
     teardown();
+}
+
+TEST(generic_closers_preserve_adjacent_assignment) {
+    setup();
+    Parser parser; DiagSink sink; XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("var a:Array<i64>=[1]\n"
+        "var b:Array<Array<i64>>=[[2]]\nvar shifted=8>>1\nvar compared=2>=1\n",
+        &parser, &sink, 0, &arena);
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(parser.had_error, 0);
+    ASSERT_EQ_INT(sink.count, 0);
+    ASSERT_EQ_INT(program_decl_count(ast), 4);
+    VarDeclNode *a = &ast->as.program.statements[0]->as.var_decl;
+    VarDeclNode *b = &ast->as.program.statements[1]->as.var_decl;
+    ASSERT_EQ_INT(a->type_annotation->kind, XR_TREF_GENERIC);
+    ASSERT_EQ_INT(b->type_annotation->children[0]->kind, XR_TREF_GENERIC);
+    ASSERT_EQ_INT(a->initializer->type, AST_ARRAY_LITERAL);
+    ASSERT_EQ_INT(b->initializer->type, AST_ARRAY_LITERAL);
+    ASSERT_EQ_INT(ast->as.program.statements[2]->as.var_decl.initializer->type, AST_BINARY_RSHIFT);
+    ASSERT_EQ_INT(ast->as.program.statements[3]->as.var_decl.initializer->type, AST_BINARY_GE);
+    release_arena(arena);
+    ast = parse_recoverable("var extra:Array<i64>>=[1]\n", &parser, &sink, 0, &arena);
+    ASSERT_NOT_NULL(ast);
+    ASSERT_TRUE(sink.count > 0);
+    ASSERT_TRUE(parser.had_error);
+    release_arena(arena); teardown();
 }
 
 TEST(invalid_utf8_source_reports_lexer_diagnostic) {
@@ -664,6 +691,7 @@ TEST(null_parser_returns_null_safely) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xr_parse_recoverable contract");
 RUN_TEST(clean_source_no_errors);
+RUN_TEST(generic_closers_preserve_adjacent_assignment);
 RUN_TEST(invalid_utf8_source_reports_lexer_diagnostic);
 RUN_TEST(returns_partial_ast_on_error);
 RUN_TEST(resync_after_error_keeps_following_decls);

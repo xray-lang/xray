@@ -28,9 +28,16 @@ result type. Other typed declarations expose their value type. A type carries it
 generic declaration owner: equal parameter ordinals in two functions do not mean
 equal type identities. Constructed IDs refer only to the snapshot's owned copy
 of the same unified type pool, interpreted under that generic owner. A node's
-kind distinguishes CALLABLE, ARRAY and internal CELL; an ID range alone cannot
+kind distinguishes CALLABLE, ARRAY, internal CELL and NOMINAL; an ID range alone cannot
 identify a callable. Callable parameter payloads are independently owned too.
-Source interning places child nodes before parents. Mutable generic captures
+Snapshot publication also owns nominal declaration tables, length-delimited
+module/type/field names, constraints, and each node's arguments and substituted
+fields. Declaration-only pools remain present even without constructed nodes.
+Incomplete snapshots preserve partial facts without certifying type validity.
+Runtime identity-only tables reject at this source boundary. Copying nominal
+metadata grants no source syntax admission, visibility or construction permission.
+Structural component interning places child nodes before parents. Nominal field
+graphs use the independent budgeted dependency proof, including forward declarations. Mutable generic captures
 preserve the original lexical owner even when their shared CELL node is reused
 by another declaration with the same parameter ordinal.
 
@@ -69,7 +76,7 @@ module bindings, returns, literals, concrete i64 arithmetic and signed compariso
 concatenation, print and Atomic<i64> construction/load/fetchAdd. The integer family
 follows `xir-integer-arithmetic.md`; f32/f64 arithmetic and output follow
 `xir-floating-point.md`. Other numeric families,
-ref/move, user aggregates, reflection, coroutine syntax, attributes and
+ref/move, other user aggregates, reflection, coroutine syntax, attributes and
 unimplemented declarations fail closed. Every function body is checked, including
 unreachable functions. Ordinary generic read functions with explicit type arguments and the optional
 Sendable marker follow `xir-generic-templates.md`. Unsupported constraints and
@@ -110,7 +117,7 @@ The io/output.xr submodule exports writeStdout(string)->bool and
 writeStderr(string)->bool over the host typed-output capability. Only its exact
 stdlib identity admits the private __writeStdout/__writeStderr primitives. They
 require one read string and lower to WRITE_STREAM; ordinary local declarations
-still shadow primitive names. Imports require exported source functions, so users
+still shadow primitive names. Imports require exported source functions or admitted nominal types, so users
 cannot import a private primitive. All wrapper bodies are checked normally.
 This capability reports provider acceptance; it neither opens File handles nor
 promises filesystem flush/short-write behavior. Existing yieldable File operations

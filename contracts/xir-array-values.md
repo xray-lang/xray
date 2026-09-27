@@ -162,11 +162,11 @@ scoped by declaration and ordered arguments; equal parameter ordinals from
 different definitions do not share generic authority. All runtime types and
 layout operands are closed before immutable Program sealing.
 
-This cutover uses Checked schema 5 / semantic contract 16, Value ABI 9,
-Call ABI 14 and Program ABI 9. Schema 5 remains because instruction records and
-tagged type-node wire traversal are unchanged; the newly legal operations and
-roles were introduced in semantic revision 15; current admission requires revision 16. Call/Program revisions carry the separately
-frozen Bounds detail. Older or mixed semantic/call/program entries reject with
+Current admission uses Checked schema 6 / semantic contract 17, Value ABI 10,
+Call ABI 14 and Program ABI 11. Array operations and roles entered at semantic15;
+the current shared pool, nominal metadata and declaration ownership follow
+`xir-nominal-struct-types.md`. Typed Bounds detail retains its separately
+frozen call and Program behavior. Older or mixed semantic/call/program entries reject with
 no alias or fallback. TypeArena/backing implementation does not invent a second
 serialized physical format. A recomputed digest cannot authorize malformed
 roles, ranges, mutability, generic context or physical layout.

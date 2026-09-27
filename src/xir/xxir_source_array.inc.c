@@ -33,7 +33,7 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
     if (!operation || operation >= sizeof(ctx->array_members) / sizeof(ctx->array_members[0]))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array member identity is not executable");
     if (!ctx->array_members[operation]) {
-        SourceName symbol = {0}; symbol.name = source_native_owned_text(ctx, member->name);
+        SourceName symbol = {0}; symbol.name = source_owned_text(ctx, member->name);
         if (!symbol.name) return false;
         XrXirSourceRange range = {ctx->array_module, (int) member->line, (int) member->column,
             (int) member->line, (int) (member->column + strlen(member->name))};
@@ -47,13 +47,13 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
         }
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
         record->native_identity = member->id;
-        record->signature = source_native_owned_text(ctx, member->signature);
+        record->signature = source_owned_text(ctx, member->signature);
         if (!record->signature) return false;
         record->type = source_array_schema_type(ctx, member->result);
         record->parameters = parameters; record->parameter_count = member->parameter_count;
         record->exported = true; record->mutable = member->receiver == XR_NATIVE_RECEIVER_REF;
     }
-    return source_query_native_reference(ctx, source_query_range(ctx, node, NULL),
+    return source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
         ctx->array_members[operation], XR_XIR_SOURCE_CALL);
 }
 static SourceName *source_array_root(SourceContext *ctx, AstNode *node) {
@@ -113,7 +113,7 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, XrXirType ex
     if (!source_array_element_type(ctx, element, &array) || !source_native_array_declaration(ctx)) return false;
     if (!emit_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0},
         elements, (uint32_t) literal->count, value)) return false;
-    return source_query_native_reference(ctx, source_query_range(ctx, node, NULL),
+    return source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
         ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
 }
 static bool source_array_get(SourceContext *ctx, AstNode *node, AstNode *receiver, AstNode *index,
@@ -186,7 +186,7 @@ static bool source_array_length(SourceContext *ctx, AstNode *node,
         ctx->query.modules = modules;
         /* Core identity has no source-position/content-hash claim in this snapshot. */
         modules[ctx->query.module_count - 1] = (XrXirSourceQueryModule) {"xray-core:prelude", NULL, {{0}}};
-        SourceName symbol = {0}; symbol.name = source_native_owned_text(ctx, descriptor->source_name);
+        SourceName symbol = {0}; symbol.name = source_owned_text(ctx, descriptor->source_name);
         if (!symbol.name) return false;
         if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_INTRINSIC, 0,
             (XrXirSourceRange) {ctx->query.module_count - 1, 0, 0, 0, 0})) return false;
@@ -199,6 +199,6 @@ static bool source_array_length(SourceContext *ctx, AstNode *node,
         record->parameters = parameter; record->parameter_count = 1;
     }
     return emit(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0}, value) &&
-        source_query_native_reference(ctx, source_query_range(ctx, call->callee, NULL),
+        source_query_target_reference(ctx, source_query_range(ctx, call->callee, NULL),
             ctx->length_declaration, XR_XIR_SOURCE_CALL);
 }

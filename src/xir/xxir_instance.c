@@ -13,7 +13,8 @@
 
 
 #include "xxir_program_internal.h"
-#include "xxir_instance_array.h"
+#include "xxir_instance_value.h"
+#include "xxir_struct.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 
@@ -342,22 +343,22 @@ static XrXirInstance *view_instance(XrXirCallView *view) {
     return instance;
 }
 
-static bool array_unit(XrXirValue value) {
+static bool value_unit(XrXirValue value) {
     return value.type == XR_XIR_UNIT && !value.reserved && !value.payload;
 }
-static XrXirCallStatus array_place(XrXirCallView *view, XrXirInstance *instance,
-    const XrXirArrayReceiver *receiver, bool writable, XrXirValueAdmission *admission,
-    XrXirArrayPlace *place) {
+static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
+    const XrXirValueReceiver *receiver, bool writable, XrXirValueAdmission *admission,
+    XrXirValuePlace *place) {
     if (!receiver) return XR_XIR_CALL_BAD_STATE;
     place->type = receiver->type;
-    if (receiver->kind == XR_XIR_ARRAY_CELL) {
+    if (receiver->kind == XR_XIR_ROOT_CELL) {
         if (receiver->local_payload || receiver->slot) return XR_XIR_CALL_BAD_STATE;
-        XrXirValueStatus status = xr_xir_cell_array_place(&receiver->value, admission, place);
+        XrXirValueStatus status = xr_xir_cell_value_place(&receiver->value, admission, place);
         if (status != XR_XIR_VALUE_OK) return value_call_status(status);
         return place->type == receiver->type ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
     }
-    if (!array_unit(receiver->value)) return XR_XIR_CALL_BAD_STATE;
-    if (receiver->kind == XR_XIR_ARRAY_LOCAL) {
+    if (!value_unit(receiver->value)) return XR_XIR_CALL_BAD_STATE;
+    if (receiver->kind == XR_XIR_ROOT_LOCAL) {
         uint32_t entry = xr_xir_call_current_entry(view->activation);
         uintptr_t address = (uintptr_t) receiver->local_payload, base = (uintptr_t) view->state;
         uint32_t bytes = instance->entries[entry].state_bytes;
@@ -368,7 +369,7 @@ static XrXirCallStatus array_place(XrXirCallView *view, XrXirInstance *instance,
         return XR_XIR_CALL_READY;
     }
     const XrXirDeclarations *d = instance->program->declarations;
-    if (receiver->kind != XR_XIR_ARRAY_SLOT || receiver->local_payload || receiver->slot >= d->slot_count)
+    if (receiver->kind != XR_XIR_ROOT_SLOT || receiver->local_payload || receiver->slot >= d->slot_count)
         return XR_XIR_CALL_BAD_STATE;
     uint32_t slot = receiver->slot, module = d->slots[slot].module;
     uint32_t function = xr_xir_call_current_entry(view->activation);
@@ -388,21 +389,21 @@ XrXirCallStatus xr_xir_instance_array_new(XrXirCallView *view, XrXirType type,
     return value_call_status(xr_xir_array_new(type, values, count, admission, output));
 }
 XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,
-    const XrXirArrayReceiver *receiver, int64_t index, bool length,
+    const XrXirValueReceiver *receiver, int64_t index, bool length,
     XrXirValue *output, XrXirFaultDetail *fault) {
     if (!fault) return XR_XIR_CALL_BAD_ARGUMENT;
     *fault = (XrXirFaultDetail) {0};
     XrXirInstance *instance = view_instance(view);
-    if (!instance || !receiver || !output || !array_unit(*output)) return XR_XIR_CALL_BAD_STATE;
+    if (!instance || !receiver || !output || !value_unit(*output)) return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     XrXirValue borrowed = {0}, held = {0};
-    if (receiver->kind == XR_XIR_ARRAY_VALUE) {
+    if (receiver->kind == XR_XIR_ROOT_VALUE) {
         if (receiver->local_payload || receiver->slot || receiver->value.type != (uint32_t) receiver->type)
             return XR_XIR_CALL_BAD_STATE;
         borrowed = receiver->value;
     } else {
-        XrXirArrayPlace place = {0};
-        XrXirCallStatus status = array_place(view, instance, receiver, false, admission, &place);
+        XrXirValuePlace place = {0};
+        XrXirCallStatus status = value_place(view, instance, receiver, false, admission, &place);
         if (status != XR_XIR_CALL_READY) return status;
         borrowed.type = (uint32_t) place.type;
         memcpy(&borrowed.payload, place.payload, sizeof(borrowed.payload));
@@ -422,18 +423,28 @@ XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,
     return value_call_status(status);
 }
 XrXirCallStatus xr_xir_instance_array_write(XrXirCallView *view,
-    const XrXirArrayReceiver *receiver, int64_t index, const XrXirValue *element,
+    const XrXirValueReceiver *receiver, int64_t index, const XrXirValue *element,
     bool append, XrXirFaultDetail *fault) {
     if (!fault) return XR_XIR_CALL_BAD_ARGUMENT;
     *fault = (XrXirFaultDetail) {0};
     XrXirInstance *instance = view_instance(view);
     if (!instance || !receiver) return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
-    XrXirArrayPlace place = {0};
-    XrXirCallStatus status = array_place(view, instance, receiver, true, admission, &place);
+    XrXirValuePlace place = {0};
+    XrXirCallStatus status = value_place(view, instance, receiver, true, admission, &place);
     if (status != XR_XIR_CALL_READY) return status;
     return value_call_status(append ? xr_xir_array_push(&place, element, admission) :
         xr_xir_array_set(&place, index, element, admission, fault));
+}
+XrXirCallStatus xr_xir_instance_struct_write(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, uint32_t field, const XrXirValue *value) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !receiver) return XR_XIR_CALL_BAD_STATE;
+    XrXirValueAdmission *admission = xr_xir_call_admission(view);
+    XrXirValuePlace place = {0};
+    XrXirCallStatus status = value_place(view, instance, receiver, true, admission, &place);
+    if (status != XR_XIR_CALL_READY) return status;
+    return value_call_status(xr_xir_struct_set(&place, field, value, admission));
 }
 XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, XrXirValue *output) {
     XrXirInstance *instance = view_instance(view);

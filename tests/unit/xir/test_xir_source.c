@@ -19,6 +19,8 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
+/* Lowering frees abstract type payloads allocated by the counted type clone. */
+#include "xir/xxir.c"
 #include "xir_source_cases.h"
 int main(int argc, char **argv) {
     XrCompilerSession *session = xr_compiler_session_new(NULL);
@@ -71,6 +73,10 @@ int main(int argc, char **argv) {
     xr_xir_program_drop(program);
     source_result_drop(&results[0]); source_result_drop(&results[1]);
     puts("Real source modules, independent state and output passed in Lowered VM");
+    if (runtime_live) {
+        fprintf(stderr, "runtime residual: %zu allocations, %zu bytes\n", runtime_live, runtime_bytes);
+        for (size_t i = 0; i < runtime_live; ++i) fprintf(stderr, "residual %zu: %zu bytes\n", i, runtime_owned[i].bytes);
+    }
     CHECK(!runtime_live && !runtime_bytes);
     return 0;
 }

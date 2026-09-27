@@ -19,7 +19,7 @@ bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirT
     uint32_t count = module->generics ? module->generics[function].parameter_count : 0;
     const XrXirTypeNode *node = xr_xir_type_node(module->types, type);
     if (node) return (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
-        node->kind == XR_XIR_TYPE_CELL) && node->parameter_span <= count;
+        node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL) && node->parameter_span <= count;
     return (uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t) type < XR_XIR_TYPE_PARAMETER_LIMIT &&
         (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < count;
 }
@@ -29,6 +29,12 @@ XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
     --remaining->work;
     if (!module || constraints & ~XR_XIR_CONSTRAINT_SENDABLE || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
+    const XrXirTypeNode *node = xr_xir_type_node(module->types, type);
+    if (node && node->kind == XR_XIR_TYPE_NOMINAL) {
+        XrXirStatus status = xr_xir_nominal_access(module, function, node->nominal.declaration,
+            0, XR_XIR_NOMINAL_TYPE, &remaining->work);
+        if (status != XR_XIR_OK) return status;
+    }
     if (!constraints) return XR_XIR_OK;
     const XrXirGeneric *generic = module->generics ? &module->generics[function] : NULL;
     return xr_xir_type_sendable(module->types, type, generic ? generic->constraints : NULL,
@@ -101,37 +107,9 @@ XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
     }
     return XR_XIR_OK;
 }
-typedef struct CallTypes {
-    const XrXirTypes *table;
-    const XrXirType *arguments;
-    uint32_t count;
-    XrXirBudget *remaining;
-} CallTypes;
-static XrXirStatus call_type_matches(CallTypes *c, XrXirType type, XrXirType actual, uint32_t depth) {
-    if (!c->remaining->work || depth == 128) return XR_XIR_BUDGET;
-    --c->remaining->work;
-    if ((uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t) type < XR_XIR_TYPE_PARAMETER_LIMIT) {
-        uint32_t index = (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE;
-        return index < c->count && c->arguments[index] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
-    }
-    const XrXirTypeNode *from = xr_xir_type_node(c->table, type);
-    if (!from || !from->parameter_span) return type == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
-    const XrXirTypeNode *to = xr_xir_type_node(c->table, actual);
-    if (!to || from->kind != to->kind || from->parameter_count != to->parameter_count || from->flags != to->flags)
-        return XR_XIR_BAD_TYPE;
-    if (from->kind == XR_XIR_TYPE_ARRAY || from->kind == XR_XIR_TYPE_CELL)
-        return call_type_matches(c, from->element, to->element, depth + 1);
-    if (from->kind != XR_XIR_TYPE_CALLABLE) return XR_XIR_BAD_TYPE;
-    XrXirStatus status = call_type_matches(c, from->result, to->result, depth + 1);
-    for (uint32_t p = 0; p < from->parameter_count && status == XR_XIR_OK; ++p) {
-        if (from->parameters[p].mode != to->parameters[p].mode) return XR_XIR_BAD_TYPE;
-        status = call_type_matches(c, from->parameters[p].type, to->parameters[p].type, depth + 1);
-    }
-    return status;
-}
 XrXirStatus xr_xir_call_type_matches(const XrXirModule *module, uint32_t caller,
     const XrXirInstruction *call, XrXirType type, XrXirType actual, XrXirBudget *remaining) {
-    CallTypes c = {module->types, NULL, call->targets[1], remaining};
-    if (c.count) c.arguments = module->generics[caller].arguments + call->targets[0];
-    return call_type_matches(&c, type, actual, 0);
+    uint32_t count = call->targets[1];
+    const XrXirType *arguments = count ? module->generics[caller].arguments + call->targets[0] : NULL;
+    return xr_xir_type_substitution_matches(module->types, arguments, count, type, actual, remaining);
 }

@@ -304,13 +304,13 @@ static void numeric_admission(void) {
 static void constructed_metadata(void) {
     XrXirCallableParameter input = {(XrXirType)256,0};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0},
-        {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,0,0},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536}
+        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
+        {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,0,0, {0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536, {0}}
     };
-    XrXirTypes types = {nodes,5};
+    XrXirTypes types = {nodes,5, NULL};
     XrXirBudget budget = xr_xir_default_budget();
     CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_OK);
     CHECK(xr_xir_type_is_array(&types,(XrXirType)256));
@@ -378,7 +378,150 @@ static void constructed_metadata(void) {
 
 #include "xir_array_stage_cases.h"
 
+#include "xir_nominal_fixture.h"
+static void nominal_metadata_cases(void) {
+    NominalFixture f; nominal_fixture(&f);
+    XrXirBudget b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
+    f.declarations[1].module = f.declarations[0].module;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    nominal_fixture(&f); f.fields[1].name = f.fields[0].name;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    nominal_fixture(&f); f.declarations[0].parameter_count = 0; f.declarations[0].constraints = NULL;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    nominal_fixture(&f); f.constraint = 2;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    nominal_fixture(&f); f.fields[0].flags = XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    nominal_fixture(&f); f.module[2] = 0;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+    nominal_fixture(&f); f.fields[0].type = XR_XIR_UNIT;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    nominal_fixture(&f);
+    XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1), NULL, 0, XR_XIR_UNIT, 0, 2, {0}};
+    XrXirTypes types = {&node, 1, NULL}; f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, &types, &b) == XR_XIR_BAD_TYPE);
+    node.element = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, &types, &b) == XR_XIR_OK);
+    node.kind = XR_XIR_TYPE_CELL;
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, &types, &b) == XR_XIR_BAD_TYPE);
+    nominal_fixture(&f); b = xr_xir_default_budget(); b.work = 1;
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BUDGET && b.work == 1);
+    b = xr_xir_default_budget(); b.metadata_bytes = 1;
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BUDGET && b.metadata_bytes == 1);
+    b = xr_xir_default_budget();
+    XrXirNominalTable *copy = NULL;
+    CHECK(xr_xir_nominal_clone(&f.table, NULL, &b, &copy) == XR_XIR_OK && copy);
+    memset(&f, 0xCC, sizeof(f));
+    b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(copy, NULL, &b) == XR_XIR_OK);
+    CHECK(copy->count == 2 && memcmp(copy->declarations[0].module.bytes, "alpha", 5) == 0);
+    CHECK(copy->declarations[0].constraints[0] == XR_XIR_CONSTRAINT_SENDABLE);
+    CHECK(memcmp(copy->declarations[0].fields[0].name.bytes, "value", 5) == 0);
+    xr_xir_nominal_free(copy);
+}
+
+static void nominal_pool_ownership(void) {
+    NominalFixture f; nominal_fixture(&f);
+    XrXirTypes types = {NULL, 0, &f.table};
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    XrXirTypes *copy = NULL;
+    CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OK && copy && copy->nominals);
+    CHECK(copy->nominals != &f.table && copy->nominals->declarations != f.declarations);
+    memset(&f, 0xCC, sizeof(f));
+    budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(copy, &budget) == XR_XIR_OK);
+    CHECK(memcmp(copy->nominals->declarations[0].name.bytes, "Pair", 4) == 0);
+    Fixture source; fixture_init(&source); source.module.types = copy;
+    XrXirArtifact *artifact = NULL;
+    CHECK(xr_xir_check(&source.module, NULL, &artifact, NULL) == XR_XIR_BAD_STRUCTURE && !artifact);
+    xr_xir_types_free(copy);
+    types.nominals = NULL;
+    budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
+}
+
+static void nominal_instance_metadata(void) {
+    NominalFixture f; nominal_fixture(&f);
+    XrXirType argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, &argument, 1, NULL, 0}}};
+    XrXirTypes types = {nodes, 3, &f.table};
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    for (unsigned mode = 0; mode < 11; ++mode) {
+        XrXirTypeNode saved = nodes[2]; XrXirType saved_argument = argument;
+        if (mode == 0) nodes[2].nominal.declaration = 2;
+        if (mode == 1) nodes[2].nominal.declaration = 0;
+        if (mode == 2) nodes[2].nominal.argument_count = 0;
+        if (mode == 3) nodes[2].nominal.arguments = NULL;
+        if (mode == 4) nodes[2].element = XR_XIR_I64;
+        if (mode == 5) nodes[2].parameter_span = 1;
+        if (mode == 6) argument = XR_XIR_UNIT;
+        if (mode == 7) argument = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
+        if (mode == 8) argument = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 2);
+        if (mode == 9) nodes[0].kind = XR_XIR_TYPE_CELL;
+        if (mode == 10) { nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].element = XR_XIR_UNIT; nodes[0].result = XR_XIR_STRING; }
+        budget = xr_xir_default_budget();
+        CHECK(xr_xir_types_verify(&types, &budget) != XR_XIR_OK);
+        nodes[2] = saved; argument = saved_argument;
+        nodes[0] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+    }
+    nodes[0].nominal.declaration = 1; budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
+    nodes[0].nominal.declaration = 0;
+    XrXirTypes *copy = NULL;
+    CHECK(xr_xir_types_clone(&types, &copy) == XR_XIR_OK);
+    CHECK(copy->nodes[1].nominal.arguments != &argument);
+    argument = XR_XIR_UNIT; memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes));
+    budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(copy, &budget) == XR_XIR_OK);
+    CHECK(copy->nodes[1].nominal.arguments[0] == (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE);
+    xr_xir_types_free(copy);
+}
+
+static void nominal_argument_identity(void) {
+    NominalFixture f; nominal_fixture(&f);
+    uint32_t constraints[] = {0, 0};
+    for (uint32_t i = 0; i < 2; ++i) {
+        f.declarations[i].parameter_count = 2; f.declarations[i].constraints = constraints;
+    }
+    XrXirType arguments[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_STRING, XR_XIR_I64};
+    XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments, 2, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 2, 2, NULL, 0}}};
+    XrXirTypes types = {nodes, 2, &f.table};
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    nodes[1].nominal.arguments = arguments; budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_STRUCTURE);
+    for (uint32_t i = 0; i < 2; ++i) {
+        f.declarations[i].parameter_count = 0; f.declarations[i].constraints = NULL;
+        nodes[i].nominal = (XrXirNominalType) {i, NULL, 0, NULL, 0};
+    }
+    f.fields[0].type = XR_XIR_I64; budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    types.nominals = NULL; budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_TYPE);
+}
+
 int main(void) {
+    nominal_argument_identity();
+    nominal_instance_metadata();
+    nominal_pool_ownership();
+    nominal_metadata_cases();
     array_metadata_cases();
     constructed_metadata();
     numeric_admission();
