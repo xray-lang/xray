@@ -426,7 +426,7 @@ and column, including when a newline separates the keyword and identifier. The
 source query regression checks this parser-owned location directly. This source
 anchor update changes no PSC schema, runtime identity, or artifact fingerprint.
 
-anchor-sha256: CMakeLists.txt 14d5cb82e420361a9e6283233c695e2da0a273e3d5545af070c24ba70d3307a3
+anchor-sha256: CMakeLists.txt 47ae3b3c4f665118a0c4f63d7e59a883d10d59191bdc5e85b73646b896f95a51
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
@@ -489,7 +489,7 @@ anchor-sha256: tests/unit/frontend/test_parser.c d7e4e7455e597c1ce6494d781792048
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 39c2cbedd4bc84650f6faa2e098f93ea67a2389bf74ba54909ed3fc5871d0736
-anchor-sha256: tests/unit/CMakeLists.txt 1e1b3a6d39df2783161c62097cb03be33375e12b3612a8ba27412d60e5dd8c6e
+anchor-sha256: tests/unit/CMakeLists.txt 02322efc9f2872095db17bd57aff44252c7f641c3c5310455ff9e95d06a1195f
 anchor-sha256: src/aot/xaot_boundary.h 68b659ce8507f314986e3b2f234feab033a5682d4e037dd46406903b695aef84
 anchor-sha256: src/aot/xaot_boundary.c 9f58c653651b4395d0ec34f13eb1e3223ad179d900a06f120023065cb81ab40e
 anchor-sha256: src/aot/xaot_bundle.c 22a955023d50d374c684299decf272258ff987908dbbf7afc50ad433c4ce98c4

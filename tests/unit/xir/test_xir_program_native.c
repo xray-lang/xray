@@ -15,9 +15,17 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_program_cases.h"
 #include "xir_capture_cases.h"
+#include "xir_array_program_cases.h"
+extern const XrXirProgramSpec array_program0_program, array_program1_program;
 extern const XrXirProgramSpec captures_program;
 extern const XrXirProgramSpec program0_program, program1_program, program2_program;
 int main(void) {
+    const XrXirProgramSpec *arrays[] = {&array_program0_program,&array_program1_program};
+    for (uint32_t mode = 0; mode < 2; ++mode) {
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_program_seal(arrays[mode],65536,&program) == XR_XIR_OK);
+        array_program_cases(program,mode != 0);
+    }
     const XrXirProgramSpec *specs[] = {&program0_program, &program1_program, &program2_program};
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirProgram *program = NULL;

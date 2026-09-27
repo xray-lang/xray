@@ -26,7 +26,7 @@
     },
     {
       "heading": "Value copies and identity boundaries",
-      "markdown": "`const` fixes the binding and its value-semantic components. Saving a copyable Array into another binding preserves a logical copy; it does not require explicit copy/move or unique backing. Class and synchronized fields retain identity, so const does not freeze their referenced objects or prove Sendable. Type-position `const T` is outside this frozen subset. The example states the language contract, not complete new-XIR implementation qualification.",
+      "markdown": "`const` fixes the binding and its value-semantic components. Saving a copyable Array into another binding preserves a logical copy; it does not require explicit copy/move or unique backing. Class and synchronized fields retain identity, so const does not freeze their referenced objects or prove Sendable. Type-position `const T` is outside this frozen subset. Spec §17.26 admits ordinary Array copies and independent mutation of a writable local copy. The broader identity/resource cases in the example remain language contracts and do not imply complete new-XIR qualification.",
       "fences": [
         "decl-capability"
       ]

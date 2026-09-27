@@ -6859,6 +6859,46 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     setup_pool();
 }
 
+TEST(analyzer_length_identity_respects_lexical_shadow) {
+    const char *sources[] = {
+        "fn len(value: string) -> string { return value }\nconst text: string = len(\"x\")\n",
+        "fn arrayLength(values: Array<i64>) -> i64 { return len(values) }\n"
+        "class Box { values: Array<i64>\nconstructor() { this.values = [7] }\n"
+        "len() -> i64 { return arrayLength(this.values) } }\n",
+    };
+    for (unsigned i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
+        XaAnalyzer *a = xa_analyzer_new(g_session);
+        ASSERT(a != NULL);
+        AstNode *program = xr_parse(g_session, sources[i]);
+        ASSERT(program != NULL);
+        xa_analyzer_analyze(a, "length_identity.xr", program);
+        ASSERT(a->diagnostic_count == 0);
+        xa_analyzer_free(a);
+        setup_pool();
+    }
+}
+
+TEST(analyzer_array_index_methods_require_checked_value_operations) {
+    const char *sources[] = {
+        "var a = [7]\na.get(0)\n", "var a = [7]\na.set(0, 8)\n",
+        "var a = [7]\nunsafe { a.get(0) }\n", "var a = [7]\nunsafe { a.set(0, 8) }\n",
+        "fn bad(a: Array<i64>?) { a?.get(0) }\n",
+        "fn bad(a: Array<i64>?) { a?.set(0, 8) }\n",
+        "fn bad(a: Array<i64>?) { unsafe { a?.get(0) } }\n",
+        "fn bad(a: Array<i64>?) { unsafe { a?.set(0, 8) } }\n",
+    };
+    for (unsigned i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
+        XaAnalyzer *a = xa_analyzer_new(g_session);
+        ASSERT(a != NULL);
+        AstNode *program = xr_parse(g_session, sources[i]);
+        ASSERT(program != NULL);
+        xa_analyzer_analyze(a, "array_index_authority.xr", program);
+        ASSERT(analyzer_diag_contains(a, "require the checked XIR value-operation pipeline"));
+        xa_analyzer_free(a);
+        setup_pool();
+    }
+}
+
 TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -8268,6 +8308,8 @@ int main(int argc, char **argv) {
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
     RUN_TEST(analyzer_error_effect_tracks_map_catch_aliases);
+    RUN_TEST(analyzer_length_identity_respects_lexical_shadow);
+    RUN_TEST(analyzer_array_index_methods_require_checked_value_operations);
     RUN_TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance);
     RUN_TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases);
     RUN_TEST(analyzer_error_effect_converges_recursive_components);

@@ -108,6 +108,18 @@ core numeric operations, without reassigning the existing registry.
 
 verification-test: test_target_plan
 verification-test: test_semantic_builtin_runtime_method_authority
+verification-test: test_xi_intrinsic
+verification-test: test_analyzer
+
+The core prelude length query appends stable source identity 6 without changing
+IDs 1-5. Its descriptor is direct-only with one READ length-query operand, i64
+result and value-reading effects; assertion and output contracts cannot claim
+that descriptor. Binding resolves lexical/module/import names before prelude
+identity lookup. A user len declaration keeps its ordinary signature, including
+inside a class that declares a same-named method. Legacy Xi length lowering
+consumes the resolved core identity instead of a spelling exception. This does
+not grant new Lengthable families authority in the XIR source owner, whose first
+specialization admits only governed Array descriptors.
 
 ## Digest anchors
 
@@ -117,7 +129,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_native_leaf_shape.h 39d0821e6e750df
 anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h 35d71f47cd448b0baa0980c489b6f807c5affdf0120e746f2d4cf91b81ee5194
 anchor-sha256: src/plan/semantic/xr_semantic_string_utf8_shape.h aa8a342b9578e749c5e812dc9d193220ac63d849e15085130a4279ead5c24056
 anchor-sha256: src/ir/xi_semantic_intrinsic.c 97e2b7546320eedf5c5acfa36f96b108d75cd2091f5cf930dccb7a9706b265d7
-anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
+anchor-sha256: src/shared/xr_core_intrinsic.def 1fa53407e5ddcfc3ec820e449b2965470b13c81b54e2fe2ea12b7a624d9ea6aa
 anchor-sha256: contracts/capability-deletions.tsv 0ce3ca872d9dafa777f75f8540cc92244edb082615b9733534e418afe2d40449
 anchor-sha256: scripts/check_branch_hint_surface_residue.py de29c337d4f946fda333015f97e5d78143889959e0e5956d5c2790216121283e
 anchor-sha256: tests/regression/05_functions/0582_removed_builtin_names_reusable.xr 037941a5256838f24279cf536a83ccbbaa84af5dde8bc386343addc97b849c49

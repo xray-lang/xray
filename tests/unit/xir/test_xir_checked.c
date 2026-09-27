@@ -123,10 +123,13 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 5 && XR_XIR_CHECKED_CONTRACT == 14 && XR_XIR_OP_COUNT == 63, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 5 && XR_XIR_CHECKED_CONTRACT == 15 && XR_XIR_OP_COUNT == 70, "packet revision");
     _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 54 &&
         XR_XIR_CONST_FLOAT == 55 && XR_XIR_NEG_FLOAT == 56 && XR_XIR_EQ_FLOAT == 57 && XR_XIR_GE_FLOAT == 62, "numeric wire identities");
     _Static_assert(XR_XIR_FUNCTION_REF == 49 && XR_XIR_CALL_INDIRECT == 50, "callable wire operations");
+    _Static_assert(XR_XIR_CELL_PLACE == 63 && XR_XIR_SLOT_PLACE == 64 && XR_XIR_ARRAY_NEW == 65 &&
+        XR_XIR_ARRAY_GET == 66 && XR_XIR_ARRAY_SET == 67 && XR_XIR_ARRAY_PUSH == 68 &&
+        XR_XIR_ARRAY_LEN == 69, "array wire operations");
     _Static_assert(XR_XIR_UNIT == 0 && XR_XIR_BOOL == 1 && XR_XIR_I64 == 2 && XR_XIR_STRING == 3 && XR_XIR_ATOMIC_I64 == 4, "wire type identities");
     for (unsigned i = 0; i < 25; ++i) CHECK((unsigned) identities[i] == i + 1);
     XrXirInstruction ops[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, INT64_MIN},
@@ -144,8 +147,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x4b, 0x42, 0xe4, 0x0c, 0xad, 0x6f, 0xdd, 0xe0, 0x62, 0x43, 0x94, 0xbb, 0xfe, 0x1c, 0x4a, 0xee,
-        0x75, 0xba, 0xc3, 0x27, 0x5d, 0x0d, 0xb5, 0xd3, 0x8a, 0x53, 0x00, 0x7e, 0xb6, 0x1a, 0x14, 0x6f};
+        0xfc, 0xac, 0x65, 0x7d, 0x65, 0x0d, 0xd1, 0xab, 0x08, 0x6d, 0x54, 0xb1, 0x0c, 0xf4, 0x12, 0x7b,
+        0x85, 0xf1, 0xcd, 0x45, 0x9a, 0xe2, 0xb3, 0xdd, 0x7f, 0x54, 0x69, 0xc0, 0x85, 0x1e, 0x2b, 0x23};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[177]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
@@ -155,7 +158,7 @@ static void byte_order(void) {
     XrXirArtifact *narrow = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &narrow, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(narrow);
-    put32(packet.bytes + 12, 12); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 14); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].instructions[0].immediate == INT64_MIN);
@@ -393,7 +396,10 @@ static void constructed_contracts(void) {
     CHECK(xr_xir_artifact_verify(lowered,NULL,NULL) == XR_XIR_OK);
     xr_xir_artifact_free(lowered);
 }
+#include "xir_array_checked_cases.h"
+
 int main(void) {
+    array_checked_cases();
     constructed_contracts();
     cell_checked_cases();
     capture_rejections(); capture_packet_rejection();

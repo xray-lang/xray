@@ -13,8 +13,9 @@
 #ifndef XXIR_CALL_H
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
+#include "xxir_fault.h"
 
-#define XR_XIR_CALL_ABI_VERSION 13u
+#define XR_XIR_CALL_ABI_VERSION 14u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -22,12 +23,14 @@ typedef enum XrXirCallStatus {
     XR_XIR_CALL_SUSPENDED, XR_XIR_CALL_CANCELLED, XR_XIR_CALL_LIMIT,
     XR_XIR_CALL_OOM, XR_XIR_CALL_BAD_ARGUMENT, XR_XIR_CALL_BAD_ABI,
     XR_XIR_CALL_BAD_STATE, XR_XIR_CALL_BUSY, XR_XIR_CALL_DIVIDE_BY_ZERO,
-    XR_XIR_CALL_CONSUMED, XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_NUMERIC_RANGE
+    XR_XIR_CALL_CONSUMED, XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_NUMERIC_RANGE,
+    XR_XIR_CALL_BOUNDS
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
     XrXirValue value;
     uint64_t wake;
+    XrXirFaultDetail fault;
 } XrXirCallResult;
 typedef enum XrXirActionKind {
     XR_XIR_ACTION_CALL = 1, XR_XIR_ACTION_RETURN, XR_XIR_ACTION_THROW,
@@ -40,10 +43,12 @@ typedef struct XrXirAction {
     const XrXirValue *arguments;
     uint32_t argument_count;
     XrXirValue value;
+    XrXirFaultDetail fault;
 } XrXirAction;
 
 /* Normalize failures inside an admitted entry; admission errors are separate. */
 XR_FUNC XrXirAction xr_xir_call_fault(XrXirRunStatus status);
+XR_FUNC XrXirAction xr_xir_call_bounds(int64_t index, int64_t length);
 typedef struct XrXirCallView {
     XrXirCall *activation;
     void *instance;
@@ -54,6 +59,8 @@ typedef struct XrXirCallView {
     XrXirCallResult inbox;
     const XrXirTypeArena *arena;
 } XrXirCallView;
+/* Borrowed only by the driver's current resume view, until that callback returns. */
+XR_FUNC XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view);
 typedef XrXirAction (*XrXirResumeEntry)(XrXirCallView *view);
 typedef void (*XrXirCleanupEntry)(XrXirCallView *view, XrXirCallStatus reason);
 typedef struct XrXirCallEntry {

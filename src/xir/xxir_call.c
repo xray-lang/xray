@@ -47,6 +47,7 @@ struct XrXirCall {
     XrXirCallConfig config;
     CallFrame *top;
     CallSegment *segment;
+    const XrXirCallView *active_view;
     XrXirCallResult result;
     uint64_t allocation_bytes, polls_left, next_wake;
     bool driving, cleaning, cancel_requested;
@@ -62,7 +63,7 @@ XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
         case XR_XIR_RUN_FRAME_LIMIT: reason = XR_XIR_CALL_LIMIT; break;
         default: reason = XR_XIR_CALL_BAD_STATE; break;
     }
-    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, reason}};
+    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, reason}, {0}};
 }
 
 uint32_t xr_xir_call_current_entry(const XrXirCall *call) {
@@ -72,15 +73,32 @@ uint32_t xr_xir_call_current_entry(const XrXirCall *call) {
 XrXirCallStatus xr_xir_call_state(const XrXirCall *call) {
     return !call ? XR_XIR_CALL_BAD_ARGUMENT : call->driving ? XR_XIR_CALL_BUSY : call->result.status;
 }
+XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view) {
+    if (!view || !view->activation) return NULL;
+    XrXirCall *call = view->activation;
+    if (!call->driving || call->cleaning || !call->top || call->active_view != view)
+        return NULL;
+    const CallFrame *frame = call->top;
+    if (view->instance != call->config.instance || view->environment != frame->entry->environment ||
+        view->state != frame->state || view->arguments != frame->arguments ||
+        view->argument_count != frame->entry->parameter_count || view->arena != call->config.admission.arena)
+        return NULL;
+    return &call->config.admission;
+}
 
 static XrXirCallResult call_result(XrXirCallStatus status) {
-    return (XrXirCallResult) {status, {XR_XIR_UNIT, 0, 0}, 0};
+    return (XrXirCallResult) {status, {XR_XIR_UNIT, 0, 0}, 0, {0}};
 }
 
 static bool boundary_value(XrXirValue value, XrXirType type) {
     if (type == XR_XIR_UNIT)
         return value.type == XR_XIR_UNIT && !value.reserved && !value.payload;
     return xr_xir_value_argument(&value, NULL, type);
+}
+
+XrXirAction xr_xir_call_bounds(int64_t index, int64_t length) {
+    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
+        {XR_XIR_I64, 0, XR_XIR_CALL_BOUNDS}, {430, 0, index, length}};
 }
 
 static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
@@ -342,6 +360,12 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
 }
 
 static void accept_action(XrXirCall *call, XrXirAction action) {
+    bool bounds = action.kind == XR_XIR_ACTION_FAULT &&
+        boundary_value(action.value, XR_XIR_I64) && action.value.payload == XR_XIR_CALL_BOUNDS;
+    if (bounds ? !xr_xir_fault_bounds_valid(action.fault) : !xr_xir_fault_empty(action.fault)) {
+        unwind(call, XR_XIR_CALL_BAD_STATE);
+        return;
+    }
     if (action.kind == XR_XIR_ACTION_OUTPUT || action.kind == XR_XIR_ACTION_WRITE_STREAM) {
         bool writing = action.kind == XR_XIR_ACTION_WRITE_STREAM;
         if (action.callee < XR_XIR_STDOUT || action.callee > XR_XIR_OUTPUT_LINE ||
@@ -404,10 +428,11 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_FAULT) {
         XrXirCallStatus reason = XR_XIR_CALL_BAD_STATE;
         if (boundary_value(action.value, XR_XIR_I64) &&
-            (action.value.payload == XR_XIR_CALL_NUMERIC_RANGE || action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
+            (bounds || action.value.payload == XR_XIR_CALL_NUMERIC_RANGE || action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
              action.value.payload == XR_XIR_CALL_LIMIT))
             reason = (XrXirCallStatus) action.value.payload;
         unwind(call, reason);
+        call->result.fault = action.fault;
         return;
     }
     if (action.kind == XR_XIR_ACTION_SUSPEND) {
@@ -462,7 +487,9 @@ XrXirCallResult xr_xir_call_poll(XrXirCall *call) {
         --call->polls_left;
         ++call->config.accounting->polls;
         XrXirCallView view = frame_view(call);
+        call->active_view = &view;
         XrXirAction action = call->top->entry->resume(&view);
+        call->active_view = NULL;
         if (call->cancel_requested)
             unwind(call, XR_XIR_CALL_CANCELLED);
         else accept_action(call, action);

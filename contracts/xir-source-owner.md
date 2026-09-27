@@ -17,8 +17,11 @@ component may outlive the other, the session, and the source files.
 
 Declaration IDs are nonzero indices stable within that snapshot. They are not
 portable across edits, checks, or sessions. Module indices refer to owned durable
-canonical identities and source-content fingerprints; physical paths are locators
-only. A reference preserves both the lexical declaration (including an import
+canonical identities and available source-content fingerprints; physical paths are locators
+only. A query-only native source module owns its generated LF content fingerprint
+and source path. A core registry module may expose only its stable identity: null
+path, zero coordinates and zero fingerprint explicitly mean unavailable source
+provenance, not a verified source-content digest. A reference preserves both the lexical declaration (including an import
 alias) and the resolved target. Captures preserve the original binding identity.
 Function declarations expose their checked signature; their type field is the
 result type. Other typed declarations expose their value type. A type carries its
@@ -30,6 +33,15 @@ identify a callable. Callable parameter payloads are independently owned too.
 Source interning places child nodes before parents. Mutable generic captures
 preserve the original lexical owner even when their shared CELL node is reused
 by another declaration with the same parameter ordinal.
+
+Governed native type, type-parameter, member and core-intrinsic records use
+distinct declaration kinds. The native identity field is interpreted under that
+kind and parent declaration. A generic type constructor is not an ordinary value
+type. Member signature text is independently owned; abstract element type facts
+carry the schema declaration owner, not the calling function's T owner. A direct
+core length query exposes its i64 result and one abstract operand with unknown
+ordinary value type; it does not masquerade as an executable first-class callable.
+Successful type uses and calls record resolved identities only after admission.
 
 Source ranges use 1-based lines and UTF-8 byte columns, with exclusive ends.
 Zero coordinates mean unavailable, never a guessed location; parameter names use
@@ -106,7 +118,7 @@ same-source Checked/native package, not serialized/cache publication qualificati
 
 This admission work does not qualify complete parser OOM recovery, source input
 budgets, stdlib publication, default CLI migration, foreign output providers,
-ordinary generics or product cutover. The reused parser currently contains fatal
+the complete generic language surface or product cutover. The reused parser currently contains fatal
 allocation checks; those remain explicit qualification debt and must be repaired.
 
 verification-test: test_xir_source
@@ -120,11 +132,13 @@ verification-test: meta_ownership_inventory
 
 Structured control and local place semantics follow `xir-local-control-flow.md`.
 
-The constructed-type foundation does not yet admit source Array annotations,
-literals, methods or indexed reads/writes. ARRAY descriptors may be represented
-and queried by the shared metadata machinery; this is not an additional checker
-or evidence that Array execution is implemented. The first Array operation family
-must use the same source owner and Built/Checked/specialization/Lowered pipeline.
+The source Array family follows `xir-array-source.md`: annotations, contextual
+literals, ordinary value copies, indexed reads/writes, governed get/set/push,
+and the stable global len identity use this same owner and the same
+Built/Checked/specialization/Lowered pipeline. Native inventory members without
+an admitted operation remain explicit errors. Root module slots and captured
+mutable cells produce logical places; read parameters and const bindings cannot
+grant mutation authority. No separate source checker or executable IR is added.
 
 The unshadowed compiler namespace Coro admits only Coro.yield() in this source
 family. It accepts no value/type arguments and returns unit. A lexical/module

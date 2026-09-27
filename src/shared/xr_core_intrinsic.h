@@ -32,14 +32,15 @@ typedef enum XrCoreBuiltinId {
     XR_CORE_BUILTIN_##id = stable_id,
 #include "xr_core_intrinsic.def"
 #undef XR_CORE_INTRINSIC
-    XR_CORE_BUILTIN_ID_LIMIT = 6,
-    XR_CORE_BUILTIN_COUNT = 5,
+    XR_CORE_BUILTIN_ID_LIMIT = 7,
+    XR_CORE_BUILTIN_COUNT = 6,
 } XrCoreBuiltinId;
 
 typedef enum XrCoreIntrinsicCategory {
     XR_CORE_INTRINSIC_CATEGORY_NONE = 0,
     XR_CORE_INTRINSIC_CATEGORY_ASSERTION,
     XR_CORE_INTRINSIC_CATEGORY_OUTPUT,
+    XR_CORE_INTRINSIC_CATEGORY_LENGTH,
     XR_CORE_INTRINSIC_CATEGORY_COUNT,
 } XrCoreIntrinsicCategory;
 
@@ -56,12 +57,14 @@ typedef enum XrCoreIntrinsicParameterShape {
     XR_CORE_INTRINSIC_PARAMETER_SHAPE_SAME_TYPE_PAIR_OPTIONAL_MESSAGE,
     XR_CORE_INTRINSIC_PARAMETER_SHAPE_ACTION_OPTIONAL_MESSAGE,
     XR_CORE_INTRINSIC_PARAMETER_SHAPE_VARIADIC_VALUES,
+    XR_CORE_INTRINSIC_PARAMETER_SHAPE_LENGTHABLE_VALUE,
     XR_CORE_INTRINSIC_PARAMETER_SHAPE_COUNT,
 } XrCoreIntrinsicParameterShape;
 
 typedef enum XrCoreIntrinsicResultShape {
     XR_CORE_INTRINSIC_RESULT_SHAPE_NONE = 0,
     XR_CORE_INTRINSIC_RESULT_SHAPE_UNIT,
+    XR_CORE_INTRINSIC_RESULT_SHAPE_I64,
     XR_CORE_INTRINSIC_RESULT_SHAPE_COUNT,
 } XrCoreIntrinsicResultShape;
 
@@ -70,6 +73,7 @@ typedef enum XrCoreIntrinsicEffectKind {
     XR_CORE_INTRINSIC_EFFECT_MAY_PANIC,
     XR_CORE_INTRINSIC_EFFECT_INVOKES_ACTION_MAY_PANIC,
     XR_CORE_INTRINSIC_EFFECT_OUTPUT_MAY_PANIC,
+    XR_CORE_INTRINSIC_EFFECT_READS_VALUE,
     XR_CORE_INTRINSIC_EFFECT_COUNT,
 } XrCoreIntrinsicEffectKind;
 
@@ -95,6 +99,7 @@ typedef enum XrCoreIntrinsicSemanticOp {
     XR_CORE_INTRINSIC_SEMANTIC_OP_ASSERT_THROWS,
     XR_CORE_INTRINSIC_SEMANTIC_OP_ASSERT_PANICS,
     XR_CORE_INTRINSIC_SEMANTIC_OP_PRINT_GROUP,
+    XR_CORE_INTRINSIC_SEMANTIC_OP_LENGTH,
     XR_CORE_INTRINSIC_SEMANTIC_OP_COUNT,
 } XrCoreIntrinsicSemanticOp;
 
@@ -110,6 +115,8 @@ typedef enum XrCoreIntrinsicTargetApplicability {
     XR_CORE_INTRINSIC_TARGET_OUTPUT_ALL =
         XR_CORE_INTRINSIC_TARGET_VM | XR_CORE_INTRINSIC_TARGET_AOT_HOSTED |
         XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_OUTPUT_PROVIDER,
+    XR_CORE_INTRINSIC_TARGET_LENGTH_ALL =
+        XR_CORE_INTRINSIC_TARGET_VM | XR_CORE_INTRINSIC_TARGET_AOT_HOSTED,
 } XrCoreIntrinsicTargetApplicability;
 
 typedef struct XrCoreIntrinsicDesc {
@@ -134,6 +141,7 @@ XR_FUNC const XrCoreIntrinsicDesc *xr_core_intrinsic_by_source_name(const char *
                                                                     size_t length);
 XR_FUNC size_t xr_core_intrinsic_count(void);
 XR_FUNC const XrCoreIntrinsicDesc *xr_core_intrinsic_at(size_t index);
+XR_FUNC bool xr_core_intrinsic_descriptor_validate(const XrCoreIntrinsicDesc *descriptor);
 XR_FUNC bool xr_core_intrinsic_registry_validate(char *error, size_t error_size);
 
 #endif  // XR_CORE_INTRINSIC_H

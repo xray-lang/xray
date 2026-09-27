@@ -73,6 +73,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #define xr_realloc(pointer, size) counted_realloc(pointer, size)
 
 #include "xir/xxir_types.c"
+#include "xir/xxir_type_layout.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"
 #include "xir/xxir_declarations.c"
@@ -253,10 +254,10 @@ static XrXirAction allocation_resume(XrXirCallView *view) {
     if (!frame->entered && view->arguments[0].payload) {
         frame->entered = true;
         frame->argument = (XrXirValue) {XR_XIR_I64, 0, view->arguments[0].payload - 1};
-        return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &frame->argument, 1, {0, 0, 0}};
+        return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &frame->argument, 1, {0, 0, 0}, {0}};
     }
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0,
-        frame->entered ? view->inbox.value.payload + 1 : 0}};
+        frame->entered ? view->inbox.value.payload + 1 : 0}, {0}};
 }
 
 static size_t call_allocation_failures(void) {

@@ -5256,7 +5256,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "%sXrAotResult ", cleanup_capacity > 0 ? "static " : cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f,
                       cleanup_capacity > 0 ? "_aot_resume_raw" : "_aot_resume");
-    fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
+    fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n    (void)ctx;\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " *f = (");

@@ -9312,6 +9312,10 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         case XI_BOX:
             /* Representation boxing also prints its scalar literal directly. */
             return arg_index == 0 && user->nargs == 1;
+        case XI_NEG:
+            /* Every negation representation emits its operand through the
+             * literal-aware converter, so no separate constant local is read. */
+            return arg_index == 0 && user->nargs == 1;
         case XI_AS:
             /* xicgen_as routes scalar operands through emit_value_as_rep_ctx()
              * for both representation-only and runtime-checked casts. */
@@ -11369,12 +11373,34 @@ static const XiValue *cg_block_musttail_call(XiCgenCtx *ctx, const XiFunc *f, co
     return call;
 }
 
+static bool cg_block_needs_label(const XiFunc *f, const XiBlock *blk) {
+    if (blk->id == 0)
+        return false;
+    if (blk == f->entry || blk->kind != XI_BLOCK_PLAIN || blk->nvalues != 0 || blk->phis ||
+        blk->control || blk->succs[0] || blk->succs[1] || blk->npreds != 0)
+        return true;
+
+    /* An empty panic landing block may remain after its TRY is removed. */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *source = f->blocks[bi];
+        if (!source)
+            continue;
+        if (source->succs[0] == blk || source->succs[1] == blk)
+            return true;
+        for (uint32_t vi = 0; vi < source->nvalues; vi++) {
+            const XiValue *value = source->values[vi];
+            if (value && value->op == XI_TRY && value->aux == blk)
+                return true;
+        }
+    }
+    return false;
+}
+
 static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *blk,
                        const char *prefix) {
     XR_DCHECK(blk != NULL, "emit_block: NULL block");
 
-    /* Label (skip for entry block b0 to reduce clutter) */
-    if (blk->id != 0)
+    if (cg_block_needs_label(f, blk))
         fprintf(out, "L%u:;\n", blk->id);
     emit_typed_array_final_len_stores(ctx, out, f, blk);
 

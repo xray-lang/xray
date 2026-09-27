@@ -15,6 +15,8 @@
 #include "xxir_vm.h"
 #include "xxir_float.h"
 #include "xxir_types.h"
+#include "xxir_array_helpers.h"
+#include "xxir_instance_array.h"
 #include "../base/xmalloc.h"
 
 typedef struct ScalarRun {
@@ -113,6 +115,60 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
     return XR_XIR_RUN_OK;
 }
 
+static XrXirValue vm_array_operand(const ScalarRun *run, uint32_t id) {
+    return (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
+        xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
+}
+static XrXirArrayReceiver vm_array_receiver(const ScalarRun *run, uint32_t id) {
+    XrXirArrayReceiver receiver = {0};
+    receiver.type = xr_xir_operand_type(run->function, id);
+    XrXirPlaceKind kind = xr_xir_place_kind(run->function, id);
+    if (kind == XR_XIR_PLACE_NONE) receiver.value = vm_array_operand(run, id);
+    else if (kind == XR_XIR_PLACE_LOCAL) {
+        receiver.kind = XR_XIR_ARRAY_LOCAL;
+        receiver.local_payload = (unsigned char *) run->frame + run->layout->offsets[id];
+    } else {
+        const XrXirInstruction *place = &run->function->instructions[id - run->function->parameter_count];
+        if (kind == XR_XIR_PLACE_CELL) {
+            receiver.kind = XR_XIR_ARRAY_CELL;
+            receiver.value = vm_array_operand(run, place->args[0]);
+        } else {
+            receiver.kind = XR_XIR_ARRAY_SLOT;
+            receiver.slot = (uint32_t) place->immediate;
+        }
+    }
+    return receiver;
+}
+static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
+    const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
+    if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+    XrXirValue output = {0};
+    XrXirFaultDetail fault = {0};
+    XrXirCallStatus status;
+    if (op->op == XR_XIR_ARRAY_NEW) {
+        for (uint32_t i = 0; i < op->args[1]; ++i)
+            state->arguments[i] = vm_array_operand(run, run->function->operands[op->args[0] + i]);
+        status = xr_xir_instance_array_new(run->view, op->type, state->arguments, op->args[1], &output);
+    } else {
+        bool setting = op->op == XR_XIR_ARRAY_SET;
+        const uint32_t *args = setting ? &run->function->operands[op->args[0]] : op->args;
+        XrXirArrayReceiver receiver = vm_array_receiver(run, args[0]);
+        int64_t index = setting || op->op == XR_XIR_ARRAY_GET ? vm_array_operand(run, args[1]).payload : 0;
+        if (setting || op->op == XR_XIR_ARRAY_PUSH) {
+            XrXirValue element = vm_array_operand(run, args[setting ? 2 : 1]);
+            status = xr_xir_instance_array_write(run->view, &receiver, index, &element, !setting, &fault);
+        } else status = xr_xir_instance_array_read(run->view, &receiver, index,
+            op->op == XR_XIR_ARRAY_LEN, &output, &fault);
+    }
+    if (status != XR_XIR_CALL_READY) {
+        *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, fault};
+        return XR_XIR_RUN_OK;
+    }
+    if (xr_xir_type_is_owned(run->module->types, op->type)) xr_xir_owned_slot_move(run->frame, destination, &output);
+    else if (op->type != XR_XIR_UNIT) xr_xir_scalar_store(run->frame, destination, output.payload);
+    return XR_XIR_RUN_OK;
+}
+
 static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t target) {
     const XrXirFunction *function = run->function;
     uint32_t low = 0, high = function->block_count;
@@ -159,7 +215,7 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
             xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
         XrXirCallStatus status = xr_xir_instance_resolve_function(run->view, &value, &callee);
         if (status != XR_XIR_CALL_READY) {
-            *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}};
+            *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}};
             return XR_XIR_RUN_OK;
         }
     }
@@ -169,7 +225,7 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
             xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
     }
     state->waiting = true; state->destination = destination; state->expected = op->type;
-    *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], value};
+    *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], value, {0}};
     return XR_XIR_RUN_OK;
 }
 
@@ -186,7 +242,15 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     uint32_t result_id = run->function->parameter_count + instruction;
     uint32_t next = instruction + 1;
     int64_t value = 0;
-    *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}};
+    *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}};
+    if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE) {
+        state->instruction = next;
+        return XR_XIR_RUN_OK;
+    }
+    if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
+        state->instruction = next;
+        return vm_array_step(run, state, op, run->layout->offsets[result_id], action);
+    }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE)) {
         state->instruction = next;
@@ -254,7 +318,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         }
         *action = (XrXirAction) {op->op == XR_XIR_WRITE_STREAM ? XR_XIR_ACTION_WRITE_STREAM : XR_XIR_ACTION_OUTPUT,
             op->op == XR_XIR_PRINT ? XR_XIR_OUTPUT_LINE :
-            (uint32_t) op->immediate, state->arguments, count, {0}};
+            (uint32_t) op->immediate, state->arguments, count, {0}, {0}};
         state->instruction = next;
         return XR_XIR_RUN_OK;
     }
@@ -301,7 +365,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         break;
     case XR_XIR_THROW:
         *action = (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {XR_XIR_I64, 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}};
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}};
         return XR_XIR_RUN_OK;
     case XR_XIR_RETURN:
         action->kind = XR_XIR_ACTION_RETURN;
@@ -328,14 +392,14 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     state->arguments = (XrXirValue *) ((unsigned char *) run.frame + layout->frame_bytes);
     if (!state->initialized) {
         if (view->argument_count != function->parameter_count)
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
         for (uint32_t i = 0; i < view->argument_count; ++i)
             if (!xr_xir_value_argument(&view->arguments[i], view->arena, function->parameters[i]))
-                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
+                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
         for (uint32_t i = 0; i < view->argument_count; ++i) {
             if (xr_xir_type_is_owned(module->types, function->parameters[i])) {
                 if (xr_xir_owned_slot_copy(run.frame, layout->offsets[i], view->arena, function->parameters[i], view->arguments[i].payload) != XR_XIR_VALUE_OK)
-                    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}};
+                    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}};
             } else xr_xir_scalar_store(run.frame, layout->offsets[i], view->arguments[i].payload);
         }
         state->initialized = true;
@@ -343,16 +407,16 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     if (state->waiting) {
         state->waiting = false;
         if (view->inbox.status == XR_XIR_CALL_THROWN)
-            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value};
+            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value, {0}};
         if (view->inbox.status != XR_XIR_CALL_RETURNED)
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
         if (state->expected == XR_XIR_UNIT ?
             (view->inbox.value.type != XR_XIR_UNIT || view->inbox.value.reserved || view->inbox.value.payload) :
             !xr_xir_value_argument(&view->inbox.value, view->arena, state->expected))
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
         if (xr_xir_type_is_owned(module->types, state->expected)) {
             if (xr_xir_owned_slot_copy(run.frame, state->destination, view->arena, state->expected, view->inbox.value.payload) != XR_XIR_VALUE_OK)
-                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}};
+                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}};
         } else if (state->destination != UINT32_MAX)
             xr_xir_scalar_store(run.frame, state->destination, view->inbox.value.payload);
     }

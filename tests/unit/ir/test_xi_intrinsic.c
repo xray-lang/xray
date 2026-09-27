@@ -572,6 +572,28 @@ static void test_core_intrinsic_registry(void) {
                     print->target_applicability == XR_CORE_INTRINSIC_TARGET_OUTPUT_ALL,
                 "print must be direct-only because heterogeneous arguments need one call-site plan");
 
+    const XrCoreIntrinsicDesc *length = xr_core_intrinsic_by_id(XR_CORE_BUILTIN_LEN);
+    ASSERT_TRUE(length && length->id == 6 &&
+                    xr_core_intrinsic_by_source_name("len", 3) == length &&
+                    length->category == XR_CORE_INTRINSIC_CATEGORY_LENGTH &&
+                    length->parameter_shape == XR_CORE_INTRINSIC_PARAMETER_SHAPE_LENGTHABLE_VALUE &&
+                    length->result_shape == XR_CORE_INTRINSIC_RESULT_SHAPE_I64 &&
+                    length->effect == XR_CORE_INTRINSIC_EFFECT_READS_VALUE &&
+                    length->min_arity == 1 && length->max_arity == 1,
+                "len must bind a distinct exact i64-returning query identity");
+    XrCoreIntrinsicDesc invalid_length = *length;
+    invalid_length.result_shape = XR_CORE_INTRINSIC_RESULT_SHAPE_UNIT;
+    ASSERT_TRUE(!xr_core_intrinsic_descriptor_validate(&invalid_length),
+                "len cannot borrow the unit result shape of assertions or output");
+    invalid_length = *length;
+    invalid_length.min_arity = 0;
+    ASSERT_TRUE(!xr_core_intrinsic_descriptor_validate(&invalid_length),
+                "len requires exactly one declared value argument");
+    invalid_length = *length;
+    invalid_length.effect = XR_CORE_INTRINSIC_EFFECT_OUTPUT_MAY_PANIC;
+    ASSERT_TRUE(!xr_core_intrinsic_descriptor_validate(&invalid_length),
+                "another operation's effect cannot grant length-query authority");
+
     const char *removed[] = {"likely",       "unlikely",   "assert_true",  "assert_false",
                              "assert_eq",    "assert_ne",   "assert_throws", NULL};
     for (size_t i = 0; removed[i]; i++) {

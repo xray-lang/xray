@@ -12,13 +12,15 @@ must originate from constructors or owned copies. This trusted native interface
 does not validate forged/dangling pointers or accept serialized pointer bytes.
 
 Constructed IDs are local to an independently owned TypeArena under
-`xir-constructed-types.md`. A function or cell object owns that arena; its kind
+`xir-constructed-types.md`. A function, cell or Array object owns that arena; its kind
 and element/signature are resolved from the verified pool. Copy/drop validates
 the object's own metadata, while execution admission additionally requires the
 expected arena and type. Equal numeric IDs from separately sealed arenas do not
 grant interchangeability. The carrier size alone does not preserve an older ABI.
-ARRAY descriptors participate in this metadata foundation; runtime Array objects,
-backing storage, COW mutation and their physical-release evidence remain OPEN.
+Array backing, compact owned elements, allocation-domain accounting, bounded
+admission, COW mutation and release are governed by `xir-array-storage.md`.
+Registering that contract does not establish implementation or qualification;
+its runtime and complete-program evidence remain OPEN until actually executed.
 
 Strings own strict UTF-8, including embedded NUL. No normalization or replacement
 occurs. Length queries distinguish bytes from Unicode scalar count, neither is a
@@ -38,7 +40,7 @@ in place when capacity permits and reallocates its byte buffer otherwise; shared
 storage separates. Self-append is valid. Failure preserves the original value,
 published copies, and live accounting. Capacity is an implementation detail.
 
-Call ABI 13 admits strings and Atomic<i64> identity values, with function/cell
+Call ABI 14 admits strings and Atomic<i64> identity values, with function/cell
 rules governed by their respective contracts. Its typed entry, action and inbox
 boundaries carry the expected arena. Arguments are borrowed at admission and copied into
 owned frame storage before publication. Resume arguments/inbox and action return
@@ -49,7 +51,7 @@ an untaken result. Taking a result needs no allocation and the resulting owned
 value survives activation and input destruction. Frame cleanup runs before its
 arguments and inbox are dropped. Failure/cancellation publishes no partial result.
 
-Typed output is an explicit synchronous provider effect. Call ABI 13 uses a
+Typed output is an explicit synchronous provider effect. Call ABI 14 uses a
 borrowed typed group. Raw output has one value and
 names stdout or stderr. Line output names stdout and carries zero or more
 bool/i64/string values: arguments evaluate left to right before one provider call.

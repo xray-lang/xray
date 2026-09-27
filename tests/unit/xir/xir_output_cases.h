@@ -94,7 +94,7 @@ static XrXirAction malformed_write(XrXirCallView *view) {
     uint32_t mode = *(const uint32_t *) view->environment;
     XrXirValue *argument = view->state;
     *argument = view->arguments[0];
-    XrXirAction action = {XR_XIR_ACTION_WRITE_STREAM, 2, argument, 1, {0}};
+    XrXirAction action = {XR_XIR_ACTION_WRITE_STREAM, 2, argument, 1, {0}, {0}};
     switch (mode) {
     case 0: action.argument_count = 0; break;
     case 1: action.argument_count = 2; break;

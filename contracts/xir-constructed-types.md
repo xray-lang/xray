@@ -108,6 +108,9 @@ The three initial constructed kinds use managed handles, but their common
 physical width grants no type conversion. Abstract copy/drop is discharged only
 after concrete type verification. Runtime array element access uses the admitted
 element descriptor, checked length/stride arithmetic, and its copy/drop rules.
+`xir-array-values.md` owns exact opcode/place/operand roles and the one shared
+compact-layout service; `xir-array-storage.md` owns backing/COW publication and
+physical accounting. Neither contract grants kind authority from equal widths.
 
 ## TypeArena ownership
 
@@ -239,26 +242,25 @@ before publishing an owned artifact. The digest provides content integrity, not
 authentication or semantic authority. A packet with a recomputed digest but an
 invalid graph or forged span must still fail.
 
-| Revision | Cutover value | Why this cutover requires it |
+The unified-pool foundation established schema 5, semantic 14, Value9, Call13
+and Program8. The Array operation/fault cutover replaces its current admission
+boundary atomically as follows; there is only one current reader/executor.
+
+| Revision | Current cutover value | Reason |
 |---|---:|---|
-| Checked schema | 4 → 5 | The serialized callable section becomes the unified tagged pool; old packets cannot be decoded under the new field traversal. |
-| Checked semantic contract | 13 → 14 | Constructed-kind identity, CELL interpretation, ARRAY obligations, generic substitution, and boundary admission rules change. |
-| Value ABI | 8 → 9 | Constructed IDs and cell encoding change; self-owned arena metadata becomes part of their interpretation. A carrier remaining 16 bytes/eight-aligned does not preserve the old ABI semantics. |
-| Call ABI | 12 → 13 | Every typed call/action/result/inbox boundary must receive the correct arena and perform the new transitive admission; old generated entries lack this contract. |
-| Program ABI | 7 → 8 | Program specifications/sealed metadata replace callable-only tables with the unified closed pool and arena ownership. |
+| Checked schema | 5 (unchanged) | Tagged pool and fixed instruction records retain their exact wire traversal. |
+| Checked semantic contract | 15 | Tags 63..69, Array operand/place/permission rules and role-aware layout become part of admission. |
+| Value ABI | 9 (unchanged) | The carrier and `(TypeArena, local type ID)` identity stay fixed; Array objects obey that existing owned identity. |
+| Call ABI | 14 | Typed Bounds detail crosses actions, results and unwind under `xir-resumable-calls.md`. |
+| Program ABI | 9 | Instance initialization/sticky failure copy preserves the full fault under `xir-program-instance.md`. |
 
-All five changes land together for the adopted cutover, with corresponding
-target/value versions, native entry checks, cache identities, emitters, loaders,
-tests, and bilingual spec references updated in the same batch. Reject older
-revisions and mixed-version entries rather than adapting them. Native caches
-must bind exact semantic/target ABI and type/signature identity; a coincident
-local node index is insufficient.
-
-Pool allocation strategy, search hashing, arena sharing versus an owned seal-time
-clone, COW capacity choices, and iterative worklist implementation do not each
-require an additional revision when they preserve the frozen wire/ABI and
-observable contract. They also cannot be used to avoid the five required
-revisions above. Numeric tags and wire traversal above are required by this cutover.
+Semantic15/Call14/Program9 land together with target/native entry checks, cache
+identities, emitters, consumers and tests. Reject older and mixed versions,
+rather than adapting them. A matching digest, local node index or carrier width
+is insufficient. No physical Array backing, place address or cached layout is
+serialized. Pool allocation strategy, hashing, arena clone/sharing, COW capacity
+and worklist implementation do not independently revise the ABI when they
+preserve this frozen observable boundary.
 
 ## Required gate responsibilities — implementation qualification OPEN
 
@@ -286,6 +288,11 @@ execution is claimed here.
 
 
 ## Logical places and owned Array operations
+
+The exact opcode, role, effect and layout authority is `xir-array-values.md`;
+the backing/rollback authority is `xir-array-storage.md`. The obligations below
+apply to that same family; they do not establish a second representation or
+declare the family implemented.
 
 The Array declaration is a value type with one ordinary copyable/storable element
 parameter. Array literals, explicit type annotations, logical copies, index get
@@ -333,9 +340,10 @@ side effects remain. Assignment's returned T is independently owned.
 
 Bounds are i64 0 <= index < length and map to E0430 in the panic/fault channel,
 with the signed index and observed length preserved. They must not be reported as
-NUMERIC_RANGE, BAD_STATE, business throw or allocation failure. The call/action
-fault-detail representation and native/VM checks must be frozen before implementing
-the first indexing opcode. Allocation, retain-limit and admission-work failures
+NUMERIC_RANGE, BAD_STATE, business throw or allocation failure. The Call14 and
+Program9 detail representation, action verification and sticky propagation are
+owned by `xir-resumable-calls.md` and `xir-program-instance.md`; both VM and native
+must use that same boundary. Allocation, retain-limit and admission-work failures
 retain their distinct existing channels.
 
 Initial cell/slot publication may retain the initial Array SSA owner until frame

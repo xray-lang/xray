@@ -112,6 +112,10 @@ XIR_TESTS = (
     "test_xir_generics",
     "test_xir_source_generics",
     "test_xir_source_query",
+    "test_xir_source_arrays",
+    "test_xir_array_packet_vm",
+    "test_xir_source_array_native",
+    "test_xir_source_array_mixed",
     "test_xir_locals",
     "test_xir_local_native",
 )

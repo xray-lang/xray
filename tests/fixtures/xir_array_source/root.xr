@@ -1,0 +1,98 @@
+import "./producer" as producer
+
+var a = producer.words()
+const original = a
+print(a[0])
+print(a[1])
+print(len(a))
+a[0] = "green"
+print(a[0])
+print(original[1])
+a.push(a[0])
+print(a[2])
+print(len(a))
+
+export fn result() -> Array<string> { return a }
+export fn originalFirst() -> string { return original[0] }
+export fn advance() -> i64 { a.push("tail"); return len(a) }
+fn replace() -> string { a = ["new", "value", "rhs"]; return "changed" }
+export fn rebound() -> string { a[2] = replace(); return a[2] }
+fn index() -> i64 { a = ["after"]; return 0 }
+export fn snapshot() -> string { a = ["before"]; return a[index()] }
+export fn methodSnapshot() -> string { a = ["before"]; return a.get(index()) }
+fn shorten() -> string { a = ["only"]; return "rhs" }
+export fn reboundFault() { a = ["old", "two"]; a[1] = shorten() }
+export fn current() -> string { return a[0] }
+export fn assignResult() -> string {
+    var b = ["x"]
+    const rhs = (b[0] = "result")
+    b[0] = "later"
+    return rhs
+}
+export fn local() -> i64 {
+    var values: Array<i64> = []
+    values.push(5)
+    const old = values
+    values.set(0, 6)
+    values.push(values.get(0))
+    return values[0] + values[1] + old[0]
+}
+export fn captured() -> i64 {
+    var values = [7]
+    const append = fn() { values.push(values[0]) }
+    append()
+    return len(values)
+}
+fn first<T>(values: Array<T>) -> T { return values[0] }
+export fn generic() -> string { return first<string>(["generic"]) }
+export fn nested() -> string { const values = [["nested"]]; return values[0][0] }
+export fn importedLength() -> string { return producer.len("shadow") }
+export fn localLength() -> string {
+    const len = fn(value: string) -> string { return value + "?" }
+    return len("shadow")
+}
+export fn selfPush() -> Array<string> {
+    var values = ["seed"]
+    for (var i = 0; i < 1024; i++) { values.push(values[0]) }
+    return values
+}
+
+var trace = 0
+export fn orderTrace() -> i64 { return trace }
+fn orderedIndex() -> i64 { trace = trace * 10 + 1; return 1 }
+fn orderedValue() -> string { trace = trace * 10 + 2; return "ordered" }
+export fn setOrder() -> string {
+    trace = 0
+    a = ["left", "right"]
+    a[orderedIndex()] = orderedValue()
+    return a[1]
+}
+fn getSuspendedIndex() -> i64 {
+    trace = trace * 10 + 1
+    Coro.yield()
+    a = ["newGet"]
+    trace = trace * 10 + 2
+    return 0
+}
+export fn suspendedSnapshot() -> string {
+    trace = 0
+    a = ["oldGet"]
+    return a[getSuspendedIndex()]
+}
+fn setSuspendedIndex() -> i64 {
+    trace = trace * 10 + 1
+    Coro.yield()
+    trace = trace * 10 + 2
+    return 1
+}
+fn setSuspendedValue() -> string {
+    trace = trace * 10 + 3
+    a = ["newSet", "untouched"]
+    return "stored"
+}
+export fn suspendedSet() -> string {
+    trace = 0
+    a = ["oldSet"]
+    a[setSuspendedIndex()] = setSuspendedValue()
+    return a[1]
+}

@@ -18,6 +18,7 @@
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
+#include "../../../src/shared/xnative_declaration.h"
 #include "../../../src/analysis/xglobal_summary.h"
 #include "../../../src/runtime/class/xclass.h"
 #include "../../../src/runtime/class/xenum.h"
@@ -71,6 +72,41 @@ TEST(native_type_methods_match_runtime_tables) {
 
 TEST(native_type_protocol_rejects_null_isolate) {
     ASSERT_EQ_INT(xa_native_verify_protocol(NULL), -1);
+}
+
+TEST(native_array_value_declaration_is_shared) {
+    const XrNativeTypeDeclaration *declaration = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+    ASSERT_NOT_NULL(declaration);
+    ASSERT_TRUE(xr_native_declaration_validate(declaration));
+    const XaBuiltinType *array = xa_builtin_get_by_name(declaration->name);
+    ASSERT_NOT_NULL(array);
+    ASSERT_EQ_INT(array->declaration_kind, XR_NATIVE_DECLARATION_VALUE);
+    ASSERT_EQ_INT(array->member_count, declaration->member_count);
+    const XrNativeMemberDeclaration *get = xr_native_declaration_member(declaration, "get");
+    const XrNativeMemberDeclaration *set = xr_native_declaration_member(declaration, "set");
+    const XrNativeMemberDeclaration *push = xr_native_declaration_member(declaration, "push");
+    ASSERT_NOT_NULL(get); ASSERT_NOT_NULL(set); ASSERT_NOT_NULL(push);
+    ASSERT_EQ_INT(get->result, XR_NATIVE_TERM_ELEMENT);
+    ASSERT_EQ_INT(get->allocation, XR_NATIVE_ALLOCATION_MAY_HEAP);
+    ASSERT_TRUE(strstr(get->failures, "allocation") != NULL);
+    ASSERT_EQ_INT(set->allocation, XR_NATIVE_ALLOCATION_MAY_HEAP);
+    ASSERT_EQ_INT(push->result, XR_NATIVE_TERM_UNIT);
+    for (uint32_t i = 0; i < declaration->member_count; ++i) {
+        const XaBuiltinMember *member = find_type_member(declaration->name, declaration->members[i].name);
+        ASSERT_NOT_NULL(member);
+        ASSERT_STR_EQ(member->signature, declaration->members[i].signature);
+    }
+    ASSERT_EQ_INT(find_type_member("Array", "set")->allocation_contract, XA_ALLOCATION_CONTRACT_MAY_HEAP);
+    ASSERT_EQ_INT(find_type_member("Array", "get")->return_ownership, XA_BUILTIN_RETURN_FRESH);
+    XrNativeTypeDeclaration mutation = *declaration;
+    mutation.kind = XR_NATIVE_DECLARATION_IDENTITY;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration;
+    mutation.source_fingerprint.bytes[0] ^= 1;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration;
+    mutation.member_count--;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
 }
 
 TEST(native_receiver_alias_contracts_are_typed_data) {
@@ -279,6 +315,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("stdlib/native-type-surface");
 RUN_TEST(native_type_methods_match_runtime_tables);
 RUN_TEST(native_type_protocol_rejects_null_isolate);
+RUN_TEST(native_array_value_declaration_is_shared);
 RUN_TEST(native_receiver_alias_contracts_are_typed_data);
 RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
 RUN_TEST(native_module_object_and_enum_metadata);

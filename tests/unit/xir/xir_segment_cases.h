@@ -45,9 +45,9 @@ static XrXirAction segment_resume(XrXirCallView *view) {
         memset((unsigned char *) state + sizeof(*state), (int) (level + 1), w->state_bytes - sizeof(*state));
         state->phase = 1;
         segment_check(view);
-        if (!level) return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0}};
+        if (!level) return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0}, {0}};
         state->child = (XrXirValue) {XR_XIR_I64, 0, level - 1};
-        return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0}, {0}};
     }
     segment_check(view);
     if (level) {
@@ -55,15 +55,15 @@ static XrXirAction segment_resume(XrXirCallView *view) {
         CHECK(__asan_address_is_poisoned(w->states[level - 1]));
 #endif
         if (view->inbox.status == XR_XIR_CALL_THROWN)
-            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value};
+            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value, {0}};
         CHECK(view->inbox.status == XR_XIR_CALL_RETURNED && view->inbox.value.payload == level - 1);
         if (level == w->root && state->phase++ < w->passes) {
             w->last_cleanup = UINT32_MAX;
-            return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0}};
+            return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0}, {0}};
         }
     }
-    if (w->mode == 2) return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {XR_XIR_I64, 0, 71}};
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, level}};
+    if (w->mode == 2) return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {XR_XIR_I64, 0, 71}, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, level}, {0}};
 }
 static void segment_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     SegmentWitness *w = view->instance; SegmentState *state = view->state;
@@ -144,7 +144,7 @@ typedef struct SegmentCopyWitness { XrXirValue arguments[2]; unsigned cleanups; 
 static XrXirAction segment_copy_resume(XrXirCallView *view) {
     SegmentCopyWitness *w = view->instance;
     CHECK(!view->argument_count);
-    return (XrXirAction) {XR_XIR_ACTION_CALL, 1, w->arguments, 2, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_CALL, 1, w->arguments, 2, {0}, {0}};
 }
 static void segment_copy_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     SegmentCopyWitness *w = view->instance;

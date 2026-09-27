@@ -89,6 +89,9 @@ const XrCoreIntrinsicDesc *xr_core_intrinsic_by_source_name(const char *name, si
 }
 
 static bool descriptor_contract_is_valid(const XrCoreIntrinsicDesc *desc) {
+    if (!desc || desc->result_shape != (desc->id == XR_CORE_BUILTIN_LEN ?
+            XR_CORE_INTRINSIC_RESULT_SHAPE_I64 : XR_CORE_INTRINSIC_RESULT_SHAPE_UNIT))
+        return false;
     switch (desc->semantic_op) {
         case XR_CORE_INTRINSIC_SEMANTIC_OP_ASSERT_CONDITION:
             return desc->id == XR_CORE_BUILTIN_ASSERT && strcmp(desc->source_name, "assert") == 0 &&
@@ -140,9 +143,25 @@ static bool descriptor_contract_is_valid(const XrCoreIntrinsicDesc *desc) {
                    desc->flow_rule == XR_CORE_INTRINSIC_FLOW_NONE &&
                    desc->expected_failure_channel == XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE &&
                    desc->target_applicability == XR_CORE_INTRINSIC_TARGET_OUTPUT_ALL;
+        case XR_CORE_INTRINSIC_SEMANTIC_OP_LENGTH:
+            return desc->id == XR_CORE_BUILTIN_LEN && strcmp(desc->source_name, "len") == 0 &&
+                   desc->category == XR_CORE_INTRINSIC_CATEGORY_LENGTH &&
+                   desc->parameter_shape == XR_CORE_INTRINSIC_PARAMETER_SHAPE_LENGTHABLE_VALUE &&
+                   desc->min_arity == 1 && desc->max_arity == 1 &&
+                   desc->effect == XR_CORE_INTRINSIC_EFFECT_READS_VALUE &&
+                   desc->flow_rule == XR_CORE_INTRINSIC_FLOW_NONE &&
+                   desc->expected_failure_channel == XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE &&
+                   desc->target_applicability == XR_CORE_INTRINSIC_TARGET_LENGTH_ALL;
         default:
             return false;
     }
+}
+
+bool xr_core_intrinsic_descriptor_validate(const XrCoreIntrinsicDesc *descriptor) {
+    return descriptor && descriptor->source_name && descriptor->source_name[0] &&
+        descriptor->diagnostic_name && descriptor->diagnostic_name[0] &&
+        descriptor->call_form == XR_CORE_INTRINSIC_CALL_FORM_DIRECT_ONLY &&
+        descriptor_contract_is_valid(descriptor);
 }
 
 static XrAssertionKind assertion_kind_for_op(XrCoreIntrinsicSemanticOp op) {
@@ -414,14 +433,15 @@ bool xr_core_intrinsic_registry_validate(char *error, size_t error_size) {
         if (a->id <= XR_CORE_BUILTIN_NONE || a->id >= XR_CORE_BUILTIN_ID_LIMIT || !a->source_name ||
             !a->source_name[0] || !a->diagnostic_name || !a->diagnostic_name[0] ||
             a->call_form != XR_CORE_INTRINSIC_CALL_FORM_DIRECT_ONLY ||
-            a->min_arity > a->max_arity || a->result_shape != XR_CORE_INTRINSIC_RESULT_SHAPE_UNIT ||
+            a->min_arity > a->max_arity || a->result_shape == XR_CORE_INTRINSIC_RESULT_SHAPE_NONE ||
+            a->result_shape >= XR_CORE_INTRINSIC_RESULT_SHAPE_COUNT ||
             a->effect == XR_CORE_INTRINSIC_EFFECT_NONE ||
             a->effect >= XR_CORE_INTRINSIC_EFFECT_COUNT ||
             a->flow_rule >= XR_CORE_INTRINSIC_FLOW_COUNT ||
             a->expected_failure_channel >= XR_CORE_INTRINSIC_FAILURE_CHANNEL_COUNT ||
             a->semantic_op <= XR_CORE_INTRINSIC_SEMANTIC_OP_NONE ||
             a->semantic_op >= XR_CORE_INTRINSIC_SEMANTIC_OP_COUNT ||
-            !descriptor_contract_is_valid(a)) {
+            !xr_core_intrinsic_descriptor_validate(a)) {
             return set_error(error, error_size, "invalid core intrinsic descriptor: %s",
                              a->source_name ? a->source_name : "<unnamed>");
         }

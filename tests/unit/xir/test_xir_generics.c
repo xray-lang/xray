@@ -160,7 +160,10 @@ static void array_definition_constraints(void) {
     CHECK(xr_xir_type_satisfies(&built,0,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_BUDGET);
     xr_xir_artifact_free(fixture);
 }
+#include "xir_array_generic_cases.h"
+
 int main(void) {
+    array_generic_cases();
     array_definition_constraints();
     rejected_templates(); forwarding(); recursive_closure();
     XrXirArtifact *checked = generic_fixture(), *decoded = NULL, *closed = NULL, *lowered = NULL;

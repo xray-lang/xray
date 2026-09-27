@@ -15,6 +15,8 @@
 #include "xxir_types.h"
 #include "xxir_float.h"
 #include "../shared/xr_decimal_float.h"
+#include "../shared/xnative_declaration.h"
+#include "../shared/xr_core_intrinsic.h"
 #include "../module/xmodule_graph.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xast_walk.h"
@@ -73,6 +75,7 @@ typedef struct SourceContext {
     bool returned, has_generics, query_ready;
     XrXirSourceView query;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
+    uint32_t query_module_capacity, array_module, array_declaration, array_members[4], length_declaration;
 } SourceContext;
 
 static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, const char *message) {
@@ -142,7 +145,7 @@ static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
     symbol->declaration = ctx->query.declaration_count;
     *record = (XrXirSourceDeclaration) {symbol->declaration, parent, 0, kind, symbol->name, range,
         {0}, NULL, 0, symbol->mutable,
-        kind == XR_XIR_SOURCE_FUNCTION && !parent && symbol->node && symbol->node->is_exported};
+        kind == XR_XIR_SOURCE_FUNCTION && !parent && symbol->node && symbol->node->is_exported, 0, NULL};
     return true;
 }
 static void source_query_binding_type(SourceContext *ctx, SourceName *symbol) {
@@ -245,6 +248,7 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CELL, element,
         NULL, 0, XR_XIR_UNIT, 0, 0}, type);
 }
+#include "xxir_source_native.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     XrXirType type, uint32_t depth, XrXirType *output) {
@@ -324,6 +328,8 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
         }
         break;
     case XR_TREF_GENERIC:
+        if (ref->name && xr_native_declaration_by_name(ref->name))
+            return source_native_array_type(ctx, ref, type);
         if (ref->name && !strcmp(ref->name, "Atomic") && ref->nchildren == 1 &&
             ref->children[0]->kind == XR_TREF_SCALAR && ref->children[0]->scalar_rep == XR_NATIVE_I64) {
             *type = XR_XIR_ATOMIC_I64; return true;
@@ -545,6 +551,7 @@ static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
         !source_substitute(ctx,&arguments.substitution,function->result,0,&op->type)) return false;
     *substitution = arguments.substitution; return true;
 }
+#include "xxir_source_array.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -560,7 +567,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         const char *name = callee->as.variable.name;
         target = visible_name(ctx, name);
         binding = target;
-        if (!target) { print = !strcmp(name, "print"); atomic = !strcmp(name, "Atomic"); stream = stream_primitive(ctx, name); }
+        if (!target) {
+            const XrCoreIntrinsicDesc *intrinsic = xr_core_intrinsic_by_source_name(name, strlen(name));
+            if (intrinsic && intrinsic->id == XR_CORE_BUILTIN_LEN)
+                return source_array_length(ctx, node, intrinsic, value);
+            print = !strcmp(name, "print"); atomic = !strcmp(name, "Atomic"); stream = stream_primitive(ctx, name);
+        }
         if (target && target->kind == SOURCE_IMPORT) target = imported_function(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
@@ -574,7 +586,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         }
         if (base && base->kind == SOURCE_MODULE) { binding = base; target = imported_function(ctx, base, member->name); }
         else {
+            if (base && xr_xir_type_is_array(&ctx->types, base->type))
+                return source_array_call(ctx, node, NULL, value);
             if (!expression(ctx, member->object, &receiver)) return false;
+            if (xr_xir_type_is_array(&ctx->types, receiver.type))
+                return source_array_call(ctx, node, &receiver, value);
             if (receiver.type == XR_XIR_ATOMIC_I64) {
                 if (!strcmp(member->name, "load") && !call->arg_count) method = XR_XIR_ATOMIC_I64_LOAD;
                 if (!strcmp(member->name, "fetchAdd") && call->arg_count == 1) method = XR_XIR_ATOMIC_I64_FETCH_ADD;
@@ -901,6 +917,11 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceV
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     switch (node->type) {
+    case AST_ARRAY_LITERAL: return source_array_literal(ctx, node, expected, value);
+    case AST_INDEX_GET: return source_array_get(ctx, node, node->as.index_get.array,
+        node->as.index_get.index, NULL, NULL, value);
+    case AST_INDEX_SET: return source_array_set(ctx, node, node->as.index_set.array,
+        node->as.index_set.index, node->as.index_set.value, NULL, true, value);
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING:
         return source_literal(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
@@ -1572,6 +1593,7 @@ static bool source_query_modules(SourceContext *ctx) {
     XrXirSourceQueryModule *modules = source_alloc(ctx, count, sizeof(*modules));
     if (count && !modules) return false;
     ctx->query.modules = modules; ctx->query.module_count = count;
+    ctx->query_module_capacity = count;
     for (uint32_t i = 0; i < count; ++i) {
         if (!source_work(ctx, NULL)) return false;
         const XrModuleSpec *module = &ctx->graph->specs[i];

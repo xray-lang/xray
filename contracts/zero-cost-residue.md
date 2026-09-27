@@ -141,6 +141,6 @@ not own emission rows and are excluded from boxed-adapter body inspection;
 their nested functions remain independently traversed for reachable bodies.
 
 anchor-sha256: src/aot/xi_cgen.h 82dbe6329f95db4b2ecd0eba6f2bf33e353a0814cd9e253528be6ce540a3c9d1
-anchor-sha256: src/aot/xi_cgen.c 48f81f94437637c0c75bea20a3664a5b7d3a1fe67d07ef39ae3ea81ef73b9282
+anchor-sha256: src/aot/xi_cgen.c f35b43f9c823f2049b0847c3312a5c6f47125e3af70476ddb4a6ad546bb144da
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 511b8292fb7b7610e57fb6db233c0e1359c22853bc71aa2d8ac61fbe8066d4e6
 anchor-sha256: src/app/cli/xcmd_verify.c 488650c108fe0276f2f98ce69f961be1a3bfeca1962b72af93d74b15bafbef99

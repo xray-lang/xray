@@ -2500,11 +2500,11 @@ TEST(cgen_immediate_scalar_constant_keeps_debug_sync_without_release_local) {
     TEST_REQUIRE(masked_end != NULL, "manual debug-constant function end emitted");
     TEST_REQUIRE(contains_between(masked, masked_end, "uint64_t mask = 0;"),
                  "debug-local builds must declare the source-level constant slot");
-    TEST_REQUIRE(contains_between(masked, masked_end, "mask = (uint64_t)INT64_C(255);"),
+    TEST_REQUIRE(contains_between(masked, masked_end, "mask = (uint64_t)UINT64_C(255);"),
                  "debug-local builds must synchronize the source-level constant slot");
-    TEST_REQUIRE(contains_between(masked, masked_end, "INT64_C(255)"),
+    TEST_REQUIRE(contains_between(masked, masked_end, "UINT64_C(255)"),
                  "release expression must retain the exact constant literal");
-    TEST_REQUIRE(count_between(masked, masked_end, " = INT64_C(255);") == 0,
+    TEST_REQUIRE(count_between(masked, masked_end, " = UINT64_C(255);") == 0,
                  "release C must not materialize a constant used only by literal-aware ops");
 
     printf("  Generated debug-synchronized immediate constant %zu bytes of C code\n", strlen(code));

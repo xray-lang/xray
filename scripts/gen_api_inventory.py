@@ -22,6 +22,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import builtin_symbols  # noqa: E402  (repo-local helper, needs the path above)
+import gen_native_declarations  # noqa: E402
 
 
 ITEM_SORT_KEY = lambda item: (
@@ -1030,11 +1031,49 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
     return out
 
 
+def collect_native_array(root: Path, path: Path, text: str,
+                         doc_surface: str, doc_module: str) -> list[dict[str, Any]]:
+    prelude = (root / "stdlib/prelude/builtin_symbols.def").read_text(encoding="utf-8")
+    header, members = gen_native_declarations.parse_source(text, prelude)
+    identity, name, binder, line, column = header
+    declaration = item(category="native-type", namespace=name, name=name, kind="type",
+                       signature=f"{name}<{binder}>", source=rel(root, path), line=line,
+                       doc_surface=doc_surface, doc_module=doc_module)
+    declaration.update(native_type_id=identity, declaration_kind="struct", column=column)
+    out = [declaration]
+    for member_id, member in enumerate(members, 1):
+        if member.method:
+            close = matching_paren_index(member.signature, 0)
+            params = member.signature[1:close]
+            tail = member.signature[close + 1:].strip()
+            signature = normalize_signature(params, tail[2:].strip() if tail else None)
+            kind = "static-method" if member.static else "method"
+        else:
+            signature = member.signature
+            kind = "field"
+        entry = item(category="native-type", namespace=name, name=member.name, kind=kind,
+                     signature=signature, source=rel(root, path), line=member.line,
+                     doc_surface=doc_surface, doc_module=doc_module,
+                     allocation=member.allocation)
+        entry.update(native_type_id=identity, native_member_id=member_id,
+                     column=member.column, receiver=member.receiver.lower(),
+                     operation=member.operation, xir_admitted=member.operation != "NONE",
+                     failures=member.failures.split(",") if member.failures else [],
+                     ownership=member.ownership)
+        out.append(entry)
+    return out
+
+
 def collect_native_types(root: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     cards = {path.stem for path in (root / "spec/source/cards/stdlib").glob("*.json")}
     for path in sorted((root / "stdlib/types").glob("*.xr")):
         text = path.read_text(encoding="utf-8")
+        if path.name == "array.xr":
+            doc_module = "array" if "array" in cards else ""
+            out.extend(collect_native_array(root, path, text,
+                                            "stdlib" if doc_module else "", doc_module))
+            continue
         for match in CLASS_RE.finditer(text):
             class_name = match.group(1)
             doc_module = class_name.lower() if class_name.lower() in cards else ""

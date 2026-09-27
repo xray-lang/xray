@@ -164,7 +164,10 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     if (v->type->kind == XR_KIND_INT || xr_type_is_enum_metadata(v->type)) {
         if (boxed)
             fprintf(out, "XR_FROM_INT(");
-        if (v->aux_int == INT64_MIN)
+        if (!boxed && emission_status == CG_VALUE_EMISSION_FOUND &&
+            emission.rep == XR_C_VALUE_REP_U64)
+            fprintf(out, "UINT64_C(%" PRIu64 ")", (uint64_t) v->aux_int);
+        else if (v->aux_int == INT64_MIN)
             fprintf(out, "INT64_MIN");
         else
             fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);

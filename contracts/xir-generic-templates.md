@@ -5,9 +5,12 @@ noncopyable resources and internal CELL types are not ordinary arguments.
 Admitted primitives, including the fixed-width numeric family, string and
 Atomic<i64>, are Sendable. Ordinary CALLABLE types are copyable/storable but
 have no Sendable proof. ARRAY descriptor admission derives storage and Sendable
-obligations from its element; it does not implement source Array syntax or
-runtime Array operations. An unconstrained parameter gains no additional
-Sendable authority. Constraint entailment uses declarations and spends work budget.
+obligations from its element. `xir-array-values.md` separately governs the
+NEW/GET/SET/PUSH/LEN family: ordinary T supplies its copyable/storable element
+obligation, but no arithmetic, display, comparison or implicit construction
+witness. Empty NEW creates no T and still requires a valid explicit ARRAY<T>
+type. Source syntax and runtime qualification remain separate. An unconstrained
+parameter gains no additional Sendable authority. Constraint entailment uses declarations and spends work budget.
 
 The admitted source declarations are named `fn f<T, U:Sendable>(x:T)->T` and
 explicit ordinary calls `f<string, i64>(x)`. An own-parameter `where T:Sendable`
@@ -34,7 +37,7 @@ the caller's type context before comparison and dominance checking. Initializers
 and the root entry cannot have type parameters.
 
 All metadata is owned, copied across stages and bounded by aggregate parameter,
-metadata and work budgets. Checked packet schema 5 / semantic contract 14 carries a generic-presence
+metadata and work budgets. Checked packet schema 5 / semantic contract 15 carries a generic-presence
 u32 after declarations, followed when present by each row's constraint count/
 u32 bits and argument count/u32 type IDs. Older schema or semantic revisions are rejected, with no reader
 or alias. Decode performs the same definition and forwarding checks.
@@ -62,6 +65,10 @@ Constructed components may use enclosing parameter ordinals under
 `xir-constructed-types.md`. Callable, ARRAY and internal CELL nodes share one
 ordered pool. Calls compare contracts structurally under explicit substitution;
 specialization interns closed nodes and remaps all uses, including capture cells
-and slots, before rechecking. Each instance's node cache remains bound to its
-ordered arguments and declaration identity. Signature identity alone supplies
+and slots, before rechecking. Array instruction result types and projected
+CELL/slot/local receiver types are remapped in the same pass; operand IDs retain
+their value/place roles and exact table partition. The specialized result is
+rechecked for element equality, place permission and closure before lowering.
+Each instance's node cache remains bound to its ordered arguments and declaration
+identity. Signature identity alone supplies
 no Sendable proof.

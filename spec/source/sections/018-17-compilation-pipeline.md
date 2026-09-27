@@ -147,7 +147,7 @@ print及默认SeqCst的Atomic<i64>构造/load/fetchAdd。未实施语法明确�
 
 顶层函数提升，顶层执行语句及绑定初始化按源码顺序每实例执行一次；main只是普通函数。
 各模块私有unit initializer与返回0的合成i64入口分开。库模块状态必须是const Sendable，
-当前准入scalar/string/Atomic<i64>；根var属于实例。跨模块调用要求直接导入与export，
+最初准入scalar/string/Atomic<i64>；后续类型按本章各节准入，Array见§17.26。根var属于实例。跨模块调用要求直接导入与export，
 模块身份来自resolver，重复/私有/未解析声明与环拒绝。字符串AST已经解码，不重复解码。
 
 CALL/PRINT用args[0]/args[1]表示函数自有操作数表的起点/数量；非空范围按指令顺序
@@ -183,7 +183,7 @@ installer 发布或完整无源码标准库分发已经验收。
 ### 17.11 定义处检查与 Checked 泛型特化
 
 普通类型参数准入域为可复制、可保存的值，不包括 unit、视图和 noncopyable 资源。
-当前具体类型为 bool/i64/string/Atomic<i64>。函数可以声明 `<T, U:Sendable>`，
+最初具体类型为 bool/i64/string/Atomic<i64>；后续数值、函数与Array类型按本章各节准入。函数可以声明 `<T, U:Sendable>`，
 或使用该声明自身参数的 `where U:Sendable`；调用须显式给出全部类型实参。
 参数名不重复，Sendable 是保留标记名；首批每个参数最多一个 Sendable 约束，
 不准入默认类型参数、交叉/成员/条件方法约束或类型推断。
@@ -205,7 +205,7 @@ CALL 的类型实参范围与值实参范围分别规范化并复验；替换后
 及工作量有预算，失败发布空结果并释放临时存储。Lowered 和不可变 Program 不保留
 开放类型参数，不在执行期追加实例。实例调试名字不是 native 缓存身份凭证。
 
-成员见证、符号回调效应、泛型类型构造器、类型推断、诊断来源序列化与完整标准库包
+成员见证、符号回调效应、用户声明的泛型类型构造器、类型推断、诊断来源序列化与完整标准库包
 链接/缓存配对仍待实现；本族未准入的效应/借用/callable 声明仍拒绝。精确接口合同为
 `contracts/xir-generic-templates.md`，不得用本族通过代替普通泛型完整资格。
 
@@ -311,13 +311,13 @@ Checked与Program、值和调用边界使用§17.6的现行版本，不接受先
 当前唯一协议遵循§17.6，无旧版本读取或ABI适配。源码var不得以快照冒充共享cell。
 ### 17.20 定宽整数运行时基础
 
-统一无分配整数核心显式接收8/16/32/64位和符号；有符号payload符号扩展，无符号payload零扩展，u64保留全部64位。非规范payload和非法宽度拒绝。算术、比较、显式转换及§3.3.2移位遵循§2.3.1；失败返回状态并将数值输出清零。当前i64的VM与native路径均使用该核心，旧入口已删除，现行调用ABI拒绝旧native条目。Checked与值/Program边界遵循§17.6。本节确认运行时基础；八种整数的XIR、显式cast、同符号运算提升和输出接入见§17.21，完整上下文推导与容器仍OPEN。
+统一无分配整数核心显式接收8/16/32/64位和符号；有符号payload符号扩展，无符号payload零扩展，u64保留全部64位。非规范payload和非法宽度拒绝。算术、比较、显式转换及§3.3.2移位遵循§2.3.1；失败返回状态并将数值输出清零。当前i64的VM与native路径均使用该核心，旧入口已删除，现行调用ABI拒绝旧native条目。Checked与值/Program边界遵循§17.6。本节确认运行时基础；八种整数的XIR、显式cast、同符号运算提升和输出接入见§17.21，完整上下文推导与其他容器仍OPEN；Array子集见§17.26。
 
 ### 17.21 类型化定宽整数XIR
 
 整数类型ID为i64=2、i8=5、i16=6、i32=7、u8=8、u16=9、u32=10、u64=11。唯一CONST_INT与算术/比较/移位INT操作族替代旧i64专用名称；CONVERT_NUMBER显式转换具体整数，所有指令继续检查类型、值角色和支配。算术两侧及结果类型相同；比较两侧同类型并返回bool；移位保留左类型，计数可为任意整数。无约束T不能通过特化获得算术资格。
 
-常量和边界值保持规范payload；copy、phi、调用、模块槽、cell、callable签名和输出保留精确类型。存储宽度/对齐为1/2/4/8字节，frame仍为8字节，boxed/参数/结果仍16字节且8对齐。无符号输出按完整无符号十进制解释，u64全一位型为18446744073709551615。输出预算及一次发布不变。仅接受§17.6的现行协议，旧包与条目拒绝。源码已接通八种类型名称、具体整数as、已定型操作数的同符号宽化、原宽度一元运算/增减、共享cell、模块状态及print。nullable cast、bool/rune/float与无约束T转换拒绝。直接整数字面量与赋值/参数/返回宽化见§17.22；完整推断、浮点和容器仍OPEN。
+常量和边界值保持规范payload；copy、phi、调用、模块槽、cell、callable签名和输出保留精确类型。存储宽度/对齐为1/2/4/8字节，frame仍为8字节，boxed/参数/结果仍16字节且8对齐。无符号输出按完整无符号十进制解释，u64全一位型为18446744073709551615。输出预算及一次发布不变。仅接受§17.6的现行协议，旧包与条目拒绝。源码已接通八种类型名称、具体整数as、已定型操作数的同符号宽化、原宽度一元运算/增减、共享cell、模块状态及print。nullable cast、bool/rune/float与无约束T转换拒绝。直接整数字面量与赋值/参数/返回宽化见§17.22；完整推断、浮点和其他容器仍OPEN；Array子集见§17.26。
 
 
 ### 17.22 整数上下文与无损宽化
@@ -326,7 +326,7 @@ Checked与Program、值和调用边界使用§17.6的现行版本，不接受先
 
 二元算术/比较中的直接字面量由另一已定型操作数获得上下文；两侧均为直接字面量时采用外层整数上下文，否则默认i64。上下文不穿透任意已成形子表达式做常量折叠。取反的直接字面量可用外层整数上下文，已定型一元操作保留其操作数类型。移位左侧直接字面量可用外层上下文，但计数独立定型，不因左侧窄类型而拒绝256或负数；结果仍按§3.3.2处理。复合赋值的非移位RHS采用绑定类型；先读取左侧快照，再执行RHS，成功才写回。显式as的输入独立定型，`200 as i8`继续环绕，不变为越界字面量错误。唯一例外是超过i64正范围且仍可由u64表示的直接正字面量（包括括号）：它保留完整u64幅度作为转换源，再按目标宽度取模；负字面量不借此绕过i64下界检查。
 
-有明确上下文的条件表达式分别检查并宽化分支，在各自前驱块产生转换，运行时只执行选中分支；无外部上下文时先分别定型两个分支；同符号整数取较宽类型，在对应前驱路径显式转换再由PHI合流。直接分支字面量仍独立默认i64，不从另一分支暗取窄类型。其他类型仍要求相同，本节不声称完成union或通用分支类型推断。普通/间接调用保持callee先于按序实参求值；仅无副作用的直接字面量允许延后产生IR以取得另一操作数类型。未调用函数和泛型定义体照常检查，不以实例化绕过约束。此批只扩展源码生产者，已有XIR操作语义、wire与ABI版本不变；浮点、完整推断和容器仍OPEN。
+有明确上下文的条件表达式分别检查并宽化分支，在各自前驱块产生转换，运行时只执行选中分支；无外部上下文时先分别定型两个分支；同符号整数取较宽类型，在对应前驱路径显式转换再由PHI合流。直接分支字面量仍独立默认i64，不从另一分支暗取窄类型。其他类型仍要求相同，本节不声称完成union或通用分支类型推断。普通/间接调用保持callee先于按序实参求值；仅无副作用的直接字面量允许延后产生IR以取得另一操作数类型。未调用函数和泛型定义体照常检查，不以实例化绕过约束。此批只扩展源码生产者，已有XIR操作语义、wire与ABI版本不变；浮点、完整推断和其他容器仍OPEN；Array子集见§17.26。
 
 
 ### 17.23 二进制浮点转换基础
@@ -353,6 +353,24 @@ NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等�
 
 十进制浮点token的完整拼写由AST拥有；共享转换不截断输入，不使用strtod、locale或宿主浮点指令。按目标binary32/binary64精度一次ties-to-even舍入，溢出为带符号无穷，渐进下溢保留负零；所有指数位和分隔符仍验证。固定大整数保存有理数，1152有效数字及非零尾标志足以区分所有IEEE舍入中点；不把缓冲截断当作数学截断。
 无唯一浮点上下文默认f64；注解、赋值、已声明返回和实例化后参数直接选f32/f64，括号及直接负号保留上下文。已成形f64不隐式窄化。直接整数处于浮点上下文时必须完整精确可表示；显式as允许舍入。泛型定义仍先按声明约束检查。格式化保留原始拼写，AST拷贝复制到目标owner。现有CONST_FLOAT、Checked复验与唯一Lowered执行不变，浮点算术/输出另行准入。
+
+### 17.26 XIR Array值与源码边界
+
+`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，仅READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`准入新XIR执行。其余29个成员保留清单身份，不因此获得执行资格。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
+
+源码准入显式`Array<T>`、同类型元素字面量、有Array上下文的空字面量、普通赋值复制、参数、返回、局部及入口模块状态。空字面量没有元素上下文时拒绝。元素从左到右求值，使用既有上下文类型规则；嵌套Array与函数元素遵循统一构造类型池的可复制、可存储准入，unit、内部CELL、视图和未准入的不可复制资源不能成为普通元素。`Array<T>`泛型体在定义处按约束检查，在Checked上特化后复验；普通实例在Program封存前完成，不能按具体实参补造定义处未证明的能力。其他容器与用户struct/class声明族仍须分别准入。
+
+Array复制保留独立逻辑值，无需显式`copy`或`move`。共享backing在写入前取得独立存储，独占且容量充足时可原地修改；紧凑元素存储使用唯一类型布局与copy/drop规则。const与READ参数不能成为可写接收者；把其可复制值保存到普通局部var后，可修改该副本。backing是否独占不授予写权限。已有多模块可见性与库模块可变状态限制继续生效。
+
+GET及索引读返回独立拥有的元素，并保留索引求值前选定的接收者值。SET、索引写及PUSH先确定支持的根绑定，再按序求值实参，最后读取该绑定当前的Array；RHS重绑根后，写入针对新值。`a.push(a[0])`有效。越界严格要求`0 <= index < len`，否则产生E0430并保留有符号index与实际length；初始化期间的失败保持原有粘滞语义。set/push返回unit，索引赋值表达式返回已转换RHS的独立逻辑值，其可能失败的结果retain在提交前完成。失败不提交本次修改，但不撤销此前实参求值的副作用。len只借用接收者，以有界常数工作量读取长度，不分配或遍历元素；GET对嵌套函数元素的传递准入可能分配有界scratch。
+
+返回的Array拥有所需TypeArena与backing寿命，可在原调用、Instance和Program宿主句柄释放后继续读取、复制和释放；纯Array不为类型元数据反向保留Program代码。同Program的纯Array可在Instance间按值传递；不同arena即使数字类型ID相同也拒绝。函数元素仍须通过真实存活的执行gate，Array包装不增加调用权限。新分离或增长存储计入当前接收Instance的物理分配域，已有存储仍由原域记账；准入、元素搬移及调用工作遵守累计预算。最终释放按实际owner归还物理存储，不按嵌套深度递归销毁。
+
+源码查询快照独立拥有Array类型节点、成员签名、泛型声明owner、源码位置及内容身份，编译会话释放后仍有效；查询不重新解析、推断或执行。原生声明的查询来源不产生可执行initializer。失败的私有、别名或未准入成员查找不发布成功绑定；资源失败不发布Checked或快照。查询中的core len记录其稳定身份，未知源码来源保持未知。
+
+此子集的Windows源码VM、native、混合条目及Checked重载按独立预期验证两模块字符串程序，输出为`red\nblue\n2\ngreen\nblue\ngreen\n3\n`；实例隔离、结果寿命、初始化越界粘滞与分配失败物理释放另有断言。输出golden不替代OOM、retain、工作预算或全量sanitizer门。完整批次资格仍要求受影响目标重建、回归、合同和sanitizer门；本节不声明这些完整门或macOS已通过。
+
+Array构造器调用、withCapacity/capacity、切片、ptr/mutPtr、map/filter、迭代及其余未准入成员仍明确拒绝。源码ref参数、move、完整用户结构体、跨Program结构导入、stdlib Checked/native包发布、默认CLI迁移和旧链最终删除不由本节完成。唯一现行协议仍由§17.6的实现常量定义，无旧reader或兼容接口。
 
 <!-- /xr-spec:cn -->
 
@@ -534,7 +552,8 @@ annotation is not yet admitted. Generic bodies cannot bypass constraints.
 Functions are hoisted, while top-level statements and initializers run once per
 instance in source order. A function named main is ordinary. Private unit module
 initializers precede a separate synthesized i64 entry returning zero. Library
-state must be const Sendable; admitted carriers are scalar/string/Atomic<i64>.
+state must be const Sendable; initial carriers are scalar/string/Atomic<i64>.
+Later type admission follows this chapter, including Array in §17.26.
 Root mutable state belongs to the instance. Cross-module calls require direct
 imports and export visibility, using resolver-owned identities. Duplicate,
 private, unresolved and cyclic declarations fail. Parser string payloads are
@@ -584,7 +603,8 @@ publication or complete source-free standard-library distribution.
 ### 17.11 Definition Checking and Checked Generic Specialization
 
 Ordinary type parameters admit copyable, storable values, excluding unit, views
-and noncopyable resources. The current concrete domain is bool/i64/string/Atomic<i64>.
+and noncopyable resources. The initial concrete domain is bool/i64/string/Atomic<i64>;
+later numeric, function and Array admission follows this chapter.
 Named functions can declare `<T, U:Sendable>` or an own-parameter `where U:Sendable`;
 calls supply all type arguments explicitly. Parameter names are distinct and
 Sendable is a reserved marker name. Each parameter currently admits at most one
@@ -616,7 +636,7 @@ publishes no result and releases temporary storage. Lowered and immutable Progra
 contain no open parameters and acquire no execution-time instances. Debug names
 are not native-cache identity proofs.
 
-Member witnesses, symbolic callback effects, generic type constructors, inference,
+Member witnesses, symbolic callback effects, user-declared generic type constructors, inference,
 diagnostic provenance serialization and complete stdlib package/cache pairing are
 still unavailable. Unadmitted effect/borrow/callable declarations continue to
 reject. The precise interface contract is `contracts/xir-generic-templates.md`;
@@ -768,13 +788,13 @@ Ordinary var captures retain one shared storage identity; every alias observes u
 The unique current revisions follow §17.6, without old readers or ABI adapters. Source var capture must not substitute snapshots for shared cells.
 ### 17.20 Fixed-width integer runtime foundation
 
-The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and the current call ABI rejects old native entries. Checked and value/Program boundaries follow §17.6. This section qualifies the runtime foundation. Typed XIR, explicit casts, same-signedness arithmetic widening and output follow §17.21; full contextual inference and containers remain OPEN.
+The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and the current call ABI rejects old native entries. Checked and value/Program boundaries follow §17.6. This section qualifies the runtime foundation. Typed XIR, explicit casts, same-signedness arithmetic widening and output follow §17.21; full contextual inference and other containers remain OPEN; the Array subset follows §17.26.
 
 ### 17.21 Typed fixed-width integer XIR
 
 Integer type IDs are i64=2, i8=5, i16=6, i32=7, u8=8, u16=9, u32=10 and u64=11. The sole CONST_INT and arithmetic/comparison/shift INT family replace the old i64-specific names. CONVERT_NUMBER explicitly converts concrete integers. All instructions retain type, value-role and dominance checks. Arithmetic operands and results share an exact type; comparison operands share a type and return bool; shifts keep the left type and accept any integer count. Unconstrained T gains no arithmetic authority from specialization.
 
-Constants and boundaries preserve canonical payloads. Copy, phi, calls, module slots, cells, callable signatures and output retain exact type identity. Storage width/alignment is 1/2/4/8 bytes; frame slots remain 8 bytes, boxed/parameter/result boundaries remain 16 bytes aligned to 8. Unsigned output uses the complete unsigned decimal value, including 18446744073709551615 for all-ones u64. Output budgets and single publication remain unchanged. Only the current revisions in §17.6 are admitted; old packets and entries reject. The source producer admits all eight names, concrete integer as, same-signedness widening of already typed arithmetic operands, width-preserving unary/increment operations, shared cells, module state and print. Nullable casts and bool/rune/float or unconstrained-T conversion reject. Direct integer literal contexts and assignment/parameter/return widening follow §17.22; full inference, floating point and containers remain OPEN.
+Constants and boundaries preserve canonical payloads. Copy, phi, calls, module slots, cells, callable signatures and output retain exact type identity. Storage width/alignment is 1/2/4/8 bytes; frame slots remain 8 bytes, boxed/parameter/result boundaries remain 16 bytes aligned to 8. Unsigned output uses the complete unsigned decimal value, including 18446744073709551615 for all-ones u64. Output budgets and single publication remain unchanged. Only the current revisions in §17.6 are admitted; old packets and entries reject. The source producer admits all eight names, concrete integer as, same-signedness widening of already typed arithmetic operands, width-preserving unary/increment operations, shared cells, module state and print. Nullable casts and bool/rune/float or unconstrained-T conversion reject. Direct integer literal contexts and assignment/parameter/return widening follow §17.22; full inference, floating point and other containers remain OPEN; the Array subset follows §17.26.
 
 
 ### 17.22 Integer contexts and lossless widening
@@ -783,7 +803,7 @@ Binding annotations, assignment targets, declared return types and direct/indire
 
 A direct literal in binary arithmetic/comparison uses the other typed operand's context. Two direct literals use an outer integer context, otherwise i64. Context does not penetrate arbitrary formed subexpressions to fold constants. A direct literal under complement can use the outer integer context; typed unary operations preserve the operand type. A direct shift-left operand can use outer context, but the count is typed independently and is not restricted by a narrow left operand: 256 and negative counts remain legal under §3.3.2. Non-shift compound RHS uses the binding type; read the left snapshot before evaluating the RHS and write only on success. Explicit as types its input independently, so `200 as i8` still wraps rather than becoming a literal range error. The sole exception is a direct positive literal above the i64 maximum but representable in u64 (including parentheses): it retains its complete u64 magnitude as the conversion source before reducing to the target width. Negative literals cannot bypass the i64 lower bound this way.
 
-A conditional with explicit context checks and widens each branch in its own predecessor block; only the selected branch executes. Without outer context, both branches are first typed independently. Same-signedness integers use the wider type, converting on the corresponding predecessor path before PHI. Direct branch literals still default independently to i64 and do not infer a narrow type from the other arm. Other branch types must match; unions and general branch inference are not qualified here. Calls evaluate the callee then arguments in order. Only effect-free direct literals may defer IR emission to obtain the other operand's type. Uncalled functions and generic definitions are checked without specialization bypasses. This producer extension does not alter XIR operation semantics, wire or ABI versions. Floating point, full inference and containers remain OPEN.
+A conditional with explicit context checks and widens each branch in its own predecessor block; only the selected branch executes. Without outer context, both branches are first typed independently. Same-signedness integers use the wider type, converting on the corresponding predecessor path before PHI. Direct branch literals still default independently to i64 and do not infer a narrow type from the other arm. Other branch types must match; unions and general branch inference are not qualified here. Calls evaluate the callee then arguments in order. Only effect-free direct literals may defer IR emission to obtain the other operand's type. Uncalled functions and generic definitions are checked without specialization bypasses. This producer extension does not alter XIR operation semantics, wire or ABI versions. Floating point, full inference and other containers remain OPEN; the Array subset follows §17.26.
 
 
 ### 17.23 Binary floating conversion foundation
@@ -810,5 +830,23 @@ The sole current revisions follow §17.6; older versions reject without compatib
 
 The AST owns each complete decimal floating token. Shared conversion never truncates input or uses strtod, locale or host floating instructions. It rounds once at the requested binary32/binary64 precision, ties to even; overflow produces signed infinity and gradual underflow preserves signed zero. Every exponent digit and separator is validated. A bounded integer rational with 1152 significant digits and a nonzero sticky tail distinguishes all IEEE rounding boundaries; buffer truncation never substitutes for mathematical rounding.
 Without a unique floating context the default is f64. Annotations, assignments, declared returns and substituted parameters directly select f32/f64; grouping and direct negation retain context. Formed f64 expressions never narrow implicitly. Direct integers in a floating context must be exactly representable in full; explicit as permits rounding. Generic definitions remain constraint checked. Formatting preserves spelling and AST cloning copies it into the destination owner. Existing CONST_FLOAT, Checked revalidation and the sole Lowered execution remain unchanged; floating arithmetic/output require separate admission.
+
+### 17.26 XIR Array values and source boundary
+
+The `struct Array<T>` declaration in `stdlib/types/array.xr` is this family's sole source authority. The compiler, member adapters and API inventory consume the same structured declaration. Of its current 32 members, only READ `get(index: i64) -> T`, REF `set(index: i64, value: T) -> ()` and REF `push(value: T) -> ()` admit new-XIR execution. The other 29 retain inventory identities without execution authority. Index reads/writes use the same operations. Global `len` resolves separately by its core intrinsic identity; this subset accepts only Array and returns i64. Lexical, module and import resolution precede the prelude, so a user function named `len` remains an ordinary function.
+
+Source admits explicit `Array<T>`, homogeneous literals, empty literals with an Array context, ordinary assignment copies, parameters, returns, locals and entry-module state. An empty literal without an element context rejects. Elements evaluate left to right under ordinary contextual typing. Nested arrays and function elements use the unified constructed pool's copyable/storable admission; unit, internal CELL, views and unadmitted noncopyable resources are not ordinary elements. Generic bodies using `Array<T>` are checked against their declared constraints, specialized on Checked, then reverified. Ordinary instances finish before Program sealing; concrete arguments cannot invent capabilities missing at definition checking. Other container and user struct/class families require separate admission.
+
+Array copies preserve independent logical values without explicit `copy` or `move`. Shared backing detaches before mutation; unique storage with enough capacity may mutate in place. Compact elements use the sole type layout and copy/drop rules. Const and READ parameters cannot supply writable receivers, but saving their copyable values into an ordinary local var permits mutation of that copy. Backing uniqueness grants no write authority. Existing cross-module visibility and restrictions on mutable library-module state remain in force.
+
+GET and index reads return independently owned elements and preserve the receiver value selected before evaluating the index. SET, index writes and PUSH first bind a supported root, evaluate arguments in order, then resolve that binding's current Array; an RHS that rebinds the root changes the target value. `a.push(a[0])` is valid. Bounds strictly require `0 <= index < len`; failure produces E0430 with the signed index and observed length, including the existing sticky initialization-failure behavior. Set/push return unit. An index-assignment expression returns an independent logical copy of its converted RHS, with fallible result retention completed before commit. Failure does not commit the mutation or undo earlier argument effects. Len borrows the receiver and reads length with bounded constant work, without allocation or element traversal. GET's transitive admission of nested function elements can allocate bounded scratch.
+
+An escaped Array owns the TypeArena and backing lifetime needed for reading, copying and release after the originating call, Instance and Program host handles are gone. Pure arrays do not retain Program code merely for type metadata. Pure arrays may pass by value between Instances of one Program; different arenas reject even matching numeric type IDs. Function elements still require their real live execution gate; wrapping them in Array grants no call authority. New detach/growth storage is charged to the receiving Instance's current physical allocation domain; existing storage remains charged to its original domain. Admission, element relocation and call work obey cumulative budgets. Final release returns physical storage to its actual owner without recursive destruction proportional to nesting depth.
+
+Source query snapshots independently own Array type nodes, member signatures, generic declaration owners, source positions and content identities, and remain valid after compiler-session release. Queries do not resolve, infer or execute. Native declaration provenance does not create an executable initializer. Failed private, alias or unadmitted-member lookups publish no successful binding; resource failure publishes neither Checked nor a snapshot. A core len query records its stable identity and leaves unknown source provenance unknown.
+
+The Windows source VM, native, mixed-entry and Checked-reload paths verify the two-module string program against independent expectations: `red\nblue\n2\ngreen\nblue\ngreen\n3\n`. Separate assertions cover instance isolation, result lifetime, sticky initialization bounds and physical release after allocation failure. The output golden does not replace OOM, retain, work-budget or full sanitizer gates. Complete batch qualification still requires fresh affected targets, regression, contract and sanitizer gates; this section does not claim those complete gates or macOS have passed.
+
+Array constructor calls, withCapacity/capacity, slices, ptr/mutPtr, map/filter, iteration and other unadmitted members explicitly reject. Source ref parameters, move, complete user structs, cross-Program structural import, stdlib Checked/native package publication, default CLI migration and final old-chain deletion are outside this subset. The sole current protocols remain defined by the implementation constants in §17.6, without old readers or compatibility interfaces.
 
 <!-- /xr-spec:en -->

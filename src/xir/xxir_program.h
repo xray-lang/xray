@@ -15,7 +15,7 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 8u
+#define XR_XIR_PROGRAM_ABI_VERSION 9u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
@@ -64,7 +64,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_start(XrXirInstance *instance, uint32_t 
 XR_FUNC XrXirInstanceResult xr_xir_instance_poll(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, uint64_t wake);
 XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);
-XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,

@@ -19,9 +19,9 @@
     {
       "heading": "Array",
       "fences": [
-        "types-array",
-        "expr-array-lit"
-      ]
+        "types-array"
+      ],
+      "markdown": "The new-XIR source subset in spec §17.26 admits typed and homogeneous literals, contextual empty literals, ordinary logical copies, parameters/returns, index reads/writes, get/set/push and global len. Array is a value struct; COW preserves independent copies without explicit copy/move. Its source-derived inventory contains 32 members, but only get/set/push have admitted member operations; the other 29 remain inventory-only. Constructor calls, capacity, slices, pointers, iteration and higher-order methods require separate admission."
     },
     {
       "heading": "Map",
@@ -56,7 +56,8 @@
       "heading": "Index access",
       "fences": [
         "expr-index-access"
-      ]
+      ],
+      "markdown": "For the new-XIR Array subset, get/index reads return independently owned elements and bounds are strict: 0 <= index < len. E0430 preserves the signed index and observed length. Index reads preserve the receiver selected before index evaluation; writes resolve the current root after argument/RHS evaluation. Set/push return unit, while index assignment returns the converted RHS. Len reads length without allocation or element traversal. See spec §17.26 for ownership and qualification limits."
     },
     {
       "heading": "Other collection-like types",

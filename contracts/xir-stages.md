@@ -14,14 +14,14 @@ storage may immediately be destroyed. Failure publishes no partial artifact.
 Neither a caller-supplied stage tag nor prior checking exempts input validation.
 
 `xir-constructed-types.md` extends metadata through one owned CALLABLE/ARRAY/CELL
-pool across these same stages. Checked schema 5 / semantic contract 14 and
-Value9/Call13/Program8 replace their predecessors atomically. Every constructed
-use resolves its kind through that pool; no signature-only table or cell-bit
-encoding remains. ARRAY descriptor, substitution, layout and arena support are
-the foundation for later Array values. They do not qualify source Array syntax,
-construction, reads, writes, mutation, COW or physical backing release. Qualification
-of this cutover requires the new assertions and actual rebuild/test results;
-updating this contract or registering a test name is not execution evidence.
+pool across these same stages. Every constructed use resolves its kind through
+that pool; no signature-only table or cell-bit encoding remains. Array operation
+tags 63..69 and their place/range/ownership rules are owned by
+`xir-array-values.md`; backing storage by `xir-array-storage.md`. The current
+cutover is Checked schema 5 / semantic contract 15 and Value9/Call14/Program9,
+with no older or mixed-version reader. Descriptor support alone does not qualify
+source Array syntax or execution. Qualification requires the new assertions and
+actual rebuild/test results; contract edits and registration are not evidence.
 
 The scalar subset has unit, bool, and signed i64. Function parameters are read
 bool/i64 values; unit is a result/terminator type and has no value ID in this
@@ -54,12 +54,16 @@ the view API is not an untrusted byte decoder. Owned Checked packet admission is
 governed separately by `xir-checked-packet.md`.
 Allocation failure, malformed data, and exhausted budgets are distinct failures.
 
-CALL, PRINT and PHI use args[0]/args[1] as a first/count range into the owning function's
-operand table. CALL immediate names its callee; PRINT immediate is zero. Empty
+CALL, PRINT, PHI, FUNCTION_REF, CALL_INDIRECT, ARRAY_NEW and ARRAY_SET use
+args[0]/args[1] as a first/count range into the owning function's operand table.
+Their exact element roles follow their owning operation contracts; in particular
+ARRAY_SET has three entries and its first is a logical place, not a value. CALL immediate names its callee; PRINT immediate is zero. Empty
 ranges are canonical zero/zero. Nonempty ranges partition the table exactly in
 instruction order; gaps, overlaps, trailing entries and overflow are rejected.
-CALL/PRINT values are type-checked and dominance-checked at their instruction.
-PHI inputs are checked at predecessor terminators as below.
+Non-PHI value operands are type-checked and dominance-checked at their
+instruction. Array receiver places use the independent producer/permission
+checks in `xir-array-values.md`. PHI inputs are checked at predecessor
+terminators as below.
 CALL range length equals the callee signature. Arity is bounded by the current
 native boundary's 65536-value limit and resource budgets, not a two-value format.
 Both stage transitions copy the operand table. Lowered layout freezes the maximum
@@ -96,4 +100,4 @@ The edge is one indivisible activation step; each PHI still consumes its normal
 instruction step. There is no suspension/provider call inside edge capture. Frame
 and metadata budgets include scratch ownership, and cancellation/step exhaustion
 use normal frame cleanup. Checked serialization preserves the incoming table;
-semantic contract 14 rejects earlier versions. No separate executable PHI format.
+semantic contract 15 rejects earlier versions. No separate executable PHI format.

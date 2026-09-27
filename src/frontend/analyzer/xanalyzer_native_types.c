@@ -28,6 +28,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../os/os_thread.h"
 #include "../../base/xlog.h"
+#include "../../shared/xnative_declaration.h"
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -345,7 +346,6 @@ static const NativeTypeMapping type_mappings[] = {
     {"bool", XR_TID_BOOL, TYPE_NAME_BOOL},
     {"string", XR_TID_STRING, TYPE_NAME_STRING},
     {"rune", XR_TID_RUNE, TYPE_NAME_RUNE},
-    {"Array", XR_TID_ARRAY, TYPE_NAME_ARRAY},
     {"Map", XR_TID_MAP, TYPE_NAME_MAP},
     {"Set", XR_TID_SET, TYPE_NAME_SET},
     {"BigInt", XR_TID_BIGINT, TYPE_NAME_BIGINT},
@@ -382,6 +382,7 @@ static bool class_name_is_generated_plain_class(const char *name) {
 
 /* Runtime-populated builtin type table (indexed by XrTypeId). */
 static XaBuiltinType native_builtin_types[XR_TID_COUNT];
+static XaBuiltinMember native_array_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinType compiler_builtin_json_namespace;
 static XaBuiltinType compiler_builtin_corolocal;
 static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
@@ -422,6 +423,7 @@ static void load_one_source(const char *source) {
                 native_builtin_types[tid].name = display_name;
                 native_builtin_types[tid].members = members;
                 native_builtin_types[tid].member_count = member_count;
+                native_builtin_types[tid].declaration_kind = XR_NATIVE_DECLARATION_IDENTITY;
             } else if (class_name_is_generated_plain_class(class_name)) {
                 /* Owned by .def-generated class metadata rather than the legacy
                  * XrTypeId-indexed builtin table. */
@@ -484,6 +486,35 @@ static void load_one_source(const char *source) {
 #pragma GCC diagnostic pop
 #endif
 
+static void load_native_value_declarations(void) {
+    const XrNativeTypeDeclaration *declaration = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+    XR_CHECK(xr_native_declaration_validate(declaration), "native Array declaration is invalid");
+    XR_CHECK(declaration->member_count <= MAX_MEMBERS_PER_TYPE, "native Array declaration exceeds member storage");
+    for (uint32_t i = 0; i < declaration->member_count; ++i) {
+        const XrNativeMemberDeclaration *source = &declaration->members[i];
+        XaBuiltinMember *member = &native_array_members[i];
+        member->name = source->name;
+        member->signature = source->signature;
+        member->doc = "";
+        member->is_method = source->is_method;
+        member->is_static = source->is_static;
+        member->is_lowered_only = source->lowered;
+        member->receiver_mode = source->receiver == XR_NATIVE_RECEIVER_REF ? XR_PARAM_REF :
+            source->receiver == XR_NATIVE_RECEIVER_MOVE ? XR_PARAM_MOVE : XR_PARAM_READ;
+        native_member_apply_contract(declaration->name, member);
+        if (source->operation != XR_NATIVE_OPERATION_NONE) {
+            member->allocation_contract = source->allocation == XR_NATIVE_ALLOCATION_NO_HEAP ?
+                XA_ALLOCATION_CONTRACT_NO_HEAP : XA_ALLOCATION_CONTRACT_MAY_HEAP;
+            /* Bounds and resource failures use the panic channel, not typed errors. */
+            member->effect_contract.kind = XA_EFFECT_CONTRACT_NOTHROW;
+            member->return_ownership = source->ownership == XR_NATIVE_OWNERSHIP_OWNED ?
+                XA_BUILTIN_RETURN_FRESH : XA_BUILTIN_RETURN_UNKNOWN;
+        }
+    }
+    native_builtin_types[XR_TID_ARRAY] = (XaBuiltinType) {declaration->name,
+        native_array_members, (int) declaration->member_count, (unsigned) declaration->kind};
+}
+
 static void xa_native_types_init_once(void) {
     memset(native_builtin_types, 0, sizeof(native_builtin_types));
 
@@ -491,6 +522,7 @@ static void xa_native_types_init_once(void) {
 #define LOAD_NATIVE(file_name, source_var) load_one_source(source_var);
     XR_NATIVE_TYPE_DEFS(LOAD_NATIVE)
 #undef LOAD_NATIVE
+    load_native_value_declarations();
 
     /* Inject the few type members whose Xray schema is projected by the
      * stdlib metadata generator rather than indexed by XrTypeId. */

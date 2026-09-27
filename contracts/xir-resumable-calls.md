@@ -11,7 +11,7 @@ No process-global current instance is used. Inputs are copied before a call is
 accepted; scalar results own their inline payload. Unit, canonical bool, i64, and strings are admitted. Managed ownership, output
 and one-shot result transfer are governed by `xir-managed-values.md`. ABI mismatches fail before publication.
 
-Call ABI 13 retains the admission TypeArena for the activation lifetime and
+Call ABI 14 retains the admission TypeArena for the activation lifetime and
 passes it through each CallView. Typed argument, return, inbox and action
 admission checks the expected arena/type as well as existing execution authority.
 VM frame copies and emitted native frame copies use that same arena. Scalar
@@ -51,7 +51,31 @@ manufacture success through the fault channel and also become BAD_STATE.
 Argument and ABI admission errors before entry remain their existing distinct
 statuses. Every fault clears the language result, unwinds children before
 parents and balances physical frame accounting. This normalization changes no
-wire layout, opcode identity or accepted ABI version.
+instruction wire layout or opcode identity.
+
+## Allocation-free bounds fault detail
+
+Call ABI 14 atomically adds `fault` to Action and CallResult. The only admitted
+detail is a 24-byte, alignment-eight record: u32 code, u32 reserved, i64 index,
+i64 length. Bounds uses code 430, reserved zero, nonnegative length and an index
+less than zero or at least length. Index and length retain their full signed
+values. Every non-Bounds action/result carries an all-zero detail. Unknown codes,
+nonzero reserved bits, a negative length, an in-range Bounds index, or detail
+on a non-Bounds action reject as BAD_STATE before any action side effect.
+
+Bounds is a distinct fatal CALL_BOUNDS status, never language THROW, numeric
+range, OOM or a successful result. Its FAULT action has no callee or arguments
+and carries the canonical i64 CALL_BOUNDS reason. Its terminal result has unit
+value and zero wake. The driver validates and copies detail before unwinding;
+cleanup cannot overwrite it or recover the parent frame. Detail owns no memory,
+code, arena or Instance lease and can be formatted after all owners are freed.
+Constructing/reporting Bounds never allocates. Cancellation arbitration retains
+its existing precedence; a discarded action cannot publish partial detail.
+
+Generated native entries assert the new Action/CallResult/detail sizes,
+alignments and field offsets. Old Call ABI entries reject before execution.
+No reader, adapter, old result signature or compatibility entry is retained.
+Implementation and new assertions are OPEN until the corresponding tests pass.
 
 Metadata and frames share one physical byte budget per activation. Frame depth and resume work
 have separate limits. Accounting includes the activation and copied descriptors,
@@ -62,6 +86,26 @@ An Instance may retain one completed activation while constructing one unpublish
 replacement under the same per-activation limit. The two physical accounts and
 failure-atomic replacement bound are governed by `xir-program-instance.md`;
 activation accounting never silently combines or discards either live allocation.
+
+Resume count and value-admission work are separate activation-lifetime accounts.
+`poll_limit` initializes the resume count once; a host poll may invoke multiple
+resume entries, and later polls or matching suspend/resume never replenish it.
+The CallConfig admission work is likewise consumed cumulatively by initial and
+child arguments, indirect targets, returns and the current Instance's value
+helpers. An Instance initializes that separate work allowance from its configured
+poll_limit, but consuming admission work does not consume resume-count credit.
+Per-operation copies of the original allowance are forbidden. Consumed work is
+not refunded after a failure, even when value/allocation publication rolls back.
+Scratch bytes remain a simultaneous temporary-storage bound, not lifetime credit.
+
+Only the current resume callback's actual CallView may borrow the activation's
+admission account through `xr_xir_call_admission`. The driver verifies the active
+view identity and its current frame, arguments, environment, Instance and arena.
+Copied or forged views, cleanup, inactive/suspended/terminal activations and
+stale parent views during child execution do not expose that account. The loan
+ends when the callback returns; it cannot be stored in a value or retained across
+suspension. This is an internal native interface, not a source capability to
+rewrite limits or authority.
 
 Each activation owns a linked stack of nonmoving frame segments. A segment normally
 reserves 4096 physical bytes including its header; oversized frames reserve their

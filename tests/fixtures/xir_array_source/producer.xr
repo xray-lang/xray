@@ -1,0 +1,2 @@
+export fn words() -> Array<string> { return ["red", "blue"] }
+export fn len(value: string) -> string { return value + "!" }

@@ -264,6 +264,107 @@ static void failures(XrXirSourceRequest *request) {
     CHECK(view && view->complete && view->declaration_count == 1 && !strcmp(view->declarations[0].name, "ok"));
     xr_xir_source_result_free(&result);
 }
+static XrXirSourceResult native_array_type_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "fn first<T>(x:Array<T>)->Array<T> { return x }\n"
+        "fn second<T>(x:Array<T>)->Array<T> { return x }\n"
+        "fn nested(x:Array<Array<string>>)->Array<Array<string>> { return x }\n");
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr, "native types: %d %s\n", status, diagnostic.message);
+    CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *array = declaration(view, "Array", 0);
+    const XrXirSourceDeclaration *first = declaration(view, "first", 0);
+    const XrXirSourceDeclaration *second = declaration(view, "second", 0);
+    CHECK(array && first && second && array->kind == XR_XIR_SOURCE_TYPE && array->native_identity == 1);
+    CHECK(array->range.module == 1 && array->exported && !array->type.known);
+    CHECK(view->module_count == 2 && !strcmp(view->modules[1].identity, "xray-native:prelude/Array"));
+    CHECK(!strcmp(view->modules[1].path, "stdlib/types/array.xr"));
+    const XrXirSourceDeclaration *binder = declaration(view, "T", array->id);
+    CHECK(binder && binder->kind == XR_XIR_SOURCE_TYPE_PARAMETER && binder->type.generic_owner == array->id);
+    CHECK(first->type.type == second->type.type && first->type.generic_owner == first->id &&
+        second->type.generic_owner == second->id && first->id != second->id);
+    CHECK(xr_xir_type_is_array(view->types, first->type.type));
+    CHECK(xr_xir_array_element(view->types, first->type.type) == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
+    CHECK(references(view, array->id, array->id) == 8);
+    xr_xir_artifact_free(result.checked); result.checked = NULL;
+    return result;
+}
+static void native_array_type_rejections(XrXirSourceRequest *request) {
+    const char *sources[] = {
+        "fn bad(x:Array<()>){ }\n", "fn bad(x:Array<i64,string>){ }\n",
+        "fn bad<Array>(x:Array<i64>){ }\n",
+        "fn bad(x:Array<i64>){ }\nfn Array()->i64 { return 1 }\n",
+        "class Array<T> {}\nfn bad(x:Array<i64>){ }\n",
+        "fn bad(x:Array<i64>){ }\nclass Array<T> {}\n",
+        "struct Array<T> {}\nfn bad(x:Array<i64>){ }\n",
+        "fn bad(x:Array<i64>){ }\nstruct Array<T> {}\n",
+    };
+    for (unsigned i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
+        write_source(request->entry_path, sources[i]);
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        if (i == 2) {
+            CHECK(status == XR_XIR_BAD_STRUCTURE && !result.snapshot);
+            CHECK(strstr(diagnostic.message, "parse"));
+        } else {
+            CHECK(status == XR_XIR_BAD_TYPE && result.snapshot &&
+                !xr_xir_source_snapshot_view(result.snapshot)->complete);
+        }
+        CHECK(!result.checked);
+        if (i >= 4) {
+            const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+            const XrXirSourceDeclaration *bad = declaration(view, "bad", 0);
+            CHECK(bad && !bad->type.known);
+            for (uint32_t d = 0; d < view->declaration_count; ++d)
+                CHECK(view->declarations[d].kind != XR_XIR_SOURCE_TYPE || !view->declarations[d].native_identity);
+            for (uint32_t r = 0; r < view->reference_count; ++r)
+                CHECK(view->references[r].access != XR_XIR_SOURCE_TYPE_USE);
+        }
+        xr_xir_source_result_free(&result);
+    }
+}
+static void native_array_binding_decisions(XrXirSourceRequest *request, const char *library) {
+    write_source(library, "export fn len(value:string)->string { return value }\n");
+    write_source(request->entry_path, "import { len } from \"./lib\"\nconst text:string=len(\"named\")\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    unsigned alias = 0, calls = 0;
+    for (uint32_t d = 0; d < view->declaration_count; ++d) {
+        CHECK(view->declarations[d].kind != XR_XIR_SOURCE_INTRINSIC);
+        if (view->declarations[d].kind == XR_XIR_SOURCE_IMPORT) alias = view->declarations[d].id;
+    }
+    for (uint32_t r = 0; r < view->reference_count; ++r)
+        if (view->references[r].declaration == alias && view->references[r].access == XR_XIR_SOURCE_CALL) ++calls;
+    CHECK(alias && calls == 1); xr_xir_source_result_free(&result);
+    write_source(request->entry_path, "var values=[1]\nvalues.iterator()\n");
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_BAD_TYPE);
+    view = xr_xir_source_snapshot_view(result.snapshot);
+    CHECK(view && !view->complete && !result.checked);
+    for (uint32_t d = 0; d < view->declaration_count; ++d) CHECK(view->declarations[d].kind != XR_XIR_SOURCE_MEMBER);
+    xr_xir_source_result_free(&result);
+    write_source(request->entry_path,
+        "var a=[7]\nconst early=read()\nvar index:i64=0\nfn read()->i64 { return a[index] }\n");
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    const XrXirModule *module = xr_xir_artifact_module(result.checked);
+    unsigned loads = 0, gets = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        if (function->name_length != 4 || memcmp(function->name, "read", 4)) continue;
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            const XrXirInstruction *op = &function->instructions[i];
+            CHECK(op->op != XR_XIR_SLOT_PLACE);
+            if (op->op == XR_XIR_SLOT_LOAD) ++loads;
+            if (op->op == XR_XIR_ARRAY_GET) {
+                CHECK(i >= 2 && op->args[0] < op->args[1]); ++gets;
+            }
+        }
+    }
+    CHECK(loads == 2 && gets == 1); xr_xir_source_result_free(&result);
+    write_source(library, "export fn visible(value:i64)->i64 { return value }\nfn hidden(value:i64)->i64 { return value }\n");
+}
 int main(void) {
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory, absolute, sizeof(absolute)));
@@ -277,9 +378,16 @@ int main(void) {
     failures(&request);
     publication_budgets(&request);
     multiline_declaration(&request);
+    native_array_type_rejections(&request);
+    XrXirSourceResult native = native_array_type_facts(&request);
+    native_array_binding_decisions(&request, library);
     XrXirSourceResult result = accepted(&request);
     xr_xir_artifact_free(result.checked); result.checked = NULL;
     xr_compiler_session_delete(session);
+    const XrXirSourceView *native_view = xr_xir_source_snapshot_view(native.snapshot);
+    const XrXirSourceDeclaration *native_array = declaration(native_view, "Array", 0);
+    CHECK(native_array && !strcmp(native_view->modules[native_array->range.module].path, "stdlib/types/array.xr"));
+    xr_xir_source_result_free(&native);
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
     const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
     generic_facts(view); shadow_and_imports(view); constructed_facts(view);

@@ -1,12 +1,16 @@
-// Built-in Array<T> type — implementation in src/runtime/object/xarray_methods.c
-class Array<T> {
+// Governed native value declaration. Unmarked members require separate admission.
+// @native-type id=1
+struct Array<T> {
     static withCapacity(capacity: i64) -> Array<T>
     capacity: i64
-    ref push(value: T)
+    // @native-operation ARRAY_PUSH allocation=may_heap failures=allocation,retain,limit ownership=unit
+    ref push(value: T) -> ()
     // @lowered
+    // @native-operation ARRAY_GET allocation=may_heap failures=bounds,allocation,retain,limit ownership=owned
     get(index: i64) -> T
     // @lowered
-    ref set(index: i64, value: T)
+    // @native-operation ARRAY_SET allocation=may_heap failures=bounds,allocation,retain,limit ownership=unit
+    ref set(index: i64, value: T) -> ()
     // @lowered
     ptr() -> Ptr<T>
     // @lowered
