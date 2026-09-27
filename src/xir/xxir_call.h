@@ -41,6 +41,9 @@ typedef struct XrXirAction {
     uint32_t argument_count;
     XrXirValue value;
 } XrXirAction;
+
+/* Normalize failures inside an admitted entry; admission errors are separate. */
+XR_FUNC XrXirAction xr_xir_call_fault(XrXirRunStatus status);
 typedef struct XrXirCallView {
     XrXirCall *activation;
     void *instance;

@@ -34,6 +34,17 @@ completion/cancellation arbitration. Suspension is not generator output or EOF.
 Language throw carries an i64 error token in this scalar subset. Runtime faults
 remain distinct and unwind the activation without a partial language result.
 
+VM and generated C translate scalar runtime failures through the same fault
+action constructor. Divide-by-zero and numeric-range failures retain their
+distinct call statuses; allocation failure maps to OOM, and scalar step/frame
+limits map to LIMIT. Invalid arguments, artifacts or ABI facts inside an
+already admitted entry are BAD_STATE. OK and unknown status values cannot
+manufacture success through the fault channel and also become BAD_STATE.
+Argument and ABI admission errors before entry remain their existing distinct
+statuses. Every fault clears the language result, unwinds children before
+parents and balances physical frame accounting. This normalization changes no
+wire layout, opcode identity or accepted ABI version.
+
 Metadata and frames share a physical byte budget. Frame depth and resume work
 have separate limits. Accounting includes the activation and copied descriptors,
 not just user payload. Allocation failure restores live bytes and allocation/free

@@ -50,6 +50,19 @@ struct XrXirCall {
     bool driving, cleaning, cancel_requested;
 };
 
+XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
+    XrXirCallStatus reason;
+    switch (status) {
+        case XR_XIR_RUN_DIVIDE_BY_ZERO: reason = XR_XIR_CALL_DIVIDE_BY_ZERO; break;
+        case XR_XIR_RUN_NUMERIC_RANGE: reason = XR_XIR_CALL_NUMERIC_RANGE; break;
+        case XR_XIR_RUN_OUT_OF_MEMORY: reason = XR_XIR_CALL_OOM; break;
+        case XR_XIR_RUN_STEP_LIMIT:
+        case XR_XIR_RUN_FRAME_LIMIT: reason = XR_XIR_CALL_LIMIT; break;
+        default: reason = XR_XIR_CALL_BAD_STATE; break;
+    }
+    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, reason}};
+}
+
 uint32_t xr_xir_call_current_entry(const XrXirCall *call) {
     return call && call->driving && !call->cleaning && call->top ?
         (uint32_t) (call->top->entry - call->config.entries) : UINT32_MAX;

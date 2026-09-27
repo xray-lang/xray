@@ -13,6 +13,7 @@
  */
 
 #include "xxir_emit_c.h"
+#include "xxir_program.h"
 #include "xxir_callable.h"
 #include "xxir_scalar.h"
 #include "../base/xmalloc.h"
@@ -95,7 +96,7 @@ static void append(CBuffer *buffer, const char *format, ...) {
     va_end(args);
 }
 
-static void emit_integer_step(CBuffer *buffer, const XrXirFunction *function,
+static void emit_numeric_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, uint32_t index, bool resumable) {
     const XrXirInstruction *op = &function->instructions[index];
     const char *frame = resumable ? "state->frame" : "frame";
@@ -127,10 +128,8 @@ static void emit_integer_step(CBuffer *buffer, const XrXirFunction *function,
             "xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &temporary);\n",
             (uint32_t) op->type, emit_arithmetic_operation(op->op), frame, left, frame, layout->offsets[op->args[1]]);
     }
-    if (resumable) append(buffer, "    if (numeric_status != XR_XIR_RUN_OK) return (XrXirAction) "
-        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, numeric_status == XR_XIR_RUN_NUMERIC_RANGE ? XR_XIR_CALL_NUMERIC_RANGE : "
-        "numeric_status == XR_XIR_RUN_DIVIDE_BY_ZERO ? "
-        "XR_XIR_CALL_DIVIDE_BY_ZERO : XR_XIR_CALL_BAD_ARGUMENT}};\n");
+    if (resumable) append(buffer, "    if (numeric_status != XR_XIR_RUN_OK) "
+        "return xr_xir_call_fault(numeric_status);\n");
     else append(buffer, "    if (numeric_status != XR_XIR_RUN_OK) { status = numeric_status; goto xr_done; }\n");
     append(buffer, "    xr_xir_scalar_store(%s, %uu, ", frame, destination);
     if (comparison) append(buffer, "ordering %s 0", comparison);
@@ -249,7 +248,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_CONVERT_NUMBER:
-        emit_integer_step(buffer, function, layout, index, false);
+        emit_numeric_step(buffer, function, layout, index, false);
         break;
     case XR_XIR_JUMP:
         emit_edge(buffer, function, layout, index, op->targets[0], false);
@@ -323,10 +322,11 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_float.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 8u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
-           "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");
+           "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
+           XR_XIR_VALUE_ABI_VERSION);
     for (uint32_t f = 0; f < module->function_count && buffer.status == XR_XIR_OK; ++f)
         emit_function(&buffer, artifact, symbol_prefix, f);
     if (buffer.status != XR_XIR_OK) {
@@ -499,7 +499,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_CONVERT_NUMBER:
-        emit_integer_step(buffer, function, layout, index, true);
+        emit_numeric_step(buffer, function, layout, index, true);
         break;
     case XR_XIR_JUMP:
         emit_edge(buffer, function, layout, index, op->targets[0], true);
@@ -666,10 +666,10 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
     append(buffer, ", %uu, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else append(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu};\n", d->literal_count, d->root_module, d->entry_function);
-    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 7u, \"XIR program ABI\");\n"
+    append(buffer, "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == %uu, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
-        prefix, prefix, module->function_count, prefix);
+        XR_XIR_PROGRAM_ABI_VERSION, prefix, prefix, module->function_count, prefix);
     if (module->callables) append(buffer, "&%s_callable_types", prefix); else append(buffer, "NULL");
     append(buffer, "};\n");
 }
@@ -686,11 +686,12 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
     append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
-           "_Static_assert(XR_XIR_CALL_ABI_VERSION == 12u, \"XIR call ABI\");\n"
-           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == 8u, \"XIR scalar ABI\");\n"
+           "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"
+           "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
-           "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n");
+           "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
+           XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
     for (uint32_t f = 0; f < module->function_count && buffer.status == XR_XIR_OK; ++f)
         emit_resume_function(&buffer, artifact, symbol_prefix, f);
     append(&buffer, "XR_DATADEF const XrXirCallEntry %s_entries[] = {\n", symbol_prefix);

@@ -544,6 +544,46 @@ ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")
 TEST_RE = re.compile(r"^verification-test: ([A-Za-z0-9_-]+)$")
 ASSERTION_FIXTURE = "semantic_contract_assertions"
 XIR_ASSERTION_FIXTURE = "xir_contract_assertions"
+XIR_PROTOCOL_DEFINITIONS = {
+    "XR_XIR_VALUE_ABI_VERSION": "src/xir/xxir_value.h",
+    "XR_XIR_CALL_ABI_VERSION": "src/xir/xxir_call.h",
+    "XR_XIR_PROGRAM_ABI_VERSION": "src/xir/xxir_program.h",
+    "XR_XIR_CHECKED_SCHEMA": "src/xir/xxir_checked.h",
+    "XR_XIR_CHECKED_CONTRACT": "src/xir/xxir_checked.h",
+}
+XIR_LITERAL_REVISION = re.compile(
+    r"\b(?:Value|Call|Program)\s*(?:ABI\s*)?\d+|"
+    r"\bABI\s*(?:version\s*|版本\s*)?\d+|"
+    r"\bschema\s*(?:u32\s*|is\s*|为\s*)?\d+|"
+    r"\bsemantic(?:[- ]contract)?\s*(?:is\s*)?\d+|"
+    r"语义(?:合同)?(?:为)?\s*\d+", re.IGNORECASE)
+
+
+def verify_xir_protocol_text(text: str) -> None:
+    match = XIR_LITERAL_REVISION.search(text)
+    if match:
+        raise ValueError(f"XIR spec duplicates a protocol revision: {match.group()}")
+    for language in ("cn", "en"):
+        block = re.search(rf"<!-- xr-spec:{language} -->(.*?)<!-- /xr-spec:{language} -->",
+                          text, re.DOTALL)
+        if not block:
+            raise ValueError(f"XIR spec missing language block: {language}")
+        for symbol in XIR_PROTOCOL_DEFINITIONS:
+            if block.group(1).count(f"`{symbol}`") != 1:
+                raise ValueError(f"XIR spec must name one {language} revision owner: {symbol}")
+
+
+def verify_xir_protocol_references(root: Path) -> None:
+    path = root / "spec/source/sections/018-17-compilation-pipeline.md"
+    verify_xir_protocol_text(path.read_text(encoding="utf-8"))
+    scalar = (root / "contracts/xir-scalar-execution.md").read_text(encoding="utf-8")
+    if XIR_LITERAL_REVISION.search(scalar) or "`XR_XIR_VALUE_ABI_VERSION`" not in scalar:
+        raise ValueError("scalar contract must reference its current ABI owner")
+    for symbol, owner in XIR_PROTOCOL_DEFINITIONS.items():
+        text = (root / owner).read_text(encoding="utf-8")
+        definitions = re.findall(rf"^#define {symbol} ([1-9][0-9]*)u$", text, re.MULTILINE)
+        if len(definitions) != 1:
+            raise ValueError(f"XIR protocol needs one positive revision definition: {symbol}")
 
 
 def verify_contract_inventory(contracts_dir: Path, specs=CONTRACT_SPECS) -> None:
@@ -707,6 +747,24 @@ def refresh_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> li
 
 
 def self_test() -> int:
+    protocol_block = "\n".join(f"`{symbol}`" for symbol in XIR_PROTOCOL_DEFINITIONS)
+    protocol_text = "\n".join(f"<!-- xr-spec:{lang} -->\n{protocol_block}\n<!-- /xr-spec:{lang} -->"
+                              for lang in ("cn", "en"))
+    verify_xir_protocol_text(protocol_text)
+    for stale in ("Value8/Call12/Program7", "ABI version 5", "ABI版本5", "schema4",
+                  "schema is 4", "schema为4", "semantic contract 13", "语义合同为10"):
+        try:
+            verify_xir_protocol_text(protocol_text + "\n" + stale)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"accepted duplicated protocol revision: {stale}")
+    try:
+        verify_xir_protocol_text(protocol_text.replace("`XR_XIR_VALUE_ABI_VERSION`", "value", 1))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("accepted missing language revision owner")
     with tempfile.TemporaryDirectory(prefix="xray-contract-freeze-") as tmp:
         root = Path(tmp)
         (root / "contracts").mkdir()
@@ -841,6 +899,7 @@ def main() -> int:
                   if args.scope == "all" or spec.name.startswith("xir-"))
     try:
         verify_contract_inventory(contracts_dir)
+        verify_xir_protocol_references(root)
         tests = assertion_tests(contracts_dir, specs)
         if args.list_tests:
             print("\n".join(sorted(tests)))

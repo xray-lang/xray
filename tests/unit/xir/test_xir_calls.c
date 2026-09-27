@@ -327,7 +327,70 @@ static void call_admission(void) {
     }
     xr_xir_artifact_free(artifact);
 }
+typedef struct FaultWitness {
+    XrXirRunStatus failure;
+    XrXirCallStatus reason;
+    uint32_t cleanups;
+} FaultWitness;
+
+static XrXirAction fault_parent(XrXirCallView *view) {
+    (void) view;
+    return (XrXirAction) {XR_XIR_ACTION_CALL, 1, NULL, 0, {XR_XIR_UNIT, 0, 0}};
+}
+
+static XrXirAction fault_child(XrXirCallView *view) {
+    FaultWitness *witness = view->instance;
+    return xr_xir_call_fault(witness->failure);
+}
+
+static void fault_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
+    FaultWitness *witness = view->instance;
+    const uint32_t *identity = view->environment;
+    CHECK(reason == witness->reason);
+    CHECK(*identity == 1u - witness->cleanups);
+    ++witness->cleanups;
+}
+
+static void fault_boundary(void) {
+    const struct {
+        XrXirRunStatus failure;
+        XrXirCallStatus reason;
+    } cases[] = {
+        {XR_XIR_RUN_DIVIDE_BY_ZERO, XR_XIR_CALL_DIVIDE_BY_ZERO},
+        {XR_XIR_RUN_NUMERIC_RANGE, XR_XIR_CALL_NUMERIC_RANGE},
+        {XR_XIR_RUN_OUT_OF_MEMORY, XR_XIR_CALL_OOM},
+        {XR_XIR_RUN_STEP_LIMIT, XR_XIR_CALL_LIMIT},
+        {XR_XIR_RUN_FRAME_LIMIT, XR_XIR_CALL_LIMIT},
+        {XR_XIR_RUN_BAD_ARGUMENT, XR_XIR_CALL_BAD_STATE},
+        {XR_XIR_RUN_BAD_ARTIFACT, XR_XIR_CALL_BAD_STATE},
+        {XR_XIR_RUN_BAD_ABI, XR_XIR_CALL_BAD_STATE},
+        {XR_XIR_RUN_OK, XR_XIR_CALL_BAD_STATE},
+        {(XrXirRunStatus) -1, XR_XIR_CALL_BAD_STATE},
+        {(XrXirRunStatus) 999, XR_XIR_CALL_BAD_STATE},
+    };
+    const XrXirCallEntry entries[] = {
+        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_parent, fault_cleanup, &identities[0]},
+        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_child, fault_cleanup, &identities[1]},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        FaultWitness witness = {cases[i].failure, cases[i].reason, 0};
+        XrXirCallAccounting accounting = {0};
+        XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 2, &accounting, {NULL, NULL}};
+        XrXirCall *call = NULL;
+        CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
+        XrXirCallResult result = xr_xir_call_poll(call);
+        CHECK(result.status == cases[i].reason);
+        CHECK(result.value.type == XR_XIR_UNIT && !result.value.reserved && !result.value.payload);
+        CHECK(result.wake == 0 && witness.cleanups == 2 && accounting.depth == 0);
+        CHECK(xr_xir_call_poll(call).status == cases[i].reason);
+        CHECK(witness.cleanups == 2);
+        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+        CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
+    }
+}
+
 int main(void) {
+    fault_boundary();
     callback_cases();
     bounded_stack();
     xir_instruction_calls();

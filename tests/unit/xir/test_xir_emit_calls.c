@@ -31,6 +31,8 @@ int main(int argc, char **argv) {
         CHECK(xr_xir_emit_c(artifact, prefix, 65536, &source) == XR_XIR_OK);
         xr_xir_artifact_free(artifact);
         CHECK(!strstr(source.text, "({"));
+        if (mode == 2)
+            CHECK(strstr(source.text, "xr_xir_call_fault(numeric_status)"));
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_c_source_free(&source);
     }

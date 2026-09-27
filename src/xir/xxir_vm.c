@@ -358,11 +358,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     XrXirAction action;
     XrXirRunStatus status = scalar_step(&run, state, &action);
     if (status != XR_XIR_RUN_OK)
-        return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0,
-            status == XR_XIR_RUN_NUMERIC_RANGE ? XR_XIR_CALL_NUMERIC_RANGE :
-            status == XR_XIR_RUN_DIVIDE_BY_ZERO ? XR_XIR_CALL_DIVIDE_BY_ZERO :
-            status == XR_XIR_RUN_OUT_OF_MEMORY ? XR_XIR_CALL_OOM :
-            status == XR_XIR_RUN_FRAME_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE}};
+        return xr_xir_call_fault(status);
     return action;
 }
 
