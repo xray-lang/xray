@@ -300,19 +300,25 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
     fprintf(out, "_e; })");
 }
 
+static void emit_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
+                                                const XrBuiltinEnumRow *ed,
+                                                uint32_t member_index);
+
 static bool emit_enum_namespace_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v, bool storage_predeclared) {
-    if (!ctx || !out || !v || v->op != XI_CONST || !v->type)
+    if (!ctx || !out || !v || !v->type || ctx->freestanding_profile)
         return false;
 
     const XiEnumData *ed = NULL;
-    if (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux)
+    const XrBuiltinEnumRow *prelude = NULL;
+    if (v->op == XI_CONST && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux)
         ed = (const XiEnumData *) v->aux;
-    else
+    else if (v->op == XI_GET_BUILTIN)
+        prelude = xr_builtin_enum_registry_row((int) v->aux_int);
+    if (!ed && !prelude)
         return false;
 
-    if (ctx->freestanding_profile)
-        return false;
+    uint32_t member_count = ed ? ed->member_count : prelude->member_count;
     if (!storage_predeclared && !ctx->pre_decl_all) {
         fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
         emit_vref(out, v);
@@ -320,20 +326,22 @@ static bool emit_enum_namespace_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
     }
     fprintf(out, "    ");
     emit_vref(out, v);
-    fprintf(out, " = xrt_map_new(%u);\n", (unsigned) (ed ? ed->member_count : 0));
-    for (uint32_t i = 0; ed && i < ed->member_count; i++) {
-        const XiEnumMemberData *member = &ed->members[i];
-        const char *name = member->name ? member->name : "";
+    fprintf(out, " = xrt_map_new(%u);\n", (unsigned) member_count);
+    for (uint32_t i = 0; i < member_count; i++) {
+        const char *name = ed ? ed->members[i].name : prelude->members[i].name;
         fprintf(out, "    xrt_map_set((xrt_map_t*)");
         emit_vref(out, v);
         fprintf(out, ".ptr, ");
-        cg_emit_str_value(ctx, out, name);
+        cg_emit_str_value(ctx, out, name ? name : "");
         fprintf(out, ", ");
-        if (ed->is_adt) {
+        if (prelude) {
+            emit_prelude_enum_member_value_expr(ctx, out, prelude, i);
+        } else if (ed->is_adt) {
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         } else {
             emit_enum_member_box_value_expr(ctx, out, "unit", ed->layout_id,
-                                            ed->name ? ed->name : "", name, i, ed->layout_id);
+                                            ed->name ? ed->name : "", name ? name : "", i,
+                                            ed->layout_id);
         }
         fprintf(out, ");\n");
     }
@@ -491,19 +499,6 @@ static void emit_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
                                     member->name ? member->name : "", member_index, 0);
 }
 
-static bool emit_prelude_enum_type_expr(XiCgenCtx *ctx, FILE *out, int builtin_index) {
-    const XrBuiltinEnumRow *ed = xr_builtin_enum_registry_row(builtin_index);
-    if (!ed)
-        return false;
-    fprintf(out, "({ XrValue _e = xrt_map_new(%u); ", (unsigned) ed->member_count);
-    for (uint32_t i = 0; i < ed->member_count; i++) {
-        fprintf(out, "xrt_map_set((xrt_map_t*)_e.ptr, xr_box_str(\"%s\"), ", ed->members[i].name);
-        emit_prelude_enum_member_value_expr(ctx, out, ed, i);
-        fprintf(out, "); ");
-    }
-    fprintf(out, "_e; })");
-    return true;
-}
 
 static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                        int builtin_index, const char *member_name) {

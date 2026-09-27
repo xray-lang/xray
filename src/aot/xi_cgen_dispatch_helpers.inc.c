@@ -4448,10 +4448,12 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     } else if (ctx && ctx->freestanding_profile && xr_builtin_enum_registry_row((int) v->aux_int) != NULL) {
         fprintf(out, "XR_NULL_VAL /* freestanding prelude enum namespace: %s */",
                 v->aux ? (const char *) v->aux : "?");
-    } else if (emit_prelude_enum_type_expr(ctx, out, (int) v->aux_int)) {
-        /* Prelude enum type object: standalone AOT uses the same lightweight
-         * map representation as user enums, avoiding a full isolate solely for
-         * enum member lookup. */
+    } else if (xr_builtin_enum_registry_row((int) v->aux_int) != NULL) {
+        /* Namespace construction requires statements and must have been
+         * materialized before an expression consumer reaches this path. */
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: prelude enum namespace was not materialized\n");
+        emit_codegen_abort_expr(out);
     } else {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT builtin global '%s'\n",

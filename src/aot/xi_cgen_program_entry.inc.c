@@ -470,7 +470,7 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
         fprintf(out, "#include <math.h>\n");
         fprintf(out, "#include \"xrt.h\"\n\n");
         if (runtime_bridge) {
-            fprintf(out, "#include \"xaot_coro.h\"\n\n");
+            fprintf(out, "#include \"../aot/xaot_coro.h\"\n\n");
             fprintf(out, "#include \"xrt_thread_aot.h\"\n\n");
         }
         emit_pragma_pop(out);

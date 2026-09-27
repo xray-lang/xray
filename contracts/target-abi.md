@@ -1394,7 +1394,7 @@ anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 022a99ffcd7990f061e219356081f2f6f864a7f83b2b56c231f8a1fa16c5e6d0
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 97085f29b14fd95ab3f942fa6782eafe79f5caaad0b7dab9d50b9d11cb7606a0
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c cbc5cfc599653e3668f4b7dd6a81755baeb274b67a455e52155cc16205f68a23
-anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 3a1b50209d93f7e098b67a9b23b79175050b1bf4ad297060b93e7aad257ad950
+anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 49f608015159cfa9136a9277a98669a8ddf565a4dfcaa77ef7730542462aebb8
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 5c15a320923a30c60c771f9618f6fe23dc9ed22af8a59bc96016c447043f894f
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd948a4a9fcd64adfab03c177fd125f577686043223b601f524
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
@@ -1414,8 +1414,8 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c ef69a37f0508160df042ba4e84268750d0b2e0fc31ff7f11c2f5f65c12fab36e
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c bfd1bf8927cc7562ca193bfc182158a928b2c6e8dec77d1c02fbc88c8df1d959
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b1296f68ba37032061b8ba2fae7ffc5cd9b76bb03f9df6a34f4f3c7d9fedeb79
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 1c560b4d775ce9f62738b8a988a4827d9862cf9cb80584135528c6084640de99
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 1efa62a583b15ed1525d132e7e850643744c090d0e42930b8ea43d6731a86c7f
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 10f8d418f0f79e577191731ae87cc1511af9d416387a95392dd8913beaf6ac18
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 08db1ebcd463d21d5a849a5f7bfcae7d41206818c04fc73c44566017c8e8a522
 anchor-sha256: src/aot/xi_cgen.c 48f81f94437637c0c75bea20a3664a5b7d3a1fe67d07ef39ae3ea81ef73b9282
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
@@ -2366,3 +2366,26 @@ Scalar/ref-Slice projection preserves the callee function boundary category:
 suspending bodies are coroutine boundaries; captured, module-initializer and
 throwing bodies are tagged boundaries. The ref parameter retains its exact
 pointee pointer ABI independently of that function-level category.
+
+### Hosted enum namespace statements and runtime bridge identity
+
+In ordinary function bodies, hosted prelude enum namespace values use the
+same ordinary C11 statement materialization owner as source enum namespaces.
+Expression emission rejects a prelude namespace that was not materialized;
+it cannot fall back to a GNU statement expression. Nominal member identity and
+checked typed-catch behavior remain unchanged.
+
+Coroutine prelude namespace values retain their existing runtime GET_BUILTIN
+lookup. The statement helper must not replace those lookups with newly allocated
+local maps. Source-declared enum namespace materialization is unchanged. A real
+yielding SendResult fixture retains actual prelude GET_BUILTIN nodes and an
+emitted resume state, requires the runtime lookup, and rejects local map creation.
+
+Generated hosted C includes `../aot/xaot_coro.h` from the SDK AOT include root.
+The installed SDK preserves the sibling `src/aot` and `src/coro` directories.
+That spelling reaches the bridge even when a consumer also places the coroutine
+runtime include directory first; it cannot select the same-basename runtime
+declaration header. Both synchronous and coroutine emission share this include
+owner. These fixes do not qualify all generated-C families or other providers.
+
+verification-test: test_native_stdlib_portability

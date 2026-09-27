@@ -5743,6 +5743,70 @@ TEST(cgen_standalone_prelude_enum_globals_generate_static_members) {
     test_func_free(ir);
 }
 
+TEST(cgen_prelude_typed_catch_uses_portable_namespace_statements) {
+    const char *source =
+        "fn decode(bytes: Array<u8>) -> string? {\n"
+        "    var result: string? = null\n"
+        "    try { result = string.fromUtf8(bytes[:]) }\n"
+        "    catch (e: Utf8Error) { result = null }\n"
+        "    return result\n"
+        "}\n"
+        "print(decode([65]))\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "typed prelude catch compiles through the source pipeline");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code && !had_error, "typed prelude catch has complete C emission authority");
+    TEST_REQUIRE(contains(code, "xrt_map_new(1)"), "the prelude namespace is materialized");
+    TEST_REQUIRE(!contains(code, "({"), "namespace production must use portable statements");
+    TEST_REQUIRE(contains(code, "InvalidUtf8"), "the nominal error member is preserved");
+    xr_free(code);
+    test_func_free(ir);
+}
+
+TEST(cgen_coro_prelude_namespace_preserves_runtime_lookup) {
+    const char *source =
+        "fn probe(flag: bool) -> bool {\n"
+        "    Coro.yield()\n"
+        "    var result = flag ? SendResult.Sent : SendResult.Closed\n"
+        "    return result == SendResult.Sent\n"
+        "}\n"
+        "print(probe(true), probe(false))\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir != NULL, "coroutine prelude source compiles");
+    XiFunc *worker = test_find_child_function(ir, "probe");
+    TEST_REQUIRE(worker != NULL, "the source worker retains its own IR body");
+    uint32_t namespaces = 0;
+    for (uint32_t bi = 0; bi < worker->nblocks; bi++) {
+        const XiBlock *block = worker->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->op == XI_GET_BUILTIN &&
+                value->aux_int == XR_GLOBAL_VAR_SEND_RESULT)
+                namespaces++;
+        }
+    }
+    TEST_REQUIRE(namespaces > 0, "the regression retains actual prelude GET_BUILTIN nodes");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code && !had_error, "coroutine prelude C generation succeeds");
+    char resume_name[96];
+    snprintf(resume_name, sizeof(resume_name), "_probe_%d_aot_resume(", worker->cgen_id);
+    const char *resume = find_static_function_definition(code, resume_name);
+    TEST_REQUIRE(resume != NULL, "the checked worker owns an emitted resume definition");
+    const char *resume_end = next_static_after(resume);
+    TEST_REQUIRE(contains_between(resume, resume_end, "case 1:"),
+                 "the worker body owns an emitted resume state");
+    char load[80];
+    snprintf(load, sizeof(load), "xr_aot_get_builtin(ctx, %d)", XR_GLOBAL_VAR_SEND_RESULT);
+    TEST_REQUIRE(contains_between(resume, resume_end, load),
+                 "the worker body consumes its runtime prelude namespace");
+    TEST_REQUIRE(!contains_between(resume, resume_end, "xrt_map_new("),
+                 "the worker body must not replace prelude lookup with local maps");
+    xr_free(code);
+    test_func_free(ir);
+}
+
 TEST(cgen_cancelled_builtin_generates_false) {
     const char *src = "print(cancelled())\n";
 
@@ -17480,6 +17544,8 @@ int main(int argc, char **argv) {
     run_cgen_initializes_file_dir_builtins_from_entry_source();
     run_cgen_runtime_file_dir_stays_runtime_owned();
     run_cgen_standalone_prelude_enum_globals_generate_static_members();
+    run_cgen_prelude_typed_catch_uses_portable_namespace_statements();
+    run_cgen_coro_prelude_namespace_preserves_runtime_lookup();
     run_cgen_cancelled_builtin_generates_false();
     run_cgen_variable_and_print();
     run_cgen_if_else();

@@ -3076,7 +3076,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     if (cg_shared_static_function_value_is_elided(ctx, f, v))
         return;
-    if (emit_enum_namespace_value_stmt(ctx, out, f, v, true))
+    /* Prelude namespaces belong to the runtime. Preserve their builtin
+     * lookup instead of introducing a new local map allocation. */
+    if (v->op != XI_GET_BUILTIN && emit_enum_namespace_value_stmt(ctx, out, f, v, true))
         return;
     if (emit_closure_new_value_stmt(ctx, out, f, prefix, v, true))
         return;

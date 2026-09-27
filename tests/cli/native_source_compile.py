@@ -1,5 +1,6 @@
 """Compile source fixtures through frozen plans and strict host C compilation."""
 import argparse
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,7 +15,9 @@ def run(command, cwd, timeout=60):
                            (result.stdout + result.stderr).decode("utf-8", errors="replace"))
 
 
-def compile_cases(cases, extra_sources=None, case_timeouts=None):
+def compile_cases(cases, extra_sources=None, case_timeouts=None, *,
+                  runtime_headers_first=False, reject_statement_expressions=False,
+                  generated_check=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--host-compiler", required=True)
@@ -46,6 +49,11 @@ def compile_cases(cases, extra_sources=None, case_timeouts=None):
                 run([str(compiler), "native-fastpaths", "main.xr", "--output", str(generated),
                      "--header", str(folder / (name + ".h"))], folder,
                     timeout=(case_timeouts or {}).get(name, 60))
+                if reject_statement_expressions and re.search(
+                        r"\(\s*\{", generated.read_text(encoding="utf-8")):
+                    raise RuntimeError("generated C contains a GNU statement expression")
+                if generated_check:
+                    generated_check(name, generated.read_text(encoding="utf-8"))
                 if args.msvc:
                     command = [args.host_compiler, "/nologo", "/std:c11",
                                "/utf-8", "/D_CRT_SECURE_NO_WARNINGS", "/W4", "/WX", "/wd4702",
@@ -59,6 +67,10 @@ def compile_cases(cases, extra_sources=None, case_timeouts=None):
                                "-pedantic-errors", "-isystem", str(root / "src/aot"),
                                "-isystem", str(root / "include"), "-c", str(generated),
                                "-o", str(folder / (name + ".o"))]
+                if runtime_headers_first:
+                    roots = (["/external:I" + str(root / "src/coro")] if args.msvc else
+                             ["-isystem", str(root / "src/coro")])
+                    command[1:1] = roots
                 run(command, folder)
             except (RuntimeError, subprocess.TimeoutExpired, OSError) as error:
                 failures.append(name)

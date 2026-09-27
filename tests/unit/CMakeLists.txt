@@ -1322,6 +1322,11 @@ add_test(NAME test_native_execution_closure_authority
         --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_execution_closure_authority PROPERTIES
     LABELS "aot;generated-c;closure;integration" TIMEOUT 240)
+add_test(NAME test_native_stdlib_portability
+    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_stdlib_portability.py
+        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+set_tests_properties(test_native_stdlib_portability PROPERTIES
+    LABELS "aot;generated-c;portability;integration" TIMEOUT 240)
 add_test(NAME test_native_static_method_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_static_method.py
         --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
