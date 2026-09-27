@@ -53,6 +53,7 @@ Decimal literals and exact integer contextual admission follow
 rejected until their arithmetic/formatting contracts are implemented. No product
 or cross-platform qualification is implied by this subset.
 
+verification-test: xir_float_vectors_check
 verification-test: test_xir_execution
 verification-test: test_xir_native
 verification-test: test_xir_checked

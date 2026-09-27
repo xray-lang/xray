@@ -416,12 +416,12 @@ verification-test: test_semantic_zero_operand_metadata
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt b1c8ca9d099f8ce568f86a237723c2226a20e608d3499de0e33323531e5f2e80
+anchor-sha256: CMakeLists.txt 14d5cb82e420361a9e6283233c695e2da0a273e3d5545af070c24ba70d3307a3
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
 anchor-sha256: src/module/xmodule_graph.c df2a1ef9ff63dee28badae0307f1a1279f6e8b6697b296ec63275a10cde1ba4c
-anchor-sha256: src/frontend/parser/xparse.c a1d70ee1738c1fc9f756cbaf7bc0046b3d85169f491f29c4fdf308da51cfc627
+anchor-sha256: src/frontend/parser/xparse.c dedcf2cb95e3e1f3b3d8b154de91ab4aa829c4910a7d6d352fc6590838144e7d
 anchor-sha256: src/frontend/parser/xparse_decl.c 3f5c544c32fd42a0b66a2d6095e0986dc800cdbf8bc94f8713fb10ab36090ef2
 anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 4da1394baa34244c76f07d0f9a6bccf406d862ba38f5b20b9b78b02ce894564a
@@ -475,7 +475,7 @@ anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c b9ef88ecf75777f9146180fbca884a68b66bc7fceb6ac56b385e79914d943aca
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c eec8355e8f44b033a8688ac38d6a37af3f49eb576e7f2766863a716df9772f33
-anchor-sha256: tests/unit/frontend/test_parser.c 83d2fcc57c562b0def2f589440f0f7991ed049680c4941c5b7ccd48e22f56eb1
+anchor-sha256: tests/unit/frontend/test_parser.c d7e4e7455e597c1ce6494d781792048ade9f1bbc3bc1e77ce745d05da7084644
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 39c2cbedd4bc84650f6faa2e098f93ea67a2389bf74ba54909ed3fc5871d0736
@@ -517,3 +517,12 @@ Cross-execution move promotion updates the consumed node's storage-domain and
 evidence snapshot only after its candidate, root, source symbol and allocation
 plan identifiers match the current binding generation. Call and spawn boundaries
 share that operation; later rebinding cannot replace the consumed proof.
+
+Parser generic-suffix speculation keeps its rollback snapshot outside ordinary
+Pratt recursion frames. Grouping at the expression nesting budget must report
+a recoverable diagnostic on the Windows default stack in optimized and
+unoptimized builds. This storage change preserves token rollback, diagnostics
+and accepted generic/comparison grammar; it adds no PSC or execution authority.
+
+verification-test: test_parser_recoverable
+verification-test: test_parser

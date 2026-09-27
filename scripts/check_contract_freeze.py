@@ -36,6 +36,34 @@ CONTRACT_SPECS = (
     ContractSpec("xir-checked-packet.md", ()),
     ContractSpec("xir-generic-templates.md", ()),
     ContractSpec("xir-local-control-flow.md", ()),
+    ContractSpec("xir-callable-types.md", ()),
+    ContractSpec("xir-function-values.md", ()),
+    ContractSpec("xir-shared-cells.md", ()),
+    ContractSpec("xir-integer-arithmetic.md", ()),
+    ContractSpec("xir-floating-point.md", ()),
+    ContractSpec("xir-decimal-literals.md", ()),
+    ContractSpec(
+        "print-semantics.md",
+        (
+            "src/shared/xr_print_plan.h",
+            "src/shared/xr_core_intrinsic_registry.c",
+            "src/ir/xi_lower_expr.c",
+            "src/ir/xi_emit_call.c",
+            "src/vm/xvm_dispatch_convert.inc.c",
+            "src/aot/xi_cgen_dispatch_helpers.inc.c",
+            "src/plan/semantic/xr_semantic_plan.c",
+            "src/plan/target/xr_target_capability.h",
+            "src/plan/target/xr_target_builder.c",
+            "src/api/xrepl.c",
+            "tests/diff/cases/semantics/output/print_zero_args.xr",
+            "tests/diff/cases/semantics/output/print_separator_exact.xr",
+            "tests/diff/cases/semantics/output/print_terminator_exact.xr",
+            "tests/diff/cases/semantics/output/print_evaluation_order.xr",
+            "tests/diff/cases/semantics/output/print_group_atomic_on_panic.xr",
+            "tests/diff/cases/semantics/output/print_group_atomic_on_fatal.xr",
+            "tests/diff/cases/semantics/output/print_unsigned_widths.xr",
+        ),
+    ),
     ContractSpec(
         "intrinsic-identity.md",
         (
@@ -515,6 +543,19 @@ CONTRACT_SPECS = (
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")
 TEST_RE = re.compile(r"^verification-test: ([A-Za-z0-9_-]+)$")
 ASSERTION_FIXTURE = "semantic_contract_assertions"
+XIR_ASSERTION_FIXTURE = "xir_contract_assertions"
+
+
+def verify_contract_inventory(contracts_dir: Path, specs=CONTRACT_SPECS) -> None:
+    names = [spec.name for spec in specs]
+    if len(names) != len(set(names)):
+        raise ValueError("duplicate registered contract")
+    files = {path.name for path in contracts_dir.glob("*.md") if path.name != "README.md"}
+    missing = set(names) - files
+    unregistered = files - set(names)
+    if missing or unregistered:
+        raise ValueError(f"contract inventory mismatch: missing={sorted(missing)}, "
+                         f"unregistered={sorted(unregistered)}")
 
 
 def assertion_tests(contracts_dir: Path, specs=CONTRACT_SPECS) -> set[str]:
@@ -540,7 +581,8 @@ def assertion_tests(contracts_dir: Path, specs=CONTRACT_SPECS) -> set[str]:
     return tests
 
 
-def verify_assertion_registration(tests: set[str], inventory: dict) -> None:
+def verify_assertion_registration(tests: set[str], inventory: dict,
+                                  fixture=ASSERTION_FIXTURE, gate="contract_freeze") -> None:
     rows = {row["name"]: row for row in inventory["tests"]}
     for name in sorted(tests):
         if name not in rows:
@@ -551,11 +593,11 @@ def verify_assertion_registration(tests: set[str], inventory: dict) -> None:
             raise ValueError(f"contract assertion test cannot execute: {name}")
         if any(key in properties for key in ("SKIP_RETURN_CODE", "SKIP_REGULAR_EXPRESSION")):
             raise ValueError(f"contract assertion test permits a skipped result: {name}")
-        if ASSERTION_FIXTURE not in properties.get("FIXTURES_SETUP", []):
+        if fixture not in properties.get("FIXTURES_SETUP", []):
             raise ValueError(f"contract assertion test does not guard freeze: {name}")
-    freeze = rows.get("contract_freeze", {})
+    freeze = rows.get(gate, {})
     properties = {p["name"]: p["value"] for p in freeze.get("properties", [])}
-    if ASSERTION_FIXTURE not in properties.get("FIXTURES_REQUIRED", []):
+    if fixture not in properties.get("FIXTURES_REQUIRED", []):
         raise ValueError("contract freeze does not require its assertion tests")
 
 
@@ -676,6 +718,14 @@ def self_test() -> int:
         contract.write_text(
             f"# Sample\n\nanchor-sha256: src/truth.def {digest(anchor)}\n", encoding="utf-8"
         )
+        verify_contract_inventory(root / "contracts", (spec,))
+        for specs in ((), (spec, spec), (ContractSpec("absent.md", ()),)):
+            try:
+                verify_contract_inventory(root / "contracts", specs)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("accepted incomplete or duplicate contract inventory")
         assert verify_digests(root, root / "contracts", (spec,)) == []
         duplicate = ContractSpec("sample.md", spec.anchors * 2)
         before = contract.read_bytes()
@@ -715,6 +765,25 @@ def self_test() -> int:
                 {"name": "FIXTURES_REQUIRED", "value": [ASSERTION_FIXTURE]}]},
         ]}
         verify_assertion_registration({"sample_behavior"}, inventory)
+        scoped = json.loads(json.dumps(inventory))
+        scoped["tests"][0]["properties"][0]["value"].append(XIR_ASSERTION_FIXTURE)
+        scoped["tests"].append({"name": "contract_freeze_xir", "properties": [
+            {"name": "FIXTURES_REQUIRED", "value": [XIR_ASSERTION_FIXTURE]}]})
+        verify_assertion_registration({"sample_behavior"}, scoped,
+                                      XIR_ASSERTION_FIXTURE, "contract_freeze_xir")
+        for mutate_gate in (False, True):
+            bad = json.loads(json.dumps(scoped))
+            if mutate_gate:
+                bad["tests"][2]["properties"] = []
+            else:
+                bad["tests"][0]["properties"][0]["value"] = [ASSERTION_FIXTURE]
+            try:
+                verify_assertion_registration({"sample_behavior"}, bad,
+                                              XIR_ASSERTION_FIXTURE, "contract_freeze_xir")
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("accepted a disconnected scoped contract fixture")
         for mutation in ("missing", "disabled", "skip", "unbound", "missing-requirement"):
             bad = json.loads(json.dumps(inventory))
             if mutation == "missing":
@@ -753,6 +822,8 @@ def main() -> int:
     parser.add_argument("--contracts-dir", default="contracts", help="contract directory")
     parser.add_argument("--build-dir", default="build", help="configured CTest build")
     parser.add_argument("--list-tests", action="store_true", help="emit required assertion tests")
+    parser.add_argument("--scope", choices=("all", "xir"), default="all",
+                        help="select contract responsibilities; the global gate remains required")
     parser.add_argument(
         "--refresh",
         action="store_true",
@@ -766,8 +837,11 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     contracts_dir = (root / args.contracts_dir).resolve()
+    specs = tuple(spec for spec in CONTRACT_SPECS
+                  if args.scope == "all" or spec.name.startswith("xir-"))
     try:
-        tests = assertion_tests(contracts_dir)
+        verify_contract_inventory(contracts_dir)
+        tests = assertion_tests(contracts_dir, specs)
         if args.list_tests:
             print("\n".join(sorted(tests)))
             return 0
@@ -776,29 +850,32 @@ def main() -> int:
                 ["ctest", "--test-dir", str(root / args.build_dir), "--show-only=json-v1"],
                 encoding="utf-8", errors="strict"))
             verify_assertion_registration(tests, inventory)
+            if args.scope == "xir":
+                verify_assertion_registration(tests, inventory,
+                                              XIR_ASSERTION_FIXTURE, "contract_freeze_xir")
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"contract verification failed: {exc}", file=sys.stderr)
         return 1
     if args.refresh:
-        errors = refresh_digests(root, contracts_dir)
+        errors = refresh_digests(root, contracts_dir, specs)
         if errors:
             print("task-220 contract freeze refresh failed:", file=sys.stderr)
             for error in errors:
                 print(f"  - {error}", file=sys.stderr)
             return 1
-        remaining = sum(bool(spec.anchors) for spec in CONTRACT_SPECS)
+        remaining = sum(bool(spec.anchors) for spec in specs)
         print(f"contract freeze: REFRESHED ({remaining} remaining digest contracts)")
         return 0
-    errors = verify_digests(root, contracts_dir)
+    errors = verify_digests(root, contracts_dir, specs)
     if errors:
         print("task-220 contract freeze gate failed:", file=sys.stderr)
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
 
-    migrated = sum(not spec.anchors for spec in CONTRACT_SPECS)
-    print(f"contract registration and remaining digests: PASS "
-          f"({migrated} assertion contracts, {len(CONTRACT_SPECS) - migrated} digest contracts; "
+    migrated = sum(not spec.anchors for spec in specs)
+    print(f"contract registration and remaining digests ({args.scope}): PASS "
+          f"({migrated} assertion contracts, {len(specs) - migrated} digest contracts; "
           "assertion execution is enforced by CTest)")
     return 0
 

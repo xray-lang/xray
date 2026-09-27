@@ -47,3 +47,5 @@ verification-test: test_xir_packet_vm
 verification-test: test_parser
 verification-test: test_mono
 verification-test: test_formatter_strings
+verification-test: test_fmt_roundtrip
+verification-test: xir_decimal_vectors_check

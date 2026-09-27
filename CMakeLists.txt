@@ -2916,12 +2916,29 @@ if(BUILD_TESTS)
         message(FATAL_ERROR "Cannot resolve semantic contract assertion tests")
     endif()
     string(REPLACE "\n" ";" XR_CONTRACT_ASSERTION_TESTS "${_xr_contract_tests}")
+    execute_process(
+        COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/check_contract_freeze.py
+                --root ${CMAKE_SOURCE_DIR} --scope xir --list-tests
+        RESULT_VARIABLE _xr_xir_contract_status
+        OUTPUT_VARIABLE _xr_xir_contract_tests
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(NOT _xr_xir_contract_status EQUAL 0)
+        message(FATAL_ERROR "Cannot resolve XIR contract assertion tests")
+    endif()
+    string(REPLACE "\n" ";" XR_XIR_CONTRACT_ASSERTION_TESTS "${_xr_xir_contract_tests}")
     function(xray_attach_contract_assertions)
         get_property(_xr_local_tests DIRECTORY PROPERTY TESTS)
         foreach(_xr_test IN LISTS XR_CONTRACT_ASSERTION_TESTS)
             if(_xr_test IN_LIST _xr_local_tests)
                 set_property(TEST ${_xr_test} APPEND PROPERTY
                     FIXTURES_SETUP semantic_contract_assertions)
+            endif()
+        endforeach()
+        foreach(_xr_test IN LISTS XR_XIR_CONTRACT_ASSERTION_TESTS)
+            if(_xr_test IN_LIST _xr_local_tests)
+                set_property(TEST ${_xr_test} APPEND PROPERTY
+                    FIXTURES_SETUP xir_contract_assertions)
             endif()
         endforeach()
     endfunction()
@@ -5457,6 +5474,34 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 30
     )
+
+    add_test(
+        NAME contract_freeze_xir
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR} --scope xir
+                --build-dir ${CMAKE_BINARY_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(contract_freeze_xir PROPERTIES
+        LABELS "meta;contracts;freeze;xir"
+        FIXTURES_REQUIRED xir_contract_assertions
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    foreach(_xr_vector_family float decimal)
+        add_test(
+            NAME xir_${_xr_vector_family}_vectors_check
+            COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_xir_${_xr_vector_family}_vectors.py --check
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(xir_${_xr_vector_family}_vectors_check PROPERTIES
+            LABELS "meta;contracts;xir;numeric"
+            PROCESSORS 1
+            TIMEOUT 60
+        )
+    endforeach()
 
     add_test(
         NAME contract_freeze_injection

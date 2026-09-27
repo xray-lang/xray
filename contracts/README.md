@@ -19,6 +19,19 @@ uses those same tests, without a second matrix. Missing, disabled, skip-enabled
 or disconnected tests fail registration validation. Registration alone is not
 proof that the test ran successfully.
 
+Every top-level Markdown contract other than this README must appear exactly
+once in the checker registry. Configuration and both gates reject missing or
+unregistered contracts, even when a narrower scope is selected.
+
+`ctest -R '^contract_freeze_xir$'` runs the XIR owners' assertion fixture,
+including shared parser recovery, metadata ownership and exact numeric-vector
+regeneration checks. These tests also remain attached to the global contract
+fixture. An XIR gate pass certifies only those registered responsibilities;
+it does not certify the global gate, complete source admission, sanitizers or
+product cutover. A failed prerequisite makes its dependent gate NOT RUN, never
+PASS. Invoking the Python checker directly only validates registration and
+remaining digests, without proving assertion execution.
+
 Contracts whose replacement assertions still fail retain `anchor-sha256`
 records and their registered source sets. Repair and rerun those assertions
 before removing that contract's digest protection. The checker still rejects

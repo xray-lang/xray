@@ -775,6 +775,19 @@ static void skip_invalid_inline_attribute_tail(Parser *parser, int start_line) {
     }
 }
 
+// Keep speculative state out of ordinary expression recursion frames. A full
+// Parser snapshot is needed only when the token stream can start type arguments.
+static AstNode *try_generic_suffix(Parser *parser, AstNode *left) {
+    XR_DCHECK(parser != NULL, "try_generic_suffix: NULL parser");
+    Parser checkpoint = *parser;
+    int error_count = parser->error_count;
+    xr_parser_advance(parser);
+    AstNode *result = xr_parse_try_generic_call_after_lt(parser, left);
+    if (!result && parser->error_count == error_count)
+        *parser = checkpoint;
+    return result;
+}
+
 // Pratt parser core: parse expression by precedence.
 // Inner implementation; the public xr_parse_precedence wraps this with the
 // recursion-depth guard.
@@ -829,10 +842,8 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
 
         if (parser->current.type == TK_LT && !parser->current.has_leading_space &&
             precedence <= PREC_CALL) {
-            Parser before_generic = *parser;
             int before_error_count = parser->error_count;
-            xr_parser_advance(parser);
-            AstNode *generic_call = xr_parse_try_generic_call_after_lt(parser, left);
+            AstNode *generic_call = try_generic_suffix(parser, left);
             if (generic_call) {
                 left = generic_call;
                 continue;
@@ -840,7 +851,6 @@ static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
             if (parser->error_count > before_error_count) {
                 return left;
             }
-            *parser = before_generic;
         }
 
         if (precedence > xr_get_rule(parser->current.type)->precedence)

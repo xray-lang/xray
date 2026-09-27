@@ -71,6 +71,8 @@ verification-test: test_xir_source_native
 verification-test: test_xir_source_mixed
 verification-test: test_xir_source_admission
 verification-test: test_xir_source_allocations
+verification-test: test_parser_recoverable
+verification-test: meta_ownership_inventory
 
 Structured control and local place semantics follow `xir-local-control-flow.md`.
 

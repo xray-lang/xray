@@ -132,9 +132,9 @@ struct Parser {
     bool parsing_pattern;
 };
 
-// Maximum nesting depth for expressions / types / match patterns. Chosen to
-// far exceed any realistic source while leaving ample headroom on the default
-// 8MB stack (each recursion level uses a few hundred bytes; 1000 levels < 1MB).
+// Logical nesting budget for expressions, types and match patterns. Recursive
+// implementations must also fit the host stack in unoptimized and sanitized
+// builds; the numeric budget alone does not establish stack safety.
 #define XR_PARSER_MAX_DEPTH 1000
 
 // Number of open brackets tracked by Parser::bracket_bits. Beyond this the

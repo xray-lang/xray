@@ -80,27 +80,43 @@ ASAN_OPTIONS = ("detect_leaks=0:abort_on_error=1:symbolize=1:"
                 "strict_string_checks=1:detect_stack_use_after_return=1")
 UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
+XIR_TESTS = (
+    "test_xir_stages",
+    "test_xir_allocations",
+    "test_xir_execution",
+    "test_xir_emit",
+    "test_xir_native",
+    "test_xir_calls",
+    "test_xir_emit_calls",
+    "test_xir_call_native",
+    "test_xir_values",
+    "test_xir_value_allocations",
+    "test_xir_emit_strings",
+    "test_xir_string_native",
+    "test_xir_string_vm",
+    "test_xir_instances",
+    "test_xir_emit_program",
+    "test_xir_program_vm",
+    "test_xir_program_native",
+    "test_xir_emit_output",
+    "test_xir_output_vm",
+    "test_xir_output_native",
+    "test_xir_source",
+    "test_xir_source_native",
+    "test_xir_source_admission",
+    "test_xir_source_allocations",
+    "test_xir_source_mixed",
+    "test_xir_checked",
+    "test_xir_checked_allocations",
+    "test_xir_packet_vm",
+    "test_xir_generics",
+    "test_xir_source_generics",
+    "test_xir_locals",
+    "test_xir_local_native",
+)
+
 EXACT_PROFILES = {
-    "xir": (("test_xir_stages", "test_xir_allocations", "test_xir_execution",
-             "test_xir_emit", "test_xir_native", "test_xir_calls", "test_xir_emit_calls", "test_xir_call_native",
-             "test_xir_values", "test_xir_value_allocations", "test_xir_emit_strings",
-             "test_xir_string_native", "test_xir_string_vm", "test_xir_instances",
-             "test_xir_emit_program", "test_xir_program_vm", "test_xir_program_native",
-             "test_xir_emit_output", "test_xir_output_vm", "test_xir_output_native",
-             "test_xir_source", "test_xir_source_native", "test_xir_source_admission",
-             "test_xir_source_allocations", "test_xir_source_mixed",
-             "test_xir_checked", "test_xir_checked_allocations", "test_xir_packet_vm",
-             "test_xir_generics", "test_xir_source_generics", "test_xir_locals", "test_xir_local_native"),
-            ("test_xir_stages", "test_xir_allocations", "test_xir_execution",
-             "test_xir_emit", "test_xir_native", "test_xir_calls", "test_xir_emit_calls", "test_xir_call_native",
-             "test_xir_values", "test_xir_value_allocations", "test_xir_emit_strings",
-             "test_xir_string_native", "test_xir_string_vm", "test_xir_instances",
-             "test_xir_emit_program", "test_xir_program_vm", "test_xir_program_native",
-             "test_xir_emit_output", "test_xir_output_vm", "test_xir_output_native",
-             "test_xir_source", "test_xir_source_native", "test_xir_source_admission",
-             "test_xir_source_allocations", "test_xir_source_mixed",
-             "test_xir_checked", "test_xir_checked_allocations", "test_xir_packet_vm",
-             "test_xir_generics", "test_xir_source_generics", "test_xir_locals", "test_xir_local_native")),
+    "xir": (XIR_TESTS, XIR_TESTS),
     "canonical-program": (
         canonical_profile.CTEST_NAMES,
         canonical_profile.BUILD_TARGETS,
@@ -132,7 +148,8 @@ EXACT_PROFILES = {
 }
 
 EXACT_PROFILES["xir-decimal"] = tuple(
-    items + ("test_parser", "test_mono", "test_formatter_strings", "test_fmt_roundtrip")
+    items + ("test_parser", "test_parser_recoverable", "test_mono",
+             "test_formatter_strings", "test_fmt_roundtrip")
     for items in EXACT_PROFILES["xir"]
 )
 

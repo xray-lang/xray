@@ -527,7 +527,7 @@ verification-test: test_semantic_dependency_method_authority
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt b1c8ca9d099f8ce568f86a237723c2226a20e608d3499de0e33323531e5f2e80
+anchor-sha256: CMakeLists.txt 14d5cb82e420361a9e6283233c695e2da0a273e3d5545af070c24ba70d3307a3
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h 816a42a2d3d0843c90cf00b567eec69c45822d2545ed65b8807e86d4fe4dc62f
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
