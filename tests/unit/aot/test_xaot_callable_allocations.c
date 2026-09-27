@@ -172,8 +172,8 @@ int main(void) {
     call->id = saved_call_id;
     XaotBoundaryCallTargets later_targets[8];
     XaotBoundaryFunctionCalls batches[] = {
-        {root, targets, XR_COUNTOF(targets)},
-        {root, later_targets, saved_call_id},
+        {.function = root, .targets = targets, .target_count = XR_COUNTOF(targets)},
+        {.function = root, .targets = later_targets, .target_count = saved_call_id},
     };
     REQUIRE(!xaot_boundary_resolve_call_batches(&bundle, batches, XR_COUNTOF(batches)));
     REQUIRE(targets[saved_call_id].direct == NULL && targets[saved_call_id].parameter_target == NULL);

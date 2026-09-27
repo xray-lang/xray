@@ -884,7 +884,7 @@ static void xi_cgen_shared_lib_ctor(XiCgenCtx *ctx, FILE *out, XiModule **module
     fprintf(out, "}\n");
 }
 
-XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
+static void cg_emit_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
     XR_DCHECK(ctx != NULL, "xi_cgen_main: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_main: NULL output");
     XR_DCHECK(n > 0, "xi_cgen_main: no modules");
@@ -991,6 +991,14 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     fprintf(out, "}\n");
 }
 
+XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
+    CgEmissionCoverage coverage = {0};
+    if (!cg_emission_begin(ctx, &coverage))
+        return;
+    cg_emit_main(ctx, out, modules, n, entry_index);
+    cg_emission_end(ctx, &coverage);
+}
+
 XR_FUNC XiCgenLeafProductRoute xi_cgen_leaf_product_program_route(const XiModule *module,
                                                                   const XrTargetPlan *plan) {
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
@@ -1045,7 +1053,7 @@ static bool cg_try_emit_leaf_value_product_program(XiCgenCtx *ctx, FILE *out, Xi
     return true;
 }
 
-XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
+static void cg_emit_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     XR_DCHECK(ctx != NULL, "xi_cgen_program: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_program: NULL output");
     XR_DCHECK(module != NULL, "xi_cgen_program: NULL module");
@@ -1053,9 +1061,6 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
 
     XiFunc *main_func = module->init;
     const char *prefix = module->name ? module->name : "mod";
-
-    if (cg_try_emit_leaf_value_product_program(ctx, out, module))
-        return;
 
     if (!cg_require_backend_tree(ctx, main_func))
         return;
@@ -1431,8 +1436,8 @@ static bool cg_emit_program_direct_i64_initializer_decls(XiCgenCtx *ctx, FILE *o
  * XiCgenCtx is reused across every unit of a bundle so function ids stay
  * globally consistent; the per-unit string pool is reset so each object only
  * carries its own literals. */
-XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, int nmodules,
-                               int mod_index, int entry_index) {
+static void cg_emit_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, int nmodules,
+                              int mod_index, int entry_index) {
     XR_DCHECK(ctx != NULL, "xi_cgen_module_tu: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_module_tu: NULL output");
     XR_DCHECK(modules != NULL, "xi_cgen_module_tu: NULL modules");
@@ -1530,7 +1535,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     if (is_entry) {
         if (ctx->artifact_kind == XAOT_ARTIFACT_EXECUTABLE)
-            xi_cgen_main(ctx, body, modules, nmodules, entry_index);
+            cg_emit_main(ctx, body, modules, nmodules, entry_index);
         else if (ctx->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY &&
                  ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
             xi_cgen_shared_lib_ctor(ctx, body, modules, nmodules, entry_index);
@@ -1676,4 +1681,29 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     ctx->shared_name = "xrt_shared";
     ctx->extern_linkage = false;
+}
+
+XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
+    if (!ctx || ctx->error)
+        return;
+    if (ctx->emission_coverage || !out || !module || !module->init) {
+        ctx->error = true;
+        return;
+    }
+    if (cg_try_emit_leaf_value_product_program(ctx, out, module))
+        return;
+    CgEmissionCoverage coverage = {0};
+    if (!cg_emission_begin(ctx, &coverage))
+        return;
+    cg_emit_program(ctx, out, module);
+    cg_emission_end(ctx, &coverage);
+}
+
+XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, int nmodules,
+                               int mod_index, int entry_index) {
+    CgEmissionCoverage coverage = {0};
+    if (!cg_emission_begin(ctx, &coverage))
+        return;
+    cg_emit_module_tu(ctx, out, modules, nmodules, mod_index, entry_index);
+    cg_emission_end(ctx, &coverage);
 }

@@ -709,7 +709,8 @@ static bool callable_analysis_init(CallableAnalysis *a, const XaotBundle *bundle
         if ((facts->value_count && !facts->values) || !callable_allocate_call_facts(facts))
             return false;
         a->call_batches[fi] =
-            (XaotBoundaryFunctionCalls) {facts->func, facts->calls, facts->value_count};
+            (XaotBoundaryFunctionCalls) {.function = facts->func, .targets = facts->calls,
+                                        .target_count = facts->value_count};
         if (facts->func) {
             bool has_portable_parallel_suspend = false;
             bool has_aot_suspend = false;

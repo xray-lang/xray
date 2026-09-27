@@ -497,9 +497,10 @@ leaf_program_function_for_row(const XrSemanticPlan *semantic, uint32_t program_r
 }
 
 static XaotLeafAggregateTargetStatus leaf_function_authority(
-    const XaotBundle *bundle, const XiFunc *function, const XiModule **module_out,
+    const BoundaryCallAdmission *admission, const XiFunc *function, const XiModule **module_out,
     const XrProgramSemanticClosure **closure_out, const XrTargetPlan **target_out,
     const XrSemanticProgramFunctionBinding **binding_out, char *errbuf, size_t errbuf_len) {
+    const XaotBundle *bundle = admission->bundle;
     if (module_out)
         *module_out = NULL;
     if (closure_out)
@@ -549,7 +550,8 @@ static XaotLeafAggregateTargetStatus leaf_function_authority(
     XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(closure);
     if (!target || !semantic || !provenance ||
         xr_target_plan_completed_family_mask(target) != XR_TARGET_REQUIRED_FAMILIES ||
-        !xr_target_plan_is_verified(target) || !xr_target_plan_fingerprint_is_intact(target) ||
+        !xr_target_plan_is_verified(target) ||
+        (target != admission->target && !xr_target_plan_fingerprint_is_intact(target)) ||
         provenance->program_schema != xr_program_semantic_closure_schema(closure) ||
         provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
         provenance->type_count != xr_program_semantic_closure_type_count(closure) ||
@@ -694,8 +696,8 @@ static bool leaf_aggregate_rep(const XrTargetPlan *target, const XrSemanticPlan 
            machine->detail == projection.layout;
 }
 
-XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_function_status(
-    const XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
+static XaotLeafAggregateTargetStatus leaf_aggregate_function_status(
+    const BoundaryCallAdmission *admission, const XiFunc *function, const XrTargetPlan **target_out,
     const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len) {
     if (target_out)
         *target_out = NULL;
@@ -704,7 +706,7 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_function_stat
     const XrTargetPlan *target = NULL;
     const XrSemanticProgramFunctionBinding *program_function = NULL;
     XaotLeafAggregateTargetStatus status = leaf_function_authority(
-        bundle, function, NULL, NULL, &target, &program_function, errbuf, errbuf_len);
+        admission, function, NULL, NULL, &target, &program_function, errbuf, errbuf_len);
     if (status != XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         return status;
     uint32_t count = 0;
@@ -718,6 +720,14 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_function_stat
     if (function_out)
         *function_out = &functions[index];
     return XAOT_LEAF_AGGREGATE_TARGET_FOUND;
+}
+
+XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_function_status(
+    const XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
+    const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len) {
+    const BoundaryCallAdmission admission = {.bundle = bundle};
+    return leaf_aggregate_function_status(&admission, function, target_out, function_out, errbuf,
+                                           errbuf_len);
 }
 
 XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_semantic_value(
@@ -840,9 +850,10 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_call_view(
     const XiModule *module = NULL;
     const XrProgramSemanticClosure *closure = NULL;
     const XrSemanticProgramFunctionBinding *caller_binding = NULL;
+    const BoundaryCallAdmission admission = {.bundle = bundle};
     if (!operation || operation->result_type != result_type || !program_call ||
         program_call->operation != operation_index ||
-        leaf_function_authority(bundle, caller, &module, &closure, NULL, &caller_binding, NULL,
+        leaf_function_authority(&admission, caller, &module, &closure, NULL, &caller_binding, NULL,
                                 0) != XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         return leaf_aggregate_error(errbuf, errbuf_len,
                                     "leaf-aggregate call lacks its typed program binding");
@@ -1589,16 +1600,41 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
     return resolve_uncovered_direct_call(bundle, current, call, first_arg_out);
 }
 
-static bool resolve_function_calls(const BoundaryCallAdmission *admission, const XiFunc *function,
-                                   XaotBoundaryCallTargets *targets, uint32_t target_count) {
+static XaotBoundaryFunctionCoverage function_coverage(const BoundaryCallAdmission *admission,
+                                                     const XiFunc *function) {
+    if (!function)
+        return XAOT_BOUNDARY_FUNCTION_INVALID;
+    XaotLeafAggregateTargetStatus leaf =
+        leaf_aggregate_function_status(admission, function, NULL, NULL, NULL, 0);
+    if (leaf == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+        return XAOT_BOUNDARY_FUNCTION_INVALID;
+    if (leaf == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+        return XAOT_BOUNDARY_FUNCTION_LEAF_AGGREGATE;
+    XaotDirectI64TargetStatus scalar =
+        direct_i64_function_status(admission, function, NULL, NULL, NULL, 0);
+    if (scalar == XAOT_DIRECT_I64_TARGET_INVALID)
+        return XAOT_BOUNDARY_FUNCTION_INVALID;
+    return scalar == XAOT_DIRECT_I64_TARGET_FOUND ? XAOT_BOUNDARY_FUNCTION_DIRECT_I64
+                                                  : XAOT_BOUNDARY_FUNCTION_UNCOVERED;
+}
+
+static bool resolve_function_calls(const BoundaryCallAdmission *admission,
+                                   XaotBoundaryFunctionCalls *function_calls) {
     const XaotBundle *bundle = admission->bundle;
+    const XiFunc *function = function_calls->function;
+    XaotBoundaryCallTargets *targets = function_calls->targets;
+    uint32_t target_count = function_calls->target_count;
     size_t target_bytes = (size_t) target_count * sizeof(*targets);
-    if (!bundle || !function || !targets || target_bytes / sizeof(*targets) != target_count)
+    if (!bundle || !function || (target_count && !targets) ||
+        target_bytes / sizeof(*targets) != target_count)
         return false;
-    memset(targets, 0, target_bytes);
-    bool admitted = false;
-    XaotLeafAggregateTargetStatus leaf = XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED;
-    XaotDirectI64TargetStatus scalar = XAOT_DIRECT_I64_TARGET_UNCOVERED;
+    if (target_bytes)
+        memset(targets, 0, target_bytes);
+    function_calls->coverage = function_coverage(admission, function);
+    if (function_calls->coverage == XAOT_BOUNDARY_FUNCTION_INVALID)
+        return false;
+    if (!target_count)
+        return true;
     for (uint32_t bi = 0; bi < function->nblocks; bi++) {
         const XiBlock *block = function->blocks[bi];
         for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
@@ -1608,31 +1644,15 @@ static bool resolve_function_calls(const BoundaryCallAdmission *admission, const
                 continue;
             if (value->id >= target_count)
                 goto invalid;
-            /* Function coverage and its TargetPlan cannot change inside this
-             * callback-free traversal. Check them once, retaining all exact
-             * per-call checks for covered typed paths. */
-            if (!admitted) {
-                leaf = xaot_boundary_leaf_aggregate_function_status(
-                    bundle, function, NULL, NULL, NULL, 0);
-                if (leaf == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
-                    goto invalid;
-                if (leaf == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED) {
-                    scalar = direct_i64_function_status(
-                        admission, function, NULL, NULL, NULL, 0);
-                    if (scalar == XAOT_DIRECT_I64_TARGET_INVALID)
-                        goto invalid;
-                }
-                admitted = true;
-            }
             XaotBoundaryCallTargets *call = &targets[value->id];
-            if (leaf == XAOT_LEAF_AGGREGATE_TARGET_FOUND) {
+            if (function_calls->coverage == XAOT_BOUNDARY_FUNCTION_LEAF_AGGREGATE) {
                 XaotLeafAggregateTargetView view = {0};
                 if (xaot_boundary_leaf_aggregate_call_view(bundle, function, value, &view,
                                                            NULL, 0) !=
                     XAOT_LEAF_AGGREGATE_TARGET_FOUND)
                     goto invalid;
                 call->direct = view.callee;
-            } else if (scalar == XAOT_DIRECT_I64_TARGET_FOUND) {
+            } else if (function_calls->coverage == XAOT_BOUNDARY_FUNCTION_DIRECT_I64) {
                 XaotDirectI64TargetView view = {0};
                 if (xaot_boundary_direct_i64_call_view(bundle, function, value, &view, NULL, 0) !=
                     XAOT_DIRECT_I64_TARGET_FOUND)
@@ -1661,6 +1681,7 @@ static bool clear_function_call_batches(XaotBoundaryFunctionCalls *functions, ui
     bool valid = true;
     for (uint32_t index = 0; index < count; index++) {
         XaotBoundaryFunctionCalls *function = &functions[index];
+        function->coverage = XAOT_BOUNDARY_FUNCTION_INVALID;
         size_t bytes = (size_t) function->target_count * sizeof(*function->targets);
         if (bytes / sizeof(*function->targets) != function->target_count ||
             (function->target_count && !function->targets)) {
@@ -1669,7 +1690,7 @@ static bool clear_function_call_batches(XaotBoundaryFunctionCalls *functions, ui
         }
         if (bytes)
             memset(function->targets, 0, bytes);
-        if (function->target_count && !function->function)
+        if (!function->function)
             valid = false;
     }
     return valid;
@@ -1688,9 +1709,7 @@ XR_FUNC bool xaot_boundary_resolve_call_batches(const XaotBundle *bundle,
     const BoundaryCallAdmission admission = {.bundle = bundle, .target = target};
     for (uint32_t index = 0; index < function_count; index++) {
         XaotBoundaryFunctionCalls *function = &functions[index];
-        if (function->target_count &&
-            !resolve_function_calls(&admission, function->function, function->targets,
-                                      function->target_count)) {
+        if (!resolve_function_calls(&admission, function)) {
             (void) clear_function_call_batches(functions, function_count);
             return false;
         }
@@ -1704,6 +1723,7 @@ XR_FUNC bool xaot_boundary_resolve_function_calls(const XaotBundle *bundle,
                                                   uint32_t target_count) {
     if (!function || !targets)
         return false;
-    XaotBoundaryFunctionCalls calls = {function, targets, target_count};
+    XaotBoundaryFunctionCalls calls = {.function = function, .targets = targets,
+                                     .target_count = target_count};
     return xaot_boundary_resolve_call_batches(bundle, &calls, 1);
 }

@@ -57,6 +57,10 @@ static bool cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *m
 }
 
 XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, int nmodules) {
+    if (ctx->emission_coverage) {
+        ctx->error = true;
+        return;
+    }
     XR_DCHECK(ctx != NULL, "xi_cgen_resolve_module_imports: NULL ctx");
     ctx->all_modules = modules;
     ctx->all_nmodules = modules && nmodules > 0 ? nmodules : 0;

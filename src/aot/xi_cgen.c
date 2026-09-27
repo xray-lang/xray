@@ -106,6 +106,8 @@
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
+#include <stdlib.h>
+#include "xi_cgen_emission_coverage.inc.c"
 /* ========== Representation Helpers ========== */
 /* Read the stored representation set by select_rep.
  * select_rep always runs in the AOT pipeline before code generation. */
@@ -767,6 +769,8 @@ struct XiCgenCtx {
     uint32_t coro_emit_seen_cap;
     uint32_t coro_emit_seen_count;
     const XaotBundle *aot_bundle;
+    /* Owned by the active emission stack frame; never retained across calls. */
+    const CgEmissionCoverage *emission_coverage;
     XrCProgramDirectI64EmissionBinding program_direct_i64;
     bool program_direct_i64_required;
     bool program_direct_i64_bound;
@@ -1401,6 +1405,40 @@ static void cg_emit_static_str_value_initializer(XiCgenCtx *ctx, FILE *out, cons
 
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx) {
     return ctx ? ctx->aot_bundle : NULL;
+}
+
+static bool cg_emission_begin(XiCgenCtx *ctx, CgEmissionCoverage *coverage) {
+    if (!ctx || ctx->error)
+        return false;
+    if (ctx->emission_coverage) {
+        fprintf(stderr, "[xi_cgen] ERROR: emission is already active\n");
+        ctx->error = true;
+        return false;
+    }
+    if (ctx->program_direct_i64_required) {
+        const XaotBundle *bundle = ctx->aot_bundle;
+        char error[256] = {0};
+        if (!bundle || !ctx->program_direct_i64_bound ||
+            !xr_c_program_direct_i64_emission_verify(
+                &ctx->program_direct_i64, xaot_bundle_program_target_plan(bundle),
+                bundle->modules, bundle->nmodules, error, sizeof(error))) {
+            fprintf(stderr, "[xi_cgen] ERROR: %s\n",
+                    error[0] ? error : "Program direct emission admission failed");
+            ctx->error = true;
+            return false;
+        }
+    } else if (!cg_emission_coverage_build(ctx->aot_bundle, coverage)) {
+        fprintf(stderr, "[xi_cgen] ERROR: function coverage admission failed\n");
+        ctx->error = true;
+        return false;
+    }
+    ctx->emission_coverage = coverage;
+    return true;
+}
+
+static void cg_emission_end(XiCgenCtx *ctx, CgEmissionCoverage *coverage) {
+    ctx->emission_coverage = NULL;
+    cg_emission_coverage_dispose(coverage);
 }
 
 static const XrCProgramXiFunctionBinding *
@@ -12613,7 +12651,10 @@ static bool cg_func_has_native_receiver_boxed_use(XiCgenCtx *ctx, const XiFunc *
     if (!ctx || !owner || !target)
         return false;
 
-    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+    /* Only executable bodies own representation rows. Children remain an
+     * independent search: a cold parent can retain a live closure body. */
+    bool owner_reachable = cg_func_body_is_reachable_from_roots(ctx, owner, 0);
+    for (uint32_t bi = 0; owner_reachable && bi < owner->nblocks; bi++) {
         const XiBlock *blk = owner->blocks[bi];
         if (!blk)
             continue;
@@ -13664,8 +13705,8 @@ static void emit_c_export_header_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         emit_c_export_header_func(ctx, out, f->children[i], count);
 }
 
-XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule **modules,
-                                     int nmodules, const char *guard) {
+static void cg_emit_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule **modules,
+                                    int nmodules, const char *guard) {
     const char *header_guard = (guard && guard[0]) ? guard : "XRAY_AOT_C_EXPORTS_H";
     uint32_t count = 0;
     CgCExportStructTypedef typedefs[CG_STRUCT_TYPEDEF_MAX];
@@ -13726,6 +13767,15 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
 
     fprintf(out, "\n#ifdef __cplusplus\n}\n#endif\n\n");
     fprintf(out, "#endif /* %s */\n", header_guard);
+}
+
+XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule **modules,
+                                     int nmodules, const char *guard) {
+    CgEmissionCoverage coverage = {0};
+    if (!cg_emission_begin(ctx, &coverage))
+        return;
+    cg_emit_c_export_header(ctx, out, modules, nmodules, guard);
+    cg_emission_end(ctx, &coverage);
 }
 
 static void emit_c_export_c_param_storage_expr(FILE *out, const XiFunc *f, uint16_t index) {

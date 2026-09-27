@@ -269,15 +269,23 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
     /* A covered caller may resolve a call only with the complete call row.
      * A bare callee value is insufficient authority, so the legacy shape
      * resolver is deliberately unreachable for this execution family. */
-    XaotLeafAggregateTargetStatus leaf_aggregate = xaot_boundary_leaf_aggregate_function_status(
-        cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);
-    if (leaf_aggregate != XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
+    XaotBoundaryFunctionCoverage coverage =
+        cg_emission_coverage_lookup(ctx ? ctx->emission_coverage : NULL, current);
+    if (coverage == XAOT_BOUNDARY_FUNCTION_INVALID) {
+        /* A function outside the emission's owned table has no cached
+         * authority. Independent queries retain complete input validation. */
+        XaotLeafAggregateTargetStatus leaf = xaot_boundary_leaf_aggregate_function_status(
+            cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);
+        if (leaf != XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
+            return cg_no_static_function_call();
+        XaotDirectI64TargetStatus scalar = xaot_boundary_direct_i64_function_status(
+            cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);
+        if (scalar != XAOT_DIRECT_I64_TARGET_UNCOVERED)
+            return cg_no_static_function_call();
+    } else if (coverage != XAOT_BOUNDARY_FUNCTION_UNCOVERED) {
         return cg_no_static_function_call();
+    }
     if (cg_program_direct_i64_function_binding(ctx, current))
-        return cg_no_static_function_call();
-    XaotDirectI64TargetStatus direct_i64 = xaot_boundary_direct_i64_function_status(
-        cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);
-    if (direct_i64 != XAOT_DIRECT_I64_TARGET_UNCOVERED)
         return cg_no_static_function_call();
 
     if ((callee->op == XI_BOX || callee->op == XI_UNBOX || xi_copy_is_identity_alias(callee) ||

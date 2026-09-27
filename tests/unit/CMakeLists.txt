@@ -1069,6 +1069,10 @@ set_tests_properties(test_xr_program_imported_callable_native PROPERTIES
     LABELS "unit;aot;canonical-program;source;callable;multi-module;generated-c;native;task-301")
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_bootstrap_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+add_xray_bootstrap_unit_test(test_xaot_emission_coverage aot/test_xaot_emission_coverage.c
+    plan/target_profile_test_fixture.c)
+set_tests_properties(test_xaot_emission_coverage PROPERTIES
+    LABELS "unit;aot;metadata;ownership;allocation-failure")
 add_test(NAME test_xi_cgen_multimodule
     COMMAND ${CMAKE_COMMAND} -E env XRAY_TEST_FILTER=cgen_multimodule
         $<TARGET_FILE:test_xi_cgen>)

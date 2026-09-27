@@ -416,6 +416,11 @@ verification-test: test_semantic_zero_operand_metadata
 
 ## Digest anchors
 
+Invocation-owned CGen coverage facts reuse the existing boundary admission;
+Program-direct entries independently reverify their installed binding on every
+emission. The source anchors include tests for drift after a prior successful
+emission. This changes no program identity or semantic closure authority.
+
 Named function declaration coordinates use the identifier token for both line
 and column, including when a newline separates the keyword and identifier. The
 source query regression checks this parser-owned location directly. This source
@@ -479,14 +484,14 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.c cbc5cfc599653e3668f4b7dd6a
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2b5667297212ffe1df19d87643c5045b1a6cfed11bc8683c
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c b9ef88ecf75777f9146180fbca884a68b66bc7fceb6ac56b385e79914d943aca
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c eec8355e8f44b033a8688ac38d6a37af3f49eb576e7f2766863a716df9772f33
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 378edd0ad9914f5617c7b5f6c3c3248ce08db161599d7749ee4811c4ecd20585
 anchor-sha256: tests/unit/frontend/test_parser.c d7e4e7455e597c1ce6494d781792048ade9f1bbc3bc1e77ce745d05da7084644
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 39c2cbedd4bc84650f6faa2e098f93ea67a2389bf74ba54909ed3fc5871d0736
-anchor-sha256: tests/unit/CMakeLists.txt e9ebc628328192213453a39c249039401fb1dd7f1dd92e6737752d708c537618
-anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
+anchor-sha256: tests/unit/CMakeLists.txt 9355cbb646ba4e4414aa30a81259ace136db56fceb59d0710f29fe7b90d6e2f0
+anchor-sha256: src/aot/xaot_boundary.h 68b659ce8507f314986e3b2f234feab033a5682d4e037dd46406903b695aef84
+anchor-sha256: src/aot/xaot_boundary.c 9f58c653651b4395d0ec34f13eb1e3223ad179d900a06f120023065cb81ab40e
 anchor-sha256: src/aot/xaot_bundle.c 22a955023d50d374c684299decf272258ff987908dbbf7afc50ad433c4ce98c4
 
 Imported static methods bind a SOURCE_STATIC_METHOD_DEPENDENCY target. The

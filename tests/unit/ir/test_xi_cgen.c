@@ -3329,7 +3329,8 @@ typedef enum NativeDirectFreshMutation {
     NATIVE_DIRECT_FRESH_MUTATION_COUNT,
 } NativeDirectFreshMutation;
 
-static void expect_native_direct_fresh_cgen_mutation_rejected(NativeDirectFreshMutation mutation) {
+static void expect_native_direct_fresh_cgen_mutation_rejected(NativeDirectFreshMutation mutation,
+                                                            bool prior_emission, bool resign) {
     XiValue *live_call = NULL;
     XiFunc *ir = native_direct_fresh_result_fixture(&live_call);
     TEST_REQUIRE(ir && live_call && test_prepare_backend_ir(ir),
@@ -3352,6 +3353,20 @@ static void expect_native_direct_fresh_cgen_mutation_rejected(NativeDirectFreshM
     xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
     TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan.bundle),
                  "fresh-result mutation installed verified emission plans");
+
+    if (prior_emission) {
+        for (unsigned repeat = 0; repeat < 2; repeat++) {
+            char *first_code = NULL;
+            size_t first_size = 0;
+            FILE *first = xr_open_memstream(&first_code, &first_size);
+            TEST_REQUIRE(first != NULL, "repeat emission output stream allocated");
+            xi_cgen_program(ctx, first, module);
+            TEST_REQUIRE(xr_close_memstream(first, &first_code, &first_size) == 0 &&
+                             !xi_cgen_has_error(ctx) && contains(first_code, "xrt_net_udp_bind("),
+                         "repeated emission validates and emits the unmodified provider");
+            xr_free(first_code);
+        }
+    }
 
     switch (mutation) {
         case NATIVE_DIRECT_FRESH_MUTATE_RESULT_OWNERSHIP:
@@ -3376,7 +3391,8 @@ static void expect_native_direct_fresh_cgen_mutation_rejected(NativeDirectFreshM
             TEST_REQUIRE(false, "invalid fresh-result mutation kind");
             break;
     }
-    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    if (resign)
+        xr_target_plan_compute_fingerprint(target, &target->fingerprint);
 
     char *mutated_code = NULL;
     size_t mutated_size = 0;
@@ -3398,8 +3414,14 @@ static void expect_native_direct_fresh_cgen_mutation_rejected(NativeDirectFreshM
 }
 
 TEST(cgen_native_direct_fresh_result_authority_mutations_fail_closed) {
-    for (uint8_t mutation = 0; mutation < NATIVE_DIRECT_FRESH_MUTATION_COUNT; mutation++)
-        expect_native_direct_fresh_cgen_mutation_rejected((NativeDirectFreshMutation) mutation);
+    for (uint8_t mutation = 0; mutation < NATIVE_DIRECT_FRESH_MUTATION_COUNT; mutation++) {
+        expect_native_direct_fresh_cgen_mutation_rejected(
+            (NativeDirectFreshMutation) mutation, false, true);
+        expect_native_direct_fresh_cgen_mutation_rejected(
+            (NativeDirectFreshMutation) mutation, true, true);
+        expect_native_direct_fresh_cgen_mutation_rejected(
+            (NativeDirectFreshMutation) mutation, true, false);
+    }
 }
 
 TEST(cgen_native_direct_uses_verified_call_and_argument_view) {

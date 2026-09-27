@@ -1765,6 +1765,77 @@ static void test_driver_entry_closure_owns_physical_bodies(void) {
     passed++;
 }
 
+static void test_driver_boxed_adapter_scan_respects_cold_body_authority(void) {
+    char root[XR_TEST_PATH_MAX], entry[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
+    char manifest[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    ASSERT_TRUE(xr_temp_dir_create("xray-cold-boxed-adapter", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(entry, sizeof(entry), "%s/main.xr", root) > 0);
+    ASSERT_TRUE(snprintf(library, sizeof(library), "%s/library.xr", root) > 0);
+    ASSERT_TRUE(snprintf(manifest, sizeof(manifest), "%s/xray.toml", root) > 0);
+    ASSERT_TRUE(write_file_text(library,
+        "export class Payload {\n"
+        "    value: i64\n"
+        "    constructor(value: i64) { this.value = value }\n"
+        "}\n"
+        "export enum Envelope { Some { payload: Payload }, None }\n"
+        "export fn cold(node: Envelope) -> i64 {\n"
+        "    return match (node) {\n"
+        "        Envelope.Some { payload } -> payload.value,\n"
+        "        _ -> 0\n"
+        "    }\n"
+        "}\n"));
+    ASSERT_TRUE(write_file_text(entry,
+        "import \"./library\"\n"
+        "class Counter {\n"
+        "    constructor() {}\n"
+        "}\n"
+        "export fn probe() -> i64 {\n"
+        "    var counter = Counter()\n"
+        "    return 7\n"
+        "}\n"));
+    ASSERT_TRUE(write_file_text(manifest,
+        "[project]\nname = \"cold-boxed-adapter\"\nmain = \"main.xr\"\n"
+        "[[export.c]]\nxray = \"probe\"\nsymbol = \"cold_boxed_adapter_probe\"\n"
+        "visibility = \"hidden\"\nabi = \"hosted-vm-v1\"\nheader = true\n"));
+    XrProject *project = xr_project_load(NULL, root);
+    ASSERT_TRUE(project && project->initialized && project->native_plan);
+    ASSERT_TRUE(xaot_target_init(&target, "native-c90"));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
+    options.native_package_plan = project->native_plan;
+    options.emit_plan_dump = true;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE(xaot_build_script(entry, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 2 && result.plan_dump && result.c_export_header);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=cold", "reachable=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=cold", "legacy_values=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=cold", "backend_adapters=0"));
+    /* The importing entry follows the library in this two-module fixture. */
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=constructor module=1 ", "reachable=1"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=probe", "reachable=1"));
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(&result, &size);
+    ASSERT_TRUE(source && size && strstr(source, "cold_boxed_adapter_probe("));
+    ASSERT_TRUE(find_function_definition(source, "_cold_") == NULL);
+    ASSERT_TRUE(find_function_definition(source, "_constructor_") != NULL);
+    ASSERT_TRUE(find_function_definition(source, "_probe_") != NULL);
+    ASSERT_TRUE(strstr(source, "({") == NULL);
+    xr_free(source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_project_free(project);
+    ASSERT_TRUE(xr_test_unlink(entry) == 0);
+    ASSERT_TRUE(xr_test_unlink(library) == 0);
+    ASSERT_TRUE(xr_test_unlink(manifest) == 0);
+    ASSERT_TRUE(xr_test_rmdir(root) == 0);
+    passed++;
+}
+
 static void test_driver_hosted_export_keeps_callee_abi(void) {
     char root[XR_TEST_PATH_MAX], entry[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
     char manifest[XR_TEST_PATH_MAX];
@@ -1912,6 +1983,11 @@ int main(void) {
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
+    if (filter && strcmp(filter, "cold_boxed_adapter") == 0) {
+        test_driver_boxed_adapter_scan_respects_cold_body_authority();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
     if (filter && strcmp(filter, "native_storage") == 0) {
         test_driver_native_storage_construction();
         printf("%d passed, %d failed\n", passed, failed);
@@ -1989,6 +2065,7 @@ int main(void) {
     test_driver_borrowed_call_result_preserves_caller_type();
     test_driver_module_ref_uses_verified_address_storage();
     test_driver_entry_closure_owns_physical_bodies();
+    test_driver_boxed_adapter_scan_respects_cold_body_authority();
     test_driver_hosted_export_keeps_callee_abi();
     test_driver_native_storage_construction();
     printf("%d passed, %d failed\n", passed, failed);

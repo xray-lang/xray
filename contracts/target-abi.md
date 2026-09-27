@@ -192,6 +192,28 @@ resolver. Standalone queries admit their inputs independently. A failed batch
 clears every function's output, including earlier resolved functions, and
 mutations of call targets or re-signed ownership rows are checked again on the
 next invocation. No persistent admission flag or callback escapes.
+C generation owns function-coverage facts only for one synchronous emission.
+The existing call batch admits the current TargetPlan contents before deriving
+each exact function classification, including functions with no calls. CGen
+borrows that owned table only until the emission returns; every success and
+failure exit destroys it. A later emission rebuilds the facts, even when the
+context and plan addresses are unchanged. Inputs remain alive and immutable
+throughout this callback-free scope. An unknown function still requires an
+independent query, and invalid authority never becomes uncovered authority.
+The table replaces repeated coverage queries only. Exact call, argument,
+ownership, ABI and materialization verification remain mandatory, including
+re-signed mutations after registry installation. No schema, artifact identity,
+fingerprint algorithm or public execution ABI changes.
+Coverage allocation shares TargetPlan construction's UINT32_MAX metadata-byte
+ceiling and checks size multiplication before allocation. Bundle, projection
+registry and import-module replacement are rejected during an active emission;
+internal module-local resolver context changes do not replace those inputs.
+Program-direct emission uses its existing binding verifier at every public
+emission entry, including main, header and a translation unit with no caller;
+it does not use the ordinary coverage table. The independent leaf-product
+emitter retains its own exact admission and does not consume this table.
+
+verification-test: test_xaot_emission_coverage
 Imported class constructor edges resolve through the existing module import
 binding, including shared-slot reads. The constructor's owning module supplies
 its child function and implicit receiver offset. Ordinary native fresh storage
@@ -1349,7 +1371,7 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
-anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759eb00fd65b40b648f0fc7c661
+anchor-sha256: src/aot/xaot_callable.c 8fe3745d0c3e98ea9ad84684c0c647a7a20f46a54486bf7c36f217330887adb3
 anchor-sha256: src/aot/xaot_prepare.c 450a6a387ef4aad2ed27e85d281c06aaa6ff3f184e80f491d6c7b8960e61ed3f
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c 22a955023d50d374c684299decf272258ff987908dbbf7afc50ad433c4ce98c4
@@ -1393,9 +1415,9 @@ anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c ef69a37f0508160df042ba4e84268750d0b2e0fc31ff7f11c2f5f65c12fab36e
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c bfd1bf8927cc7562ca193bfc182158a928b2c6e8dec77d1c02fbc88c8df1d959
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b1296f68ba37032061b8ba2fae7ffc5cd9b76bb03f9df6a34f4f3c7d9fedeb79
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ea9c4ac67c31537fc6f41326f09481e702c1592f159946d54da89eae8a5a1baf
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 1c560b4d775ce9f62738b8a988a4827d9862cf9cb80584135528c6084640de99
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 08db1ebcd463d21d5a849a5f7bfcae7d41206818c04fc73c44566017c8e8a522
-anchor-sha256: src/aot/xi_cgen.c 94ebb75accf6859990298c952c031a32a8900c10d102b534feb1ca3852ec0987
+anchor-sha256: src/aot/xi_cgen.c 48f81f94437637c0c75bea20a3664a5b7d3a1fe67d07ef39ae3ea81ef73b9282
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
 anchor-sha256: src/ir/xi_opt.c 7541e8f4bc982cbc6f9cd054ef0397473020cee74168055a28d667b2e5c78bb5
 anchor-sha256: src/aot/xrt_coll.h f699e3aecd8f3c408deca50e306274be74d0d700a61b29ca1dd170be48086511
@@ -1415,10 +1437,10 @@ anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 0488c328fc9d2eda313728e80c1eb
 anchor-sha256: src/aot/xrt_provider_abi.h c38c4c8f9bf7893f6d6dbc0b0c518f703d80a2493d2829a07d4f7aa2972b0f44
 anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1bfd9f84613580b3b6b5ece8bfd9eaa4
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
-anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c 45c62f8dd693f45d3a3920c6367b3a534b939f9b9647fcfaed6d686e87114319
+anchor-sha256: src/aot/xaot_boundary.h 68b659ce8507f314986e3b2f234feab033a5682d4e037dd46406903b695aef84
+anchor-sha256: src/aot/xaot_boundary.c 9f58c653651b4395d0ec34f13eb1e3223ad179d900a06f120023065cb81ab40e
 anchor-sha256: src/aot/xaot_driver.c c2abf8701a94321beada41f0fe97f8d4ceb25accd0a564a918b58f1a3f88677c
-anchor-sha256: tests/unit/aot/test_xaot_driver.c 8137258328d858ab5109a184c159a5375077de2dd9301fc16e798ebfd69e99ba
+anchor-sha256: tests/unit/aot/test_xaot_driver.c 2125ba8aabbd72632be8d1cb55a177d68da28e09b93e95f39f934fba6413692f
 
 ### Optional runtime receiver arguments
 

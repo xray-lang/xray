@@ -105,7 +105,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
 XR_FUNC bool xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle) {
     if (!ctx)
         return false;
-    if (ctx->error || ctx->value_emission_registry) {
+    if (ctx->error || ctx->value_emission_registry || ctx->emission_coverage) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: XR_TARGET_1001: C value emission registry is sealed\n");
         ctx->error = true;
@@ -154,7 +154,8 @@ XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(
     XiCgenCtx *ctx, const XrCEmissionPlan *const *emission_plans,
     uint32_t count) {
     const XaotBundle *bundle = ctx ? ctx->aot_bundle : NULL;
-    if (!ctx || ctx->error || ctx->value_emission_registry || !bundle || !bundle->modules ||
+    if (!ctx || ctx->error || ctx->value_emission_registry || ctx->emission_coverage ||
+        !bundle || !bundle->modules ||
         !bundle->program_target_plan || !emission_plans || count == 0 ||
         count != bundle->nmodules) {
         fprintf(stderr,

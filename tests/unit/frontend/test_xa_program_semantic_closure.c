@@ -1724,6 +1724,133 @@ scalar_graph_cgen_order_and_post_bind_metadata_are_exact(ScalarGraphPlanFixture 
     return exact;
 }
 
+typedef enum ScalarGraphCgenEntry {
+    SCALAR_GRAPH_CGEN_MAIN,
+    SCALAR_GRAPH_CGEN_HEADER,
+    SCALAR_GRAPH_CGEN_PRODUCER_TU,
+    SCALAR_GRAPH_CGEN_CALLER_TU,
+} ScalarGraphCgenEntry;
+
+static bool scalar_graph_cgen_entry_emit(XiCgenCtx *ctx, ScalarGraphPlanFixture *fixture,
+                                          ScalarGraphCgenEntry entry, char **source,
+                                          size_t *size) {
+    FILE *stream = xr_open_memstream(source, size);
+    if (!stream)
+        return false;
+    if (entry == SCALAR_GRAPH_CGEN_MAIN) {
+        xi_cgen_main(ctx, stream, fixture->modules, 2, (int) fixture->entry_index);
+    } else if (entry == SCALAR_GRAPH_CGEN_HEADER) {
+        xi_cgen_c_export_header(ctx, stream, fixture->modules, 2, "PROGRAM_READMISSION_H");
+    } else {
+        uint32_t module = entry == SCALAR_GRAPH_CGEN_PRODUCER_TU ? fixture->producer_index
+                                                               : fixture->entry_index;
+        xi_cgen_module_tu(ctx, stream, fixture->modules, 2, (int) module,
+                         (int) fixture->entry_index);
+    }
+    return xr_close_memstream(stream, source, size) == 0;
+}
+
+static bool scalar_graph_cgen_entry_rejects_changed_authority(
+    ScalarGraphPlanFixture *fixture, XrTargetPlan *target, XaotBundle *bundle,
+    const XrCProgramDirectI64EmissionBinding *scope, ScalarGraphCgenEntry entry, bool resign) {
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    bool exact = ctx && xi_cgen_ctx_set_aot_bundle(ctx, bundle);
+    if (exact) {
+        xi_cgen_resolve_module_imports(ctx, fixture->modules, 2);
+        exact = !xi_cgen_has_error(ctx);
+    }
+    const char *marker = entry == SCALAR_GRAPH_CGEN_MAIN       ? "int main("
+                         : entry == SCALAR_GRAPH_CGEN_HEADER ? "#ifndef PROGRAM_READMISSION_H"
+                                                             : scope->callee.c_symbol;
+    /* The same context first emits the caller and then the tested entry. Both
+     * must succeed before mutation, so stale scope state cannot pass as rejection. */
+    for (uint32_t attempt = 0; exact && attempt < 2u; attempt++) {
+        char *source = NULL;
+        size_t size = 0;
+        ScalarGraphCgenEntry selected = attempt == 0u ? SCALAR_GRAPH_CGEN_CALLER_TU : entry;
+        exact = scalar_graph_cgen_entry_emit(ctx, fixture, selected, &source, &size) &&
+                !xi_cgen_has_error(ctx) && source && size &&
+                strstr(source, attempt == 0u ? scope->caller.c_symbol : marker);
+        xr_free(source);
+    }
+    XrTargetCallRecord *call = &target->calls[scope->target_call];
+    uint8_t saved_ownership = call->result_ownership;
+    XrFingerprint saved_fingerprint = target->fingerprint;
+    if (exact) {
+        exact = saved_ownership == XR_TARGET_CALL_NONE;
+        call->result_ownership = XR_TARGET_CALL_RETURN_OWNED;
+        if (resign)
+            xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+        /* The Xi call remains exact. These entry points must re-admit target
+         * contents even when they emit no body containing the direct call. */
+        exact = exact && xr_target_plan_fingerprint_is_intact(target) == resign &&
+                xr_c_program_direct_i64_call_is_exact(scope, scope->caller.xi_function,
+                                                      scope->xi_call);
+        if (exact) {
+            char *source = NULL;
+            size_t size = 0;
+            exact = scalar_graph_cgen_entry_emit(ctx, fixture, entry, &source, &size) &&
+                    xi_cgen_has_error(ctx) && size == 0u;
+            xr_free(source);
+        }
+    }
+    call->result_ownership = saved_ownership;
+    target->fingerprint = saved_fingerprint;
+    xi_cgen_ctx_free(ctx);
+    if (!exact)
+        fprintf(stderr, "program CGen readmission failed: entry=%u resign=%u\n",
+                (unsigned) entry, (unsigned) resign);
+    return exact;
+}
+
+static bool scalar_graph_cgen_readmission_is_exact(ScalarGraphPlanFixture *fixture,
+                                                    XrTargetPlan *target) {
+    XaotBundle bundle = {0};
+    XgGlobalEvidence evidence = {0};
+    XrCProgramDirectI64EmissionBinding scope = {0};
+    char error[512] = {0};
+    bool init_ok = xaot_bundle_init(&bundle, fixture->modules, 2u, fixture->entry_index);
+    bool target_ok = init_ok && xaot_bundle_set_program_target_plan(&bundle, target);
+    bool evidence_ok = target_ok &&
+        xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+            &evidence, fixture->source->graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u,
+            fixture->source->analyzer) &&
+        xaot_bundle_set_global_evidence(&bundle, &evidence, XG_BUILD_NATIVE_RELEASE);
+    bool binding_ok = evidence_ok &&
+        xr_c_program_direct_i64_emission_bind(target, fixture->modules, 2u, &scope, error,
+                                              sizeof(error));
+    bool prepare_ok = binding_ok && xaot_prepare_bundle(&bundle, NULL);
+    bool verify_ok = prepare_ok && xaot_verify_bundle(&bundle, error, sizeof(error));
+    XiModule *caller_module = fixture->modules[fixture->entry_index];
+    XiModule *producer_module = fixture->modules[fixture->producer_index];
+    /* Child functions are owned by the module's function table; only the
+     * initializer itself is required to store the module back-pointer. */
+    bool exact = verify_ok && scope.caller.xi_function && scope.callee.xi_function && scope.xi_call &&
+            scope.target_call < target->calls_count &&
+            caller_module && caller_module->nfuncs == 1u && caller_module->functions &&
+            caller_module->functions[0] == scope.caller.xi_function &&
+            producer_module && producer_module->nfuncs == 1u && producer_module->functions &&
+            producer_module->functions[0] == scope.callee.xi_function &&
+            fixture->entry_index != fixture->producer_index;
+    if (!exact)
+        fprintf(stderr,
+                "program CGen fixture failed: init=%u target=%u evidence=%u binding=%u "
+                "prepare=%u verify=%u ownership=%u: %s\n",
+                (unsigned) init_ok, (unsigned) target_ok, (unsigned) evidence_ok,
+                (unsigned) binding_ok, (unsigned) prepare_ok, (unsigned) verify_ok,
+                (unsigned) exact, error[0] ? error : bundle.error_msg ? bundle.error_msg : "");
+    for (uint32_t entry = SCALAR_GRAPH_CGEN_MAIN;
+         exact && entry <= SCALAR_GRAPH_CGEN_PRODUCER_TU; entry++) {
+        for (uint32_t resign = 0; exact && resign < 2u; resign++)
+            exact = scalar_graph_cgen_entry_rejects_changed_authority(
+                fixture, target, &bundle, &scope, (ScalarGraphCgenEntry) entry, resign != 0u);
+    }
+    xr_c_program_direct_i64_emission_release(&scope);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&evidence);
+    return exact;
+}
+
 static void *scalar_graph_runtime_allocate(void *context, size_t size, size_t alignment) {
     (void) context;
     return size && alignment <= _Alignof(void *) ? xr_malloc(size) : NULL;
@@ -3180,6 +3307,54 @@ TEST(source_backed_leaf_product_freezes_all_direct_local_callers) {
     fixture_cleanup(&fixture);
 }
 
+TEST(program_direct_cgen_entries_readmit_after_mutation) {
+    ScalarGraphFixture source = {0};
+    ScalarGraphPlanFixture fixture = {0};
+    XrProgramSemanticClosure *closure = NULL;
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = NULL;
+    char diagnostic[512] = {0};
+    bool source_ok = scalar_graph_fixture_build(&source, "41");
+    bool publication_ok = source_ok &&
+        xa_program_semantic_closure_publish_scalar_module_graph(
+            source.analyzer, source.graph, &closure, diagnostic, sizeof(diagnostic)) ==
+            XA_PROGRAM_SEMANTIC_CLOSURE_READY && closure;
+    bool lowering_ok = publication_ok &&
+        scalar_graph_plan_fixture_build(&fixture, &source, closure, diagnostic,
+                                        sizeof(diagnostic));
+    bool profile_ok = lowering_ok &&
+        xr_runtime_target_profile_build_native_hosted(&profile, diagnostic, sizeof(diagnostic));
+    bool exact = profile_ok;
+    const XrSemanticPlan *modules[2] = {NULL, NULL};
+    for (uint32_t i = 0; exact && i < 2u; i++) {
+        const XrSemanticPlan *semantic = scalar_graph_plan(&fixture, i);
+        const XrSemanticProgramProvenance *provenance =
+            xr_semantic_plan_program_provenance(semantic);
+        if (!semantic || !provenance || provenance->program_module_row >= 2u ||
+            modules[provenance->program_module_row]) {
+            exact = false;
+            break;
+        }
+        modules[provenance->program_module_row] = semantic;
+    }
+    bool target_ok = exact && modules[0] && modules[1] &&
+            xr_target_plan_build_program_graph(modules, 2u, profile, &target, diagnostic,
+                                               sizeof(diagnostic));
+    exact = target_ok && scalar_graph_cgen_readmission_is_exact(&fixture, target);
+    if (!exact)
+        fprintf(stderr,
+                "program CGen source fixture: source=%u publication=%u lowering=%u "
+                "profile=%u target=%u\n",
+                (unsigned) source_ok, (unsigned) publication_ok, (unsigned) lowering_ok,
+                (unsigned) profile_ok, (unsigned) target_ok);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    scalar_graph_plan_fixture_cleanup(&fixture);
+    xr_program_semantic_closure_free(closure);
+    scalar_graph_fixture_cleanup(&source);
+    ASSERT_MSG(exact, diagnostic[0] ? diagnostic : "Program CGen entries must re-admit authority");
+}
+
 TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ScalarGraphFixture fixture;
     ASSERT_TRUE(scalar_graph_fixture_build(&fixture, "41"));
@@ -3605,6 +3780,15 @@ TEST(resolved_target_mismatch_does_not_publish_scalar_authority) {
 
 TEST_MAIN_BEGIN()
 setup();
+if (argc == 2 && strcmp(argv[1], "--program-emission-readmission") == 0) {
+    RUN_TEST_SUITE("program CGen entry readmission");
+    RUN_TEST(program_direct_cgen_entries_readmit_after_mutation);
+    teardown();
+    TEST_REPORT();
+    int result = TEST_EXIT();
+    XR_TEST_PROCESS_SHUTDOWN();
+    return result;
+}
 if (argc == 5 && strcmp(argv[1], "--write-program-runtime-artifacts") == 0) {
     int result = scalar_graph_write_program_runtime_artifacts(argv[2], argv[3], argv[4]);
     teardown();
@@ -3615,6 +3799,7 @@ RUN_TEST_SUITE("source-backed program semantic closure");
 RUN_TEST(source_backed_scalar_snapshot_builds_verified_closure);
 RUN_TEST(source_backed_leaf_aggregate_publishes_typed_psc);
 RUN_TEST(source_backed_leaf_product_freezes_all_direct_local_callers);
+RUN_TEST(program_direct_cgen_entries_readmit_after_mutation);
 RUN_TEST(two_source_module_scalar_graph_publishes_complete_authority);
 RUN_TEST(entry_csv_text_publishes_complete_source_module_graph_authority);
 RUN_TEST(strict_call_locator_boundaries_fail_after_source_republication);

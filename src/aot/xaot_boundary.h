@@ -67,14 +67,24 @@ typedef struct XaotBoundaryCallTargets {
     uint16_t first_param;
 } XaotBoundaryCallTargets;
 
+typedef enum XaotBoundaryFunctionCoverage {
+    XAOT_BOUNDARY_FUNCTION_INVALID = 0,
+    XAOT_BOUNDARY_FUNCTION_UNCOVERED,
+    XAOT_BOUNDARY_FUNCTION_LEAF_AGGREGATE,
+    XAOT_BOUNDARY_FUNCTION_DIRECT_I64,
+} XaotBoundaryFunctionCoverage;
+
 typedef struct XaotBoundaryFunctionCalls {
     const XiFunc *function;
     XaotBoundaryCallTargets *targets;
     uint32_t target_count;
+    XaotBoundaryFunctionCoverage coverage;
 } XaotBoundaryFunctionCalls;
 
 /* All outputs are cleared on failure. Common target admission is local to
- * this synchronous traversal; independent queries never inherit it. */
+ * this synchronous traversal; independent queries never inherit it. A zero
+ * target_count requests coverage alone, including for a function with no calls.
+ * Returned facts are valid only while the inputs remain alive and unchanged. */
 XR_FUNC bool xaot_boundary_resolve_call_batches(const struct XaotBundle *bundle,
                                                  XaotBoundaryFunctionCalls *functions,
                                                  uint32_t function_count);
