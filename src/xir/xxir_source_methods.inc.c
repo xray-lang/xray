@@ -44,6 +44,31 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
             method->declaration, XR_XIR_SOURCE_CALL) &&
         emit_group(ctx, op, arguments, function->parameter_count, value);
 }
+static bool source_member_value(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    SourceValue receiver;
+    if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
+    SourceName *method = source_method_find(ctx, receiver.type, node->as.member_access.name);
+    if (!method) return source_struct_get_value(ctx, node, receiver, value);
+    const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
+    if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method value requires its declaration owner");
+    const XrXirFunction *function = &ctx->functions[method->index];
+    const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, receiver.type);
+    SourceSubstitution substitution = {type->nominal.arguments, type->nominal.argument_count};
+    uint32_t count = function->parameter_count - 1;
+    XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
+    if (count && !parameters) return false;
+    for (uint32_t p = 0; p < count; ++p)
+        if (!source_substitute(ctx, &substitution, function->parameters[p + 1], 0, &parameters[p].type)) return false;
+    XrXirType result;
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index};
+    return source_substitute(ctx, &substitution, function->result, 0, &result) &&
+        source_signature(ctx, parameters, count, result, &op.type) &&
+        source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
+        source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
+            method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) &&
+        emit_group(ctx, op, &receiver, 1, value);
+}
 static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];

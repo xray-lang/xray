@@ -81,5 +81,6 @@ export struct ReadBox<T> {
     get()->T{return this.relay(this)}
     take(other:T)->T{return other}
     snapshot()->fn()->T{return fn()->T{return this.fetch()}}
+    bound()->fn()->T{return this.fetch}
 }
 export struct MethodSecret { private hidden:i64=97; private fetch()->i64{return this.hidden}; get()->i64{return this.fetch()} }

@@ -4306,6 +4306,9 @@ Xray uses a layered memory management strategy:
 - Reference cycles are not collected at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk disposal of the execution-local reclamation domain (L2).
 - No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
 
+
+A READ struct method value `receiver.method` evaluates the receiver once at binding and saves its logical value snapshot without executing the method body. The callable signature contains only explicit parameters and the result, after substituting the struct arguments. Later writes to the original binding do not change the snapshot; identity handles retain their identity semantics. Private/protected access is checked at binding; a declaring body may explicitly return an authorized callable without granting callers direct member access. The callable remains subject to its originating Instance's revocation and cleanup, with no implicit Sendable/no_suspend promise. Ref/move receivers must not degrade to READ binding.
+
 ---
 
 ## 8. Error Handling

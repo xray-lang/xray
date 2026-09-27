@@ -457,3 +457,14 @@ const methodOrder=Atomic(0)
 fn methodReceiver()->alpha.ReadBox<i64>{methodOrder.fetchAdd(1);return alpha.ReadBox<i64>{value:methodOrder.load()}}
 fn methodArgument()->i64{return methodOrder.fetchAdd(10)}
 print(methodReceiver().take(methodArgument()),methodOrder.load())
+
+fn bindRead<T>(box:alpha.ReadBox<T>)->fn()->T{return box.get}
+var boundBox=alpha.ReadBox<string>{value:"bound"}
+const boundGet=bindRead<string>(boundBox)
+const boundPrivate=boundBox.bound()
+const boundTake=boundBox.take
+boundBox.value="later"
+const temporaryGet=methodReceiver().get
+print(boundGet(),boundPrivate(),boundTake("arg"),boundBox.get(),temporaryGet(),methodOrder.load())
+
+export fn boundResult()->fn()->string{return boundPrivate}

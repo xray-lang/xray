@@ -420,7 +420,7 @@ static void source_struct_facts(XrXirSourceRequest *request) {
     CHECK(declaration(view, "value", pair->id) && declaration(view, "label", pair->id));
     xr_xir_source_result_free(&result);
     write_source(request->entry_path,
-        "struct S<T>{\n value:T\n get(\n input:T\n )->T{return this.value}\n}\nconst s=S<i64>{value:7};const n=s.get(7)\n");
+        "struct S<T>{\n value:T\n get(\n input:T\n )->T{return this.value}\n}\nconst s=S<i64>{value:7};const n=s.get(7);const bound=s.get\n");
     CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_OK && result.checked && result.snapshot);
     view = xr_xir_source_snapshot_view(result.snapshot);
     const XrXirSourceDeclaration *method_owner = declaration(view, "S", 0);
@@ -432,6 +432,14 @@ static void source_struct_facts(XrXirSourceRequest *request) {
     const XrXirSourceDeclaration *input_parameter = declaration(view, "input", method->id);
     CHECK(input_parameter && input_parameter->range.line == 4 && input_parameter->range.column == 2);
     CHECK(input_parameter->range.end_line == 4 && input_parameter->range.end_column == 7);
+    const XrXirSourceDeclaration *bound = declaration(view, "bound", 0);
+    CHECK(bound && bound->type.known);
+    const XrXirTypeNode *bound_type = xr_xir_callable_signature(view->types, bound->type.type);
+    CHECK(bound_type && bound_type->parameter_count == 1 && bound_type->parameters[0].type == XR_XIR_I64 && bound_type->result == XR_XIR_I64);
+    unsigned bound_references = 0;
+    for (uint32_t i = 0; i < view->reference_count; ++i)
+        if (view->references[i].target == method->id && view->references[i].access == XR_XIR_SOURCE_FUNCTION_VALUE) ++bound_references;
+    CHECK(bound_references == 1);
     xr_xir_source_result_free(&result);
     static const char *const invalid[] = {
         "struct S{x:i64}\nvar s=S{}", "struct S{x:i64}\nvar s=S{y:1}",

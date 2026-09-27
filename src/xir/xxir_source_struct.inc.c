@@ -264,10 +264,6 @@ static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceVal
     if (!source_struct_field(ctx, node, receiver.type, node->as.member_access.name, false, &index, &type)) return false;
     return emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index}, value);
 }
-static bool source_struct_get(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    SourceValue receiver;
-    return expression(ctx, node->as.member_access.object, &receiver) && source_struct_get_value(ctx, node, receiver, value);
-}
 static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     MemberSetNode *set = &node->as.member_set;
     SourceName *root = set->object->type == AST_VARIABLE ? visible_name(ctx, set->object->as.variable.name) : NULL;

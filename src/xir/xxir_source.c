@@ -1010,7 +1010,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
     case AST_MEMBER_ACCESS: {
         MemberAccessNode *member = &node->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
-        if (!base || base->kind != SOURCE_MODULE) return source_struct_get(ctx, node, value);
+        if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, value);
         return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), value);
     }
     case AST_THIS_EXPR: case AST_VARIABLE: {

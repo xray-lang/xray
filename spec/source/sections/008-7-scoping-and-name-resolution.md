@@ -199,6 +199,9 @@ Xray 采用多层内存管理：
 - 引用环不由运行时收集：静态证明（L0）、`weak` 显式断环（L1）、执行局部回收域批量处置封顶（L2）。
 - 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
 
+
+READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，保存其逻辑值快照，不执行方法体。所得函数签名只包含显式参数与返回类型，结构体泛型实参先替换；原绑定后续写入不改变快照，身份句柄仍保持其身份语义。私有/protected访问在绑定处检查，声明内部可显式返回已授权的函数值，调用者不会因此取得直接成员访问权。函数值仍受所属Instance的撤销与清理约束，不隐含Sendable/no_suspend承诺。ref/move接收者不得退化为READ绑定。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -398,5 +401,8 @@ Xray uses a layered memory management strategy:
 - The compiler marks only types that may form reference cycles as cycle candidates; the mark serves diagnostics and drives no runtime reclamation.
 - Reference cycles are not collected at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk disposal of the execution-local reclamation domain (L2).
 - No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
+
+
+A READ struct method value `receiver.method` evaluates the receiver once at binding and saves its logical value snapshot without executing the method body. The callable signature contains only explicit parameters and the result, after substituting the struct arguments. Later writes to the original binding do not change the snapshot; identity handles retain their identity semantics. Private/protected access is checked at binding; a declaring body may explicitly return an authorized callable without granting callers direct member access. The callable remains subject to its originating Instance's revocation and cleanup, with no implicit Sendable/no_suspend promise. Ref/move receivers must not degrade to READ binding.
 
 <!-- /xr-spec:en -->

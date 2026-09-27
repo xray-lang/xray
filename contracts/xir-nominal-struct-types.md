@@ -740,7 +740,7 @@ identity; field/method name collisions reject. Private field reads retain nomina
 owner checking and nested closures inherit that owner. Source query method
 signatures record the implicit receiver first. No caller acquires field authority.
 Static, ref/move, method-local generics, accessors, operators,
-default/rest parameters, bound method values and user constructors remain outside
+default/rest parameters and user constructors remain outside
 this initial admission. Reject these declarations explicitly; do not erase their
 receiver or access promises to fit READ. Their full contracts remain required.
 
@@ -769,5 +769,5 @@ Required evidence: same-owner generic and nested closure calls; outside/same-mod
 other-owner/cross-module rejection; forged access/owner/export and function-ref
 rejection; packet roundtrip, specialization and native proof correspondence;
 independent VM/native output, failed allocation release and full batch gates.
-Static/ref/move, method-local generics, bound method source syntax and user
+Static/ref/move, method-local generics and user
 constructors remain separate obligations.

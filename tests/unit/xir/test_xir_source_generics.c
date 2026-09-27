@@ -281,7 +281,11 @@ int main(void) {
         "struct S{get(x:i64)->i64{return x}}\nconst s=S();s.get(true)\n",
         "struct S{get()->i64{return 1}}\nconst s=S();s.get<i64>()\n",
         "struct S{private get()->i64{return 1}}\nconst s=S();s.get()\n",
-        "struct S{get()->i64{return 1}}\nconst s=S();const f=s.get\n",
+        "struct S{private get()->i64{return 1}}\nconst s=S();const f=s.get\n",
+        "struct S{protected get()->i64{return 1}}\nconst f=S().get\n",
+        "struct S{get(x:i64)->i64{return x}}\nconst f=S().get;f(true)\n",
+        "struct S{get(x:i64)->i64{return x}}\nconst f=S().get;f()\n",
+        "struct S{get()->i64{return 1}}\nconst f=S().get<i64>\n",
         "struct S{protected get()->i64{return 1}}\nS().get()\n",
         "struct S{private get()->i64{return 1}}\nstruct U{read(s:S)->i64{return s.get()}}\n",
         "struct S<T>{private get()->T{return missing}}\n"

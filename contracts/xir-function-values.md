@@ -137,3 +137,26 @@ share the constructed pool; no standalone signature table or encoded cell type
 survives this cutover. ARRAY descriptors in that pool do not yet qualify runtime
 arrays, arrays of functions or transitive array-element admission. Those require
 the operation and negative-boundary evidence in `xir-constructed-types.md`.
+
+## Bound READ struct method values
+
+`receiver.method` evaluates the receiver exactly once at value formation and
+captures its logical READ value snapshot. Its callable signature contains the
+explicit method parameters and result after substituting the receiver's nominal
+arguments; the implicit receiver is excluded. Later writes to the original root
+do not change this snapshot. Captured identity handles preserve their existing
+identity semantics. Binding does not execute the method body.
+
+The existing FUNCTION_REF binds the receiver as its single captured prefix
+operand, with exact generic arguments. No thunk, new instruction, runtime
+specialization or alternate dispatch path is introduced. Access is checked at
+formation, including member_access; an authorized private method may return its
+bound capability for ordinary indirect calls. Description alone grants none.
+Instance revocation, owned capture cleanup, cancellation, and escaped values use
+the existing function-value contract. No implicit Sendable/no_suspend capability.
+
+Static/ref/move methods, method-local generic arguments and bound writable roots
+remain outside this admission and must not silently use READ snapshots. Required
+validation includes generic forwarding, snapshot isolation, temporary receivers,
+single evaluation, nonzero arguments, private formation rejection and authorized
+escape, exact query target, VM/native independent outputs and physical release.
