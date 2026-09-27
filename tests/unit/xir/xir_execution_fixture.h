@@ -20,6 +20,25 @@
 #include <limits.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 
+static XrXirArtifact *uninitialized_leaf_fixture(void) {
+    const XrXirType parameter = XR_XIR_I64;
+    const XrXirInstruction ops[] = {
+        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {1, 0}, {0}, 0},
+        {XR_XIR_LOCAL_READ, XR_XIR_I64, {1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {3}, {0}, 0}
+    };
+    const XrXirBlock block = {0, 4};
+    const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0};
+    const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
+    XrXirArtifact *checked = NULL, *lowered = NULL;
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked);
+    return lowered;
+}
+
 static XrXirFunction phi_leaf_fixture(void) {
     static const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64, XR_XIR_I64};
     static const XrXirInstruction ops[] = {

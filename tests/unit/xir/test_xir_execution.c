@@ -26,6 +26,13 @@ static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *conte
 }
 
 int main(void) {
+    { XrXirArtifact *uninitialized = uninitialized_leaf_fixture();
+    XrXirRunContext context = {4, 65536, 0, 0, 0, 0};
+    XrXirValue argument = {XR_XIR_I64, 0, -1}, result = {0};
+    CHECK(xr_xir_vm_run(uninitialized, 0, &context, &argument, 1, &result) == XR_XIR_RUN_OK);
+    CHECK(result.type == XR_XIR_I64 && result.payload == -1);
+    CHECK(!context.live_bytes && context.allocations == context.frees);
+    xr_xir_artifact_free(uninitialized); }
     decimal_cases();
     integer_runtime_cases();
     float_runtime_cases();

@@ -694,6 +694,60 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
     return XR_XIR_OK;
 }
 
+/* Reuse reachability bytes only after CFG and ordinary operand validation. */
+static XrXirStatus local_initialization(Graph *graph, const XrXirFunction *function,
+                                       VerifyContext *context) {
+    for (uint32_t declaration = 0; declaration < function->instruction_count; ++declaration) {
+        if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+        if (function->instructions[declaration].op != XR_XIR_LOCAL_UNINIT) continue;
+        uint32_t place = function->parameter_count + declaration;
+        uint8_t *out = graph->reachable;
+        memset(out, 1, function->block_count);
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            for (uint32_t b = 0; b < function->block_count; ++b) {
+                if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+                bool initialized = b != 0;
+                for (uint32_t edge = graph->head[b]; edge != UINT32_MAX; edge = graph->next[edge]) {
+                    if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+                    initialized = initialized && out[graph->predecessor[edge]];
+                }
+                const XrXirBlock *block = &function->blocks[b];
+                for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+                    if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+                    const XrXirInstruction *op = &function->instructions[i];
+                    if (i == declaration) initialized = false;
+                    if (local_write(op->op) && op->args[0] == place) initialized = true;
+                }
+                if (out[b] != initialized) { out[b] = (uint8_t)initialized; changed = true; }
+            }
+        }
+        for (uint32_t b = 0; b < function->block_count; ++b) {
+            bool initialized = b != 0;
+            for (uint32_t edge = graph->head[b]; edge != UINT32_MAX; edge = graph->next[edge]) {
+                if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+                initialized = initialized && out[graph->predecessor[edge]];
+            }
+            const XrXirBlock *block = &function->blocks[b];
+            for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+                if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+                const XrXirInstruction *op = &function->instructions[i];
+                context->location.block = b; context->location.instruction = i;
+                if (i == declaration) initialized = false;
+                if (local_write(op->op) && op->args[0] == place) { initialized = true; continue; }
+                if (op->op == XR_XIR_PHI) continue;
+                uint32_t count = operand_count(function, op, context->module);
+                if (!spend(&context->remaining.work, count)) return XR_XIR_BUDGET;
+                for (uint32_t a = 0; a < count; ++a) {
+                    uint32_t id = xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0] + a] : op->args[a];
+                    if (id == place && !initialized) return XR_XIR_BAD_VALUE;
+                }
+            }
+        }
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage stage,
                                  VerifyContext *context) {
     XrXirStatus status = function_shape(function, stage, context);
@@ -707,6 +761,8 @@ static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage sta
         status = graph_dominators(&graph, function, context);
     if (status == XR_XIR_OK)
         status = graph_uses(&graph, function, context);
+    if (status == XR_XIR_OK)
+        status = local_initialization(&graph, function, context);
     graph_free(&graph);
     return status;
 }

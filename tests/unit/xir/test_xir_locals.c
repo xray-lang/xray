@@ -80,9 +80,66 @@ static void phi_layout_attacks(XrXirArtifact *artifact) {
     CHECK(xr_xir_artifact_verify(artifact, &budget, NULL) == XR_XIR_BUDGET);
     CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_OK);
 }
+static void rejected_initialization(const XrXirArtifact *artifact) {
+    XrXirModule module = *xr_xir_artifact_module(artifact);
+    XrXirFunction function = module.functions[3];
+    XrXirInstruction ops[10]; memcpy(ops, function.instructions, sizeof(ops));
+    module.functions = &function; module.function_count = 1; function.instructions = ops;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+    ops[4] = xr_xir_artifact_module(artifact)->functions[3].instructions[4];
+    ops[2] = (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_STRING, {3}, {0}, 0};
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+}
+/* A write on a backedge cannot justify the first visit to its header. */
+static void initialization_loops(void) {
+    const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_BOOL};
+    XrXirInstruction ops[] = {
+        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
+        {XR_XIR_LOCAL_READ, XR_XIR_I64, {2}, {0}, 0},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {2, 3}, 0},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0}
+    };
+    XrXirBlock blocks[] = {{0, 3}, {3, 2}, {5, 2}, {7, 1}};
+    XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    ops[1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+    /* Store the body before its header, retaining exactly the same CFG. */
+    XrXirInstruction read = ops[3], branch = ops[4];
+    ops[3] = ops[5]; ops[4] = ops[6]; ops[5] = read; ops[6] = branch;
+    ops[2].targets[0] = 2; ops[4].targets[0] = 2; ops[6].targets[0] = 1;
+    ops[7].args[0] = 7;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+    ops[1] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0};
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    /* Redeclaration kills the initialized state from the previous iteration. */
+    XrXirInstruction reset_ops[] = {
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
+        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {3, 0}, {0}, 0},
+        {XR_XIR_LOCAL_READ, XR_XIR_I64, {3}, {0}, 0},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {1, 2}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0}
+    };
+    const XrXirBlock reset_blocks[] = {{0, 1}, {1, 4}, {5, 1}};
+    function.instructions = reset_ops; function.instruction_count = 6;
+    function.blocks = reset_blocks; function.block_count = 3;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    XrXirInstruction write = reset_ops[2]; reset_ops[2] = reset_ops[3]; reset_ops[3] = write;
+    reset_ops[5].args[0] = 4;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+}
 int main(int argc, char **argv) {
+    initialization_loops();
     XrXirArtifact *checked = local_fixture(), *decoded = NULL, *lowered = NULL;
-    rejected_places(checked); rejected_phis(checked);
+    rejected_places(checked); rejected_phis(checked); rejected_initialization(checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);
@@ -101,6 +158,10 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_vm_bind(lowered, 1, &binding, &entry) == XR_XIR_OK);
     numeric_cleanup(&entry);
     CHECK(xr_xir_vm_bind(lowered, 2, &binding, &entry) == XR_XIR_OK);
+    phi_cases(&entry);
+    CHECK(xr_xir_vm_bind(lowered, 3, &binding, &entry) == XR_XIR_OK);
+    local_cases(&entry);
+    CHECK(xr_xir_vm_bind(lowered, 4, &binding, &entry) == XR_XIR_OK);
     phi_cases(&entry);
     XrXirModule changed = *xr_xir_artifact_module(lowered);
     XrXirFunction changed_function = *function;

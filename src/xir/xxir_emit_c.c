@@ -235,6 +235,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
         emit_constant(buffer, op->immediate);
         append(buffer, ");\n");
         break;
+    case XR_XIR_LOCAL_UNINIT: break;
     case XR_XIR_SCALAR_LOCAL_NEW:
     case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_COPY:
@@ -556,6 +557,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         append(buffer, "        xr_xir_scalar_store(state->frame, %uu, ", destination);
         emit_constant(buffer, op->immediate);
         append(buffer, ");\n");
+        break;
+    case XR_XIR_LOCAL_UNINIT:
+        if (xr_xir_type_is_owned(module->types, op->type))
+            append(buffer, "        xr_xir_owned_slot_clear(state->frame, %uu);\n", destination);
         break;
     case XR_XIR_SCALAR_LOCAL_NEW:
     case XR_XIR_SCALAR_LOCAL_READ:

@@ -42,7 +42,13 @@ static XrXirRunStatus run(void *owner, uint32_t function, XrXirRunContext *conte
     CHECK(function < sizeof(entries) / sizeof(entries[0]));
     return entries[function](context, arguments, count, result);
 }
+XR_FUNC XrXirRunStatus uninitialized_f0(XrXirRunContext *, const XrXirValue *, uint32_t, XrXirValue *);
 int main(void) {
+    XrXirRunContext context = {4, 65536, 0, 0, 0, 0};
+    XrXirValue argument = {XR_XIR_I64, 0, -1}, result = {0};
+    CHECK(uninitialized_f0(&context, &argument, 1, &result) == XR_XIR_RUN_OK);
+    CHECK(result.type == XR_XIR_I64 && result.payload == -1);
+    CHECK(!context.live_bytes && context.allocations == context.frees);
     decimal_cases();
     integer_runtime_cases();
     float_runtime_cases();

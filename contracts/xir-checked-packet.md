@@ -6,8 +6,8 @@ linking, native cache admission or publication. There is one Checked reader and
 no Built, Lowered, legacy, or alternate executable format reader.
 
 All integers use fixed-width little endian, with no native struct padding.
-The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 7, semantic-contract
-u32 19, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
+The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 `XR_XIR_CHECKED_SCHEMA`, semantic-contract
+u32 `XR_XIR_CHECKED_CONTRACT`, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
 over header bytes 0..31 followed by the payload. Unknown versions, stage or
 reserved fields, length mismatch, trailing bytes and digest mismatch reject.
 The digest is content identity/integrity, not authentication. Schema or semantic
@@ -19,7 +19,7 @@ first/count pairs, instruction count and records, operand count and value IDs.
 An instruction contains op/type/args[2]/targets[2] u32s and immediate i64 encoded
 as two's-complement u64. A blob is u32 length followed by exactly those bytes.
 Declaration data, when present, is module/slot/literal counts, root/entry IDs,
-modules (name blob, dependency count/IDs, initializer), one module/exported/nominal_owner u32 triple
+modules (name blob, dependency count/IDs, initializer), one module/exported/nominal_owner/member_access u32 record
 per function, slots (module/type/mutable), and literal blobs. A generic-presence flag and per-function constraint/type-argument
 tables follow, governed by `xir-generic-templates.md`. A constructed-node u32 count
 and nominal-declaration u32 count follow. Each node record starts with u32 kind and u32 exact free-parameter span.

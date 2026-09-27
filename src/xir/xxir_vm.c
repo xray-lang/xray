@@ -310,6 +310,10 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_CONST_INT:
         value = op->immediate;
         break;
+    case XR_XIR_LOCAL_UNINIT:
+        if (xr_xir_type_is_owned(run->module->types, op->type))
+            xr_xir_owned_slot_clear(run->frame, run->layout->offsets[result_id]);
+        state->instruction = next; return XR_XIR_RUN_OK;
     case XR_XIR_SCALAR_LOCAL_NEW:
     case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_COPY:

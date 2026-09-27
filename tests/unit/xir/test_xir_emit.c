@@ -29,12 +29,18 @@ int main(int argc, char **argv) {
     xr_xir_artifact_free(artifact);
     CHECK(source.length == strlen(source.text));
     CHECK(!strstr(source.text, "({"));
+    XrXirArtifact *uninitialized = uninitialized_leaf_fixture();
+    XrXirCSource extra = {0};
+    CHECK(xr_xir_emit_leaf_c(uninitialized, "uninitialized", 65536, &extra) == XR_XIR_OK);
+    xr_xir_artifact_free(uninitialized);
     if (argc == 2) {
         FILE *file = fopen(argv[1], "wb");
         CHECK(file);
         CHECK(fwrite(source.text, 1, source.length, file) == source.length);
+        CHECK(fwrite(extra.text, 1, extra.length, file) == extra.length);
         CHECK(fclose(file) == 0);
     } else CHECK(argc == 1);
+    xr_xir_c_source_free(&extra);
     xr_xir_c_source_free(&source);
     CHECK(!source.text && !source.length);
     puts("XIR C emission and generated-output verifier passed");

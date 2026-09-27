@@ -36,6 +36,7 @@ CONTRACT_SPECS = (
     ContractSpec("xir-checked-packet.md", ()),
     ContractSpec("xir-generic-templates.md", ()),
     ContractSpec("xir-local-control-flow.md", ()),
+    ContractSpec("xir-local-initialization.md", ()),
     ContractSpec("xir-callable-types.md", ()),
     ContractSpec("xir-constructed-types.md", ()),
     ContractSpec("xir-nominal-struct-types.md", ()),

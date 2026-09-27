@@ -26,7 +26,7 @@ static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, ui
     if (!function || !function->instructions || value < function->parameter_count ||
         value - function->parameter_count >= function->instruction_count) return XR_XIR_PLACE_NONE;
     XrXirOp op = function->instructions[value - function->parameter_count].op;
-    if (op == XR_XIR_LOCAL_NEW || op == XR_XIR_SCALAR_LOCAL_NEW || op == XR_XIR_OWNED_LOCAL_NEW)
+    if (op == XR_XIR_LOCAL_UNINIT || op == XR_XIR_LOCAL_NEW || op == XR_XIR_SCALAR_LOCAL_NEW || op == XR_XIR_OWNED_LOCAL_NEW)
         return XR_XIR_PLACE_LOCAL;
     if (op == XR_XIR_CELL_PLACE) return XR_XIR_PLACE_CELL;
     if (op == XR_XIR_SLOT_PLACE) return XR_XIR_PLACE_SLOT;

@@ -1,7 +1,9 @@
 # Typed local places and structured control flow
 
 A mutable local binding is a typed activation-local place, distinct from an SSA
-value. It must have an initializer. LOCAL_NEW defines the place; LOCAL_READ
+value. Source mutable bindings require an initializer. Internal LOCAL_UNINIT
+storage instead obeys the independent definite-initialization contract.
+LOCAL_NEW defines an initialized place; LOCAL_READ
 copies its current value; LOCAL_WRITE replaces it from an already evaluated value.
 A place cannot be returned, passed, printed, copied as a value or used as another
 place's initializer. Local read/write use a place only as their first operand.
@@ -9,7 +11,8 @@ place's initializer. Local read/write use a place only as their first operand.
 GET/LEN/SET/PUSH receiver role, with its independent read/write permission check;
 it does not turn that place into a normal value. CELL_PLACE/SLOT_PLACE projections
 remain distinct producers and cannot be used by local read/write.
-The initializer must dominate every access. Types match exactly, including generic
+The place declaration must dominate every access. LOCAL_UNINIT accesses additionally
+require initialization on every incoming path. Types match exactly, including generic
 parameters before specialization. Read parameters and const bindings stay values.
 
 Checked operations remain abstract. Lowering selects SCALAR_LOCAL or OWNED_LOCAL
