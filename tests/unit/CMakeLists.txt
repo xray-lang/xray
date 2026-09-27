@@ -1370,6 +1370,17 @@ endforeach()
 # Complete programs lowered by test_xi_cgen, strictly compiled, linked with the
 # same AOT core archive the CLI links, executed, and compared byte for byte
 # with independent answers kept in the runner.
+set(XR_CGEN_EXECUTION_HOST_ARGS ${XR_NATIVE_SOURCE_HOST_ARGS})
+if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+    list(APPEND XR_CGEN_EXECUTION_HOST_ARGS --asan)
+endif()
+if(ENABLE_UBSAN OR ENABLE_SANITIZERS)
+    list(APPEND XR_CGEN_EXECUTION_HOST_ARGS --ubsan)
+endif()
+if(XRAY_C_MSVC_FRONTEND)
+    list(APPEND XR_CGEN_EXECUTION_HOST_ARGS
+        "--msvc-runtime=$<TARGET_GENEX_EVAL:xray_aot_core,$<TARGET_PROPERTY:xray_aot_core,MSVC_RUNTIME_LIBRARY>>")
+endif()
 foreach(execution_case IN ITEMS
         cgen_nullable_unit_enum_compare_execution
         cgen_nullable_unit_enum_execution
@@ -1379,7 +1390,7 @@ foreach(execution_case IN ITEMS
     add_test(NAME test_run_${execution_case}
         COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/run_cgen_execution.py
             --cgen $<TARGET_FILE:test_xi_cgen> --case ${execution_case}
-            --aot-core $<TARGET_FILE:xray_aot_core> ${XR_NATIVE_SOURCE_HOST_ARGS})
+            --aot-core $<TARGET_FILE:xray_aot_core> ${XR_CGEN_EXECUTION_HOST_ARGS})
     set_tests_properties(test_run_${execution_case} PROPERTIES
         LABELS "aot;generated-c;execution;integration" TIMEOUT 240)
 endforeach()

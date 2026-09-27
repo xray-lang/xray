@@ -23,6 +23,13 @@ EXPECTED_STDOUT = {
     "cgen_direct_move_array_execution": "3\n2\n",
 }
 
+MSVC_RUNTIME_OPTIONS = {
+    "MultiThreaded": "/MT",
+    "MultiThreadedDebug": "/MTd",
+    "MultiThreadedDLL": "/MD",
+    "MultiThreadedDebugDLL": "/MDd",
+}
+
 
 def run(command, cwd, timeout):
     # English compiler diagnostics keep failure reports readable on any console.
@@ -32,16 +39,30 @@ def run(command, cwd, timeout):
 
 
 def strict_compile(args, root, source, executable, folder):
+    sanitizer_options = []
+    if args.asan:
+        sanitizer_options.append("/fsanitize=address" if args.msvc else "-fsanitize=address")
+    if args.ubsan:
+        sanitizer_options.extend(["/clang:-fsanitize=undefined", "/clang:-fno-sanitize=function"]
+                                 if args.msvc else
+                                 ["-fsanitize=undefined", "-fno-sanitize=function"])
+    if sanitizer_options:
+        sanitizer_options.append("/Oy-" if args.msvc else "-fno-omit-frame-pointer")
     if args.msvc:
-        command = [args.host_compiler, "/nologo", "/std:c11", "/utf-8",
+        command = [args.host_compiler, *sanitizer_options, "/nologo", "/std:c11", "/utf-8",
                    "/D_CRT_SECURE_NO_WARNINGS", "/W4", "/WX", "/wd4702",
                    "/external:I" + str(root / "src/aot"), "/external:I" + str(root / "include"),
                    "/external:W0", str(source), "/Fe:" + str(executable),
-                   "/Fo:" + str(folder / "program.obj"), str(args.aot_core.resolve(strict=True))]
+                   "/Fo:" + str(folder / "program.obj")]
         if args.msvc_atomics:
             command.append("/experimental:c11atomics")
+        if args.msvc_runtime:
+            command.append(MSVC_RUNTIME_OPTIONS[args.msvc_runtime])
+        command.extend(["/link", str(args.aot_core.resolve(strict=True))])
+        if args.asan:
+            command.append("/INCREMENTAL:NO")
     else:
-        command = [args.host_compiler, "-std=c11", "-Wall", "-Wextra", "-Werror",
+        command = [args.host_compiler, *sanitizer_options, "-std=c11", "-Wall", "-Wextra", "-Werror",
                    "-pedantic-errors", "-isystem", str(root / "src/aot"), "-isystem",
                    str(root / "include"), str(source), str(args.aot_core.resolve(strict=True)),
                    "-o", str(executable), "-lm", "-lpthread"]
@@ -58,7 +79,12 @@ def main():
     parser.add_argument("--aot-core", type=Path, required=True)
     parser.add_argument("--msvc", action="store_true")
     parser.add_argument("--msvc-atomics", action="store_true")
+    parser.add_argument("--msvc-runtime", choices=tuple(MSVC_RUNTIME_OPTIONS))
+    parser.add_argument("--asan", action="store_true")
+    parser.add_argument("--ubsan", action="store_true")
     args = parser.parse_args()
+    if args.ubsan and args.msvc and Path(args.host_compiler).stem.lower() != "clang-cl":
+        parser.error("UBSan with an MSVC frontend requires the clang-cl driver")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     root = Path(__file__).resolve().parents[2]
     started = time.perf_counter()
