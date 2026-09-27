@@ -253,6 +253,30 @@ target_link_libraries(test_xir_source_array_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_source_array_mixed xir/test_xir_source_array_mixed.c ${XIR_ARRAY_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_array_mixed PRIVATE xray_xir_vm)
 target_compile_definitions(test_xir_source_array_mixed PRIVATE XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}")
+add_xray_bootstrap_executable(test_xir_source_floats xir/test_xir_source_floats.c)
+target_link_libraries(test_xir_source_floats PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_source_floats PRIVATE XR_FLOAT_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_float_source")
+set(XIR_FLOAT_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_float_source.xrc)
+set(XIR_FLOAT_SOURCE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_float_source.c)
+add_custom_command(OUTPUT ${XIR_FLOAT_CHECKED_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_source_floats> ${XIR_FLOAT_CHECKED_GENERATED}
+    DEPENDS test_xir_source_floats
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_float_source/root.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_float_source/producer.xr
+    VERBATIM)
+add_executable(test_xir_float_packet_vm xir/test_xir_float_packet_vm.c ${XIR_FLOAT_CHECKED_GENERATED})
+target_link_libraries(test_xir_float_packet_vm PRIVATE xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_float_packet_vm PRIVATE XR_FLOAT_CHECKED_FIXTURE="${XIR_FLOAT_CHECKED_GENERATED}")
+add_custom_command(OUTPUT ${XIR_FLOAT_SOURCE_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_float_packet_vm> ${XIR_FLOAT_SOURCE_GENERATED}
+    DEPENDS test_xir_float_packet_vm ${XIR_FLOAT_CHECKED_GENERATED}
+    VERBATIM)
+add_executable(test_xir_source_float_native xir/test_xir_source_float_native.c ${XIR_FLOAT_SOURCE_GENERATED})
+target_link_libraries(test_xir_source_float_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_source_float_mixed xir/test_xir_source_float_mixed.c ${XIR_FLOAT_SOURCE_GENERATED})
+target_link_libraries(test_xir_source_float_mixed PRIVATE xray_xir_vm)
+target_compile_definitions(test_xir_source_float_mixed PRIVATE XR_FLOAT_CHECKED_FIXTURE="${XIR_FLOAT_CHECKED_GENERATED}")
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
@@ -262,7 +286,8 @@ foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generic
     test_xir_emit_program test_xir_program_vm test_xir_program_native
     test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native
     test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics test_xir_source_query
-    test_xir_source_arrays test_xir_array_packet_vm test_xir_source_array_native test_xir_source_array_mixed)
+    test_xir_source_arrays test_xir_array_packet_vm test_xir_source_array_native test_xir_source_array_mixed
+    test_xir_source_floats test_xir_float_packet_vm test_xir_source_float_native test_xir_source_float_mixed)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()
@@ -3627,6 +3652,13 @@ if((MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC") AND NOT ENABLE_ASAN)
             test_target_profile_authority)
         target_link_options(${stack_fixture} PRIVATE "LINKER:/STACK:8388608")
     endforeach()
+endif()
+
+# Debug sanitizer execution includes the complete numerical witness corpus and
+# source module specialization. Schedule these measured long tests early.
+if(ENABLE_ASAN)
+    set_tests_properties(test_xir_execution PROPERTIES COST 120)
+    set_tests_properties(test_dostring_program_image PROPERTIES COST 230)
 endif()
 
 xray_prepend_windows_asan_runtime_to_directory_tests()

@@ -613,7 +613,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 operand_type = id < function->parameter_count ? function->parameters[id] :
                     function->instructions[id - function->parameter_count].type;
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
-                if (operand_type != XR_XIR_BOOL && !xr_xir_type_is_integer(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
+                if (operand_type != XR_XIR_BOOL && !xr_xir_type_is_number(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
             uint32_t id = op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT ?
                 function->operands[op->args[0] + a] : op->args[a];

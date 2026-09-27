@@ -160,6 +160,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 字面量默认 `f64`。
 
+浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；无效操作与 NaN 结果统一为正 canonical quiet NaN。禁止隐式融合或重排操作，不依赖或改变宿主浮点舍入状态与异常标志。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
+
 #### 2.3.3 `bool`
 
 `true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: i64 = true`，也不能 `var b: bool = 1`）。
@@ -1200,6 +1202,15 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `f64` | IEEE-754 double precision; default floating type |
 
 Literals default to `f64`.
+
+Floating `+ - * /` rounds each operation at the common operand precision,
+nearest with ties to even; a mixed f32/f64 pair first widens f32 exactly to
+f64. Subnormals use gradual underflow and overflow produces signed infinity.
+Division by zero follows IEEE rules rather than raising an integer division
+fault. Invalid operations and NaN results produce the positive canonical quiet
+NaN. Operations are not implicitly fused or reassociated and neither depend on
+nor alter host rounding state or exception flags. Floating remainder and bitwise
+operations reject; already typed integer/float mixing still requires an explicit cast.
 
 #### 2.3.3 `bool`
 

@@ -13,6 +13,8 @@
 #define XIR_FLOAT_RUNTIME_CASES_H
 #include "xir/xxir_float.h"
 #include <fenv.h>
+#include "xir_float_arithmetic_cases.h"
+#include "xir_float_format_cases.h"
 static int64_t float_test_payload(uint64_t bits) {
     return bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) (UINT64_MAX - bits);
 }
@@ -157,6 +159,8 @@ static void float_runtime_cases(void) {
         CHECK(feraiseexcept(FE_INEXACT) == 0);
         int exceptions = fetestexcept(FE_ALL_EXCEPT);
         float_runtime_vectors(); float_runtime_ordering(); float_runtime_rejections();
+        float_arithmetic_cases();
+        float_format_cases();
         CHECK(fegetround() == modes[i] && fetestexcept(FE_ALL_EXCEPT) == exceptions);
     }
     CHECK(fesetenv(&original) == 0);

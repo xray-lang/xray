@@ -100,6 +100,26 @@ static void floating_relations(FixtureRun run, void *owner) {
         }
     }
 }
+static void floating_arithmetic_execution(FixtureRun run, void *owner) {
+    static const struct { XrXirType type; XrXirFloatOperation operation; uint64_t a, b, expected; } cases[] = {
+#define XIR_FLOAT_ARITHMETIC(width, operation, a, b, result) {XR_XIR_F##width, operation, a, b, result},
+#include "xir_float_arithmetic_vectors.def"
+#undef XIR_FLOAT_ARITHMETIC
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        XrXirType type = cases[i].type;
+        XrXirValue inputs[] = {floating_argument(type, cases[i].a), floating_argument(type, cases[i].b)};
+        XrXirValue output = {99, 99, 99};
+        XrXirRunContext context = {2, 24, 0, 0, 0, 0};
+        XrXirRunStatus expected = floating_canonical(type, cases[i].a) && floating_canonical(type, cases[i].b) ?
+            XR_XIR_RUN_OK : XR_XIR_RUN_BAD_ARGUMENT;
+        XrXirOp op = (XrXirOp) (XR_XIR_ADD_FLOAT + cases[i].operation);
+        CHECK(run(owner, floating_function(type, type, op), &context, inputs, 2, &output) == expected);
+        CHECK(output.type == (uint32_t) (expected == XR_XIR_RUN_OK ? type : XR_XIR_UNIT));
+        CHECK((uint64_t) output.payload == (expected == XR_XIR_RUN_OK ? cases[i].expected : 0) && !output.reserved);
+        CHECK(!context.live_bytes && context.allocations == context.frees);
+    }
+}
 static void floating_execution_cases(FixtureRun run, void *owner) {
     fenv_t saved; CHECK(fegetenv(&saved) == 0);
     const int modes[] = {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO};
@@ -107,6 +127,7 @@ static void floating_execution_cases(FixtureRun run, void *owner) {
         CHECK(fesetround(modes[mode]) == 0 && feclearexcept(FE_ALL_EXCEPT) == 0 && feraiseexcept(FE_INEXACT) == 0);
         int flags = fetestexcept(FE_ALL_EXCEPT);
         floating_conversions(run, owner); floating_relations(run, owner);
+        floating_arithmetic_execution(run, owner);
         CHECK(fegetround() == modes[mode] && fetestexcept(FE_ALL_EXCEPT) == flags);
     }
     CHECK(fesetenv(&saved) == 0);

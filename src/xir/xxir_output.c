@@ -10,6 +10,7 @@
  *   Scalar formatting is deterministic and strings retain their exact length.
  */
 #include "xxir_output.h"
+#include "xxir_float.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
 
@@ -18,6 +19,11 @@ static bool output_piece(const XrXirValue *value, char *scalar, const char **byt
     if (value->type == XR_XIR_STRING) return xr_xir_string_view(value, bytes, length);
     if (value->type == XR_XIR_BOOL) {
         *bytes = value->payload ? "true" : "false"; *length = value->payload ? 4 : 5; return true;
+    }
+    uint32_t floating = xr_xir_float_bits((XrXirType) value->type);
+    if (floating) {
+        *bytes = scalar;
+        return xr_xir_float_format(floating, (uint64_t) value->payload, scalar, 32, length);
     }
     if (!xr_xir_type_is_integer((XrXirType) value->type)) return false;
     int count = xr_xir_integer_signed((XrXirType) value->type) ?

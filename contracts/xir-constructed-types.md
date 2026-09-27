@@ -249,7 +249,7 @@ boundary atomically as follows; there is only one current reader/executor.
 | Revision | Current cutover value | Reason |
 |---|---:|---|
 | Checked schema | 5 (unchanged) | Tagged pool and fixed instruction records retain their exact wire traversal. |
-| Checked semantic contract | 15 | Tags 63..69, Array operand/place/permission rules and role-aware layout become part of admission. |
+| Checked semantic contract | 16 | Includes Array tags 63..69 and floating arithmetic tags 70..73 with exact operand/result types. |
 | Value ABI | 9 (unchanged) | The carrier and `(TypeArena, local type ID)` identity stay fixed; Array objects obey that existing owned identity. |
 | Call ABI | 14 | Typed Bounds detail crosses actions, results and unwind under `xir-resumable-calls.md`. |
 | Program ABI | 9 | Instance initialization/sticky failure copy preserves the full fault under `xir-program-instance.md`. |

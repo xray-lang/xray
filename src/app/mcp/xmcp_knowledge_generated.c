@@ -7489,6 +7489,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "print(x is i64)                 // true\n"
             "// typeOf(x) == \"i64\"           // compile error: use Type.i64 or typeName(x)\n"
             "```\n"
+            "\n"
+            "### Admitted XIR floating semantics\n"
+            "New-XIR typed print accepts f32/f64 (spec section 17.27). Finite values use the shortest round-tripping decimal at their original precision, with an even final digit on equal-distance ties. Decimal exponents in [-4,16) use fixed notation (integral values end in .0); others use lowercase e and a signed exponent. Special spellings are nan, inf, -inf, 0.0 and -0.0. A complete output group is prepared before one sink call; insufficient budget, allocation failure and rejected output retain OUTPUT_ERROR cleanup semantics.\n"
             "",
     },
     {
@@ -8669,6 +8672,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var value = callback?.(input)   // optional function call\n"
             "var road = user?.address.street // whole-chain short-circuit: null when user is null\n"
             "```\n"
+            "\n"
+            "### Admitted XIR floating semantics\n"
+            "The admitted new-XIR floating subset supports +, -, *, / and their compound assignments for f32/f64 (spec section 17.27). Each operation rounds once at its operand width, nearest with ties to even, including gradual underflow. Mixed f32/f64 widens before the operation; typed integer/float mixing, floating remainder and bitwise operations reject. Compound assignment reads the left value before evaluating the right, including suspension, and cannot narrow implicitly.\n"
             "",
     },
     {
@@ -8992,6 +8998,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var m = #{}                    // equivalent to Map<...>()\n"
             "var p = Point{x: 1, y: 2}      // struct literal\n"
             "```\n"
+            "\n"
+            "### Admitted XIR floating semantics\n"
+            "In the new-XIR subset, f32 and f64 preserve their original IEEE precision across arithmetic and output (spec section 17.27). Zero signs and gradual subnormal values are preserved; invalid floating operations produce canonical NaN, and finite nonzero division by zero produces signed infinity. VM and native AOT use the same integer-only arithmetic implementation with independent exact-result tests; this does not imply the entire language or standard library is migrated.\n"
             "",
     },
     {

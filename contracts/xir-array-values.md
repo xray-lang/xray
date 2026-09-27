@@ -162,10 +162,10 @@ scoped by declaration and ordered arguments; equal parameter ordinals from
 different definitions do not share generic authority. All runtime types and
 layout operands are closed before immutable Program sealing.
 
-This cutover uses Checked schema 5 / semantic contract 15, Value ABI 9,
+This cutover uses Checked schema 5 / semantic contract 16, Value ABI 9,
 Call ABI 14 and Program ABI 9. Schema 5 remains because instruction records and
 tagged type-node wire traversal are unchanged; the newly legal operations and
-roles require semantic revision 15. Call/Program revisions carry the separately
+roles were introduced in semantic revision 15; current admission requires revision 16. Call/Program revisions carry the separately
 frozen Bounds detail. Older or mixed semantic/call/program entries reject with
 no alias or fallback. TypeArena/backing implementation does not invent a second
 serialized physical format. A recomputed digest cannot authorize malformed

@@ -641,7 +641,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         op = (XrXirInstruction) {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {args[0].id, 0}, {0, 0}, stream};
     } else if (print) {
         for (int i = 0; i < call->arg_count; ++i)
-            if (args[i].type != XR_XIR_BOOL && !xr_xir_type_is_integer(args[i].type) && args[i].type != XR_XIR_STRING)
+            if (args[i].type != XR_XIR_BOOL && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
         op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0};
     } else if (atomic) {
@@ -714,28 +714,33 @@ static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *v
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete numeric operand");
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONVERT_NUMBER, target, {input.id, 0}, {0}, 0}, value);
 }
-static bool source_float_compare(SourceContext *ctx, AstNode *node, AstNodeType operation,
+static bool source_float_binary(SourceContext *ctx, AstNode *node, AstNodeType operation,
     SourceValue left, SourceValue right, SourceValue *value) {
     XrXirType common = left.type == XR_XIR_F64 || right.type == XR_XIR_F64 ? XR_XIR_F64 : XR_XIR_F32;
     if (!source_expect(ctx, node, common, &left) || !source_expect(ctx, node, common, &right)) return false;
     XrXirOp op;
     switch (operation) {
+    case AST_BINARY_ADD: op = XR_XIR_ADD_FLOAT; break;
+    case AST_BINARY_SUB: op = XR_XIR_SUB_FLOAT; break;
+    case AST_BINARY_MUL: op = XR_XIR_MUL_FLOAT; break;
+    case AST_BINARY_DIV: op = XR_XIR_DIV_FLOAT; break;
     case AST_BINARY_EQ: op = XR_XIR_EQ_FLOAT; break;
     case AST_BINARY_NE: op = XR_XIR_NE_FLOAT; break;
     case AST_BINARY_LT: op = XR_XIR_LT_FLOAT; break;
     case AST_BINARY_LE: op = XR_XIR_LE_FLOAT; break;
     case AST_BINARY_GT: op = XR_XIR_GT_FLOAT; break;
     case AST_BINARY_GE: op = XR_XIR_GE_FLOAT; break;
-    default: return source_fail(ctx, node, XR_XIR_BAD_TYPE, "floating arithmetic requires an implemented contract");
+    default: return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator is not defined for floating operands");
     }
-    return emit(ctx, (XrXirInstruction) {op, XR_XIR_BOOL, {left.id, right.id}, {0}, 0}, value);
+    XrXirType result = op >= XR_XIR_ADD_FLOAT && op <= XR_XIR_DIV_FLOAT ? common : XR_XIR_BOOL;
+    return emit(ctx, (XrXirInstruction) {op, result, {left.id, right.id}, {0}, 0}, value);
 }
 static bool source_binary(SourceContext *ctx, AstNode *node, AstNodeType operation,
                           SourceValue left, SourceValue right, SourceValue *value) {
     if (operation == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING)
         return emit(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {left.id, right.id}, {0}, 0}, value);
     if (xr_xir_float_bits(left.type) && xr_xir_float_bits(right.type))
-        return source_float_compare(ctx, node, operation, left, right, value);
+        return source_float_binary(ctx, node, operation, left, right, value);
     if (!xr_xir_type_is_integer(left.type) || !xr_xir_type_is_integer(right.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "operator requires a declared concrete operand contract");
     bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
