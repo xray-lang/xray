@@ -343,6 +343,7 @@ typedef struct ScalarGraphFixture {
     char directory[256];
     char producer_path[320];
     char entry_path[320];
+    XrModuleResolver *resolver;
     XrModuleGraph *graph;
     XaAnalyzer *analyzer;
 } ScalarGraphFixture;
@@ -425,7 +426,12 @@ static bool scalar_graph_fixture_build(ScalarGraphFixture *fixture, const char *
         !write_source_file(fixture->entry_path, entry_source))
         goto fail;
 
-    fixture->graph = xr_module_graph_new(g_session, g_resolver);
+    /* A physical source fixture owns its durable-identity resolver cache. */
+    XrModuleResolverConfig resolver_config = {0};
+    fixture->resolver = xr_module_resolver_new(&resolver_config);
+    if (!fixture->resolver)
+        goto fail;
+    fixture->graph = xr_module_graph_new(g_session, fixture->resolver);
     if (!fixture->graph)
         goto fail;
     XrModuleIdentityAuthority authority = {
@@ -488,6 +494,7 @@ static void scalar_graph_fixture_cleanup(ScalarGraphFixture *fixture) {
         return;
     xa_analyzer_free(fixture->analyzer);
     xr_module_graph_free(fixture->graph);
+    xr_module_resolver_free(fixture->resolver);
     if (strcmp(g_scalar_graph_directory, fixture->directory) == 0) {
         cleanup_registered_scalar_graph_fixture();
     } else {
@@ -3307,7 +3314,7 @@ TEST(source_backed_leaf_product_freezes_all_direct_local_callers) {
     fixture_cleanup(&fixture);
 }
 
-TEST(program_direct_cgen_entries_readmit_after_mutation) {
+static bool scalar_graph_fixture_cgen_readmission_is_exact(void) {
     ScalarGraphFixture source = {0};
     ScalarGraphPlanFixture fixture = {0};
     XrProgramSemanticClosure *closure = NULL;
@@ -3352,7 +3359,14 @@ TEST(program_direct_cgen_entries_readmit_after_mutation) {
     scalar_graph_plan_fixture_cleanup(&fixture);
     xr_program_semantic_closure_free(closure);
     scalar_graph_fixture_cleanup(&source);
-    ASSERT_MSG(exact, diagnostic[0] ? diagnostic : "Program CGen entries must re-admit authority");
+    if (!exact && diagnostic[0])
+        fprintf(stderr, "program CGen readmission: %s\n", diagnostic);
+    return exact;
+}
+
+TEST(program_direct_cgen_entries_readmit_after_mutation) {
+    ASSERT_TRUE(scalar_graph_fixture_cgen_readmission_is_exact());
+    ASSERT_TRUE(scalar_graph_fixture_cgen_readmission_is_exact());
 }
 
 TEST(two_source_module_scalar_graph_publishes_complete_authority) {
