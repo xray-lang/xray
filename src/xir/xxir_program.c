@@ -16,9 +16,10 @@
 #include "../base/xchecks.h"
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
-    if (xr_xir_type_is_cell(type)) type = xr_xir_cell_element(type);
+    if (xr_xir_type_is_cell(spec->types, type)) type = xr_xir_cell_element(spec->types, type);
     return type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ATOMIC_I64 || xr_xir_callable_signature(spec->callables, type);
+        type == XR_XIR_ATOMIC_I64 || xr_xir_callable_signature(spec->types, type) ||
+        xr_xir_type_is_array(spec->types, type);
 }
 static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, uint64_t *work) {
     if (!spec || !spec->entries || !spec->entry_count || spec->entry_count > 65535 ||
@@ -30,33 +31,35 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
         (uint64_t) spec->declarations->module_count * sizeof(uint32_t) * 2;
     if (fixed > *bytes || fixed > SIZE_MAX) return XR_XIR_BUDGET;
     *bytes -= fixed;
-    XrXirStatus status = xr_xir_declarations_verify(spec->declarations, spec->entry_count, bytes, work);
-    if (status != XR_XIR_OK) return status;
     XrXirBudget signature_budget = {0};
     signature_budget.metadata_bytes = *bytes; signature_budget.work = *work;
     signature_budget.parameters = 65536;
-    status = xr_xir_callable_types_verify(spec->callables, &signature_budget);
+    XrXirStatus status = xr_xir_types_verify(spec->types, &signature_budget);
     if (status != XR_XIR_OK) return status;
-    if (spec->callables) for (uint32_t t = 0; t < spec->callables->count; ++t)
-        if (spec->callables->signatures[t].parameter_span) return XR_XIR_BAD_TYPE;
-    *bytes = signature_budget.metadata_bytes; *work = signature_budget.work;
+    if (spec->types) for (uint32_t t = 0; t < spec->types->count; ++t)
+        if (spec->types->nodes[t].parameter_span) return XR_XIR_BAD_TYPE;
+    /* The runtime arena charges its actual header and owned descriptors against
+     * the remaining metadata budget after the other program allocations. */
+    *work = signature_budget.work;
+    status = xr_xir_declarations_verify(spec->declarations, spec->types, spec->entry_count, bytes, work);
+    if (status != XR_XIR_OK) return status;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
         const XrXirSlot *slot = &spec->declarations->slots[s];
-        if (xr_xir_type_is_cell(slot->type) || !program_value_type(spec, slot->type) || (xr_xir_type_is_callable(slot->type) &&
+        if (xr_xir_type_is_cell(spec->types, slot->type) || !program_value_type(spec, slot->type) || (xr_xir_type_is_callable(spec->types, slot->type) &&
             slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
         if (!entry->resume || (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
-        if (xr_xir_type_is_cell(entry->result) || (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
+        if (xr_xir_type_is_cell(spec->types, entry->result) || (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
         uint64_t parameter_bytes = (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (parameter_bytes > *bytes || parameter_bytes > SIZE_MAX || entry->parameter_count > *work)
             return XR_XIR_BUDGET;
         *bytes -= parameter_bytes; *work -= entry->parameter_count;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
             if (!program_value_type(spec, entry->parameters[p]) ||
-                (xr_xir_type_is_cell(entry->parameters[p]) && spec->declarations->functions[i].exported)) return XR_XIR_BAD_TYPE;
+                (xr_xir_type_is_cell(spec->types, entry->parameters[p]) && spec->declarations->functions[i].exported)) return XR_XIR_BAD_TYPE;
     }
     const XrXirDeclarations *d = spec->declarations;
     const XrXirCallEntry *entry = &spec->entries[d->entry_function];
@@ -72,7 +75,7 @@ static void program_dispose(XrXirProgram *program) {
     if (program->entries) for (uint32_t i = 0; i < program->entry_count; ++i)
         xr_free((void *) program->entries[i].parameters);
     xr_free(program->entries);
-    xr_xir_callable_types_free(program->callables);
+    xr_xir_type_arena_drop(program->arena);
     xr_xir_declarations_free(program->declarations);
     xr_free(program->order);
     xr_free(program->module_slots);
@@ -105,8 +108,23 @@ XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, uint64_t byte_limi
             program->entries[i].parameters = types;
         }
     }
-    status = xr_xir_callable_types_clone(spec->callables, &program->callables);
-    if (status != XR_XIR_OK) goto failed;
+    if (spec->types) {
+        XrXirDomain *domain = NULL;
+        XrXirValueStatus value_status = xr_xir_domain_new(byte_limit, &domain);
+        if (value_status == XR_XIR_VALUE_OK) {
+            XrXirBudget budget = {.parameters = 65536, .metadata_bytes = byte_limit,
+                .scratch_bytes = byte_limit, .work = work};
+            value_status = xr_xir_type_arena_new(domain, spec->types, &budget, &program->arena);
+            if (value_status == XR_XIR_VALUE_OK) work = budget.work;
+        }
+        xr_xir_domain_drop(domain);
+        if (value_status != XR_XIR_VALUE_OK) {
+            status = value_status == XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+                value_status == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+            goto failed;
+        }
+        program->types = xr_xir_type_arena_types(program->arena);
+    }
     status = xr_xir_declarations_clone(spec->declarations, spec->entry_count, &program->declarations);
     if (status != XR_XIR_OK) goto failed;
     status = xr_xir_declarations_order(program->declarations, program->order, &work);

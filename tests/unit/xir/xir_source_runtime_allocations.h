@@ -58,7 +58,8 @@ static void *runtime_realloc(void *pointer, size_t size) {
 #define xr_realloc(pointer, size) runtime_realloc(pointer, size)
 #define xr_free(pointer) runtime_free(pointer)
 #include "xir/xxir_declarations.c"
-#include "xir/xxir_callable.c"
+#include "xir/xxir_types.c"
+#include "xir/xxir_type_arena.c"
 #include "xir/xxir_value.c"
 #include "xir/xxir_scalar.c"
 #include "xir/xxir_call.c"

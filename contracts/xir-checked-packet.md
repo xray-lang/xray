@@ -6,8 +6,8 @@ linking, native cache admission or publication. There is one Checked reader and
 no Built, Lowered, legacy, or alternate executable format reader.
 
 All integers use fixed-width little endian, with no native struct padding.
-The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 4, semantic-contract
-u32 13, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
+The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 5, semantic-contract
+u32 14, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
 over header bytes 0..31 followed by the payload. Unknown versions, stage or
 reserved fields, length mismatch, trailing bytes and digest mismatch reject.
 The digest is content identity/integrity, not authentication. Schema or semantic
@@ -21,13 +21,16 @@ as two's-complement u64. A blob is u32 length followed by exactly those bytes.
 Declaration data, when present, is module/slot/literal counts, root/entry IDs,
 modules (name blob, dependency count/IDs, initializer), one module/exported pair
 per function, slots (module/type/mutable), and literal blobs. A generic-presence flag and per-function constraint/type-argument
-tables follow, governed by `xir-generic-templates.md`. A callable count follows,
-then each signature contains parameter count, ordered type/mode u32 pairs, result
-type, flags and exact free-parameter span. Zero count has no table owner. Nested identity and canonical
-contracts follow `xir-callable-types.md`. Earlier revisions reject without
+tables follow, governed by `xir-generic-templates.md`. A constructed-node u32 count
+follows. Each record starts with u32 kind and u32 exact free-parameter span.
+CALLABLE (kind 1) carries parameter count, ordered type/mode u32 pairs, result
+type and flags. ARRAY (kind 2) and CELL (kind 3) each carry one u32 element ID.
+Zero count has no pool owner. Nested identity, kind-specific payloads and canonical
+contracts follow `xir-constructed-types.md`; descriptor admission alone does not
+implement Array source syntax or runtime operations. Earlier revisions reject without
 a compatibility reader. All IDs retain their
 Checked meaning. No source path, pointer, native code, target layout, runtime
-state or trusted verification result is persisted.
+state, arena address or trusted verification result is persisted.
 
 Writing first verifies an owned Checked artifact. Reading bounds packet bytes
 by metadata_bytes and four work units per byte before hashing or allocation;

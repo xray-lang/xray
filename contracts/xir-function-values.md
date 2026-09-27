@@ -1,13 +1,16 @@
 # XIR owned function values and execution admission
 
-A concrete ordinary callable value carries its canonical Program signature type,
+A concrete ordinary callable value carries its canonical CALLABLE type identity,
 entry identity and a retained execution-admission record. It is copyable through
 explicit ownership operations. It conveys no Sendable or no_suspend proof.
 Constructing a value checks the full signature and existing module import,
 visibility and initializer restrictions. Describing a type never grants access.
 
-Program sealing owns a verified signature table. Boxed value ABI 8, call ABI 12
-and Program ABI 7 replace their predecessors without an alternate runtime path.
+Program sealing owns an independently retained TypeArena for the verified closed
+constructed pool. A function's identity is its arena plus local type ID; the node
+must have kind CALLABLE. The function object owns its arena, independently of
+its execution gate. Boxed value ABI 9, call ABI 13
+and Program ABI 8 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
 it does not own module slots, providers, active frames or instance allocations.
@@ -19,9 +22,17 @@ lease. Instance slots may consequently hold functions without an instance cycle.
 Each allocation and failed construction leaves explicit owners and budgets intact.
 
 The first runtime admission uses the existing single-host-thread instance driver.
+Every typed boundary supplies the expected arena and rejects a foreign arena,
+including one with an identical descriptor and local type ID.
 A function is invoked only in its originating live instance; another instance or
 Program rejects it even when numeric type or entry IDs coincide. Cross-instance
 call transfer and concurrent admission remain pending and are not certified here.
+Function resolution first compares the binding owner with the receiving
+Instance's own function gate. A different owner returns BAD_ARGUMENT regardless
+of whether the originating gate is live or revoked; resolution does not inspect
+an unproven foreign owner as an Instance gate. After owner identity is established,
+the receiving Instance's stopped/revoked gate returns BAD_STATE. This ordering
+preserves the same foreign-instance result before and after its source stops.
 An authorized private function value may be invoked through its capability; it
 does not make its numeric entry a public host entry. Indirect calls use the same
 resumable call action and cleanup path as ordinary calls, including suspension,
@@ -36,7 +47,7 @@ resolved before Program sealing. CALL_INDIRECT records an SSA callee ID in its
 immediate and the existing ordered argument range. Callee dominance, value role,
 full signature and result are checked without enumerating implementation targets.
 Both operations use the canonical owned frame layout and resumable ABI. Semantic
-contract 13 rejects previous packets; wire schema is 4. Function-valued root
+contract 14 rejects previous packets; wire schema is 5. Function-valued root
 slots are instance state; non-root ordinary callable slots have no Sendable proof.
 
 Source admission uses the existing fn(...) -> R spelling (unit omits the arrow).
@@ -96,7 +107,7 @@ can clean up. No borrowed environment survives independently of its owner.
 
 Last-reference destruction drains nested immutable environments without host
 recursion or allocation. stop/free revokes entry but not escaped value lifetime.
-Value8/Call12/Program7 and schema4/semantic13 replace earlier contracts.
+Value9/Call13/Program8 and schema5/semantic14 replace earlier contracts.
 Strong-cycle reclamation, full callable contracts and concurrency remain open;
 this contract never substitutes snapshot capture for shared mutable bindings.
 
@@ -120,5 +131,9 @@ it cannot declare its own first-class generic parameter list. Both its body and
 the FUNCTION_REF capture prefix go through ordinary Checked validation,
 specialization and recheck. No source/AST retry occurs during instantiation.
 
-This producer adds no wire opcode or ABI revision: it consumes the current
-schema4/semantic13 and Value8/Call12/Program7 environment contract.
+Source closure production consumes the current schema5/semantic14 and
+Value9/Call13/Program8 environment contract. Captured cells and callable signatures
+share the constructed pool; no standalone signature table or encoded cell type
+survives this cutover. ARRAY descriptors in that pool do not yet qualify runtime
+arrays, arrays of functions or transitive array-element admission. Those require
+the operation and negative-boundary evidence in `xir-constructed-types.md`.

@@ -28,6 +28,12 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 
 **E5（赋值）**：`place = rhs` 依次求值 place 的位置子表达式（receiver 或数组表达式 → 索引表达式）→ `rhs` → 执行存储。位置子表达式先于右值，与 C# / Java 一致，与 Rust 相反。
 
+**Array 的值 receiver 与可写 receiver**：读取 `a[index]` 或只读 `a.get(index)` 时，先取得 receiver 的逻辑值快照，再求值 index，最后针对该快照检查边界并复制元素。index 中的调用即使改绑 a，也不改变此次读取的快照。`ref` 方法和下标赋值则先绑定根 place 一次，不提前读取其 Array 值或建立独占访问；全部实参或 index/RHS 求值完成后，才对该 binding 的**当前值**建立独占访问。若实参或 RHS 改绑同一根变量，修改作用于新值，并按新长度检查边界。
+
+只有具名 place 的 index 不含调用、写入或挂起，并且可证明中间没有 owner 变化时，才可消去读取 receiver 的物理快照。此许可不豁免资源错误：必须证明被省略的分配/retain 不可能失败，或在原 receiver 求值位置保留等效失败检查；不得删除、延后 OOM/持有计数失败，也不得改变它与 index 错误的先后顺序。仅证明“无副作用”不够。保存 Array 值仍须保留逻辑副本；元素结果仍是独立拥有的 T。
+
+首个执行子集可仅将字面量或普通 i64 名称作为 GET-place 的 index，证明其求值无调用、写入、挂起、分配或运行时 fault。实现可在一个同步 helper 内临时 retain receiver、检查边界并复制元素、drop receiver，不把该临时 owner 留到 activation 退出；index 与这次 retain 的调序仍须满足上述无失败证明。此实现保留 retain 失败，又使后续 `a.push(a[0])` 不受已完成读取的数组临时别名影响；不要求立即实现零 retain 优化。
+
 **E6（复合赋值）**：`place op= rhs` 等价于 `place = place op rhs`，**但 place 的每个子表达式只求值一次**。求值顺序为：place 子表达式 → 读取 place → `rhs` → 计算 → 写回 place。`x++` / `x--` 等价于 `x += 1` / `x -= 1`，遵循同一规则。复合赋值的目标限于变量与成员访问（见 §3.4）。
 
 **E7（字面量）**：Array / Set / tuple 元素按源码顺序求值；Map 与对象字面量按源码顺序逐项求值，每项内 key 先于 value；展开 `...` 在其出现位置按序求值。
@@ -236,13 +242,13 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 ```
 
 **语义**：
-- 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。
+- 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。Array 赋值保存逻辑副本；目标与表达式结果各自保有值责任，不能让结果借用一个随后可被覆盖的元素槽。实现可复用已持有的右侧结果，所有可能失败的持有工作必须先于存储提交，提交后再释放被替换的旧值。失败不回滚此前完成的右侧副作用。
 - `x op= y` 等价于 `x = x op y`，但 `x` 的每个子表达式只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次；`mk().f += 1` 只调用 `mk()` 一次）。完整时序见 §3.0 E6。
 - **复合赋值的目标不含索引**：`a[i] += v` 是编译错误，写作 `a[i] = a[i] + v`。简单赋值 `a[i] = v` 不受此限。
 - 不能赋值给 `const`（编译错误 `E0303`）。
 
 **特殊**：
-- 默认参数是只读借用；`ref` 参数才允许通过 place 修改，`move` 参数消费源所有权。
+- 普通 read 参数允许读取或保存可复制值的逻辑副本，不允许通过该参数修改值语义部分；class 引用仍可调用修改对象身份的方法。`ref` 参数授予 place 的独占可写访问；声明为 `move` 的参数转移不可复制资源的持有权。
 - 数组/Map 字面量字段：`a[i] = v` 调用 `operator[]=` 或内置 setter。
 
 ### 3.5 三元 `? :`
@@ -504,10 +510,46 @@ var bytes: Slice<u8> = text.bytes()
 bytes[i]                // 显式 byte 视图索引
 ```
 
-- `Array` 索引：`i64`，越界抛 `E0430`。
+- `Array<T>` 索引的类型为 `i64`，合法范围为 `0 <= i < len(array)`。读取产生 T 的逻辑副本；写入要求可写 place，右侧按 T 检查及转换。负索引及等于长度的索引均进入 `E0430` panic 通道，不是业务 throw。
+- 下标写入遵循 E5：根 place 和下标各求值一次，再完成右侧求值；随后建立独占访问、按该 binding 的当前数组检查边界、分离共享存储并提交。RHS 改绑根变量时，写入新数组；不能提前按旧长度拒绝。不得跨右侧求值保存裸元素地址。失败不修改提交前的数组或其他逻辑副本；已经发生的右侧副作用（包括改绑）保留。读取则遵循 §3.0 的 receiver 快照规则，针对快照在读取元素前检查边界。
 - `Map` 索引：键类型；找不到键 → `E0431`。
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 自定义类：通过 `operator[]` 重载。
+
+```xray @id=array-read-receiver-snapshot
+var a: Array<string> = ["old"]
+fn replaceForIndex() -> i64 {
+    print("index")
+    a = ["new"]
+    return 0
+}
+print(a[replaceForIndex()])  // 依次输出 index、old
+print(a[0])                 // new
+```
+
+```xray @id=array-write-current-binding
+var a: Array<string> = ["old"]
+fn index() -> i64 { print("index"); return 1 }
+fn replacement() -> string {
+    print("rhs")
+    a = ["new0", "new1"]
+    return "stored"
+}
+var written = (a[index()] = replacement())
+print(written, a[1])        // 依次输出 index、rhs、stored stored；旧长度不提前拒绝
+```
+
+```xray @id=array-write-current-binding-bounds
+var a: Array<string> = ["old0", "old1"]
+fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
+a[1] = shrink()             // 输出 rhs 后 E0430 panic；改绑为 ["new"] 不回滚
+```
+
+```xray @id=array-read-parameter-mutation-rejected
+fn invalid(values: Array<string>) {
+    values.push("x")       // 编译错误：普通 read 参数不是可写 receiver
+}
+```
 
 #### 切片
 
@@ -526,7 +568,7 @@ var view: Slice<i64> = arr[1:4]
 - 半开区间 `[start, end)`。
 - Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
 - string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
-- 切片求值为目标类型为 `Slice<T>` 的**借用视图**，不复制元素。包括 `arr[:]` 在内的所有形式都是视图：通过视图写入直接改写 owner 的存储，owner 的元素写入也对视图立即可见。需要独立数据时写 `copy(arr[1:4])`。
+- 目标类型为 `Slice<T>` 的切片是**共享只读借用视图**，不复制元素；不能通过它写入，其存活期间 owner 也不能修改。可写视图必须使用 §2.4.2 明确准入的 `MutSlice<T>` 独占借用，不能由 `Slice<T>` 默默获得写权限。包括 `arr[:]` 在内的形式都不是逻辑副本；需要独立数据时写 `copy(arr[1:4])`。
 - 切片是一次借用：owner 在视图存活期间受 §2.4.2 的借用规则约束，视图本身不得逃逸出 owner 的作用域。完整规则见 §2.4.2。
 
 ### 3.12 匿名函数与 Lambda
@@ -704,6 +746,12 @@ This is a requirement rather than a conservative preference. Differential testin
 **E4 (short-circuit points)**: `&&`, `||`, `??`, `?:`, `?.` and `?[` are **all** of the language's short-circuit points. No other operand is ever conditionally skipped.
 
 **E5 (assignment)**: `place = rhs` evaluates the place's location subexpressions (receiver, or array expression → index expression) → `rhs` → the store. Place before value, as in C# and Java, and unlike Rust.
+
+**Array value and writable receivers**: reading `a[index]` or read-only `a.get(index)` first takes a logical value snapshot of the receiver, then evaluates index, then checks bounds against that snapshot and copies the element. A call inside index may rebind a without changing this read's snapshot. A `ref` method or index assignment instead binds the root place once, without reading its Array value or establishing exclusive access yet. After every argument, or index and RHS, has been evaluated, exclusive access is established to the binding's **current value**. If an argument or the RHS rebinds the same root, mutation applies to the new value and bounds use its new length.
+
+A physical receiver snapshot may be eliminated only for a named place whose index contains no call, write or suspension, with proof that the owner cannot change in between. This permission does not waive resource errors: the omitted allocation/retain must be proven unable to fail, or equivalent failure checks must remain at the original receiver-evaluation point. OOM/retention failures may not be removed, delayed or reordered relative to index errors. Absence of side effects alone is insufficient. Saving an Array still preserves a logical copy; an element result still independently owns T.
+
+The initial execution subset may restrict a GET-place index to a literal or ordinary i64 name whose evaluation is proven free of calls, writes, suspension, allocation and runtime faults. One synchronous helper can transiently retain the receiver, check bounds and copy the element, then drop the receiver, without keeping that temporary owner until activation exit. Reordering index evaluation with this retain still requires the stated no-failure proof. This preserves retention failures while preventing a completed read's temporary Array alias from forcing COW in `a.push(a[0])`; zero-retain optimization is not required initially.
 
 **E6 (compound assignment)**: `place op= rhs` is equivalent to `place = place op rhs`, **except that each subexpression of the place is evaluated exactly once**. The order is: place subexpressions → read the place → `rhs` → compute → write the place back. `x++` / `x--` are equivalent to `x += 1` / `x -= 1` and follow the same rule. Compound assignment targets are restricted to variables and member accesses (see §3.4).
 
@@ -913,13 +961,13 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 ```
 
 **Semantics**:
-- Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
+- Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`). Array assignment saves a logical copy. The destination and expression result each retain their value obligations; the result must not borrow an element slot that can later be overwritten. An implementation may reuse the already owned right-hand result. All fallible ownership acquisition precedes the store commit; the replaced value is released afterwards. Failure does not undo earlier right-hand side effects.
 - `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
 - **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
 - Cannot assign to a `const` (compile error `E0303`).
 
 **Special cases**:
-- A default parameter is a read-only borrow; only `ref` permits mutation through a place, while `move` consumes source ownership.
+- An ordinary read parameter permits reading or saving a logical copy of a copyable value. It does not permit modifying that value through the parameter. A class reference may still invoke methods that change the referenced identity. `ref` grants exclusive writable access to a place; a declared `move` parameter transfers ownership of a noncopyable resource.
 - Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
 
 ### 3.5 Ternary `? :`
@@ -1181,10 +1229,46 @@ var bytes: Slice<u8> = text.bytes()
 bytes[i]                // explicit byte-view index
 ```
 
-- `Array` indexing: `i64`; out-of-bounds throws `E0430`.
+- An `Array<T>` index has type `i64`, with valid range `0 <= i < len(array)`. Reading produces a logical copy of T. Writing requires a writable place and checks/converts the right-hand value against T. Negative indices and indices equal to the length enter the `E0430` panic channel, not a business throw.
+- Index assignment follows E5: evaluate the root place and index once, then finish the right-hand side. Only then establish exclusive access, check bounds against the binding's current array, detach shared storage and commit. If the RHS rebinds the root, the new array is written; the old length cannot cause an early rejection. A raw element address cannot survive right-hand evaluation. Failure preserves the pre-commit array and other logical copies; earlier RHS effects, including rebinding, remain. Reads follow the receiver-snapshot rule in §3.0 and check the snapshot's bounds before copying the element.
 - `Map` indexing: key type; missing key → `E0431`.
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User classes: via `operator[]` overload.
+
+```xray @id=array-read-receiver-snapshot
+var a: Array<string> = ["old"]
+fn replaceForIndex() -> i64 {
+    print("index")
+    a = ["new"]
+    return 0
+}
+print(a[replaceForIndex()])  // Prints index, then old
+print(a[0])                 // new
+```
+
+```xray @id=array-write-current-binding
+var a: Array<string> = ["old"]
+fn index() -> i64 { print("index"); return 1 }
+fn replacement() -> string {
+    print("rhs")
+    a = ["new0", "new1"]
+    return "stored"
+}
+var written = (a[index()] = replacement())
+print(written, a[1])        // Prints index, rhs, then stored stored; no old-length rejection
+```
+
+```xray @id=array-write-current-binding-bounds
+var a: Array<string> = ["old0", "old1"]
+fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
+a[1] = shrink()             // Prints rhs, then E0430 panic; rebinding to ["new"] remains
+```
+
+```xray @id=array-read-parameter-mutation-rejected
+fn invalid(values: Array<string>) {
+    values.push("x")       // Compile error: a read parameter is not a writable receiver
+}
+```
 
 #### Slice
 
@@ -1203,7 +1287,7 @@ var view: Slice<i64> = arr[1:4]
 - Half-open interval `[start, end)`.
 - Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
 - Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
-- A slice expression evaluates to a **borrowed view** of type `Slice<T>`, selected by its target type; no elements are copied. Every form, including `arr[:]`, is a view: writing through the view writes straight into the owner's storage, and element writes on the owner are immediately visible through the view. Use `copy(arr[1:4])` when you need independent data.
+- A slice targeting `Slice<T>` is a **shared read-only borrowed view**; no elements are copied. Neither writing through it nor mutating its owner is allowed while it is live. A writable view requires the explicitly admitted exclusive `MutSlice<T>` borrow in §2.4.2; a `Slice<T>` never silently gains write permission. Every form, including `arr[:]`, is a view rather than a logical copy. Use `copy(arr[1:4])` when you need independent data.
 - A slice expression is a borrow: while the view is live the owner is constrained by the borrow rules in §2.4.2, and the view itself must not escape the owner's scope. See §2.4.2 for the full rules.
 
 ### 3.12 Anonymous Functions and Lambdas

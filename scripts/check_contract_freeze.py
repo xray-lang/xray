@@ -37,6 +37,7 @@ CONTRACT_SPECS = (
     ContractSpec("xir-generic-templates.md", ()),
     ContractSpec("xir-local-control-flow.md", ()),
     ContractSpec("xir-callable-types.md", ()),
+    ContractSpec("xir-constructed-types.md", ()),
     ContractSpec("xir-function-values.md", ()),
     ContractSpec("xir-shared-cells.md", ()),
     ContractSpec("xir-integer-arithmetic.md", ()),

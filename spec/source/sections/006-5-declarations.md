@@ -8,7 +8,7 @@ order: 006
 
 ## 5. 声明 (Declarations)
 
-> 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
+> 声明语法锚点：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`。本章语言合同由前端统一检查；当前新 XIR 声明族实现资格见 §17，不能由旧 analyzer 行为替代本章规则。
 
 ### 5.1 `var` / `const`
 
@@ -36,7 +36,7 @@ var empty: string = ""            // string 必须显式初始化
 - 可重新赋值。
 - 必须有初值**或**类型标注；否则编译错误 `E0303`。
 - 无初值只允许 **default-initializable** 类型：数值类型默认 `0` / `0.0`，`bool` 默认 `false`，`()` 默认 unit，`T?` 默认 `null`，struct 仅当所有字段都可默认初始化时允许。
-- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。
+- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。`var a: Array<T>` 不默认构造空数组。
 
 #### 5.1.2 `const` — 不可变绑定
 
@@ -45,27 +45,29 @@ const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
 
-- **必须**有初值。
-- 不能重新赋值（编译错误 `E0303`）。
-- 类型可推断或显式标注。
-- `const` 和 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
-- 对 managed/aggregate 值，`const name: T` 推导并持有 `const T` 能力：字段、索引和嵌套投影深只读；`var name: const T` 则允许名字重绑，但不开放图内修改。
-- `const T` 可用于任意 type position。不可变标量上的 `const` 与原类型等价；managed/aggregate 上的 `const T` 是独立 type identity。
-- 新鲜构造可直接进入 `var` 的可变域或 `const` 的只读域。已有可变唯一图进入 `const` 必须显式 `move` 或 `copy`，不存在隐式冻结或隐藏复制。
-- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄以 `const` 命名；编译器把它们规范化为内部同步共享能力，其受审计方法仍可改变同步保护的内部状态。
-- 新鲜可变图由编译器推断唯一所有权，不需要存储修饰符。`move` 要求源根唯一且无存活 alias/loan，成功后使源绑定失效；`copy` 保留源并显式构造独立图。
+- **必须**有初值，不能重新赋值（编译错误 `E0303`）；类型可推断或显式标注。
+- 与 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
+- `const` 固定绑定及其值语义部分：不得经该绑定改写 Array 元素、追加元素或修改值类型字段。普通 `const snapshot = source` 合法并保留逻辑副本，不要求显式 `move` / `copy` 或源数组 backing 唯一。
+- 值语义在 class 和同步身份边界停止。`const xs = [Counter()]` 不冻结 Counter；普通 class 方法仍可修改所引用的对象。经一个可写副本替换数组元素，不影响 `xs` 的元素。
+- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄可用 `const` 固定绑定；其受审计 API 仍可改变同步保护的内部状态。`const` 本身不是 Sendable 或并发安全的证明。
+- 从只读可复制值保存到 `var` 时得到可写的逻辑副本；不能借此取得原 place 的可写借用，或解除 class 对象自身的权限限制。
 
 ```xray @id=decl-capability
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
-var moved = move source       // 转移同一根；source 此后不可用
-const snapshot = copy(moved)  // 显式构造深只读独立图
-var current: const Config = loadConfig()
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
 ```
 
-详见 [§10.11](#1011-并发安全模型)。
+本节冻结绑定与值语义部分的只读权限，不裁决 type-position `const T` 的独立类型身份、转换及全部可用位置；该表面不在本已冻结子集内，须在准入前另行确定，不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+
+这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
 #### 5.1.3 解构绑定
 
@@ -157,38 +159,40 @@ var result = divmod(10, 3)        // result 类型 (i64, i64)
 
 #### 5.2.4 参数模式
 
-普通参数默认提供只读 capability；只有写借用和所有权交接需要显式模式：
-`name: ref T`、`name: move T`。
+普通参数默认为 READ；写借用使用 `name: ref T`，不可复制资源的消费交接使用 `name: move T`。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
 
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: Vec2) -> f64 {
-    // v 默认只读；具体 ABI 可按值或按只读地址传递
     return v.x * v.x + v.y * v.y
 }
 
 fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
-    // v 是可变引用（修改对调用方可见）
     v.x += dx
     v.y += dy
 }
 
-fn submit(job: move Job) -> () {
-    queue.store(move job)
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
 }
 
 translate(ref point, 1.0, 2.0)
-submit(move pending)
-submit(makeJob())
 ```
 
 | 参数模式 | 语义 |
 |--|--|
-| 无（READ） | 只读 capability；callee 不得修改 caller 的 mutable graph |
-| `ref` | 独占可写 place 借用；调用点必须写 `ref place` |
-| `move` | 取得唯一 owner；既有 lvalue 调用点必须写 `move value`，fresh value 与 `copy(value)` 可直接传入 |
+| 无（READ） | 参数绑定不可重绑，其值语义部分只读；可复制、可保存的值可以保存或返回逻辑副本 |
+| `ref` | 独占可写 place 借用，修改回写调用方；调用点必须写 `ref place` |
+| `move` | 仅用于不可复制类型，转移持有权及最终析构责任；调用是否消费由声明模式决定，`move value` 可选标明该转移 |
 
-普通输出使用返回值、tuple、struct 或 `Result`。C ABI 输出位置使用 `MutPtr<T>`，
-不把输出参数模式引入普通 Xray 函数。
+READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保存到本地 `var` 后可以修改副本，原实参不受影响。保存可复制值不等于允许借用逃逸；视图或不可复制资源不能借此成为普通拥有式副本。READ class 参数同样不能重绑，但可调用修改同一对象的方法，不能把 READ 解释为整个可达图不可变。
+
+`ref` 实参必须是类型精确匹配的可写 place，不能是 `const`、只读参数或临时值；`ref` 类型不变。调用先按 §3.0 E2 完成 receiver 与全部实参求值，再建立独占借用，覆盖检查、必要的 COW 分离、修改及回写。不得提前借用 receiver 而拒绝 `a.push(a[0])`。赋值仍遵循 E5 的位置子表达式、索引、右值、存储顺序。
+
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver；不可复制资源的初始化、消费后使用和活动借用仍须检查，详见 §2.14.5。资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
+
+普通输出使用返回值、tuple 或 struct；业务错误按 §8 的类型化 `throw` / `catch` 通道处理，不引入全局 `Result<T,E>`。C ABI 输出位置使用 `MutPtr<T>`，不把输出参数模式引入普通 Xray 函数。
 
 #### 5.2.5 rest 参数
 
@@ -404,6 +408,8 @@ main()
 
 ### 5.3 `class` 声明
 
+class 具有身份，赋值与保存参数只复制引用。class 方法不写 `ref` / `move` receiver；经只读参数或 `const` 绑定调用普通方法仍可修改对象，但不能重绑该参数或绑定。class 字段的 `ref` / 视图访问须保活对象并检查动态独占；局部无冲突证明只可消除检查，不能改变权限合同。
+
 ```ebnf
 ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
@@ -468,7 +474,7 @@ class Dog extends Animal {
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
 - 不能在 `super(...)` 之前访问 `this`。
-- **覆写父类方法必须写 `override`**；该修饰符只用于类实例方法，不用于字段、构造器、静态方法、struct 或 enum。顺序为可选可见性、`override`、可选 `ref`/`move`。
+- **覆写父类方法必须写 `override`**；该修饰符只用于类实例方法，不用于字段、构造器、静态方法、struct 或 enum。顺序为可选可见性、`override`；class 方法不声明 `ref` / `move` receiver。
 - 同名不同签不是重载，也不是隐藏；必须改名或使用默认参数 / 命名工厂。
 - 父类标 `final class` 则不可继承。
 - `super.method()` 可在重写的方法体内调用被屏蔽的父类方法。
@@ -684,6 +690,10 @@ main()
 
 ### 5.4 `struct` 声明
 
+可复制 struct 按字段声明类型保留逻辑副本：Array 等拥有式容器字段保持值语义，class 与同步字段只复制身份引用。字段可以是 Array 或 class；不能将 struct 限制为仅含标量和 string，也不能把 struct 复制误写为复制整个 class 对象图。字段仍须满足初始化、存储及可复制性要求（§2.14.6）。
+
+struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。可复制类型不得声明 `move` receiver。完整聚合、receiver 和借用声明族的实现资格见 §17。
+
 ```ebnf
 StructDecl ::= 'struct' Identifier TypeParams?
                ('implements' Identifier (',' Identifier)*)?
@@ -737,14 +747,14 @@ var c = Config{host: "localhost"}    // OK
 
 | 维度 | `class` | `struct` |
 |--|--|--|
-| 内存语义 | 引用类型（堆） | 值类型（栈或内联） |
-| 赋值/传参 | 共享引用 | **拷贝**（`var b = a` 生产独立副本） |
+| 内存语义 | 身份引用 | 逻辑值；物理布局不改变复制合同 |
+| 赋值/保存参数 | 复制身份引用 | **按字段复制**（`var b = a` 保留逻辑副本） |
 | 继承 | 支持 `extends` | **不支持**继承 |
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | **可省略**：`Point()` 生成零值实例 |
+| 构造器 | `constructor(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -754,7 +764,7 @@ var c = Config{host: "localhost"}    // OK
 
 #### 5.4.1 值语义示例
 
-`struct` 是值类型，赋值与传参都会拷贝：
+可复制 `struct` 是值类型，赋值与保存参数按字段保留逻辑副本；普通 READ 参数只读访问该值，允许保存副本，不强制某一种物理 ABI：
 
 ```xray
 struct Point {
@@ -1086,7 +1096,7 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-静态方法使用 `static name(...)`；实例方法默认 READ receiver，也可使用 `ref` 或 `move` receiver。enum 方法不写 `fn`：
+静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver。`move` receiver 仅适用于不可复制 enum，可复制 enum 不得声明；不可复制声明族的准入见 §17。enum 方法不写 `fn`：
 
 ```xray
 enum Color {
@@ -1187,7 +1197,7 @@ export * from "./other"
 
 ## 5. Declarations
 
-> Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
+> Declaration-syntax anchors: `src/frontend/parser/xparse_decl.c` and `src/frontend/parser/xast_nodes_decl.h`. The frontend checks this chapter's language contracts uniformly. See §17 for current new XIR declaration-family qualification; old analyzer behavior does not replace these rules.
 
 ### 5.1 `var` / `const`
 
@@ -1215,7 +1225,7 @@ var empty: string = ""            // string requires an explicit initializer
 - Reassignable.
 - Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
 - Omitted initializers are allowed only for **default-initializable** types: numeric types default to `0` / `0.0`, `bool` defaults to `false`, `()` defaults to unit, `T?` defaults to `null`, and structs are allowed only when every field is default-initializable.
-- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar reference-like values require an explicit initializer.
+- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar types require an explicit initializer. `var a: Array<T>` does not default-construct an empty array.
 
 #### 5.1.2 `const` — immutable binding
 
@@ -1224,27 +1234,29 @@ const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
 
-- Initializer is **required**.
-- Cannot be reassigned (compile error `E0303`).
-- The type may be inferred or annotated explicitly.
-- Like `var`, each `const` declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
-- For managed/aggregate values, `const name: T` infers and holds the `const T` capability: fields, indexes, and nested projections are deeply read-only. `var name: const T` permits rebinding the name without granting graph mutation.
-- `const T` is accepted in every type position. `const` on an immutable scalar is identical to the base type; `const T` on a managed/aggregate value is a distinct type identity.
-- Fresh construction may target either a mutable `var` domain or a read-only `const` domain. An existing mutable unique graph entering `const` requires explicit `move` or `copy`; there is no implicit freeze or hidden copy.
-- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` are named with `const`. The compiler normalizes them to an internal synchronized shared capability whose audited methods may still mutate protected internal state.
-- The compiler infers unique ownership for fresh mutable graphs; no storage modifier is required. `move` requires a unique root with no live alias/loan and invalidates the source binding on success; `copy` preserves the source and explicitly constructs an independent graph.
+- An initializer is **required** and reassignment is forbidden (compile error `E0303`). The type may be inferred or annotated.
+- Like `var`, each declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
+- `const` fixes the binding and its value-semantic components: Array elements, appends, and value-type fields cannot be mutated through it. Ordinary `const snapshot = source` is legal and preserves a logical copy; it does not require explicit `move` / `copy` or a unique source backing store.
+- Value semantics stop at class and synchronized identity boundaries. `const xs = [Counter()]` does not freeze Counter; ordinary class methods may still mutate the referenced object. Replacing an array element through a writable copy does not change the elements of `xs`.
+- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` may use `const` to fix the binding. Their audited APIs can still change protected internal state. `const` alone proves neither Sendable nor concurrency safety.
+- Saving a copyable read-only value into `var` produces a writable logical copy. It does not acquire a writable borrow of the original place or remove the referenced class object's own permission restrictions.
 
 ```xray @id=decl-capability
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
-var moved = move source       // transfer the same root; source is now invalid
-const snapshot = copy(moved)  // explicitly construct an independent read-only graph
-var current: const Config = loadConfig()
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
 ```
 
-See [§10.11](#1011-concurrency-safety-model).
+This section freezes read-only binding and value-component permissions, not the distinct type identity, conversions, or permitted positions of type-position `const T`. That surface is outside this frozen subset and requires a separate decision before admission; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+
+These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
 #### 5.1.3 Destructuring bindings
 
@@ -1336,38 +1348,40 @@ var result = divmod(10, 3)        // result has type (i64, i64)
 
 #### 5.2.4 Parameter modes
 
-Ordinary parameters provide a read-only capability by default. Only writable borrowing and
-ownership transfer have explicit modes: `name: ref T` and `name: move T`.
+Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; consuming a noncopyable resource uses `name: move T`. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
 
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: Vec2) -> f64 {
-    // v is read-only; the ABI may pass a small value or a read-only address
     return v.x * v.x + v.y * v.y
 }
 
 fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
-    // v is a mutable reference (changes are visible to the caller)
     v.x += dx
     v.y += dy
 }
 
-fn submit(job: move Job) -> () {
-    queue.store(move job)
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
 }
 
 translate(ref point, 1.0, 2.0)
-submit(move pending)
-submit(makeJob())
 ```
 
 | Parameter mode | Semantics |
 |--|--|
-| none (READ) | Read-only capability; the callee cannot mutate the caller's mutable graph |
-| `ref` | Exclusive writable place loan; the call site must write `ref place` |
-| `move` | Transfer of the unique owner; an existing lvalue requires `move value`, while a fresh value or `copy(value)` can be passed directly |
+| none (READ) | The parameter binding cannot be rebound and its value-semantic components are read-only; copyable, storable values may be saved or returned as logical copies |
+| `ref` | Exclusive writable place borrow; mutations write back to the caller, and the call site must write `ref place` |
+| `move` | Restricted to noncopyable types; transfers ownership and final destruction responsibility. The declaration mode determines consumption; `move value` optionally marks that transfer |
 
-Ordinary outputs use return values, tuples, structs, or `Result`. C ABI output locations use
-`MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
+A READ Array parameter cannot be indexed for writing, passed as a receiver to `push`, or rebound. Saving it into a local `var` permits mutation of the copy without changing the original argument. Saving a copyable value does not permit a borrow to escape; views and noncopyable resources cannot thereby become ordinary owned copies. A READ class parameter also cannot be rebound, but may invoke methods that mutate the same object. READ does not mean that the entire reachable graph is immutable.
+
+A `ref` argument must be an exactly typed writable place, not a `const`, READ parameter, or temporary. `ref` types are invariant. §3.0 E2 evaluates the receiver and every argument before exclusive access begins. That access covers checks, necessary COW detachment, mutation, and writeback. Borrowing the receiver early must not reject `a.push(a[0])`. Assignment still follows E5: location subexpressions, index, right-hand side, then storage.
+
+Copyable types, including Array, cannot declare `move` parameters or receivers. Initialization, use after consumption, and active borrows of noncopyable resources still require checking; see §2.14.5. See §17 for current implementation qualification of resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
+
+Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
 #### 5.2.5 Rest parameters
 
@@ -1574,6 +1588,8 @@ main()
 
 ### 5.3 `class` declaration
 
+Classes have identity; assignment and saving a parameter copy references only. Class methods do not declare `ref` / `move` receivers. Ordinary methods invoked through a READ parameter or `const` binding may still mutate the object, but cannot rebind that parameter or binding. A `ref` / view access to a class field must retain the object and check dynamic exclusivity. A local proof of no conflict may eliminate that check, not change the permission contract.
+
 ```ebnf
 ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
@@ -1638,7 +1654,7 @@ class Dog extends Animal {
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
 - `this` must not be accessed before `super(...)`.
-- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility, `override`, then optional `ref`/`move`.
+- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility followed by `override`; class methods do not declare `ref` / `move` receivers.
 - Same-name different-signature methods are not overloads or hiding; rename the method or use default arguments / named factories.
 - A `final class` cannot be inherited.
 - `super.method()` invokes the shadowed parent method from inside an override.
@@ -1854,6 +1870,10 @@ main()
 
 ### 5.4 `struct` declaration
 
+A copyable struct preserves logical copies according to the declared type of each field. Owned container fields such as Array retain value semantics; class and synchronized fields copy identity references only. Fields may be Arrays or classes. Structs are not restricted to scalars and strings, and copying a struct does not copy an entire class object graph. Fields still satisfy initialization, storage, and copyability requirements (§2.14.6).
+
+A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. Copyable types cannot declare `move` receivers. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
+
 ```ebnf
 StructDecl ::= 'struct' Identifier TypeParams?
                ('implements' Identifier (',' Identifier)*)?
@@ -1907,14 +1927,14 @@ var c = Config{host: "localhost"}    // OK
 
 | Dimension | `class` | `struct` |
 |--|--|--|
-| Memory model | Reference type (heap) | Value type (stack or inlined) |
-| Assign / pass | Shared reference | **Copy** (`var b = a` produces an independent copy) |
+| Memory model | Identity reference | Logical value; physical layout does not change the copy contract |
+| Assign / save parameter | Copy identity reference | **Field-wise copy** (`var b = a` preserves a logical copy) |
 | Inheritance | Supports `extends` | **No** inheritance |
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
-| Constructor | `constructor(...)` | **Optional**: `Point()` yields a zero-valued instance |
+| Constructor | `constructor(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
 | Literal | none | `TypeName{field: value, ...}` |
 
 **When to use**:
@@ -1924,7 +1944,7 @@ var c = Config{host: "localhost"}    // OK
 
 #### 5.4.1 Value-semantics example
 
-A `struct` is a value type: assignment and argument passing copy it.
+A copyable `struct` is a value type: assignment and saving a parameter preserve logical copies field by field. An ordinary READ parameter accesses the value read-only and may save a copy, without requiring a particular physical ABI.
 
 ```xray
 struct Point {
@@ -2256,7 +2276,7 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-Static methods use `static name(...)`. Instance methods have a READ receiver by default and may use `ref` or `move`; enum methods do not write `fn`:
+Static methods use `static name(...)`. Instance methods have a READ receiver by default and use `ref` to mutate value-semantic components. A `move` receiver is restricted to noncopyable enums and is forbidden for copyable enums; see §17 for admission of noncopyable declarations. Enum methods do not write `fn`:
 
 ```xray
 enum Color {

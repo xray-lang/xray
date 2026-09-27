@@ -56,7 +56,41 @@ static int source_fault_resolve(XrModuleResolver *resolver, const char *specifie
 #define xr_module_resolver_resolve source_fault_resolve
 #include "xir/xxir_source.c"
 #undef xr_module_resolver_resolve
+static void snapshot_type_allocations(void) {
+    const XrXirCallableParameter parameter = {XR_XIR_I64, 0};
+    const XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, XR_XIR_STRING, 0, 0},
+        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0},
+        {XR_XIR_TYPE_CELL, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, NULL, 0, XR_XIR_UNIT, 0, 0}
+    };
+    const XrXirTypes types = {nodes, 3};
+    XrXirSourceView view = {0}; view.types = &types;
+    view.diagnostic.status = XR_XIR_BAD_TYPE;
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+    size_t sites = 0;
+    for (size_t attempt = 0; attempt <= sites; ++attempt) {
+        attempts = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+        budget = xr_xir_default_budget();
+        XrXirSourceSnapshot *snapshot = NULL;
+        XrXirStatus status = xr_xir_source_snapshot_copy(&view, &budget, &snapshot);
+        if (!attempt) {
+            CHECK(status == XR_XIR_OK && snapshot); sites = attempts;
+            const XrXirSourceView *copy = xr_xir_source_snapshot_view(snapshot);
+            CHECK(!copy->complete && copy->diagnostic.status == XR_XIR_BAD_TYPE);
+            CHECK(copy->types && copy->types != &types && copy->types->nodes != nodes);
+            CHECK(copy->types->count == 3 && copy->types->nodes[0].parameters != &parameter);
+            CHECK(copy->types->nodes[0].parameters[0].type == XR_XIR_I64);
+            CHECK(copy->types->nodes[1].kind == XR_XIR_TYPE_ARRAY && copy->types->nodes[1].element == XR_XIR_STRING);
+            CHECK(copy->types->nodes[2].kind == XR_XIR_TYPE_CELL && copy->types->nodes[2].element == XR_XIR_CONSTRUCTED_TYPE_BASE);
+        } else CHECK(status == XR_XIR_OUT_OF_MEMORY && !snapshot);
+        xr_xir_source_snapshot_free(snapshot); CHECK(!live);
+    }
+    fail_at = SIZE_MAX; attempts = 0;
+    printf("Constructed query snapshot: %zu allocation failure sites; no partial snapshot\n", sites);
+}
 int main(void) {
+    snapshot_type_allocations();
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB};

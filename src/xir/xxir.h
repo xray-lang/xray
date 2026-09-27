@@ -105,7 +105,6 @@ typedef struct XrXirFunction {
     uint32_t operand_count;
 } XrXirFunction;
 
-#define XR_XIR_TYPE_PARAMETER_BASE 65536u
 #define XR_XIR_CONSTRAINT_SENDABLE 1u
 typedef struct XrXirGeneric {
     const uint32_t *constraints;
@@ -115,17 +114,24 @@ typedef struct XrXirGeneric {
 } XrXirGeneric;
 
 typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
-typedef struct XrXirCallableSignature {
+typedef enum XrXirTypeKind {
+    XR_XIR_TYPE_CALLABLE = 1,
+    XR_XIR_TYPE_ARRAY = 2,
+    XR_XIR_TYPE_CELL = 3
+} XrXirTypeKind;
+typedef struct XrXirTypeNode {
+    uint32_t kind;
+    XrXirType element;
     const XrXirCallableParameter *parameters;
     uint32_t parameter_count;
     XrXirType result;
     uint32_t flags;
     uint32_t parameter_span;
-} XrXirCallableSignature;
-typedef struct XrXirCallableTypes {
-    const XrXirCallableSignature *signatures;
+} XrXirTypeNode;
+typedef struct XrXirTypes {
+    const XrXirTypeNode *nodes;
     uint32_t count;
-} XrXirCallableTypes;
+} XrXirTypes;
 
 typedef struct XrXirModule {
     XrXirStage stage;
@@ -133,7 +139,7 @@ typedef struct XrXirModule {
     uint32_t function_count;
     const XrXirDeclarations *declarations;
     const XrXirGeneric *generics;
-    const XrXirCallableTypes *callables;
+    const XrXirTypes *types;
 } XrXirModule;
 
 typedef struct XrXirBudget {
@@ -169,13 +175,13 @@ XR_FUNC const XrXirModule *xr_xir_artifact_module(const XrXirArtifact *artifact)
 XR_FUNC const XrXirTarget *xr_xir_artifact_target(const XrXirArtifact *artifact);
 XR_FUNC const XrXirFunctionLayout *xr_xir_artifact_layout(const XrXirArtifact *artifact,
                                                        uint32_t function);
-XR_FUNC XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
+XR_FUNC XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
                                 XrXirLayoutContext context, XrXirLayout *layout);
 XR_FUNC XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact,
                                         const XrXirBudget *budget, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_artifact_free(XrXirArtifact *artifact);
 XR_FUNC XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *declarations,
-    uint32_t functions, uint64_t *bytes, uint64_t *work);
+    const XrXirTypes *types, uint32_t functions, uint64_t *bytes, uint64_t *work);
 /* Internal snapshot helpers require successful declaration verification first. */
 XR_FUNC XrXirStatus xr_xir_declarations_order(const XrXirDeclarations *declarations,
     uint32_t *order, uint64_t *work);

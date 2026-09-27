@@ -13,6 +13,16 @@ Each successful transition publishes a distinct immutable owned snapshot; input
 storage may immediately be destroyed. Failure publishes no partial artifact.
 Neither a caller-supplied stage tag nor prior checking exempts input validation.
 
+`xir-constructed-types.md` extends metadata through one owned CALLABLE/ARRAY/CELL
+pool across these same stages. Checked schema 5 / semantic contract 14 and
+Value9/Call13/Program8 replace their predecessors atomically. Every constructed
+use resolves its kind through that pool; no signature-only table or cell-bit
+encoding remains. ARRAY descriptor, substitution, layout and arena support are
+the foundation for later Array values. They do not qualify source Array syntax,
+construction, reads, writes, mutation, COW or physical backing release. Qualification
+of this cutover requires the new assertions and actual rebuild/test results;
+updating this contract or registering a test name is not execution evidence.
+
 The scalar subset has unit, bool, and signed i64. Function parameters are read
 bool/i64 values; unit is a result/terminator type and has no value ID in this
 internal subset. Copying a scalar preserves its value without resource ownership. Integer
@@ -86,4 +96,4 @@ The edge is one indivisible activation step; each PHI still consumes its normal
 instruction step. There is no suspension/provider call inside edge capture. Frame
 and metadata budgets include scratch ownership, and cancellation/step exhaustion
 use normal frame cleanup. Checked serialization preserves the incoming table;
-semantic contract 13 rejects earlier versions. No separate executable PHI format.
+semantic contract 14 rejects earlier versions. No separate executable PHI format.

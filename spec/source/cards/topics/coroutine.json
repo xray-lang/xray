@@ -29,7 +29,7 @@
     },
     {
       "heading": "Common constraints",
-      "markdown": "`go` accepts only a call expression. Write inline logic as an immediately invoked lambda, for example `go fn(x: i64) { work(x) }(value)`. A lambda may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with `copy(...)` or `move`. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous."
+      "markdown": "`go` accepts only a call expression; inline logic uses an immediately invoked lambda. Under the settled target ownership contract, arguments and captures must be Sendable. A go lambda may capture const values, copyable non-view READ values, and qualified synchronization handles, but never an ordinary outer `var`, even for reads. Pass copyable, Sendable local data explicitly by value; Array arguments preserve logical copies without a required copy/move marker. Noncopyable resources transfer through declared consuming parameters. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting uses `await task`; Task results must be copyable and Sendable, and `await all` is homogeneous. Complete go/Task behavior, including repeated observation and cancellation, remains subject to declaration-family qualification under spec §17; these rules are not a claim of completed new-XIR concurrency support."
     },
     {
       "heading": "Task handle",

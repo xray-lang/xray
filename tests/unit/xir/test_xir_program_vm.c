@@ -85,7 +85,7 @@ static void capture_mixed(void) {
             (owner->entries[5].resume == captures_program.entries[5].resume));
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
-            {owner,capture_mixed_release},module->callables};
+            {owner,capture_mixed_release},module->types};
         XrXirProgram *program = NULL;
         CHECK(xr_xir_program_seal(&spec,65536,&program) == XR_XIR_OK);
         capture_cases(program); CHECK(mixed_releases == parity+1);

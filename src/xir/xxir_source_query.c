@@ -59,17 +59,17 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
             decls[i].parameter_count, sizeof(*decls[i].parameters));
     }
 }
-static void query_callables(SourceQueryCopy *copy, const XrXirCallableTypes *source) {
-    if (!source || !source->count) { copy->snapshot->view.callables = NULL; return; }
-    XrXirCallableTypes *types = query_copy(copy, source, 1, sizeof(*types));
+static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {
+    if (!source || !source->count) { copy->snapshot->view.types = NULL; return; }
+    XrXirTypes *types = query_copy(copy, source, 1, sizeof(*types));
     if (!types) return;
-    copy->snapshot->view.callables = types;
-    XrXirCallableSignature *signatures = query_copy(copy, source->signatures, source->count, sizeof(*signatures));
-    types->signatures = signatures;
-    if (!signatures) return;
+    copy->snapshot->view.types = types;
+    XrXirTypeNode *nodes = query_copy(copy, source->nodes, source->count, sizeof(*nodes));
+    types->nodes = nodes;
+    if (!nodes) return;
     for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i)
-        signatures[i].parameters = query_copy(copy, source->signatures[i].parameters,
-            signatures[i].parameter_count, sizeof(*signatures[i].parameters));
+        nodes[i].parameters = query_copy(copy, source->nodes[i].parameters,
+            nodes[i].parameter_count, sizeof(*nodes[i].parameters));
 }
 XrXirStatus xr_xir_source_snapshot_copy(const XrXirSourceView *view,
     XrXirBudget *remaining, XrXirSourceSnapshot **output) {
@@ -81,7 +81,7 @@ XrXirStatus xr_xir_source_snapshot_copy(const XrXirSourceView *view,
     remaining->metadata_bytes -= sizeof(*snapshot); --remaining->work;
     snapshot->view = *view;
     SourceQueryCopy copy = {snapshot, remaining, XR_XIR_OK};
-    query_modules(&copy, view); query_declarations(&copy, view); query_callables(&copy, view->callables);
+    query_modules(&copy, view); query_declarations(&copy, view); query_types(&copy, view->types);
     snapshot->view.references = query_copy(&copy, view->references, view->reference_count, sizeof(*view->references));
     snapshot->view.expressions = query_copy(&copy, view->expressions, view->expression_count, sizeof(*view->expressions));
     if (copy.status != XR_XIR_OK) { xr_xir_source_snapshot_free(snapshot); return copy.status; }

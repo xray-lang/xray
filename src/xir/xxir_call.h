@@ -14,7 +14,7 @@
 #define XXIR_CALL_H
 #include "xxir_scalar.h"
 
-#define XR_XIR_CALL_ABI_VERSION 12u
+#define XR_XIR_CALL_ABI_VERSION 13u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -52,6 +52,7 @@ typedef struct XrXirCallView {
     const XrXirValue *arguments;
     uint32_t argument_count;
     XrXirCallResult inbox;
+    const XrXirTypeArena *arena;
 } XrXirCallView;
 typedef XrXirAction (*XrXirResumeEntry)(XrXirCallView *view);
 typedef void (*XrXirCleanupEntry)(XrXirCallView *view, XrXirCallStatus reason);
@@ -93,6 +94,7 @@ typedef struct XrXirCallConfig {
     uint32_t depth_limit;
     XrXirCallAccounting *accounting;
     XrXirOutputProvider output;
+    XrXirValueAdmission admission;
 } XrXirCallConfig;
 
 XR_FUNC XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,

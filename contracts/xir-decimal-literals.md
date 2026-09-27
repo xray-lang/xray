@@ -34,7 +34,7 @@ formatting preserves source spelling. There is no compatibility parser or
 product execution path. AST structural signatures include the owned spelling
 so distinct f32 rounding inputs cannot collapse through their common f64 value.
 Built emits the existing canonical CONST_FLOAT; the
-Checked/Lowered pipeline and Value8/Call12/Program7/schema4/semantic13 remain
+Checked/Lowered pipeline and Value9/Call13/Program8/schema5/semantic14 remain
 the only execution admission. Arithmetic and floating output stay unqualified.
 
 verification-test: test_xir_execution

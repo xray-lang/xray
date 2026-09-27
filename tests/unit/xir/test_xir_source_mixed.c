@@ -84,7 +84,7 @@ int main(void) {
     CHECK(owner->entries[fixture_source_numeric_pause].resume == fixture_source_program.entries[fixture_source_numeric_pause].resume);
     CHECK(owner->entries[fixture_source_resume_text].resume != fixture_source_program.entries[fixture_source_resume_text].resume);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,
-        module->declarations, {owner, mixed_release}, module->callables};
+        module->declarations, {owner, mixed_release}, module->types};
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);

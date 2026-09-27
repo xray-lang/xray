@@ -50,7 +50,7 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
     XrXirCallAccounting accounting = {0};
     StringOutput output = {0, mode, NULL};
     XrXirCallConfig config = {entries, 3, NULL, 65536, mode == 5 ? 15 : 100, 10,
-        &accounting, {mode == 4 ? NULL : string_output, &output}};
+        &accounting, {mode == 4 ? NULL : string_output, &output}, {0}};
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, mode == 5 || mode == 6 ? 2 : 0, arguments, 2, &call) == XR_XIR_CALL_READY);
     output.call = call;

@@ -6,11 +6,23 @@ driving require their own qualification. No legacy artifact reader is admitted.
 
 A program seals a verified Lowered closure before execution. It owns copied
 module/function identities, exact signatures, dependency edges, slot declarations,
-literal bytes, and a deterministic initialization order. Code environments are
+literal bytes, a closed constructed-type arena, and a deterministic initialization
+order. Program ABI 8, Call ABI 13 and Value ABI 9 are admitted atomically. The
+ProgramSpec supplies the unique type pool; sealing verifies and deep-copies its
+descriptors into the arena before publishing the Program. Code environments are
 either explicitly process-static or transferred to the program with one release
-callback. Instances retain their program; final program release destroys its
-metadata and owned code environment only after the last instance. A native image
+callback. Instances and function-admission records retain their program; final
+program release destroys its metadata and owned code environment after the last
+Program lease. The arena has no reverse Program lease and can outlive that release
+through an escaped constructed value. A native image
 is a trusted compiler-produced C descriptor, not an untrusted byte decoder.
+
+Constructed boundary identity is `(arena, local type ID)`. Separate seals reject
+each other's values even if descriptor structure and IDs match. Instances of
+the same Program share its arena; function execution still requires the correct
+live Instance gate. ARRAY descriptors are admitted as metadata only in this
+foundation. Array construction, cross-Instance pure Array values, COW operations
+and escaped Array physical release remain unimplemented and unqualified here.
 
 Modules form a DAG rooted at the entry module. Cycles, duplicate identities,
 duplicate dependencies, unreachable modules and invalid indices reject. A ready
@@ -58,6 +70,16 @@ transitions. CONST_STRING creates an owned runtime string in the instance domain
 Unknown declarations, types, slot permissions and malformed operands reject before
 execution. Metadata counts, bytes, graph work, code frames and instance values
 have explicit budgets. Every allocation failure publishes no partial owner.
+
+`call_limit` bounds copied entry descriptors and physical frame segments per
+activation. Replacing a completed execution may retain one terminal activation
+and one unpublished candidate, each independently accounted; their combined call
+storage never exceeds twice `call_limit`. Candidate failure restores its live
+bytes and depth and balances allocations/frees without changing the terminal
+activation, result, epoch or Instance state. Successful replacement releases the
+terminal activation before publishing execution progress. Both activations share
+the Instance's single value Domain and `value_limit`; replacement grants no second
+value budget. There is no third retained activation or uncharged frame cache.
 
 CONST_STRING indexes a literal; SLOT_LOAD returns an owned copy or scalar value.
 SLOT_INIT and SLOT_STORE have a unit result and one exactly typed operand. The

@@ -10,7 +10,7 @@
  *   Queries survive source destruction without granting rejected capabilities.
  */
 #include "xir/xxir_source.h"
-#include "xir/xxir_callable.h"
+#include "xir/xxir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
 #include <stdio.h>
@@ -52,8 +52,8 @@ static void generic_facts(const XrXirSourceView *view) {
     CHECK(parameter->kind == XR_XIR_SOURCE_PARAMETER && parameter->type.generic_owner == capture->id);
     CHECK(parameter->range.line == 5 && parameter->range.column == 15 && parameter->range.end_column == 20);
     CHECK(references(view, parameter->id, parameter->id) == 1);
-    CHECK(capture->type.generic_owner == capture->id && view->callables);
-    const XrXirCallableSignature *signature = xr_xir_callable_signature(view->callables, capture->type.type);
+    CHECK(capture->type.generic_owner == capture->id && view->types);
+    const XrXirTypeNode *signature = xr_xir_callable_signature(view->types, capture->type.type);
     CHECK(signature && signature->parameter_count == 0 && signature->result == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
     unsigned closures = 0, generic_expressions = 0;
     for (uint32_t i = 0; i < view->declaration_count; ++i) {
@@ -95,6 +95,52 @@ static void shadow_and_imports(const XrXirSourceView *view) {
     }
     CHECK(bindings == 2 && uses == 2);
 }
+static void constructed_facts(const XrXirSourceView *view) {
+    CHECK(view->types && view->types->nodes);
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(view->types, &budget) == XR_XIR_OK);
+    unsigned generic_cells = 0, scalar_cells = 0, callable_cells = 0;
+    for (uint32_t i = 0; i < view->types->count; ++i) {
+        const XrXirTypeNode *node = &view->types->nodes[i];
+        XrXirType type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i);
+        CHECK(xr_xir_type_node(view->types, type) == node);
+        CHECK(!xr_xir_type_is_array(view->types, type));
+        if (node->kind == XR_XIR_TYPE_CALLABLE) {
+            CHECK(xr_xir_callable_signature(view->types, type) == node);
+            continue;
+        }
+        CHECK(node->kind == XR_XIR_TYPE_CELL && xr_xir_type_is_cell(view->types, type));
+        CHECK(!xr_xir_callable_signature(view->types, type));
+        CHECK(!node->parameters && !node->parameter_count && node->result == XR_XIR_UNIT);
+        CHECK(xr_xir_cell_element(view->types, type) == node->element);
+        if (node->element == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE) {
+            CHECK(node->parameter_span == 1); ++generic_cells;
+        } else if (node->element == XR_XIR_I64) {
+            CHECK(!node->parameter_span); ++scalar_cells;
+        } else {
+            CHECK(xr_xir_type_is_callable(view->types, node->element));
+            CHECK((uint32_t) node->element < (uint32_t) type); ++callable_cells;
+        }
+    }
+    CHECK(generic_cells == 1 && scalar_cells == 1 && callable_cells == 1);
+    const char *owners[] = {"mutableCapture", "mutableOther"};
+    for (unsigned i = 0; i < 2; ++i) {
+        const XrXirSourceDeclaration *owner = declaration(view, owners[i], 0); CHECK(owner);
+        const XrXirSourceDeclaration *held = declaration(view, "held", owner->id); CHECK(held);
+        CHECK(held->mutable && held->type.type == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
+        CHECK(held->type.generic_owner == owner->id && owner->type.generic_owner == owner->id);
+        CHECK(references(view, held->id, held->id) == 1);
+        unsigned closures = 0;
+        for (uint32_t d = 0; d < view->declaration_count; ++d) {
+            const XrXirSourceDeclaration *nested = &view->declarations[d];
+            if (nested->parent == owner->id && nested->kind == XR_XIR_SOURCE_FUNCTION) {
+                CHECK(nested->type.type == held->type.type && nested->type.generic_owner == owner->id);
+                CHECK(nested->type.generic_owner != nested->id); ++closures;
+            }
+        }
+        CHECK(closures == 1);
+    }
+}
 static const char accepted_source[] =
     "import { visible as alias } from \"./lib\"\r\n"
     "import \"./lib\" as lib\r\n"
@@ -105,7 +151,11 @@ static const char accepted_source[] =
     "const text=\"\xF0\x9F\x98\x80\"; const answer=alias(7)\r\n"
     "const again=lib.visible(answer)\r\n"
     "const callback=lib.visible\r\n"
-    "const result=callback(9)\r\n";
+    "const result=callback(9)\r\n"
+    "fn mutableCapture<T>(value:T)->fn()->T { var held=value; return fn()->T { return held } }\r\n"
+    "fn mutableOther<T>(value:T)->fn()->T { var held=value; return fn()->T { return held } }\r\n"
+    "fn callableCell(cb:fn(i64)->i64)->fn(i64)->i64 { var held=cb; return fn(x:i64)->i64 { return held(x) } }\r\n"
+    "fn scalarCells()->i64 { var left=1; var right=2; return left+right }\r\n";
 static XrXirSourceResult accepted(const XrXirSourceRequest *request) {
     write_source(request->entry_path, accepted_source);
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic;
@@ -114,7 +164,7 @@ static XrXirSourceResult accepted(const XrXirSourceRequest *request) {
     CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
     const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot); CHECK(view);
     CHECK(view->complete && view->diagnostic.status == XR_XIR_OK && view->module_count == 2);
-    generic_facts(view); shadow_and_imports(view);
+    generic_facts(view); shadow_and_imports(view); constructed_facts(view);
     const XrXirSourceDeclaration *answer = declaration(view, "answer", 0); CHECK(answer);
     const char *line = strstr(accepted_source, "const text="), *name = strstr(line, "answer="); CHECK(line && name);
     CHECK(answer->range.line == 7 && answer->range.column == (int) (name - line) + 1);
@@ -126,12 +176,25 @@ static XrXirSourceResult accepted(const XrXirSourceRequest *request) {
     CHECK(checked_module->name != query_identity);
     CHECK(checked_module->name_length == strlen(query_identity));
     CHECK(!memcmp(checked_module->name, query_identity, checked_module->name_length));
-    CHECK(module->callables && module->callables != view->callables && module->callables->signatures != view->callables->signatures);
-    CHECK(module->callables->count == view->callables->count);
+    CHECK(module->types && module->types != view->types && module->types->nodes != view->types->nodes);
+    CHECK(module->types->count == view->types->count);
+    for (uint32_t i = 0; i < module->types->count; ++i) {
+        const XrXirTypeNode *checked = &module->types->nodes[i], *queried = &view->types->nodes[i];
+        CHECK(checked->kind == queried->kind && checked->element == queried->element);
+        CHECK(checked->result == queried->result && checked->parameter_count == queried->parameter_count);
+        CHECK(checked->flags == queried->flags && checked->parameter_span == queried->parameter_span);
+        if (checked->parameter_count) {
+            CHECK(checked->parameters != queried->parameters);
+            for (uint32_t p = 0; p < checked->parameter_count; ++p) {
+                CHECK(checked->parameters[p].type == queried->parameters[p].type);
+                CHECK(checked->parameters[p].mode == queried->parameters[p].mode);
+            }
+        }
+    }
     return result;
 }
 static void publication_budgets(XrXirSourceRequest *request) {
-    write_source(request->entry_path, "const ok=1\n");
+    write_source(request->entry_path, "fn identity(value:i64)->i64 { var held=value; return held }\nconst callback=identity\n");
     for (unsigned mode = 0; mode < 2; ++mode) {
         uint64_t low = 0, high = 65536;
         XrXirBudget budget = xr_xir_default_budget();
@@ -219,10 +282,10 @@ int main(void) {
     xr_compiler_session_delete(session);
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
     const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
-    generic_facts(view); shadow_and_imports(view);
+    generic_facts(view); shadow_and_imports(view); constructed_facts(view);
     CHECK(view->modules[0].identity[0] && strstr(view->modules[0].path, "root.xr"));
     xr_xir_source_result_free(&result); xr_xir_source_result_free(&result);
     CHECK(!result.checked && !result.snapshot && !xr_xir_source_snapshot_view(NULL));
-    puts("Owned source facts: lifetime, lexical binding, generic owner, byte ranges and fail-closed publication passed");
+    puts("Owned source facts: unified types, lifetime, lexical binding, generic owner, byte ranges and fail-closed publication passed");
     return 0;
 }

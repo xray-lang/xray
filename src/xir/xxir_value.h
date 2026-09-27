@@ -14,10 +14,11 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 8u
-#define XR_XIR_CELL_TYPE_FLAG 0x40000000u
-#define XR_XIR_CALLABLE_TYPE_BASE 256u
-#define XR_XIR_CALLABLE_TYPE_LIMIT 65536u
+#define XR_XIR_VALUE_ABI_VERSION 9u
+#define XR_XIR_CONSTRUCTED_TYPE_BASE 256u
+#define XR_XIR_CONSTRUCTED_TYPE_LIMIT 65536u
+#define XR_XIR_TYPE_PARAMETER_BASE 65536u
+#define XR_XIR_TYPE_PARAMETER_LIMIT 131072u
 #define XR_XIR_ARCH_X86_64 1u
 typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64,
     XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64 } XrXirType;
@@ -69,6 +70,7 @@ typedef enum XrXirValueStatus {
     XR_XIR_VALUE_OOM, XR_XIR_VALUE_LIMIT, XR_XIR_VALUE_REFCOUNT_LIMIT
 } XrXirValueStatus;
 typedef struct XrXirDomain XrXirDomain;
+typedef struct XrXirTypeArena XrXirTypeArena;
 typedef struct XrXirDomainStats {
     uint64_t live_bytes, peak_bytes, allocations, frees, reallocations;
 } XrXirDomainStats;
@@ -76,7 +78,10 @@ typedef struct XrXirDomainStats {
 XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t byte_limit, XrXirDomain **output);
 XR_FUNC void xr_xir_domain_drop(XrXirDomain *domain);
 XR_FUNC XrXirDomainStats xr_xir_domain_stats(XrXirDomain *domain);
-XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, XrXirType type);
+/* Self-validation does not grant permission to execute an escaped function. */
+XR_FUNC bool xr_xir_value_valid(const XrXirValue *value);
+XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena *arena, XrXirType type);
+XR_FUNC const XrXirTypeArena *xr_xir_value_arena(const XrXirValue *value);
 /* Copy/new outputs must be canonical unit handles. Native pointers are trusted. */
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output);
 XR_FUNC void xr_xir_value_drop(XrXirValue *value);
@@ -86,7 +91,8 @@ XR_FUNC XrXirValueStatus xr_xir_string_append(XrXirValue *destination, const XrX
 XR_FUNC bool xr_xir_string_view(const XrXirValue *value, const char **bytes, size_t *length);
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count);
 XR_FUNC void xr_xir_owned_slot_clear(void *frame, uint32_t offset);
-XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, XrXirType type, int64_t payload);
+XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, const XrXirTypeArena *arena,
+                                                XrXirType type, int64_t payload);
 XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
                                                   int64_t left, int64_t right);
 XR_FUNC XrXirValueStatus xr_xir_atomic_i64_new(XrXirDomain *domain, int64_t initial, XrXirValue *output);
@@ -100,27 +106,29 @@ typedef struct XrXirFunctionBinding {
     const XrXirValue *captures;
     uint32_t capture_count;
 } XrXirFunctionBinding;
+/* The caller validates a live execution gate; pointer equality is not authority. */
+typedef XrXirValueStatus (*XrXirFunctionAdmission)(void *context,
+    const XrXirFunctionBinding *binding, XrXirType type, uint64_t *work);
+typedef struct XrXirValueAdmission {
+    const XrXirTypeArena *arena;
+    XrXirDomain *domain;
+    XrXirFunctionAdmission function;
+    void *context;
+    uint64_t work, scratch_bytes;
+} XrXirValueAdmission;
+/* Admission consumes work before inspecting a value and never publishes it. */
+XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
+                                           XrXirValueAdmission *admission);
 /* Successful construction takes the binding lease; failures leave it with the caller. */
-XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirType type,
-    const XrXirFunctionBinding *binding, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirTypeArena *arena,
+    XrXirType type, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission,
+    XrXirValue *output);
 XR_FUNC const XrXirFunctionBinding *xr_xir_function_binding(const XrXirValue *value);
-static inline bool xr_xir_type_is_callable(XrXirType type) {
-    return (uint32_t) type >= XR_XIR_CALLABLE_TYPE_BASE && (uint32_t) type < XR_XIR_CALLABLE_TYPE_LIMIT;
-}
-static inline bool xr_xir_type_is_cell(XrXirType type) {
-    return ((uint32_t) type & ~0x1ffffu) == XR_XIR_CELL_TYPE_FLAG;
-}
-static inline XrXirType xr_xir_cell_element(XrXirType type) {
-    return (XrXirType) ((uint32_t) type & ~XR_XIR_CELL_TYPE_FLAG);
-}
-static inline XrXirType xr_xir_cell_type(XrXirType element) {
-    return (XrXirType) (XR_XIR_CELL_TYPE_FLAG | (uint32_t) element);
-}
-static inline bool xr_xir_type_is_owned(XrXirType type) {
-    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || xr_xir_type_is_callable(type) || xr_xir_type_is_cell(type);
-}
-XR_FUNC XrXirValueStatus xr_xir_cell_new(XrXirDomain *domain, const XrXirValue *initial, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_cell_new(XrXirDomain *domain, XrXirTypeArena *arena,
+    XrXirType type, const XrXirValue *initial, XrXirValueAdmission *admission,
+    XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_cell_read(const XrXirValue *cell, XrXirValue *output);
-XR_FUNC XrXirValueStatus xr_xir_cell_write(const XrXirValue *cell, const XrXirValue *value);
+XR_FUNC XrXirValueStatus xr_xir_cell_write(const XrXirValue *cell, const XrXirValue *value,
+                                         XrXirValueAdmission *admission);
 XR_FUNC bool xr_xir_cell_in_domain(const XrXirValue *cell, XrXirDomain *domain);
 #endif // XXIR_VALUE_H

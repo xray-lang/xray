@@ -12,6 +12,7 @@
 #ifndef XIR_INTEGER_EXECUTION_CASES_H
 #define XIR_INTEGER_EXECUTION_CASES_H
 #include "xir/xxir.h"
+#include "xir/xxir_type_arena.h"
 #include "xir/xxir_output.h"
 
 typedef struct IntegerExecutionCase {
@@ -53,19 +54,27 @@ static void integer_value_boundaries(void) {
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     for (unsigned i = 0; i < 8; ++i) {
         XrXirType type = (XrXirType) values[i].type;
+        XrXirTypeNode node = {XR_XIR_TYPE_CELL,type,NULL,0,XR_XIR_UNIT,0,0};
+        XrXirTypes types = {&node,1};
+        XrXirBudget budget = {.parameters = 16, .metadata_bytes = 4096, .work = 64};
+        XrXirTypeArena *arena = NULL;
+        CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena) == XR_XIR_VALUE_OK);
+        XrXirValueAdmission admission = {arena,domain,NULL,NULL,16,0};
         XrXirValue copy = {0}, cell = {0}, read = {0};
         CHECK(xr_xir_value_copy(&values[i], &copy) == XR_XIR_VALUE_OK);
         CHECK(copy.type == values[i].type && copy.payload == values[i].payload);
-        CHECK(xr_xir_cell_new(domain, &copy, &cell) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_cell_new(domain,arena,(XrXirType)256,&copy,&admission,&cell) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_value_argument(&cell,arena,(XrXirType)256));
         CHECK(xr_xir_cell_read(&cell, &read) == XR_XIR_VALUE_OK && read.payload == copy.payload);
         CHECK(read.type == (uint32_t) type);
         copy.type = XR_XIR_BOOL;
-        CHECK(xr_xir_cell_write(&cell, &copy) == XR_XIR_VALUE_BAD_ARGUMENT);
+        CHECK(xr_xir_cell_write(&cell,&copy,&admission) == XR_XIR_VALUE_BAD_ARGUMENT);
         copy.type = (uint32_t) type; copy.payload = 0;
-        CHECK(xr_xir_cell_write(&cell, &copy) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_cell_write(&cell,&copy,&admission) == XR_XIR_VALUE_OK);
         CHECK(read.payload == values[i].payload);
         xr_xir_value_drop(&copy); xr_xir_value_drop(&read); xr_xir_value_drop(&cell);
         CHECK(!copy.type && !read.type && !cell.type);
+        xr_xir_type_arena_drop(arena);
         CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
     }
     xr_xir_domain_drop(domain);
@@ -78,7 +87,7 @@ static void integer_execution_cases(FixtureRun run, void *owner) {
         CHECK(run(owner, row->function, &context, arguments, row->count, &result) == XR_XIR_RUN_OK);
         CHECK(result.type == (uint32_t) row->result && !result.reserved && result.payload == row->expected);
         CHECK(!context.steps && !context.live_bytes && context.allocations == 1 && context.frees == 1);
-        CHECK(xr_xir_value_argument(&result, row->result));
+        CHECK(xr_xir_value_argument(&result, NULL, row->result));
         if (row->operation == XR_XIR_DIV_INT || row->operation == XR_XIR_REM_INT) {
             arguments[1].payload = 0; context = (XrXirRunContext) {2, 24, 0, 0, 0, 0};
             CHECK(run(owner, row->function, &context, arguments, 2, &result) == XR_XIR_RUN_DIVIDE_BY_ZERO);

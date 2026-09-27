@@ -4,8 +4,8 @@
   "sections": [
     {
       "heading_level": 2,
-      "heading": "Golden rule",
-      "markdown": "If it compiles, it is concurrency-safe."
+      "heading": "Sharing contract and qualification",
+      "markdown": "The settled target contract requires Sendable arguments and captures at go boundaries and forbids every ordinary outer var capture, including reads. Const, COW, and atomic reference counts alone do not prove Sendable. These are language contracts, not evidence that the complete go, Task, resource, or synchronization families are implemented in new XIR; qualification follows spec §17."
     },
     {
       "heading_level": 2,
@@ -24,11 +24,10 @@
     },
     {
       "heading_level": 2,
-      "heading": "Deep-copy and explicit move",
+      "heading": "Value arguments and declared consumption",
+      "markdown": "Copyable, Sendable values pass as logical copies; ordinary Array arguments do not require copy(array), explicit move, or unique backing. Copying stops at class and synchronization identities. Only noncopyable resources use consuming parameter declarations; an explicit move marker may identify that transfer. Complete go admission remains a separate obligation.",
       "fences": [
-        "coro-go-forms",
-        "coro-move-argument",
-        "coro-move-transfer"
+        "coro-go-forms"
       ]
     },
     {

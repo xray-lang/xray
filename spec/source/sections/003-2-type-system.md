@@ -8,7 +8,7 @@ order: 003
 
 ## 2. 类型系统 (Type System)
 
-> 真值源：`src/runtime/value/xtype.h`（XrType 定义）、`src/runtime/value/xtype.c`、`src/frontend/parser/xparse_type.c`（语法）、`src/frontend/analyzer/xtype_ref_resolve.c`（解析）、`stdlib/prelude/builtin_symbols.def`（内置类型表）。
+> 类型语法与内置身份锚点：`src/frontend/parser/xparse_type.c`、`stdlib/prelude/builtin_symbols.def`。本章定义语言合同；既有运行时或 analyzer 的表示不是值语义合法性的来源。当前新 XIR 实现资格见 §17。
 
 ### 2.1 概述
 
@@ -30,7 +30,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确浮点 | `f32`、`f64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
-| 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
+| 借用视图 | `Slice<T>` / `MutSlice<T>`（共享只读 / 独占可写，不拥有元素，见 §2.4.2） |
 | Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`NetConn`、`NetListener`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
@@ -42,6 +42,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
+
+内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
 
 <!-- xr-builtin-registry:begin -->
 
@@ -266,23 +268,28 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-有序可变数组。详见 §14.7。
+`Array<T>` 是有序、可增长的值类型。赋值、保存参数和返回值保留独立的逻辑副本；实现可以共享元素存储，但经一个可写绑定修改或追加元素不得改变其他逻辑副本。复制沿值语义部分递归，在 class 或同步身份处只复制引用，不复制或冻结所引用的对象。方法见 §14.7，所有权规则见 §2.14。
 
 ```xray @id=types-array
 var a: Array<i64> = [1, 2, 3]
-var b = [1, 2, 3]                // 推断为 Array<i64>
+var b = a                        // b 是逻辑副本
+b[0] = 9                         // a[0] 仍为 1
 var c: Array<string> = []         // 显式空数组
 ```
 
-`Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
+`T` 必须在编译期确定，且可复制、可保存；借用视图和不可复制资源不能作为普通 Array 元素。空 `[]` 需要类型上下文，无上下文时是编译错误：`Empty array '[]' requires a type annotation`。非 nullable Array 必须显式初始化，不从未初始化存储推定为空数组。
 
-`Array<rune>` 保留 `rune` 元素身份：读出时得到 `rune`，写入时只接受 `rune`。
+读出元素产生类型为 `T` 的逻辑副本；写入按 `T` 检查，只采用该类型已允许的赋值转换。`Array<T>` 不变：元素可转换不意味着整个数组可隐式转换，例如 `Array<i8>` 不能整体隐式转换为 `Array<i64>`。`Array<rune>` 保留 `rune` 身份，读写均按 `rune` 检查。
+
+容器本身只要求存储所需能力，不要求所有 `T` 都可比较、排序、哈希或字符串化。条件方法的约束必须由相应声明明确给出；具体实例恰好提供某成员不能补足普通泛型定义处的约束。
+
+本节规定语言合同，不表示所有 Array 方法、聚合元素或借用视图已获新 XIR 源入口准入；当前实现资格见 §17。未准入的声明族必须明确拒绝。
 
 #### 2.4.1.1 定长数组 `[T; N]`
 
 `[T; N]` 是定长布局数组类型，表示 `N` 个 `T` 元素。`N` 是类型的一部分，必须能在分析期求值为正的编译期整数表达式；当前支持整数字面量、`const` 整数标识符、括号、一元 `-`/`~`，以及整数算术/位运算。当前后端编码上限为 65535 个元素。
 
-定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和引用容器等元素类型，因此可以递归组合：
+定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和拥有式容器等元素类型，因此可以递归组合：
 
 ```xray
 var bytes: [u8; 4] = [1, 2, 3, 4]
@@ -293,11 +300,11 @@ var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
 
-定长数组支持 `len(array)`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
+定长数组支持 `len(array)`、索引读取、可写 place 上的索引写入和 `ref` 参数传递。借用视图按 §2.4.2 区分共享 `Slice<T>` 与独占 `MutSlice<T>`：
 
 ```xray
 var data: [u8; 4] = [5, 6, 7, 8]
-var view: Slice<u8> = data[1:4]
+var view: MutSlice<u8> = data[1:4]
 view[1] = 99
 ```
 
@@ -318,58 +325,36 @@ fn first(packet: Packet) -> u8 {
 `[T; N]` 与 `Array<T>` 语义不同：
 
 - `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
-- `Array<T>`：动态长度、可增长、堆上容器。
-- `Slice<T>`：借用连续存储的视图，不拥有数据（见 §2.4.2）。
+- `Array<T>`：动态长度、可增长的值类型；元素存储可在堆上共享并按需分离。
+- `Slice<T>` / `MutSlice<T>`：借用连续存储的共享 / 独占视图，不拥有元素（见 §2.4.2）。
 
 旧的 `[N]T` 语法不属于 Xray 语言。
 
-#### 2.4.2 `Slice<T>`
+#### 2.4.2 `Slice<T>` / `MutSlice<T>`
 
-> 真值源：`stdlib/prelude/builtin_symbols.def`（prelude 内置符号注册）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（借用跟踪与失效检查）、`src/frontend/analyzer/xa_memory_effect_db.h`（失效判据）、`src/frontend/analyzer/xanalyzer_visitor_decl.c`（返回视图契约）。
+`Slice<T>` 是共享只读借用，`MutSlice<T>` 是独占可写借用。它们描述另一个值拥有的连续元素存储，自身不拥有元素；借用始终依附可证明的 owner 和访问权限。以下规则定义视图合同，不表示新 XIR 源入口已经支持视图声明族；其完整准入与验证见 §17。
 
-`Slice<T>` 是**借用视图**：它描述另一个值所拥有的一段连续元素存储，自身不拥有数据、不参与引用计数、不可放入任何长生命周期存储。它是 prelude 类型（`GENERIC_1`），可以在任何类型注解里直接写出。
+##### 构造与访问
 
-##### 构造
+切片使用显式目标视图类型。`array[start:end]` 或 `fixedArray[start:end]` 可形成共享视图；形成 `MutSlice<T>` 还要求 owner 是独占可写 place，并在视图产生前完成必要的 COW 分离。字符串字节视图 `str.bytes()` 是 `Slice<u8>`，不能用于修改字符串。
 
-视图只能由以下三种来源产生，且**必须有显式目标类型**——没有目标类型时切片表达式是编译错误：
+`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；不得用尚未冻结的 type-position `const T` 重新定义可写视图。
 
-| 来源 | 结果 | 说明 |
-|--|--|--|
-| `array[start:end]` | `Slice<T>` | owner 是 `Array<T>` |
-| `fixedArray[start:end]` | `Slice<T>` | owner 是 `[T; N]` |
-| `str.bytes()` | `Slice<u8>` | owner 是 `string` 的 UTF-8 字节存储 |
+owner 必须是可证明存活的具名局部 place、参数或 receiver 字段路径，不能借用临时值。嵌套投影保护所属根及必要路径。class 字段借用须保活对象并动态检查独占；只有局部无冲突证明才可省去动态检查。
 
-```xray
-var arr: Array<i64> = [10, 20, 30, 40]
-var view: Slice<i64> = arr[1:3]      // OK：借用 arr
-var all: Slice<i64> = arr[:]         // 全长视图，不是拷贝
-var bad = arr[1:3]                   // E0365：切片结果需要显式目标类型
-```
-
-owner 必须是**具名的局部变量、参数或 receiver 上的字段路径**。不能借用临时值：
-
-```xray
-var view: Slice<u8> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
-```
-
-##### 能力
-
-- `len(view)` 取长度；`view[i]` 读元素；`view[i] = v` 写元素，**直接写入 owner 的存储**。
-- `view[a:b]` 可以再切片，结果仍借用同一个 owner。
-- 视图**没有成员方法**，也没有 `.length`。
-- `const Slice<T>` 与 `const` owner 派生出的视图是只读的，写入是编译错误。
+`MutSlice<T>` 赋值转移借用，普通调用暂时重借用。`MutSlice<T>` 到 `Slice<T>` 是共享重借用；派生的只读视图存活期间，原可写视图不能写入。子切片也必须遵守同一借用权限。
 
 ```xray @id=types-slice
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
-    var view: Slice<i64> = arr[1:3]        // 借用视图，不是拷贝
-    view[1] = 31
-    print(arr[2])                          // 31 —— 写穿到 owner
-    arr[1] = 21
-    print(view[0])                         // 21 —— owner 的元素写入对视图立即可见
-    var owned: Array<i64> = copy(arr[1:3]) // 独立的 Array<T>
-    arr.push(50)                           // OK：此处没有存活的视图
-    print(len(owned))
+    var view: Slice<i64> = arr[1:3]
+    print(view[0])                         // 20；view 的最后一次使用
+    var writable: MutSlice<i64> = arr[1:3]
+    writable[1] = 31                       // writable 的最后一次使用
+    print(arr[2])                          // 31
+    var owned: Array<i64> = copy(arr[1:3]) // 物化拥有式副本
+    arr.push(50)                           // 没有存活借用
+    print(len(owned))                      // 2
 }
 
 main()
@@ -377,66 +362,45 @@ main()
 
 ##### 借用规则
 
-设视图 `v` 借用 owner `o`。在 `v` 的**存活期**内：
+设视图 `v` 借用 owner `o`。借用存活期按最后一次使用而非词法块末尾判定：
 
-1. **元素写允许**：`o[i] = x` 合法。元素写不改变 `o` 的存储地址，视图仍然有效。
-2. **失效操作拒绝**（`E0382`）：任何可能使 `o` 的元素存储重新定位、缩短或整体失效的操作都被拒绝。判据不是方法名白名单，而是被调用函数的 memory effect：地址稳定性（`ADDRESS_STABLE` / `MAY_RELOCATE`）、长度收缩（`NEVER_SHORTENS` / `MAY_SHORTEN`）、视图失效（`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`）。`o.push(x)`、重新给 `o` 赋值、`move o`、`freeze o`、`return o` 都属于此类。
-3. **存活期按最后一次使用判定**（非词法生命周期）：借用在 `v` 的最后一次使用处结束，而不是在词法块末尾。因此紧随其后的 owner 变更是合法的。
-4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/structural object 字段、Array / Map / Set / tuple / JSON.Value / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
+1. `Slice<T>` 存活期间不得修改 `o`，包括元素写入；不能因为一次写入可能不改变物理地址就放行。
+2. `MutSlice<T>` 存活期间不得经 owner 或其他路径读取、写入或复制 `o`。只有当前独占视图及合法重借用可访问该存储。
+3. 重新绑定、销毁、消费或其他使借用失效的操作被拒绝（`E0382`）。操作效应必须反映 COW 分离与重定位；不得把 Array 元素替换一概标为地址稳定。
+4. 视图仅可用于局部、参数、返回及 tuple / Optional 包装；包装继承全部借用限制。视图不得进入普通集合、用户聚合、模块存储或 `go` 等跨执行边界，不得借 `as` 擦除限制（`E0383`）。
+5. 被普通闭包以共享 cell 捕获的变量不能产生视图。捕获视图的闭包可以立即调用；跨参数传递要求显式、已冻结的借用调用合同，保证不保存、不返回且调用结束前完成。被调方实现推断不能代替该公开合同，也不因闭包字面量写在实参位置就认定不逃逸。
+6. 普通调用中的借用可以跨挂起，但须始终保活 owner 并维持访问权限。帧地址稳定不能代替这些证明；生成器首版不得保存借用参数。
 
 ```xray
-fn ok() {
-    var bytes: Array<u8> = [1, 2]
-    var view: Slice<u8> = bytes[:]
-    print(len(view))                 // view 的最后一次使用
-    bytes.push(3)                    // OK：借用已结束（规则 3）
-}
-
 fn rejected() {
     var bytes: Array<u8> = [1, 2]
     var view: Slice<u8> = bytes[:]
-    bytes.push(3)                    // E0382：view 仍存活
-    print(len(view))
+    bytes[0] = 3                    // E0382：共享借用仍存活
+    print(view[0])
 }
 ```
 
-##### 跨函数：返回视图契约
+##### 跨函数：返回来源合同
 
-函数可以返回 `Slice<T>`，**当且仅当**返回的视图有**唯一可推断的来源**：某一个参数、receiver，或静态存储。编译器为这样的函数记录一份返回视图契约（来源 + 参数下标），调用点据此把结果继续记在原 owner 的账上，借用规则在调用者一侧照常生效。
+返回视图的来源首版只由签名确定：整个签名必须恰有一个视图输入或 `ref` 输入候选；`ref` receiver 也计入候选。零候选或多个候选均拒绝（`E0384`），即使函数体始终返回某一个参数；不得从函数体或静态存储特例推导跨模块来源。返回局部值的视图同样非法。
 
-来源不唯一、或借自函数的局部值时，是编译错误 `E0384`：
+tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验证可写性；可写返回不能来自只读候选。返回两个 `MutSlice` 还要求显式的不重叠构造合同，普通用户函数不能只凭下标算式建立该保证。
 
 ```xray
 fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
-    return data[start:]              // OK：唯一来源是参数 data
+    return data[start:]              // 唯一候选为 data
 }
 
-fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
-    if (useA) {
-        return a
-    }
-    return b                         // E0384：多来源
-}
-
-fn alsoBad() -> Slice<i64> {
-    var local: Array<i64> = [1, 2]
-    return local[:]                  // E0384：借自局部值
+fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
+    return a                        // E0384：签名中有两个候选
 }
 ```
 
-##### 逃生口：`copy`
+##### 物化拥有式副本
 
-需要让数据活过 owner，或需要把它放进长生命周期存储时，用 `copy` 把视图物化为独立的 owner：
+`copy(view)` 将借用数据物化为 `Array<T>`，其元素遵循 §2.14 的逻辑复制与身份边界；class 元素仍引用同一个对象。结果不再借用原 owner。此用途不裁决 `copy(array)` 的公开拼写，也不使其成为普通 Array 赋值的前置条件。
 
-```xray
-var owned: Array<i64> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
-```
-
-`copy(slice)` 的结果类型是 `Array<T>`，不是 `Slice<T>`；它是唯一能把借用数据变成拥有数据的构造。
-
-##### 与其他借用形式的关系
-
-`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 共用同一套借用跟踪与同一组错误码：`E0382`（owner 在借用存活期内失效）、`E0383`（借用逃逸）、`E0384`（借用来源不稳定或不唯一）。`unsafe` 块不放宽其中任何一条。
+`ref` 参数和 `Ptr<T>` / `MutPtr<T>` 同样必须满足来源、权限、存活与不逃逸要求。相关诊断为 `E0382`（存活借用冲突）、`E0383`（借用逃逸）、`E0384`（来源不稳定或不唯一）；`unsafe` 不放宽这些要求。
 
 #### 2.4.3 `Map<K, V>`
 
@@ -936,7 +900,7 @@ fn drain(first: string?) {
 
 1. **赋值** / 复合赋值 / `++` / `--`：绑定的静态类型重置为被赋值表达式的静态类型；
 2. 作为 `ref` 实参传出：重置为声明类型；
-3. `move x` 之后：绑定不可用（见 §10）；
+3. 成功消费 `x` 之后：绑定不可用（见 §2.14.5）；
 4. **在任意闭包体内被赋值**的绑定：在整个函数体内不可收窄（闭包何时运行不可知）。该规则与闭包在源码中的位置无关——写在收窄点之后同样生效。诊断会指出该原因，修法是改用不被写入的新绑定；
 5. 普通函数调用**不**使收窄失效——N-1 / N-2 保证可收窄主体不可能被被调用方改写。
 
@@ -961,130 +925,68 @@ fn f(a: string?) {
 - `x!`：静态去掉 `null`；运行期若为 `null` 则 panic（`NullError`），**不是未定义行为**；
 - `x ?? d`：结果类型为 `x` 去 `null` 后与 `d` 的并集；
 - `x?.f`：可选链，**整链短路**——链上任意一段为 `null` 时整个后缀链求值为 `null`，结果类型为可空（见 §3.6）。
-### 2.14 所有权、别名与借用
+### 2.14 值、身份与借用
 
-> 真值源：`src/frontend/analyzer/xa_ownership.h`（证据轴与判定结构）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（`move` 判定）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（别名与借用跟踪）、`src/ir/xi_source_move_verify.c`（Xi 层独立复核）。
+本节定义声明类型、参数模式及函数内数据流共同决定的语言合同。存储布局、引用计数和 COW 是实现机制，不能反向改变源程序合法性。Built→Checked 检查这些规则；特化在 Checked 上完成并复验，Lowered 才选择具体复制、分离和释放操作。完整声明族的实现资格见 §17，规格冻结不等于实现完成。
 
-Xray 不要求写生命周期，也不提供借用检查器语法。但**所有权是有定义的**：`move`、`copy`、`ref`、`Slice<T>`、跨协程传递都读同一套判定，本节把它写出来。
+#### 2.14.1 逻辑值与身份边界
 
-#### 2.14.1 所有权根
+Array / Map / Set / string、可复制 struct、enum、tuple 和匿名记录按值复制。复制获得独立的逻辑值；实现允许共享不可变存储或采用 COW，但经一个副本修改值语义部分不得污染其他副本。调用返回的 Array 也遵守同一合同，不要求调用方分析被调方函数体以证明其存储唯一。
 
-**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map`（含 `JSON.Object`）/ `Set` / `JSON.Value` 的复合 arm / `structural object` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
+class 实例和同步对象具有身份。复制其引用仍指向同一个对象；递归复制聚合时在这个身份边界停止。因而复制含 class 元素的 Array 不复制 class 对象，修改对象状态可经其他引用观察到；替换某个 Array 元素则仅影响该数组的逻辑值。
 
-只有拥有根的绑定才谈得上所有权转移。对没有根的值写 `move` 是编译错误（`E0391`：`move is not meaningful for value type`）。
+`const` 固定绑定及其值语义部分，不冻结整个可达图。`const xs = [Counter()]` 禁止经 `xs` 改写或追加数组元素，但不冻结 Counter 的身份状态；对象方法与同步 API 仍受各自合同控制。是否能跨执行共享由完整类型的 Sendable 性质决定，不能由 `const` 或底层原子引用计数推导。
 
-#### 2.14.2 四条独立证据轴
+#### 2.14.2 初始化、权限与借用事实
 
-每个绑定在每个程序点上带四条**互相独立**的证据，合法的所有权操作要求四条同时成立：
+每个程序点都必须分别证明：
 
-| 轴 | 回答的问题 | 取值 |
-|--|--|--|
-| **绑定状态** | 这个名字现在能用吗 | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
-| **根别名** | 还有别的引用指向同一个根吗 | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
-| **能力** | 允许做什么 | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
-| **借用** | 有存活的借出吗 | 一组 loan：Slice 视图 / 裸指针借用 / 闭包捕获 |
-
-分成四条是有意的：绑定状态是控制流事实，别名是对象图事实，能力是权限，借用是有起止的 place 事实。它们不能互相推导，也不能互相替代。
-
-**默认 fail-closed**：任何一轴无法给出肯定证据时，答案是拒绝，不是放行。这也是为什么一个来源不明的调用结果不能被 `move`——编译器没有它的别名证据。
-
-#### 2.14.3 别名如何产生与终止
-
-| 动作 | 对根别名的影响 | 能否恢复 |
-|--|--|--|
-| `var b = a` | `LOCAL_ALIASED` | 能。`b` 最后一次使用后，根重新是 `UNIQUE` |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
-| 来源不明的调用结果 | `ALIAS_UNKNOWN` | 不能 |
-| `copy(a)` | 不影响 `a`；结果是新的 `UNIQUE` 根 | — |
-| `move a` | `a` 变为 `MOVED`；根随之转移 | — |
-
-**存活期按最后一次使用判定**（非词法生命周期），与 §2.4.2 的借用规则一致。因此下面第一段合法、第二段不合法：
-
-```xray
-fn ok() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    print(len(alias))          // alias 的最后一次使用
-    consume(move buf)          // OK：别名已结束
-}
-
-fn rejected() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    consume(move buf)          // E0391：strong alias 'alias' remains live
-    print(len(alias))
-}
-```
-
-`ESCAPED` 是终态，这一点是刻意的：把引用写进堆图之后，谁还持有它已经不是这个函数能回答的问题。需要转移时用 `copy(a)`。
-
-#### 2.14.4 借用如何产生与终止
-
-三种借用形式共用同一份 loan 记录、同一套非词法存活期判定、同一组错误码（`E0382` / `E0383` / `E0384`）：
-
-| 形式 | 借出者 | 存活期 |
-|--|--|--|
-| `Slice<T>` 视图 | 视图绑定 | 到视图绑定的最后一次使用 |
-| `Ptr<T>` / `MutPtr<T>` | 指针绑定 | 到指针绑定的最后一次使用 |
-| **闭包捕获** | 闭包绑定 | 到闭包绑定的最后一次使用 |
-
-普通同步闭包对外层可变 `var` **按共享cell引用捕获**，因此这类捕获形成借用；`const`与可复制非视图的普通read参数按值捕获，不形成该借用：
-
-```xray
-fn rejected() {
-    var buf = [1, 2, 3]
-    const peek = fn() -> i64 { return len(buf) }
-    go consume(move buf)       // E0382：closure capture 'peek' is active
-    print(peek())
-}
-```
-
-只作为**调用实参**出现的闭包字面量通常不产生存活借用——它随调用结束，不可能活过调用：
-
-```xray
-fn ok() {
-    var buf: Array<i64> = []
-    items.forEach(fn(x: i64) { buf.push(x) })   // 调用边界内的捕获
-    consume(move buf)                            // OK
-}
-```
-
-例外是被调方**保留或逃逸**该形参时——此时闭包活过调用，它按引用捕获的根随之逃逸（`OWN-E-ESCAPED-ROOT`）。判据是被调方的形参效应摘要，不是语法形状。
-
-存活的借用禁止对 owner 做失效操作，`move` 是其中一种（`E0382`）。
-
-#### 2.14.5 `move` 的完整条件
-
-`move x` 要求 `x` 是**可重绑定的局部 `var` 根**，且：
-
-1. 绑定状态是 `LIVE`（不是已 moved、可能已 moved 或未知）；
-2. 根别名是 `UNIQUE`；
-3. 能力是 `MUTABLE`（`const` 与同步句柄不可 move）；
-4. 没有存活的 loan；
-5. 存储计划完整（编译器已为这个根解出分配域）；
-6. 不在会重复执行的循环里消费循环外声明的绑定。
-
-`move` 只接受**标识符**：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。字段与元素没有独立的所有权根——它们的根是容器本身，转移其中一格会让容器处于部分转移状态，这个状态没有表示。需要取出一格时，先 `copy`，或让容器本身成为 move 源。
-
-move 成功后源绑定在编译期标记为已 moved，再次引用是编译错误。**被拒绝的 move 不污染源状态**：诊断之后 `x` 仍然可用。
-
-拒绝原因在诊断里具名，便于定位是哪一轴失败：
-
-| 原因 | 含义 |
+| 事实 | 必须证明的条件 |
 |--|--|
-| `OWN-E-LIVE-ALIAS` | 存在存活的局部强别名 |
-| `OWN-E-ESCAPED-ROOT` | 根已写入堆图 |
-| `OWN-E-UNKNOWN-CALL` | 唯一性证据不完整（来源不明的调用结果） |
-| `OWN-E-STORAGE-PLAN` | 存储/所有权计划不完整 |
-| `OWN-E-LIVE-LOAN` | 存在存活借用（Slice 视图 / 裸指针 / 闭包捕获） |
+| 初始化和消费状态 | 读取前已完整初始化；需要持有权的操作不得使用已消费或可能已消费的值 |
+| place 权限 | 写入目标可写；只读参数和 `const` 的值语义部分不能直接写入 |
+| 值与声明合同 | 类型、复制或消费能力、参数模式、保存与返回权限符合声明 |
+| 活动借用 | 访问不与仍存活的共享或独占借用冲突，借用来源和存活期有效 |
 
-#### 2.14.6 值拷贝与 managed 字段
+初始化与消费状态是控制流事实，权限来自绑定和声明，借用保护具体 place 及必要路径；这些证明不能互相代替。缺少真实所需证明必须拒绝，但 Array backing 是否唯一不是普通赋值、保存副本、返回或修改的语言准入条件。非 nullable Array 仍须显式初始化（§5.1.1）。
 
-值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `JSON.Value` / class 实例**不能**作为 struct 字段（`E0352`）。
+#### 2.14.3 普通复制与存储共享
 
-因此不存在「struct 值拷贝携带可变 managed 字段」的情形，也就不需要在浅拷贝与深拷贝之间做选择。唯一的 managed 字段是 `string`，而 `string` 不可变：共享它不产生任何可观察差异，唯一性判定也不受影响。
+`var b = a`、保存只读参数、返回 Array，以及把可复制 Array 存入另一个合法容器或聚合，均保留逻辑副本，不建立对源数组可变存储的语言级别名。它们不会把源绑定标为永久 `ESCAPED`，也不要求其他副本先结束存活期才能修改源值。底层存储的唯一性只可用于省略分离或复制的优化。
 
-需要在聚合里放可变图时用 class——class 是引用类型，赋值创建的是别名，按 §2.14.3 的规则处理。
+```xray
+var a = [1, 2, 3]
+var b = a
+const snapshot = a
+b[0] = 9
+a.push(a[0])                 // 先求值实参，再建立 ref receiver 的独占访问
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+print(b[0])                 // 9
+print(len(a))               // 4
+```
+
+复制必须取得可独立释放的结果责任；失败不得发布部分初始化的结果。自赋值、读取自身元素后写回或追加均须维持这一责任，不能因物理共享造成重复释放或使用已释放存储。求值顺序遵循 §3.0 E2/E5；复制或自动移动优化不能改变既定错误、析构或外部副作用顺序。
+
+#### 2.14.4 place 借用与捕获
+
+`ref` 是独占可写 place 借用。调用先按 E2 求值 receiver 和全部实参，再在进入被调方前建立借用；存活期间不得通过其他路径冲突访问借出的 place。赋值仍按 E5 求值位置子表达式、索引、右值，再存储，不因 COW 实现更改顺序。
+
+`Slice` 共享借用与 `MutSlice` 独占借用遵循 §2.4.2；class 字段借用还须保活对象并检查动态独占。底层 backing 共享不能成为取消这些检查的理由。反过来，普通 Array 逻辑副本不因共享 backing 自动成为借用。
+
+普通闭包的外层 `var` 捕获共享 cell，`const` 与可复制非视图的普通 READ 参数按值捕获。共享 cell 的身份不能伪装成不可逃逸的临时 loan；其存储和释放责任必须显式保留。被共享 cell 捕获的变量不能产生视图。视图捕获与借用回调的准入遵循 §2.4.2 的显式合同，不能从被调方实现或实参语法形状猜测。
+
+#### 2.14.5 消费与尚未准入的表面
+
+不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
+
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，以及 type-position `const T` 的身份和转换，均不在本已冻结子集内，须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+
+#### 2.14.6 struct 字段的复制与初始化
+
+可复制 struct 按字段的声明类型复制：Array / Map / Set 等容器字段保留逻辑副本，string 保持不可变值语义，class 和同步字段只复制身份引用。不得仅因字段是 Array、其他拥有式容器或 class 引用而拒绝该 struct；也不能把带 class 字段的 struct 描述成整个可达图都独立。
+
+字段仍须满足普通存储、初始化和可复制性要求。视图不能进入普通用户聚合；不可复制字段或载荷要求所属 struct / enum 也不可复制，其声明族另行准入。含非 nullable Array 的字段不能无条件零初始化，默认构造须满足 §5 的字段规则。
 
 ### 2.15 完整可运行示例
 
@@ -1147,7 +1049,7 @@ main()
 
 ## 2. Type System
 
-> Source of truth: `src/runtime/value/xtype.h` (`XrType` definition), `src/runtime/value/xtype.c`, `src/frontend/parser/xparse_type.c` (syntax), `src/frontend/analyzer/xtype_ref_resolve.c` (resolution), `stdlib/prelude/builtin_symbols.def` (built-in type table).
+> Type-syntax and built-in identity anchors: `src/frontend/parser/xparse_type.c` and `stdlib/prelude/builtin_symbols.def`. This chapter defines language contracts; existing runtime or analyzer representations do not determine value-semantic legality. See §17 for current new XIR implementation qualification.
 
 ### 2.1 Overview
 
@@ -1169,7 +1071,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized floats | `f32`, `f64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<u8>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
-| Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
+| Borrowed view | `Slice<T>` / `MutSlice<T>` (shared read-only / exclusive writable; no element ownership, see §2.4.2) |
 | Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, and the `Os*` synchronization types |
 | Module-exported types | `DateTime`, `Logger`, `NetConn`, `NetListener`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
@@ -1181,6 +1083,8 @@ Xray is statically typed; every expression has a determined type at compile time
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
+
+The built-in registry is an implementation projection, not the new XIR declaration-family admission list. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
 
 <!-- xr-builtin-registry:begin -->
 
@@ -1405,23 +1309,28 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-Ordered mutable array. See §14.7.
+`Array<T>` is an ordered, growable value type. Assignment, saving a parameter, and returning a value preserve distinct logical copies. Implementations may share element storage, but mutation or append through one writable binding must not change other logical copies. Copying follows value-semantic components and copies only references at class or synchronized identity boundaries; it neither copies nor freezes the referenced objects. See §14.7 for methods and §2.14 for ownership.
 
 ```xray @id=types-array
 var a: Array<i64> = [1, 2, 3]
-var b = [1, 2, 3]                // inferred as Array<i64>
+var b = a                        // b is a logical copy
+b[0] = 9                         // a[0] is still 1
 var c: Array<string> = []         // explicit empty array
 ```
 
-The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
+`T` must be determined at compile time and must be copyable and storable. Borrowed views and noncopyable resources cannot be ordinary Array elements. An empty `[]` requires a type context; without one it is a compile error: `Empty array '[]' requires a type annotation`. A non-nullable Array requires explicit initialization; uninitialized storage is not an empty array.
 
-`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`.
+Reading an element produces a logical copy of type `T`. Writes are checked against `T`, using only assignment conversions already allowed for that type. `Array<T>` is invariant: an element conversion does not permit an implicit conversion of the whole array, such as `Array<i8>` to `Array<i64>`. `Array<rune>` preserves `rune` identity for both reads and writes.
+
+The container itself requires only the capabilities needed for storage; it does not require every `T` to support comparison, sorting, hashing, or string conversion. Conditional method requirements must be explicit in the corresponding declaration. Members incidentally present on a concrete instance cannot supply missing constraints at an ordinary generic definition.
+
+This section defines the language contract, not implementation admission for every Array method, aggregate element, or borrowed view in the new XIR source entry. See §17 for current implementation qualification. Unadmitted declaration families must be rejected explicitly.
 
 #### 2.4.1.1 Fixed Arrays `[T; N]`
 
 `[T; N]` is a fixed-layout array type for `N` elements of type `T`. `N` is part of the type and must evaluate during analysis to a positive compile-time integer expression. The current expression subset includes integer literals, `const` integer identifiers, grouping, unary `-`/`~`, and integer arithmetic/bitwise operators. The current backend encoding limit is 65535 elements.
 
-Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and reference-container element types, so fixed arrays compose recursively:
+Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and owned-container element types, so fixed arrays compose recursively:
 
 ```xray
 var bytes: [u8; 4] = [1, 2, 3, 4]
@@ -1432,11 +1341,11 @@ var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
 
-Fixed arrays support `len(array)`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
+Fixed arrays support `len(array)`, indexed reads, indexed writes to writable places, and `ref` parameters. Borrowed views distinguish shared `Slice<T>` from exclusive `MutSlice<T>` as specified in §2.4.2:
 
 ```xray
 var data: [u8; 4] = [5, 6, 7, 8]
-var view: Slice<u8> = data[1:4]
+var view: MutSlice<u8> = data[1:4]
 view[1] = 99
 ```
 
@@ -1457,58 +1366,36 @@ fn first(packet: Packet) -> u8 {
 `[T; N]` has different semantics from `Array<T>`:
 
 - `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
-- `Array<T>`: dynamic length, growable, heap-backed container.
-- `Slice<T>`: borrowed view over contiguous storage; it does not own data (see §2.4.2).
+- `Array<T>`: a growable value type with dynamic length; element storage may be shared on the heap and detached when needed.
+- `Slice<T>` / `MutSlice<T>`: shared / exclusive borrowed views over contiguous storage; they do not own elements (see §2.4.2).
 
 The old `[N]T` syntax is not part of the Xray language.
 
-#### 2.4.2 `Slice<T>`
+#### 2.4.2 `Slice<T>` / `MutSlice<T>`
 
-> Source of truth: `stdlib/prelude/builtin_symbols.def` (prelude built-in symbol registration), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (borrow tracking and invalidation checks), `src/frontend/analyzer/xa_memory_effect_db.h` (invalidation criteria), `src/frontend/analyzer/xanalyzer_visitor_decl.c` (returned-view contract).
+`Slice<T>` is a shared read-only borrow; `MutSlice<T>` is an exclusive writable borrow. They describe contiguous element storage owned by another value and do not own the elements. A borrow remains attached to a proven owner and access permission. These are view contracts, not a claim that the new XIR source entry already admits the view declaration family; see §17 for implementation qualification and validation.
 
-`Slice<T>` is a **borrowed view**: it denotes a run of contiguous element storage owned by another value. It owns no data, does not participate in reference counting, and cannot be placed in any long-lived storage. It is a prelude type (`GENERIC_1`) and may be written directly in any type annotation.
+##### Construction and access
 
-##### Construction
+Slicing uses an explicit target view type. `array[start:end]` and `fixedArray[start:end]` may form shared views. Forming a `MutSlice<T>` additionally requires an exclusively writable owner place and completion of any necessary COW detachment before publishing the view. The string byte view `str.bytes()` is a `Slice<u8>` and cannot mutate the string.
 
-A view can only arise from the three sources below, and it **requires an explicit target type** — a slice expression without one is a compile error:
+`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; the unsettled type-position `const T` spelling must not redefine writable views.
 
-| Source | Result | Notes |
-|--|--|--|
-| `array[start:end]` | `Slice<T>` | the owner is an `Array<T>` |
-| `fixedArray[start:end]` | `Slice<T>` | the owner is a `[T; N]` |
-| `str.bytes()` | `Slice<u8>` | the owner is the string's UTF-8 byte storage |
+An owner must be a named local place, parameter, or receiver field path with a proven lifetime; a temporary cannot be borrowed. Nested projections protect their root and the necessary access path. Borrowing a class field must retain the object and check exclusive access dynamically. A local proof of no conflict may eliminate that dynamic check.
 
-```xray
-var arr: Array<i64> = [10, 20, 30, 40]
-var view: Slice<i64> = arr[1:3]      // OK: borrows arr
-var all: Slice<i64> = arr[:]         // full-length view, not a copy
-var bad = arr[1:3]                   // E0365: a slice result needs an explicit target type
-```
-
-The owner must be a **named local, a parameter, or a field path rooted at one**. Temporaries cannot be borrowed:
-
-```xray
-var view: Slice<u8> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
-```
-
-##### Capabilities
-
-- `len(view)` for the length; `view[i]` reads an element; `view[i] = v` writes one, **straight into the owner's storage**.
-- `view[a:b]` reslices; the result still borrows the same owner.
-- A view has **no member methods** and no `.length`.
-- A `const Slice<T>`, and any view derived from a `const` owner, is read-only; writing through it is a compile error.
+Assignment of a `MutSlice<T>` transfers its borrow; ordinary calls temporarily reborrow it. Conversion from `MutSlice<T>` to `Slice<T>` is a shared reborrow. The original writable view cannot write while the derived read-only view is live. Subslices obey the same borrow permissions.
 
 ```xray @id=types-slice
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
-    var view: Slice<i64> = arr[1:3]        // borrowed view, not a copy
-    view[1] = 31
-    print(arr[2])                          // 31 — the write goes through to the owner
-    arr[1] = 21
-    print(view[0])                         // 21 — element writes on the owner are visible here
-    var owned: Array<i64> = copy(arr[1:3]) // an independent Array<T>
-    arr.push(50)                           // OK: no view is live at this point
-    print(len(owned))
+    var view: Slice<i64> = arr[1:3]
+    print(view[0])                         // 20; last use of view
+    var writable: MutSlice<i64> = arr[1:3]
+    writable[1] = 31                       // last use of writable
+    print(arr[2])                          // 31
+    var owned: Array<i64> = copy(arr[1:3]) // materialize an owned copy
+    arr.push(50)                           // no live borrow
+    print(len(owned))                      // 2
 }
 
 main()
@@ -1516,66 +1403,45 @@ main()
 
 ##### Borrow rules
 
-Let view `v` borrow owner `o`. While `v` is **live**:
+Let view `v` borrow owner `o`. Borrow liveness ends at last use, not at the end of the lexical block:
 
-1. **Element writes are allowed**: `o[i] = x` is legal. An element write does not move the owner's storage, so the view stays valid.
-2. **Invalidating operations are rejected** (`E0382`): any operation that may relocate, shorten, or otherwise invalidate `o`'s element storage. The criterion is not a method-name allowlist but the callee's memory effect: address stability (`ADDRESS_STABLE` / `MAY_RELOCATE`), shortening (`NEVER_SHORTENS` / `MAY_SHORTEN`), and view invalidation (`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`). `o.push(x)`, reassigning `o`, `move o`, `freeze o`, and `return o` all fall in this class.
-3. **Liveness ends at the last use** (non-lexical lifetimes): the borrow ends at `v`'s last use, not at the end of the enclosing block, so an owner mutation placed after that point is legal.
-4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / structural object fields, Array / Map / Set / tuple / JSON.Value / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
+1. While a `Slice<T>` is live, `o` must not be mutated, including element writes. The possibility that a write preserves a physical address does not permit it.
+2. While a `MutSlice<T>` is live, `o` must not be read, written, or copied through the owner or another path. Only the exclusive view and its valid reborrows may access that storage.
+3. Rebinding, destruction, consumption, or other invalidation of a live borrow is rejected (`E0382`). Operation effects must account for COW detachment and relocation; Array element replacement is not unconditionally address-stable.
+4. Views are allowed only in locals, parameters, returns, and tuple / Optional wrappers. Wrappers inherit every borrow restriction. Views cannot enter ordinary collections, user aggregates, module storage, or execution boundaries such as `go`, and `as` cannot erase these restrictions (`E0383`).
+5. A variable captured by an ordinary closure through a shared cell cannot produce a view. A closure capturing a view may be called immediately. Passing it as a parameter requires an explicit, frozen borrowing-call contract that prevents saving or returning it and guarantees completion before the call ends. Inference from the callee body cannot replace that public contract; a closure literal in argument position does not by itself prove no escape.
+6. A borrow in an ordinary call may survive suspension only while the owner remains alive and access permissions hold. Frame address stability is not such a proof. Generators initially must not save borrowed parameters.
 
 ```xray
-fn ok() {
-    var bytes: Array<u8> = [1, 2]
-    var view: Slice<u8> = bytes[:]
-    print(len(view))                 // last use of view
-    bytes.push(3)                    // OK: the borrow already ended (rule 3)
-}
-
 fn rejected() {
     var bytes: Array<u8> = [1, 2]
     var view: Slice<u8> = bytes[:]
-    bytes.push(3)                    // E0382: view is still live
-    print(len(view))
+    bytes[0] = 3                    // E0382: shared borrow is still live
+    print(view[0])
 }
 ```
 
-##### Across functions: the returned-view contract
+##### Across functions: return-source contracts
 
-A function may return `Slice<T>` **if and only if** the returned view has a **uniquely inferable source**: one specific parameter, the receiver, or static storage. The compiler records a returned-view contract (source kind plus parameter index) for such a function; the call site charges the result back to the original owner, so the borrow rules keep applying on the caller's side.
+The initial return-source rule uses the signature alone: the entire signature must contain exactly one view input or `ref` input candidate. A `ref` receiver counts as a candidate. Zero or multiple candidates are rejected (`E0384`), even if the body always returns one particular parameter. Neither body inference nor a static-storage exception supplies a cross-module source contract. Returning a view of a local value is also invalid.
 
-A non-unique source, or a view borrowed from one of the function's own locals, is a compile error (`E0384`):
+Each returned view inside a tuple / Optional attaches to that unique candidate and is checked separately for write permission. A writable result cannot originate from a read-only candidate. Returning two `MutSlice` values additionally requires an explicit non-overlapping construction contract; ordinary user functions cannot establish it merely from index arithmetic.
 
 ```xray
 fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
-    return data[start:]              // OK: the unique source is the parameter data
+    return data[start:]              // data is the unique candidate
 }
 
-fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
-    if (useA) {
-        return a
-    }
-    return b                         // E0384: multiple sources
-}
-
-fn alsoBad() -> Slice<i64> {
-    var local: Array<i64> = [1, 2]
-    return local[:]                  // E0384: borrowed from a local
+fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
+    return a                        // E0384: two signature candidates
 }
 ```
 
-##### The escape hatch: `copy`
+##### Materializing an owned copy
 
-When the data must outlive the owner, or must go into long-lived storage, use `copy` to materialize the view into an independent owner:
+`copy(view)` materializes borrowed data as an `Array<T>` whose elements follow the logical-copy and identity-boundary rules in §2.14. Class elements still reference the same objects. The result no longer borrows the original owner. This use does not decide the public `copy(array)` spelling and does not make it a prerequisite for ordinary Array assignment.
 
-```xray
-var owned: Array<i64> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
-```
-
-`copy(slice)` has result type `Array<T>`, not `Slice<T>`; it is the only construct that turns borrowed data into owned data.
-
-##### Relationship to other borrows
-
-`ref` parameters and `Ptr<T>` / `MutPtr<T>` share the same borrow tracking and the same error codes: `E0382` (owner invalidated while a borrow is live), `E0383` (borrow escapes), `E0384` (borrow source unstable or not unique). An `unsafe` block relaxes none of them.
+`ref` parameters and `Ptr<T>` / `MutPtr<T>` must also satisfy source, permission, lifetime, and non-escape requirements. The relevant diagnostics are `E0382` (live-borrow conflict), `E0383` (borrow escape), and `E0384` (unstable or non-unique source). `unsafe` relaxes none of them.
 
 #### 2.4.3 `Map<K, V>`
 
@@ -2091,7 +1957,7 @@ fn drain(first: string?) {
 
 1. **assignment** / compound assignment / `++` / `--`: the static type resets to the static type of the assigned expression;
 2. being passed as a `ref` argument: resets to the declared type;
-3. `move x`: the binding becomes unusable (§10);
+3. after successful consumption of `x`: the binding becomes unusable (§2.14.5);
 4. being **assigned inside any closure body**: the binding does not narrow anywhere in the function body, because when the closure runs is unknowable. The rule does not depend on where the closure appears — one written after the narrowing site suppresses it just the same. The diagnostic names this cause; the fix is a fresh binding that is never written;
 5. an ordinary function call does **not** invalidate narrowing — N-1 / N-2 guarantee a narrowable subject cannot be written by a callee.
 
@@ -2116,130 +1982,68 @@ fn f(a: string?) {
 - `x!`: statically removes `null`; panics (`NullError`) at run time when the value is `null` — this is **not** undefined behavior;
 - `x ?? d`: the result type is the union of `x` without `null` and `d`;
 - `x?.f`: optional chaining, **whole-chain short-circuit** — when any link is `null` the entire postfix chain evaluates to `null`, and the result type is nullable (§3.6).
-### 2.14 Ownership, Aliasing, and Loans
+### 2.14 Values, Identity, and Borrows
 
-> Truth source: `src/frontend/analyzer/xa_ownership.h` (evidence axes and decision structures), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (`move` decision), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (alias and loan tracking), `src/ir/xi_source_move_verify.c` (independent Xi-level re-check).
+This section defines language contracts determined by declared types, parameter modes, and intraprocedural dataflow. Layout, reference counting, and COW are implementation mechanisms and must not change source legality. Built→Checked checks these rules; specialization operates on Checked and is rechecked before Lowered selects concrete copy, detachment, and release operations. See §17 for implementation qualification of complete declaration families. Freezing a specification is not completion of its implementation.
 
-Xray has no lifetime syntax and no borrow-checker annotations. Ownership is nonetheless **defined**: `move`, `copy`, `ref`, `Slice<T>`, and every cross-coroutine transfer read one decision procedure, and this section states it.
+#### 2.14.1 Logical values and identity boundaries
 
-#### 2.14.1 Ownership roots
+Array / Map / Set / string, copyable structs, enums, tuples, and anonymous records copy by value. A copy is a distinct logical value. Implementations may share immutable storage or use COW, but mutation of value-semantic components through one copy must not change another. An Array returned by a call obeys the same contract; callers need not inspect the callee body to prove storage uniqueness.
 
-An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map` (including `JSON.Object`), `Set`, composite `JSON.Value` arms, `structural object`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
+Class instances and synchronized objects have identity. A copied reference still names the same object; recursive aggregate copying stops at that boundary. Copying an Array of class elements therefore does not copy the class objects. Object-state mutation may be visible through other references, while replacing an Array element affects only that array's logical value.
 
-Only a binding that owns a root can transfer ownership. Writing `move` on a rootless value is a compile error (`E0391`: `move is not meaningful for value type`).
+`const` fixes the binding and its value-semantic components, not the entire reachable graph. `const xs = [Counter()]` prevents replacing or appending array elements through `xs` but does not freeze Counter's identity state. Object methods and synchronized APIs retain their own contracts. Sharing across execution boundaries depends on the complete type's Sendable property; neither `const` nor atomic reference counting proves it.
 
-#### 2.14.2 Four independent evidence axes
+#### 2.14.2 Initialization, permissions, and borrow facts
 
-At every program point a binding carries four **mutually independent** pieces of evidence. A legal ownership operation requires all four at once:
+At each program point the following must be proved separately:
 
-| Axis | Question it answers | Values |
-|--|--|--|
-| **Binding state** | Is this name usable now | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
-| **Root aliasing** | Does another reference reach the same root | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
-| **Capability** | What is permitted | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
-| **Loans** | Is anything borrowed out | a set of loans: Slice views / raw pointer borrows / closure captures |
-
-The split is deliberate: binding state is a CFG fact, aliasing is an object-graph fact, capability is a permission, and a loan is a bounded place fact. None of the four can be derived from or substituted for another.
-
-**Fail-closed by default**: when an axis cannot produce positive evidence, the answer is rejection, not permission. That is why the result of a call with unknown provenance cannot be moved — the compiler has no aliasing evidence for it.
-
-#### 2.14.3 How aliases are created and end
-
-| Action | Effect on root aliasing | Recoverable |
-|--|--|--|
-| `var b = a` | `LOCAL_ALIASED` | Yes. After `b`'s last use the root is `UNIQUE` again |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
-| Result of a call with unknown provenance | `ALIAS_UNKNOWN` | No |
-| `copy(a)` | `a` unaffected; the result is a fresh `UNIQUE` root | — |
-| `move a` | `a` becomes `MOVED`; the root moves with it | — |
-
-Liveness is decided by **last use**, not by lexical scope, matching the borrow rules in §2.4.2. So the first function below is legal and the second is not:
-
-```xray
-fn ok() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    print(len(alias))          // alias's last use
-    consume(move buf)          // OK: the alias has ended
-}
-
-fn rejected() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    consume(move buf)          // E0391: strong alias 'alias' remains live
-    print(len(alias))
-}
-```
-
-`ESCAPED` being terminal is deliberate: once a reference is written into a heap graph, who still holds it is no longer a question this function can answer. Use `copy(a)` when a transfer is needed anyway.
-
-#### 2.14.4 How loans are created and end
-
-Three loan forms share one loan record, one non-lexical liveness rule, and one set of error codes (`E0382` / `E0383` / `E0384`):
-
-| Form | Borrower | Live until |
-|--|--|--|
-| `Slice<T>` view | the view binding | that binding's last use |
-| `Ptr<T>` / `MutPtr<T>` | the pointer binding | that binding's last use |
-| **Closure capture** | the closure binding | that binding's last use |
-
-An ordinary synchronous closure captures an outer mutable var through a shared cell, so that capture is a loan. Const and ordinary read parameters of copyable non-view types are captured by value and do not form that loan:
-
-```xray
-fn rejected() {
-    var buf = [1, 2, 3]
-    const peek = fn() -> i64 { return len(buf) }
-    go consume(move buf)       // E0382: closure capture 'peek' is active
-    print(peek())
-}
-```
-
-A closure literal that appears only as a **call argument** usually creates no live loan: it ends with the call and cannot outlive it.
-
-```xray
-fn ok() {
-    var buf: Array<i64> = []
-    items.forEach(fn(x: i64) { buf.push(x) })   // capture bounded by the call
-    consume(move buf)                            // OK
-}
-```
-
-The exception is a callee that **retains or escapes** that parameter: the closure then outlives the call, and every root it captured by reference escapes with it (`OWN-E-ESCAPED-ROOT`). The decision reads the callee's parameter effect summary, not the syntactic shape.
-
-A live loan forbids invalidating operations on the owner, and `move` is one of them (`E0382`).
-
-#### 2.14.5 The full conditions for `move`
-
-`move x` requires `x` to be a **rebindable local `var` root**, and:
-
-1. binding state is `LIVE` (not moved, not maybe-moved, not unknown);
-2. root aliasing is `UNIQUE`;
-3. capability is `MUTABLE` (`const` values and synchronization handles cannot be moved);
-4. no loan is live;
-5. the storage plan is complete (the compiler has resolved an allocation domain for the root);
-6. the consumed binding is not declared outside a loop that would run the `move` again.
-
-`move` accepts an **identifier** only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. A field or an element has no ownership root of its own — its root is the container — and transferring one slot would leave the container partially moved, a state with no representation. To take one slot out, `copy` it, or make the container itself the move source.
-
-After a successful move the source binding is statically marked moved, and any later reference is a compile error. **A rejected move does not poison the source**: after the diagnostic, `x` is still usable.
-
-Rejection reasons are named in the diagnostic so the failing axis is identifiable:
-
-| Reason | Meaning |
+| Fact | Required condition |
 |--|--|
-| `OWN-E-LIVE-ALIAS` | a local strong alias is still live |
-| `OWN-E-ESCAPED-ROOT` | the root was written into a heap graph |
-| `OWN-E-UNKNOWN-CALL` | uniqueness evidence is incomplete (call result with unknown provenance) |
-| `OWN-E-STORAGE-PLAN` | the storage / ownership plan is incomplete |
-| `OWN-E-LIVE-LOAN` | a loan is live (Slice view / raw pointer / closure capture) |
+| Initialization and consumption state | A read requires complete initialization; operations needing ownership cannot use a consumed or possibly consumed value |
+| Place permission | A write requires a writable destination; READ parameters and the value-semantic components of `const` cannot be written directly |
+| Value and declaration contract | Type, copy or consumption capability, parameter mode, storage, and return permissions satisfy the declaration |
+| Active borrows | Access does not conflict with a live shared or exclusive borrow, whose source and lifetime remain valid |
 
-#### 2.14.6 Value copies and managed fields
+Initialization and consumption are control-flow facts, permissions come from bindings and declarations, and borrows protect specific places and necessary paths. These proofs cannot substitute for each other. Missing a required proof is an error, but uniqueness of an Array backing store is not a language admission condition for ordinary assignment, saving a copy, returning, or mutation. Non-nullable Arrays still require explicit initialization (§5.1.1).
 
-A value struct is copied by value. So that "copied by value" is always the complete semantics, **struct field types are restricted**: only scalars, `string`, raw pointers, fixed arrays, and other value structs are allowed. `Array`, `Map`, `Set`, `JSON.Value`, and class instances **cannot** be struct fields (`E0352`).
+#### 2.14.3 Ordinary copies and storage sharing
 
-A struct value copy therefore never carries a mutable managed field, and there is no shallow-versus-deep choice to make. The one managed field type is `string`, and `string` is immutable: sharing it produces no observable difference and does not affect the uniqueness decision.
+`var b = a`, saving a READ parameter, returning an Array, and storing a copyable Array in another permitted container or aggregate preserve logical copies. They do not create a language-level alias to the source array's mutable storage, do not permanently mark its binding `ESCAPED`, and do not require other copies to die before the source can be mutated. Backing-store uniqueness may only optimize away detachment or copying.
 
-Use a class when an aggregate needs a mutable graph. A class is a reference type, so assignment creates an alias and §2.14.3 governs it.
+```xray
+var a = [1, 2, 3]
+var b = a
+const snapshot = a
+b[0] = 9
+a.push(a[0])                 // evaluate arguments before exclusive receiver access
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+print(b[0])                 // 9
+print(len(a))               // 4
+```
+
+A copy must acquire independently releasable result ownership; failure must not publish a partially initialized result. Self-assignment and reading an element before replacing or appending it must preserve this responsibility, without double release or access to freed storage caused by physical sharing. Evaluation follows §3.0 E2/E5. Copy or automatic-move optimizations must not change the established order of errors, destruction, or external side effects.
+
+#### 2.14.4 Place borrows and captures
+
+`ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
+
+Shared `Slice` and exclusive `MutSlice` borrows follow §2.4.2. Class-field borrows additionally retain the object and check dynamic exclusivity. Sharing a backing store cannot remove these checks. Conversely, ordinary Array logical copies do not become borrows merely because they share backing storage.
+
+Ordinary closures capture outer `var` bindings through shared cells; `const` and ordinary READ parameters of copyable non-view types are captured by value. Shared-cell identity must not be disguised as a temporary non-escaping loan; its storage and release responsibilities remain explicit. Variables captured through shared cells cannot produce views. View captures and borrowing callbacks require the explicit contracts in §2.4.2, not guesses from a callee body or argument syntax.
+
+#### 2.14.5 Consumption and unadmitted surfaces
+
+Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
+
+Copyable types, including Array, cannot declare `move` parameters or receivers. Whether a standalone `move x` expression is allowed for copyable values, whether ordinary `copy(array)` retains a public spelling, and the identity and conversions of type-position `const T` are outside this frozen subset and require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+
+#### 2.14.6 Struct-field copying and initialization
+
+A copyable struct copies fields according to their declared types. Array / Map / Set and other container fields preserve logical copies, string retains immutable value semantics, and class or synchronized fields copy identity references only. A struct must not be rejected merely because it contains an Array, another owned container, or a class reference. Nor may a struct with class fields be described as a wholly independent reachable graph.
+
+Fields still satisfy ordinary storage, initialization, and copyability requirements. Views cannot enter ordinary user aggregates. A noncopyable field or payload requires its containing struct / enum to be noncopyable, with that declaration family admitted separately. A non-nullable Array field cannot be unconditionally zero-initialized; default construction must obey §5's field rules.
 
 ### 2.15 Worked Examples
 

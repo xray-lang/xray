@@ -11,6 +11,7 @@
  */
 #ifndef XIR_FLOAT_ADMISSION_CASES_H
 #define XIR_FLOAT_ADMISSION_CASES_H
+#include "xir/xxir_type_arena.h"
 static void floating_ir_rejections(void) {
     for (unsigned test = 0; test < 13; ++test) {
         XrXirType types[] = {XR_XIR_F32, XR_XIR_F32};
@@ -54,15 +55,24 @@ static void floating_value_admission(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(4096, &domain) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        XrXirTypeNode node = {XR_XIR_TYPE_CELL,cases[i].type,NULL,0,XR_XIR_UNIT,0,0};
+        XrXirTypes types = {&node,1};
+        XrXirBudget budget = {.parameters = 16, .metadata_bytes = 4096, .work = 64};
+        XrXirTypeArena *arena = NULL;
+        CHECK(xr_xir_type_arena_new(domain,&types,&budget,&arena) == XR_XIR_VALUE_OK);
+        XrXirValueAdmission admission = {arena,domain,NULL,NULL,16,0};
         XrXirValue value = floating_argument(cases[i].type, cases[i].bits), copy = {0}, cell = {0}, read = {0};
-        CHECK(xr_xir_value_argument(&value, cases[i].type) == cases[i].valid);
+        CHECK(xr_xir_value_argument(&value, NULL, cases[i].type) == cases[i].valid);
         CHECK(xr_xir_value_copy(&value, &copy) == (cases[i].valid ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT));
-        CHECK(xr_xir_cell_new(domain, &value, &cell) == (cases[i].valid ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT));
+        CHECK(xr_xir_cell_new(domain,arena,(XrXirType)256,&value,&admission,&cell) ==
+            (cases[i].valid ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT));
         if (cases[i].valid) {
             CHECK(copy.type == value.type && copy.payload == value.payload && !copy.reserved);
+            CHECK(xr_xir_value_argument(&cell,arena,(XrXirType)256));
             CHECK(xr_xir_cell_read(&cell, &read) == XR_XIR_VALUE_OK && read.type == value.type && read.payload == value.payload);
         } else CHECK(!copy.type && !copy.payload && !cell.type && !cell.payload);
         xr_xir_value_drop(&copy); xr_xir_value_drop(&cell); xr_xir_value_drop(&read);
+        xr_xir_type_arena_drop(arena);
         CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
     }
     xr_xir_domain_drop(domain);
@@ -72,7 +82,7 @@ static void floating_value_admission(void) {
         uint32_t size = context == XR_XIR_LAYOUT_STORAGE ? (width ? 8 : 4) :
             context == XR_XIR_LAYOUT_FRAME || context == XR_XIR_LAYOUT_SSA ? 8 : 16;
         XrXirLayout layout;
-        CHECK(xr_xir_layout(type, &target, (XrXirLayoutContext) context, &layout) == XR_XIR_OK);
+        CHECK(xr_xir_layout(NULL, type, &target, (XrXirLayoutContext) context, &layout) == XR_XIR_OK);
         CHECK(layout.size == size && layout.alignment == (size > 8 ? 8 : size));
     }
     floating_ir_rejections();

@@ -12,6 +12,8 @@
  *   cancellation cannot reclaim a frame while its callback is running.
  */
 #include "xxir_call.h"
+#include "xxir_type_arena.h"
+#include "xxir_types.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 
@@ -78,7 +80,20 @@ static XrXirCallResult call_result(XrXirCallStatus status) {
 static bool boundary_value(XrXirValue value, XrXirType type) {
     if (type == XR_XIR_UNIT)
         return value.type == XR_XIR_UNIT && !value.reserved && !value.payload;
-    return xr_xir_value_argument(&value, type);
+    return xr_xir_value_argument(&value, NULL, type);
+}
+
+static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
+                                   XrXirValueAdmission *admission) {
+    if (type == XR_XIR_UNIT)
+        return value && boundary_value(*value, type) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_ARGUMENT;
+    if (!xr_xir_value_argument(value, admission->arena, type)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if ((uint32_t) type < XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_CALL_READY;
+    XrXirValueStatus status = xr_xir_value_admit(value, type, admission);
+    if (status == XR_XIR_VALUE_OK) return XR_XIR_CALL_READY;
+    if (status == XR_XIR_VALUE_OOM) return XR_XIR_CALL_OOM;
+    if (status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT) return XR_XIR_CALL_LIMIT;
+    return XR_XIR_CALL_BAD_ARGUMENT;
 }
 
 static void *call_allocate(const XrXirCallConfig *config, uint64_t bytes,
@@ -161,16 +176,17 @@ static void frame_release(XrXirCall *call, CallFrame *frame) {
     }
 }
 
-static bool entry_arguments(const XrXirCallEntry *entry, const XrXirValue *arguments,
-                             uint32_t count, const XrXirFunctionBinding *binding) {
+static XrXirCallStatus entry_arguments(const XrXirCallEntry *entry, const XrXirValue *arguments,
+    uint32_t count, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission) {
     uint32_t captures = binding ? binding->capture_count : 0;
     if (captures > entry->parameter_count || count != entry->parameter_count - captures || (count && !arguments))
-        return false;
+        return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t i = 0; i < entry->parameter_count; ++i) {
         const XrXirValue *value = i < captures ? &binding->captures[i] : &arguments[i - captures];
-        if (!xr_xir_value_argument(value, entry->parameters[i])) return false;
+        XrXirCallStatus status = admit_value(value, entry->parameters[i], admission);
+        if (status != XR_XIR_CALL_READY) return status;
     }
-    return true;
+    return XR_XIR_CALL_READY;
 }
 
 static uint64_t state_offset(void) {
@@ -179,12 +195,14 @@ static uint64_t state_offset(void) {
 }
 
 static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
-                                  const XrXirValue *arguments, uint32_t count, const XrXirFunctionBinding *binding) {
+    const XrXirValue *arguments, uint32_t count, const XrXirFunctionBinding *binding, bool admitted) {
     if (id >= call->config.entry_count)
         return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *entry = &call->config.entries[id];
-    if (!entry_arguments(entry, arguments, count, binding))
-        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!admitted) {
+        XrXirCallStatus status = entry_arguments(entry, arguments, count, binding, &call->config.admission);
+        if (status != XR_XIR_CALL_READY) return status;
+    }
     XrXirCallAccounting *accounting = call->config.accounting;
     if (accounting->depth >= call->config.depth_limit)
         return XR_XIR_CALL_LIMIT;
@@ -218,7 +236,8 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
 static XrXirCallView frame_view(XrXirCall *call) {
     CallFrame *frame = call->top;
     return (XrXirCallView) {call, call->config.instance, frame->entry->environment,
-        frame->state, frame->arguments, frame->entry->parameter_count, frame->inbox};
+        frame->state, frame->arguments, frame->entry->parameter_count, frame->inbox,
+        call->config.admission.arena};
 }
 
 static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
@@ -251,6 +270,7 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
     *bytes = sizeof(XrXirCall) + (uint64_t) config->entry_count * sizeof(XrXirCallEntry);
     if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
         return XR_XIR_CALL_LIMIT;
+    const XrXirTypes *types = xr_xir_type_arena_types(config->admission.arena);
     for (uint32_t i = 0; i < config->entry_count; ++i) {
         const XrXirCallEntry *entry = &config->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION)
@@ -258,14 +278,14 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
         if (!entry->resume || entry->parameter_count > 65536 ||
             (entry->parameter_count && !entry->parameters) ||
             (entry->result != XR_XIR_UNIT && entry->result != XR_XIR_BOOL &&
-             !xr_xir_type_is_number((XrXirType) entry->result) && !xr_xir_type_is_owned(entry->result)))
+             !xr_xir_type_is_number((XrXirType) entry->result) && !xr_xir_type_is_owned(types, entry->result)))
             return XR_XIR_CALL_BAD_ARGUMENT;
         *bytes += (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
             return XR_XIR_CALL_LIMIT;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
             if (entry->parameters[p] != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
-                !xr_xir_type_is_owned(entry->parameters[p]))
+                !xr_xir_type_is_owned(types, entry->parameters[p]))
                 return XR_XIR_CALL_BAD_ARGUMENT;
     }
     return XR_XIR_CALL_READY;
@@ -283,12 +303,20 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     XrXirCallStatus status = table_size(config, &bytes);
     if (status != XR_XIR_CALL_READY)
         return status;
-    if (entry >= config->entry_count || !entry_arguments(&config->entries[entry], arguments, count, NULL))
+    if (entry >= config->entry_count)
         return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirValueAdmission admission = config->admission;
+    status = entry_arguments(&config->entries[entry], arguments, count, NULL, &admission);
+    if (status != XR_XIR_CALL_READY) return status;
+    XrXirTypeArena *arena = (XrXirTypeArena *) admission.arena;
+    if (arena && !xr_xir_type_arena_retain(arena)) return XR_XIR_CALL_LIMIT;
     XrXirCall *call = call_allocate(config, bytes, &status);
-    if (!call)
+    if (!call) {
+        xr_xir_type_arena_drop(arena);
         return status;
+    }
     call->config = *config;
+    call->config.admission = admission;
     call->allocation_bytes = bytes;
     call->polls_left = config->poll_limit;
     call->result = call_result(XR_XIR_CALL_READY);
@@ -303,8 +331,9 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
             parameters += entries[i].parameter_count;
         } else entries[i].parameters = NULL;
     }
-    status = push_frame(call, entry, arguments, count, NULL);
+    status = push_frame(call, entry, arguments, count, NULL, true);
     if (status != XR_XIR_CALL_READY) {
+        xr_xir_type_arena_drop(arena);
         call_deallocate(config->accounting, call, bytes);
         return status;
     }
@@ -327,7 +356,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
             const XrXirValue *value = &action.arguments[i];
             if ((writing && value->type != XR_XIR_STRING) ||
                 (value->type != XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
-                !xr_xir_value_argument(value, (XrXirType) value->type)) {
+                !xr_xir_value_argument(value, NULL, (XrXirType) value->type)) {
                 unwind(call, XR_XIR_CALL_BAD_STATE); return;
             }
         }
@@ -351,7 +380,10 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
             return;
         }
         CallFrame *parent = call->top;
-        XrXirCallStatus status = push_frame(call, action.callee, action.arguments, action.argument_count, binding);
+        XrXirCallStatus status = binding ? admit_value(&action.value, (XrXirType) action.value.type,
+            &call->config.admission) : XR_XIR_CALL_READY;
+        if (status == XR_XIR_CALL_READY)
+            status = push_frame(call, action.callee, action.arguments, action.argument_count, binding, false);
         if (status != XR_XIR_CALL_READY)
             unwind(call, status);
         else {
@@ -388,9 +420,14 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         return;
     }
     bool returning = action.kind == XR_XIR_ACTION_RETURN;
-    if ((!returning && action.kind != XR_XIR_ACTION_THROW) ||
-        !boundary_value(action.value, returning ? call->top->entry->result : XR_XIR_I64)) {
+    if (!returning && action.kind != XR_XIR_ACTION_THROW) {
         unwind(call, XR_XIR_CALL_BAD_STATE);
+        return;
+    }
+    XrXirCallStatus admitted = admit_value(&action.value,
+        returning ? call->top->entry->result : XR_XIR_I64, &call->config.admission);
+    if (admitted != XR_XIR_CALL_READY) {
+        unwind(call, admitted == XR_XIR_CALL_BAD_ARGUMENT ? XR_XIR_CALL_BAD_STATE : admitted);
         return;
     }
     XrXirCallResult result = call_result(returning ? XR_XIR_CALL_RETURNED : XR_XIR_CALL_THROWN);
@@ -480,6 +517,7 @@ XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
     if (call->top)
         unwind(call, XR_XIR_CALL_CANCELLED);
     xr_xir_value_drop(&call->result.value);
+    xr_xir_type_arena_drop((XrXirTypeArena *) call->config.admission.arena);
     call_deallocate(call->config.accounting, call, call->allocation_bytes);
     return XR_XIR_CALL_READY;
 }

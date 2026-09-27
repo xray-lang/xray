@@ -63,13 +63,16 @@
     },
     {
       "heading_level": 2,
-      "heading": "Safety: compile pass = concurrency safe",
+      "heading": "Value and concurrency boundary contracts",
       "bullets": [
-        "`const T`: stable deep-read-only capability; audited synchronization handles retain synchronized interior mutation",
-        "`Channel<T>`: communication with well-defined ownership semantics",
+        "`const` fixes a binding and its value-semantic components; class and synchronized objects retain identity and are not deeply frozen",
+        "Array assignment, saved READ parameters, and returns preserve logical copies without explicit copy/move or unique backing",
+        "go arguments and captures must be Sendable; ordinary outer var captures are forbidden even for reads",
+        "`Channel<T>` requires copyable, storable, Sendable payloads; ref and Slice/MutSlice loans cannot cross go boundaries",
         "`Atomic<T>`: lock-free atomic ops for `i64`/`f64`/`bool` (name with `const`)",
-        "`move`: explicit ownership transfer for rebindable local `var` values",
-        "execution-local graphs require explicit `copy(...)` or `move`; module-mutable state and short-lived views/pointers cannot cross execution boundaries"
+        "Consuming parameters and receivers are for noncopyable resources; the declaration decides transfer and an explicit move marker is optional",
+        "Type-position const T, the public copy(array) spelling, and standalone move for copyable values are outside the frozen subset",
+        "These target contracts do not certify complete new-XIR go, Task, resource, or synchronization support; declaration-family qualification remains required"
       ]
     },
     {

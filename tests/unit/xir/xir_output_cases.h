@@ -36,7 +36,7 @@ static void output_cases(const XrXirCallEntry *entry) {
         XrXirOutputSink sink = {output_bytes, &probe, mode == 1 ? 26 : 65536};
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {entry, 1, NULL, 65536, 100, 10, &accounting,
-            {mode == 4 ? NULL : xr_xir_output_render, &sink}};
+            {mode == 4 ? NULL : xr_xir_output_render, &sink}, {0}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 2, &call) == XR_XIR_CALL_READY);
         probe.call = call;
@@ -72,7 +72,7 @@ static void write_cases(const XrXirCallEntry *entries) {
         XrXirOutputSink sink = {write_bytes, &probe, mode == 4 ? 4 : 65536};
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting,
-            {mode == 2 ? NULL : xr_xir_output_render, &sink}};
+            {mode == 2 ? NULL : xr_xir_output_render, &sink}, {0}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, mode >= 5 ? 2 : 1, &argument, 1, &call) == XR_XIR_CALL_READY);
         probe.call = call; xr_xir_value_drop(&argument);
@@ -123,7 +123,7 @@ static void write_action_admission(void) {
         XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_BOOL,
             sizeof(XrXirValue), malformed_write, NULL, &mode};
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {unexpected_write, NULL}};
+        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {unexpected_write, NULL}, {0}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, &argument, 1, &call) == XR_XIR_CALL_READY);
         CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_BAD_STATE);

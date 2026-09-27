@@ -21,9 +21,10 @@
     {
       "heading": "Concurrency rules",
       "bullets": [
-        "Channels can be captured by `go` closures through their verified synchronization capability",
-        "Execution-local graphs require an explicit `move` or `copy` at send sites",
-        "Channel payload transfer never performs an implicit deep copy"
+        "The target Channel<T> payload domain requires copyable, storable, Sendable T; complete channel/go qualification remains separate from this contract",
+        "Qualified channel handles may be captured by go closures when the full type satisfies Sendable",
+        "Array payloads preserve logical copies without a required copy/move marker; class and synchronized identities are not duplicated or frozen",
+        "Noncopyable resources are outside the first Channel<T> payload domain; const or a synchronization wrapper cannot bypass Sendable checks"
       ]
     }
   ]

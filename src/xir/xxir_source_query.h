@@ -71,7 +71,7 @@ typedef struct XrXirSourceView {
     uint32_t reference_count;
     const XrXirSourceExpression *expressions;
     uint32_t expression_count;
-    const XrXirCallableTypes *callables;
+    const XrXirTypes *types;
 } XrXirSourceView;
 typedef struct XrXirSourceSnapshot XrXirSourceSnapshot;
 typedef struct XrXirSourceResult {
