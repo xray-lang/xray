@@ -7,7 +7,7 @@ driving require their own qualification. No legacy artifact reader is admitted.
 A program seals a verified Lowered closure before execution. It owns copied
 module/function identities, exact signatures, dependency edges, slot declarations,
 literal bytes, a closed constructed-type arena, and a deterministic initialization
-order. Program ABI 11, Call ABI 14 and Value ABI 10 are admitted atomically. The
+order. Program ABI 12, Call ABI 14 and Value ABI 10 are admitted atomically. The
 ProgramSpec supplies the unique type pool; sealing verifies and deep-copies its
 descriptors into the arena before publishing the Program. Code environments are
 either explicitly process-static or transferred to the program with one release
@@ -55,7 +55,7 @@ detail, before releasing the activation and slots. The sole failure-copy API
 accepts an empty CallResult output (READY, unit, zero wake and detail), copies
 the value with independent ownership and copies detail by value. Failure leaves
 the output unchanged. The old value-only signature is removed atomically with
-Program ABI 9; current Program ABI 11 preserves this complete fault contract.
+Program ABI 9; current Program ABI 12 preserves this complete fault contract.
 Repeated failed polls/copies preserve the original index/length
 without rereading released storage or replaying initialization effects. An
 ordinary entry Bounds fault does not change an already-ready Instance into an
@@ -124,10 +124,10 @@ verification-test: test_xir_program_vm
 verification-test: test_xir_program_native
 verification-test: test_xir_allocations
 
-Program ABI 11 includes the native nominal type descriptors and the per-function
+Program ABI 12 includes the native nominal type descriptors and the per-function
 nominal_owner word. XrXirTypes owns a declaration/identity table, and each
 XrXirTypeNode includes ordered nominal arguments and substituted field types.
-Program ABI 10 and earlier reject before reading declarations or type metadata,
+Program ABI 11 and earlier reject before reading declarations or type metadata,
 taking a code lease, or allocating a runtime arena. Generated C binds the numeric
 Program ABI in its static assertion. Tests supply inaccessible descriptor pointers
 with old Program and Value ABI versions to verify this admission order.
@@ -137,6 +137,22 @@ helpers; its tagged value remains 16 bytes. Call ABI 14 is unchanged. Helpers an
 metadata alone do not establish source admission. STRUCT_NEW/GET/SET consume verified
 construction/member authority under `xir-nominal-struct-types.md`. Closed
 nominal signatures and root slots use the ordinary owned transport contract,
-with type visibility checked again during sealing. The declaration-owner word resolves to a same-module
+with naming authority rechecked through the mandatory Checked proof during sealing. The declaration-owner word resolves to a same-module
 nominal declaration; entry and initializer functions must have no nominal owner.
 The shared member authority rules are governed by `xir-nominal-struct-types.md`.
+
+Program ABI 12 adds a mandatory borrowed Checked packet, full-packet SHA-256
+identity and canonical FunctionLayout array to ProgramSpec. CGen emits all fields;
+VM and mixed producers supply the same Lowered input evidence. Sealing uses the
+shared Checked decoder and lowering implementation, then compares target, exact
+signatures, type pools, declarations and physical layouts. It does not instantiate
+ordinary generics or verify arbitrary callback machine code. No missing-evidence
+or older-ABI path is admitted. Temporary artifacts are released before publication,
+and the code lease transfers only on successful sealing.
+
+Temporary requested-byte reservation is the maximum of 2*D.metadata+D.scratch
+and D.metadata+5*L.metadata+L.scratch, using checked subtraction before allocation.
+Sealing sets both stage metadata/scratch caps to total_bytes/7. The runtime
+metadata allocation phase starts after temporary proof artifacts are freed.
+Allocator overhead, OS pages and stack storage are outside this requested-byte
+accounting. Work uses conservative phase reservation; it is not a wall-time claim.

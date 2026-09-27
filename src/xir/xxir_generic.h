@@ -18,6 +18,9 @@ XR_FUNC XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudge
 XR_FUNC XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **output);
 XR_FUNC void xr_xir_generics_free(XrXirGeneric *generics, uint32_t functions);
 XR_FUNC bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type);
+/* Constraint proof is independent of naming authority at a substitution site. */
+XR_FUNC XrXirStatus xr_xir_type_constraints(const XrXirModule *module, uint32_t function,
+    XrXirType type, uint32_t constraints, XrXirBudget *remaining);
 XR_FUNC XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
     XrXirType type, uint32_t constraints, XrXirBudget *remaining);
 XR_FUNC XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,

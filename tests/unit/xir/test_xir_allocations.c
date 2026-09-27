@@ -76,6 +76,8 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"
+#include "xir/xxir_checked.c"
+#include "base/xsha256.c"
 #include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
@@ -86,6 +88,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_vm.c"
 #include "xir/xxir_emit_c.c"
 #include "xir/xxir_call.c"
+#include "xir/xxir_program_match.c"
 #include "xir/xxir_program.c"
 #include "xir/xxir_instance.c"
 #include "xir/xxir_output.c"
@@ -299,7 +302,7 @@ static size_t program_allocation_failures(void) {
         XrXirArtifact *artifact = program_fixture(0), *original = artifact;
         XrXirProgram *program = NULL;
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        XrXirStatus sealed = xr_xir_vm_program_take(&artifact, 65536, &program);
+        XrXirStatus sealed = xr_xir_vm_program_take(&artifact, 2097152, &program);
         if (sealed != XR_XIR_OK) {
             CHECK(attempt && sealed == XR_XIR_OUT_OF_MEMORY && !program && artifact == original);
         } else {
@@ -425,7 +428,7 @@ int main(void) {
         {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
         {"second", 6, &parameter, 1, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},
     };
-    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, functions, 2, NULL, NULL, NULL, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirBudget exact = xr_xir_default_budget();
     exact.metadata_bytes = sizeof(XrXirArtifact);

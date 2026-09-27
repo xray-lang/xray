@@ -422,3 +422,20 @@ struct Init22 { next:Init23 }
 struct Init23 { value:i64 }
 var deepDefault:Init0
 print(deepDefault.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.value)
+
+struct GenericBox<T> { value:T }
+struct GenericOuter<T> { inner:GenericBox<T> }
+fn genericWrap<T>(value:T)->GenericOuter<T> { return GenericOuter<T>{inner:GenericBox<T>{value:value}} }
+const genericNumber=genericWrap<i64>(7)
+const genericText=genericWrap<string>("generic")
+fn genericPass<T>(value:T)->T { return value }
+const genericForward=genericPass<GenericOuter<string>>(genericText)
+var genericImported=alpha.GenericRecord<string>{value:"before"}
+const genericOld=genericImported
+genericImported.value=genericForward.inner.value
+const genericLibrary=alpha.identity<alpha.GenericRecord<string>>(genericImported)
+print(genericNumber.inner.value,genericLibrary.value,genericOld.value)
+
+struct OpaquePrivate { value:i64 }
+const opaquePrivate=alpha.identity<OpaquePrivate>(OpaquePrivate{value:73})
+print(opaquePrivate.value)

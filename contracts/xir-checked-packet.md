@@ -6,8 +6,8 @@ linking, native cache admission or publication. There is one Checked reader and
 no Built, Lowered, legacy, or alternate executable format reader.
 
 All integers use fixed-width little endian, with no native struct padding.
-The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 6, semantic-contract
-u32 17, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
+The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 7, semantic-contract
+u32 19, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
 over header bytes 0..31 followed by the payload. Unknown versions, stage or
 reserved fields, length mismatch, trailing bytes and digest mismatch reject.
 The digest is content identity/integrity, not authentication. Schema or semantic
@@ -73,12 +73,34 @@ NOMINAL kind 4 uses kind/span/declaration/argument-count u32 words followed by
 ordered u32 argument IDs, then field-count and derived field-type u32 words.
 A present field vector is recomputed against the declaration and arguments;
 empty leaves fields unresolved. No physical layout offsets are serialized.
-The current metadata reader admits closed arguments under declaration
-constraints and preserves exact declaration/argument identity; unsupported
-abstract and nominal arguments reject. This uses the sole
-schema 6 / contract 17 representation; no alternate reader is introduced. Closed nominal
+The metadata reader admits parameterized and nested nominal arguments, with
+constraints rechecked in each owning declaration or function context and exact
+declaration/ordered-argument identity preserved. This uses the sole
+schema 7 / contract 19 representation; no alternate reader is introduced. Closed nominal
 transport and STRUCT_NEW/GET/SET (tags74/75/76) follow `xir-nominal-struct-types.md`.
 NEW uses the canonical operand-table range; GET/SET store a field ordinal in
 immediate. SET takes a writable place and an ordinary field value. All three
 recheck declaration permissions, field substitution and value roles after
 decoding. Source struct admission remains OPEN.
+
+Schema 7 appends a provenance-presence u32 after every module type pool. Zero
+ends the module. One carries an original Checked module using the same encoding
+and then one origin per output function: source function index, argument count,
+and ordered output-pool type IDs, all u32. The original must have presence zero;
+nesting rejects before allocating another module. Both modules share the cursor
+allocation and count limits and the cumulative semantic-verification budget.
+The reader owns each partial prefix and verifies declaration, body, substitution
+and instance closure before publication. Provenance records are evidence to
+recheck, never persisted authority. Lowered preserves and rechecks the source while remapping instance arguments.
+Native Program12 sealing consumes the packet through shared decode/lower and
+descriptor/layout matching. Specialization attaches provenance automatically;
+only complete definition and correspondence verification establishes opaque
+substitution authority. Packet presence or its digest alone grants no exemption.
+
+Lowering retains an independently owned encoding of its input specialized Checked
+module before type-pool projection. The Lowered artifact holds a separate SHA-256
+of the entire packet; verification charges retained bytes and hashing work and
+rejects missing storage or a changed digest. Artifact destruction releases the
+packet through the Checked packet owner, including every failed transition.
+This identity is not authentication or native descriptor correspondence; native
+admission must decode, reverify, lower and compare the descriptor before use.

@@ -10,10 +10,12 @@
  *   Instance code owns its artifact and matches independent expected effects.
  */
 #include "xir/xxir_vm.h"
+#include "xir/xxir_program_internal.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_runtime_allocations.h"
 #include "xir_program_fixture.h"
 #include "xir_program_cases.h"
 #include "xir_capture_fixture.h"
@@ -22,6 +24,8 @@
 #include "xir_array_program_cases.h"
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_generic_cases.h"
+#include "xir_nominal_expression_fixture.h"
+#include "xir_nominal_expression_cases.h"
 #include "xir_nominal_chain_fixture.h"
 #include "xir_nominal_checked_fixture.h"
 #include "xir_nominal_transport_fixture.h"
@@ -30,6 +34,81 @@
 #include "xir_struct_ops_cases.h"
 #include "xir_struct_set_fixture.h"
 #include "xir_struct_set_cases.h"
+static void descriptor_correspondence(void) {
+    XrXirArtifact *a = nominal_expression_lowered(), *b = nominal_expression_lowered();
+    const XrXirModule *module = xr_xir_artifact_module(b);
+    CHECK(module->function_count == 9);
+    XrXirCallEntry entries[9]; XrXirVmBinding bindings[9];
+    for (uint32_t i = 0; i < 9; ++i)
+        CHECK(xr_xir_vm_bind(b, i, &bindings[i], &entries[i]) == XR_XIR_OK);
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_artifact_target(b),
+        entries, 9, module->declarations, {0}, module->types, xr_xir_program_proof(b)};
+    uint64_t work = 16000000;
+    CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_OK);
+    uint64_t cost = 16000000 - work;
+    work = cost; CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_OK && !work);
+    work = cost - 1; CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BUDGET);
+    for (uint32_t attack = 0; attack < 6; ++attack) {
+        XrXirTypeNode *node = (XrXirTypeNode *)&module->types->nodes[0];
+        XrXirType saved = node->nominal.fields[0];
+        XrXirFunctionIdentity *id = (XrXirFunctionIdentity *)&module->declarations->functions[0];
+        uint32_t exported = id->exported;
+        char *name = (char *)module->types->nominals->identities[0].name.bytes;
+        switch (attack) {
+        case 0: entries[0].result = XR_XIR_U8; break;
+        case 1: ((XrXirType *)node->nominal.fields)[0] = XR_XIR_BOOL; break;
+        case 2: id->exported ^= 1; break;
+        case 3: name[0] ^= 1; break;
+        case 4: --spec.entry_count; break;
+        case 5: ++spec.target.abi_version; break;
+        }
+        work = 16000000;
+        CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BAD_STRUCTURE);
+        entries[0].result = module->functions[0].result;
+        ((XrXirType *)node->nominal.fields)[0] = saved; id->exported = exported;
+        if (attack == 3) name[0] ^= 1;
+        spec.entry_count = 9; spec.target = *xr_xir_artifact_target(b);
+    }
+    work = 16000000;
+    CHECK(xr_xir_program_match(&spec, NULL, a, &work) == XR_XIR_BAD_STRUCTURE);
+    uint32_t owned = UINT32_MAX, parameter = UINT32_MAX;
+    for (uint32_t i = 0; i < 9; ++i) {
+        if (b->layouts[i].owned_count) owned = i;
+        if (module->functions[i].parameter_count) parameter = i;
+    }
+    CHECK(owned != UINT32_MAX && parameter != UINT32_MAX);
+    for (uint32_t attack = 0; attack < 13; ++attack) {
+        uint32_t index = attack >= 10 ? parameter : owned;
+        XrXirFunctionLayout *layout = &b->layouts[index], saved = *layout;
+        uint32_t offset = layout->offsets[0], owned_offset = layout->owned_offsets[0];
+        XrXirLayout physical = {0};
+        if (index == parameter) physical = layout->parameters[0];
+        switch (attack) {
+        case 0: ++layout->slot_count; break;
+        case 1: ++layout->frame_bytes; break;
+        case 2: ++layout->owned_count; break;
+        case 3: ++layout->outgoing_count; break;
+        case 4: ++layout->result.size; break;
+        case 5: ++layout->result.alignment; break;
+        case 6: ((uint32_t *)layout->offsets)[0] ^= 8; break;
+        case 7: ((uint32_t *)layout->owned_offsets)[0] ^= 8; break;
+        case 8: layout->offsets = NULL; break;
+        case 9: layout->owned_offsets = NULL; break;
+        case 10: ++((XrXirLayout *)layout->parameters)[0].size; break;
+        case 11: ++((XrXirLayout *)layout->parameters)[0].alignment; break;
+        case 12: layout->parameters = NULL; break;
+        }
+        work = 16000000;
+        CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BAD_STRUCTURE);
+        *layout = saved;
+        ((uint32_t *)layout->offsets)[0] = offset;
+        ((uint32_t *)layout->owned_offsets)[0] = owned_offset;
+        if (index == parameter) ((XrXirLayout *)layout->parameters)[0] = physical;
+    }
+    work = 16000000;
+    CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_OK);
+    xr_xir_artifact_free(a); xr_xir_artifact_free(b);
+}
 static void admission(void) {
     for (uint32_t invalid = 0; invalid < 23; ++invalid) {
         XrXirArtifact *artifact = program_fixture(0), *saved = artifact;
@@ -68,7 +147,7 @@ static void admission(void) {
         }
         XrXirProgram *program = NULL;
         CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) != XR_XIR_OK);
-        CHECK(xr_xir_vm_program_take(&artifact, 65536, &program) != XR_XIR_OK);
+        CHECK(xr_xir_vm_program_take(&artifact, 2097152, &program) != XR_XIR_OK);
         CHECK(artifact == saved && !program);
         xr_xir_artifact_free(artifact);
     }
@@ -97,9 +176,9 @@ static void capture_mixed(void) {
             (owner->entries[5].resume == captures_program.entries[5].resume));
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
-            {owner,capture_mixed_release},module->types};
+            {owner,capture_mixed_release},module->types,xr_xir_program_proof(owner->artifact)};
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&spec,65536,&program) == XR_XIR_OK);
+        CHECK(xr_xir_program_seal(&spec,2097152,&program) == XR_XIR_OK);
         capture_cases(program); CHECK(mixed_releases == parity+1);
     }
 }
@@ -129,9 +208,9 @@ static void array_mixed(void) {
                 (owner->entries[3].resume == native[mode]->entries[3].resume));
             XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
                 {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,8,module->declarations,
-                {owner,array_mixed_release},module->types};
+                {owner,array_mixed_release},module->types,xr_xir_program_proof(owner->artifact)};
             XrXirProgram *program = NULL;
-            CHECK(xr_xir_program_seal(&spec,65536,&program) == XR_XIR_OK);
+            CHECK(xr_xir_program_seal(&spec,2097152,&program) == XR_XIR_OK);
             array_program_cases(program,mode != 0);
             CHECK(array_mixed_releases == mode * 2 + parity + 1);
         }
@@ -139,10 +218,10 @@ static void array_mixed(void) {
 }
 int main(void) {
     XrXirArtifact *struct_set = struct_set_lowered(); XrXirProgram *set_program = NULL;
-    CHECK(xr_xir_vm_program_take(&struct_set,65536,&set_program) == XR_XIR_OK && !struct_set);
+    CHECK(xr_xir_vm_program_take(&struct_set,2097152,&set_program) == XR_XIR_OK && !struct_set);
     struct_set_cases(set_program);
     XrXirArtifact *struct_ops = struct_ops_lowered(); XrXirProgram *struct_program = NULL;
-    CHECK(xr_xir_vm_program_take(&struct_ops,65536,&struct_program) == XR_XIR_OK && !struct_ops);
+    CHECK(xr_xir_vm_program_take(&struct_ops,2097152,&struct_program) == XR_XIR_OK && !struct_ops);
     struct_ops_cases(struct_program);
     for (unsigned mode = 0; mode < 3; ++mode) for (unsigned branch = 0; branch < 2; ++branch) {
         XrXirArtifact *transport = nominal_transport_fixture();
@@ -155,12 +234,16 @@ int main(void) {
     }
     XrXirArtifact *combined_artifact = nominal_generic_lowered();
     XrXirProgram *combined = NULL;
-    CHECK(xr_xir_vm_program_take(&combined_artifact, 65536, &combined) == XR_XIR_OK && !combined_artifact);
+    CHECK(xr_xir_vm_program_take(&combined_artifact, 2097152, &combined) == XR_XIR_OK && !combined_artifact);
     nominal_generic_cases(combined);
+    XrXirArtifact *expression_artifact = nominal_expression_lowered();
+    XrXirProgram *expression_program = NULL;
+    CHECK(xr_xir_vm_program_take(&expression_artifact, 2097152, &expression_program) == XR_XIR_OK && !expression_artifact);
+    nominal_expression_cases(expression_program);
     for (unsigned i = 0; i < 3; ++i) {
         XrXirArtifact *nominal = i == 2 ? nominal_chain_lowered() : nominal_lowered_fixture(i ? 3 : 0);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&nominal, 65536, &program) == XR_XIR_OK && !nominal);
+        CHECK(xr_xir_vm_program_take(&nominal, 2097152, &program) == XR_XIR_OK && !nominal);
         program_cases(program, 0);
     }
 
@@ -168,24 +251,25 @@ int main(void) {
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *array = array_program_fixture(mode == 1, mode == 2);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&array,65536,&program) == XR_XIR_OK);
+        CHECK(xr_xir_vm_program_take(&array,2097152,&program) == XR_XIR_OK);
         array_program_cases(program,mode == 1);
     }
-    admission(); capture_mixed();
+    descriptor_correspondence(); admission(); capture_mixed();
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *artifact = program_fixture(mode), *saved = artifact;
         XrXirProgram *program = NULL;
         CHECK(xr_xir_vm_program_take(&artifact, 1, &program) == XR_XIR_BUDGET);
         CHECK(artifact == saved && !program);
-        CHECK(xr_xir_vm_program_take(&artifact, 65536, &program) == XR_XIR_OK);
+        CHECK(xr_xir_vm_program_take(&artifact, 2097152, &program) == XR_XIR_OK);
         CHECK(!artifact && program);
         program_cases(program, mode);
     }
     XrXirArtifact *artifact = capture_fixture();
     XrXirProgram *captures = NULL;
-    CHECK(xr_xir_vm_program_take(&artifact,65536,&captures) == XR_XIR_OK);
+    CHECK(xr_xir_vm_program_take(&artifact,2097152,&captures) == XR_XIR_OK);
     capture_cases(captures);
     puts("VM capture environments, two suspensions, cancellation and escaped ownership passed");
     puts("VM module programs match independent output, state and lifetime expectations");
+    CHECK(!runtime_live && !runtime_bytes);
     return 0;
 }

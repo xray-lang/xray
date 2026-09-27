@@ -15,13 +15,21 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 11u
+#define XR_XIR_PROGRAM_ABI_VERSION 12u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
     void *owner;
     void (*release)(void *owner);
 } XrXirCodeLease;
+typedef struct XrXirProgramProof {
+    const uint8_t *bytes;
+    size_t length;
+    const uint8_t *identity;
+    const XrXirFunctionLayout *layouts;
+} XrXirProgramProof;
+/* Borrowed until the source artifact is destroyed. */
+XR_FUNC XrXirProgramProof xr_xir_program_proof(const XrXirArtifact *artifact);
 typedef struct XrXirProgramSpec {
     uint32_t abi_version;
     XrXirTarget target;
@@ -30,6 +38,7 @@ typedef struct XrXirProgramSpec {
     const XrXirDeclarations *declarations;
     XrXirCodeLease code;
     const XrXirTypes *types;
+    XrXirProgramProof proof;
 } XrXirProgramSpec;
 typedef enum XrXirInstanceState {
     XR_XIR_INSTANCE_NEW, XR_XIR_INSTANCE_INITIALIZING, XR_XIR_INSTANCE_READY,

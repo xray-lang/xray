@@ -49,7 +49,7 @@ static XrXirArtifact *capture_checked(void) {
     XrXirFunctionIdentity identities[] = {{0,0, 0},{0,1, 0},{0,1, 0},{0,0, 0},{0,1, 0},{0,0, 0}};
     XrXirLiteral literal = {"captured",8};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1};
-    XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types};
+    XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK && checked);
     memset(make,0xcc,sizeof(make)); memset(captures,0xcc,sizeof(captures));

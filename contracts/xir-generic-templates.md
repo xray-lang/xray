@@ -37,7 +37,7 @@ the caller's type context before comparison and dominance checking. Initializers
 and the root entry cannot have type parameters.
 
 All metadata is owned, copied across stages and bounded by aggregate parameter,
-metadata and work budgets. Checked packet schema 6 / semantic contract 17 carries a generic-presence
+metadata and work budgets. Checked packet schema 7 / semantic contract 19 carries a generic-presence
 u32 after declarations, followed when present by each row's constraint count/
 u32 bits and argument count/u32 type IDs. Older schema or semantic revisions are rejected, with no reader
 or alias. Decode performs the same definition and forwarding checks.
@@ -73,6 +73,17 @@ Each instance's node cache remains bound to its ordered arguments and declaratio
 identity. Signature identity alone supplies
 no Sendable proof.
 
+Type-expression constraint checking uses the current declaration's ordered
+constraint vector each time. A shared expression node is not a cached proof for
+another declaration with the same parameter ordinals. The bounded type-layer
+context verifier visits expression edges, checks parameter bounds and each
+nominal argument obligation, and never traverses derived field edges as authority.
+Both stored-field declarations and ordinary function type uses invoke this
+check; visibility and storage admission remain separate mandatory checks.
+This verifier does not itself grant pool or execution admission. Parameterized
+and nested nominal expressions follow the semantic-contract extension in
+`xir-nominal-struct-types.md`; source generic declarations remain separate.
+
 Constructed-type substitution uses an explicit pending-node stack bounded by the
 verified source pool size and charged to metadata budget. It spends work on
 component visits and exact interning comparisons; there is no additional fixed
@@ -91,6 +102,6 @@ combined result is rechecked; concrete fields and function bodies reuse equal
 closed constructed nodes. Each declaration's parameter cache stays independent.
 No intermediate field-only artifact is published and no second specialization
 pipeline is introduced. Lowering alone removes remaining declaration expressions
-and remaps all uses. This coexistence does not admit abstract nominal expressions. Closed nominal
+and remaps all uses. Abstract nominal expressions follow the same substitution stack and growing closed field queue. Closed nominal
 value transport follows `xir-nominal-struct-types.md`; its struct constructors
 and member instructions require separate executable admission.

@@ -140,6 +140,11 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
         if (xr_xir_type_is_cell(types, slot->type) || (slot->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(types, slot->type)))
             return XR_XIR_BAD_TYPE;
         if (xr_xir_type_span(types, slot->type)) return XR_XIR_BAD_TYPE;
+        XrXirModule scope = {XR_XIR_BUILT, NULL, functions, d, NULL, types, NULL};
+        XrXirBudget access_budget = {0}; access_budget.metadata_bytes = *bytes; access_budget.work = *work;
+        status = xr_xir_type_access(&scope, d->modules[slot->module].initializer, slot->type, &access_budget);
+        *bytes = access_budget.metadata_bytes; *work = access_budget.work;
+        if (status != XR_XIR_OK) return status;
         if (slot->module != d->root_module) {
             XrXirStatus sendable = xr_xir_type_sendable(types, slot->type, NULL, 0, work);
             if (sendable != XR_XIR_OK) return sendable;

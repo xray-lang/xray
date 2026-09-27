@@ -209,11 +209,14 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     return XR_XIR_OK;
 }
 
-static XrXirStatus nominal_type_use(VerifyContext *context, uint32_t function, XrXirType type) {
-    const XrXirTypeNode *node = xr_xir_type_node(context->module->types, type);
-    return node && node->kind == XR_XIR_TYPE_NOMINAL ?
-        xr_xir_nominal_access(context->module, function, node->nominal.declaration, 0,
-            XR_XIR_NOMINAL_TYPE, &context->remaining.work) : XR_XIR_OK;
+static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, XrXirType type) {
+    const XrXirGeneric *generic = context->module->generics ? &context->module->generics[function] : NULL;
+    XrXirStatus status = xr_xir_type_context_verify(context->module->types, type,
+        generic ? generic->constraints : NULL, generic ? generic->parameter_count : 0, &context->remaining);
+    /* Naming checks for substituted types are discharged by original-definition
+     * verification and complete correspondence before this module can publish. */
+    if (status != XR_XIR_OK || context->module->provenance) return status;
+    return xr_xir_type_access(context->module, function, type, &context->remaining);
 }
 
 static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stage,
@@ -240,7 +243,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
     if (xr_xir_type_is_cell(context->module->types, function->result)) return XR_XIR_BAD_TYPE;
     if (function->result != XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->result))
         return XR_XIR_BAD_TYPE;
-    XrXirStatus visibility = nominal_type_use(context, function_id, function->result);
+    XrXirStatus visibility = type_use_context(context, function_id, function->result);
     if (visibility != XR_XIR_OK) return visibility;
     if (!spend(&context->remaining.work, function->name_length))
         return XR_XIR_BUDGET;
@@ -251,7 +254,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             return XR_XIR_BUDGET;
         if (!xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
             return XR_XIR_BAD_TYPE;
-        visibility = nominal_type_use(context, function_id, function->parameters[p]);
+        visibility = type_use_context(context, function_id, function->parameters[p]);
         if (visibility != XR_XIR_OK) return visibility;
         if (xr_xir_type_is_cell(context->module->types, function->parameters[p]) && (!context->module->declarations ||
             context->module->declarations->functions[function_id].exported)) return XR_XIR_BAD_TYPE;
@@ -269,7 +272,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             if (!spend(&context->remaining.work, 1))
                 return XR_XIR_BUDGET;
             const XrXirInstruction *op = &function->instructions[i];
-            visibility = nominal_type_use(context, function_id, op->type);
+            visibility = type_use_context(context, function_id, op->type);
             if (visibility != XR_XIR_OK) return visibility;
             if ((op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) && !spend(&context->remaining.work, op->targets[1])) return XR_XIR_BUDGET;
             if ((op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) && context->module->declarations) {
@@ -525,8 +528,9 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
     if (op->op == XR_XIR_CELL_PLACE && xr_xir_type_is_nominal(types, array))
         return role_operand(function, graph, context, instruction, 0, cell);
     XrXirType element = xr_xir_array_element(types, array);
-    XrXirStatus status = xr_xir_type_satisfies(context->module, context->location.function,
-        element, 0, &context->remaining);
+    XrXirStatus status = context->module->provenance ?
+        xr_xir_type_constraints(context->module, context->location.function, element, 0, &context->remaining) :
+        xr_xir_type_satisfies(context->module, context->location.function, element, 0, &context->remaining);
     if (status != XR_XIR_OK) return status;
     if (op->op == XR_XIR_ARRAY_GET && op->type != element) return XR_XIR_BAD_TYPE;
     uint32_t count = operand_count(function, op, context->module);
@@ -705,7 +709,7 @@ static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage sta
     return status;
 }
 
-static XrXirStatus verify_nominal_modules(const XrXirModule *module, uint64_t *work) {
+static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirBudget *remaining) {
     const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
     if (!table) return XR_XIR_OK;
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
@@ -715,8 +719,15 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, uint64_t *w
         for (uint32_t m = 0; m < module->declarations->module_count; ++m) {
             const XrXirSourceModule *owner = &module->declarations->modules[m];
             uint64_t cost = owner->name_length == name.length ? (uint64_t) name.length + 1 : 1;
-            if (!spend(work, cost)) return XR_XIR_BUDGET;
+            if (!spend(&remaining->work, cost)) return XR_XIR_BUDGET;
             if (owner->name_length == name.length && !memcmp(owner->name, name.bytes, name.length)) {
+                if (table->declarations) {
+                    const XrXirNominalDeclaration *d = &table->declarations[i];
+                    for (uint32_t f = 0; f < d->field_count; ++f) {
+                        XrXirStatus status = xr_xir_type_access(module, owner->initializer, d->fields[f].type, remaining);
+                        if (status != XR_XIR_OK) return status;
+                    }
+                }
                 found = true; break;
             }
         }
@@ -725,9 +736,32 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, uint64_t *w
     return XR_XIR_OK;
 }
 
-XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
-                        XrXirDiagnostic *diagnostic) {
-    VerifyContext context = {budget ? *budget : xr_xir_default_budget(),
+static XrXirStatus verify_provenance(const XrXirModule *module, XrXirBudget *remaining,
+    XrXirDiagnostic *diagnostic) {
+    const XrXirProvenance *p = module->provenance;
+    if (module->stage != XR_XIR_CHECKED && module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    if (!p->source || p->source->module.provenance || !p->origins || p->count != module->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (p->source->module.stage != XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
+    uint64_t bytes = sizeof(*p) + (uint64_t)p->count * sizeof(*p->origins);
+    if (!spend(&remaining->metadata_bytes, bytes) || !spend(&remaining->work, p->count)) return XR_XIR_BUDGET;
+    for (uint32_t i = 0; i < p->count; ++i) {
+        bytes = (uint64_t)p->origins[i].argument_count * sizeof(XrXirType);
+        if (!spend(&remaining->metadata_bytes, bytes)) return XR_XIR_BUDGET;
+    }
+    XrXirStatus status = xr_xir_verify_remaining(&p->source->module, remaining, diagnostic);
+    if (status != XR_XIR_OK) return status;
+    return xr_xir_provenance_functions_match(&p->source->module, module, p->origins, remaining, diagnostic);
+}
+
+XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *remaining,
+                                  XrXirDiagnostic *diagnostic) {
+    if (!remaining) {
+        if (diagnostic)
+            *diagnostic = (XrXirDiagnostic) {XR_XIR_BAD_STRUCTURE, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    VerifyContext context = {*remaining,
                              {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX}, module};
     XrXirStatus status = XR_XIR_OK;
     if (!module || !module->functions || !module->function_count)
@@ -735,7 +769,7 @@ XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
     else if (module->stage != XR_XIR_BUILT && module->stage != XR_XIR_CHECKED &&
              module->stage != XR_XIR_LOWERED)
         status = XR_XIR_BAD_STAGE;
-    else if (module->function_count > context.remaining.functions ||
+    else if (!spend_count(&context.remaining.functions, module->function_count) ||
              !spend(&context.remaining.metadata_bytes, sizeof(XrXirArtifact)))
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
@@ -749,13 +783,13 @@ XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
         if (module->types && ((!module->generics && !module->types->nominals) || module->stage == XR_XIR_LOWERED))
             for (uint32_t t = 0; t < module->types->count; ++t)
                 if (module->types->nodes[t].parameter_span) status = XR_XIR_BAD_TYPE;
-        if (status == XR_XIR_OK) status = xr_xir_generics_verify(module, &context.remaining);
     }
     if (status == XR_XIR_OK) {
         status = xr_xir_declarations_verify(module->declarations, module->types, module->function_count,
             &context.remaining.metadata_bytes, &context.remaining.work);
     }
-    if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining.work);
+    if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining);
+    if (status == XR_XIR_OK) status = xr_xir_generics_verify(module, &context.remaining);
     if (status == XR_XIR_OK && module->declarations) {
         const XrXirDeclarations *d = module->declarations;
         const XrXirFunction *entry = &module->functions[d->entry_function];
@@ -779,8 +813,17 @@ XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
                 break;
         }
     }
+    if (status == XR_XIR_OK && module->provenance)
+        status = verify_provenance(module, &context.remaining, &context.location);
     context.location.status = status;
+    *remaining = context.remaining;
     if (diagnostic)
         *diagnostic = context.location;
     return status;
+}
+
+XrXirStatus xr_xir_verify(const XrXirModule *module, const XrXirBudget *budget,
+                        XrXirDiagnostic *diagnostic) {
+    XrXirBudget remaining = budget ? *budget : xr_xir_default_budget();
+    return xr_xir_verify_remaining(module, &remaining, diagnostic);
 }

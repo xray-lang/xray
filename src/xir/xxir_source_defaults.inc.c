@@ -24,6 +24,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
             if (!source_work(ctx, symbol->node)) return false;
             if (ctx->nominal_defaultable[d]) continue;
             const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[d];
+            if (decl->parameter_count) continue;
             bool available = true;
             for (uint32_t f = 0; f < decl->field_count; ++f) {
                 AstNode *field = symbol->node->as.struct_decl.fields[f];

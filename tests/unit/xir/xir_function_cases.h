@@ -50,6 +50,7 @@ static void function_case_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     (void) reason; xr_xir_value_drop(&((FunctionCaseFrame *) view->state)->owned);
 }
 static void function_case_release(void *owner) { ++*(unsigned *) owner; }
+#include "xir_native_metadata_fixture.h"
 static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program) {
     XrXirSourceModule module = {"root", 4, NULL, 0, 0};
     XrXirFunctionIdentity identities[] = {{0,0, 0}, {0,1, 0}, {0,1, 0}, {0,0, 0}, {0,1, 0}};
@@ -65,13 +66,18 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
         i == 0 ? XR_XIR_UNIT : i == 1 ? XR_XIR_I64 : i == 2 ? callback_type : XR_XIR_STRING,
         sizeof(FunctionCaseFrame), function_case_resume, function_case_cleanup, NULL};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
-        entries, 5, &declarations, {releases, function_case_release}, &types};
+        entries, 5, &declarations, {releases, function_case_release}, &types, {0}};
+    XrXirArtifact *proof = NULL;
+    XrXirStatus prepared = native_metadata_fixture(&spec, &proof);
+    if (prepared != XR_XIR_OK) return prepared;
+    spec.proof = xr_xir_program_proof(proof);
     signature.result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; signature.parameter_span = 1;
-    XrXirStatus rejected = xr_xir_program_seal(&spec, 65536, program);
-    if (rejected == XR_XIR_OUT_OF_MEMORY) return rejected;
+    XrXirStatus rejected = xr_xir_program_seal(&spec, 2097152, program);
+    if (rejected == XR_XIR_OUT_OF_MEMORY) { xr_xir_artifact_free(proof); return rejected; }
     CHECK(rejected == XR_XIR_BAD_TYPE && !*program);
     signature.result = XR_XIR_STRING; signature.parameter_span = 0;
-    return xr_xir_program_seal(&spec, 65536, program);
+    XrXirStatus status = xr_xir_program_seal(&spec, 2097152, program);
+    xr_xir_artifact_free(proof); return status;
 }
 static bool function_case_run(bool cancel) {
     unsigned releases = 0;

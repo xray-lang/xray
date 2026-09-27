@@ -186,7 +186,7 @@ static XrXirArtifact *fixture_checked(void) {
 #undef FLOAT_PARAMETERS_1
 #undef FLOAT_PARAMETERS_2
     };
-    const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL};
+    const XrXirModule module = {XR_XIR_BUILT, functions, sizeof(functions) / sizeof(functions[0]), NULL, NULL, NULL, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xr_xir_check(&module, NULL, &artifact, NULL) == XR_XIR_OK);
     return artifact;

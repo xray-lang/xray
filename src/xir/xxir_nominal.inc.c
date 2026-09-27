@@ -59,6 +59,8 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         status = nominal_name(field->name, b);
         if (status != XR_XIR_OK) return status;
         if (!nominal_field_type(types, field->type, d->parameter_count)) return XR_XIR_BAD_TYPE;
+        status = xr_xir_type_context_verify(types, field->type, d->constraints, d->parameter_count, b);
+        if (status != XR_XIR_OK) return status;
         for (uint32_t j = 0; j < f; ++j) {
             bool same = false;
             status = nominal_same_name(field->name, d->fields[j].name, b, &same);
@@ -212,14 +214,15 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirBudget *bu
         if (node->nominal.argument_count != d->parameter_count) return XR_XIR_BAD_TYPE;
         if (node->nominal.field_count && node->nominal.field_count != d->field_count) return XR_XIR_BAD_TYPE;
         for (uint32_t f = 0; f < node->nominal.field_count; ++f) {
-            if (!nominal_field_type(types, node->nominal.fields[f], 0)) return XR_XIR_BAD_TYPE;
+            if (!nominal_field_type(types, node->nominal.fields[f], node->parameter_span)) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xr_xir_type_substitution_matches(types, node->nominal.arguments,
                 node->nominal.argument_count, d->fields[f].type, node->nominal.fields[f], budget);
             if (status != XR_XIR_OK) return status;
         }
         for (uint32_t a = 0; a < d->parameter_count; ++a) {
             if (!nominal_charge(budget, 0, 1)) return XR_XIR_BUDGET;
-            if (d->constraints[a] & XR_XIR_CONSTRAINT_SENDABLE) {
+            if (!xr_xir_type_span(types, node->nominal.arguments[a]) &&
+                (d->constraints[a] & XR_XIR_CONSTRAINT_SENDABLE)) {
                 XrXirStatus status = xr_xir_type_sendable(types, node->nominal.arguments[a], NULL, 0, &budget->work);
                 if (status != XR_XIR_OK) return status;
             }

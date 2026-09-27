@@ -29,7 +29,7 @@ argument; definition checking cannot gain a constraint from a future body.
 Checked transitions and packets own every descriptor and parameter record; parser
 arenas, borrowed construction buffers and input bytes may be destroyed afterwards.
 Specialization substitutes components, interns a fresh closed constructed pool and
-remaps all type uses before rechecking. Checked schema 6, semantic contract 17
+remaps all type uses before rechecking. Checked schema 7, semantic contract 19
 places the unified tagged pool after generic metadata; earlier schema/contract
 pairs reject without an alternate reader. The exact record layout belongs to
 `xir-checked-packet.md`. Wire records contain only bounded IDs and descriptor

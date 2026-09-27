@@ -14,6 +14,7 @@
 #include "xir/xxir.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,13 +52,49 @@ static void fixture_init(Fixture *fixture) {
     fixture->instructions[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {6, 0}, {0, 0}, 0};
     fixture->function = (XrXirFunction) {fixture->name, 5, fixture->parameters, 2,
         XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6, NULL, 0};
-    fixture->module = (XrXirModule) {XR_XIR_BUILT, &fixture->function, 1, NULL, NULL, NULL};
+    fixture->module = (XrXirModule) {XR_XIR_BUILT, &fixture->function, 1, NULL, NULL, NULL, NULL};
 }
 
 static void expect(Fixture *fixture, XrXirStatus status) {
     XrXirDiagnostic diagnostic;
     CHECK(xr_xir_verify(&fixture->module, NULL, &diagnostic) == status);
     CHECK(diagnostic.status == status);
+}
+
+static void cumulative_verification_budget(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrXirBudget initial = xr_xir_default_budget(), remaining = initial;
+    XrXirDiagnostic diagnostic;
+    CHECK(xr_xir_verify_remaining(&fixture.module, &remaining, &diagnostic) == XR_XIR_OK);
+    CHECK(remaining.functions == initial.functions - 1);
+    CHECK(remaining.parameters == initial.parameters - 2);
+    CHECK(remaining.blocks == initial.blocks - 3);
+    CHECK(remaining.instructions == initial.instructions - 6);
+    uint64_t bytes = initial.metadata_bytes - remaining.metadata_bytes;
+    uint64_t work = initial.work - remaining.work;
+    CHECK(bytes && work);
+    CHECK(remaining.scratch_bytes == initial.scratch_bytes);
+    CHECK(remaining.frame_bytes == initial.frame_bytes);
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        remaining = initial;
+        remaining.functions = 2;
+        remaining.metadata_bytes = bytes * 2;
+        remaining.work = work * 2;
+        if (mode == 1) --remaining.functions;
+        if (mode == 2) --remaining.metadata_bytes;
+        if (mode == 3) --remaining.work;
+        CHECK(xr_xir_verify_remaining(&fixture.module, &remaining, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_verify_remaining(&fixture.module, &remaining, &diagnostic) ==
+              (mode ? XR_XIR_BUDGET : XR_XIR_OK));
+        CHECK(diagnostic.status == (mode ? XR_XIR_BUDGET : XR_XIR_OK));
+        if (!mode) CHECK(!remaining.functions && !remaining.metadata_bytes && !remaining.work);
+    }
+    remaining = initial;
+    CHECK(xr_xir_verify(&fixture.module, &remaining, NULL) == XR_XIR_OK);
+    CHECK(memcmp(&remaining, &initial, sizeof(initial)) == 0);
+    CHECK(xr_xir_verify_remaining(&fixture.module, NULL, &diagnostic) == XR_XIR_BAD_STRUCTURE);
+    CHECK(diagnostic.status == XR_XIR_BAD_STRUCTURE);
 }
 
 static void transitions_and_lifetime(void) {
@@ -220,7 +257,7 @@ static void loops_and_storage_order(void) {
     };
     XrXirBlock blocks[] = {{0, 2}, {2, 1}, {3, 1}, {4, 1}};
     XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     ops[0].immediate = 2;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
@@ -249,7 +286,7 @@ static void dominance_word_boundary(void) {
             ops[next++] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {b + 1, 0}, 0};
     }
     XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     ops[64] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {65, 69}, 0};
     XrXirType boolean = XR_XIR_BOOL;
@@ -270,7 +307,7 @@ static void reverse_storage_and_boolean_values(void) {
     };
     XrXirBlock blocks[] = {{0, 1}, {1, 1}, {2, 4}};
     XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0};
-    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
@@ -288,7 +325,7 @@ static void numeric_admission(void) {
         XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
         const XrXirBlock block = {0, 2};
         XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};
-        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL};
+        XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
         CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
         parameters[1] = XR_XIR_BOOL;
         CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
@@ -355,7 +392,7 @@ static void constructed_metadata(void) {
         memcpy(nodes,saved,sizeof(nodes)); input.type = (XrXirType)256;
     }
     XrXirGeneric generic = {NULL,65536,NULL,0};
-    XrXirModule context = {XR_XIR_BUILT,NULL,1,NULL,&generic,&types};
+    XrXirModule context = {XR_XIR_BUILT,NULL,1,NULL,&generic,&types, NULL};
     CHECK(xr_xir_type_in_context(&context,0,(XrXirType)260));
     CHECK(xr_xir_type_in_context(&context,0,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1)));
     CHECK(!xr_xir_type_in_context(&context,0,(XrXirType)XR_XIR_TYPE_PARAMETER_LIMIT));
@@ -517,7 +554,44 @@ static void nominal_argument_identity(void) {
     CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_BAD_TYPE);
 }
 
+static void nominal_context_proofs(void) {
+    NominalFixture f; nominal_fixture(&f);
+    XrXirType argument = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1);
+    XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_ARRAY, argument, NULL, 0, XR_XIR_UNIT, 0, 2, {0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 2, {0, &argument, 1, NULL, 0}}};
+    XrXirTypes types = {nodes, 2, &f.table};
+    const XrXirType nominal = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
+    uint32_t allowed[] = {0, XR_XIR_CONSTRAINT_SENDABLE}, denied[] = {XR_XIR_CONSTRAINT_SENDABLE, 0};
+    XrXirBudget initial = xr_xir_default_budget(), budget = initial;
+    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
+    uint64_t bytes = initial.metadata_bytes - budget.metadata_bytes, work = initial.work - budget.work;
+    budget = initial;
+    CHECK(xr_xir_type_context_verify(&types, nominal, denied, 2, &budget) == XR_XIR_BAD_TYPE);
+    budget = initial;
+    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 1, &budget) == XR_XIR_BAD_TYPE);
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        budget = initial; budget.metadata_bytes = bytes; budget.work = work;
+        if (mode == 1) --budget.metadata_bytes;
+        if (mode == 2) --budget.work;
+        CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) ==
+            (mode ? XR_XIR_BUDGET : XR_XIR_OK));
+    }
+    argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE; budget = initial;
+    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) == XR_XIR_OK);
+    budget = initial;
+    CHECK(xr_xir_type_context_verify(&types, nominal, denied, 2, &budget) == XR_XIR_BAD_TYPE);
+    argument = nominal; budget = initial;
+    CHECK(xr_xir_type_context_verify(&types, nominal, allowed, 2, &budget) == XR_XIR_BAD_TYPE);
+    argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
+    /* A well-formed pool still needs the separate use-site context proofs above. */
+    budget = initial;
+    CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
+}
+
 int main(void) {
+    cumulative_verification_budget();
+    nominal_context_proofs();
     nominal_argument_identity();
     nominal_instance_metadata();
     nominal_pool_ownership();

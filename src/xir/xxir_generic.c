@@ -23,22 +23,23 @@ bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirT
     return (uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t) type < XR_XIR_TYPE_PARAMETER_LIMIT &&
         (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < count;
 }
-XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
+XrXirStatus xr_xir_type_constraints(const XrXirModule *module, uint32_t function,
     XrXirType type, uint32_t constraints, XrXirBudget *remaining) {
     if (!remaining || !remaining->work) return XR_XIR_BUDGET;
     --remaining->work;
     if (!module || constraints & ~XR_XIR_CONSTRAINT_SENDABLE || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
-    const XrXirTypeNode *node = xr_xir_type_node(module->types, type);
-    if (node && node->kind == XR_XIR_TYPE_NOMINAL) {
-        XrXirStatus status = xr_xir_nominal_access(module, function, node->nominal.declaration,
-            0, XR_XIR_NOMINAL_TYPE, &remaining->work);
-        if (status != XR_XIR_OK) return status;
-    }
-    if (!constraints) return XR_XIR_OK;
     const XrXirGeneric *generic = module->generics ? &module->generics[function] : NULL;
+    XrXirStatus context = xr_xir_type_context_verify(module->types, type,
+        generic ? generic->constraints : NULL, generic ? generic->parameter_count : 0, remaining);
+    if (context != XR_XIR_OK || !constraints) return context;
     return xr_xir_type_sendable(module->types, type, generic ? generic->constraints : NULL,
         generic ? generic->parameter_count : 0, &remaining->work);
+}
+XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
+    XrXirType type, uint32_t constraints, XrXirBudget *remaining) {
+    XrXirStatus status = xr_xir_type_constraints(module, function, type, constraints, remaining);
+    return status == XR_XIR_OK ? xr_xir_type_access(module, function, type, remaining) : status;
 }
 XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remaining) {
     if (!module->generics) return XR_XIR_OK;

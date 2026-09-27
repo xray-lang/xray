@@ -12,6 +12,8 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_internal.h"
+#include "xir/xxir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast_walk.h"
@@ -57,6 +59,85 @@ static void reference_syntax(void) {
     xr_compiler_session_delete(session);
 }
 #include "xir_source_closure_cases.h"
+/* Characterize the open specialization authority gap without granting access. */
+static void nominal_specialization_authority(XrXirSourceRequest *request, const char *library) {
+    write_generic_source(library,
+        "struct LibraryPrivate{value:i64}\n"
+        "fn privateHelper()->i64{return LibraryPrivate{value:7}.value}\n"
+        "export fn identity<T>(x:T)->T{privateHelper();return x}\n");
+    const char *sources[] = {
+        "struct Private{value:i64}\nfn identity<T>(x:T)->T{return x}\nconst p=identity<Private>(Private{value:7})\n",
+        "import \"./lib\" as lib\nstruct Private{value:i64}\nconst p=lib.identity<Private>(Private{value:7})\n",
+        "import \"./lib\" as lib\nexport struct Public{value:i64}\nconst p=lib.identity<Public>(Public{value:7})\n",
+        "import \"./lib\" as lib\nconst p=lib.identity<i64>(7)\n"
+    };
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        write_generic_source(request->entry_path, sources[mode]);
+        XrXirSourceResult result = {0};
+        CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK && result.checked);
+        XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
+        CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);
+        xr_xir_source_result_free(&result);
+        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_checked_packet_free(&packet);
+        XrXirDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_specialize(decoded, NULL, &closed, &diagnostic);
+        {
+            CHECK(status == XR_XIR_OK && closed);
+            if (mode) {
+                const XrXirModule *module = xr_xir_artifact_module(closed);
+                bool instance = false, helper = false;
+                for (uint32_t f = 0; f < module->function_count; ++f) {
+                    const XrXirFunction *function = &module->functions[f];
+                    bool identity = function->name_length > 9 && !memcmp(function->name,"identity$",9);
+                    bool private_helper = function->name_length == 13 && !memcmp(function->name,"privateHelper",13);
+                    if (!identity && !private_helper) continue;
+                    const XrXirFunctionIdentity *scope = &module->declarations->functions[f];
+                    const XrXirSourceModule *owner = &module->declarations->modules[scope->module];
+                    CHECK(owner->name_length >= 6 && !memcmp(owner->name + owner->name_length - 6,"lib.xr",6));
+                    if (identity) instance = true;
+                    if (private_helper) { CHECK(!scope->exported); helper = true; }
+                }
+                CHECK(instance && helper);
+            }
+        }
+        if (mode == 1 || mode == 2) {
+            XrXirProvenance *proof = (XrXirProvenance *)closed->module.provenance;
+            CHECK(proof && proof->source);
+            closed->module.provenance = NULL;
+            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_TYPE);
+            XrXirCheckedPacket stripped = {0};
+            CHECK(xr_xir_checked_write(closed, NULL, &stripped, NULL) == XR_XIR_BAD_TYPE && !stripped.bytes);
+            closed->module.provenance = proof;
+            uint32_t instance = UINT32_MAX;
+            for (uint32_t f = 0; f < closed->module.function_count; ++f)
+                if (closed->module.functions[f].name_length > 9 &&
+                    !memcmp(closed->module.functions[f].name, "identity$", 9)) instance = f;
+            CHECK(instance != UINT32_MAX);
+            uint32_t original = proof->origins[instance].function;
+            proof->origins[instance].function = UINT32_MAX;
+            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+            proof->origins[instance].function = original;
+            const XrXirTypes *types = proof->source->module.types;
+            XrXirType opaque = XR_XIR_UNIT;
+            const char *name = mode == 1 ? "Private" : "Public";
+            for (uint32_t t = 0; t < types->count; ++t) {
+                const XrXirTypeNode *node = &types->nodes[t];
+                if (node->kind != XR_XIR_TYPE_NOMINAL || node->parameter_span) continue;
+                XrXirLiteral declared = types->nominals->declarations[node->nominal.declaration].name;
+                if (declared.length == strlen(name) && !memcmp(declared.bytes, name, declared.length))
+                    opaque = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + t);
+            }
+            CHECK(opaque != XR_XIR_UNIT);
+            XrXirFunction *definition = (XrXirFunction *)&proof->source->module.functions[original];
+            XrXirType saved = definition->result; definition->result = opaque;
+            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_BAD_TYPE);
+            definition->result = saved;
+            CHECK(xr_xir_artifact_verify(closed, NULL, NULL) == XR_XIR_OK);
+        }
+        xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
+    }
+}
 int main(void) {
     reference_syntax();
     const char *rejected[] = {
@@ -111,6 +192,10 @@ int main(void) {
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
+    nominal_specialization_authority(&request, library);
+    write_generic_source(library,
+        "export fn required<T:Sendable>(x:T)->T { return x }\n"
+        "fn hidden<T>(x:T)->T { return x }\n");
     source_closure_cases(&request);
     for (unsigned i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_generic_source(root, rejected[i]);

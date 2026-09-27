@@ -20,6 +20,138 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_generic_fixture.h"
 #include "xir_nominal_generic_fixture.h"
+#include "xir_nominal_expression_fixture.h"
+#include "xir_nominal_checked_fixture.h"
+#include "xir_nominal_field_closure_fixture.h"
+static void nominal_ordered_matching(void) {
+    NominalFixture f; nominal_fixture(&f);
+    uint32_t constraints[2] = {0};
+    for (unsigned i = 0; i < 2; ++i) {
+        f.declarations[i].parameter_count = 2; f.declarations[i].constraints = constraints;
+    }
+    XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirType arguments[][2] = {
+        {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),t},
+        {XR_XIR_I64,XR_XIR_STRING}, {XR_XIR_STRING,XR_XIR_I64},
+        {(XrXirType)256,t}, {(XrXirType)257,XR_XIR_STRING}};
+    XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,2,{0,arguments[0],2,NULL,0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,arguments[1],2,NULL,0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,arguments[1],2,NULL,0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,arguments[2],2,NULL,0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,2,{0,arguments[3],2,NULL,0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,arguments[4],2,NULL,0}}};
+    XrXirTypes types = {nodes,6,&f.table}; XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_OK);
+    for (unsigned i = 0; i < 4; ++i) {
+        budget = xr_xir_default_budget();
+        XrXirType expected = (XrXirType)(i == 3 ? 260 : 256);
+        XrXirType actual = (XrXirType)(i == 3 ? 261 : 257+i);
+        CHECK(xr_xir_type_substitution_matches(&types,arguments[2],2,expected,actual,&budget) ==
+            (i == 0 || i == 3 ? XR_XIR_OK : XR_XIR_BAD_TYPE));
+    }
+}
+static void nominal_field_closure(void) {
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        XrXirArtifact *checked = nominal_field_closure_fixture(mode), *closed = NULL;
+        XrXirBudget budget = xr_xir_default_budget();
+        if (mode == 2) budget.work = 10000;
+        CHECK(xr_xir_artifact_verify(checked, &budget, NULL) == XR_XIR_OK);
+        XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+        CHECK(xr_xir_specialize(checked, &budget, &closed, NULL) == expected);
+        xr_xir_artifact_free(checked);
+        if (mode) { CHECK(!closed); continue; }
+        const XrXirModule *module = xr_xir_artifact_module(closed);
+        CHECK(!module->generics && module->types->count == 3);
+        CHECK(module->types->nodes[1].nominal.fields[0] == (XrXirType)258);
+        CHECK(module->types->nodes[2].nominal.declaration == 0 &&
+            module->types->nodes[2].nominal.arguments[0] == XR_XIR_I64 &&
+            module->types->nodes[2].nominal.fields[0] == XR_XIR_I64);
+        XrXirArtifact *lowered = NULL;
+        const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL) == XR_XIR_OK);
+        xr_xir_artifact_free(closed);
+        module = xr_xir_artifact_module(lowered);
+        CHECK(module->types->count == 2 && module->types->nodes[0].nominal.fields[0] == (XrXirType)257);
+        xr_xir_artifact_free(lowered);
+    }
+}
+static void nominal_definition_constraints(void) {
+    XrXirArtifact *checked = nominal_expression_fixture();
+    const XrXirModule *module = xr_xir_artifact_module(checked);
+    const XrXirNominalDeclaration *declarations = module->types->nominals->declarations;
+    ((uint32_t *) declarations[0].constraints)[0] = XR_XIR_CONSTRAINT_SENDABLE;
+    CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_BAD_TYPE);
+    ((uint32_t *) declarations[1].constraints)[0] = XR_XIR_CONSTRAINT_SENDABLE;
+    CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_BAD_TYPE);
+    ((uint32_t *) module->generics[1].constraints)[0] = XR_XIR_CONSTRAINT_SENDABLE;
+    CHECK(xr_xir_artifact_verify(checked, NULL, NULL) == XR_XIR_OK);
+    XrXirArtifact *closed = NULL;
+    CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(closed); xr_xir_artifact_free(checked);
+}
+static void cross_pool_substitution(void) {
+    XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, actual = XR_XIR_STRING;
+    XrXirTypeNode source_nodes[] = {{XR_XIR_TYPE_ARRAY, parameter, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
+        {XR_XIR_TYPE_ARRAY, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
+    XrXirTypeNode target_nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_BOOL, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {XR_XIR_TYPE_ARRAY, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
+    XrXirTypes source = {source_nodes, 2, NULL}, target = {target_nodes, 3, NULL};
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_type_substitution_matches_between(&source,&target,&actual,1,(XrXirType)256,(XrXirType)257,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_type_substitution_matches_between(&source,&target,&actual,1,(XrXirType)256,(XrXirType)256,&budget) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_type_substitution_matches_between(&source,&target,NULL,0,(XrXirType)257,(XrXirType)258,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_type_substitution_matches_between(&source,&target,NULL,0,(XrXirType)257,(XrXirType)257,&budget) == XR_XIR_BAD_TYPE);
+    budget.work = 0;
+    CHECK(xr_xir_type_substitution_matches_between(&source,&target,&actual,1,(XrXirType)256,(XrXirType)257,&budget) == XR_XIR_BUDGET);
+}
+static void nominal_argument_visibility(void) {
+    XrXirArtifact *checked = nominal_checked_fixture(2);
+    XrXirModule module = *xr_xir_artifact_module(checked);
+    XrXirTypeNode nodes[4]; memcpy(nodes, module.types->nodes, 3 * sizeof(*nodes));
+    XrXirType argument = (XrXirType)258;
+    nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
+        {0, &argument, 1, NULL, 0}};
+    ((uint32_t *) module.types->nominals->declarations[0].constraints)[0] = 0;
+    XrXirTypes types = {nodes, 4, module.types->nominals}; module.types = &types;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_type_access(&module, 4, (XrXirType)259, &budget) == XR_XIR_BAD_TYPE);
+    budget = xr_xir_default_budget();
+    CHECK(xr_xir_type_access(&module, 8, (XrXirType)259, &budget) == XR_XIR_OK);
+    ((XrXirNominalDeclaration *) types.nominals->declarations)[1].exported = 0;
+    budget = xr_xir_default_budget();
+    CHECK(xr_xir_type_access(&module, 8, (XrXirType)259, &budget) == XR_XIR_BAD_TYPE);
+    xr_xir_artifact_free(checked);
+}
+static void nominal_expression_closure(void) {
+    XrXirArtifact *checked = nominal_expression_fixture(), *closed = NULL, *lowered = NULL;
+    XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL;
+    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_checked_packet_free(&packet);
+    CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded);
+    const XrXirModule *module = xr_xir_artifact_module(closed);
+    CHECK(module->types->count == 8 && module->function_count == 6);
+    for (uint32_t f = 3; f < 6; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        const XrXirTypeNode *box = xr_xir_type_node(module->types, function->instructions[0].type);
+        const XrXirTypeNode *outer = xr_xir_type_node(module->types, function->instructions[1].type);
+        XrXirType expected = f == 3 ? XR_XIR_I64 : f == 4 ? XR_XIR_U8 : XR_XIR_STRING;
+        CHECK(box && outer && box != outer && box->nominal.declaration == 0 && outer->nominal.declaration == 1);
+        CHECK(box->nominal.arguments[0] == expected && box->nominal.fields[0] == expected);
+        CHECK(outer->nominal.arguments[0] == expected && outer->nominal.fields[0] == function->instructions[0].type);
+    }
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(closed);
+    CHECK(xr_xir_artifact_module(lowered)->types->count == 6);
+    CHECK(xr_xir_artifact_verify(lowered, NULL, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(lowered);
+}
 static void nominal_function_closure(void) {
     for (unsigned mode = 0; mode < 2; ++mode) {
         XrXirArtifact *checked = nominal_generic_fixture(mode != 0), *closed = NULL, *again = NULL, *lowered = NULL;
@@ -101,7 +233,7 @@ static void forwarding(void) {
     for (unsigned i = 0; i < 3; ++i) ops[i].type = t;
     caller.instructions = ops;
     XrXirFunction views[] = {caller, functions[1]};
-    XrXirModule module = {XR_XIR_BUILT, views, 2, NULL, generics, NULL};
+    XrXirModule module = {XR_XIR_BUILT, views, 2, NULL, generics, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_TYPE);
     constraint = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
@@ -110,8 +242,8 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(valid, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(valid);
-    CHECK(packet.length > 44 && packet.bytes[packet.length - 40] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 40] = 0; rehash_generic(&packet);
+    CHECK(packet.length > 44 && packet.bytes[packet.length - 44] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[packet.length - 44] = 0; rehash_generic(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_checked_packet_free(&packet);
     xr_xir_artifact_free(checked);
@@ -245,6 +377,12 @@ static void deep_body_substitution(void) {
 
 int main(void) {
     nominal_function_closure();
+    nominal_expression_closure();
+    nominal_field_closure();
+    nominal_ordered_matching();
+    nominal_definition_constraints();
+    nominal_argument_visibility();
+    cross_pool_substitution();
     deep_body_substitution();
     array_generic_cases();
     array_definition_constraints();

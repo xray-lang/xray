@@ -15,6 +15,7 @@
 #include "xxir_generic.h"
 #include "xxir_types.h"
 #include "../base/xmalloc.h"
+#include "../base/xsha256.h"
 
 XrXirBudget xr_xir_default_budget(void) {
     return (XrXirBudget) {1024, 65536, 4096, 1048576,
@@ -63,9 +64,11 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
         }
     }
     xr_free(artifact->layouts);
+    xr_xir_checked_packet_free(&artifact->checked_packet);
     xr_xir_generics_free((XrXirGeneric *) artifact->module.generics, artifact->module.function_count);
     xr_xir_declarations_free((XrXirDeclarations *) artifact->module.declarations);
     xr_xir_types_free((XrXirTypes *) artifact->module.types);
+    xr_xir_provenance_free((XrXirProvenance *)artifact->module.provenance);
     xr_free(functions);
     xr_free(artifact);
 }
@@ -88,7 +91,7 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         xr_free(copy);
         return NULL;
     }
-    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL};
+    copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL, NULL};
     XrXirGeneric *generics = NULL;
     if (xr_xir_generics_clone(source, &generics) != XR_XIR_OK) {
         xr_xir_artifact_free(copy); return NULL;
@@ -122,9 +125,31 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
             return NULL;
         }
     }
+    if (source->provenance) {
+        const XrXirProvenance *from = source->provenance;
+        XrXirProvenance *to = xr_calloc(1, sizeof(*to));
+        if (!to) { xr_xir_artifact_free(copy); return NULL; }
+        copy->module.provenance = to;
+        to->origins = xr_calloc(from->count, sizeof(*to->origins));
+        if (!to->origins) { xr_xir_artifact_free(copy); return NULL; }
+        to->count = from->count;
+        to->source = clone_module(&from->source->module);
+        if (!to->source) { xr_xir_artifact_free(copy); return NULL; }
+        to->source->budget = from->source->budget;
+        for (uint32_t i = 0; i < from->count; ++i) {
+            to->origins[i] = from->origins[i];
+            to->origins[i].arguments = copy_bytes(from->origins[i].arguments,
+                (size_t)from->origins[i].argument_count * sizeof(XrXirType));
+            if (from->origins[i].argument_count && !to->origins[i].arguments) {
+                xr_xir_artifact_free(copy); return NULL;
+            }
+        }
+    }
     return copy;
 }
 
+#include "xxir_provenance.inc.c"
+#include "xxir_provenance_match.inc.c"
 #include "xxir_types_lower.inc.c"
 
 static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnostic) {
@@ -172,6 +197,11 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
     if (!copy)
         return transition_error(XR_XIR_OUT_OF_MEMORY, diagnostic);
     copy->budget = limits;
+    if (source == XR_XIR_CHECKED) {
+        status = xr_xir_checked_write(copy, &limits, &copy->checked_packet, diagnostic);
+        if (status != XR_XIR_OK) { xr_xir_artifact_free(copy); return status; }
+        xr_sha256(copy->checked_packet.bytes, copy->checked_packet.length, copy->checked_identity);
+    }
     copy->module.stage = source == XR_XIR_BUILT ? XR_XIR_CHECKED : XR_XIR_LOWERED;
     if (copy->module.stage == XR_XIR_LOWERED) {
         XrXirBudget projection_budget = limits;
@@ -222,6 +252,19 @@ XrXirStatus xr_xir_lower(const XrXirArtifact *checked, const XrXirTarget *target
 XrXirStatus xr_xir_artifact_verify(const XrXirArtifact *artifact, const XrXirBudget *budget,
                                  XrXirDiagnostic *diagnostic) {
     XrXirBudget limits = budget ? *budget : (artifact ? artifact->budget : xr_xir_default_budget());
+    if (artifact && artifact->module.stage == XR_XIR_LOWERED) {
+        const XrXirCheckedPacket *packet = &artifact->checked_packet;
+        if (!packet->bytes || packet->length < 64)
+            return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+        if (packet->length > limits.metadata_bytes || packet->length > limits.work)
+            return transition_error(XR_XIR_BUDGET, diagnostic);
+        limits.metadata_bytes -= packet->length;
+        limits.work -= packet->length;
+        uint8_t digest[32];
+        xr_sha256(packet->bytes, packet->length, digest);
+        if (memcmp(digest, artifact->checked_identity, sizeof(digest)))
+            return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+    }
     XrXirStatus status = xr_xir_verify(xr_xir_artifact_module(artifact), &limits, diagnostic);
     if (status != XR_XIR_OK)
         return status;

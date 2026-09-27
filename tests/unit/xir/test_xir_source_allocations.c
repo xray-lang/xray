@@ -176,7 +176,75 @@ static void array_source_allocations(XrCompilerSession *session) {
     CHECK(xr_test_unlink(path) == 0 && xr_test_rmdir(directory) == 0);
     printf("Array source and owned native facts: %zu OOM sites; no partial publication\n", sites);
 }
+static bool source_nominal_substitution_case(SourceContext *ctx) {
+    XrXirType args[] = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + 1), (XrXirType)XR_XIR_TYPE_PARAMETER_BASE};
+    XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
+    node.nominal = (XrXirNominalType) {0, args, 2, NULL, 0};
+    XrXirType pair, nested, closed, repeated;
+    if (!source_intern_type(ctx, node, &pair)) return false;
+    CHECK(xr_xir_type_span(&ctx->types, pair) == 2);
+    XrXirType nested_args[] = {pair, args[1]}; node.nominal.arguments = nested_args;
+    if (!source_intern_type(ctx, node, &nested)) return false;
+    CHECK(nested != pair);
+    XrXirType actual[] = {XR_XIR_STRING, XR_XIR_I64};
+    SourceSubstitution sub = {actual, 2};
+    if (!source_substitute(ctx, &sub, nested, 0, &closed) ||
+        !source_substitute(ctx, &sub, nested, 0, &repeated)) return false;
+    CHECK(closed == repeated && !xr_xir_type_span(&ctx->types, closed));
+    const XrXirTypeNode *outer = xr_xir_type_node(&ctx->types, closed);
+    CHECK(outer->nominal.arguments[1] == XR_XIR_STRING && !outer->nominal.field_count);
+    const XrXirTypeNode *inner = xr_xir_type_node(&ctx->types, outer->nominal.arguments[0]);
+    CHECK(inner->nominal.arguments[0] == XR_XIR_I64 && inner->nominal.arguments[1] == XR_XIR_STRING);
+    XrXirNominalField fields[] = {{{"first",5}, args[1], XR_XIR_FIELD_MUTABLE},
+        {{"second",6}, args[0], 0}, {{"nested",6}, pair, 0}};
+    XrXirNominalDeclaration declaration = {0}; declaration.fields = fields; declaration.field_count = 3;
+    declaration.parameter_count = 2;
+    ctx->nominals = (XrXirNominalTable) {&declaration, 1, NULL};
+    uint32_t members[] = {1,2,3}, *member_tables[] = {members}; ctx->nominal_members = member_tables;
+    XrXirFunctionIdentity identity = {0}; ctx->identities = &identity;
+    uint32_t field_index; XrXirType field_type;
+    if (!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "first", true, &field_index, &field_type)) return false;
+    CHECK(field_index == 0 && field_type == XR_XIR_I64);
+    if (!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "second", false, &field_index, &field_type)) return false;
+    CHECK(field_index == 1 && field_type == XR_XIR_STRING);
+    if (!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "nested", false, &field_index, &field_type)) return false;
+    const XrXirTypeNode *field_node = xr_xir_type_node(&ctx->types, field_type);
+    CHECK(field_node && field_node->nominal.arguments[0] == XR_XIR_STRING && field_node->nominal.arguments[1] == XR_XIR_I64);
+    CHECK(ctx->query.reference_count == 3 && ctx->query.references[0].target == 1);
+    XrXirType reversed[] = {XR_XIR_STRING, XR_XIR_I64}; node.nominal.arguments = reversed;
+    if (!source_intern_type(ctx, node, &repeated)) return false;
+    CHECK(repeated != outer->nominal.arguments[0]);
+    node.nominal.declaration = 1;
+    if (!source_intern_type(ctx, node, &closed)) return false;
+    CHECK(closed != repeated);
+    uint32_t references = ctx->query.reference_count;
+    fields[0].flags |= XR_XIR_FIELD_PRIVATE;
+    CHECK(!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "first", false, &field_index, &field_type));
+    CHECK(ctx->diagnostic.status == XR_XIR_BAD_TYPE && ctx->query.reference_count == references);
+    ctx->diagnostic = (XrXirSourceDiagnostic) {0}; identity.nominal_owner = 1;
+    if (!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "first", true, &field_index, &field_type)) return false;
+    CHECK(field_type == XR_XIR_I64);
+    CHECK(!source_struct_field(ctx, NULL, outer->nominal.arguments[0], "second", true, &field_index, &field_type));
+    CHECK(ctx->diagnostic.status == XR_XIR_BAD_TYPE && ctx->query.reference_count == references + 1);
+    ctx->diagnostic = (XrXirSourceDiagnostic) {0};
+    return true;
+}
+static void source_nominal_substitution_failures(void) {
+    size_t sites = 0;
+    for (size_t attempt = 0; attempt <= sites; ++attempt) {
+        SourceContext ctx = {0}; ctx.budget = xr_xir_default_budget();
+        attempts = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+        bool ok = source_nominal_substitution_case(&ctx);
+        if (!attempt) { CHECK(ok); sites = attempts; }
+        else CHECK(!ok && ctx.diagnostic.status == XR_XIR_OUT_OF_MEMORY);
+        while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_free(ctx.memory); ctx.memory = next; }
+        CHECK(!live);
+    }
+    fail_at = SIZE_MAX;
+    printf("Source nominal identity and substitution: %zu OOM sites\n", sites);
+}
 int main(void) {
+    source_nominal_substitution_failures();
     snapshot_nominal_allocations();
     snapshot_type_allocations();
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);

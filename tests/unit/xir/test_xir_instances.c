@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 
+#include "xir_native_metadata_fixture.h"
+
 typedef struct Witness { uint32_t mode, releases, begins[3]; } Witness;
 typedef struct Environment { Witness *witness; uint32_t module; } Environment;
 typedef struct Frame { uint32_t phase; XrXirValue value; int64_t sum; } Frame;
@@ -122,6 +124,7 @@ typedef struct Fixture {
     XrXirCallEntry entries[10];
     XrXirDeclarations declarations;
     XrXirProgramSpec spec;
+    XrXirArtifact *proof;
 } Fixture;
 static const XrXirType string_parameter = XR_XIR_STRING;
 static void fixture(Fixture *f, uint32_t mode) {
@@ -154,7 +157,9 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->literals[1] = (XrXirLiteral) {"independent", 11};
     f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL};
+        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL, {0}};
+    CHECK(native_metadata_fixture(&f->spec, &f->proof) == XR_XIR_OK);
+    f->spec.proof = xr_xir_program_proof(f->proof);
 }
 static XrXirInstance *new_instance(XrXirProgram *program, Trace *log) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
@@ -179,7 +184,8 @@ static void strings_equal(const XrXirValue *value, const char *expected, size_t 
 static void isolation(void) {
     Fixture f; fixture(&f, 1);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f.spec, 65536, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&f.spec, 2097152, &program) == XR_XIR_OK);
+    xr_xir_artifact_free(f.proof); f.proof = NULL;
     /* Metadata inputs may die or change after sealing; code environments stay leased. */
     f.modules[2].name = "other"; f.dependencies[0] = 99; f.literals[0].bytes = "wrong";
     f.slots[0].module = 0; f.identities[9].module = 0; f.entries[3].resume = NULL;
@@ -223,7 +229,8 @@ static void isolation(void) {
 static void borrowed_restart(void) {
     Fixture f; fixture(&f, 0);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f.spec, 65536, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&f.spec, 2097152, &program) == XR_XIR_OK);
+    xr_xir_artifact_free(f.proof); f.proof = NULL;
     Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
     CHECK(xr_xir_instance_start(instance, 8, NULL, 0) == XR_XIR_CALL_READY);
     XrXirInstanceResult old = xr_xir_instance_poll(instance);
@@ -253,7 +260,8 @@ static void failed_initialization(void) {
     for (uint32_t mode = 1; mode <= 4; ++mode) {
         Fixture f; fixture(&f, mode);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&f.spec, 65536, &program) == XR_XIR_OK);
+        CHECK(xr_xir_program_seal(&f.spec, 2097152, &program) == XR_XIR_OK);
+    xr_xir_artifact_free(f.proof); f.proof = NULL;
         Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
         CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll(instance);
@@ -287,9 +295,11 @@ static void failed_initialization(void) {
     }
 }
 static void seal_rejection(void) {
-    for (uint32_t invalid = 0; invalid < 18; ++invalid) {
+    for (uint32_t invalid = 0; invalid < 24; ++invalid) {
         Fixture f; fixture(&f, 0);
         uint32_t cycle = 0;
+        uint8_t identity[32];
+        XrXirFunctionLayout layouts[10];
         switch (invalid) {
         case 0: f.spec.abi_version = 0; break;
         case 1: f.spec.target.abi_version = 2; break;
@@ -318,11 +328,28 @@ static void seal_rejection(void) {
             f.spec.abi_version = 10;
             f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
             break;
+        case 18:
+            f.spec.abi_version = 11;
+            f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
+            f.spec.proof.bytes = (const uint8_t *) (uintptr_t) 1;
+            f.spec.proof.layouts = (const XrXirFunctionLayout *) (uintptr_t) 1;
+            break;
+        case 19: f.spec.proof.bytes = NULL; break;
+        case 20:
+            memcpy(identity, f.spec.proof.identity, sizeof(identity)); identity[0] ^= 1;
+            f.spec.proof.identity = identity; break;
+        case 21: --f.spec.proof.length; break;
+        case 22:
+            memcpy(layouts, f.spec.proof.layouts, sizeof(layouts)); ++layouts[0].frame_bytes;
+            f.spec.proof.layouts = layouts; break;
+        case 23: f.slots[0].mutable ^= 1; break;
         }
         XrXirProgram *program = NULL;
-        XrXirStatus status = xr_xir_program_seal(&f.spec, invalid == 9 ? 1 : 65536, &program);
+        XrXirStatus status = xr_xir_program_seal(&f.spec, invalid == 9 ? 1 : 2097152, &program);
+        xr_xir_artifact_free(f.proof); f.proof = NULL;
         CHECK(status != XR_XIR_OK);
-        if (invalid >= 15) CHECK(status == XR_XIR_BAD_LAYOUT);
+        if (invalid >= 15 && invalid <= 18) CHECK(status == XR_XIR_BAD_LAYOUT);
+        if (invalid >= 19) CHECK(status == XR_XIR_BAD_STRUCTURE);
         CHECK(!program && !f.witness.releases);
     }
 }

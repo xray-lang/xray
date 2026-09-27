@@ -12,6 +12,7 @@
  */
 #ifndef XIR_ARRAY_INSTANCE_CASES_H
 #define XIR_ARRAY_INSTANCE_CASES_H
+#include "xir_native_metadata_fixture.h"
 #include "xir/xxir_instance_value.h"
 
 typedef struct ArrayAccessWitness { uint32_t mode, reads, cleanups; } ArrayAccessWitness;
@@ -144,9 +145,13 @@ static void array_instance_cases(void) {
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness},
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_library,array_access_cleanup,&witness}};
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
-            entries,mode ? 2 : 4,&declarations,{0},&types};
+            entries,mode ? 2 : 4,&declarations,{0},&types,{0}};
+        XrXirArtifact *proof = NULL;
+        CHECK(native_metadata_fixture(&spec, &proof) == XR_XIR_OK);
+        spec.proof = xr_xir_program_proof(proof);
         XrXirProgram *program = NULL; XrXirInstance *instance = NULL;
-        CHECK(xr_xir_program_seal(&spec,65536,&program) == XR_XIR_OK);
+        CHECK(xr_xir_program_seal(&spec,2097152,&program) == XR_XIR_OK);
+        xr_xir_artifact_free(proof);
         XrXirInstanceConfig config = xr_xir_instance_defaults();
         if (mode) config.poll_limit = 64;
         CHECK(xr_xir_instance_new(program,&config,&instance) == XR_XIR_CALL_READY);

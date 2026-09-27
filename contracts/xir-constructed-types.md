@@ -249,7 +249,7 @@ boundary atomically as follows; there is only one current reader/executor.
 | Revision | Current cutover value | Reason |
 |---|---:|---|
 | Checked schema | 6 | The unified pool includes owned nominal declarations, arguments and substituted fields. |
-| Checked semantic contract | 17 | Includes Array, floating arithmetic and struct tags 74..76 with exact types and declaration authority. |
+| Checked semantic contract | 18 | Includes Array, floating arithmetic and struct tags 74..76 with exact types and declaration authority. |
 | Value ABI | 10 | Owned nominal values extend the same TypeArena identity and value ownership boundary. |
 | Call ABI | 14 | Typed Bounds detail crosses actions, results and unwind under `xir-resumable-calls.md`. |
 | Program ABI | 11 | Native descriptors include nominal metadata and each function's declaration ownership; typed faults remain preserved. |
@@ -342,7 +342,7 @@ side effects remain. Assignment's returned T is independently owned.
 Bounds are i64 0 <= index < length and map to E0430 in the panic/fault channel,
 with the signed index and observed length preserved. They must not be reported as
 NUMERIC_RANGE, BAD_STATE, business throw or allocation failure. The Call14 and
-current Program11 detail representation, action verification and sticky propagation are
+current Program12 detail representation, action verification and sticky propagation are
 owned by `xir-resumable-calls.md` and `xir-program-instance.md`; both VM and native
 must use that same boundary. Allocation, retain-limit and admission-work failures
 retain their distinct existing channels.

@@ -144,9 +144,15 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
         if (count > 65536 || total > remaining->parameters || total > remaining->work ||
             bytes > SIZE_MAX || bytes > remaining->metadata_bytes) return XR_XIR_BUDGET;
         remaining->parameters -= (uint32_t) total; remaining->work -= total; remaining->metadata_bytes -= bytes;
-        for (uint32_t a = 0; a < count; ++a)
-            if (!type_component(types, node->nominal.arguments[a], index) ||
-                xr_xir_type_span(types, node->nominal.arguments[a])) return XR_XIR_BAD_TYPE;
+        for (uint32_t a = 0; a < count; ++a) {
+            XrXirType argument = node->nominal.arguments[a];
+            const XrXirTypeNode *nested = xr_xir_type_node(types, argument);
+            bool nominal = nested && nested->kind == XR_XIR_TYPE_NOMINAL &&
+                (uint32_t) argument - XR_XIR_CONSTRUCTED_TYPE_BASE < index;
+            if (!nominal && !type_component(types, argument, index)) return XR_XIR_BAD_TYPE;
+            uint32_t component = xr_xir_type_span(types, argument);
+            if (component > span) span = component;
+        }
     } else return XR_XIR_BAD_TYPE;
     if (types->nominals && types->nominals->identities && span) return XR_XIR_BAD_TYPE;
     return node->parameter_span == span ? XR_XIR_OK : XR_XIR_BAD_TYPE;
@@ -246,6 +252,7 @@ XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value) {
 }
 
 #include "xxir_type_match.inc.c"
+#include "xxir_type_context.inc.c"
 #include "xxir_nominal.inc.c"
 #include "xxir_nominal_identity.inc.c"
 #include "xxir_nominal_layout.inc.c"

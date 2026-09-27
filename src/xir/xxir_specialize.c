@@ -54,9 +54,15 @@ static XrXirType spec_node(SpecContext *c, XrXirTypeNode signature) {
         if (!spec_work(c, 1)) return XR_XIR_UNIT;
         const XrXirTypeNode *s = &c->types.nodes[i];
         if (s->kind != signature.kind || s->element != signature.element || s->flags != signature.flags ||
-            s->parameter_count != signature.parameter_count || s->result != signature.result) continue;
+            s->parameter_count != signature.parameter_count || s->result != signature.result ||
+            s->parameter_span != signature.parameter_span ||
+            s->nominal.declaration != signature.nominal.declaration ||
+            s->nominal.argument_count != signature.nominal.argument_count) continue;
         if (!spec_work(c, s->parameter_count)) return XR_XIR_UNIT;
         bool same = true;
+        if (!spec_work(c, s->nominal.argument_count)) return XR_XIR_UNIT;
+        for (uint32_t a = 0; a < s->nominal.argument_count; ++a)
+            if (s->nominal.arguments[a] != signature.nominal.arguments[a]) same = false;
         for (uint32_t p = 0; p < s->parameter_count; ++p)
             if (s->parameters[p].type != signature.parameters[p].type ||
                 s->parameters[p].mode != signature.parameters[p].mode) same = false;
@@ -102,6 +108,12 @@ static bool spec_type_push(SpecContext *c, uint32_t index, uint32_t *count) {
         XrXirCallableParameter *parameters = spec_alloc(c, n, sizeof(*parameters));
         if (n && !parameters) return false;
         frame->node.parameters = parameters;
+    } else if (frame->node.kind == XR_XIR_TYPE_NOMINAL) {
+        uint32_t n = frame->node.nominal.argument_count;
+        XrXirType *arguments = spec_alloc(c, n, sizeof(*arguments));
+        if (n && !arguments) return false;
+        frame->node.nominal.arguments = arguments;
+        frame->node.nominal.fields = NULL; frame->node.nominal.field_count = 0;
     }
     return true;
 }
@@ -118,12 +130,14 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
     while (count && c->diagnostic.status == XR_XIR_OK) {
         SpecTypeFrame *frame = &c->type_stack[count - 1];
         const XrXirTypeNode *source = &c->source->types->nodes[frame->index];
-        uint32_t components = source->kind == XR_XIR_TYPE_CALLABLE ? source->parameter_count + 1 : 1;
+        uint32_t components = source->kind == XR_XIR_TYPE_NOMINAL ? source->nominal.argument_count :
+            source->kind == XR_XIR_TYPE_CALLABLE ? source->parameter_count + 1 : 1;
         if (frame->next == components) {
             *spec_type_cache(c, instance, frame->index) = spec_node(c, frame->node);
             --count; continue;
         }
         XrXirType child = source->element;
+        if (source->kind == XR_XIR_TYPE_NOMINAL) child = source->nominal.arguments[frame->next];
         if (source->kind == XR_XIR_TYPE_CALLABLE)
             child = frame->next < source->parameter_count ? source->parameters[frame->next].type : source->result;
         if (!spec_type_ready(c, instance, child, &result)) {
@@ -133,7 +147,9 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
             if (!spec_type_push(c, index, &count)) break;
             continue;
         }
-        if (source->kind != XR_XIR_TYPE_CALLABLE) frame->node.element = result;
+        if (source->kind == XR_XIR_TYPE_NOMINAL)
+            ((XrXirType *) frame->node.nominal.arguments)[frame->next] = result;
+        else if (source->kind != XR_XIR_TYPE_CALLABLE) frame->node.element = result;
         else if (frame->next == source->parameter_count) frame->node.result = result;
         else {
             XrXirCallableParameter *parameters = (XrXirCallableParameter *) frame->node.parameters;
@@ -241,7 +257,7 @@ static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
     result->slots = slots; result->modules = modules; result->functions = c->identities;
     result->entry_function = c->ordinary[source->entry_function]; return true;
 }
-static XrXirStatus spec_nominal_fields(SpecContext *c) {
+static XrXirStatus spec_nominal_seed(SpecContext *c) {
     const XrXirTypes *source = c->source->types;
     c->types.nominals = source->nominals;
     if (!source->count) return XR_XIR_OK;
@@ -253,23 +269,41 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
     c->types = (XrXirTypes) {nodes, source->count, source->nominals}; c->node_capacity = source->count;
     for (uint32_t i = 0; i < source->count; ++i)
         if (!source->nodes[i].parameter_span) c->closed.node_cache[i] = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i);
-    for (uint32_t i = 0; i < source->count; ++i) {
+    return XR_XIR_OK;
+}
+static XrXirStatus spec_nominal_fields(SpecContext *c) {
+    const XrXirTypes *source = c->source->types;
+    if (!c->types.nominals) return XR_XIR_OK;
+    for (uint32_t i = 0; i < c->types.count; ++i) {
         if (!spec_work(c, 1)) return c->diagnostic.status;
-        const XrXirTypeNode *node = &source->nodes[i];
-        if (node->kind != XR_XIR_TYPE_NOMINAL) continue;
-        const XrXirNominalDeclaration *d = &source->nominals->declarations[node->nominal.declaration];
+        /* Field substitution can grow the pool; keep only independently owned edges. */
+        XrXirTypeNode node = c->types.nodes[i];
+        if (node.kind != XR_XIR_TYPE_NOMINAL || node.parameter_span) continue;
+        const XrXirNominalDeclaration *d = &source->nominals->declarations[node.nominal.declaration];
         if (d->field_count > c->remaining.parameters) return XR_XIR_BUDGET;
         c->remaining.parameters -= d->field_count;
         XrXirType *cache = spec_alloc(c, source->count, sizeof(*cache));
         XrXirType *fields = spec_alloc(c, d->field_count, sizeof(*fields));
         if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
-        SpecInstance instance = {node->nominal.declaration, node->nominal.arguments, node->nominal.argument_count, cache};
+        SpecInstance instance = {node.nominal.declaration, node.nominal.arguments, node.nominal.argument_count, cache};
         for (uint32_t f = 0; f < d->field_count; ++f) fields[f] = spec_type(c, &instance, d->fields[f].type);
         if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
         XrXirTypeNode *owned = (XrXirTypeNode *) c->types.nodes;
         owned[i].nominal.fields = fields; owned[i].nominal.field_count = d->field_count;
     }
     return XR_XIR_OK;
+}
+static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
+    uint64_t bytes = (uint64_t)c->count * sizeof(XrXirOrigin);
+    if (bytes > SIZE_MAX || bytes > c->remaining.metadata_bytes) return XR_XIR_BUDGET;
+    c->remaining.metadata_bytes -= bytes;
+    XrXirOrigin *origins = xr_malloc((size_t)bytes);
+    if (!origins) return XR_XIR_OUT_OF_MEMORY;
+    for (uint32_t f = 0; f < c->count; ++f)
+        origins[f] = (XrXirOrigin) {c->instances[f].declaration, c->instances[f].arguments, c->instances[f].count};
+    XrXirStatus status = xr_xir_provenance_copy(c->source, origins, c->count, &c->remaining, output);
+    xr_free(origins);
+    return status;
 }
 XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *budget,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
@@ -284,10 +318,12 @@ XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *b
     c.diagnostic.status = xr_xir_artifact_verify(checked, &limits, &c.diagnostic);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     if (c.source->types && c.source->types->nominals) {
-        c.diagnostic.status = spec_nominal_fields(&c);
+        c.diagnostic.status = spec_nominal_seed(&c);
         if (c.diagnostic.status != XR_XIR_OK) goto done;
     }
     if (!c.source->generics) {
+        c.diagnostic.status = spec_nominal_fields(&c);
+        if (c.diagnostic.status != XR_XIR_OK) goto done;
         XrXirModule specialized = *c.source;
         if (c.types.nominals) specialized.types = &c.types;
         c.diagnostic.status = xr_xir_recheck(&specialized, &limits, output, &c.diagnostic);
@@ -319,8 +355,15 @@ XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *b
     for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
     XrXirDeclarations declarations = {0};
     if (!spec_declarations(&c, &declarations)) goto done;
-    XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.types.count || c.types.nominals ? &c.types : NULL};
+    c.diagnostic.status = spec_nominal_fields(&c);
+    if (c.diagnostic.status != XR_XIR_OK) goto done;
+    XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.types.count || c.types.nominals ? &c.types : NULL, NULL};
+    XrXirProvenance *provenance = NULL;
+    c.diagnostic.status = spec_provenance(&c, &provenance);
+    if (c.diagnostic.status != XR_XIR_OK) goto done;
+    specialized.provenance = provenance;
     c.diagnostic.status = xr_xir_recheck(&specialized, &limits, output, &c.diagnostic);
+    xr_xir_provenance_free(provenance);
 done:
     while (c.memory) { SpecMemory *next = c.memory->next; xr_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;

@@ -18,6 +18,7 @@
 #include "xir_array_program_fixture.h"
 #include "xir_nominal_checked_fixture.h"
 #include "xir_nominal_generic_fixture.h"
+#include "xir_nominal_expression_fixture.h"
 #include "xir_nominal_chain_fixture.h"
 #include "xir_nominal_transport_fixture.h"
 #include "xir_struct_ops_fixture.h"
@@ -53,6 +54,13 @@ int main(int argc, char **argv) {
     CHECK(!strstr(combined_source.text, "xr_xir_vm") && !strstr(combined_source.text, "({"));
     if (file) CHECK(fwrite(combined_source.text, 1, combined_source.length, file) == combined_source.length);
     xr_xir_c_source_free(&combined_source);
+    XrXirArtifact *expressions = nominal_expression_lowered();
+    XrXirCSource expression_source = {0};
+    CHECK(xr_xir_emit_c(expressions, "nominal_expression", 200000, &expression_source) == XR_XIR_OK);
+    xr_xir_artifact_free(expressions);
+    CHECK(!strstr(expression_source.text, "xr_xir_vm") && !strstr(expression_source.text, "({"));
+    if (file) CHECK(fwrite(expression_source.text, 1, expression_source.length, file) == expression_source.length);
+    xr_xir_c_source_free(&expression_source);
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *artifact = program_fixture(mode);
         char prefix[32]; CHECK(snprintf(prefix, sizeof(prefix), "program%u", mode) > 0);

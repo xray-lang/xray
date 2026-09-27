@@ -145,6 +145,7 @@ typedef struct XrXirTypes {
     const XrXirNominalTable *nominals;
 } XrXirTypes;
 
+typedef struct XrXirProvenance XrXirProvenance;
 typedef struct XrXirModule {
     XrXirStage stage;
     const XrXirFunction *functions;
@@ -152,6 +153,7 @@ typedef struct XrXirModule {
     const XrXirDeclarations *declarations;
     const XrXirGeneric *generics;
     const XrXirTypes *types;
+    const XrXirProvenance *provenance;
 } XrXirModule;
 
 typedef struct XrXirBudget {

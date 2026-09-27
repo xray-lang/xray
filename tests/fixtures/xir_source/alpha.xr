@@ -68,3 +68,4 @@ export struct Complete {
     callback:fn()->i64=fn()->i64{return 19}
     private hidden:i64=23
 }
+export struct GenericRecord<T> { value:T }

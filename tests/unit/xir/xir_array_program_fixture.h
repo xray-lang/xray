@@ -115,7 +115,7 @@ static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
     XrXirSlot slots[] = {{1,a,0},{0,a,1},{0,a,1}};
     XrXirLiteral literals[] = {{"red",3},{"blue",4},{"green",5}};
     XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2};
-    XrXirModule built = {XR_XIR_BUILT,functions,8,&declarations,NULL,&types};
+    XrXirModule built = {XR_XIR_BUILT,functions,8,&declarations,NULL,&types, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_check(&built,NULL,&checked,&diagnostic);

@@ -27,5 +27,14 @@ struct XrXirProgram {
     XrXirTypeArena *arena;
     const XrXirTypes *types;
 };
+/* Both inputs require prior shape verification; this grants no execution authority.
+ * Backend-specific callback state storage is not a canonical frame layout. */
+XR_FUNC XrXirStatus xr_xir_program_match(const XrXirProgramSpec *spec,
+    const XrXirFunctionLayout *layouts, const XrXirArtifact *lowered, uint64_t *work);
+/* Peak reservation covers overlapping owned metadata and verification scratch.
+ * Successful verification retains neither the packet nor temporary artifacts. */
+XR_FUNC XrXirStatus xr_xir_program_proof_verify(const XrXirProgramSpec *spec,
+    const XrXirProgramProof *proof, const XrXirBudget *decode_budget,
+    const XrXirBudget *lower_budget, uint64_t byte_limit, uint64_t *work);
 XR_FUNC bool xr_xir_program_retain(XrXirProgram *program);
 #endif // XXIR_PROGRAM_INTERNAL_H

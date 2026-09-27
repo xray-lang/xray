@@ -74,7 +74,7 @@ static XrXirArtifact *struct_set_checked(unsigned invalid) {
     XrXirLiteral literals[] = {{"roots",5},{"replacement",11}};
     XrXirSlot slots[] = {{0,pair,1},{0,pair,0}};
     XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,2,0,1};
-    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types};
+    XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL};
     if (invalid == 1) entry[4].args[0] = 0;
     if (invalid == 2) nominal.fields[0].flags = 0;
     if (invalid == 3) slots[0].mutable = 0;

@@ -20,7 +20,6 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
-#include "xir/xxir.c"
 #include "xir_source_cases.h"
 int main(int argc, char **argv) {
     CHECK(argc >= 1 && argc <= 3);
@@ -55,7 +54,7 @@ int main(int argc, char **argv) {
     XrXirCSource source;
     CHECK(xr_xir_emit_c(lowered, "fixture_source", 524288, &source) == XR_XIR_BUDGET);
     CHECK(!source.text && !source.length);
-    CHECK(xr_xir_emit_c(lowered, "fixture_source", 1048576, &source) == XR_XIR_OK);
+    CHECK(xr_xir_emit_c(lowered, "fixture_source", 4194304, &source) == XR_XIR_OK);
     CHECK(source.length > 524288);
     if (argc >= 2) {
         file = fopen(argv[1], "wb"); CHECK(file);
@@ -68,7 +67,7 @@ int main(int argc, char **argv) {
     }
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, 8388608, &program) == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause}, results);
     runtime_source_failures(program, entry, resume_text, numeric_pause);

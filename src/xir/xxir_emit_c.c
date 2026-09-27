@@ -778,10 +778,54 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
     if (types->nominals) append(buffer, "&%s_nominals", prefix); else append(buffer, "NULL");
     append(buffer, "};\n");
 }
-static void emit_program(CBuffer *buffer, const XrXirModule *module, const char *prefix) {
+static void emit_proof(CBuffer *buffer, const XrXirArtifact *artifact, const char *prefix) {
+    XrXirProgramProof proof = xr_xir_program_proof(artifact);
+    const XrXirModule *module = xr_xir_artifact_module(artifact);
+    append(buffer, "static const uint8_t %s_checked[] = {", prefix);
+    for (size_t i = 0; i < proof.length; ++i) {
+        if (!(i % 16)) append(buffer, "\n    ");
+        append(buffer, "%u,", (unsigned)proof.bytes[i]);
+    }
+    append(buffer, "\n};\nstatic const uint8_t %s_identity[32] = {", prefix);
+    for (unsigned i = 0; i < 32; ++i) append(buffer, "%u,", (unsigned)proof.identity[i]);
+    append(buffer, "};\n");
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunctionLayout *layout = &proof.layouts[f];
+        append(buffer, "static const uint32_t %s_offsets_%u[] = {", prefix, f);
+        for (uint32_t i = 0; i < layout->slot_count; ++i) append(buffer, "%uu,", layout->offsets[i]);
+        append(buffer, "};\n");
+        if (layout->owned_count) {
+            append(buffer, "static const uint32_t %s_owned_%u[] = {", prefix, f);
+            for (uint32_t i = 0; i < layout->owned_count; ++i) append(buffer, "%uu,", layout->owned_offsets[i]);
+            append(buffer, "};\n");
+        }
+        if (module->functions[f].parameter_count) {
+            append(buffer, "static const XrXirLayout %s_physical_%u[] = {", prefix, f);
+            for (uint32_t i = 0; i < module->functions[f].parameter_count; ++i)
+                append(buffer, "{%uu,%uu},", layout->parameters[i].size, layout->parameters[i].alignment);
+            append(buffer, "};\n");
+        }
+    }
+    append(buffer, "static const XrXirFunctionLayout %s_layouts[] = {\n", prefix);
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunctionLayout *layout = &proof.layouts[f];
+        append(buffer, "    {%uu,%uu,%s_offsets_%u,", layout->slot_count, layout->frame_bytes, prefix, f);
+        if (module->functions[f].parameter_count) append(buffer, "%s_physical_%u,", prefix, f);
+        else append(buffer, "NULL,");
+        append(buffer, "{%uu,%uu},%uu,", layout->result.size, layout->result.alignment, layout->owned_count);
+        if (layout->owned_count) append(buffer, "%s_owned_%u,", prefix, f);
+        else append(buffer, "NULL,");
+        append(buffer, "%uu},\n", layout->outgoing_count);
+    }
+    append(buffer, "};\n");
+}
+
+static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const char *prefix) {
+    const XrXirModule *module = xr_xir_artifact_module(artifact);
     const XrXirDeclarations *d = module->declarations;
     if (!d) return;
     emit_types(buffer, module->types, prefix);
+    emit_proof(buffer, artifact, prefix);
     for (uint32_t m = 0; m < d->module_count; ++m) {
         const XrXirSourceModule *source = &d->modules[m];
         if (!source->dependency_count) continue;
@@ -829,7 +873,8 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         XR_XIR_PROGRAM_ABI_VERSION, prefix, prefix, module->function_count, prefix);
     if (module->types) append(buffer, "&%s_types", prefix); else append(buffer, "NULL");
-    append(buffer, "};\n");
+    append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity, %s_layouts}};\n",
+        prefix, prefix, prefix, prefix);
 }
 
 XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_prefix,
@@ -873,7 +918,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
                symbol_prefix, f);
     }
     append(&buffer, "};\n");
-    emit_program(&buffer, module, symbol_prefix);
+    emit_program(&buffer, artifact, symbol_prefix);
     if (buffer.status != XR_XIR_OK) {
         xr_free(buffer.text);
         return buffer.status;

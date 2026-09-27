@@ -25,9 +25,16 @@ XR_FUNC XrXirType xr_xir_array_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirStatus xr_xir_type_sendable(const XrXirTypes *types, XrXirType type,
     const uint32_t *constraints, uint32_t parameter_count, uint64_t *work);
+/* Expression obligations are proved independently in each declaration context. */
+XR_FUNC XrXirStatus xr_xir_type_context_verify(const XrXirTypes *types, XrXirType type,
+    const uint32_t *constraints, uint32_t parameter_count, XrXirBudget *remaining);
 XR_FUNC XrXirStatus xr_xir_type_substitution_matches(const XrXirTypes *types,
     const XrXirType *arguments, uint32_t count, XrXirType expected,
     XrXirType actual, XrXirBudget *remaining);
+/* Pools share nominal declaration identities; arguments name destination types. */
+XR_FUNC XrXirStatus xr_xir_type_substitution_matches_between(const XrXirTypes *source_types,
+    const XrXirTypes *types, const XrXirType *arguments, uint32_t count,
+    XrXirType expected, XrXirType actual, XrXirBudget *remaining);
 XR_FUNC XrXirStatus xr_xir_types_verify(const XrXirTypes *types, XrXirBudget *remaining);
 /* Snapshot cloning requires successful descriptor-pool verification first. */
 XR_FUNC XrXirStatus xr_xir_types_clone(const XrXirTypes *types, XrXirTypes **output);

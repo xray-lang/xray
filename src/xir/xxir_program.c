@@ -21,13 +21,6 @@ static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
         type == XR_XIR_ATOMIC_I64 || xr_xir_callable_signature(spec->types, type) ||
         xr_xir_type_is_array(spec->types, type) || xr_xir_type_is_nominal(spec->types, type);
 }
-static XrXirStatus program_nominal_type(const XrXirProgramSpec *spec, uint32_t function,
-                                        XrXirType type, uint64_t *work) {
-    const XrXirTypeNode *node = xr_xir_type_node(spec->types, type);
-    if (!node || node->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_OK;
-    XrXirModule scope = {XR_XIR_LOWERED, NULL, spec->entry_count, spec->declarations, NULL, spec->types};
-    return xr_xir_nominal_access(&scope, function, node->nominal.declaration, 0, XR_XIR_NOMINAL_TYPE, work);
-}
 static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, uint64_t *work) {
     if (!spec || !spec->entries || !spec->entry_count || spec->entry_count > 65535 ||
         !spec->declarations || (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
@@ -52,8 +45,6 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
     if (status != XR_XIR_OK) return status;
     for (uint32_t s = 0; s < spec->declarations->slot_count; ++s) {
         const XrXirSlot *slot = &spec->declarations->slots[s];
-        status = program_nominal_type(spec, spec->declarations->modules[slot->module].initializer, slot->type, work);
-        if (status != XR_XIR_OK) return status;
         if (xr_xir_type_is_cell(spec->types, slot->type) || !program_value_type(spec, slot->type) || (xr_xir_type_is_callable(spec->types, slot->type) &&
             slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
     }
@@ -62,15 +53,11 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
         if (!entry->resume || (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
         if (xr_xir_type_is_cell(spec->types, entry->result) || (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
-        status = program_nominal_type(spec, i, entry->result, work);
-        if (status != XR_XIR_OK) return status;
         uint64_t parameter_bytes = (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (parameter_bytes > *bytes || parameter_bytes > SIZE_MAX || entry->parameter_count > *work)
             return XR_XIR_BUDGET;
         *bytes -= parameter_bytes; *work -= entry->parameter_count;
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
-            status = program_nominal_type(spec, i, entry->parameters[p], work);
-            if (status != XR_XIR_OK) return status;
             if (!program_value_type(spec, entry->parameters[p]) ||
                 (xr_xir_type_is_cell(spec->types, entry->parameters[p]) && spec->declarations->functions[i].exported)) return XR_XIR_BAD_TYPE;
         }
@@ -98,8 +85,16 @@ static void program_dispose(XrXirProgram *program) {
 XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, uint64_t byte_limit, XrXirProgram **output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
     *output = NULL;
+    uint64_t proof_limit = byte_limit;
     uint64_t work = UINT64_C(16000000);
     XrXirStatus status = program_shape(spec, &byte_limit, &work);
+    if (status != XR_XIR_OK) return status;
+    XrXirBudget phase = xr_xir_default_budget();
+    phase.metadata_bytes = proof_limit / 7;
+    phase.scratch_bytes = phase.metadata_bytes;
+    phase.work = work / 16;
+    work -= phase.work * 15;
+    status = xr_xir_program_proof_verify(spec, &spec->proof, &phase, &phase, proof_limit, &work);
     if (status != XR_XIR_OK) return status;
     XrXirProgram *program = xr_calloc(1, sizeof(*program));
     if (!program) return XR_XIR_OUT_OF_MEMORY;

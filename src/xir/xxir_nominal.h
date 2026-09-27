@@ -59,4 +59,6 @@ typedef enum XrXirNominalAccess {
 /* Requires a verified module; declaration ownership grants no generic facts. */
 XR_FUNC XrXirStatus xr_xir_nominal_access(const XrXirModule *module, uint32_t function,
     uint32_t declaration, uint32_t field, XrXirNominalAccess access, uint64_t *work);
+XR_FUNC XrXirStatus xr_xir_type_access(const XrXirModule *module, uint32_t function,
+    XrXirType type, XrXirBudget *remaining);
 #endif // XXIR_NOMINAL_H

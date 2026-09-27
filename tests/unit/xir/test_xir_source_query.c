@@ -12,6 +12,7 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_source_query_internal.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_generic.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
 #include <stdio.h>
@@ -306,6 +307,13 @@ static void native_array_type_rejections(XrXirSourceRequest *request) {
         write_source(request->entry_path, sources[i]);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
         XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        if (i >= 6) {
+            CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
+            const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+            const XrXirSourceDeclaration *array = declaration(view, "Array", 0);
+            CHECK(array && !array->native_identity && array->kind == XR_XIR_SOURCE_TYPE);
+            xr_xir_source_result_free(&result); continue;
+        }
         if (i == 2) {
             CHECK(status == XR_XIR_BAD_STRUCTURE && !result.snapshot);
             CHECK(strstr(diagnostic.message, "parse"));
@@ -377,6 +385,22 @@ static void nominal_query_boundary(void) {
     CHECK(!memcmp(&budget, &original, sizeof(budget)));
 }
 static void source_struct_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path, "struct Box<T>{value:T}\nstruct Outer<T>{inner:Box<T>}\n"
+        "fn wrap<T>(x:T)->Outer<T>{return Outer<T>{inner:Box<T>{value:x}}}\n"
+        "var a=wrap<i64>(7)\nvar b=wrap<string>(\"generic\")\nprint(a.inner.value,b.inner.value)\n");
+    XrXirSourceResult generic = {0}; XrXirSourceDiagnostic generic_diagnostic = {0};
+    XrXirStatus generic_status = xr_xir_source_check(request, &generic, &generic_diagnostic);
+    if (generic_status != XR_XIR_OK) fprintf(stderr,"generic struct %u: %s\n",generic_status,generic_diagnostic.message);
+    CHECK(generic_status == XR_XIR_OK && generic.checked && generic.snapshot);
+    const XrXirSourceView *generic_view = xr_xir_source_snapshot_view(generic.snapshot);
+    const XrXirSourceDeclaration *box = declaration(generic_view,"Box",0);
+    CHECK(box && box->type.generic_owner == box->id);
+    CHECK(declaration(generic_view,"value",box->id)->type.generic_owner == box->id);
+    XrXirArtifact *specialized = NULL, *lowered = NULL;
+    CHECK(xr_xir_specialize(generic.checked,NULL,&specialized,NULL) == XR_XIR_OK);
+    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_lower(specialized,&target,NULL,&lowered,NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(lowered); xr_xir_artifact_free(specialized); xr_xir_source_result_free(&generic);
     write_source(request->entry_path, "struct Pair { value:i64\n label:string }\n"
         "var p=Pair{label:\"owned\",value:7}\nconst old=p\np.value=23\n"
         "fn read(p:Pair)->i64{return p.value}\nprint(read(p),old.value,p.label)\n"
@@ -400,7 +424,11 @@ static void source_struct_facts(XrXirSourceRequest *request) {
         "struct S{x:i64;y:i64}\nvar s=S{x:1,x:2}", "struct S{x:i64}\nvar s=S{x:\"bad\"}",
         "struct S{private x:i64}\nvar s=S{x:1}", "struct S{x:i64}\nconst s=S{x:1}\ns.x=2",
         "struct S{const x:i64}\nvar s=S{x:1}\ns.x=2", "struct S{x:S}",
-        "struct S{x:i64=\"bad\"}", "struct S<T>{x:T}", "struct S{x:Unknown}"
+        "struct S{x:i64=\"bad\"}", "struct S<T>{x:T}\nvar s=S{x:1}", "struct S{x:Unknown}",
+        "struct S<T>{x:T}\nvar s=S<i64>{x:\"bad\"}",
+        "struct S<T>{x:T}\nvar s:S<i64>", "struct S<T>{x:T=1}",
+        "struct S<T>{x:T}\nvar s=S<i64,string>{x:1}",
+        "struct S<T:Sendable>{x:T}\nfn bad<T>(x:T)->S<T>{return S<T>{x:x}}"
     };
     for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
         write_source(request->entry_path, invalid[i]);

@@ -18,7 +18,7 @@ pool, extended with NOMINAL by `xir-nominal-struct-types.md`, across these same 
 that pool; no signature-only table or cell-bit encoding remains. Array operation
 tags 63..69 and their place/range/ownership rules are owned by
 `xir-array-values.md`; backing storage by `xir-array-storage.md`. The current
-cutover is Checked schema 6 / semantic contract 17 and Value10/Call14/Program11,
+cutover is Checked schema 7 / semantic contract 19 and Value10/Call14/Program12,
 with no older or mixed-version reader. Descriptor support alone does not qualify
 source Array syntax or execution. Qualification requires the new assertions and
 actual rebuild/test results; contract edits and registration are not evidence.
@@ -100,4 +100,4 @@ The edge is one indivisible activation step; each PHI still consumes its normal
 instruction step. There is no suspension/provider call inside edge capture. Frame
 and metadata budgets include scratch ownership, and cancellation/step exhaustion
 use normal frame cleanup. Checked serialization preserves the incoming table;
-semantic contract 17 rejects earlier versions. No separate executable PHI format.
+semantic contract 19 rejects earlier versions. No separate executable PHI format.

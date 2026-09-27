@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     XrXirArtifact *lowered = source_float_lower(checked);
     uint32_t functions[FLOAT_FUNCTION_COUNT]; source_float_find(xr_xir_artifact_module(lowered), functions);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, 2097152, &program) == XR_XIR_OK && !lowered);
     source_float_program_cases(program, functions);
     puts("Source floating program matched independent output and lifecycle expectations");
     return 0;

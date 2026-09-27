@@ -1,5 +1,40 @@
 # XIR nominal struct declarations and field type ownership
 
+## Abstract nominal expression admission
+
+Semantic contract 19 extends the sole schema 7 pool with nominal expressions
+whose ordered arguments may contain enclosing parameters and earlier nominal
+expressions. The exact parameter span is derived from the argument sequence.
+Declaration identity and ordered arguments form identity; derived field vectors
+do not. Array and
+callable nominal components and nominal Sendable
+remain outside the current executable source family.
+
+Each declaration field and function use proves nominal argument constraints in
+its own parameter context. Visibility follows every nominal expression argument
+as well as its root; expression metadata supplies no construction authority.
+Closed unused nodes still prove concrete constraints. Abstract pool nodes alone
+carry no lexical proof. Derived abstract fields, when supplied, must match exact
+substitution and fit the expression's parameter span.
+
+The same Checked specializer substitutes nominal arguments, interns exact
+identities, drains fields for the growing closed pool and rechecks the complete
+result. Abstract descriptors remain declaration expressions only and are removed
+at Lowered projection. Closed descriptor fields must be complete. Parameter
+contexts remain separate, allocation/work exhaustion publishes no result, and
+the closed field graph must have finite value layout before physical execution.
+No AST instantiation, second reader or runtime instantiation is admitted.
+
+The declaration layer owns recursive type-visibility checking. Checked checks
+module slot types in their declaring module, including unused slots and nominal
+argument types. Native Program sealing uses shared Checked admission and exact
+descriptor correspondence instead of repeating naming checks on substituted
+signatures. A public outer declaration cannot hide an explicitly named
+inaccessible argument. Scratch allocation and visits spend cumulative budgets;
+failure publishes no Program. Native admission depends on the shared XIR
+verifier and lowering library, without frontend, specialization production,
+VM or CGen dependencies.
+
 This owns the declaration/type boundary for user structs. Registration of assertion owners is not implementation or
 qualification. Closed value transport and STRUCT_NEW/GET/SET follow the contracts
 below. Source struct admission is limited to the concrete family recorded below;
@@ -8,9 +43,103 @@ unsupported declarations rather than constructing a partially checked type.
 
 ## Identity and the sole owner
 
+### Specialization provenance and opaque substitution
+
+Checked wire admission now uses schema 7 / semantic 19. Program ABI 12 now requires complete specialized Checked evidence during sealing.
+Ordinary generic specialization attaches the original definition and exact origins.
+Cross-module substitution reuses verified definition authority without adding imports.
+The complete cutover removes the preceding revisions; it adds no optional
+compatibility reader. Value ABI 10 and Call ABI 14 need no representation change.
+
+A specialized Checked module owns one original, unspecialized Checked module
+and one origin record per output function. A record contains a source function
+index and its exact ordered type arguments, expressed in the output type pool.
+The original module has no provenance child. Repeated specialization preserves
+this original and the canonical mapping instead of nesting provenance or treating
+the closed output as a new template. Ordinary source functions have zero type
+arguments and exactly one output mapping. Generic instances are justified by the
+reachable closure of calls and function references rooted at ordinary functions;
+an unreferenced, self-authorizing instance is not a valid witness.
+
+The module wire traversal appends a u32 provenance-present word after its type
+pool. Zero ends the module. One is followed by the original module in the same
+canonical module encoding, then exactly output-function-count origin records.
+Each record is source-function-index u32, argument-count u32, then ordered type
+IDs u32. The nested original must encode provenance-present zero. All presence
+words, counts, source indices and type IDs are checked before use. Packet
+integrity covers both modules and all mappings. A valid digest alone grants no
+authority. The reader owns partial allocations before advancing the cursor and
+must release every prefix on malformed data, budget exhaustion or OOM.
+
+Verification structurally checks the output while deferring substituted type naming.
+Before publication it independently validates the original under its generic
+constraints and definition permissions, then checks mappings, exact function
+body/type/call correspondence and instance reachability. Each origin argument
+independently satisfies its definition constraint, including unused parameters. Modules, dependency
+edges, literal bytes, slots and nominal declaration identities must correspond;
+only documented function/type index remapping is permitted. Explicit nominal
+names and member operations retain definition authority. A type introduced only
+through a verified parameter substitution does not require a reverse import into
+the defining module. No instance may gain the caller's nominal-owner privileges.
+
+The proof and output consume a single cumulative work and metadata budget.
+Copying the source is not an uncharged second verification budget. Ownership
+must survive destruction of the input artifact and packet buffers. Lowered
+projection remaps destination type IDs in the origin arguments and preserves
+the original template identities; it cannot discard the proof before verification.
+Native descriptors need a verified signature-origin projection and bind it to
+the same Checked input/cache identity. Descriptor validation is not validation
+of arbitrary native machine code, and must not be described as such.
+
+Native Program 12 binds this projection to the complete specialized Checked
+packet retained at the Checked-to-Lowered boundary. The packet carries the
+original template and origins through schema 7; its digest is the cache content
+identity, not authentication. Emitted C carries these bytes and their expected
+identity. Native sealing uses the same bounded Checked admission and lowering
+implementation, then compares target, function signatures/layouts, type pool,
+module identities/imports, literals and slots against the supplied descriptor.
+Only successful correspondence can replace the explicit-name check for parameter
+substitutions. A projection flag or caller-supplied access whitelist is forbidden.
+The native entry callbacks remain trusted compiler-produced code; matching
+metadata cannot prove arbitrary callback machine code correct.
+
+Admission and lowering are one reusable XIR library. Frontend parsing, ordinary
+specialization production, C generation and the VM are not native runtime
+dependencies. Retained packet bytes, temporary decoded/Lowered owners, relation
+checking and cleanup must be budgeted; descriptor publication and code-lease
+transfer happen only after verification. Temporary proof artifacts are released
+before sealing returns. Startup cost and physical failure cleanup require tests;
+neither the library split nor packet retention alone qualifies Program 12.
+
+Admission remains closed until compiler ownership, packet round trips and hostile
+re-signing, repeated specialization, Lowered remapping, native sealing, physical
+failure cleanup and independent VM/native execution pass. Required attacks
+include nested provenance, missing/extra origins, wrong source function/arity,
+swapped arguments, unreachable invented instances, changed imports/literals/slots,
+changed opcode/control flow/callee, explicit inaccessible types disguised as
+substitutions and forged native signature projections. The existing external
+private/public nominal characterization cases then become success regressions;
+the library-private-helper case must continue to use definition permissions.
+
+### Explicit generic source admission contract
+
+Generic struct fields resolve parameters in their own declaration scope. Exact
+explicit ordered arguments are required in type annotations and brace literals;
+a bare generic name does not infer arguments. A field read or write substitutes
+the receiver arguments into the declared field type without gaining access rights.
+Declarations support the existing unconstrained and Sendable marker parameters;
+Checked proves every field and function use in its own constraint context.
+Generic bodies are checked once before Checked specialization, never cloned ASTs.
+Initial execution requires explicit values for every generic field. Generic field
+defaults and default construction remain rejected until their conditional
+definition proofs are implemented. This does not restrict non-generic defaults.
+Query snapshots own the same parameterized nominal metadata, with each abstract
+field's generic owner identifying its struct declaration. Initial source tests
+exercise nested numeric/string instances; complete family qualification is OPEN.
+
 ### Concrete source family
 
-The source owner hoists non-generic struct identities across the parsed module
+The source owner hoists struct identities across the parsed module
 closure before checking stored field annotations and ordinary function signatures.
 Names resolve through the same lexical/module/import tables. Exported types may
 be named through a module alias or a named import. Distinct declarations never
@@ -19,8 +148,8 @@ types; the final Checked verifier proves field graphs, visibility and storage.
 
 Admitted fields have explicit admitted value types, normal alignment, ordinary
 value storage, and public/private/protected plus const/mutable access metadata.
-Methods, user-declared constructors, inheritance/interfaces, generic
-struct declarations, layout attributes, static/weak/flexible fields and nested
+Methods, user-declared constructors, inheritance/interfaces,
+layout attributes, static/weak/flexible fields and nested
 declarations remain errors. This admission does not silently synthesize defaults
 or authorize ordinary constructors or methods.
 
@@ -254,12 +383,12 @@ charged arena. Poisoning producer storage and failing each allocation prefix
 are required before claiming this metadata boundary complete.
 
 The existing Checked type traversal must be extended in the same change that
-admits NOMINAL nodes. Schema 6 and semantic contract 17 carry the declaration table and reject the
+admits NOMINAL nodes. Schema 7 and semantic contract 19 carry the declaration table and reject the
 previous schema 5 / semantic contract 16. Exact-byte fixtures and protocol
 reference checks follow the same sole reader/writer. Closed NOMINAL expression
 nodes use the explicit kind-4 wire rule below. Closed fields are substituted and
-reverified; abstract nominal expressions and recursive instance expansion remain
-unimplemented.
+reverified; parameterized expressions use the context proofs and closure defined
+above.
 No protocol constant changes during preparation alone. Executable value/call/VM
 and native ABI changes are separately frozen with struct operations; merely
 recognizing metadata cannot make a struct signature, layout or opcode executable.
@@ -345,31 +474,28 @@ allocation with physical accounting restored.
 
 Kind 4 is NOMINAL. Its explicit payload contains a declaration index, owned
 ordered argument and derived-field pointer/count pairs, and no callable/element/result/flags payload.
-Other kinds require an entirely zero nominal payload. Checked schema 6 /
-contract 17 encodes kind, parameter span, declaration index, argument count,
+Other kinds require an entirely zero nominal payload. Checked schema 7 /
+contract 19 encodes kind, parameter span, declaration index, argument count,
 then that many u32 type IDs, followed by the derived field vector described below.
 Declaration records follow the node sequence.
 Zero-argument instances use a null argument pointer. The count must exactly
 match the referenced declaration. Identity compares declaration and every
 argument; a hash or equal field shape cannot collapse distinct declarations.
 
-The current node admission uses closed arguments from the existing
-copyable/storable scalar, Array or callable types, have zero parameter span,
-and satisfy the declaration's constraints. Unit, CELL, unknown types, forward
-expression edges, and abstract arguments reject. This is an implementation
-boundary, not the final language domain: abstract nominal expressions and nominal
-arguments remain closed until context-sensitive constraint proof and recursive
-instance closure are implemented. Direct closed nominal field dependencies,
+Node arguments use the admitted copyable/storable scalar, Array, callable,
+parameter or earlier nominal expressions. The exact free-parameter span is
+derived from arguments; declared constraints are proved in each use context.
+Unit, CELL, unknown types and forward expression edges reject. Direct closed nominal field dependencies,
 value operations, Lowered projection and runtime ownership follow the sections
 below. Nominal components of callable signatures remain unavailable.
 The entire pool owns its argument arrays through clone, packet decode and
 cleanup, including every failed allocation prefix. Runtime projection owns its
 closed argument and field vectors instead of retaining compiler argument storage.
 
-The native descriptor and declaration authority require Program ABI 11; owned
+The native descriptor and declaration authority require Program ABI 12; owned
 nominal values require Value ABI 10, with Call ABI 14 unchanged. Older Program
 and Value admissions fail before descriptor dereference. The independent opaque
-TypeArena is reached through runtime helpers. Checked uses schema 6 / semantic 17.
+TypeArena is reached through runtime helpers. Checked uses schema 7 / semantic 19.
 Full generated-native regressions rebuild descriptors
 and their runtime together; old generated C must retain a failing ABI assertion.
 
@@ -382,8 +508,8 @@ identity. Each field must be closed, storable, and exactly equal to substitution
 of that declaration's field expression under the node's ordered arguments.
 Verification recomputes this relationship; a packet cannot certify it. Field
 vector references may point anywhere in the pool because they are dependency
-edges, not expression-construction edges. Current admission still rejects
-nominal-valued fields pending recursive instance and layout closure.
+edges, not expression-construction edges. Nominal-valued fields require the
+independent finite-layout proof below.
 
 The single Checked specializer uses its existing bounded substitution stack
 and exact constructed-type interner to fill these vectors. It keeps definition
@@ -395,8 +521,8 @@ work records instead of C recursion. Verification scratch is charged before
 allocation and freed on every path; output ownership is allocated only after
 validation succeeds.
 
-In schema6/semantic17, NOMINAL's argument sequence is followed by field-count
-and field-type u32 words. Current Value10/Call14/Program11 covers the owned
+In schema7/semantic19, NOMINAL's argument sequence is followed by field-count
+and field-type u32 words. Current Value10/Call14/Program12 covers the owned
 nominal value, expanded native descriptor and function declaration authority.
 The derived vector alone grants no construction, field access or runtime
 instantiation. Lowering performs the closed descriptor projection below,
@@ -411,7 +537,7 @@ have no constraints or field type expressions. This is a stage projection, not
 a second registry. Built/Checked reject identity payloads; Lowered rejects
 declaration payloads. Runtime arenas accept only the identity payload.
 
-Before projection, every nominal instance must have a completely reverified
+Before projection, every closed nominal instance must have a completely reverified
 field vector. Lowering removes all abstract expression nodes, preserves the
 relative order of closed nodes, and remaps every function signature, instruction
 type, slot type, nominal argument and field type to the compacted pool. A mapped
@@ -422,11 +548,12 @@ IDs and keeps neither Checked storage nor source-module dependency tables alive.
 The identity payload and nominal argument/field arrays are independently cloned
 and packed into the runtime arena's single aligned, domain-charged allocation.
 Generated native C emits the same closed descriptors, including identity-only
-pools, and Program11 rejects older native layout contracts. The sole Checked
+pools, and Program12 rejects older native layout contracts. The sole Checked
 wire remains declaration-based; identity payloads cannot masquerade as Checked
 packages. Type metadata projection alone admits no new struct value operations.
 Closed nominal-valued fields follow the graph and layout validation below;
-abstract nominal expressions and recursive instance expansion remain closed.
+abstract nominal expressions remain Checked-only and their closed instances
+must finish specialization before projection.
 
 ## Closed nominal field dependencies
 
@@ -444,8 +571,9 @@ rejects an infinite layout; revisiting a completed node is valid sharing.
 Traversal has explicit pool-bounded storage, charges edges/work and allocation
 bytes, and releases scratch on success, budget exhaustion and failure. An
 indirect Array/callable carrier is not a direct field-layout edge. This does not
-yet admit nominal arguments or Array<Nominal>, abstract nominal expressions,
-recursive instance expansion or executable struct operations.
+admit Array<Nominal> or callable nominal components; those require their own
+physical storage and runtime contracts. Nominal argument expressions and
+executable struct operations follow their separate rules above and below.
 
 ## Nominal storage layout service
 
@@ -501,7 +629,7 @@ and the module entry have no nominal owner. Specialization preserves this
 declaration scope without granting additional generic constraints.
 
 Checked records encode module, exported and nominal_owner as three u32 words.
-The current schema6/semantic17 contract has only this representation. Native
+The current schema7/semantic19 contract has only this representation. Native
 function identity layout changes Program ABI to11; Value10/Call14 remain.
 Old Program10 must reject before reading its declarations or type metadata.
 
@@ -539,7 +667,7 @@ checked consumers of these representations.
 ## Explicit field construction and owned field reads
 
 STRUCT_NEW (tag74) and STRUCT_GET (tag75) are admitted in Built, Checked and
-Lowered within the schema6/semantic17 contract. NEW's result is a
+Lowered within the schema7/semantic19 contract. NEW's result is a
 closed nominal type; args name the canonical operand-table range containing
 exactly one value per declared field in declaration order. Its immediate and
 targets are zero. It requires construction access to every field; this is not
@@ -579,3 +707,10 @@ pointer across calls. The same place/receiver types replace Array-specific root
 carriers without aliases. Internal CELL may contain an earlier closed nominal
 node; this does not admit Array<Nominal>, callable nominal components, nominal
 Sendable or CELL as an ordinary stored struct field.
+
+The native Program shape check admits structurally valid signatures without a
+second naming-authority algorithm. Mandatory packet verification and exact
+descriptor correspondence establish naming authority before sealing. Removing
+provenance from a foreign opaque instance rejects; an invalid origin mapping or
+an original definition explicitly naming an inaccessible caller type also rejects.
+Construction/member checks remain active during output verification.

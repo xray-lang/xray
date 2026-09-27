@@ -60,7 +60,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     return true;
 }
 static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
-    XrXirModule module = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics, &ctx->types};
+    XrXirModule module = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics, &ctx->types, NULL};
     XrXirStatus status = xr_xir_type_satisfies(&module, ctx->function, element, 0, &ctx->budget);
     if (status != XR_XIR_OK)
         return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");

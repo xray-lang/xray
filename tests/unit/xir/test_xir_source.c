@@ -20,7 +20,6 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
-#include "xir/xxir.c"
 #include "xir_source_cases.h"
 int main(int argc, char **argv) {
     XrCompilerSession *session = xr_compiler_session_new(NULL);
@@ -66,7 +65,9 @@ int main(int argc, char **argv) {
     CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 262144, &program) == XR_XIR_OK && !lowered);
+    XrXirStatus seal_status = xr_xir_vm_program_take(&lowered, 8388608, &program);
+    if (seal_status != XR_XIR_OK) fprintf(stderr, "source seal status: %u\n", (unsigned)seal_status);
+    CHECK(seal_status == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause}, results);
     runtime_source_failures(program, entry, resume_text, numeric_pause);

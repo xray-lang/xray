@@ -20,7 +20,6 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_runtime_allocations.h"
 /* Lowering frees abstract type payloads allocated by the counted type clone. */
-#include "xir/xxir.c"
 #include "xir_source_cases.h"
 XR_DATA const XrXirProgramSpec fixture_source_program;
 XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause;
@@ -86,10 +85,10 @@ int main(void) {
     CHECK(owner->entries[fixture_source_numeric_pause].resume == fixture_source_program.entries[fixture_source_numeric_pause].resume);
     CHECK(owner->entries[fixture_source_resume_text].resume != fixture_source_program.entries[fixture_source_resume_text].resume);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,
-        module->declarations, {owner, mixed_release}, module->types};
+        module->declarations, {owner, mixed_release}, module->types, xr_xir_program_proof(owner->artifact)};
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&spec, 262144, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&spec, 8388608, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause}, results);
     runtime_source_failures(program, entry, fixture_source_resume_text, fixture_source_numeric_pause);

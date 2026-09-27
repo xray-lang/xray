@@ -66,6 +66,8 @@ typedef struct SourceContext {
     XrXirGeneric *generics;
     XrXirTypes types;
     XrXirNominalTable nominals;
+    ClassDeclNode *nominal_type_owner;
+    uint32_t nominal_generic_owner;
     uint32_t **nominal_members;
     uint32_t **nominal_defaults;
     SourceName **nominal_sources;
@@ -139,7 +141,7 @@ static XrXirSourceRange source_query_range(SourceContext *ctx, AstNode *node, co
 static XrXirSourceType source_query_type(SourceContext *ctx, XrXirType type) {
     uint32_t owner = 0;
     if (xr_xir_type_span(&ctx->types, type))
-        owner = ctx->bodies[ctx->function].generic_owner;
+        owner = ctx->nominal_generic_owner ? ctx->nominal_generic_owner : ctx->bodies[ctx->function].generic_owner;
     return (XrXirSourceType) {type, owner, true};
 }
 static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
@@ -209,6 +211,9 @@ static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *n
 }
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType *type);
+static SourceName *source_nominal_name(SourceContext *ctx, const char *name);
+static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTypeRef **arguments,
+    uint32_t count, XrXirType *type);
 static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
     uint32_t span = xr_xir_type_span(&ctx->types,
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
@@ -219,13 +224,25 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         if (component > span) span = component;
     }
     node.parameter_span = span;
+    if (node.kind == XR_XIR_TYPE_NOMINAL) {
+        for (uint32_t a = 0; a < node.nominal.argument_count; ++a) {
+            if (!source_work(ctx, NULL)) return false;
+            uint32_t component = xr_xir_type_span(&ctx->types, node.nominal.arguments[a]);
+            if (component > node.parameter_span) node.parameter_span = component;
+        }
+    }
     for (uint32_t i = 0; i < ctx->types.count; ++i) {
         const XrXirTypeNode *s = &ctx->types.nodes[i];
         if (!source_work(ctx, NULL)) return false;
         if (s->kind != node.kind || s->element != node.element || s->parameter_count != node.parameter_count ||
             s->result != node.result || s->flags != node.flags) continue;
-        if (node.kind == XR_XIR_TYPE_NOMINAL && s->nominal.declaration != node.nominal.declaration) continue;
+        if (node.kind == XR_XIR_TYPE_NOMINAL && (s->nominal.declaration != node.nominal.declaration ||
+            s->nominal.argument_count != node.nominal.argument_count)) continue;
         bool same = true;
+        for (uint32_t a = 0; a < node.nominal.argument_count; ++a) {
+            if (!source_work(ctx, NULL)) return false;
+            if (s->nominal.arguments[a] != node.nominal.arguments[a]) same = false;
+        }
         for (uint32_t p = 0; p < node.parameter_count; ++p) {
             if (!source_work(ctx, NULL)) return false;
             if (s->parameters[p].type != node.parameters[p].type ||
@@ -271,6 +288,16 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
     if (!found || !found->parameter_span) { *output = type; return true; }
     XrXirTypeNode node = *found;
+    if (node.kind == XR_XIR_TYPE_NOMINAL) {
+        XrXirType *arguments = source_alloc(ctx, node.nominal.argument_count, sizeof(*arguments));
+        if (!arguments) return false;
+        for (uint32_t a = 0; a < node.nominal.argument_count; ++a)
+            if (!source_substitute(ctx, sub, node.nominal.arguments[a], depth + 1, &arguments[a])) return false;
+        node.nominal.arguments = arguments;
+        /* Derived fields belong to the substituted identity, never its template. */
+        node.nominal.fields = NULL; node.nominal.field_count = 0;
+        return source_intern_type(ctx, node, output);
+    }
     if (node.kind != XR_XIR_TYPE_CALLABLE) {
         if (!source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
         return source_intern_type(ctx, node, output);
@@ -313,9 +340,11 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
         AstNode *node = ctx->bodies[ctx->function].type_owner;
         if (!ref->name) break;
         FunctionDeclNode *decl = node ? &node->as.function_decl : NULL;
-        for (int i = 0; decl && i < decl->type_param_count; ++i) {
+        XrGenericParam **parameters = ctx->nominal_type_owner ? ctx->nominal_type_owner->type_params : decl ? decl->type_params : NULL;
+        int count = ctx->nominal_type_owner ? ctx->nominal_type_owner->type_param_count : decl ? decl->type_param_count : 0;
+        for (int i = 0; i < count; ++i) {
             if (!source_work(ctx, node)) return false;
-            if (!strcmp(ref->name, decl->type_params[i]->name)) {
+            if (!strcmp(ref->name, parameters[i]->name)) {
                 *type = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + (uint32_t) i); return true;
             }
         }
@@ -337,13 +366,15 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
         }
         break;
     case XR_TREF_GENERIC:
+        if (source_nominal_name(ctx, ref->name))
+            return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
         if (ref->name && xr_native_declaration_by_name(ref->name))
             return source_native_array_type(ctx, ref, type);
         if (ref->name && !strcmp(ref->name, "Atomic") && ref->nchildren == 1 &&
             ref->children[0]->kind == XR_TREF_SCALAR && ref->children[0]->scalar_rep == XR_NATIVE_I64) {
             *type = XR_XIR_ATOMIC_I64; return true;
         }
-        break;
+        return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
     default: break;
     }
     return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type declaration is not admitted by XIR");
@@ -537,7 +568,10 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, const XrXirG
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function requires its exact explicit type arguments");
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
     if (count && !types) return false;
-    XrXirModule view = {XR_XIR_BUILT, ctx->functions, ctx->function_count, NULL, ctx->generics, &ctx->types};
+    XrXirDeclarations declarations = {0};
+    declarations.modules = ctx->modules; declarations.module_count = (uint32_t) ctx->graph->spec_count;
+    declarations.functions = ctx->identities;
+    XrXirModule view = {XR_XIR_BUILT, ctx->functions, ctx->function_count, &declarations, ctx->generics, &ctx->types, NULL};
     for (uint32_t i = 0; i < count; ++i) {
         if (!source_work(ctx, node) || !source_type(ctx, arguments->refs[i], &types[i])) return false;
         XrXirStatus status = xr_xir_type_satisfies(&view, ctx->function, types[i], callee->constraints[i], &ctx->budget);
@@ -1718,7 +1752,7 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     if (source_query_modules(&ctx) && collect_declarations(&ctx) && build_bodies(&ctx)) {
         XrXirDeclarations declarations = {ctx.modules, (uint32_t) ctx.graph->spec_count, ctx.identities,
             ctx.slots, ctx.slot_count, ctx.literals, ctx.literal_count, (uint32_t) ctx.graph->entry_index, ctx.function_count - 1};
-        XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, ctx.types.count || ctx.types.nominals ? &ctx.types : NULL};
+        XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, ctx.types.count || ctx.types.nominals ? &ctx.types : NULL, NULL};
         XrXirDiagnostic location = {0};
         XrXirStatus status = xr_xir_check(&built, &checking, &output->checked, &location);
         if (status != XR_XIR_OK) {

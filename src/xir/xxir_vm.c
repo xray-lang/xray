@@ -523,7 +523,7 @@ XrXirStatus xr_xir_vm_program_take(XrXirArtifact **artifact, uint64_t byte_limit
         if (status != XR_XIR_OK) goto finish;
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_artifact_target(*artifact),
-        entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types};
+        entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types, xr_xir_program_proof(*artifact)};
     status = xr_xir_program_seal(&spec, byte_limit - bytes, output);
     if (status == XR_XIR_OK) { owner->artifact = *artifact; *artifact = NULL; }
  finish:
