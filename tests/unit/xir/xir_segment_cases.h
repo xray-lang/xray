@@ -82,7 +82,7 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
     SegmentWitness witness = {0}; witness.root = 48; witness.state_bytes = bytes;
     witness.mode = mode; witness.passes = passes; witness.last_cleanup = UINT32_MAX;
     XrXirCallEntry entry = segment_entry(bytes); XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {&entry, 1, &witness, 2 * 1024 * 1024, 100000, 64, &accounting, {0}};
+    XrXirCallConfig config = {&entry, 1, &witness, 2 * 1024 * 1024, 100000, 64, &accounting, {0}, {0}};
     XrXirValue argument = {XR_XIR_I64, 0, 48}; XrXirCall *call = NULL;
     XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
     uint32_t wakes = 0;
@@ -119,7 +119,7 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
 static void segment_budget_cases(void) {
     SegmentWitness witness = {0}; witness.state_bytes = 131; witness.passes = 1;
     XrXirCallEntry entry = segment_entry(131); XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {&entry, 1, &witness, 65536, 100, 2, &accounting, {0}};
+    XrXirCallConfig config = {&entry, 1, &witness, 65536, 100, 2, &accounting, {0}, {0}};
     uint64_t metadata = 0; CHECK(table_size(&config, &metadata) == XR_XIR_CALL_READY);
     uint64_t minimum = metadata + frame_align(sizeof(CallSegment)) +
         frame_align(state_offset() + ((uint64_t) entry.state_bytes + 7) / 8 * 8 + sizeof(XrXirValue)) + 16;
@@ -165,7 +165,7 @@ static void segment_copy_failure(void) {
             {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_UNIT, large ? 8193u : 16u, segment_copy_resume, segment_copy_cleanup, NULL}
         };
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 4, &accounting, {0}};
+        XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 4, &accounting, {0}, {0}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
         CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_LIMIT && witness.cleanups == large + 1);

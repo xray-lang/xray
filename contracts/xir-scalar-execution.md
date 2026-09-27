@@ -1,14 +1,18 @@
 # XIR scalar layout and execution contract
 
-This contract admits internal scalar leaf execution only. Source-language admission,
-Managed string calls are governed by `xir-managed-values.md`; module instances
-remain unimplemented. Resumable XIR calls are
+This contract admits internal scalar leaf execution only. Source-language admission
+is governed by `xir-source-owner.md`, managed string calls by
+`xir-managed-values.md`, and module instances by `xir-program-instance.md`. Resumable XIR calls are
 governed separately by `xir-resumable-calls.md`; leaf tests do not certify them. The current
 target is x86_64 little-endian with the value boundary ABI defined by
 `XR_XIR_VALUE_ABI_VERSION` in `src/xir/xxir_value.h`. Other targets,
 ABI versions, and layout contexts reject explicitly.
 
-The layout service takes type, target, context, and ABI identity. Storage bool is
+The layout service takes the owning constructed pool, type, target, context, and
+ABI identity. Constructed kinds are resolved from that pool, never a bare numeric
+range; equal widths do not grant conversions. Scalar leaf execution still rejects
+managed/constructed values. ARRAY descriptors and handle layouts do not qualify
+Array operations or backing storage. Storage bool is
 one byte; i64 is eight bytes aligned to eight. SSA and frame scalar lanes are
 eight bytes. Boxed, parameter, and result boundary values are sixteen bytes,
 aligned to eight, with u32 type, zero reserved u32, and signed i64 payload. Bool

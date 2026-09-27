@@ -13,6 +13,8 @@
 
 
 #include "xir/xxir_call.h"
+#include "xir/xxir_type_arena.h"
+#include "xir/xxir_types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,14 +97,25 @@ static DWORD WINAPI thread_entry(void *pointer) { copy_worker(pointer); return 0
 #else
 static void *thread_entry(void *pointer) { copy_worker(pointer); return NULL; }
 #endif
+static XrXirTypeArena *string_cell_arena(XrXirDomain *domain) {
+    XrXirTypeNode node = {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING};
+    XrXirTypes types = {&node, 1};
+    XrXirBudget budget = {0}; budget.metadata_bytes = 65536; budget.work = 100;
+    XrXirTypeArena *arena = NULL;
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    return arena;
+}
 static void concurrent_copies(unsigned kind) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirValue value = {0}, copies[4] = {{0}, {0}, {0}, {0}};
     CHECK((kind == 1 ? xr_xir_atomic_i64_new(domain, 0, &value) :
         xr_xir_string_new(domain, "thread", 6, &value)) == XR_XIR_VALUE_OK);
+    XrXirTypeArena *arena = kind == 2 ? string_cell_arena(domain) : NULL;
     if (kind == 2) {
-        XrXirValue cell = {0}; CHECK(xr_xir_cell_new(domain, &value, &cell) == XR_XIR_VALUE_OK);
+        XrXirValueAdmission admission = {arena, domain, NULL, NULL, 10, 0};
+        XrXirValue cell = {0};
+        CHECK(xr_xir_cell_new(domain, arena, (XrXirType) 256, &value, &admission, &cell) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&value); value = cell;
     }
 #if defined(XR_OS_WINDOWS)
@@ -135,6 +148,7 @@ static void concurrent_copies(unsigned kind) {
         bytes_equal(&content, "thread", 6); xr_xir_value_drop(&content);
     } else bytes_equal(&value, "thread", 6);
     xr_xir_value_drop(&value);
+    xr_xir_type_arena_drop(arena);
     XrXirDomainStats stats = xr_xir_domain_stats(domain);
     CHECK(stats.allocations == stats.frees + 1);
     xr_xir_domain_drop(domain);
@@ -171,7 +185,7 @@ static void typed_output(void) {
         TypedOutput output = {0, mode == 1};
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting,
-            {mode == 2 ? NULL : typed_write, &output}};
+            {mode == 2 ? NULL : typed_write, &output}, {0}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
         CHECK(xr_xir_call_poll(call).status == (mode ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_RETURNED));
@@ -193,14 +207,14 @@ static void atomic_boundaries(void) {
     int64_t old = 0, value = 0;
     CHECK(xr_xir_atomic_i64_fetch_add(&copy, 1, &old) && old == INT64_MAX);
     CHECK(xr_xir_atomic_i64_load(&cell, &value) && value == INT64_MIN);
-    CHECK(!xr_xir_value_argument(&cell, XR_XIR_STRING));
+    CHECK(!xr_xir_value_argument(&cell, NULL, XR_XIR_STRING));
     int64_t frame = 0;
-    CHECK(xr_xir_owned_slot_copy(&frame, 0, XR_XIR_I64, 42) == XR_XIR_VALUE_BAD_ARGUMENT && !frame);
+    CHECK(xr_xir_owned_slot_copy(&frame, 0, NULL, XR_XIR_I64, 42) == XR_XIR_VALUE_BAD_ARGUMENT && !frame);
     const XrXirType type = XR_XIR_ATOMIC_I64;
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_UNIT, 0, atomic_output_resume, NULL, NULL};
     XrXirCallAccounting accounting = {0};
     TypedOutput output = {0};
-    XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {typed_write, &output}};
+    XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {typed_write, &output}, {0}};
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, 0, &cell, 1, &call) == XR_XIR_CALL_READY);
     CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_BAD_STATE && !output.seen);
@@ -209,8 +223,83 @@ static void atomic_boundaries(void) {
     CHECK(xr_xir_atomic_i64_load(&copy, &value) && value == INT64_MIN);
     xr_xir_value_drop(&copy);
 }
+typedef struct ValueGate { bool active; uint32_t admissions, releases; } ValueGate;
+static void value_gate_release(void *owner) { ++((ValueGate *) owner)->releases; }
+static XrXirValueStatus value_gate_admit(void *context, const XrXirFunctionBinding *binding,
+                                       XrXirType type, uint64_t *work) {
+    ValueGate *gate = context;
+    if (!*work) return XR_XIR_VALUE_LIMIT;
+    --*work; ++gate->admissions;
+    return gate->active && binding->owner == gate && binding->release == value_gate_release &&
+        binding->entry == 3 && type == (XrXirType) 256 ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
+}
+static void arena_identity_and_revocation(void) {
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
+    XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
+    XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_CALLABLE, .parameters = &parameter, .parameter_count = 1, .result = XR_XIR_I64},
+        {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 256},
+        {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_STRING},
+        {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 258},
+        {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
+    };
+    XrXirTypes types = {nodes, 5};
+    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
+    XrXirTypeArena *arena = NULL, *foreign = NULL;
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_type_arena_new(domain, &types, &budget, &foreign) == XR_XIR_VALUE_OK);
+    const XrXirTypes *owned = xr_xir_type_arena_types(arena);
+    CHECK(owned->nodes != nodes && owned->nodes[0].parameters != &parameter);
+    parameter.type = XR_XIR_BOOL; nodes[0].result = XR_XIR_BOOL;
+    CHECK(owned->nodes[0].parameters[0].type == XR_XIR_STRING && owned->nodes[0].result == XR_XIR_I64);
+    CHECK(xr_xir_type_is_array(owned, (XrXirType) 260) && !xr_xir_type_is_callable(owned, (XrXirType) 260));
+    ValueGate gate = {true, 0, 0};
+    XrXirFunctionBinding binding = {&gate, value_gate_release, 3, NULL, 0};
+    XrXirValueAdmission admission = {arena, domain, value_gate_admit, &gate, 100, 0};
+    XrXirValue function = {0}, cell = {0}, copy = {0}, rejected = {0};
+    CHECK(xr_xir_function_new(domain, arena, (XrXirType) 256, &binding, &admission, &function) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_value_valid(&function) && xr_xir_value_arena(&function) == arena);
+    CHECK(xr_xir_value_argument(&function, arena, (XrXirType) 256));
+    CHECK(!xr_xir_value_argument(&function, foreign, (XrXirType) 256));
+    CHECK(!xr_xir_value_argument(&function, NULL, (XrXirType) 256));
+    int64_t frame_slot = 0;
+    CHECK(xr_xir_owned_slot_copy(&frame_slot, 0, arena, (XrXirType) 256, function.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(&frame_slot, 0, foreign, (XrXirType) 256, function.payload) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(frame_slot == function.payload);
+    xr_xir_owned_slot_clear(&frame_slot, 0);
+    CHECK(!frame_slot && !gate.releases);
+    uint32_t admitted = gate.admissions;
+    XrXirValueAdmission wrong = {foreign, domain, value_gate_admit, &gate, 100, 0};
+    CHECK(xr_xir_value_admit(&function, (XrXirType) 256, &wrong) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(gate.admissions == admitted);
+    XrXirValue forged = function; forged.type = 257;
+    CHECK(!xr_xir_value_valid(&forged));
+    CHECK(xr_xir_value_copy(&forged, &rejected) == XR_XIR_VALUE_BAD_ARGUMENT && !rejected.type);
+    CHECK(xr_xir_function_new(domain, arena, (XrXirType) 258, &binding, &admission, &rejected) == XR_XIR_VALUE_BAD_ARGUMENT);
+    binding.entry = 4;
+    CHECK(xr_xir_function_new(domain, arena, (XrXirType) 256, &binding, &admission, &rejected) == XR_XIR_VALUE_BAD_ARGUMENT);
+    binding.entry = 3;
+    CHECK(xr_xir_cell_new(domain, arena, (XrXirType) 257, &function, &admission, &cell) == XR_XIR_VALUE_OK);
+    admission.work = 1;
+    CHECK(xr_xir_value_admit(&cell, (XrXirType) 257, &admission) == XR_XIR_VALUE_LIMIT);
+    admission.work = 100; gate.active = false;
+    CHECK(xr_xir_value_admit(&function, (XrXirType) 256, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_value_admit(&cell, (XrXirType) 257, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_cell_write(&cell, &function, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_value_copy(&function, &copy) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_cell_read(&cell, &rejected) == XR_XIR_VALUE_OK);
+    xr_xir_type_arena_drop(foreign); xr_xir_type_arena_drop(arena);
+    CHECK(xr_xir_value_valid(&function));
+    xr_xir_value_drop(&cell); xr_xir_value_drop(&function);
+    xr_xir_value_drop(&rejected); CHECK(!gate.releases);
+    xr_xir_value_drop(&copy); CHECK(gate.releases == 1);
+    CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
+    xr_xir_domain_drop(domain);
+}
 int main(void) {
-    unicode_cases(); cow_cases(); concurrent_copies(0); concurrent_copies(1); concurrent_copies(2); typed_output(); atomic_boundaries();
+    arena_identity_and_revocation(); unicode_cases(); cow_cases(); concurrent_copies(0); concurrent_copies(1); concurrent_copies(2); typed_output(); atomic_boundaries();
     puts("Strict Unicode, CoW growth, independent lifetime and concurrent owned copies passed");
     return 0;
 }

@@ -14,7 +14,7 @@
 
 #include "xxir_emit_c.h"
 #include "xxir_program.h"
-#include "xxir_callable.h"
+#include "xxir_types.h"
 #include "xxir_scalar.h"
 #include "../base/xmalloc.h"
 #include "../aot/xi_cgen_verify_output.h"
@@ -25,6 +25,7 @@ typedef struct CBuffer {
     char *text;
     size_t length, capacity, limit;
     XrXirStatus status;
+    const XrXirTypes *types;
 } CBuffer;
 
 static const char *comparison_symbol(XrXirOp op) {
@@ -180,9 +181,9 @@ static void emit_edge(CBuffer *buffer, const XrXirFunction *function,
             }
         if (source == UINT32_MAX) { buffer->status = XR_XIR_BAD_STRUCTURE; return; }
         uint32_t scratch = layout->offsets[function->parameter_count + end] + 8;
-        if (xr_xir_type_is_owned(phi->type)) {
+        if (xr_xir_type_is_owned(buffer->types, phi->type)) {
             if (!resumable) { buffer->status = XR_XIR_BAD_STAGE; return; }
-            append(buffer, "        if (xr_xir_owned_slot_copy(%s, %uu, (XrXirType) %u, "
+            append(buffer, "        if (xr_xir_owned_slot_copy(%s, %uu, view->arena, (XrXirType) %u, "
                 "xr_xir_scalar_load(%s, %uu)) != XR_XIR_VALUE_OK) goto limit;\n",
                 frame, scratch, (uint32_t) phi->type, frame, layout->offsets[source]);
         } else append(buffer, "        xr_xir_scalar_store(%s, %uu, xr_xir_scalar_load(%s, %uu));\n",
@@ -192,7 +193,7 @@ static void emit_edge(CBuffer *buffer, const XrXirFunction *function,
     for (uint32_t i = first; i < end; ++i) {
         const XrXirInstruction *phi = &function->instructions[i];
         uint32_t destination = layout->offsets[function->parameter_count + i];
-        if (xr_xir_type_is_owned(phi->type))
+        if (xr_xir_type_is_owned(buffer->types, phi->type))
             append(buffer, "        { XrXirValue value = {%uu, 0, xr_xir_scalar_load(%s, %uu)};\n"
                 "        xr_xir_scalar_store(%s, %uu, 0);\n"
                 "        xr_xir_owned_slot_move(%s, %uu, &value); }\n",
@@ -281,7 +282,7 @@ static void emit_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "    if (!context || argument_count != %uu || (argument_count && !arguments)) "
            "return XR_XIR_RUN_BAD_ARGUMENT;\n", function->parameter_count);
     for (uint32_t p = 0; p < function->parameter_count; ++p)
-        append(buffer, "    if (!xr_xir_value_argument(&arguments[%u], (XrXirType) %u)) "
+        append(buffer, "    if (!xr_xir_value_argument(&arguments[%u], NULL, (XrXirType) %u)) "
                "return XR_XIR_RUN_BAD_ARGUMENT;\n", p, (uint32_t) function->parameters[p]);
     append(buffer, "    status = xr_xir_scalar_frame_begin(context, %uu, &frame);\n"
            "    if (status != XR_XIR_RUN_OK) return status;\n", layout->frame_bytes);
@@ -315,11 +316,11 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
         return status;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
-        if (xr_xir_type_is_owned(function->result)) return XR_XIR_BAD_STAGE;
+        if (xr_xir_type_is_owned(module->types, function->result)) return XR_XIR_BAD_STAGE;
         for (uint32_t p = 0; p < function->parameter_count; ++p)
-            if (xr_xir_type_is_owned(function->parameters[p])) return XR_XIR_BAD_STAGE;
+            if (xr_xir_type_is_owned(module->types, function->parameters[p])) return XR_XIR_BAD_STAGE;
     }
-    CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
+    CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types};
     append(&buffer, "#include \"xir/xxir_float.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
@@ -352,8 +353,9 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             append(buffer, "        XrXirValue right = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
                 "        status = xr_xir_instance_cell_write(view, &left, &right);\n",
                 (uint32_t) xr_xir_operand_type(function, op->args[1]), layout->offsets[op->args[1]]);
-        } else append(buffer, "        status = %s(view, &left, &value);\n",
-            op->op == XR_XIR_CELL_NEW ? "xr_xir_instance_cell" : "xr_xir_instance_cell_read");
+        } else if (op->op == XR_XIR_CELL_NEW)
+            append(buffer, "        status = xr_xir_instance_cell(view, (XrXirType) %u, &left, &value);\n", (uint32_t) op->type);
+        else append(buffer, "        status = xr_xir_instance_cell_read(view, &left, &value);\n");
         break;
     case XR_XIR_FUNCTION_REF:
         for (uint32_t p = 0; p < op->args[1]; ++p) {
@@ -393,7 +395,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     }
     append(buffer, "        if (status != XR_XIR_CALL_READY) return (XrXirAction) "
         "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}};\n");
-    if (xr_xir_type_is_owned(op->type))
+    if (xr_xir_type_is_owned(buffer->types, op->type))
         append(buffer, "        xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
     else if (op->type != XR_XIR_UNIT)
         append(buffer, "        xr_xir_scalar_store(state->frame, %uu, value.payload);\n", destination);
@@ -453,7 +455,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
         break;
     case XR_XIR_OWNED_LOCAL_WRITE:
-        append(buffer, "        if (xr_xir_owned_slot_copy(state->frame, %uu, (XrXirType) %u, "
+        append(buffer, "        if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, "
                "xr_xir_scalar_load(state->frame, %uu)) != XR_XIR_VALUE_OK) goto limit;\n",
                layout->offsets[op->args[0]], (uint32_t) function->instructions[op->args[0] - function->parameter_count].type,
                layout->offsets[op->args[1]]);
@@ -464,7 +466,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_CONCAT_STRING:
         append(buffer, "        { XrXirValueStatus status = %s(state->frame, %uu, ",
                op->op != XR_XIR_CONCAT_STRING ? "xr_xir_owned_slot_copy" : "xr_xir_string_slot_concat", destination);
-        if (op->op != XR_XIR_CONCAT_STRING) append(buffer, "(XrXirType) %u, ", (uint32_t) op->type);
+        if (op->op != XR_XIR_CONCAT_STRING) append(buffer, "view->arena, (XrXirType) %u, ", (uint32_t) op->type);
         append(buffer, "xr_xir_scalar_load(state->frame, %uu)", layout->offsets[op->args[0]]);
         if (op->op == XR_XIR_CONCAT_STRING)
             append(buffer, ", xr_xir_scalar_load(state->frame, %uu)", layout->offsets[op->args[1]]);
@@ -549,10 +551,10 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "    if (!state->initialized) {\n"
            "        if (view->argument_count != %uu) goto invalid;\n", function->parameter_count);
     for (uint32_t p = 0; p < function->parameter_count; ++p) {
-        append(buffer, "        if (!xr_xir_value_argument(&view->arguments[%u], (XrXirType) %u)) goto invalid;\n",
+        append(buffer, "        if (!xr_xir_value_argument(&view->arguments[%u], view->arena, (XrXirType) %u)) goto invalid;\n",
                p, (uint32_t) function->parameters[p]);
-        if (xr_xir_type_is_owned(function->parameters[p]))
-            append(buffer, "        if (xr_xir_owned_slot_copy(state->frame, %uu, (XrXirType) %u, view->arguments[%u].payload) "
+        if (xr_xir_type_is_owned(module->types, function->parameters[p]))
+            append(buffer, "        if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, view->arguments[%u].payload) "
                    "!= XR_XIR_VALUE_OK) goto limit;\n", layout->offsets[p], (uint32_t) function->parameters[p], p);
         else
             append(buffer, "        xr_xir_scalar_store(state->frame, %uu, view->arguments[%u].payload);\n",
@@ -565,9 +567,9 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "        if (view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
            "        if (state->expected == XR_XIR_UNIT) {\n"
            "            if (view->inbox.value.type || view->inbox.value.reserved || view->inbox.value.payload) goto invalid;\n"
-           "        } else if (!xr_xir_value_argument(&view->inbox.value, (XrXirType) state->expected)) goto invalid;\n"
-           "        if (xr_xir_type_is_owned((XrXirType) state->expected)) {\n"
-           "            if (xr_xir_owned_slot_copy(state->frame, state->destination, (XrXirType) state->expected, view->inbox.value.payload) "
+           "        } else if (!xr_xir_value_argument(&view->inbox.value, view->arena, (XrXirType) state->expected)) goto invalid;\n"
+           "        if (xr_xir_type_is_owned(xr_xir_type_arena_types(view->arena), (XrXirType) state->expected)) {\n"
+           "            if (xr_xir_owned_slot_copy(state->frame, state->destination, view->arena, (XrXirType) state->expected, view->inbox.value.payload) "
            "!= XR_XIR_VALUE_OK) goto limit;\n"
            "        } else if (state->destination != UINT32_MAX)\n"
            "            xr_xir_scalar_store(state->frame, state->destination, view->inbox.value.payload);\n"
@@ -599,31 +601,32 @@ static void emit_bytes(CBuffer *buffer, const char *bytes, uint32_t length) {
         append(buffer, "\\x%02x", (unsigned int) (unsigned char) bytes[i]);
     append(buffer, "\"");
 }
-static void emit_callable_types(CBuffer *buffer, const XrXirCallableTypes *types, const char *prefix) {
-    if (!types) return;
+static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *prefix) {
+    if (!types || !types->count) return;
     for (uint32_t i = 0; i < types->count; ++i) {
-        const XrXirCallableSignature *s = &types->signatures[i];
-        if (!s->parameter_count) continue;
-        append(buffer, "static const XrXirCallableParameter %s_callable_parameters_%u[] = {", prefix, i);
-        for (uint32_t p = 0; p < s->parameter_count; ++p)
-            append(buffer, "%s{(XrXirType) %u, %uu}", p ? ", " : "", (uint32_t) s->parameters[p].type, s->parameters[p].mode);
+        const XrXirTypeNode *node = &types->nodes[i];
+        if (!node->parameter_count) continue;
+        append(buffer, "static const XrXirCallableParameter %s_type_parameters_%u[] = {", prefix, i);
+        for (uint32_t p = 0; p < node->parameter_count; ++p)
+            append(buffer, "%s{(XrXirType) %u, %uu}", p ? ", " : "", (uint32_t) node->parameters[p].type, node->parameters[p].mode);
         append(buffer, "};\n");
     }
-    append(buffer, "static const XrXirCallableSignature %s_callable_signatures[] = {\n", prefix);
+    append(buffer, "static const XrXirTypeNode %s_type_nodes[] = {\n", prefix);
     for (uint32_t i = 0; i < types->count; ++i) {
-        const XrXirCallableSignature *s = &types->signatures[i];
-        append(buffer, "    {");
-        if (s->parameter_count) append(buffer, "%s_callable_parameters_%u", prefix, i);
+        const XrXirTypeNode *node = &types->nodes[i];
+        append(buffer, "    {%uu, (XrXirType) %u, ", node->kind, (uint32_t) node->element);
+        if (node->parameter_count) append(buffer, "%s_type_parameters_%u", prefix, i);
         else append(buffer, "NULL");
-        append(buffer, ", %uu, (XrXirType) %u, %uu, 0u},\n", s->parameter_count, (uint32_t) s->result, s->flags);
+        append(buffer, ", %uu, (XrXirType) %u, %uu, %uu},\n", node->parameter_count,
+            (uint32_t) node->result, node->flags, node->parameter_span);
     }
-    append(buffer, "};\nstatic const XrXirCallableTypes %s_callable_types = {%s_callable_signatures, %uu};\n",
+    append(buffer, "};\nstatic const XrXirTypes %s_types = {%s_type_nodes, %uu};\n",
         prefix, prefix, types->count);
 }
 static void emit_program(CBuffer *buffer, const XrXirModule *module, const char *prefix) {
     const XrXirDeclarations *d = module->declarations;
     if (!d) return;
-    emit_callable_types(buffer, module->callables, prefix);
+    emit_types(buffer, module->types, prefix);
     for (uint32_t m = 0; m < d->module_count; ++m) {
         const XrXirSourceModule *source = &d->modules[m];
         if (!source->dependency_count) continue;
@@ -670,7 +673,7 @@ static void emit_program(CBuffer *buffer, const XrXirModule *module, const char 
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         XR_XIR_PROGRAM_ABI_VERSION, prefix, prefix, module->function_count, prefix);
-    if (module->callables) append(buffer, "&%s_callable_types", prefix); else append(buffer, "NULL");
+    if (module->types && module->types->count) append(buffer, "&%s_types", prefix); else append(buffer, "NULL");
     append(buffer, "};\n");
 }
 
@@ -683,8 +686,9 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     if (!symbol_prefix_valid(symbol_prefix)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = xr_xir_artifact_verify(artifact, NULL, NULL);
     if (status != XR_XIR_OK) return status;
-    CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK};
+    CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types};
     append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+           "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"

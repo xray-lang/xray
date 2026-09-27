@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 static bool output_piece(const XrXirValue *value, char *scalar, const char **bytes, size_t *length) {
-    if (!xr_xir_value_argument(value, (XrXirType) value->type)) return false;
+    if (!xr_xir_value_argument(value, NULL, (XrXirType) value->type)) return false;
     if (value->type == XR_XIR_STRING) return xr_xir_string_view(value, bytes, length);
     if (value->type == XR_XIR_BOOL) {
         *bytes = value->payload ? "true" : "false"; *length = value->payload ? 4 : 5; return true;

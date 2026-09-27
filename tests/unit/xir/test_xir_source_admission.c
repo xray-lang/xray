@@ -335,7 +335,7 @@ int main(void) {
     xr_xir_source_result_free(&query_result_10);
     CHECK(query_status_10 == XR_XIR_OK && unused);
     CHECK(xr_xir_specialize(unused,NULL,&closed_unused,NULL) == XR_XIR_OK && closed_unused);
-    CHECK(!xr_xir_artifact_module(closed_unused)->callables);
+    CHECK(!xr_xir_artifact_module(closed_unused)->types);
     xr_xir_artifact_free(closed_unused); xr_xir_artifact_free(unused);
     const char *valid = "import { visible } from \"./lib\"\nprint(visible(), true)\n";
     write_source(root, valid);

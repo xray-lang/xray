@@ -33,7 +33,7 @@
     },
     {
       "heading": "Parameter modes",
-      "markdown": "- `name: T` is the default READ contract; `name: ref T` is an exclusive writable place loan; `name: move T` consumes a unique owner\n- Calls to `ref` parameters must write `ref place`; existing owners passed to `move` parameters must write `move value`\n- `copy(value)` creates a fresh owner and ordinary outputs use returns, tuples, structs, or Result",
+      "markdown": "- `name: T` is the default READ contract: the parameter cannot be rebound or directly mutate its value-semantic components, but copyable, storable values may be saved or returned as logical copies\n- Copying stops at class and synchronized identity boundaries; a READ class parameter does not freeze the referenced object\n- `name: ref T` is an exclusive writable place loan; calls must write `ref place`\n- `name: move T` consumes a noncopyable resource according to the declaration; `move value` may explicitly mark that transfer. Copyable types, including Array, cannot declare move parameters or receivers\n- Ordinary Array copying does not require `copy(array)` or unique backing. Type-position `const T`, the public `copy(array)` spelling, and standalone move expressions for copyable values remain outside the frozen subset\n- Ordinary outputs use returns, tuples, or structs; business errors use typed throw/catch, without a global Result type\n\nThese are language contracts. Complete resource, ref, and view declaration families still require the implementation qualification described in spec §17.",
       "fences": [
         "decl-fn-param-modes"
       ]

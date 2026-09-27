@@ -4,12 +4,21 @@ This contract adds internal string values and explicit result ownership to the
 resumable runtime. It does not qualify source syntax, Program/Instance sealing,
 generic library publication, concurrent activation driving, or product cutover.
 
-Value ABI 8 replaces prior value ABIs without an alias or reader. A value remains a
+Value ABI 9 replaces prior value ABIs without an alias or reader. A value remains a
 16-byte, eight-aligned carrier: u32 type, zero reserved u32, and eight payload
 bytes. Unit/bool/i64 retain their canonical meanings. String payload bytes encode
 a live opaque pointer by memcpy; they are never language integers. Host values
 must originate from constructors or owned copies. This trusted native interface
 does not validate forged/dangling pointers or accept serialized pointer bytes.
+
+Constructed IDs are local to an independently owned TypeArena under
+`xir-constructed-types.md`. A function or cell object owns that arena; its kind
+and element/signature are resolved from the verified pool. Copy/drop validates
+the object's own metadata, while execution admission additionally requires the
+expected arena and type. Equal numeric IDs from separately sealed arenas do not
+grant interchangeability. The carrier size alone does not preserve an older ABI.
+ARRAY descriptors participate in this metadata foundation; runtime Array objects,
+backing storage, COW mutation and their physical-release evidence remain OPEN.
 
 Strings own strict UTF-8, including embedded NUL. No normalization or replacement
 occurs. Length queries distinguish bytes from Unicode scalar count, neither is a
@@ -29,7 +38,9 @@ in place when capacity permits and reallocates its byte buffer otherwise; shared
 storage separates. Self-append is valid. Failure preserves the original value,
 published copies, and live accounting. Capacity is an implementation detail.
 
-Call ABI 12 admits strings and Atomic<i64> identity values. Arguments are borrowed at admission and copied into
+Call ABI 13 admits strings and Atomic<i64> identity values, with function/cell
+rules governed by their respective contracts. Its typed entry, action and inbox
+boundaries carry the expected arena. Arguments are borrowed at admission and copied into
 owned frame storage before publication. Resume arguments/inbox and action return
 values are borrowed views. The driver retains a return before child cleanup and
 owns each inbox and terminal result. Poll exposes a borrowed result; explicit
@@ -38,8 +49,8 @@ an untaken result. Taking a result needs no allocation and the resulting owned
 value survives activation and input destruction. Frame cleanup runs before its
 arguments and inbox are dropped. Failure/cancellation publishes no partial result.
 
-Typed output is an explicit synchronous provider effect. Call ABI 12 replaces
-the scalar callback with a borrowed typed group. Raw output has one value and
+Typed output is an explicit synchronous provider effect. Call ABI 13 uses a
+borrowed typed group. Raw output has one value and
 names stdout or stderr. Line output names stdout and carries zero or more
 bool/i64/string values: arguments evaluate left to right before one provider call.
 Rendering inserts exactly one ASCII space between values and one final LF, as
@@ -84,7 +95,8 @@ and is cleared on all exits in reverse slot order. Both backends consume this
 cleanup list. Parameters and child results are retained into slots; return actions
 borrow until the driver captures ownership. Repeated loop definitions replace
 and release previous values. Closed scalar leaf execution rejects managed values.
-Literal tables are sealed with Program metadata. Source-to-XIR string production remains to be implemented.
+Literal tables are sealed with Program metadata. Source-to-XIR string production
+is governed by `xir-source-owner.md`; it adds no alternate value representation.
 
 verification-test: test_xir_string_vm
 verification-test: test_xir_string_native

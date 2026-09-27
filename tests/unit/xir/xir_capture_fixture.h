@@ -16,8 +16,8 @@
 static XrXirArtifact *capture_checked(void) {
     XrXirType fn = (XrXirType) 256, t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter input = {XR_XIR_STRING,0};
-    XrXirCallableSignature signature = {&input,1,XR_XIR_STRING,0,0};
-    XrXirCallableTypes types = {&signature,1};
+    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,0,0};
+    XrXirTypes types = {&signature,1};
     XrXirInstruction init[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
     XrXirInstruction root[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},17},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};

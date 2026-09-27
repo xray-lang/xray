@@ -23,8 +23,13 @@ alias) and the resolved target. Captures preserve the original binding identity.
 Function declarations expose their checked signature; their type field is the
 result type. Other typed declarations expose their value type. A type carries its
 generic declaration owner: equal parameter ordinals in two functions do not mean
-equal type identities. Callable IDs refer only to the snapshot's owned copy of
-the same callable descriptor table, interpreted under that generic owner.
+equal type identities. Constructed IDs refer only to the snapshot's owned copy
+of the same unified type pool, interpreted under that generic owner. A node's
+kind distinguishes CALLABLE, ARRAY and internal CELL; an ID range alone cannot
+identify a callable. Callable parameter payloads are independently owned too.
+Source interning places child nodes before parents. Mutable generic captures
+preserve the original lexical owner even when their shared CELL node is reused
+by another declaration with the same parameter ordinal.
 
 Source ranges use 1-based lines and UTF-8 byte columns, with exclusive ends.
 Zero coordinates mean unavailable, never a guessed location; parameter names use
@@ -114,6 +119,12 @@ verification-test: test_parser_recoverable
 verification-test: meta_ownership_inventory
 
 Structured control and local place semantics follow `xir-local-control-flow.md`.
+
+The constructed-type foundation does not yet admit source Array annotations,
+literals, methods or indexed reads/writes. ARRAY descriptors may be represented
+and queried by the shared metadata machinery; this is not an additional checker
+or evidence that Array execution is implemented. The first Array operation family
+must use the same source owner and Built/Checked/specialization/Lowered pipeline.
 
 The unshadowed compiler namespace Coro admits only Coro.yield() in this source
 family. It accepts no value/type arguments and returns unit. A lexical/module

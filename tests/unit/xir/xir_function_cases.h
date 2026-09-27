@@ -56,8 +56,8 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     XrXirSlot slot = {0, XR_XIR_STRING, 1};
     XrXirLiteral literal = {"owned callback result", 21};
     XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1};
-    XrXirCallableSignature signature = {NULL, 0, XR_XIR_STRING, 0, 0};
-    XrXirCallableTypes types = {&signature, 1};
+    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, 0, 0};
+    XrXirTypes types = {&signature, 1};
     XrXirType callback_type = (XrXirType) 256, capture_type = XR_XIR_STRING;
     XrXirCallEntry entries[5];
     for (unsigned i = 0; i < 5; ++i) entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION,
@@ -125,7 +125,7 @@ static bool function_case_run(bool cancel) {
     xr_xir_program_drop(program);
     if (function.type) {
         CHECK(!releases && xr_xir_value_copy(&function, &copy) == XR_XIR_VALUE_OK);
-        CHECK(xr_xir_instance_start_function(other, &function, NULL, 0) == XR_XIR_CALL_BAD_STATE);
+        CHECK(xr_xir_instance_start_function(other, &function, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
     }
     CHECK(xr_xir_instance_free(other) == XR_XIR_CALL_READY);
     if (success) {

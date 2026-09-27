@@ -11,6 +11,14 @@ No process-global current instance is used. Inputs are copied before a call is
 accepted; scalar results own their inline payload. Unit, canonical bool, i64, and strings are admitted. Managed ownership, output
 and one-shot result transfer are governed by `xir-managed-values.md`. ABI mismatches fail before publication.
 
+Call ABI 13 retains the admission TypeArena for the activation lifetime and
+passes it through each CallView. Typed argument, return, inbox and action
+admission checks the expected arena/type as well as existing execution authority.
+VM frame copies and emitted native frame copies use that same arena. Scalar
+leaf entries admit only primitive values and use no constructed owner. ARRAY
+descriptors do not by themselves authorize a runtime Array carrier or operation;
+that implementation and its transitive boundary tests remain OPEN.
+
 Each entry is a bounded resume callback and optional non-suspending cleanup.
 It returns an explicit continue, call, return, throw, suspend, typed output, or runtime-fault
 action. Runtime arithmetic faults are distinct from language throw. Calls yield to a
@@ -45,11 +53,15 @@ statuses. Every fault clears the language result, unwinds children before
 parents and balances physical frame accounting. This normalization changes no
 wire layout, opcode identity or accepted ABI version.
 
-Metadata and frames share a physical byte budget. Frame depth and resume work
+Metadata and frames share one physical byte budget per activation. Frame depth and resume work
 have separate limits. Accounting includes the activation and copied descriptors,
 not just user payload. Allocation failure restores live bytes and allocation/free
 counts to a balanced state with live bytes at the caller's baseline. Entry state
 is aligned to sixteen bytes on this target. Cleanup cannot create new calls or suspend.
+An Instance may retain one completed activation while constructing one unpublished
+replacement under the same per-activation limit. The two physical accounts and
+failure-atomic replacement bound are governed by `xir-program-instance.md`;
+activation accounting never silently combines or discards either live allocation.
 
 Each activation owns a linked stack of nonmoving frame segments. A segment normally
 reserves 4096 physical bytes including its header; oversized frames reserve their

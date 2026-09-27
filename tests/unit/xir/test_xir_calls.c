@@ -144,7 +144,7 @@ static void callback_cases(void) {
             {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_BOOL, sizeof(uint32_t), comparator_resume, cleanup, &identities[2]}
         };
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 3, &witness, 65536, 100, 10, &accounting, {NULL, NULL}};
+        XrXirCallConfig config = {entries, 3, &witness, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
         XrXirValue args[] = {{XR_XIR_I64, 0, 3}, {XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
@@ -220,7 +220,7 @@ static void bounded_stack(void) {
         Witness witness = {0};
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {&entry, 1, &witness, 4 * 1024 * 1024, variant == 2 ? 5 : 30000,
-            variant == 1 ? 5 : 10001, &accounting, {NULL, NULL}};
+            variant == 1 ? 5 : 10001, &accounting, {NULL, NULL}, {0}};
         XrXirValue argument = {XR_XIR_I64, 0, 10000};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, &argument, 1, &call) == XR_XIR_CALL_READY);
@@ -249,7 +249,7 @@ static void xir_instruction_calls(void) {
             entries[1] = tables[mode][1];
         }
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
+        XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
         XrXirValue args[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 2, &call) == XR_XIR_CALL_READY);
@@ -296,7 +296,7 @@ static void call_admission(void) {
     for (uint32_t i = 0; i < 3; ++i)
         CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
+    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
     XrXirCall *call = NULL;
     const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, XR_XIR_CALL_ABI_VERSION + 1};
@@ -375,7 +375,7 @@ static void fault_boundary(void) {
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         FaultWitness witness = {cases[i].failure, cases[i].reason, 0};
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 2, &accounting, {NULL, NULL}};
+        XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 2, &accounting, {NULL, NULL}, {0}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_call_poll(call);

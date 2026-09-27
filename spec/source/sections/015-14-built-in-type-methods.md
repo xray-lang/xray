@@ -108,23 +108,50 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.7 `Array<T>` 方法
 
+`Array<T>` 是可增长值类型，T 必须可复制且可保存。普通赋值、保存参数、索引读和返回遵循逻辑副本语义；共享 backing 不授予修改其他副本的权限。容器存储本身不要求 T 可比较、可哈希或可字符串化，相关方法另按各自合同准入。
+
+首个拥有式数组执行子集冻结以下接口：`len(array: Array<T>) -> i64`、只读 `get(index: i64) -> T`、`ref set(index: i64, value: T) -> ()`、`ref push(value: T) -> ()`，以及数组字面量和 §3.4/§3.11 的索引表达式。`set` 方法返回 unit；索引赋值表达式返回右侧转换后的 T。len 自身不分配；读取/复制可能遇到持有计数限制；构造和写入可能因预算、分配或持有限制失败。set 和 push 都可能因 COW 分离而迁移元素存储。
+
+只读 get 与索引读取遵循 §3.0 的值 receiver 快照规则：先取得 Array 逻辑快照，再求 index；不能因 index 中的改绑而晚读当前值。ref set/push 则先绑定根 place 一次，全部实参求值完成后才对 binding 的当前值建立独占访问，执行边界检查、分离、写入和回写。实参改绑同一 root 时，操作作用于新值；set 按新长度检查。`a.push(a[0])` 合法，元素结果必须在 push 前独立持有。失败不发布部分数组或改变提交前的逻辑值；已经完成的实参副作用和改绑不回滚。
+
+普通 read 参数不能成为这些 ref 方法的可写 receiver；可复制 Array 不声明 move receiver，pop 删除元素也不消费整个 Array。下表的 ref 是声明模式，dot-call 仍写 `a.push(x)`。纯索引 GET-place 的快照消除及瞬时 retain/copy/drop 必须遵守 §3.0 的错误保持要求，不能以共享 backing 的唯一性猜测绕过访问权限。
+
+```xray @id=array-ref-current-binding
+var a: Array<string> = ["old"]
+fn replaceForPush() -> string {
+    print("arg")
+    a = ["new"]
+    return "tail"
+}
+a.push(replaceForPush())
+print(a[0], a[1])           // 依次输出 arg、new tail
+```
+
+```xray @id=array-push-own-element
+var a: Array<string> = ["head"]
+a.push(a[0])
+print(a[0], a[1])           // head head
+```
+
+下表保留完整方法分母；首个 XIR 子集并不自动准入其余方法。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `i64` 全局查询 |
-| `capacity` / `arr[i]` / `arr[i] = v` | 容量属性与下标读写；也可使用 `get(i)` / `set(i, v)` |
-| `push(x)` / `pop()` | 尾部增删 |
-| `shift()` / `unshift(x)` | 头部增删 |
-| `concat(...arrays)` | 拼接 |
-| `indexOf(x)` / `contains(x)` | 查找 |
-| `join(sep?)` | 拼接为字符串 |
-| `reverse()` / `sort(cmp?)` | 原地重排 |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 函数式处理 |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 遍历与谓词 |
-| `fill(v, start?, end?)` / `clear()` | 填充或清空 |
-| `reserve(capacity)` / `resize(length, fill)` | 容量与长度管理 |
-| `ptr()` / `mutPtr()` | 显式底层指针视图 |
-| `toString()` | 容器字符串表示 |
-| `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
+| `capacity` / `arr[i]` / `arr[i] = v` | 只读容量查询、只读索引与可写 place 赋值；get 为只读，set 为 ref |
+| `ref push(x)` / `ref pop()` | 尾部增删；pop 不是 move receiver |
+| `ref shift()` / `ref unshift(x)` | 头部增删 |
+| `concat(...arrays)` | 只读 receiver，产生拼接结果 |
+| `indexOf(x)` / `contains(x)` | 只读查询 |
+| `join(sep?)` | 只读 receiver，拼接为字符串 |
+| `ref reverse()` / `ref sort(cmp?)` | 修改 receiver 的排列 |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读 receiver；回调合同须在准入前另冻 |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读 receiver；回调合同须在准入前另冻 |
+| `ref fill(v, start?, end?)` / `ref clear()` | 填充或清空 |
+| `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
+| `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
+| `toString()` | 只读 receiver，容器字符串表示 |
+| `iterator()` / `entriesIterator()` / `entries()` | 只读 receiver；结果所有权和迭代合同须在准入前另冻 |
 
 Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
 
@@ -408,23 +435,50 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 
 ### 14.7 `Array<T>` Methods
 
+`Array<T>` is a growable value type whose element type is copyable and storable. Assignment, saved parameters, index reads and returns preserve logical copies; shared backing does not permit mutation of other copies. Storage alone does not require comparison, hashing or string conversion; each corresponding method has its own admission contract.
+
+The first owned-array execution subset freezes `len(array: Array<T>) -> i64`, read-only `get(index: i64) -> T`, `ref set(index: i64, value: T) -> ()`, `ref push(value: T) -> ()`, array literals and the index expressions in §3.4/§3.11. The set method returns unit; an index-assignment expression returns the converted right-hand T. len itself does not allocate; reads/copies can reach retention limits; construction and mutation can fail for budget, allocation or retention limits. Both set and push can relocate element storage when detaching shared backing.
+
+Read-only get and indexing follow the value-receiver snapshot rule in §3.0: take the Array logical snapshot before evaluating index; an index that rebinds the variable cannot cause a late read of its current value. Ref set/push instead bind the root place once. Only after all arguments finish do they establish exclusive access to the binding's current value, check bounds, detach, mutate and write back. If an argument rebinds that root, the operation applies to the new value; set checks its new length. `a.push(a[0])` is valid and independently owns its element result before push. Failure publishes no partial array and preserves the pre-commit logical value; earlier argument effects and rebinding are not rolled back.
+
+An ordinary read parameter cannot be a writable receiver for these ref methods. Copyable Array has no move receiver; pop removes an element without consuming the whole Array. Ref in the table is a declaration mode: the dot call remains `a.push(x)`. Pure-index GET-place snapshot elimination and transient retain/copy/drop must preserve failures as required by §3.0; backing uniqueness never bypasses access permissions.
+
+```xray @id=array-ref-current-binding
+var a: Array<string> = ["old"]
+fn replaceForPush() -> string {
+    print("arg")
+    a = ["new"]
+    return "tail"
+}
+a.push(replaceForPush())
+print(a[0], a[1])           // Prints arg, then new tail
+```
+
+```xray @id=array-push-own-element
+var a: Array<string> = ["head"]
+a.push(a[0])
+print(a[0], a[1])           // head head
+```
+
+The table retains the complete method denominator; the first XIR subset does not automatically admit its remaining methods. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+
 | Member | Type / Description |
 |--|--|
 | `len(arr)` | global `i64` query |
-| `capacity` / `arr[i]` / `arr[i] = v` | capacity field and indexed read/write; `get(i)` / `set(i, v)` are also available |
-| `push(x)` / `pop()` | tail insert/remove |
-| `shift()` / `unshift(x)` | head insert/remove |
-| `concat(...arrays)` | concatenation |
-| `indexOf(x)` / `contains(x)` | search |
-| `join(sep?)` | concatenate into a string |
-| `reverse()` / `sort(cmp?)` | in-place reorder |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | functional helpers |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | traversal and predicates |
-| `fill(v, start?, end?)` / `clear()` | fill or clear |
-| `reserve(capacity)` / `resize(length, fill)` | capacity and length management |
-| `ptr()` / `mutPtr()` | explicit low-level pointer views |
-| `toString()` | container representation |
-| `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
+| `capacity` / `arr[i]` / `arr[i] = v` | read-only capacity/index query and writable-place assignment; get is read-only and set is ref |
+| `ref push(x)` / `ref pop()` | tail insert/remove; pop is not a move receiver |
+| `ref shift()` / `ref unshift(x)` | head insert/remove |
+| `concat(...arrays)` | read-only receiver; produces a concatenated result |
+| `indexOf(x)` / `contains(x)` | read-only query |
+| `join(sep?)` | read-only receiver; concatenates into a string |
+| `ref reverse()` / `ref sort(cmp?)` | changes the receiver's ordering |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read-only receiver; callback contracts must be frozen before admission |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read-only receiver; callback contracts must be frozen before admission |
+| `ref fill(v, start?, end?)` / `ref clear()` | fill or clear |
+| `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
+| `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |
+| `toString()` | read-only receiver; container representation |
+| `iterator()` / `entriesIterator()` / `entries()` | read-only receiver; result ownership and iteration contracts must be frozen before admission |
 
 Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
 

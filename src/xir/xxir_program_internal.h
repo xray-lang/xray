@@ -13,7 +13,8 @@
 #ifndef XXIR_PROGRAM_INTERNAL_H
 #define XXIR_PROGRAM_INTERNAL_H
 #include "xxir_program.h"
-#include "xxir_callable.h"
+#include "xxir_types.h"
+#include "xxir_type_arena.h"
 #include <stdatomic.h>
 struct XrXirProgram {
     _Atomic(uint32_t) references;
@@ -23,7 +24,8 @@ struct XrXirProgram {
     uint32_t *order;
     uint32_t *module_slots;
     XrXirCodeLease code;
-    XrXirCallableTypes *callables;
+    XrXirTypeArena *arena;
+    const XrXirTypes *types;
 };
 XR_FUNC bool xr_xir_program_retain(XrXirProgram *program);
 #endif // XXIR_PROGRAM_INTERNAL_H

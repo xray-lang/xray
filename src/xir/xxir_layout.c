@@ -12,10 +12,10 @@
  */
 
 #include "xxir_internal.h"
-#include "xxir_callable.h"
+#include "xxir_types.h"
 #include "../base/xmalloc.h"
 
-XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
+XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
                         XrXirLayoutContext context, XrXirLayout *layout) {
     if (!layout)
         return XR_XIR_BAD_LAYOUT;
@@ -23,8 +23,8 @@ XrXirStatus xr_xir_layout(XrXirType type, const XrXirTarget *target,
     if (!target || target->architecture != XR_XIR_ARCH_X86_64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
-        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) type) && !xr_xir_type_is_owned(type)) ||
-        (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER))
+        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) type) && !xr_xir_type_is_owned(types, type)) ||
+        (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER) || xr_xir_type_span(types, type))
         return XR_XIR_BAD_LAYOUT;
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
         context == XR_XIR_LAYOUT_BOXED)
@@ -62,14 +62,14 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
     uint64_t bytes = budget->metadata_bytes, work = budget->work;
     if (!subtract_bytes(&bytes, sizeof(XrXirArtifact)))
         return XR_XIR_BUDGET;
-    XrXirStatus declaration_status = xr_xir_declarations_verify(module->declarations,
-        module->function_count, &bytes, &work);
-    if (declaration_status != XR_XIR_OK) return declaration_status;
     XrXirBudget signature_budget = *budget;
     signature_budget.metadata_bytes = bytes; signature_budget.work = work;
-    XrXirStatus signature_status = xr_xir_callable_types_verify(module->callables, &signature_budget);
+    XrXirStatus signature_status = xr_xir_types_verify(module->types, &signature_budget);
     if (signature_status != XR_XIR_OK) return signature_status;
     bytes = signature_budget.metadata_bytes; work = signature_budget.work;
+    XrXirStatus declaration_status = xr_xir_declarations_verify(module->declarations, module->types,
+        module->function_count, &bytes, &work);
+    if (declaration_status != XR_XIR_OK) return declaration_status;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         uint64_t slots = (uint64_t) function->parameter_count + function->instruction_count;
@@ -112,7 +112,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     for (uint32_t slot = 0; slot < slots; ++slot) {
         XrXirLayout physical;
         XrXirType type = slot_type(function, slot);
-        XrXirStatus status = xr_xir_layout(type, &artifact->target, XR_XIR_LAYOUT_FRAME, &physical);
+        XrXirStatus status = xr_xir_layout(artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_FRAME, &physical);
         if (status != XR_XIR_OK)
             return status;
         bool phi = slot >= function->parameter_count &&
@@ -128,7 +128,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             ((uint32_t *) layout->offsets)[slot] = offset;
         else if (layout->offsets[slot] != offset)
             return XR_XIR_BAD_LAYOUT;
-        if (xr_xir_type_is_owned(type)) {
+        if (xr_xir_type_is_owned(artifact->module.types, type)) {
             if (create) ((uint32_t *) layout->owned_offsets)[owned] = offset;
             else if (owned >= layout->owned_count || layout->owned_offsets[owned] != offset)
                 return XR_XIR_BAD_LAYOUT;
@@ -141,7 +141,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             }
         }
         if (slot < function->parameter_count) {
-            status = xr_xir_layout(type, &artifact->target, XR_XIR_LAYOUT_PARAMETER, &physical);
+            status = xr_xir_layout(artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_PARAMETER, &physical);
             if (status != XR_XIR_OK)
                 return status;
             if (create)
@@ -160,7 +160,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     }
     uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue);
     if (physical_bytes > UINT32_MAX || physical_bytes > budget->frame_bytes) return XR_XIR_BUDGET;
-    XrXirStatus status = xr_xir_layout(function->result, &artifact->target, XR_XIR_LAYOUT_RESULT, &result);
+    XrXirStatus status = xr_xir_layout(artifact->module.types, function->result, &artifact->target, XR_XIR_LAYOUT_RESULT, &result);
     if (status != XR_XIR_OK)
         return status;
     if (create) {

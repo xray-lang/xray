@@ -593,7 +593,7 @@ The full precedence table is in [§3.1](#31-precedence-and-associativity).
 
 ## 2. Type System
 
-> Source of truth: `src/runtime/value/xtype.h` (`XrType` definition), `src/runtime/value/xtype.c`, `src/frontend/parser/xparse_type.c` (syntax), `src/frontend/analyzer/xtype_ref_resolve.c` (resolution), `stdlib/prelude/builtin_symbols.def` (built-in type table).
+> Type-syntax and built-in identity anchors: `src/frontend/parser/xparse_type.c` and `stdlib/prelude/builtin_symbols.def`. This chapter defines language contracts; existing runtime or analyzer representations do not determine value-semantic legality. See §17 for current new XIR implementation qualification.
 
 ### 2.1 Overview
 
@@ -615,7 +615,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized floats | `f32`, `f64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<u8>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
-| Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
+| Borrowed view | `Slice<T>` / `MutSlice<T>` (shared read-only / exclusive writable; no element ownership, see §2.4.2) |
 | Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, and the `Os*` synchronization types |
 | Module-exported types | `DateTime`, `Logger`, `NetConn`, `NetListener`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
@@ -627,6 +627,8 @@ Xray is statically typed; every expression has a determined type at compile time
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
+
+The built-in registry is an implementation projection, not the new XIR declaration-family admission list. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
 
 <!-- xr-builtin-registry:begin -->
 
@@ -851,23 +853,28 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-Ordered mutable array. See §14.7.
+`Array<T>` is an ordered, growable value type. Assignment, saving a parameter, and returning a value preserve distinct logical copies. Implementations may share element storage, but mutation or append through one writable binding must not change other logical copies. Copying follows value-semantic components and copies only references at class or synchronized identity boundaries; it neither copies nor freezes the referenced objects. See §14.7 for methods and §2.14 for ownership.
 
 ```xray
 var a: Array<i64> = [1, 2, 3]
-var b = [1, 2, 3]                // inferred as Array<i64>
+var b = a                        // b is a logical copy
+b[0] = 9                         // a[0] is still 1
 var c: Array<string> = []         // explicit empty array
 ```
 
-The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
+`T` must be determined at compile time and must be copyable and storable. Borrowed views and noncopyable resources cannot be ordinary Array elements. An empty `[]` requires a type context; without one it is a compile error: `Empty array '[]' requires a type annotation`. A non-nullable Array requires explicit initialization; uninitialized storage is not an empty array.
 
-`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`.
+Reading an element produces a logical copy of type `T`. Writes are checked against `T`, using only assignment conversions already allowed for that type. `Array<T>` is invariant: an element conversion does not permit an implicit conversion of the whole array, such as `Array<i8>` to `Array<i64>`. `Array<rune>` preserves `rune` identity for both reads and writes.
+
+The container itself requires only the capabilities needed for storage; it does not require every `T` to support comparison, sorting, hashing, or string conversion. Conditional method requirements must be explicit in the corresponding declaration. Members incidentally present on a concrete instance cannot supply missing constraints at an ordinary generic definition.
+
+This section defines the language contract, not implementation admission for every Array method, aggregate element, or borrowed view in the new XIR source entry. See §17 for current implementation qualification. Unadmitted declaration families must be rejected explicitly.
 
 #### 2.4.1.1 Fixed Arrays `[T; N]`
 
 `[T; N]` is a fixed-layout array type for `N` elements of type `T`. `N` is part of the type and must evaluate during analysis to a positive compile-time integer expression. The current expression subset includes integer literals, `const` integer identifiers, grouping, unary `-`/`~`, and integer arithmetic/bitwise operators. The current backend encoding limit is 65535 elements.
 
-Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and reference-container element types, so fixed arrays compose recursively:
+Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and owned-container element types, so fixed arrays compose recursively:
 
 ```xray
 var bytes: [u8; 4] = [1, 2, 3, 4]
@@ -878,11 +885,11 @@ var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
 
-Fixed arrays support `len(array)`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
+Fixed arrays support `len(array)`, indexed reads, indexed writes to writable places, and `ref` parameters. Borrowed views distinguish shared `Slice<T>` from exclusive `MutSlice<T>` as specified in §2.4.2:
 
 ```xray
 var data: [u8; 4] = [5, 6, 7, 8]
-var view: Slice<u8> = data[1:4]
+var view: MutSlice<u8> = data[1:4]
 view[1] = 99
 ```
 
@@ -903,58 +910,36 @@ fn first(packet: Packet) -> u8 {
 `[T; N]` has different semantics from `Array<T>`:
 
 - `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
-- `Array<T>`: dynamic length, growable, heap-backed container.
-- `Slice<T>`: borrowed view over contiguous storage; it does not own data (see §2.4.2).
+- `Array<T>`: a growable value type with dynamic length; element storage may be shared on the heap and detached when needed.
+- `Slice<T>` / `MutSlice<T>`: shared / exclusive borrowed views over contiguous storage; they do not own elements (see §2.4.2).
 
 The old `[N]T` syntax is not part of the Xray language.
 
-#### 2.4.2 `Slice<T>`
+#### 2.4.2 `Slice<T>` / `MutSlice<T>`
 
-> Source of truth: `stdlib/prelude/builtin_symbols.def` (prelude built-in symbol registration), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (borrow tracking and invalidation checks), `src/frontend/analyzer/xa_memory_effect_db.h` (invalidation criteria), `src/frontend/analyzer/xanalyzer_visitor_decl.c` (returned-view contract).
+`Slice<T>` is a shared read-only borrow; `MutSlice<T>` is an exclusive writable borrow. They describe contiguous element storage owned by another value and do not own the elements. A borrow remains attached to a proven owner and access permission. These are view contracts, not a claim that the new XIR source entry already admits the view declaration family; see §17 for implementation qualification and validation.
 
-`Slice<T>` is a **borrowed view**: it denotes a run of contiguous element storage owned by another value. It owns no data, does not participate in reference counting, and cannot be placed in any long-lived storage. It is a prelude type (`GENERIC_1`) and may be written directly in any type annotation.
+##### Construction and access
 
-##### Construction
+Slicing uses an explicit target view type. `array[start:end]` and `fixedArray[start:end]` may form shared views. Forming a `MutSlice<T>` additionally requires an exclusively writable owner place and completion of any necessary COW detachment before publishing the view. The string byte view `str.bytes()` is a `Slice<u8>` and cannot mutate the string.
 
-A view can only arise from the three sources below, and it **requires an explicit target type** — a slice expression without one is a compile error:
+`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; the unsettled type-position `const T` spelling must not redefine writable views.
 
-| Source | Result | Notes |
-|--|--|--|
-| `array[start:end]` | `Slice<T>` | the owner is an `Array<T>` |
-| `fixedArray[start:end]` | `Slice<T>` | the owner is a `[T; N]` |
-| `str.bytes()` | `Slice<u8>` | the owner is the string's UTF-8 byte storage |
+An owner must be a named local place, parameter, or receiver field path with a proven lifetime; a temporary cannot be borrowed. Nested projections protect their root and the necessary access path. Borrowing a class field must retain the object and check exclusive access dynamically. A local proof of no conflict may eliminate that dynamic check.
 
-```xray
-var arr: Array<i64> = [10, 20, 30, 40]
-var view: Slice<i64> = arr[1:3]      // OK: borrows arr
-var all: Slice<i64> = arr[:]         // full-length view, not a copy
-var bad = arr[1:3]                   // E0365: a slice result needs an explicit target type
-```
-
-The owner must be a **named local, a parameter, or a field path rooted at one**. Temporaries cannot be borrowed:
-
-```xray
-var view: Slice<u8> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
-```
-
-##### Capabilities
-
-- `len(view)` for the length; `view[i]` reads an element; `view[i] = v` writes one, **straight into the owner's storage**.
-- `view[a:b]` reslices; the result still borrows the same owner.
-- A view has **no member methods** and no `.length`.
-- A `const Slice<T>`, and any view derived from a `const` owner, is read-only; writing through it is a compile error.
+Assignment of a `MutSlice<T>` transfers its borrow; ordinary calls temporarily reborrow it. Conversion from `MutSlice<T>` to `Slice<T>` is a shared reborrow. The original writable view cannot write while the derived read-only view is live. Subslices obey the same borrow permissions.
 
 ```xray
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
-    var view: Slice<i64> = arr[1:3]        // borrowed view, not a copy
-    view[1] = 31
-    print(arr[2])                          // 31 — the write goes through to the owner
-    arr[1] = 21
-    print(view[0])                         // 21 — element writes on the owner are visible here
-    var owned: Array<i64> = copy(arr[1:3]) // an independent Array<T>
-    arr.push(50)                           // OK: no view is live at this point
-    print(len(owned))
+    var view: Slice<i64> = arr[1:3]
+    print(view[0])                         // 20; last use of view
+    var writable: MutSlice<i64> = arr[1:3]
+    writable[1] = 31                       // last use of writable
+    print(arr[2])                          // 31
+    var owned: Array<i64> = copy(arr[1:3]) // materialize an owned copy
+    arr.push(50)                           // no live borrow
+    print(len(owned))                      // 2
 }
 
 main()
@@ -962,66 +947,45 @@ main()
 
 ##### Borrow rules
 
-Let view `v` borrow owner `o`. While `v` is **live**:
+Let view `v` borrow owner `o`. Borrow liveness ends at last use, not at the end of the lexical block:
 
-1. **Element writes are allowed**: `o[i] = x` is legal. An element write does not move the owner's storage, so the view stays valid.
-2. **Invalidating operations are rejected** (`E0382`): any operation that may relocate, shorten, or otherwise invalidate `o`'s element storage. The criterion is not a method-name allowlist but the callee's memory effect: address stability (`ADDRESS_STABLE` / `MAY_RELOCATE`), shortening (`NEVER_SHORTENS` / `MAY_SHORTEN`), and view invalidation (`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`). `o.push(x)`, reassigning `o`, `move o`, `freeze o`, and `return o` all fall in this class.
-3. **Liveness ends at the last use** (non-lexical lifetimes): the borrow ends at `v`'s last use, not at the end of the enclosing block, so an owner mutation placed after that point is legal.
-4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / structural object fields, Array / Map / Set / tuple / JSON.Value / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
+1. While a `Slice<T>` is live, `o` must not be mutated, including element writes. The possibility that a write preserves a physical address does not permit it.
+2. While a `MutSlice<T>` is live, `o` must not be read, written, or copied through the owner or another path. Only the exclusive view and its valid reborrows may access that storage.
+3. Rebinding, destruction, consumption, or other invalidation of a live borrow is rejected (`E0382`). Operation effects must account for COW detachment and relocation; Array element replacement is not unconditionally address-stable.
+4. Views are allowed only in locals, parameters, returns, and tuple / Optional wrappers. Wrappers inherit every borrow restriction. Views cannot enter ordinary collections, user aggregates, module storage, or execution boundaries such as `go`, and `as` cannot erase these restrictions (`E0383`).
+5. A variable captured by an ordinary closure through a shared cell cannot produce a view. A closure capturing a view may be called immediately. Passing it as a parameter requires an explicit, frozen borrowing-call contract that prevents saving or returning it and guarantees completion before the call ends. Inference from the callee body cannot replace that public contract; a closure literal in argument position does not by itself prove no escape.
+6. A borrow in an ordinary call may survive suspension only while the owner remains alive and access permissions hold. Frame address stability is not such a proof. Generators initially must not save borrowed parameters.
 
 ```xray
-fn ok() {
-    var bytes: Array<u8> = [1, 2]
-    var view: Slice<u8> = bytes[:]
-    print(len(view))                 // last use of view
-    bytes.push(3)                    // OK: the borrow already ended (rule 3)
-}
-
 fn rejected() {
     var bytes: Array<u8> = [1, 2]
     var view: Slice<u8> = bytes[:]
-    bytes.push(3)                    // E0382: view is still live
-    print(len(view))
+    bytes[0] = 3                    // E0382: shared borrow is still live
+    print(view[0])
 }
 ```
 
-##### Across functions: the returned-view contract
+##### Across functions: return-source contracts
 
-A function may return `Slice<T>` **if and only if** the returned view has a **uniquely inferable source**: one specific parameter, the receiver, or static storage. The compiler records a returned-view contract (source kind plus parameter index) for such a function; the call site charges the result back to the original owner, so the borrow rules keep applying on the caller's side.
+The initial return-source rule uses the signature alone: the entire signature must contain exactly one view input or `ref` input candidate. A `ref` receiver counts as a candidate. Zero or multiple candidates are rejected (`E0384`), even if the body always returns one particular parameter. Neither body inference nor a static-storage exception supplies a cross-module source contract. Returning a view of a local value is also invalid.
 
-A non-unique source, or a view borrowed from one of the function's own locals, is a compile error (`E0384`):
+Each returned view inside a tuple / Optional attaches to that unique candidate and is checked separately for write permission. A writable result cannot originate from a read-only candidate. Returning two `MutSlice` values additionally requires an explicit non-overlapping construction contract; ordinary user functions cannot establish it merely from index arithmetic.
 
 ```xray
 fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
-    return data[start:]              // OK: the unique source is the parameter data
+    return data[start:]              // data is the unique candidate
 }
 
-fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
-    if (useA) {
-        return a
-    }
-    return b                         // E0384: multiple sources
-}
-
-fn alsoBad() -> Slice<i64> {
-    var local: Array<i64> = [1, 2]
-    return local[:]                  // E0384: borrowed from a local
+fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
+    return a                        // E0384: two signature candidates
 }
 ```
 
-##### The escape hatch: `copy`
+##### Materializing an owned copy
 
-When the data must outlive the owner, or must go into long-lived storage, use `copy` to materialize the view into an independent owner:
+`copy(view)` materializes borrowed data as an `Array<T>` whose elements follow the logical-copy and identity-boundary rules in §2.14. Class elements still reference the same objects. The result no longer borrows the original owner. This use does not decide the public `copy(array)` spelling and does not make it a prerequisite for ordinary Array assignment.
 
-```xray
-var owned: Array<i64> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
-```
-
-`copy(slice)` has result type `Array<T>`, not `Slice<T>`; it is the only construct that turns borrowed data into owned data.
-
-##### Relationship to other borrows
-
-`ref` parameters and `Ptr<T>` / `MutPtr<T>` share the same borrow tracking and the same error codes: `E0382` (owner invalidated while a borrow is live), `E0383` (borrow escapes), `E0384` (borrow source unstable or not unique). An `unsafe` block relaxes none of them.
+`ref` parameters and `Ptr<T>` / `MutPtr<T>` must also satisfy source, permission, lifetime, and non-escape requirements. The relevant diagnostics are `E0382` (live-borrow conflict), `E0383` (borrow escape), and `E0384` (unstable or non-unique source). `unsafe` relaxes none of them.
 
 #### 2.4.3 `Map<K, V>`
 
@@ -1537,7 +1501,7 @@ fn drain(first: string?) {
 
 1. **assignment** / compound assignment / `++` / `--`: the static type resets to the static type of the assigned expression;
 2. being passed as a `ref` argument: resets to the declared type;
-3. `move x`: the binding becomes unusable (§10);
+3. after successful consumption of `x`: the binding becomes unusable (§2.14.5);
 4. being **assigned inside any closure body**: the binding does not narrow anywhere in the function body, because when the closure runs is unknowable. The rule does not depend on where the closure appears — one written after the narrowing site suppresses it just the same. The diagnostic names this cause; the fix is a fresh binding that is never written;
 5. an ordinary function call does **not** invalidate narrowing — N-1 / N-2 guarantee a narrowable subject cannot be written by a callee.
 
@@ -1562,130 +1526,68 @@ fn f(a: string?) {
 - `x!`: statically removes `null`; panics (`NullError`) at run time when the value is `null` — this is **not** undefined behavior;
 - `x ?? d`: the result type is the union of `x` without `null` and `d`;
 - `x?.f`: optional chaining, **whole-chain short-circuit** — when any link is `null` the entire postfix chain evaluates to `null`, and the result type is nullable (§3.6).
-### 2.14 Ownership, Aliasing, and Loans
+### 2.14 Values, Identity, and Borrows
 
-> Truth source: `src/frontend/analyzer/xa_ownership.h` (evidence axes and decision structures), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (`move` decision), `src/frontend/analyzer/xanalyzer_visitor_stmt.c` (alias and loan tracking), `src/ir/xi_source_move_verify.c` (independent Xi-level re-check).
+This section defines language contracts determined by declared types, parameter modes, and intraprocedural dataflow. Layout, reference counting, and COW are implementation mechanisms and must not change source legality. Built→Checked checks these rules; specialization operates on Checked and is rechecked before Lowered selects concrete copy, detachment, and release operations. See §17 for implementation qualification of complete declaration families. Freezing a specification is not completion of its implementation.
 
-Xray has no lifetime syntax and no borrow-checker annotations. Ownership is nonetheless **defined**: `move`, `copy`, `ref`, `Slice<T>`, and every cross-coroutine transfer read one decision procedure, and this section states it.
+#### 2.14.1 Logical values and identity boundaries
 
-#### 2.14.1 Ownership roots
+Array / Map / Set / string, copyable structs, enums, tuples, and anonymous records copy by value. A copy is a distinct logical value. Implementations may share immutable storage or use COW, but mutation of value-semantic components through one copy must not change another. An Array returned by a call obeys the same contract; callers need not inspect the callee body to prove storage uniqueness.
 
-An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map` (including `JSON.Object`), `Set`, composite `JSON.Value` arms, `structural object`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
+Class instances and synchronized objects have identity. A copied reference still names the same object; recursive aggregate copying stops at that boundary. Copying an Array of class elements therefore does not copy the class objects. Object-state mutation may be visible through other references, while replacing an Array element affects only that array's logical value.
 
-Only a binding that owns a root can transfer ownership. Writing `move` on a rootless value is a compile error (`E0391`: `move is not meaningful for value type`).
+`const` fixes the binding and its value-semantic components, not the entire reachable graph. `const xs = [Counter()]` prevents replacing or appending array elements through `xs` but does not freeze Counter's identity state. Object methods and synchronized APIs retain their own contracts. Sharing across execution boundaries depends on the complete type's Sendable property; neither `const` nor atomic reference counting proves it.
 
-#### 2.14.2 Four independent evidence axes
+#### 2.14.2 Initialization, permissions, and borrow facts
 
-At every program point a binding carries four **mutually independent** pieces of evidence. A legal ownership operation requires all four at once:
+At each program point the following must be proved separately:
 
-| Axis | Question it answers | Values |
-|--|--|--|
-| **Binding state** | Is this name usable now | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
-| **Root aliasing** | Does another reference reach the same root | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
-| **Capability** | What is permitted | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
-| **Loans** | Is anything borrowed out | a set of loans: Slice views / raw pointer borrows / closure captures |
-
-The split is deliberate: binding state is a CFG fact, aliasing is an object-graph fact, capability is a permission, and a loan is a bounded place fact. None of the four can be derived from or substituted for another.
-
-**Fail-closed by default**: when an axis cannot produce positive evidence, the answer is rejection, not permission. That is why the result of a call with unknown provenance cannot be moved — the compiler has no aliasing evidence for it.
-
-#### 2.14.3 How aliases are created and end
-
-| Action | Effect on root aliasing | Recoverable |
-|--|--|--|
-| `var b = a` | `LOCAL_ALIASED` | Yes. After `b`'s last use the root is `UNIQUE` again |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
-| Result of a call with unknown provenance | `ALIAS_UNKNOWN` | No |
-| `copy(a)` | `a` unaffected; the result is a fresh `UNIQUE` root | — |
-| `move a` | `a` becomes `MOVED`; the root moves with it | — |
-
-Liveness is decided by **last use**, not by lexical scope, matching the borrow rules in §2.4.2. So the first function below is legal and the second is not:
-
-```xray
-fn ok() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    print(len(alias))          // alias's last use
-    consume(move buf)          // OK: the alias has ended
-}
-
-fn rejected() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    consume(move buf)          // E0391: strong alias 'alias' remains live
-    print(len(alias))
-}
-```
-
-`ESCAPED` being terminal is deliberate: once a reference is written into a heap graph, who still holds it is no longer a question this function can answer. Use `copy(a)` when a transfer is needed anyway.
-
-#### 2.14.4 How loans are created and end
-
-Three loan forms share one loan record, one non-lexical liveness rule, and one set of error codes (`E0382` / `E0383` / `E0384`):
-
-| Form | Borrower | Live until |
-|--|--|--|
-| `Slice<T>` view | the view binding | that binding's last use |
-| `Ptr<T>` / `MutPtr<T>` | the pointer binding | that binding's last use |
-| **Closure capture** | the closure binding | that binding's last use |
-
-An ordinary synchronous closure captures an outer mutable var through a shared cell, so that capture is a loan. Const and ordinary read parameters of copyable non-view types are captured by value and do not form that loan:
-
-```xray
-fn rejected() {
-    var buf = [1, 2, 3]
-    const peek = fn() -> i64 { return len(buf) }
-    go consume(move buf)       // E0382: closure capture 'peek' is active
-    print(peek())
-}
-```
-
-A closure literal that appears only as a **call argument** usually creates no live loan: it ends with the call and cannot outlive it.
-
-```xray
-fn ok() {
-    var buf: Array<i64> = []
-    items.forEach(fn(x: i64) { buf.push(x) })   // capture bounded by the call
-    consume(move buf)                            // OK
-}
-```
-
-The exception is a callee that **retains or escapes** that parameter: the closure then outlives the call, and every root it captured by reference escapes with it (`OWN-E-ESCAPED-ROOT`). The decision reads the callee's parameter effect summary, not the syntactic shape.
-
-A live loan forbids invalidating operations on the owner, and `move` is one of them (`E0382`).
-
-#### 2.14.5 The full conditions for `move`
-
-`move x` requires `x` to be a **rebindable local `var` root**, and:
-
-1. binding state is `LIVE` (not moved, not maybe-moved, not unknown);
-2. root aliasing is `UNIQUE`;
-3. capability is `MUTABLE` (`const` values and synchronization handles cannot be moved);
-4. no loan is live;
-5. the storage plan is complete (the compiler has resolved an allocation domain for the root);
-6. the consumed binding is not declared outside a loop that would run the `move` again.
-
-`move` accepts an **identifier** only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. A field or an element has no ownership root of its own — its root is the container — and transferring one slot would leave the container partially moved, a state with no representation. To take one slot out, `copy` it, or make the container itself the move source.
-
-After a successful move the source binding is statically marked moved, and any later reference is a compile error. **A rejected move does not poison the source**: after the diagnostic, `x` is still usable.
-
-Rejection reasons are named in the diagnostic so the failing axis is identifiable:
-
-| Reason | Meaning |
+| Fact | Required condition |
 |--|--|
-| `OWN-E-LIVE-ALIAS` | a local strong alias is still live |
-| `OWN-E-ESCAPED-ROOT` | the root was written into a heap graph |
-| `OWN-E-UNKNOWN-CALL` | uniqueness evidence is incomplete (call result with unknown provenance) |
-| `OWN-E-STORAGE-PLAN` | the storage / ownership plan is incomplete |
-| `OWN-E-LIVE-LOAN` | a loan is live (Slice view / raw pointer / closure capture) |
+| Initialization and consumption state | A read requires complete initialization; operations needing ownership cannot use a consumed or possibly consumed value |
+| Place permission | A write requires a writable destination; READ parameters and the value-semantic components of `const` cannot be written directly |
+| Value and declaration contract | Type, copy or consumption capability, parameter mode, storage, and return permissions satisfy the declaration |
+| Active borrows | Access does not conflict with a live shared or exclusive borrow, whose source and lifetime remain valid |
 
-#### 2.14.6 Value copies and managed fields
+Initialization and consumption are control-flow facts, permissions come from bindings and declarations, and borrows protect specific places and necessary paths. These proofs cannot substitute for each other. Missing a required proof is an error, but uniqueness of an Array backing store is not a language admission condition for ordinary assignment, saving a copy, returning, or mutation. Non-nullable Arrays still require explicit initialization (§5.1.1).
 
-A value struct is copied by value. So that "copied by value" is always the complete semantics, **struct field types are restricted**: only scalars, `string`, raw pointers, fixed arrays, and other value structs are allowed. `Array`, `Map`, `Set`, `JSON.Value`, and class instances **cannot** be struct fields (`E0352`).
+#### 2.14.3 Ordinary copies and storage sharing
 
-A struct value copy therefore never carries a mutable managed field, and there is no shallow-versus-deep choice to make. The one managed field type is `string`, and `string` is immutable: sharing it produces no observable difference and does not affect the uniqueness decision.
+`var b = a`, saving a READ parameter, returning an Array, and storing a copyable Array in another permitted container or aggregate preserve logical copies. They do not create a language-level alias to the source array's mutable storage, do not permanently mark its binding `ESCAPED`, and do not require other copies to die before the source can be mutated. Backing-store uniqueness may only optimize away detachment or copying.
 
-Use a class when an aggregate needs a mutable graph. A class is a reference type, so assignment creates an alias and §2.14.3 governs it.
+```xray
+var a = [1, 2, 3]
+var b = a
+const snapshot = a
+b[0] = 9
+a.push(a[0])                 // evaluate arguments before exclusive receiver access
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+print(b[0])                 // 9
+print(len(a))               // 4
+```
+
+A copy must acquire independently releasable result ownership; failure must not publish a partially initialized result. Self-assignment and reading an element before replacing or appending it must preserve this responsibility, without double release or access to freed storage caused by physical sharing. Evaluation follows §3.0 E2/E5. Copy or automatic-move optimizations must not change the established order of errors, destruction, or external side effects.
+
+#### 2.14.4 Place borrows and captures
+
+`ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
+
+Shared `Slice` and exclusive `MutSlice` borrows follow §2.4.2. Class-field borrows additionally retain the object and check dynamic exclusivity. Sharing a backing store cannot remove these checks. Conversely, ordinary Array logical copies do not become borrows merely because they share backing storage.
+
+Ordinary closures capture outer `var` bindings through shared cells; `const` and ordinary READ parameters of copyable non-view types are captured by value. Shared-cell identity must not be disguised as a temporary non-escaping loan; its storage and release responsibilities remain explicit. Variables captured through shared cells cannot produce views. View captures and borrowing callbacks require the explicit contracts in §2.4.2, not guesses from a callee body or argument syntax.
+
+#### 2.14.5 Consumption and unadmitted surfaces
+
+Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
+
+Copyable types, including Array, cannot declare `move` parameters or receivers. Whether a standalone `move x` expression is allowed for copyable values, whether ordinary `copy(array)` retains a public spelling, and the identity and conversions of type-position `const T` are outside this frozen subset and require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+
+#### 2.14.6 Struct-field copying and initialization
+
+A copyable struct copies fields according to their declared types. Array / Map / Set and other container fields preserve logical copies, string retains immutable value semantics, and class or synchronized fields copy identity references only. A struct must not be rejected merely because it contains an Array, another owned container, or a class reference. Nor may a struct with class fields be described as a wholly independent reachable graph.
+
+Fields still satisfy ordinary storage, initialization, and copyability requirements. Views cannot enter ordinary user aggregates. A noncopyable field or payload requires its containing struct / enum to be noncopyable, with that declaration family admitted separately. A non-nullable Array field cannot be unconditionally zero-initialized; default construction must obey §5's field rules.
 
 ### 2.15 Worked Examples
 
@@ -1764,6 +1666,12 @@ This is a requirement rather than a conservative preference. Differential testin
 **E4 (short-circuit points)**: `&&`, `||`, `??`, `?:`, `?.` and `?[` are **all** of the language's short-circuit points. No other operand is ever conditionally skipped.
 
 **E5 (assignment)**: `place = rhs` evaluates the place's location subexpressions (receiver, or array expression → index expression) → `rhs` → the store. Place before value, as in C# and Java, and unlike Rust.
+
+**Array value and writable receivers**: reading `a[index]` or read-only `a.get(index)` first takes a logical value snapshot of the receiver, then evaluates index, then checks bounds against that snapshot and copies the element. A call inside index may rebind a without changing this read's snapshot. A `ref` method or index assignment instead binds the root place once, without reading its Array value or establishing exclusive access yet. After every argument, or index and RHS, has been evaluated, exclusive access is established to the binding's **current value**. If an argument or the RHS rebinds the same root, mutation applies to the new value and bounds use its new length.
+
+A physical receiver snapshot may be eliminated only for a named place whose index contains no call, write or suspension, with proof that the owner cannot change in between. This permission does not waive resource errors: the omitted allocation/retain must be proven unable to fail, or equivalent failure checks must remain at the original receiver-evaluation point. OOM/retention failures may not be removed, delayed or reordered relative to index errors. Absence of side effects alone is insufficient. Saving an Array still preserves a logical copy; an element result still independently owns T.
+
+The initial execution subset may restrict a GET-place index to a literal or ordinary i64 name whose evaluation is proven free of calls, writes, suspension, allocation and runtime faults. One synchronous helper can transiently retain the receiver, check bounds and copy the element, then drop the receiver, without keeping that temporary owner until activation exit. Reordering index evaluation with this retain still requires the stated no-failure proof. This preserves retention failures while preventing a completed read's temporary Array alias from forcing COW in `a.push(a[0])`; zero-retain optimization is not required initially.
 
 **E6 (compound assignment)**: `place op= rhs` is equivalent to `place = place op rhs`, **except that each subexpression of the place is evaluated exactly once**. The order is: place subexpressions → read the place → `rhs` → compute → write the place back. `x++` / `x--` are equivalent to `x += 1` / `x -= 1` and follow the same rule. Compound assignment targets are restricted to variables and member accesses (see §3.4).
 
@@ -1973,13 +1881,13 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 ```
 
 **Semantics**:
-- Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
+- Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`). Array assignment saves a logical copy. The destination and expression result each retain their value obligations; the result must not borrow an element slot that can later be overwritten. An implementation may reuse the already owned right-hand result. All fallible ownership acquisition precedes the store commit; the replaced value is released afterwards. Failure does not undo earlier right-hand side effects.
 - `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
 - **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
 - Cannot assign to a `const` (compile error `E0303`).
 
 **Special cases**:
-- A default parameter is a read-only borrow; only `ref` permits mutation through a place, while `move` consumes source ownership.
+- An ordinary read parameter permits reading or saving a logical copy of a copyable value. It does not permit modifying that value through the parameter. A class reference may still invoke methods that change the referenced identity. `ref` grants exclusive writable access to a place; a declared `move` parameter transfers ownership of a noncopyable resource.
 - Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
 
 ### 3.5 Ternary `? :`
@@ -2241,10 +2149,46 @@ var bytes: Slice<u8> = text.bytes()
 bytes[i]                // explicit byte-view index
 ```
 
-- `Array` indexing: `i64`; out-of-bounds throws `E0430`.
+- An `Array<T>` index has type `i64`, with valid range `0 <= i < len(array)`. Reading produces a logical copy of T. Writing requires a writable place and checks/converts the right-hand value against T. Negative indices and indices equal to the length enter the `E0430` panic channel, not a business throw.
+- Index assignment follows E5: evaluate the root place and index once, then finish the right-hand side. Only then establish exclusive access, check bounds against the binding's current array, detach shared storage and commit. If the RHS rebinds the root, the new array is written; the old length cannot cause an early rejection. A raw element address cannot survive right-hand evaluation. Failure preserves the pre-commit array and other logical copies; earlier RHS effects, including rebinding, remain. Reads follow the receiver-snapshot rule in §3.0 and check the snapshot's bounds before copying the element.
 - `Map` indexing: key type; missing key → `E0431`.
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User classes: via `operator[]` overload.
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForIndex() -> i64 {
+    print("index")
+    a = ["new"]
+    return 0
+}
+print(a[replaceForIndex()])  // Prints index, then old
+print(a[0])                 // new
+```
+
+```xray
+var a: Array<string> = ["old"]
+fn index() -> i64 { print("index"); return 1 }
+fn replacement() -> string {
+    print("rhs")
+    a = ["new0", "new1"]
+    return "stored"
+}
+var written = (a[index()] = replacement())
+print(written, a[1])        // Prints index, rhs, then stored stored; no old-length rejection
+```
+
+```xray
+var a: Array<string> = ["old0", "old1"]
+fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
+a[1] = shrink()             // Prints rhs, then E0430 panic; rebinding to ["new"] remains
+```
+
+```xray
+fn invalid(values: Array<string>) {
+    values.push("x")       // Compile error: a read parameter is not a writable receiver
+}
+```
 
 #### Slice
 
@@ -2263,7 +2207,7 @@ var view: Slice<i64> = arr[1:4]
 - Half-open interval `[start, end)`.
 - Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
 - Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
-- A slice expression evaluates to a **borrowed view** of type `Slice<T>`, selected by its target type; no elements are copied. Every form, including `arr[:]`, is a view: writing through the view writes straight into the owner's storage, and element writes on the owner are immediately visible through the view. Use `copy(arr[1:4])` when you need independent data.
+- A slice targeting `Slice<T>` is a **shared read-only borrowed view**; no elements are copied. Neither writing through it nor mutating its owner is allowed while it is live. A writable view requires the explicitly admitted exclusive `MutSlice<T>` borrow in §2.4.2; a `Slice<T>` never silently gains write permission. Every form, including `arr[:]`, is a view rather than a logical copy. Use `copy(arr[1:4])` when you need independent data.
 - A slice expression is a borrow: while the view is live the owner is constrained by the borrow rules in §2.4.2, and the view itself must not escape the owner's scope. See §2.4.2 for the full rules.
 
 ### 3.12 Anonymous Functions and Lambdas
@@ -2788,7 +2732,7 @@ large
 
 ## 5. Declarations
 
-> Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
+> Declaration-syntax anchors: `src/frontend/parser/xparse_decl.c` and `src/frontend/parser/xast_nodes_decl.h`. The frontend checks this chapter's language contracts uniformly. See §17 for current new XIR declaration-family qualification; old analyzer behavior does not replace these rules.
 
 ### 5.1 `var` / `const`
 
@@ -2816,7 +2760,7 @@ var empty: string = ""            // string requires an explicit initializer
 - Reassignable.
 - Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
 - Omitted initializers are allowed only for **default-initializable** types: numeric types default to `0` / `0.0`, `bool` defaults to `false`, `()` defaults to unit, `T?` defaults to `null`, and structs are allowed only when every field is default-initializable.
-- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar reference-like values require an explicit initializer.
+- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar types require an explicit initializer. `var a: Array<T>` does not default-construct an empty array.
 
 #### 5.1.2 `const` — immutable binding
 
@@ -2825,27 +2769,29 @@ const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
 
-- Initializer is **required**.
-- Cannot be reassigned (compile error `E0303`).
-- The type may be inferred or annotated explicitly.
-- Like `var`, each `const` declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
-- For managed/aggregate values, `const name: T` infers and holds the `const T` capability: fields, indexes, and nested projections are deeply read-only. `var name: const T` permits rebinding the name without granting graph mutation.
-- `const T` is accepted in every type position. `const` on an immutable scalar is identical to the base type; `const T` on a managed/aggregate value is a distinct type identity.
-- Fresh construction may target either a mutable `var` domain or a read-only `const` domain. An existing mutable unique graph entering `const` requires explicit `move` or `copy`; there is no implicit freeze or hidden copy.
-- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` are named with `const`. The compiler normalizes them to an internal synchronized shared capability whose audited methods may still mutate protected internal state.
-- The compiler infers unique ownership for fresh mutable graphs; no storage modifier is required. `move` requires a unique root with no live alias/loan and invalidates the source binding on success; `copy` preserves the source and explicitly constructs an independent graph.
+- An initializer is **required** and reassignment is forbidden (compile error `E0303`). The type may be inferred or annotated.
+- Like `var`, each declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
+- `const` fixes the binding and its value-semantic components: Array elements, appends, and value-type fields cannot be mutated through it. Ordinary `const snapshot = source` is legal and preserves a logical copy; it does not require explicit `move` / `copy` or a unique source backing store.
+- Value semantics stop at class and synchronized identity boundaries. `const xs = [Counter()]` does not freeze Counter; ordinary class methods may still mutate the referenced object. Replacing an array element through a writable copy does not change the elements of `xs`.
+- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` may use `const` to fix the binding. Their audited APIs can still change protected internal state. `const` alone proves neither Sendable nor concurrency safety.
+- Saving a copyable read-only value into `var` produces a writable logical copy. It does not acquire a writable borrow of the original place or remove the referenced class object's own permission restrictions.
 
 ```xray
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
-var moved = move source       // transfer the same root; source is now invalid
-const snapshot = copy(moved)  // explicitly construct an independent read-only graph
-var current: const Config = loadConfig()
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
 ```
 
-See [§10.11](#1011-concurrency-safety-model).
+This section freezes read-only binding and value-component permissions, not the distinct type identity, conversions, or permitted positions of type-position `const T`. That surface is outside this frozen subset and requires a separate decision before admission; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+
+These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
 #### 5.1.3 Destructuring bindings
 
@@ -2937,38 +2883,40 @@ var result = divmod(10, 3)        // result has type (i64, i64)
 
 #### 5.2.4 Parameter modes
 
-Ordinary parameters provide a read-only capability by default. Only writable borrowing and
-ownership transfer have explicit modes: `name: ref T` and `name: move T`.
+Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; consuming a noncopyable resource uses `name: move T`. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
 
 ```xray
 fn length_sq(v: Vec2) -> f64 {
-    // v is read-only; the ABI may pass a small value or a read-only address
     return v.x * v.x + v.y * v.y
 }
 
 fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
-    // v is a mutable reference (changes are visible to the caller)
     v.x += dx
     v.y += dy
 }
 
-fn submit(job: move Job) -> () {
-    queue.store(move job)
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
 }
 
 translate(ref point, 1.0, 2.0)
-submit(move pending)
-submit(makeJob())
 ```
 
 | Parameter mode | Semantics |
 |--|--|
-| none (READ) | Read-only capability; the callee cannot mutate the caller's mutable graph |
-| `ref` | Exclusive writable place loan; the call site must write `ref place` |
-| `move` | Transfer of the unique owner; an existing lvalue requires `move value`, while a fresh value or `copy(value)` can be passed directly |
+| none (READ) | The parameter binding cannot be rebound and its value-semantic components are read-only; copyable, storable values may be saved or returned as logical copies |
+| `ref` | Exclusive writable place borrow; mutations write back to the caller, and the call site must write `ref place` |
+| `move` | Restricted to noncopyable types; transfers ownership and final destruction responsibility. The declaration mode determines consumption; `move value` optionally marks that transfer |
 
-Ordinary outputs use return values, tuples, structs, or `Result`. C ABI output locations use
-`MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
+A READ Array parameter cannot be indexed for writing, passed as a receiver to `push`, or rebound. Saving it into a local `var` permits mutation of the copy without changing the original argument. Saving a copyable value does not permit a borrow to escape; views and noncopyable resources cannot thereby become ordinary owned copies. A READ class parameter also cannot be rebound, but may invoke methods that mutate the same object. READ does not mean that the entire reachable graph is immutable.
+
+A `ref` argument must be an exactly typed writable place, not a `const`, READ parameter, or temporary. `ref` types are invariant. §3.0 E2 evaluates the receiver and every argument before exclusive access begins. That access covers checks, necessary COW detachment, mutation, and writeback. Borrowing the receiver early must not reject `a.push(a[0])`. Assignment still follows E5: location subexpressions, index, right-hand side, then storage.
+
+Copyable types, including Array, cannot declare `move` parameters or receivers. Initialization, use after consumption, and active borrows of noncopyable resources still require checking; see §2.14.5. See §17 for current implementation qualification of resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
+
+Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
 #### 5.2.5 Rest parameters
 
@@ -3175,6 +3123,8 @@ main()
 
 ### 5.3 `class` declaration
 
+Classes have identity; assignment and saving a parameter copy references only. Class methods do not declare `ref` / `move` receivers. Ordinary methods invoked through a READ parameter or `const` binding may still mutate the object, but cannot rebind that parameter or binding. A `ref` / view access to a class field must retain the object and check dynamic exclusivity. A local proof of no conflict may eliminate that check, not change the permission contract.
+
 ```ebnf
 ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
@@ -3239,7 +3189,7 @@ class Dog extends Animal {
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
 - `this` must not be accessed before `super(...)`.
-- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility, `override`, then optional `ref`/`move`.
+- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility followed by `override`; class methods do not declare `ref` / `move` receivers.
 - Same-name different-signature methods are not overloads or hiding; rename the method or use default arguments / named factories.
 - A `final class` cannot be inherited.
 - `super.method()` invokes the shadowed parent method from inside an override.
@@ -3455,6 +3405,10 @@ main()
 
 ### 5.4 `struct` declaration
 
+A copyable struct preserves logical copies according to the declared type of each field. Owned container fields such as Array retain value semantics; class and synchronized fields copy identity references only. Fields may be Arrays or classes. Structs are not restricted to scalars and strings, and copying a struct does not copy an entire class object graph. Fields still satisfy initialization, storage, and copyability requirements (§2.14.6).
+
+A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. Copyable types cannot declare `move` receivers. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
+
 ```ebnf
 StructDecl ::= 'struct' Identifier TypeParams?
                ('implements' Identifier (',' Identifier)*)?
@@ -3508,14 +3462,14 @@ var c = Config{host: "localhost"}    // OK
 
 | Dimension | `class` | `struct` |
 |--|--|--|
-| Memory model | Reference type (heap) | Value type (stack or inlined) |
-| Assign / pass | Shared reference | **Copy** (`var b = a` produces an independent copy) |
+| Memory model | Identity reference | Logical value; physical layout does not change the copy contract |
+| Assign / save parameter | Copy identity reference | **Field-wise copy** (`var b = a` preserves a logical copy) |
 | Inheritance | Supports `extends` | **No** inheritance |
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
-| Constructor | `constructor(...)` | **Optional**: `Point()` yields a zero-valued instance |
+| Constructor | `constructor(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
 | Literal | none | `TypeName{field: value, ...}` |
 
 **When to use**:
@@ -3525,7 +3479,7 @@ var c = Config{host: "localhost"}    // OK
 
 #### 5.4.1 Value-semantics example
 
-A `struct` is a value type: assignment and argument passing copy it.
+A copyable `struct` is a value type: assignment and saving a parameter preserve logical copies field by field. An ordinary READ parameter accesses the value read-only and may save a copy, without requiring a particular physical ABI.
 
 ```xray
 struct Point {
@@ -3857,7 +3811,7 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-Static methods use `static name(...)`. Instance methods have a READ receiver by default and may use `ref` or `move`; enum methods do not write `fn`:
+Static methods use `static name(...)`. Instance methods have a READ receiver by default and use `ref` to mutate value-semantic components. A `move` receiver is restricted to noncopyable enums and is forbidden for copyable enums; see §17 for admission of noncopyable declarations. Enum methods do not write `fn`:
 
 ```xray
 enum Color {
@@ -6184,23 +6138,50 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 
 ### 14.7 `Array<T>` Methods
 
+`Array<T>` is a growable value type whose element type is copyable and storable. Assignment, saved parameters, index reads and returns preserve logical copies; shared backing does not permit mutation of other copies. Storage alone does not require comparison, hashing or string conversion; each corresponding method has its own admission contract.
+
+The first owned-array execution subset freezes `len(array: Array<T>) -> i64`, read-only `get(index: i64) -> T`, `ref set(index: i64, value: T) -> ()`, `ref push(value: T) -> ()`, array literals and the index expressions in §3.4/§3.11. The set method returns unit; an index-assignment expression returns the converted right-hand T. len itself does not allocate; reads/copies can reach retention limits; construction and mutation can fail for budget, allocation or retention limits. Both set and push can relocate element storage when detaching shared backing.
+
+Read-only get and indexing follow the value-receiver snapshot rule in §3.0: take the Array logical snapshot before evaluating index; an index that rebinds the variable cannot cause a late read of its current value. Ref set/push instead bind the root place once. Only after all arguments finish do they establish exclusive access to the binding's current value, check bounds, detach, mutate and write back. If an argument rebinds that root, the operation applies to the new value; set checks its new length. `a.push(a[0])` is valid and independently owns its element result before push. Failure publishes no partial array and preserves the pre-commit logical value; earlier argument effects and rebinding are not rolled back.
+
+An ordinary read parameter cannot be a writable receiver for these ref methods. Copyable Array has no move receiver; pop removes an element without consuming the whole Array. Ref in the table is a declaration mode: the dot call remains `a.push(x)`. Pure-index GET-place snapshot elimination and transient retain/copy/drop must preserve failures as required by §3.0; backing uniqueness never bypasses access permissions.
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForPush() -> string {
+    print("arg")
+    a = ["new"]
+    return "tail"
+}
+a.push(replaceForPush())
+print(a[0], a[1])           // Prints arg, then new tail
+```
+
+```xray
+var a: Array<string> = ["head"]
+a.push(a[0])
+print(a[0], a[1])           // head head
+```
+
+The table retains the complete method denominator; the first XIR subset does not automatically admit its remaining methods. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+
 | Member | Type / Description |
 |--|--|
 | `len(arr)` | global `i64` query |
-| `capacity` / `arr[i]` / `arr[i] = v` | capacity field and indexed read/write; `get(i)` / `set(i, v)` are also available |
-| `push(x)` / `pop()` | tail insert/remove |
-| `shift()` / `unshift(x)` | head insert/remove |
-| `concat(...arrays)` | concatenation |
-| `indexOf(x)` / `contains(x)` | search |
-| `join(sep?)` | concatenate into a string |
-| `reverse()` / `sort(cmp?)` | in-place reorder |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | functional helpers |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | traversal and predicates |
-| `fill(v, start?, end?)` / `clear()` | fill or clear |
-| `reserve(capacity)` / `resize(length, fill)` | capacity and length management |
-| `ptr()` / `mutPtr()` | explicit low-level pointer views |
-| `toString()` | container representation |
-| `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
+| `capacity` / `arr[i]` / `arr[i] = v` | read-only capacity/index query and writable-place assignment; get is read-only and set is ref |
+| `ref push(x)` / `ref pop()` | tail insert/remove; pop is not a move receiver |
+| `ref shift()` / `ref unshift(x)` | head insert/remove |
+| `concat(...arrays)` | read-only receiver; produces a concatenated result |
+| `indexOf(x)` / `contains(x)` | read-only query |
+| `join(sep?)` | read-only receiver; concatenates into a string |
+| `ref reverse()` / `ref sort(cmp?)` | changes the receiver's ordering |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read-only receiver; callback contracts must be frozen before admission |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read-only receiver; callback contracts must be frozen before admission |
+| `ref fill(v, start?, end?)` / `ref clear()` | fill or clear |
+| `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
+| `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |
+| `toString()` | read-only receiver; container representation |
+| `iterator()` / `entriesIterator()` / `entries()` | read-only receiver; result ownership and iteration contracts must be frozen before admission |
 
 Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
 

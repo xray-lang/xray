@@ -13,22 +13,20 @@
   "sections": [
     {
       "heading": "Sharing model",
-      "markdown": "- `const T` is the ordinary deep-read-only capability; audited synchronization handles normalize to an internal synchronized shared capability\n- a `go` closure may not capture any outer `var`, even for reads\n- pass local data as explicit `go` arguments using ordinary inline values, `copy(...)`, or `move`\n- mutable state shared by coroutines must flow through Channel, Atomic, or audited sync handles; direct captured mutation is a compile error\n- module-mutable state and short-lived views/pointers are rejected, and `unsafe` does not relax these rules"
+      "markdown": "The following are settled target contracts; complete go, Task, resource, and synchronization families require separate implementation qualification under spec §17.\n\n- `const` fixes a binding and its value-semantic components, without freezing class objects or proving Sendable\n- go arguments and captures must be Sendable, checked over the complete type; COW or atomic reference counts alone are insufficient\n- a go closure may not capture any ordinary outer `var`, even for reads; pass copyable, Sendable local values explicitly and retain the caller's logical copy\n- const values and copyable non-view READ values may be captured by value when Sendable; qualified synchronization handles retain their synchronized identity\n- Array copying does not require `copy(array)` or unique backing; copying stops at class and synchronization identities\n- ref and Slice/MutSlice loans cannot enter go; noncopyable Sendable resources transfer only through declared consuming parameters\n- shared mutation requires qualified channels or synchronization objects; const, a short scope, or unsafe cannot waive the boundary requirements"
     },
     {
       "heading": "await all",
-      "markdown": "Plain waiting is always `await task`; there is no `await (move task)` form. A unique mutable result makes that await a compiler-proven one-time terminal take. `await all` requires a homogeneous collection of tasks: every element must have the same static `Task<T>` type, and the result is `Array<T>`."
+      "markdown": "Waiting uses `await task`, without an `await (move task)` form. The target Task result domain is copyable and Sendable; backing uniqueness does not select result ownership. `await all` uses a homogeneous collection of `Task<T>` values and produces `Array<T>`. Complete waiting, repeated observation, failure, and cancellation behavior must be frozen and qualified with the Task declaration family; this card does not claim that family is implemented."
     },
     {
-      "heading": "Move into coroutine",
-      "fences": [
-        "coro-move-argument"
-      ]
+      "heading": "Value arguments",
+      "markdown": "Passing a copyable, Sendable Array as an explicit go argument preserves the caller's logical copy. Noncopyable resources use the callee's consuming declaration; an explicit move marker does not make a non-Sendable value transferable. These target rules do not admit the complete go declaration family."
     },
     {
-      "heading": "Move ownership",
+      "heading": "Const snapshots",
       "fences": [
-        "coro-move-transfer"
+        "decl-capability"
       ]
     },
     {

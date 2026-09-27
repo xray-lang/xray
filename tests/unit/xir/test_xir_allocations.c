@@ -72,13 +72,14 @@ static void *counted_realloc(void *pointer, size_t size) {
 #define xr_free(pointer) counted_free(pointer)
 #define xr_realloc(pointer, size) counted_realloc(pointer, size)
 
-#include "xir/xxir_callable.c"
+#include "xir/xxir_types.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"
 #include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
 #include "xir/xxir_value.c"
+#include "xir/xxir_type_arena.c"
 #include "xir/xxir_scalar.c"
 #include "xir/xxir_float.c"
 #include "xir/xxir_vm.c"
@@ -93,6 +94,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_local_fixture.h"
 #include "xir_segment_cases.h"
 #include "xir_function_cases.h"
+#include "xir_instance_admission_cases.h"
 static void function_allocation_failures(void) {
     for (unsigned cancel = 0; cancel < 2; ++cancel) {
         calls = 0; fail_at = SIZE_MAX;
@@ -128,10 +130,10 @@ static void phi_snapshot_failure(void) {
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "a", 1, &a) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "b", 1, &b) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[0], XR_XIR_STRING, a.payload) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[1], XR_XIR_STRING, b.payload) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[6], XR_XIR_STRING, b.payload) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[7], XR_XIR_STRING, a.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[0], NULL, XR_XIR_STRING, a.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[1], NULL, XR_XIR_STRING, b.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[6], NULL, XR_XIR_STRING, b.payload) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_owned_slot_copy(frame, layout->offsets[7], NULL, XR_XIR_STRING, a.payload) == XR_XIR_VALUE_OK);
     XirObject *object = object_pointer(&b);
     uint32_t references = atomic_load(&object->references);
     atomic_store(&object->references, UINT32_MAX);
@@ -166,7 +168,7 @@ static size_t write_allocation_failures(void) {
         size_t published = 0;
         XrXirOutputSink sink = {allocation_bytes, &published, 65536};
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {xr_xir_output_render, &sink}};
+        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {xr_xir_output_render, &sink}, {0}};
         XrXirCall *call = NULL;
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
         XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
@@ -199,7 +201,7 @@ static void managed_allocation_run(XrXirArtifact *artifact) {
     XrXirCallEntry entries[3];
     XrXirVmBinding bindings[3];
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {allocation_output, NULL}};
+    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {allocation_output, NULL}, {0}};
     for (uint32_t i = 0; i < 3; ++i) {
         XrXirStatus status = xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]);
         if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
@@ -265,7 +267,7 @@ static size_t call_allocation_failures(void) {
         fail_at = attempt ? attempt - 1 : SIZE_MAX;
         calls = 0;
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {NULL, NULL}};
+        XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
         XrXirValue argument = {XR_XIR_I64, 0, 3};
         XrXirCall *call = NULL;
         XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
@@ -471,5 +473,6 @@ int main(void) {
     printf("Write-result activation and renderer physical release: %zu allocation sites\n", write_allocation_failures());
     phi_snapshot_failure();
     function_allocation_failures();
+    instance_admission_cases();
     return 0;
 }

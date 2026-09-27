@@ -18,8 +18,10 @@ XR_FUNC XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudge
 XR_FUNC XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **output);
 XR_FUNC void xr_xir_generics_free(XrXirGeneric *generics, uint32_t functions);
 XR_FUNC bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type);
-XR_FUNC bool xr_xir_type_satisfies(const XrXirModule *module, uint32_t function, XrXirType type, uint32_t constraints);
-XR_FUNC XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller, const XrXirInstruction *call);
+XR_FUNC XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
+    XrXirType type, uint32_t constraints, XrXirBudget *remaining);
+XR_FUNC XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
+    const XrXirInstruction *call, XrXirBudget *remaining);
 /* Requires a structurally verified module and a successful generic-call check. */
 XR_FUNC XrXirStatus xr_xir_call_type_matches(const XrXirModule *module, uint32_t caller,
     const XrXirInstruction *call, XrXirType type, XrXirType actual, XrXirBudget *remaining);

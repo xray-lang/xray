@@ -594,7 +594,7 @@ var primes = #[2, 3, 5, 7]
 
 ## 2. 类型系统 (Type System)
 
-> 真值源：`src/runtime/value/xtype.h`（XrType 定义）、`src/runtime/value/xtype.c`、`src/frontend/parser/xparse_type.c`（语法）、`src/frontend/analyzer/xtype_ref_resolve.c`（解析）、`stdlib/prelude/builtin_symbols.def`（内置类型表）。
+> 类型语法与内置身份锚点：`src/frontend/parser/xparse_type.c`、`stdlib/prelude/builtin_symbols.def`。本章定义语言合同；既有运行时或 analyzer 的表示不是值语义合法性的来源。当前新 XIR 实现资格见 §17。
 
 ### 2.1 概述
 
@@ -616,7 +616,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确浮点 | `f32`、`f64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
-| 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
+| 借用视图 | `Slice<T>` / `MutSlice<T>`（共享只读 / 独占可写，不拥有元素，见 §2.4.2） |
 | Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`NetConn`、`NetListener`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
@@ -628,6 +628,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
+
+内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
 
 <!-- xr-builtin-registry:begin -->
 
@@ -852,23 +854,28 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-有序可变数组。详见 §14.7。
+`Array<T>` 是有序、可增长的值类型。赋值、保存参数和返回值保留独立的逻辑副本；实现可以共享元素存储，但经一个可写绑定修改或追加元素不得改变其他逻辑副本。复制沿值语义部分递归，在 class 或同步身份处只复制引用，不复制或冻结所引用的对象。方法见 §14.7，所有权规则见 §2.14。
 
 ```xray
 var a: Array<i64> = [1, 2, 3]
-var b = [1, 2, 3]                // 推断为 Array<i64>
+var b = a                        // b 是逻辑副本
+b[0] = 9                         // a[0] 仍为 1
 var c: Array<string> = []         // 显式空数组
 ```
 
-`Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
+`T` 必须在编译期确定，且可复制、可保存；借用视图和不可复制资源不能作为普通 Array 元素。空 `[]` 需要类型上下文，无上下文时是编译错误：`Empty array '[]' requires a type annotation`。非 nullable Array 必须显式初始化，不从未初始化存储推定为空数组。
 
-`Array<rune>` 保留 `rune` 元素身份：读出时得到 `rune`，写入时只接受 `rune`。
+读出元素产生类型为 `T` 的逻辑副本；写入按 `T` 检查，只采用该类型已允许的赋值转换。`Array<T>` 不变：元素可转换不意味着整个数组可隐式转换，例如 `Array<i8>` 不能整体隐式转换为 `Array<i64>`。`Array<rune>` 保留 `rune` 身份，读写均按 `rune` 检查。
+
+容器本身只要求存储所需能力，不要求所有 `T` 都可比较、排序、哈希或字符串化。条件方法的约束必须由相应声明明确给出；具体实例恰好提供某成员不能补足普通泛型定义处的约束。
+
+本节规定语言合同，不表示所有 Array 方法、聚合元素或借用视图已获新 XIR 源入口准入；当前实现资格见 §17。未准入的声明族必须明确拒绝。
 
 #### 2.4.1.1 定长数组 `[T; N]`
 
 `[T; N]` 是定长布局数组类型，表示 `N` 个 `T` 元素。`N` 是类型的一部分，必须能在分析期求值为正的编译期整数表达式；当前支持整数字面量、`const` 整数标识符、括号、一元 `-`/`~`，以及整数算术/位运算。当前后端编码上限为 65535 个元素。
 
-定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和引用容器等元素类型，因此可以递归组合：
+定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和拥有式容器等元素类型，因此可以递归组合：
 
 ```xray
 var bytes: [u8; 4] = [1, 2, 3, 4]
@@ -879,11 +886,11 @@ var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
 
-定长数组支持 `len(array)`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
+定长数组支持 `len(array)`、索引读取、可写 place 上的索引写入和 `ref` 参数传递。借用视图按 §2.4.2 区分共享 `Slice<T>` 与独占 `MutSlice<T>`：
 
 ```xray
 var data: [u8; 4] = [5, 6, 7, 8]
-var view: Slice<u8> = data[1:4]
+var view: MutSlice<u8> = data[1:4]
 view[1] = 99
 ```
 
@@ -904,58 +911,36 @@ fn first(packet: Packet) -> u8 {
 `[T; N]` 与 `Array<T>` 语义不同：
 
 - `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
-- `Array<T>`：动态长度、可增长、堆上容器。
-- `Slice<T>`：借用连续存储的视图，不拥有数据（见 §2.4.2）。
+- `Array<T>`：动态长度、可增长的值类型；元素存储可在堆上共享并按需分离。
+- `Slice<T>` / `MutSlice<T>`：借用连续存储的共享 / 独占视图，不拥有元素（见 §2.4.2）。
 
 旧的 `[N]T` 语法不属于 Xray 语言。
 
-#### 2.4.2 `Slice<T>`
+#### 2.4.2 `Slice<T>` / `MutSlice<T>`
 
-> 真值源：`stdlib/prelude/builtin_symbols.def`（prelude 内置符号注册）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（借用跟踪与失效检查）、`src/frontend/analyzer/xa_memory_effect_db.h`（失效判据）、`src/frontend/analyzer/xanalyzer_visitor_decl.c`（返回视图契约）。
+`Slice<T>` 是共享只读借用，`MutSlice<T>` 是独占可写借用。它们描述另一个值拥有的连续元素存储，自身不拥有元素；借用始终依附可证明的 owner 和访问权限。以下规则定义视图合同，不表示新 XIR 源入口已经支持视图声明族；其完整准入与验证见 §17。
 
-`Slice<T>` 是**借用视图**：它描述另一个值所拥有的一段连续元素存储，自身不拥有数据、不参与引用计数、不可放入任何长生命周期存储。它是 prelude 类型（`GENERIC_1`），可以在任何类型注解里直接写出。
+##### 构造与访问
 
-##### 构造
+切片使用显式目标视图类型。`array[start:end]` 或 `fixedArray[start:end]` 可形成共享视图；形成 `MutSlice<T>` 还要求 owner 是独占可写 place，并在视图产生前完成必要的 COW 分离。字符串字节视图 `str.bytes()` 是 `Slice<u8>`，不能用于修改字符串。
 
-视图只能由以下三种来源产生，且**必须有显式目标类型**——没有目标类型时切片表达式是编译错误：
+`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；不得用尚未冻结的 type-position `const T` 重新定义可写视图。
 
-| 来源 | 结果 | 说明 |
-|--|--|--|
-| `array[start:end]` | `Slice<T>` | owner 是 `Array<T>` |
-| `fixedArray[start:end]` | `Slice<T>` | owner 是 `[T; N]` |
-| `str.bytes()` | `Slice<u8>` | owner 是 `string` 的 UTF-8 字节存储 |
+owner 必须是可证明存活的具名局部 place、参数或 receiver 字段路径，不能借用临时值。嵌套投影保护所属根及必要路径。class 字段借用须保活对象并动态检查独占；只有局部无冲突证明才可省去动态检查。
 
-```xray
-var arr: Array<i64> = [10, 20, 30, 40]
-var view: Slice<i64> = arr[1:3]      // OK：借用 arr
-var all: Slice<i64> = arr[:]         // 全长视图，不是拷贝
-var bad = arr[1:3]                   // E0365：切片结果需要显式目标类型
-```
-
-owner 必须是**具名的局部变量、参数或 receiver 上的字段路径**。不能借用临时值：
-
-```xray
-var view: Slice<u8> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
-```
-
-##### 能力
-
-- `len(view)` 取长度；`view[i]` 读元素；`view[i] = v` 写元素，**直接写入 owner 的存储**。
-- `view[a:b]` 可以再切片，结果仍借用同一个 owner。
-- 视图**没有成员方法**，也没有 `.length`。
-- `const Slice<T>` 与 `const` owner 派生出的视图是只读的，写入是编译错误。
+`MutSlice<T>` 赋值转移借用，普通调用暂时重借用。`MutSlice<T>` 到 `Slice<T>` 是共享重借用；派生的只读视图存活期间，原可写视图不能写入。子切片也必须遵守同一借用权限。
 
 ```xray
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
-    var view: Slice<i64> = arr[1:3]        // 借用视图，不是拷贝
-    view[1] = 31
-    print(arr[2])                          // 31 —— 写穿到 owner
-    arr[1] = 21
-    print(view[0])                         // 21 —— owner 的元素写入对视图立即可见
-    var owned: Array<i64> = copy(arr[1:3]) // 独立的 Array<T>
-    arr.push(50)                           // OK：此处没有存活的视图
-    print(len(owned))
+    var view: Slice<i64> = arr[1:3]
+    print(view[0])                         // 20；view 的最后一次使用
+    var writable: MutSlice<i64> = arr[1:3]
+    writable[1] = 31                       // writable 的最后一次使用
+    print(arr[2])                          // 31
+    var owned: Array<i64> = copy(arr[1:3]) // 物化拥有式副本
+    arr.push(50)                           // 没有存活借用
+    print(len(owned))                      // 2
 }
 
 main()
@@ -963,66 +948,45 @@ main()
 
 ##### 借用规则
 
-设视图 `v` 借用 owner `o`。在 `v` 的**存活期**内：
+设视图 `v` 借用 owner `o`。借用存活期按最后一次使用而非词法块末尾判定：
 
-1. **元素写允许**：`o[i] = x` 合法。元素写不改变 `o` 的存储地址，视图仍然有效。
-2. **失效操作拒绝**（`E0382`）：任何可能使 `o` 的元素存储重新定位、缩短或整体失效的操作都被拒绝。判据不是方法名白名单，而是被调用函数的 memory effect：地址稳定性（`ADDRESS_STABLE` / `MAY_RELOCATE`）、长度收缩（`NEVER_SHORTENS` / `MAY_SHORTEN`）、视图失效（`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`）。`o.push(x)`、重新给 `o` 赋值、`move o`、`freeze o`、`return o` 都属于此类。
-3. **存活期按最后一次使用判定**（非词法生命周期）：借用在 `v` 的最后一次使用处结束，而不是在词法块末尾。因此紧随其后的 owner 变更是合法的。
-4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/structural object 字段、Array / Map / Set / tuple / JSON.Value / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
+1. `Slice<T>` 存活期间不得修改 `o`，包括元素写入；不能因为一次写入可能不改变物理地址就放行。
+2. `MutSlice<T>` 存活期间不得经 owner 或其他路径读取、写入或复制 `o`。只有当前独占视图及合法重借用可访问该存储。
+3. 重新绑定、销毁、消费或其他使借用失效的操作被拒绝（`E0382`）。操作效应必须反映 COW 分离与重定位；不得把 Array 元素替换一概标为地址稳定。
+4. 视图仅可用于局部、参数、返回及 tuple / Optional 包装；包装继承全部借用限制。视图不得进入普通集合、用户聚合、模块存储或 `go` 等跨执行边界，不得借 `as` 擦除限制（`E0383`）。
+5. 被普通闭包以共享 cell 捕获的变量不能产生视图。捕获视图的闭包可以立即调用；跨参数传递要求显式、已冻结的借用调用合同，保证不保存、不返回且调用结束前完成。被调方实现推断不能代替该公开合同，也不因闭包字面量写在实参位置就认定不逃逸。
+6. 普通调用中的借用可以跨挂起，但须始终保活 owner 并维持访问权限。帧地址稳定不能代替这些证明；生成器首版不得保存借用参数。
 
 ```xray
-fn ok() {
-    var bytes: Array<u8> = [1, 2]
-    var view: Slice<u8> = bytes[:]
-    print(len(view))                 // view 的最后一次使用
-    bytes.push(3)                    // OK：借用已结束（规则 3）
-}
-
 fn rejected() {
     var bytes: Array<u8> = [1, 2]
     var view: Slice<u8> = bytes[:]
-    bytes.push(3)                    // E0382：view 仍存活
-    print(len(view))
+    bytes[0] = 3                    // E0382：共享借用仍存活
+    print(view[0])
 }
 ```
 
-##### 跨函数：返回视图契约
+##### 跨函数：返回来源合同
 
-函数可以返回 `Slice<T>`，**当且仅当**返回的视图有**唯一可推断的来源**：某一个参数、receiver，或静态存储。编译器为这样的函数记录一份返回视图契约（来源 + 参数下标），调用点据此把结果继续记在原 owner 的账上，借用规则在调用者一侧照常生效。
+返回视图的来源首版只由签名确定：整个签名必须恰有一个视图输入或 `ref` 输入候选；`ref` receiver 也计入候选。零候选或多个候选均拒绝（`E0384`），即使函数体始终返回某一个参数；不得从函数体或静态存储特例推导跨模块来源。返回局部值的视图同样非法。
 
-来源不唯一、或借自函数的局部值时，是编译错误 `E0384`：
+tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验证可写性；可写返回不能来自只读候选。返回两个 `MutSlice` 还要求显式的不重叠构造合同，普通用户函数不能只凭下标算式建立该保证。
 
 ```xray
 fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
-    return data[start:]              // OK：唯一来源是参数 data
+    return data[start:]              // 唯一候选为 data
 }
 
-fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
-    if (useA) {
-        return a
-    }
-    return b                         // E0384：多来源
-}
-
-fn alsoBad() -> Slice<i64> {
-    var local: Array<i64> = [1, 2]
-    return local[:]                  // E0384：借自局部值
+fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
+    return a                        // E0384：签名中有两个候选
 }
 ```
 
-##### 逃生口：`copy`
+##### 物化拥有式副本
 
-需要让数据活过 owner，或需要把它放进长生命周期存储时，用 `copy` 把视图物化为独立的 owner：
+`copy(view)` 将借用数据物化为 `Array<T>`，其元素遵循 §2.14 的逻辑复制与身份边界；class 元素仍引用同一个对象。结果不再借用原 owner。此用途不裁决 `copy(array)` 的公开拼写，也不使其成为普通 Array 赋值的前置条件。
 
-```xray
-var owned: Array<i64> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
-```
-
-`copy(slice)` 的结果类型是 `Array<T>`，不是 `Slice<T>`；它是唯一能把借用数据变成拥有数据的构造。
-
-##### 与其他借用形式的关系
-
-`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 共用同一套借用跟踪与同一组错误码：`E0382`（owner 在借用存活期内失效）、`E0383`（借用逃逸）、`E0384`（借用来源不稳定或不唯一）。`unsafe` 块不放宽其中任何一条。
+`ref` 参数和 `Ptr<T>` / `MutPtr<T>` 同样必须满足来源、权限、存活与不逃逸要求。相关诊断为 `E0382`（存活借用冲突）、`E0383`（借用逃逸）、`E0384`（来源不稳定或不唯一）；`unsafe` 不放宽这些要求。
 
 #### 2.4.3 `Map<K, V>`
 
@@ -1522,7 +1486,7 @@ fn drain(first: string?) {
 
 1. **赋值** / 复合赋值 / `++` / `--`：绑定的静态类型重置为被赋值表达式的静态类型；
 2. 作为 `ref` 实参传出：重置为声明类型；
-3. `move x` 之后：绑定不可用（见 §10）；
+3. 成功消费 `x` 之后：绑定不可用（见 §2.14.5）；
 4. **在任意闭包体内被赋值**的绑定：在整个函数体内不可收窄（闭包何时运行不可知）。该规则与闭包在源码中的位置无关——写在收窄点之后同样生效。诊断会指出该原因，修法是改用不被写入的新绑定；
 5. 普通函数调用**不**使收窄失效——N-1 / N-2 保证可收窄主体不可能被被调用方改写。
 
@@ -1547,130 +1511,68 @@ fn f(a: string?) {
 - `x!`：静态去掉 `null`；运行期若为 `null` 则 panic（`NullError`），**不是未定义行为**；
 - `x ?? d`：结果类型为 `x` 去 `null` 后与 `d` 的并集；
 - `x?.f`：可选链，**整链短路**——链上任意一段为 `null` 时整个后缀链求值为 `null`，结果类型为可空（见 §3.6）。
-### 2.14 所有权、别名与借用
+### 2.14 值、身份与借用
 
-> 真值源：`src/frontend/analyzer/xa_ownership.h`（证据轴与判定结构）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（`move` 判定）、`src/frontend/analyzer/xanalyzer_visitor_stmt.c`（别名与借用跟踪）、`src/ir/xi_source_move_verify.c`（Xi 层独立复核）。
+本节定义声明类型、参数模式及函数内数据流共同决定的语言合同。存储布局、引用计数和 COW 是实现机制，不能反向改变源程序合法性。Built→Checked 检查这些规则；特化在 Checked 上完成并复验，Lowered 才选择具体复制、分离和释放操作。完整声明族的实现资格见 §17，规格冻结不等于实现完成。
 
-Xray 不要求写生命周期，也不提供借用检查器语法。但**所有权是有定义的**：`move`、`copy`、`ref`、`Slice<T>`、跨协程传递都读同一套判定，本节把它写出来。
+#### 2.14.1 逻辑值与身份边界
 
-#### 2.14.1 所有权根
+Array / Map / Set / string、可复制 struct、enum、tuple 和匿名记录按值复制。复制获得独立的逻辑值；实现允许共享不可变存储或采用 COW，但经一个副本修改值语义部分不得污染其他副本。调用返回的 Array 也遵守同一合同，不要求调用方分析被调方函数体以证明其存储唯一。
 
-**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map`（含 `JSON.Object`）/ `Set` / `JSON.Value` 的复合 arm / `structural object` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
+class 实例和同步对象具有身份。复制其引用仍指向同一个对象；递归复制聚合时在这个身份边界停止。因而复制含 class 元素的 Array 不复制 class 对象，修改对象状态可经其他引用观察到；替换某个 Array 元素则仅影响该数组的逻辑值。
 
-只有拥有根的绑定才谈得上所有权转移。对没有根的值写 `move` 是编译错误（`E0391`：`move is not meaningful for value type`）。
+`const` 固定绑定及其值语义部分，不冻结整个可达图。`const xs = [Counter()]` 禁止经 `xs` 改写或追加数组元素，但不冻结 Counter 的身份状态；对象方法与同步 API 仍受各自合同控制。是否能跨执行共享由完整类型的 Sendable 性质决定，不能由 `const` 或底层原子引用计数推导。
 
-#### 2.14.2 四条独立证据轴
+#### 2.14.2 初始化、权限与借用事实
 
-每个绑定在每个程序点上带四条**互相独立**的证据，合法的所有权操作要求四条同时成立：
+每个程序点都必须分别证明：
 
-| 轴 | 回答的问题 | 取值 |
-|--|--|--|
-| **绑定状态** | 这个名字现在能用吗 | `UNINITIALIZED` / `LIVE` / `MOVED` / `MAYBE_MOVED` / `UNKNOWN` |
-| **根别名** | 还有别的引用指向同一个根吗 | `UNIQUE` / `LOCAL_ALIASED` / `ESCAPED` / `ALIAS_UNKNOWN` |
-| **能力** | 允许做什么 | `MUTABLE` / `CONST` / `SYNC_INTERIOR_MUTABLE` / `UNKNOWN` |
-| **借用** | 有存活的借出吗 | 一组 loan：Slice 视图 / 裸指针借用 / 闭包捕获 |
-
-分成四条是有意的：绑定状态是控制流事实，别名是对象图事实，能力是权限，借用是有起止的 place 事实。它们不能互相推导，也不能互相替代。
-
-**默认 fail-closed**：任何一轴无法给出肯定证据时，答案是拒绝，不是放行。这也是为什么一个来源不明的调用结果不能被 `move`——编译器没有它的别名证据。
-
-#### 2.14.3 别名如何产生与终止
-
-| 动作 | 对根别名的影响 | 能否恢复 |
-|--|--|--|
-| `var b = a` | `LOCAL_ALIASED` | 能。`b` 最后一次使用后，根重新是 `UNIQUE` |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
-| 来源不明的调用结果 | `ALIAS_UNKNOWN` | 不能 |
-| `copy(a)` | 不影响 `a`；结果是新的 `UNIQUE` 根 | — |
-| `move a` | `a` 变为 `MOVED`；根随之转移 | — |
-
-**存活期按最后一次使用判定**（非词法生命周期），与 §2.4.2 的借用规则一致。因此下面第一段合法、第二段不合法：
-
-```xray
-fn ok() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    print(len(alias))          // alias 的最后一次使用
-    consume(move buf)          // OK：别名已结束
-}
-
-fn rejected() {
-    var buf = [1, 2, 3]
-    var alias = buf
-    consume(move buf)          // E0391：strong alias 'alias' remains live
-    print(len(alias))
-}
-```
-
-`ESCAPED` 是终态，这一点是刻意的：把引用写进堆图之后，谁还持有它已经不是这个函数能回答的问题。需要转移时用 `copy(a)`。
-
-#### 2.14.4 借用如何产生与终止
-
-三种借用形式共用同一份 loan 记录、同一套非词法存活期判定、同一组错误码（`E0382` / `E0383` / `E0384`）：
-
-| 形式 | 借出者 | 存活期 |
-|--|--|--|
-| `Slice<T>` 视图 | 视图绑定 | 到视图绑定的最后一次使用 |
-| `Ptr<T>` / `MutPtr<T>` | 指针绑定 | 到指针绑定的最后一次使用 |
-| **闭包捕获** | 闭包绑定 | 到闭包绑定的最后一次使用 |
-
-普通同步闭包对外层可变 `var` **按共享cell引用捕获**，因此这类捕获形成借用；`const`与可复制非视图的普通read参数按值捕获，不形成该借用：
-
-```xray
-fn rejected() {
-    var buf = [1, 2, 3]
-    const peek = fn() -> i64 { return len(buf) }
-    go consume(move buf)       // E0382：closure capture 'peek' is active
-    print(peek())
-}
-```
-
-只作为**调用实参**出现的闭包字面量通常不产生存活借用——它随调用结束，不可能活过调用：
-
-```xray
-fn ok() {
-    var buf: Array<i64> = []
-    items.forEach(fn(x: i64) { buf.push(x) })   // 调用边界内的捕获
-    consume(move buf)                            // OK
-}
-```
-
-例外是被调方**保留或逃逸**该形参时——此时闭包活过调用，它按引用捕获的根随之逃逸（`OWN-E-ESCAPED-ROOT`）。判据是被调方的形参效应摘要，不是语法形状。
-
-存活的借用禁止对 owner 做失效操作，`move` 是其中一种（`E0382`）。
-
-#### 2.14.5 `move` 的完整条件
-
-`move x` 要求 `x` 是**可重绑定的局部 `var` 根**，且：
-
-1. 绑定状态是 `LIVE`（不是已 moved、可能已 moved 或未知）；
-2. 根别名是 `UNIQUE`；
-3. 能力是 `MUTABLE`（`const` 与同步句柄不可 move）；
-4. 没有存活的 loan；
-5. 存储计划完整（编译器已为这个根解出分配域）；
-6. 不在会重复执行的循环里消费循环外声明的绑定。
-
-`move` 只接受**标识符**：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。字段与元素没有独立的所有权根——它们的根是容器本身，转移其中一格会让容器处于部分转移状态，这个状态没有表示。需要取出一格时，先 `copy`，或让容器本身成为 move 源。
-
-move 成功后源绑定在编译期标记为已 moved，再次引用是编译错误。**被拒绝的 move 不污染源状态**：诊断之后 `x` 仍然可用。
-
-拒绝原因在诊断里具名，便于定位是哪一轴失败：
-
-| 原因 | 含义 |
+| 事实 | 必须证明的条件 |
 |--|--|
-| `OWN-E-LIVE-ALIAS` | 存在存活的局部强别名 |
-| `OWN-E-ESCAPED-ROOT` | 根已写入堆图 |
-| `OWN-E-UNKNOWN-CALL` | 唯一性证据不完整（来源不明的调用结果） |
-| `OWN-E-STORAGE-PLAN` | 存储/所有权计划不完整 |
-| `OWN-E-LIVE-LOAN` | 存在存活借用（Slice 视图 / 裸指针 / 闭包捕获） |
+| 初始化和消费状态 | 读取前已完整初始化；需要持有权的操作不得使用已消费或可能已消费的值 |
+| place 权限 | 写入目标可写；只读参数和 `const` 的值语义部分不能直接写入 |
+| 值与声明合同 | 类型、复制或消费能力、参数模式、保存与返回权限符合声明 |
+| 活动借用 | 访问不与仍存活的共享或独占借用冲突，借用来源和存活期有效 |
 
-#### 2.14.6 值拷贝与 managed 字段
+初始化与消费状态是控制流事实，权限来自绑定和声明，借用保护具体 place 及必要路径；这些证明不能互相代替。缺少真实所需证明必须拒绝，但 Array backing 是否唯一不是普通赋值、保存副本、返回或修改的语言准入条件。非 nullable Array 仍须显式初始化（§5.1.1）。
 
-值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `JSON.Value` / class 实例**不能**作为 struct 字段（`E0352`）。
+#### 2.14.3 普通复制与存储共享
 
-因此不存在「struct 值拷贝携带可变 managed 字段」的情形，也就不需要在浅拷贝与深拷贝之间做选择。唯一的 managed 字段是 `string`，而 `string` 不可变：共享它不产生任何可观察差异，唯一性判定也不受影响。
+`var b = a`、保存只读参数、返回 Array，以及把可复制 Array 存入另一个合法容器或聚合，均保留逻辑副本，不建立对源数组可变存储的语言级别名。它们不会把源绑定标为永久 `ESCAPED`，也不要求其他副本先结束存活期才能修改源值。底层存储的唯一性只可用于省略分离或复制的优化。
 
-需要在聚合里放可变图时用 class——class 是引用类型，赋值创建的是别名，按 §2.14.3 的规则处理。
+```xray
+var a = [1, 2, 3]
+var b = a
+const snapshot = a
+b[0] = 9
+a.push(a[0])                 // 先求值实参，再建立 ref receiver 的独占访问
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+print(b[0])                 // 9
+print(len(a))               // 4
+```
+
+复制必须取得可独立释放的结果责任；失败不得发布部分初始化的结果。自赋值、读取自身元素后写回或追加均须维持这一责任，不能因物理共享造成重复释放或使用已释放存储。求值顺序遵循 §3.0 E2/E5；复制或自动移动优化不能改变既定错误、析构或外部副作用顺序。
+
+#### 2.14.4 place 借用与捕获
+
+`ref` 是独占可写 place 借用。调用先按 E2 求值 receiver 和全部实参，再在进入被调方前建立借用；存活期间不得通过其他路径冲突访问借出的 place。赋值仍按 E5 求值位置子表达式、索引、右值，再存储，不因 COW 实现更改顺序。
+
+`Slice` 共享借用与 `MutSlice` 独占借用遵循 §2.4.2；class 字段借用还须保活对象并检查动态独占。底层 backing 共享不能成为取消这些检查的理由。反过来，普通 Array 逻辑副本不因共享 backing 自动成为借用。
+
+普通闭包的外层 `var` 捕获共享 cell，`const` 与可复制非视图的普通 READ 参数按值捕获。共享 cell 的身份不能伪装成不可逃逸的临时 loan；其存储和释放责任必须显式保留。被共享 cell 捕获的变量不能产生视图。视图捕获与借用回调的准入遵循 §2.4.2 的显式合同，不能从被调方实现或实参语法形状猜测。
+
+#### 2.14.5 消费与尚未准入的表面
+
+不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
+
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，以及 type-position `const T` 的身份和转换，均不在本已冻结子集内，须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+
+#### 2.14.6 struct 字段的复制与初始化
+
+可复制 struct 按字段的声明类型复制：Array / Map / Set 等容器字段保留逻辑副本，string 保持不可变值语义，class 和同步字段只复制身份引用。不得仅因字段是 Array、其他拥有式容器或 class 引用而拒绝该 struct；也不能把带 class 字段的 struct 描述成整个可达图都独立。
+
+字段仍须满足普通存储、初始化和可复制性要求。视图不能进入普通用户聚合；不可复制字段或载荷要求所属 struct / enum 也不可复制，其声明族另行准入。含非 nullable Array 的字段不能无条件零初始化，默认构造须满足 §5 的字段规则。
 
 ### 2.15 完整可运行示例
 
@@ -1749,6 +1651,12 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 **E4（短路点）**：`&&`、`||`、`??`、`?:`、`?.`、`?[` 是语言中**全部**的短路点。除此之外没有任何操作数会被条件性跳过求值。
 
 **E5（赋值）**：`place = rhs` 依次求值 place 的位置子表达式（receiver 或数组表达式 → 索引表达式）→ `rhs` → 执行存储。位置子表达式先于右值，与 C# / Java 一致，与 Rust 相反。
+
+**Array 的值 receiver 与可写 receiver**：读取 `a[index]` 或只读 `a.get(index)` 时，先取得 receiver 的逻辑值快照，再求值 index，最后针对该快照检查边界并复制元素。index 中的调用即使改绑 a，也不改变此次读取的快照。`ref` 方法和下标赋值则先绑定根 place 一次，不提前读取其 Array 值或建立独占访问；全部实参或 index/RHS 求值完成后，才对该 binding 的**当前值**建立独占访问。若实参或 RHS 改绑同一根变量，修改作用于新值，并按新长度检查边界。
+
+只有具名 place 的 index 不含调用、写入或挂起，并且可证明中间没有 owner 变化时，才可消去读取 receiver 的物理快照。此许可不豁免资源错误：必须证明被省略的分配/retain 不可能失败，或在原 receiver 求值位置保留等效失败检查；不得删除、延后 OOM/持有计数失败，也不得改变它与 index 错误的先后顺序。仅证明“无副作用”不够。保存 Array 值仍须保留逻辑副本；元素结果仍是独立拥有的 T。
+
+首个执行子集可仅将字面量或普通 i64 名称作为 GET-place 的 index，证明其求值无调用、写入、挂起、分配或运行时 fault。实现可在一个同步 helper 内临时 retain receiver、检查边界并复制元素、drop receiver，不把该临时 owner 留到 activation 退出；index 与这次 retain 的调序仍须满足上述无失败证明。此实现保留 retain 失败，又使后续 `a.push(a[0])` 不受已完成读取的数组临时别名影响；不要求立即实现零 retain 优化。
 
 **E6（复合赋值）**：`place op= rhs` 等价于 `place = place op rhs`，**但 place 的每个子表达式只求值一次**。求值顺序为：place 子表达式 → 读取 place → `rhs` → 计算 → 写回 place。`x++` / `x--` 等价于 `x += 1` / `x -= 1`，遵循同一规则。复合赋值的目标限于变量与成员访问（见 §3.4）。
 
@@ -1958,13 +1866,13 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 ```
 
 **语义**：
-- 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。
+- 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。Array 赋值保存逻辑副本；目标与表达式结果各自保有值责任，不能让结果借用一个随后可被覆盖的元素槽。实现可复用已持有的右侧结果，所有可能失败的持有工作必须先于存储提交，提交后再释放被替换的旧值。失败不回滚此前完成的右侧副作用。
 - `x op= y` 等价于 `x = x op y`，但 `x` 的每个子表达式只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次；`mk().f += 1` 只调用 `mk()` 一次）。完整时序见 §3.0 E6。
 - **复合赋值的目标不含索引**：`a[i] += v` 是编译错误，写作 `a[i] = a[i] + v`。简单赋值 `a[i] = v` 不受此限。
 - 不能赋值给 `const`（编译错误 `E0303`）。
 
 **特殊**：
-- 默认参数是只读借用；`ref` 参数才允许通过 place 修改，`move` 参数消费源所有权。
+- 普通 read 参数允许读取或保存可复制值的逻辑副本，不允许通过该参数修改值语义部分；class 引用仍可调用修改对象身份的方法。`ref` 参数授予 place 的独占可写访问；声明为 `move` 的参数转移不可复制资源的持有权。
 - 数组/Map 字面量字段：`a[i] = v` 调用 `operator[]=` 或内置 setter。
 
 ### 3.5 三元 `? :`
@@ -2226,10 +2134,46 @@ var bytes: Slice<u8> = text.bytes()
 bytes[i]                // 显式 byte 视图索引
 ```
 
-- `Array` 索引：`i64`，越界抛 `E0430`。
+- `Array<T>` 索引的类型为 `i64`，合法范围为 `0 <= i < len(array)`。读取产生 T 的逻辑副本；写入要求可写 place，右侧按 T 检查及转换。负索引及等于长度的索引均进入 `E0430` panic 通道，不是业务 throw。
+- 下标写入遵循 E5：根 place 和下标各求值一次，再完成右侧求值；随后建立独占访问、按该 binding 的当前数组检查边界、分离共享存储并提交。RHS 改绑根变量时，写入新数组；不能提前按旧长度拒绝。不得跨右侧求值保存裸元素地址。失败不修改提交前的数组或其他逻辑副本；已经发生的右侧副作用（包括改绑）保留。读取则遵循 §3.0 的 receiver 快照规则，针对快照在读取元素前检查边界。
 - `Map` 索引：键类型；找不到键 → `E0431`。
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 自定义类：通过 `operator[]` 重载。
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForIndex() -> i64 {
+    print("index")
+    a = ["new"]
+    return 0
+}
+print(a[replaceForIndex()])  // 依次输出 index、old
+print(a[0])                 // new
+```
+
+```xray
+var a: Array<string> = ["old"]
+fn index() -> i64 { print("index"); return 1 }
+fn replacement() -> string {
+    print("rhs")
+    a = ["new0", "new1"]
+    return "stored"
+}
+var written = (a[index()] = replacement())
+print(written, a[1])        // 依次输出 index、rhs、stored stored；旧长度不提前拒绝
+```
+
+```xray
+var a: Array<string> = ["old0", "old1"]
+fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
+a[1] = shrink()             // 输出 rhs 后 E0430 panic；改绑为 ["new"] 不回滚
+```
+
+```xray
+fn invalid(values: Array<string>) {
+    values.push("x")       // 编译错误：普通 read 参数不是可写 receiver
+}
+```
 
 #### 切片
 
@@ -2248,7 +2192,7 @@ var view: Slice<i64> = arr[1:4]
 - 半开区间 `[start, end)`。
 - Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
 - string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
-- 切片求值为目标类型为 `Slice<T>` 的**借用视图**，不复制元素。包括 `arr[:]` 在内的所有形式都是视图：通过视图写入直接改写 owner 的存储，owner 的元素写入也对视图立即可见。需要独立数据时写 `copy(arr[1:4])`。
+- 目标类型为 `Slice<T>` 的切片是**共享只读借用视图**，不复制元素；不能通过它写入，其存活期间 owner 也不能修改。可写视图必须使用 §2.4.2 明确准入的 `MutSlice<T>` 独占借用，不能由 `Slice<T>` 默默获得写权限。包括 `arr[:]` 在内的形式都不是逻辑副本；需要独立数据时写 `copy(arr[1:4])`。
 - 切片是一次借用：owner 在视图存活期间受 §2.4.2 的借用规则约束，视图本身不得逃逸出 owner 的作用域。完整规则见 §2.4.2。
 
 ### 3.12 匿名函数与 Lambda
@@ -2771,7 +2715,7 @@ large
 
 ## 5. 声明 (Declarations)
 
-> 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
+> 声明语法锚点：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`。本章语言合同由前端统一检查；当前新 XIR 声明族实现资格见 §17，不能由旧 analyzer 行为替代本章规则。
 
 ### 5.1 `var` / `const`
 
@@ -2799,7 +2743,7 @@ var empty: string = ""            // string 必须显式初始化
 - 可重新赋值。
 - 必须有初值**或**类型标注；否则编译错误 `E0303`。
 - 无初值只允许 **default-initializable** 类型：数值类型默认 `0` / `0.0`，`bool` 默认 `false`，`()` 默认 unit，`T?` 默认 `null`，struct 仅当所有字段都可默认初始化时允许。
-- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。
+- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。`var a: Array<T>` 不默认构造空数组。
 
 #### 5.1.2 `const` — 不可变绑定
 
@@ -2808,27 +2752,29 @@ const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
 
-- **必须**有初值。
-- 不能重新赋值（编译错误 `E0303`）。
-- 类型可推断或显式标注。
-- `const` 和 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
-- 对 managed/aggregate 值，`const name: T` 推导并持有 `const T` 能力：字段、索引和嵌套投影深只读；`var name: const T` 则允许名字重绑，但不开放图内修改。
-- `const T` 可用于任意 type position。不可变标量上的 `const` 与原类型等价；managed/aggregate 上的 `const T` 是独立 type identity。
-- 新鲜构造可直接进入 `var` 的可变域或 `const` 的只读域。已有可变唯一图进入 `const` 必须显式 `move` 或 `copy`，不存在隐式冻结或隐藏复制。
-- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄以 `const` 命名；编译器把它们规范化为内部同步共享能力，其受审计方法仍可改变同步保护的内部状态。
-- 新鲜可变图由编译器推断唯一所有权，不需要存储修饰符。`move` 要求源根唯一且无存活 alias/loan，成功后使源绑定失效；`copy` 保留源并显式构造独立图。
+- **必须**有初值，不能重新赋值（编译错误 `E0303`）；类型可推断或显式标注。
+- 与 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
+- `const` 固定绑定及其值语义部分：不得经该绑定改写 Array 元素、追加元素或修改值类型字段。普通 `const snapshot = source` 合法并保留逻辑副本，不要求显式 `move` / `copy` 或源数组 backing 唯一。
+- 值语义在 class 和同步身份边界停止。`const xs = [Counter()]` 不冻结 Counter；普通 class 方法仍可修改所引用的对象。经一个可写副本替换数组元素，不影响 `xs` 的元素。
+- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄可用 `const` 固定绑定；其受审计 API 仍可改变同步保护的内部状态。`const` 本身不是 Sendable 或并发安全的证明。
+- 从只读可复制值保存到 `var` 时得到可写的逻辑副本；不能借此取得原 place 的可写借用，或解除 class 对象自身的权限限制。
 
 ```xray
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
-var moved = move source       // 转移同一根；source 此后不可用
-const snapshot = copy(moved)  // 显式构造深只读独立图
-var current: const Config = loadConfig()
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
 ```
 
-详见 [§10.11](#1011-并发安全模型)。
+本节冻结绑定与值语义部分的只读权限，不裁决 type-position `const T` 的独立类型身份、转换及全部可用位置；该表面不在本已冻结子集内，须在准入前另行确定，不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+
+这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
 #### 5.1.3 解构绑定
 
@@ -2920,38 +2866,40 @@ var result = divmod(10, 3)        // result 类型 (i64, i64)
 
 #### 5.2.4 参数模式
 
-普通参数默认提供只读 capability；只有写借用和所有权交接需要显式模式：
-`name: ref T`、`name: move T`。
+普通参数默认为 READ；写借用使用 `name: ref T`，不可复制资源的消费交接使用 `name: move T`。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
 
 ```xray
 fn length_sq(v: Vec2) -> f64 {
-    // v 默认只读；具体 ABI 可按值或按只读地址传递
     return v.x * v.x + v.y * v.y
 }
 
 fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
-    // v 是可变引用（修改对调用方可见）
     v.x += dx
     v.y += dy
 }
 
-fn submit(job: move Job) -> () {
-    queue.store(move job)
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
 }
 
 translate(ref point, 1.0, 2.0)
-submit(move pending)
-submit(makeJob())
 ```
 
 | 参数模式 | 语义 |
 |--|--|
-| 无（READ） | 只读 capability；callee 不得修改 caller 的 mutable graph |
-| `ref` | 独占可写 place 借用；调用点必须写 `ref place` |
-| `move` | 取得唯一 owner；既有 lvalue 调用点必须写 `move value`，fresh value 与 `copy(value)` 可直接传入 |
+| 无（READ） | 参数绑定不可重绑，其值语义部分只读；可复制、可保存的值可以保存或返回逻辑副本 |
+| `ref` | 独占可写 place 借用，修改回写调用方；调用点必须写 `ref place` |
+| `move` | 仅用于不可复制类型，转移持有权及最终析构责任；调用是否消费由声明模式决定，`move value` 可选标明该转移 |
 
-普通输出使用返回值、tuple、struct 或 `Result`。C ABI 输出位置使用 `MutPtr<T>`，
-不把输出参数模式引入普通 Xray 函数。
+READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保存到本地 `var` 后可以修改副本，原实参不受影响。保存可复制值不等于允许借用逃逸；视图或不可复制资源不能借此成为普通拥有式副本。READ class 参数同样不能重绑，但可调用修改同一对象的方法，不能把 READ 解释为整个可达图不可变。
+
+`ref` 实参必须是类型精确匹配的可写 place，不能是 `const`、只读参数或临时值；`ref` 类型不变。调用先按 §3.0 E2 完成 receiver 与全部实参求值，再建立独占借用，覆盖检查、必要的 COW 分离、修改及回写。不得提前借用 receiver 而拒绝 `a.push(a[0])`。赋值仍遵循 E5 的位置子表达式、索引、右值、存储顺序。
+
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver；不可复制资源的初始化、消费后使用和活动借用仍须检查，详见 §2.14.5。资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
+
+普通输出使用返回值、tuple 或 struct；业务错误按 §8 的类型化 `throw` / `catch` 通道处理，不引入全局 `Result<T,E>`。C ABI 输出位置使用 `MutPtr<T>`，不把输出参数模式引入普通 Xray 函数。
 
 #### 5.2.5 rest 参数
 
@@ -3167,6 +3115,8 @@ main()
 
 ### 5.3 `class` 声明
 
+class 具有身份，赋值与保存参数只复制引用。class 方法不写 `ref` / `move` receiver；经只读参数或 `const` 绑定调用普通方法仍可修改对象，但不能重绑该参数或绑定。class 字段的 `ref` / 视图访问须保活对象并检查动态独占；局部无冲突证明只可消除检查，不能改变权限合同。
+
 ```ebnf
 ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
@@ -3231,7 +3181,7 @@ class Dog extends Animal {
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
 - 不能在 `super(...)` 之前访问 `this`。
-- **覆写父类方法必须写 `override`**；该修饰符只用于类实例方法，不用于字段、构造器、静态方法、struct 或 enum。顺序为可选可见性、`override`、可选 `ref`/`move`。
+- **覆写父类方法必须写 `override`**；该修饰符只用于类实例方法，不用于字段、构造器、静态方法、struct 或 enum。顺序为可选可见性、`override`；class 方法不声明 `ref` / `move` receiver。
 - 同名不同签不是重载，也不是隐藏；必须改名或使用默认参数 / 命名工厂。
 - 父类标 `final class` 则不可继承。
 - `super.method()` 可在重写的方法体内调用被屏蔽的父类方法。
@@ -3447,6 +3397,10 @@ main()
 
 ### 5.4 `struct` 声明
 
+可复制 struct 按字段声明类型保留逻辑副本：Array 等拥有式容器字段保持值语义，class 与同步字段只复制身份引用。字段可以是 Array 或 class；不能将 struct 限制为仅含标量和 string，也不能把 struct 复制误写为复制整个 class 对象图。字段仍须满足初始化、存储及可复制性要求（§2.14.6）。
+
+struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。可复制类型不得声明 `move` receiver。完整聚合、receiver 和借用声明族的实现资格见 §17。
+
 ```ebnf
 StructDecl ::= 'struct' Identifier TypeParams?
                ('implements' Identifier (',' Identifier)*)?
@@ -3500,14 +3454,14 @@ var c = Config{host: "localhost"}    // OK
 
 | 维度 | `class` | `struct` |
 |--|--|--|
-| 内存语义 | 引用类型（堆） | 值类型（栈或内联） |
-| 赋值/传参 | 共享引用 | **拷贝**（`var b = a` 生产独立副本） |
+| 内存语义 | 身份引用 | 逻辑值；物理布局不改变复制合同 |
+| 赋值/保存参数 | 复制身份引用 | **按字段复制**（`var b = a` 保留逻辑副本） |
 | 继承 | 支持 `extends` | **不支持**继承 |
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | **可省略**：`Point()` 生成零值实例 |
+| 构造器 | `constructor(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -3517,7 +3471,7 @@ var c = Config{host: "localhost"}    // OK
 
 #### 5.4.1 值语义示例
 
-`struct` 是值类型，赋值与传参都会拷贝：
+可复制 `struct` 是值类型，赋值与保存参数按字段保留逻辑副本；普通 READ 参数只读访问该值，允许保存副本，不强制某一种物理 ABI：
 
 ```xray
 struct Point {
@@ -3849,7 +3803,7 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-静态方法使用 `static name(...)`；实例方法默认 READ receiver，也可使用 `ref` 或 `move` receiver。enum 方法不写 `fn`：
+静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver。`move` receiver 仅适用于不可复制 enum，可复制 enum 不得声明；不可复制声明族的准入见 §17。enum 方法不写 `fn`：
 
 ```xray
 enum Color {
@@ -6151,23 +6105,50 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.7 `Array<T>` 方法
 
+`Array<T>` 是可增长值类型，T 必须可复制且可保存。普通赋值、保存参数、索引读和返回遵循逻辑副本语义；共享 backing 不授予修改其他副本的权限。容器存储本身不要求 T 可比较、可哈希或可字符串化，相关方法另按各自合同准入。
+
+首个拥有式数组执行子集冻结以下接口：`len(array: Array<T>) -> i64`、只读 `get(index: i64) -> T`、`ref set(index: i64, value: T) -> ()`、`ref push(value: T) -> ()`，以及数组字面量和 §3.4/§3.11 的索引表达式。`set` 方法返回 unit；索引赋值表达式返回右侧转换后的 T。len 自身不分配；读取/复制可能遇到持有计数限制；构造和写入可能因预算、分配或持有限制失败。set 和 push 都可能因 COW 分离而迁移元素存储。
+
+只读 get 与索引读取遵循 §3.0 的值 receiver 快照规则：先取得 Array 逻辑快照，再求 index；不能因 index 中的改绑而晚读当前值。ref set/push 则先绑定根 place 一次，全部实参求值完成后才对 binding 的当前值建立独占访问，执行边界检查、分离、写入和回写。实参改绑同一 root 时，操作作用于新值；set 按新长度检查。`a.push(a[0])` 合法，元素结果必须在 push 前独立持有。失败不发布部分数组或改变提交前的逻辑值；已经完成的实参副作用和改绑不回滚。
+
+普通 read 参数不能成为这些 ref 方法的可写 receiver；可复制 Array 不声明 move receiver，pop 删除元素也不消费整个 Array。下表的 ref 是声明模式，dot-call 仍写 `a.push(x)`。纯索引 GET-place 的快照消除及瞬时 retain/copy/drop 必须遵守 §3.0 的错误保持要求，不能以共享 backing 的唯一性猜测绕过访问权限。
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForPush() -> string {
+    print("arg")
+    a = ["new"]
+    return "tail"
+}
+a.push(replaceForPush())
+print(a[0], a[1])           // 依次输出 arg、new tail
+```
+
+```xray
+var a: Array<string> = ["head"]
+a.push(a[0])
+print(a[0], a[1])           // head head
+```
+
+下表保留完整方法分母；首个 XIR 子集并不自动准入其余方法。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `i64` 全局查询 |
-| `capacity` / `arr[i]` / `arr[i] = v` | 容量属性与下标读写；也可使用 `get(i)` / `set(i, v)` |
-| `push(x)` / `pop()` | 尾部增删 |
-| `shift()` / `unshift(x)` | 头部增删 |
-| `concat(...arrays)` | 拼接 |
-| `indexOf(x)` / `contains(x)` | 查找 |
-| `join(sep?)` | 拼接为字符串 |
-| `reverse()` / `sort(cmp?)` | 原地重排 |
-| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 函数式处理 |
-| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 遍历与谓词 |
-| `fill(v, start?, end?)` / `clear()` | 填充或清空 |
-| `reserve(capacity)` / `resize(length, fill)` | 容量与长度管理 |
-| `ptr()` / `mutPtr()` | 显式底层指针视图 |
-| `toString()` | 容器字符串表示 |
-| `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
+| `capacity` / `arr[i]` / `arr[i] = v` | 只读容量查询、只读索引与可写 place 赋值；get 为只读，set 为 ref |
+| `ref push(x)` / `ref pop()` | 尾部增删；pop 不是 move receiver |
+| `ref shift()` / `ref unshift(x)` | 头部增删 |
+| `concat(...arrays)` | 只读 receiver，产生拼接结果 |
+| `indexOf(x)` / `contains(x)` | 只读查询 |
+| `join(sep?)` | 只读 receiver，拼接为字符串 |
+| `ref reverse()` / `ref sort(cmp?)` | 修改 receiver 的排列 |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读 receiver；回调合同须在准入前另冻 |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读 receiver；回调合同须在准入前另冻 |
+| `ref fill(v, start?, end?)` / `ref clear()` | 填充或清空 |
+| `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
+| `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
+| `toString()` | 只读 receiver，容器字符串表示 |
+| `iterator()` / `entriesIterator()` / `entries()` | 只读 receiver；结果所有权和迭代合同须在准入前另冻 |
 
 Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
 

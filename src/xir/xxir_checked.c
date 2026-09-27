@@ -189,30 +189,37 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
         if (c->reading) generics[f] = g;
     }
 }
-static void checked_callables(CheckedCursor *c, XrXirModule *m) {
-    uint32_t count = checked_u32(c, m->callables ? m->callables->count : 0);
+static void checked_types(CheckedCursor *c, XrXirModule *m) {
+    uint32_t count = checked_u32(c, m->types ? m->types->count : 0);
     if (c->status != XR_XIR_OK || !count) return;
-    if (count > XR_XIR_TYPE_PARAMETER_BASE - XR_XIR_CALLABLE_TYPE_BASE) { c->status = XR_XIR_BUDGET; return; }
-    XrXirCallableTypes *types = checked_array(c, m->callables, 1, sizeof(*types), 12);
+    if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE) { c->status = XR_XIR_BUDGET; return; }
+    XrXirTypes *types = checked_array(c, m->types, 1, sizeof(*types), 12);
     if (!types) return;
-    m->callables = types;
-    XrXirCallableSignature *signatures = checked_array(c, types->signatures, count, sizeof(*signatures), 16);
-    if (c->reading) { types->signatures = signatures; types->count = signatures ? count : 0; }
+    m->types = types;
+    XrXirTypeNode *signatures = checked_array(c, types->nodes, count, sizeof(*signatures), 12);
+    if (c->reading) { types->nodes = signatures; types->count = signatures ? count : 0; }
     if (!signatures) return;
     for (uint32_t i = 0; i < count && c->status == XR_XIR_OK; ++i) {
-        XrXirCallableSignature s = signatures[i];
-        s.parameter_count = checked_count(c, s.parameter_count, &c->remaining.parameters);
-        XrXirCallableParameter *parameters = checked_array(c, s.parameters, s.parameter_count, sizeof(*parameters), 8);
-        s.parameters = parameters;
-        for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
-            XrXirCallableParameter parameter = parameters[p];
-            parameter.type = (XrXirType) checked_u32(c, (uint32_t) parameter.type);
-            parameter.mode = checked_u32(c, parameter.mode);
-            if (c->reading) parameters[p] = parameter;
-        }
-        s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
-        s.flags = checked_u32(c, s.flags);
+        XrXirTypeNode s = signatures[i];
+        s.kind = checked_u32(c, s.kind);
         s.parameter_span = checked_u32(c, s.parameter_span);
+        if (s.kind == XR_XIR_TYPE_CALLABLE) {
+            s.parameter_count = checked_count(c, s.parameter_count, &c->remaining.parameters);
+            XrXirCallableParameter *parameters = checked_array(c, s.parameters, s.parameter_count, sizeof(*parameters), 8);
+            s.parameters = parameters;
+            for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
+                XrXirCallableParameter parameter = parameters[p];
+                parameter.type = (XrXirType) checked_u32(c, (uint32_t) parameter.type);
+                parameter.mode = checked_u32(c, parameter.mode);
+                if (c->reading) parameters[p] = parameter;
+            }
+            s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
+            s.flags = checked_u32(c, s.flags);
+        } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL) {
+            s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
+        } else if (c->status == XR_XIR_OK) {
+            c->status = XR_XIR_BAD_TYPE;
+        }
         if (c->reading) signatures[i] = s;
     }
 }
@@ -237,7 +244,7 @@ static void checked_module(CheckedCursor *c, XrXirModule *m) {
         if (c->reading) *owned = d;
     }
     checked_generics(c, m);
-    checked_callables(c, m);
+    checked_types(c, m);
 }
 static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]) {
     XrSHA256Context sha;

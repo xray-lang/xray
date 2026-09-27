@@ -17,8 +17,11 @@ static void cell_checked_cases(void) {
         XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
         XrXirFunction functions[9]; memcpy(functions, built.functions, sizeof(functions));
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
+        XrXirTypeNode nodes[] = {{XR_XIR_TYPE_CELL,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0},
+            {XR_XIR_TYPE_CELL,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0}};
+        XrXirTypes types = {nodes,2}; built.types = &types;
         XrXirInstruction ops[] = {
-            {XR_XIR_CELL_NEW, xr_xir_cell_type(XR_XIR_STRING), {1}, {0}, 0},
+            {XR_XIR_CELL_NEW, (XrXirType)256, {1}, {0}, 0},
             {XR_XIR_CELL_READ, XR_XIR_STRING, {2}, {0}, 0},
             {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {2, 3}, {0}, 0},
             {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
@@ -35,9 +38,9 @@ static void cell_checked_cases(void) {
         if (mode == 3) ops[2].args[1] = 0;
         if (mode == 4) ops[0].args[0] = 3;
         if (mode == 5) ops[2].args[0] = 0;
-        if (mode == 6) functions[8].result = xr_xir_cell_type(XR_XIR_STRING);
-        if (mode == 7) { parameters[0] = xr_xir_cell_type(XR_XIR_I64); identities[8].exported = 1; }
-        if (mode == 8) ops[0].type = xr_xir_cell_type(XR_XIR_UNIT);
+        if (mode == 6) functions[8].result = (XrXirType)256;
+        if (mode == 7) { parameters[0] = (XrXirType)257; identities[8].exported = 1; }
+        if (mode == 8) nodes[0].element = XR_XIR_UNIT;
         XrXirStatus status = xr_xir_check(&built, NULL, &checked, NULL);
         xr_xir_artifact_free(base);
         if (mode) {
@@ -51,11 +54,11 @@ static void cell_checked_cases(void) {
         CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
         xr_xir_artifact_free(decoded); decoded = NULL;
         uint8_t record[32] = {0};
-        put32(record, 51); put32(record + 4, 0x40000003u); put32(record + 8, 1);
+        put32(record, 51); put32(record + 4, 256); put32(record + 8, 1);
         size_t found = 0; unsigned matches = 0;
         for (size_t i = 64; i + sizeof(record) <= packet.length; ++i)
             if (!memcmp(packet.bytes + i, record, sizeof(record))) { found = i; ++matches; }
-        CHECK(matches == 1); put32(packet.bytes + found + 4, 0x40000001u); digest_packet(&packet);
+        CHECK(matches == 1); put32(packet.bytes + found + 4, 257); digest_packet(&packet);
         CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_TYPE && !decoded);
         xr_xir_checked_packet_free(&packet);
     }

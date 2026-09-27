@@ -10,6 +10,7 @@
  *   Malformed templates fail before a concrete instance can hide their mistakes.
  */
 #include "xir/xxir_generic.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_vm.h"
@@ -25,7 +26,7 @@ static void rehash_generic(XrXirCheckedPacket *packet) {
     xr_sha256_final(&sha, packet->bytes + 32);
 }
 static void rejected_templates(void) {
-    for (unsigned mode = 0; mode < 10; ++mode) {
+    for (unsigned mode = 0; mode < 12; ++mode) {
         XrXirArtifact *checked = generic_fixture();
         XrXirFunction *functions = (XrXirFunction *) checked->module.functions;
         XrXirGeneric *generics = (XrXirGeneric *) checked->module.generics;
@@ -41,6 +42,8 @@ static void rejected_templates(void) {
         if (mode == 7) body[0].op = XR_XIR_CONST_INT;
         if (mode == 8) caller[0].type = XR_XIR_BOOL;
         if (mode == 9) generics[0].argument_count = 2;
+        if (mode == 10) body[0].type = (XrXirType) XR_XIR_TYPE_PARAMETER_LIMIT;
+        if (mode == 11) ((XrXirType *) generics[0].arguments)[0] = (XrXirType) 0x40000003u;
         CHECK(xr_xir_artifact_verify(checked, NULL, NULL) != XR_XIR_OK);
         XrXirArtifact *closed = NULL; XrXirCheckedPacket packet = {0};
         CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) != XR_XIR_OK && !closed);
@@ -86,7 +89,7 @@ static void specialized_result(XrXirArtifact *lowered) {
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 7}, {0}}, result = {0};
     CHECK(xr_xir_string_new(domain, "generic", 7, &arguments[1]) == XR_XIR_VALUE_OK);
     XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 8, &accounting, {NULL, NULL}};
+    XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 8, &accounting, {NULL, NULL}, {0}};
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_READY);
     CHECK(xr_xir_call_poll(call).status == XR_XIR_CALL_RETURNED);
@@ -122,7 +125,43 @@ static void recursive_closure(void) {
         module->functions[2].instructions[0].immediate == 2);
     xr_xir_artifact_free(closed);
 }
+static void array_definition_constraints(void) {
+    XrXirArtifact *fixture = generic_fixture(), *checked = NULL, *closed = NULL;
+    XrXirModule built = *xr_xir_artifact_module(fixture); built.stage = XR_XIR_BUILT;
+    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0},
+        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_I64,0,0},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0}};
+    XrXirTypes types = {nodes,4}; built.types = &types;
+    XrXirFunction functions[2]; memcpy(functions,built.functions,sizeof(functions)); built.functions = functions;
+    XrXirGeneric generics[2]; memcpy(generics,built.generics,sizeof(generics)); built.generics = generics;
+    XrXirInstruction ops[4]; memcpy(ops,functions[0].instructions,sizeof(ops)); functions[0].instructions = ops;
+    XrXirType parameters[] = {(XrXirType)256,(XrXirType)257}, arguments[] = {(XrXirType)256,(XrXirType)257,(XrXirType)257};
+    functions[0].parameters = parameters; functions[0].result = (XrXirType)257;
+    generics[0].arguments = arguments;
+    for (unsigned i = 0; i < 3; ++i) ops[i].type = arguments[i];
+    CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_specialize(checked,NULL,&closed,NULL) == XR_XIR_OK);
+    const XrXirModule *specialized = xr_xir_artifact_module(closed);
+    CHECK(xr_xir_array_element(specialized->types,specialized->functions[1].parameters[0]) == XR_XIR_I64);
+    CHECK(xr_xir_array_element(specialized->types,specialized->functions[2].parameters[0]) == XR_XIR_STRING);
+    xr_xir_artifact_free(closed); xr_xir_artifact_free(checked);
+    parameters[1] = arguments[1] = arguments[2] = functions[0].result = ops[1].type = ops[2].type = (XrXirType)259;
+    CHECK(xr_xir_verify(&built,NULL,NULL) == XR_XIR_BAD_TYPE);
+    uint32_t constraint = 0;
+    generics[0].parameter_count = 1; generics[0].constraints = &constraint;
+    nodes[0].element = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; nodes[0].parameter_span = 1;
+    parameters[1] = functions[0].result = (XrXirType)256;
+    for (unsigned i = 0; i < 3; ++i) arguments[i] = ops[i].type = (XrXirType)256;
+    CHECK(xr_xir_verify(&built,NULL,NULL) == XR_XIR_BAD_TYPE);
+    constraint = XR_XIR_CONSTRAINT_SENDABLE;
+    CHECK(xr_xir_verify(&built,NULL,NULL) == XR_XIR_OK);
+    XrXirBudget budget = xr_xir_default_budget(); budget.work = 2;
+    CHECK(xr_xir_type_satisfies(&built,0,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,&budget) == XR_XIR_BUDGET);
+    xr_xir_artifact_free(fixture);
+}
 int main(void) {
+    array_definition_constraints();
     rejected_templates(); forwarding(); recursive_closure();
     XrXirArtifact *checked = generic_fixture(), *decoded = NULL, *closed = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

@@ -12,6 +12,8 @@
  */
 
 #include "xir/xxir.h"
+#include "xir/xxir_types.h"
+#include "xir/xxir_generic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -299,7 +301,83 @@ static void numeric_admission(void) {
     }
 }
 
+static void constructed_metadata(void) {
+    XrXirCallableParameter input = {(XrXirType)256,0};
+    XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0},
+        {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,0,0},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536}
+    };
+    XrXirTypes types = {nodes,5};
+    XrXirBudget budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_OK);
+    CHECK(xr_xir_type_is_array(&types,(XrXirType)256));
+    CHECK(!xr_xir_type_is_callable(&types,(XrXirType)256));
+    CHECK(xr_xir_type_is_cell(&types,(XrXirType)257));
+    CHECK(xr_xir_type_is_callable(&types,(XrXirType)258));
+    CHECK(!xr_xir_type_is_owned(NULL,(XrXirType)256));
+    CHECK(!xr_xir_type_node(&types,(XrXirType)261));
+    CHECK(!xr_xir_type_node(&types,(XrXirType)XR_XIR_CONSTRUCTED_TYPE_LIMIT));
+    CHECK(xr_xir_type_sendable(&types,(XrXirType)256,NULL,0,&budget.work) == XR_XIR_OK);
+    CHECK(xr_xir_type_sendable(&types,(XrXirType)259,NULL,0,&budget.work) == XR_XIR_BAD_TYPE);
+    budget.work = 0;
+    CHECK(xr_xir_type_sendable(&types,(XrXirType)256,NULL,0,&budget.work) == XR_XIR_BUDGET);
+    XrXirLayout layout;
+    CHECK(xr_xir_layout(&types,(XrXirType)256,&fixture_target,XR_XIR_LAYOUT_STORAGE,&layout) == XR_XIR_OK);
+    CHECK(layout.size == 8 && layout.alignment == 8);
+    CHECK(xr_xir_layout(NULL,(XrXirType)256,&fixture_target,XR_XIR_LAYOUT_STORAGE,&layout) == XR_XIR_BAD_LAYOUT);
+    CHECK(!layout.size && !layout.alignment);
+    CHECK(xr_xir_layout(&types,(XrXirType)260,&fixture_target,XR_XIR_LAYOUT_STORAGE,&layout) == XR_XIR_BAD_LAYOUT);
+    for (unsigned attack = 0; attack < 18; ++attack) {
+        XrXirTypeNode saved[5]; memcpy(saved,nodes,sizeof(saved));
+        if (attack == 0) nodes[0].kind = 0;
+        if (attack == 1) nodes[0].kind = 4;
+        if (attack == 2) nodes[0].element = (XrXirType)256;
+        if (attack == 3) nodes[0].element = (XrXirType)258;
+        if (attack == 4) nodes[0].element = (XrXirType)14;
+        if (attack == 5) nodes[0].element = (XrXirType)255;
+        if (attack == 6) nodes[0].element = (XrXirType)XR_XIR_TYPE_PARAMETER_LIMIT;
+        if (attack == 7) nodes[0].element = (XrXirType)0x40000003u;
+        if (attack == 8) nodes[0].element = XR_XIR_UNIT;
+        if (attack == 9) nodes[0].flags = 1;
+        if (attack == 10) nodes[0].parameters = &input;
+        if (attack == 11) nodes[0].result = XR_XIR_I64;
+        if (attack == 12) nodes[0].parameter_span = 1;
+        if (attack == 13) nodes[4].parameter_span = 65535;
+        if (attack == 14) nodes[3] = nodes[0];
+        if (attack == 15) nodes[3].element = (XrXirType)257;
+        if (attack == 16) { nodes[3].kind = XR_XIR_TYPE_CELL; nodes[3].element = (XrXirType)257; }
+        if (attack == 17) input.type = (XrXirType)257;
+        budget = xr_xir_default_budget();
+        CHECK(xr_xir_types_verify(&types,&budget) != XR_XIR_OK);
+        memcpy(nodes,saved,sizeof(nodes)); input.type = (XrXirType)256;
+    }
+    XrXirGeneric generic = {NULL,65536,NULL,0};
+    XrXirModule context = {XR_XIR_BUILT,NULL,1,NULL,&generic,&types};
+    CHECK(xr_xir_type_in_context(&context,0,(XrXirType)260));
+    CHECK(xr_xir_type_in_context(&context,0,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1)));
+    CHECK(!xr_xir_type_in_context(&context,0,(XrXirType)XR_XIR_TYPE_PARAMETER_LIMIT));
+    generic.parameter_count = 65535;
+    CHECK(!xr_xir_type_in_context(&context,0,(XrXirType)260));
+    budget = xr_xir_default_budget();
+    CHECK(xr_xir_type_satisfies(&context,0,(XrXirType)257,0,&budget) == XR_XIR_BAD_TYPE);
+    budget = xr_xir_default_budget(); budget.metadata_bytes = 1;
+    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_BUDGET);
+    budget = xr_xir_default_budget(); budget.work = types.count;
+    CHECK(xr_xir_types_verify(&types,&budget) == XR_XIR_BUDGET);
+    XrXirTypes *copy = NULL;
+    CHECK(xr_xir_types_clone(&types,&copy) == XR_XIR_OK && copy && copy->nodes != nodes);
+    CHECK(copy->nodes[2].parameters != &input);
+    memset(nodes,0xCC,sizeof(nodes)); memset(&input,0xCC,sizeof(input));
+    budget = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(copy,&budget) == XR_XIR_OK);
+    xr_xir_types_free(copy);
+}
+
 int main(void) {
+    constructed_metadata();
     numeric_admission();
     for (uint32_t op = 1; op < XR_XIR_OP_COUNT; ++op)
         CHECK(xr_xir_op_name((XrXirOp) op) != NULL);

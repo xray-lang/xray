@@ -13,7 +13,7 @@
 
 #include "xxir_internal.h"
 #include "xxir_generic.h"
-#include "xxir_callable.h"
+#include "xxir_types.h"
 #include "../base/xmalloc.h"
 
 XrXirBudget xr_xir_default_budget(void) {
@@ -65,7 +65,7 @@ void xr_xir_artifact_free(XrXirArtifact *artifact) {
     xr_free(artifact->layouts);
     xr_xir_generics_free((XrXirGeneric *) artifact->module.generics, artifact->module.function_count);
     xr_xir_declarations_free((XrXirDeclarations *) artifact->module.declarations);
-    xr_xir_callable_types_free((XrXirCallableTypes *) artifact->module.callables);
+    xr_xir_types_free((XrXirTypes *) artifact->module.types);
     xr_free(functions);
     xr_free(artifact);
 }
@@ -94,11 +94,11 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
         xr_xir_artifact_free(copy); return NULL;
     }
     copy->module.generics = generics;
-    XrXirCallableTypes *callables = NULL;
-    if (xr_xir_callable_types_clone(source->callables, &callables) != XR_XIR_OK) {
+    XrXirTypes *types = NULL;
+    if (xr_xir_types_clone(source->types, &types) != XR_XIR_OK) {
         xr_xir_artifact_free(copy); return NULL;
     }
-    copy->module.callables = callables;
+    copy->module.types = types;
     XrXirDeclarations *declarations = NULL;
     if (xr_xir_declarations_clone(source->declarations, source->function_count, &declarations) != XR_XIR_OK) {
         xr_xir_artifact_free(copy);
@@ -159,7 +159,7 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
     if (source == XR_XIR_CHECKED) {
         if (input->generics) return transition_error(XR_XIR_BAD_STAGE, diagnostic);
         XrXirLayout layout;
-        if (xr_xir_layout(XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
+        if (xr_xir_layout(NULL, XR_XIR_I64, target, XR_XIR_LAYOUT_FRAME, &layout) != XR_XIR_OK)
             return transition_error(XR_XIR_BAD_LAYOUT, diagnostic);
     }
     XrXirStatus status = xr_xir_verify(input, budget, diagnostic);
@@ -177,12 +177,12 @@ static XrXirStatus transition(const XrXirModule *input, XrXirStage source,
             XrXirInstruction *instructions = (XrXirInstruction *) function->instructions;
             for (uint32_t i = 0; i < function->instruction_count; ++i) {
                 if (instructions[i].op == XR_XIR_COPY)
-                    instructions[i].op = xr_xir_type_is_owned(instructions[i].type) ?
+                    instructions[i].op = xr_xir_type_is_owned(copy->module.types, instructions[i].type) ?
                         XR_XIR_OWNED_RETAIN : XR_XIR_SCALAR_COPY;
                 else if (instructions[i].op >= XR_XIR_LOCAL_NEW && instructions[i].op <= XR_XIR_LOCAL_WRITE) {
                     XrXirType type = instructions[i].op == XR_XIR_LOCAL_WRITE ?
                         instructions[instructions[i].args[0] - function->parameter_count].type : instructions[i].type;
-                    instructions[i].op = (XrXirOp) ((xr_xir_type_is_owned(type) ? XR_XIR_OWNED_LOCAL_NEW :
+                    instructions[i].op = (XrXirOp) ((xr_xir_type_is_owned(copy->module.types, type) ? XR_XIR_OWNED_LOCAL_NEW :
                         XR_XIR_SCALAR_LOCAL_NEW) + instructions[i].op - XR_XIR_LOCAL_NEW);
                 }
             }

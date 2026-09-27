@@ -35,13 +35,13 @@ int main(void) {
     execution_cases(run, artifact);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirLayout layout;
-    CHECK(xr_xir_layout(XR_XIR_BOOL, &target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);
+    CHECK(xr_xir_layout(NULL, XR_XIR_BOOL, &target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);
     CHECK(layout.size == 1 && layout.alignment == 1);
-    CHECK(xr_xir_layout(XR_XIR_BOOL, &target, XR_XIR_LAYOUT_FRAME, &layout) == XR_XIR_OK);
+    CHECK(xr_xir_layout(NULL, XR_XIR_BOOL, &target, XR_XIR_LAYOUT_FRAME, &layout) == XR_XIR_OK);
     CHECK(layout.size == 8 && layout.alignment == 8);
-    CHECK(xr_xir_layout(XR_XIR_I64, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_OK);
+    CHECK(xr_xir_layout(NULL, XR_XIR_I64, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_OK);
     CHECK(layout.size == 16 && layout.alignment == 8);
-    CHECK(xr_xir_layout(XR_XIR_UNIT, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_layout(NULL, XR_XIR_UNIT, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_BAD_LAYOUT);
     XrXirFunctionLayout *physical = (XrXirFunctionLayout *) xr_xir_artifact_layout(artifact, 0);
     CHECK(physical->frame_bytes == 48 && physical->slot_count == 9);
     uint32_t *offsets = (uint32_t *) physical->offsets;

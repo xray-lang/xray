@@ -1,10 +1,13 @@
 # Definition-checked ordinary generic templates
 
 Ordinary type parameters range over copyable, storable values. Unit, views and
-noncopyable resources are not ordinary arguments. The currently implemented
-concrete domain is bool, i64, string and Atomic<i64>; all four are Sendable.
-An unconstrained parameter does not acquire Sendable merely because the current
-concrete domain happens to satisfy it. Constraint entailment uses declarations.
+noncopyable resources and internal CELL types are not ordinary arguments.
+Admitted primitives, including the fixed-width numeric family, string and
+Atomic<i64>, are Sendable. Ordinary CALLABLE types are copyable/storable but
+have no Sendable proof. ARRAY descriptor admission derives storage and Sendable
+obligations from its element; it does not implement source Array syntax or
+runtime Array operations. An unconstrained parameter gains no additional
+Sendable authority. Constraint entailment uses declarations and spends work budget.
 
 The admitted source declarations are named `fn f<T, U:Sendable>(x:T)->T` and
 explicit ordinary calls `f<string, i64>(x)`. An own-parameter `where T:Sendable`
@@ -18,7 +21,9 @@ including unused templates, is checked once against these facts. Generic
 forwarding proves each callee marker from the caller parameter's own constraints.
 Concrete instances must not repair invalid definitions through AST rechecking.
 
-Built/Checked use function-local type parameter IDs 65536+ordinal. A module may
+Built/Checked use function-local type parameter IDs 65536+ordinal, bounded above
+by 131071 and by that function's declared parameter count. Equal ordinals in
+different declarations do not identify the same type. A module may
 own one generic metadata row per function: parameter constraint bits and a type
 argument table. Only bit 1 (Sendable) is admitted. CALL targets[0]/targets[1]
 describe a first/count range in that caller's type argument table; nongeneric
@@ -29,7 +34,7 @@ the caller's type context before comparison and dominance checking. Initializers
 and the root entry cannot have type parameters.
 
 All metadata is owned, copied across stages and bounded by aggregate parameter,
-metadata and work budgets. Checked packet schema 4 / semantic contract 13 carries a generic-presence
+metadata and work budgets. Checked packet schema 5 / semantic contract 14 carries a generic-presence
 u32 after declarations, followed when present by each row's constraint count/
 u32 bits and argument count/u32 type IDs. Older schema or semantic revisions are rejected, with no reader
 or alias. Decode performs the same definition and forwarding checks.
@@ -53,7 +58,10 @@ verification-test: test_xir_generics
 verification-test: test_xir_source_generics
 verification-test: test_xir_checked_allocations
 
-Callable components may use enclosing parameter ordinals under
-`xir-callable-types.md`. Calls compare signatures structurally under their
-explicit substitution; specialization interns closed descriptors and remaps
-all uses before rechecking. Signature identity alone supplies no Sendable proof.
+Constructed components may use enclosing parameter ordinals under
+`xir-constructed-types.md`. Callable, ARRAY and internal CELL nodes share one
+ordered pool. Calls compare contracts structurally under explicit substitution;
+specialization interns closed nodes and remaps all uses, including capture cells
+and slots, before rechecking. Each instance's node cache remains bound to its
+ordered arguments and declaration identity. Signature identity alone supplies
+no Sendable proof.

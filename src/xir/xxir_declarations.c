@@ -11,7 +11,7 @@
  *   A single declaration validator defines closure, permissions and init order.
  */
 
-#include "xxir.h"
+#include "xxir_types.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_utf8_core.h"
 
@@ -102,7 +102,7 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, uint32_t functions,
+XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTypes *types, uint32_t functions,
                                       uint64_t *bytes, uint64_t *work) {
     if (!d) return XR_XIR_OK;
     uint64_t fixed = sizeof(*d) + (uint64_t) d->module_count * sizeof(*d->modules) +
@@ -123,8 +123,13 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, uint32_t func
         const XrXirSlot *slot = &d->slots[i];
         if (slot->module >= d->module_count || slot->mutable > 1 ||
             (slot->mutable && slot->module != d->root_module)) return XR_XIR_BAD_STRUCTURE;
-        if (xr_xir_type_is_cell(slot->type) || (slot->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(slot->type)))
+        if (xr_xir_type_is_cell(types, slot->type) || (slot->type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) slot->type) && !xr_xir_type_is_owned(types, slot->type)))
             return XR_XIR_BAD_TYPE;
+        if (xr_xir_type_span(types, slot->type)) return XR_XIR_BAD_TYPE;
+        if (slot->module != d->root_module) {
+            XrXirStatus sendable = xr_xir_type_sendable(types, slot->type, NULL, 0, work);
+            if (sendable != XR_XIR_OK) return sendable;
+        }
         if (slot->mutable && slot->type == XR_XIR_ATOMIC_I64) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t i = 0; i < d->literal_count; ++i) {

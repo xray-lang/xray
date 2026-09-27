@@ -41,7 +41,7 @@ conversion uses the rules above; out-of-range float-to-integer raises a distinct
 NUMERIC_RANGE execution fault with canonical unit result and normal cleanup.
 NEG_FLOAT and six float comparisons accept equal-width concrete float operands;
 NaN makes EQ false, NE true, and every ordered relation false. No host FPU state
-changes occur. Checked schema4/semantic13, Value8/Call12/Program7 reject older
+changes occur. Checked schema5/semantic14, Value9/Call13/Program8 reject older
 versions, including otherwise integer-only artifacts.
 
 Source admits f32/f64 annotations, explicit numeric casts, float negation and
