@@ -415,9 +415,9 @@ def main() -> int:
         f"clock provider did not produce positive epoch milliseconds: {clock.stdout!r}",
     )
 
-    sleep_started = time.monotonic()
+    sleep_started = time.perf_counter()
     slept = invoke(args.binary, "run", str(args.fixtures / "time_sleep.xr"))
-    sleep_elapsed = time.monotonic() - sleep_started
+    sleep_elapsed = time.perf_counter() - sleep_started
     require(slept.returncode == 0, f"timer suspension route failed: {slept.stderr!r}")
     require(
         slept.stdout == "",
@@ -554,15 +554,17 @@ def main() -> int:
             built = invoke(args.binary, "build", "--native", str(args.fixtures / name),
                            "-o", str(executable))
             require(built.returncode == 0, f"native provider build failed: {built.stdout} {built.stderr}")
-            started = time.monotonic()
+            started = time.perf_counter()
             executed = invoke(executable)
             require(executed.returncode == 0, f"native provider execution failed: {executed.stderr}")
             if name == "time_now.xr":
                 require(executed.stdout.strip().isdecimal() and int(executed.stdout.strip()) > 0,
                         f"native clock did not produce positive epoch milliseconds: {executed.stdout!r}")
             else:
-                require(executed.stdout == "" and time.monotonic() - started >= 0.020,
-                        "native timer did not wait for readiness")
+                elapsed = time.perf_counter() - started
+                require(executed.stdout == "" and elapsed >= 0.020,
+                        f"native timer readiness: elapsed={elapsed:.9f}s "
+                        f"stdout={executed.stdout!r} stderr={executed.stderr!r}")
         sentinel = executable.read_bytes()
         rejected = invoke(args.binary, "build", "--native", str(mono_depth), "-o", str(executable))
         require(rejected.returncode != 0 and "E0389" in rejected.stderr,

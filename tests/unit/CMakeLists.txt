@@ -1743,6 +1743,14 @@ target_include_directories(test_xr_program_aot PRIVATE
 target_link_libraries(test_xr_program_aot PRIVATE
     xr_program_test_core xray_program_vm_runtime xray_program_aot_compiler)
 add_test(NAME test_xr_program_aot COMMAND $<TARGET_FILE:test_xr_program_aot>)
+add_test(NAME native_timer_readiness_injected
+    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/native_timer_readiness.py
+        $<TARGET_FILE:xray>
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/canonical_run/time_sleep.xr
+        $<TARGET_FILE:test_xr_program_aot>)
+set_tests_properties(native_timer_readiness_injected PROPERTIES
+    LABELS "aot;canonical-program;generated-c;native;coroutine;ownership"
+    TIMEOUT 60)
 add_dependencies(test_xr_program_aot xray_program_aot_compiler)
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
         OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
@@ -3661,9 +3669,6 @@ if(ENABLE_ASAN)
     set_tests_properties(test_dostring_program_image PROPERTIES COST 230)
 endif()
 
-xray_prepend_windows_asan_runtime_to_directory_tests()
-xray_attach_contract_assertions()
-
 add_test(NAME test_native_leaf_representation
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_leaf_representation.py
         --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
@@ -3677,3 +3682,7 @@ set_tests_properties(test_native_raw_slice PROPERTIES
     LABELS "aot;generated-c;ownership" TIMEOUT 120)
 add_test(NAME test_cgen_raw_slice COMMAND $<TARGET_FILE:test_xi_cgen> raw-slice)
 set_tests_properties(test_cgen_raw_slice PROPERTIES LABELS "aot;ownership" TIMEOUT 120)
+
+# Include every test, even when new declarations are appended later.
+cmake_language(DEFER CALL xray_prepend_windows_asan_runtime_to_directory_tests)
+cmake_language(DEFER CALL xray_attach_contract_assertions)

@@ -111,6 +111,18 @@ is inferred from hosted execution. Product readiness drivers may resume only a
 well-formed request, use monotonic elapsed time for the timer, and fail closed
 on every unknown kind, arity, or non-normalized payload.
 
+Standalone native timer drivers treat host sleep as a scheduling hint: Windows
+readiness requires a successful monotonic counter comparison covering the full
+requested duration, including after early wakeups. Counter failure, nonpositive
+frequency, negative counters, or a counter regression reject readiness. Zero
+duration is immediately ready; out-of-range durations fail before host calls.
+Failure cancels the suspended initializer or entry through its verified cancel
+successor before publishing a trap. Initializer failure remains sticky and uses
+the ordinary module cleanup path. No global clock-resolution setting is changed.
+Deterministic host-clock injection into real generated C must cover early wakeup,
+fractional tick rounding, maximum duration, invalid requests and clock failure;
+the real native timer route independently retains its elapsed-time assertion.
+
 Callable dispatch is program-owned rather than provider-owned. An indirect call performs a
 non-consuming `READ` of its affine callable operand, so an owned pack and a borrowed non-owner
 function parameter are both valid; target identity and capture layout remain private to each
@@ -331,6 +343,8 @@ cleanup execute against the canonical production runtime.
 
 verification-test: test_xr_execution
 verification-test: test_xr_execution_allocations
+verification-test: canonical_source_run_cli
+verification-test: native_timer_readiness_injected
 
 Provider call admission recursively matches declared logical parameter/result
 types to Program types, including exact resource identities inside tuple and

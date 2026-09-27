@@ -51,4 +51,4 @@ anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d3a980de75c5c131f17bc95bce
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: tests/unit/vm/test_typed_opaque_boundary.c 95f901461ae9c8103700db5aec2b72797811a01a93cf8d6d5c4c4b312d5fb799
-anchor-sha256: tests/unit/CMakeLists.txt 89ca28f5aafa12d46c07fe8ad6e5b82dce3c15858aea3666790e9f5a48756798
+anchor-sha256: tests/unit/CMakeLists.txt cb5ef6c07b6bd70d573e0940ed9b20aa6c386c739aac25b42c881df5d93ed4a0

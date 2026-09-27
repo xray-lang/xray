@@ -1204,6 +1204,20 @@ static XrValidatedProgram *build_callable_program(void) {
     return program;
 }
 
+static XrValidatedProgram *build_timer_coroutine_program(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_timer_suspension_fixture_write_mutated(
+                XR_PROGRAM_TIMER_SUSPENSION_FIXTURE_VALID, &artifact,
+                diagnostic, sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                               &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
 static XrValidatedProgram *build_coroutine_program(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
@@ -4234,6 +4248,8 @@ int main(int argc, char **argv) {
         program = build_existential_program();
     else if (argc == 3 && strcmp(argv[2], "callable") == 0)
         program = build_callable_program();
+    else if (argc == 3 && strcmp(argv[2], "coroutine-timer") == 0)
+        program = build_timer_coroutine_program();
     else if (argc == 3 && (strcmp(argv[2], "coroutine-yield") == 0 || coroutine_object_mode))
         program = build_coroutine_program();
     else if (pointer_width_mode)

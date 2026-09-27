@@ -592,6 +592,7 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, b
 #include "xr_backend_ir_provider.inc.c"
 #include "xr_backend_ir_emit_module.inc.c"
 #include "xr_backend_ir_emit_format.inc.c"
+#include "xr_backend_ir_emit_timer.inc.c"
 
 static bool has_timer_suspension(const XrBackendIR *ir) {
     for (uint32_t function = 0u; ir && function < ir->program->function_count; ++function)
@@ -969,19 +970,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
                              "    return result;\n"
                              "}\n\n"))
         return false;
-    if (standalone_main && has_timer_suspension(ir) &&
-        !append_text(buffer, "static void xr_aot_host_wait_timer(int64_t milliseconds) {\n"
-                             "    if (milliseconds <= 0) return;\n"
-                             "#if defined(_WIN32)\n"
-                             "    Sleep((DWORD)milliseconds);\n"
-                             "#else\n"
-                             "    struct timespec delay;\n"
-                             "    delay.tv_sec = (time_t)(milliseconds / INT64_C(1000));\n"
-                             "    delay.tv_nsec = (long)((milliseconds % INT64_C(1000)) * "
-                             "INT64_C(1000000));\n"
-                             "    while (nanosleep(&delay, &delay) != 0 && errno == EINTR) {}\n"
-                             "#endif\n"
-                             "}\n\n"))
+    if (host_timer && !emit_host_timer(buffer))
         return false;
     if (wrapping &&
         !append_text(buffer, "static int64_t xr_aot_i64_from_bits(uint64_t bits) {\n"
@@ -3893,8 +3882,8 @@ static bool emit_module_initializers(CBuffer *buffer, const XrBackendIR *ir, boo
                 !append_text(
                     buffer,
                     "            if (result.suspension_kind == 2 && "
-                    "result.suspension_operand_count == 1) {\n"
-                    "                xr_aot_host_wait_timer(result.suspension_timer_after_ms);\n"
+                    "result.suspension_operand_count == 1 &&\n"
+                    "                xr_aot_host_wait_timer(result.suspension_timer_after_ms)) {\n"
                     "                continue;\n"
                     "            }\n"))
                 return false;
@@ -3991,11 +3980,16 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
                 !append_text(
                     buffer,
                     "        if (result.suspension_kind == UINT32_C(2) && "
-                    "result.suspension_operand_count == UINT32_C(1)) {\n"
-                    "            xr_aot_host_wait_timer(result.suspension_timer_after_ms);\n"
+                    "result.suspension_operand_count == UINT32_C(1) &&\n"
+                    "            xr_aot_host_wait_timer(result.suspension_timer_after_ms)) {\n"
                     "            continue;\n        }\n"))
                 return false;
-            if (!append_text(buffer, "        result = xr_aot_make(UINT32_C(4), 0, 0);\n"
+            if (!append_format(buffer, "        result = xr_aot_fn_%u_step(xr_ctx, &frame, UINT8_C(1)",
+                               ir->program->entry_function) ||
+                !emit_boundary_outputs(buffer, ir, entry, false) ||
+                !append_text(buffer, ");\n") ||
+                !emit_boundary_output_cleanup(buffer, ir, entry, false) ||
+                !append_text(buffer, "        result = xr_aot_make(UINT32_C(1), 0, UINT32_C(4));\n"
                                      "        break;\n    }\n"))
                 return false;
         } else if (!append_format(buffer, "    result = xr_aot_fn_%u(xr_ctx",
