@@ -19,7 +19,7 @@ XR_DATA const XrXirProgramSpec fixture_source_program;
 XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause;
 int main(void) {
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&fixture_source_program, 8388608, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&fixture_source_program, 16777216, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, fixture_source_program.declarations->entry_function,
         (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause}, results);

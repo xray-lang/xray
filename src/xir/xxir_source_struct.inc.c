@@ -57,7 +57,7 @@ static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTyp
 }
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
-    if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->method_count || decl->super_name || decl->interface_count ||
+    if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->super_name || decl->interface_count ||
         decl->is_packed || decl->explicit_align || decl->attr_count || decl->field_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct declaration contract is not admitted");
     SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], decl->name, node);

@@ -186,7 +186,15 @@ int main(void) {
         "struct S<T>{private value:i64=7}\nconst s=S<string>{}\n",
         "struct S<T>{value:T}\nconst s=S<i64>()\n",
         "struct S<T>{value:T}\nfn make<T>()->S<T>{return S<T>()}\n",
-        "struct S<T>{count:i64}\nconst s=S()\n"
+        "struct S<T>{count:i64}\nconst s=S()\n",
+        "struct S{x:i64;bad(){this.x=1}}\n",
+        "struct S<T>{x:T;bad()->T{return 0}}\n",
+        "struct S{x:i64;get()->i64{return missing}}\n",
+        "struct S{x:i64;x()->i64{return 1}}\n",
+        "struct S{get(x:i64)->i64{return x}}\nconst s=S();s.get(true)\n",
+        "struct S{get()->i64{return 1}}\nconst s=S();s.get<i64>()\n",
+        "struct S{private get()->i64{return 1}}\n",
+        "struct S{get()->i64{return 1}}\nconst s=S();const f=s.get\n"
     };
     char directory[XR_TEST_PATH_MAX] = "xir-source-generics-XXXXXX";
     CHECK(xr_test_mkdtemp(directory));

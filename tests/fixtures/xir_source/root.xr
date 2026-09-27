@@ -448,3 +448,12 @@ fn makeGenericEmpty<T>()->alpha.GenericEmpty<T>{return alpha.GenericEmpty<T>()}
 const genericEmpty=makeGenericEmpty<string>()
 var genericNested:alpha.GenericNested<i64>
 print(genericEmpty.identity("constructed"),genericEmpty.count,genericNested.inner.identity(89),genericNested.inner.count)
+
+var readBox=alpha.ReadBox<string>{value:"method"}
+const readSnapshot=readBox.snapshot()
+readBox.value="changed"
+print(readBox.get(),readSnapshot(),alpha.MethodSecret().get())
+const methodOrder=Atomic(0)
+fn methodReceiver()->alpha.ReadBox<i64>{methodOrder.fetchAdd(1);return alpha.ReadBox<i64>{value:methodOrder.load()}}
+fn methodArgument()->i64{return methodOrder.fetchAdd(10)}
+print(methodReceiver().take(methodArgument()),methodOrder.load())

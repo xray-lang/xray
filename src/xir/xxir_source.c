@@ -70,7 +70,7 @@ typedef struct SourceContext {
     uint32_t nominal_generic_owner;
     uint32_t **nominal_members;
     uint32_t **nominal_defaults;
-    SourceName **nominal_sources;
+    SourceName **nominal_sources, **nominal_methods;
     bool *nominal_defaultable;
     uint32_t *nominal_constructors;
     uint32_t type_capacity;
@@ -605,6 +605,7 @@ static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
 #include "xxir_source_array.inc.c"
 #include "xxir_source_struct.inc.c"
 #include "xxir_source_defaults.inc.c"
+#include "xxir_source_methods.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -646,6 +647,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
             if (xr_xir_type_is_nominal(&ctx->types, receiver.type)) {
+                SourceName *member_method = source_method_find(ctx, receiver.type, member->name);
+                if (member_method) return source_method_call(ctx, node, receiver, member_method, value);
                 if (!source_struct_get_value(ctx, callee, receiver, &indirect) ||
                     !source_query_expression(ctx, callee, indirect.type)) return false;
                 indirect_ready = true;
@@ -1010,8 +1013,8 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
         if (!base || base->kind != SOURCE_MODULE) return source_struct_get(ctx, node, value);
         return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), value);
     }
-    case AST_VARIABLE: {
-        SourceName *symbol = visible_name(ctx, node->as.variable.name);
+    case AST_THIS_EXPR: case AST_VARIABLE: {
+        SourceName *symbol = visible_name(ctx, node->type == AST_THIS_EXPR ? "this" : node->as.variable.name);
         if (symbol && (symbol->kind == SOURCE_FUNCTION || symbol->kind == SOURCE_IMPORT))
             return source_function_value(ctx, node, symbol, symbol, value);
         if (!symbol || (symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_LOCAL) || !symbol->type)
@@ -1386,6 +1389,9 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_STRUCT_DECL) ++nominals;
             if (node->type == AST_STRUCT_DECL) {
                 ClassDeclNode *decl = &node->as.struct_decl;
+                if (functions > ctx->budget.functions || decl->method_count < 0 || (uint32_t)decl->method_count > ctx->budget.functions - functions)
+                    return source_fail(ctx, node, XR_XIR_BUDGET, "method function budget exhausted");
+                functions += (uint32_t)decl->method_count;
                 for (int f = 0; f < decl->field_count; ++f) {
                     if (!source_work(ctx, decl->fields[f])) return false;
                     if (decl->fields[f]->type == AST_FIELD_DECL && decl->fields[f]->as.field_decl.initializer) {
@@ -1417,6 +1423,7 @@ static bool collect_declarations(SourceContext *ctx) {
     ctx->nominal_members = source_alloc(ctx, nominals, sizeof(*ctx->nominal_members));
     ctx->nominal_defaults = source_alloc(ctx, nominals, sizeof(*ctx->nominal_defaults));
     ctx->nominal_sources = source_alloc(ctx, nominals, sizeof(*ctx->nominal_sources));
+    ctx->nominal_methods = source_alloc(ctx, nominals, sizeof(*ctx->nominal_methods));
     ctx->nominal_defaultable = source_alloc(ctx, nominals, sizeof(*ctx->nominal_defaultable));
     ctx->nominal_constructors = source_alloc(ctx, nominals, sizeof(*ctx->nominal_constructors));
     if (nominals) ctx->types.nominals = &ctx->nominals;
@@ -1457,7 +1464,7 @@ static bool collect_declarations(SourceContext *ctx) {
             }
         }
     }
-    if (!source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || function != ctx->first_closure)
+    if (!source_struct_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || function != ctx->first_closure)
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "field initializer function inventory mismatch");
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
@@ -1516,6 +1523,7 @@ static bool capture_scope(SourceCaptureScan *scan, AstNode *node) {
 }
 static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
     switch (node->type) {
+    case AST_THIS_EXPR: return capture_name(scan, "this", node);
     case AST_VARIABLE: return capture_name(scan, node->as.variable.name, node);
     case AST_INC: return capture_name(scan, node->as.inc.name, node);
     case AST_DEC: return capture_name(scan, node->as.dec.name, node);
@@ -1682,6 +1690,10 @@ static bool build_bodies(SourceContext *ctx) {
                 !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0}, NULL)) return false;
             ctx->returned = true;
             if (!finish_body(ctx)) return false;
+            continue;
+        }
+        if (ctx->bodies[f].node->type == AST_METHOD_DECL) {
+            if (!source_method_body(ctx) || !finish_body(ctx)) return false;
             continue;
         }
         FunctionDeclNode *decl = &ctx->bodies[f].node->as.function_decl;

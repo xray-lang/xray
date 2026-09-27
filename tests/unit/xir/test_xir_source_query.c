@@ -419,6 +419,20 @@ static void source_struct_facts(XrXirSourceRequest *request) {
     CHECK(pair && pair->kind == XR_XIR_SOURCE_TYPE && pair->type.known);
     CHECK(declaration(view, "value", pair->id) && declaration(view, "label", pair->id));
     xr_xir_source_result_free(&result);
+    write_source(request->entry_path,
+        "struct S<T>{\n value:T\n get(\n input:T\n )->T{return this.value}\n}\nconst s=S<i64>{value:7};const n=s.get(7)\n");
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_OK && result.checked && result.snapshot);
+    view = xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *method_owner = declaration(view, "S", 0);
+    CHECK(method_owner);
+    const XrXirSourceDeclaration *method = declaration(view, "get", method_owner->id);
+    CHECK(method && method->kind == XR_XIR_SOURCE_FUNCTION && method->parameter_count == 2);
+    CHECK(method->type.known && method->type.generic_owner == method_owner->id);
+    CHECK(method->parameters[0].known && method->parameters[0].generic_owner == method_owner->id);
+    const XrXirSourceDeclaration *input_parameter = declaration(view, "input", method->id);
+    CHECK(input_parameter && input_parameter->range.line == 4 && input_parameter->range.column == 2);
+    CHECK(input_parameter->range.end_line == 4 && input_parameter->range.end_column == 7);
+    xr_xir_source_result_free(&result);
     static const char *const invalid[] = {
         "struct S{x:i64}\nvar s=S{}", "struct S{x:i64}\nvar s=S{y:1}",
         "struct S{x:i64;y:i64}\nvar s=S{x:1,x:2}", "struct S{x:i64}\nvar s=S{x:\"bad\"}",

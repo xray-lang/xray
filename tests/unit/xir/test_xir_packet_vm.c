@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     }
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 8388608, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, 16777216, &program) == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {result, advance, update, calculate, resume_text, stack_depth, numeric_pause}, results);
     runtime_source_failures(program, entry, resume_text, numeric_pause);

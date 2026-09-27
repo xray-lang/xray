@@ -73,3 +73,11 @@ export struct GenericRecord<T> { value:T }
 export struct GenericDefault<T> { value:T; identity:fn(T)->T=fn(x:T)->T{return x}; label:string="generic" }
 export struct GenericEmpty<T>{identity:fn(T)->T=fn(x:T)->T{return x};count:i64}
 export struct GenericNested<T>{inner:GenericEmpty<T>}
+
+export struct ReadBox<T> {
+    value:T
+    get()->T{return this.value}
+    take(other:T)->T{return other}
+    snapshot()->fn()->T{return fn()->T{return this.value}}
+}
+export struct MethodSecret { private hidden:i64=97; get()->i64{return this.hidden} }

@@ -157,10 +157,11 @@ types; the final Checked verifier proves field graphs, visibility and storage.
 
 Admitted fields have explicit admitted value types, normal alignment, ordinary
 value storage, and public/private/protected plus const/mutable access metadata.
-Methods, user-declared constructors, inheritance/interfaces,
+Except for the public READ direct methods specified below, methods remain closed.
+User-declared constructors, inheritance/interfaces,
 layout attributes, static/weak/flexible fields and nested
 declarations remain errors. This admission does not silently synthesize defaults
-or authorize ordinary constructors or methods.
+or authorize user constructors or other method families.
 
 `Type{field: expression, ...}` requires each required field exactly once. The
 source path must resolve to an admitted nominal declaration, including qualified
@@ -723,3 +724,22 @@ descriptor correspondence establish naming authority before sealing. Removing
 provenance from a foreign opaque instance rejects; an invalid origin mapping or
 an original definition explicitly naming an inaccessible caller type also rejects.
 Construction/member checks remain active during output verification.
+
+## Public READ method source admission
+
+A public instance method with a READ receiver is an ordinary Checked function
+with its exact nominal receiver as parameter zero. Its definition inherits the
+struct parameters and constraints and its nominal owner. The receiver expression
+is evaluated once before explicit arguments, which retain left-to-right order.
+Direct calls pass exact struct arguments through the existing specialization
+pipeline. This is an owned logical snapshot, not a writable alias to the caller.
+Returning or capturing the receiver follows normal copyable value ownership.
+
+All method bodies are checked even when unused. Direct calls use declaration
+identity; field/method name collisions reject. Private field reads retain nominal
+owner checking and nested closures inherit that owner. Source query method
+signatures record the implicit receiver first. No caller acquires field authority.
+Private/protected, static, ref/move, method-local generics, accessors, operators,
+default/rest parameters, bound method values and user constructors remain outside
+this initial admission. Reject these declarations explicitly; do not erase their
+receiver or access promises to fit READ. Their full contracts remain required.

@@ -1,0 +1,119 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_source_methods.inc.c - Declaration-owned READ instance methods
+ *
+ * KEY CONCEPT:
+ *   The receiver is one ordinary owned parameter, never a writable caller root.
+ */
+static SourceName *source_method_find(SourceContext *ctx, XrXirType type, const char *name) {
+    const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
+    return node && node->kind == XR_XIR_TYPE_NOMINAL ?
+        find_name(ctx, ctx->nominal_methods[node->nominal.declaration], name) : NULL;
+}
+static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue receiver,
+    SourceName *method, SourceValue *value) {
+    CallExprNode *call = &node->as.call_expr;
+    const XrXirFunction *function = &ctx->functions[method->index];
+    if (call->type_arg_count || (uint32_t)call->arg_count + 1 != function->parameter_count)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its exact value arguments");
+    const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, receiver.type);
+    SourceSubstitution substitution = {type->nominal.arguments, type->nominal.argument_count};
+    SourceValue *arguments = source_alloc(ctx, function->parameter_count, sizeof(*arguments));
+    if (!arguments) return false;
+    arguments[0] = receiver;
+    for (uint32_t i = 1; i < function->parameter_count; ++i) {
+        if (call->arg_accesses && call->arg_accesses[i - 1] != XR_CALL_ARG_PLAIN)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "READ method argument cannot transfer or borrow a root");
+        XrXirType expected;
+        if (!source_substitute(ctx, &substitution, function->parameters[i], 0, &expected) ||
+            !expression_in(ctx, call->arguments[i - 1], expected, &arguments[i])) return false;
+        if (arguments[i].type != expected)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method argument type mismatch");
+    }
+    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, method->index};
+    return source_substitute(ctx, &substitution, function->result, 0, &op.type) &&
+        source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
+        source_query_target_reference(ctx, source_query_range(ctx, call->callee, NULL),
+            method->declaration, XR_XIR_SOURCE_CALL) &&
+        emit_group(ctx, op, arguments, function->parameter_count, value);
+}
+static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
+    for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
+        SourceName *owner = ctx->nominal_sources[d];
+        ClassDeclNode *decl = &owner->node->as.struct_decl;
+        ctx->module = owner->module;
+        for (int m = 0; m < decl->method_count; ++m) {
+            AstNode *node = decl->methods[m];
+            if (!source_work(ctx, node) || node->type != AST_METHOD_DECL) return false;
+            MethodDeclNode *method = &node->as.method_decl;
+            if (method->is_constructor || method->is_static || method->is_private || method->is_protected ||
+                method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
+                method->is_variadic || method->is_operator || method->receiver_mode != XR_PARAM_READ ||
+                method->attr_count || method->type_param_count || method->borrow_origin_count ||
+                method->borrow_origin_syntax || !method->body || method->param_count < 0 || method->param_count >= 65536)
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method declaration contract is not admitted");
+            for (int f = 0; f < decl->field_count; ++f) {
+                if (!source_work(ctx, node)) return false;
+                if (!strcmp(method->name, decl->fields[f]->as.field_decl.name))
+                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field and method names must be distinct");
+            }
+            SourceName *symbol = add_name(ctx, &ctx->nominal_methods[d], method->name, node);
+            if (!symbol) return false;
+            if (*next >= ctx->first_closure)
+                return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "method function inventory mismatch");
+            uint32_t index = (*next)++; ctx->function = index;
+            symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = owner->module;
+            SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
+            source_struct_function_scope(ctx, index, owner);
+            if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
+                source_query_range(ctx, node, method->name))) return false;
+            body->declaration = symbol->declaration;
+            body->parameters = source_alloc(ctx, (uint32_t)method->param_count + 1, sizeof(*body->parameters));
+            if (!body->parameters) return false;
+            body->parameters[0] = owner->type;
+            XrXirFunction *function = &ctx->functions[index];
+            *function = (XrXirFunction) {method->name, (uint32_t)strlen(method->name), body->parameters,
+                (uint32_t)method->param_count + 1, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
+            if (!source_type(ctx, method->return_type, &function->result)) return false;
+            for (int i = 0; i < method->param_count; ++i) {
+                XrParamNode *param = method->params[i];
+                if (!param->type || param->passing_mode != XR_PARAM_READ || param->default_value ||
+                    param->pattern || param->is_rest || !strcmp(param->name, "this") ||
+                    !source_type(ctx, param->type, &body->parameters[i + 1]) || body->parameters[i + 1] == XR_XIR_UNIT)
+                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
+                for (int j = 0; j < i; ++j) {
+                    if (!source_work(ctx, node)) return false;
+                    if (!strcmp(param->name, method->params[j]->name))
+                        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate method parameter");
+                }
+            }
+            ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, ctx->nominals.declarations[d].exported, d + 1};
+            if (!source_query_parameters(ctx, symbol->declaration)) return false;
+        }
+    }
+    return true;
+}
+static bool source_method_body(SourceContext *ctx) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    MethodDeclNode *method = &body->node->as.method_decl;
+    for (uint32_t i = 0; i <= (uint32_t)method->param_count; ++i) {
+        const char *name = i ? method->params[i - 1]->name : "this";
+        SourceName *symbol = add_name(ctx, &ctx->locals, name, body->node);
+        if (!symbol) return false;
+        symbol->kind = SOURCE_LOCAL; symbol->index = i; symbol->type = body->parameters[i];
+        XrXirSourceRange range = source_query_range(ctx, body->node, NULL);
+        if (i) {
+            const XrParamNode *parameter = method->params[i - 1];
+            range = (XrXirSourceRange) {ctx->module, parameter->line, parameter->column, parameter->line, 0};
+            if (parameter->column > 0 && strlen(name) <= (size_t)(INT_MAX - parameter->column))
+                range.end_column = parameter->column + (int)strlen(name);
+        }
+        if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
+        source_query_binding_type(ctx, symbol);
+    }
+    return statement(ctx, method->body, false);
+}
