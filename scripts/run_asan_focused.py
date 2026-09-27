@@ -131,6 +131,11 @@ EXACT_PROFILES = {
     ),
 }
 
+EXACT_PROFILES["xir-decimal"] = tuple(
+    items + ("test_parser", "test_mono", "test_formatter_strings", "test_fmt_roundtrip")
+    for items in EXACT_PROFILES["xir"]
+)
+
 USAGE = """usage: run_asan_focused.py [-h|--help]
 
 Run the configured ASan+UBSan lane. Select its bounded profile and build tree
@@ -138,6 +143,7 @@ with XR_ASAN_PROFILE and XR_ASAN_BUILD_DIR; all execution settings are explicit
 environment variables documented in this module's header.
 
 XR_ASAN_PROFILE choices:
+    xir-decimal           partial XIR and decimal frontend preflight
     full                  complete qualifying lane (default)
     canonical-program     partial canonical Program preflight
     h2                    partial exact H2 aggregate and differential ratchet

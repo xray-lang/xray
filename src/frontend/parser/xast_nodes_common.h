@@ -62,6 +62,9 @@ typedef struct LiteralNode {
      * older call sites. */
     uint64_t int_bits;
     bool int_overflows_i64;
+    /* Exact owned decimal spelling permits rounding at the contextual width. */
+    const char *decimal_text;
+    size_t decimal_length;
     /* String literals only: true when this node is a literal chunk of a
      * template string rather than a value in its own right. `"a${"b"}"` holds
      * two string literals — the chunk `a` and the interpolated `"b"` — and

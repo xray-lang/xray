@@ -621,6 +621,7 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_LITERAL_FLOAT:
             sig_add(s, " f=%.17g", n->as.literal.raw_value.float_val);
+            if (n->as.literal.decimal_text) sig_name(s, "decimal", n->as.literal.decimal_text);
             return true;
         case AST_LITERAL_BIGINT:
             sig_name(s, "big", n->as.literal.raw_value.bigint_val);

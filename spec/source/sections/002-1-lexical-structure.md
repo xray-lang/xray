@@ -218,7 +218,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-字面量类型为 `f64`（IEEE-754 双精度）。
+无唯一浮点上下文时，字面量类型为 `f64`（IEEE-754 双精度）；唯一的 `f32`/`f64` 上下文直接选择舍入精度，完整拼写和舍入合同见 §17.25。词法目标包含前导/尾随点号形式；当前 XIR 源码子集尚未准入这些形式，不能将转换核心的支持计为完整词法实现。
 
 ```xray
 3.14
@@ -700,7 +700,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-Literal type is `f64` (IEEE-754 double precision).
+Without a unique floating context the literal type is `f64` (IEEE-754 double precision); a unique `f32`/`f64` context directly selects rounding precision. Complete spelling and rounding follow §17.25. The lexical target includes leading/trailing-dot forms; the current XIR source subset does not yet admit them, and converter support does not qualify the full lexical grammar.
 
 ```xray
 3.14

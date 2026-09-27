@@ -639,12 +639,19 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
     switch (node->type) {
         // === Literals ===
         case AST_LITERAL_INT:
-        case AST_LITERAL_FLOAT:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:
             n->as.literal = node->as.literal;
+            break;
+        case AST_LITERAL_FLOAT:
+            n->as.literal = node->as.literal;
+            n->as.literal.decimal_text = clone_str(node->as.literal.decimal_text);
+            if (node->as.literal.decimal_text && !n->as.literal.decimal_text) {
+                if (clone_ctx) clone_ctx->type_substitution_failed = true;
+                xr_free(n); return NULL;
+            }
             break;
         case AST_LITERAL_STRING:
             n->as.literal = node->as.literal;

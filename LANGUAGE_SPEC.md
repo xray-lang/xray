@@ -323,7 +323,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-Literal type is `f64` (IEEE-754 double precision).
+Without a unique floating context the literal type is `f64` (IEEE-754 double precision); a unique `f32`/`f64` context directly selects rounding precision. Complete spelling and rounding follow §17.25. The lexical target includes leading/trailing-dot forms; the current XIR source subset does not yet admit them, and converter support does not qualify the full lexical grammar.
 
 ```xray
 3.14
@@ -7234,8 +7234,13 @@ CONST_FLOAT, NEG_FLOAT, six floating comparisons and the sole CONVERT_NUMBER run
 CONVERT_NUMBER atomically replaces the former integer-only conversion. Float-to-integer truncates then checks the full range; NUMERIC_RANGE faults clean up with a unit result.
 NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Conversions follow 17.23 without changing the host floating environment.
 Source admits explicit numeric casts, floating negation/comparison, implicit f32-to-f64 widening and conditional joins; integer/float mixing requires explicit casts.
-Copies, slots, cells, closures, generic instances and suspension preserve bits. Decimal literals, floating arithmetic and floating output remain unadmitted.
+Copies, slots, cells, closures, generic instances and suspension preserve bits. Decimal literals and exact contextual integers follow §17.25; floating arithmetic and floating output remain unadmitted.
 The sole versions are Value8/Call12/Program7 and Checked schema4/semantic13; older versions reject without compatibility paths.
+
+### 17.25 Exact decimal literals
+
+The AST owns each complete decimal floating token. Shared conversion never truncates input or uses strtod, locale or host floating instructions. It rounds once at the requested binary32/binary64 precision, ties to even; overflow produces signed infinity and gradual underflow preserves signed zero. Every exponent digit and separator is validated. A bounded integer rational with 1152 significant digits and a nonzero sticky tail distinguishes all IEEE rounding boundaries; buffer truncation never substitutes for mathematical rounding.
+Without a unique floating context the default is f64. Annotations, assignments, declared returns and substituted parameters directly select f32/f64; grouping and direct negation retain context. Formed f64 expressions never narrow implicitly. Direct integers in a floating context must be exactly representable in full; explicit as permits rounding. Generic definitions remain constraint checked. Formatting preserves spelling and AST cloning copies it into the destination owner. Existing CONST_FLOAT, Checked revalidation and the sole Lowered execution remain unchanged; floating arithmetic/output require separate admission.
 
 ---
 

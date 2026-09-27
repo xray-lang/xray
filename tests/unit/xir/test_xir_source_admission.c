@@ -124,18 +124,24 @@ static const char *const rejected[] = {
     "import { __writeStderr } from \"std/io/output\"\n",
     "import { writeStderr } from \"std/io/output\"\nwriteStderr(1)\n",
     "import \"std/io/output\" as output\noutput.__writeStdout(\"forbidden\")\n",
-    "const x:f32=1\n",
-    "const x:f64=1\n",
+    "const x:f32=16777217\n",
+    "const x:f64=9007199254740993\n",
+    "const x:f32=18446744073709551615\n",
+    "const x:i64=1.25\n",
+    "const x:f32=1e\n",
+    "const x=1.0e+\n",
+    "const x=1._0\n",
+    "const x=1.0_e1\n",
+    "const x=1.0e_1\n",
+    "const x=1__0.0\n",
+    "const x:f32=(1.25 as f64)\n",
     "const x:f32=1 as f64\n",
     "const x=(1 as f32)+ (2 as f32)\n",
     "const x=(1 as f32)% (2 as f32)\n",
     "const x=~(1 as f32)\n",
-    "const x=(1 as f32)==1\n",
     "const x=true ? (1 as f32) : 1\n",
     "print(1 as f32)\n",
     "print(1 as f64)\n",
-    "const x:f32=1.25\n",
-    "const x:f64=1.25\n",
     "fn unused<T>(v:T)->f32 { return v as f32 }\n",
     "fn unused<T>(v:T)->bool { return v < (1 as f64) }\n",
     "const x=true as f32\n",
@@ -260,6 +266,7 @@ static const char *const rejected[] = {
     "const a = \"unterminated\n"
 };
 #include "xir_source_integer_context.h"
+#include "xir_source_decimal_context.h"
 int main(void) {
     stdlib_resolution();
 
@@ -276,6 +283,7 @@ int main(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB};
     source_integer_contexts(&request, root);
+    source_decimal_contexts(&request, root);
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_source(root, rejected[i]);
         XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;

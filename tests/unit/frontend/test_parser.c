@@ -19,6 +19,7 @@
 
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast_api.h"
+#include "frontend/parser/xast_walk.h"
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/parser/xtype_ref.h"
@@ -1490,6 +1491,29 @@ TEST(parser_tuple_field_access_chained) {
 
 /* ========== Main ========== */
 
+TEST(decimal_literal_owned_spelling) {
+    setup();
+    char source[] = "const x:f32=1.00000005960464477539062500000000000000000000000000000000000000001\n";
+    AstNode *program = parse_ok(source);
+    AstNode *literal = first_stmt(program)->as.var_decl.initializer;
+    ASSERT_EQ_INT(literal->type, AST_LITERAL_FLOAT);
+    const char *text = literal->as.literal.decimal_text;
+    ASSERT_NOT_NULL(text);
+    ASSERT_TRUE(literal->as.literal.decimal_length == strlen(text));
+    ASSERT_TRUE(text != strchr(source, '=') + 1);
+    char before[512], after[512];
+    ASSERT_TRUE(xr_ast_node_signature(literal, before, sizeof(before)));
+    memset(source, 'x', sizeof(source) - 1);
+    ASSERT_TRUE(text[0] == '1' && text[literal->as.literal.decimal_length - 1] == '1');
+    AstNode changed = *literal;
+    changed.as.literal.decimal_text = "1.000000059604644775390625";
+    changed.as.literal.decimal_length = strlen(changed.as.literal.decimal_text);
+    ASSERT_TRUE(xr_ast_node_signature(&changed, after, sizeof(after)));
+    ASSERT_TRUE(strcmp(before, after) != 0);
+    xr_program_destroy(program);
+    teardown();
+}
+
 int main(void) {
     xr_test_suppress_dialogs();
     RUN_TEST_SUITE("Parser Tests");
@@ -1497,6 +1521,7 @@ int main(void) {
     // Literals
     RUN_TEST(parser_int_literal);
     RUN_TEST(parser_float_literal);
+    RUN_TEST(decimal_literal_owned_spelling);
     RUN_TEST(parser_string_literal);
     RUN_TEST(parser_block_string_normalizes_crlf_and_margin);
     RUN_TEST(parser_non_expression_string_consumers_use_shared_decoder);

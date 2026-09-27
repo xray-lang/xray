@@ -39,3 +39,5 @@ export fn frozen<T:Sendable>(value:T)->fn()->T {
 
 const floatingSeed: f32 = 16777217 as f32
 export fn floatSeed()->f32 { return floatingSeed }
+const decimalState:f32 = 1.25
+export fn decimalSeed()->f32 { return decimalState }

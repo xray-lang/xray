@@ -316,7 +316,7 @@ fn inferredIntegerJoin() {
 inferredIntegerJoin()
 export fn numericPause(flag: bool) -> i64 {
     const selected = flag ? alpha.pause<i8>(-128) : alpha.pause<i16>(32767)
-    const floating = flag ? alpha.pause<f32>(-128 as f32) : alpha.pause<f64>(32767 as f64)
+    const floating = flag ? alpha.pause<f32>(-128.0) : alpha.pause<f64>(32767.0)
     if (floating != (selected as f64)) { return 0 }
     return floating as i64
 }
@@ -337,3 +337,18 @@ fn floatingValues() {
         (127 as f64) as i8, (255 as f32) as u8)
 }
 floatingValues()
+
+fn decimalValues() {
+    const direct: f32 = 1.00000005960464477539062500000000000000000000000000000000000000000000000001
+    const cast = 1.00000005960464477539062500000000000000000000000000000000000000000000000001 as f32
+    var captured: f32 = 0.0
+    const set = fn(value:f32)->f64 { captured = value; return captured }
+    const chosen:f32 = true ? 1.25 : 2.5
+    const result = set(alpha.identity<f32>(chosen))
+    const negative = fn()->f32 { return -2.5 }
+    const exact32:f32 = 16777216
+    const exact64:f64 = 9007199254740992
+    print(direct > cast, cast == 1, result == 1.25, captured == 1.25,
+        negative() < -2, exact32 == 16777216.0, exact64 == 9_007_199_254_740_992.0, alpha.decimalSeed() == 1.25)
+}
+decimalValues()

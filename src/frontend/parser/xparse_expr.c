@@ -21,6 +21,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../xdiag_fmt.h"
 #include "../lexer/xquoted_literal.h"
+#include "../../shared/xr_decimal_float.h"
 
 #include <stdint.h>
 
@@ -319,11 +320,17 @@ AstNode *xr_parse_literal(Parser *parser) {
         }
 
         case TK_LITERAL_FLOAT: {
-            char buf[64];
-            strip_underscores(parser->previous.start, parser->previous.length, buf, sizeof(buf));
-            xr_Number value = strtod(buf, NULL);
-            AstNode *node =
-                xr_ast_literal_float(parser->compiler_session, value, parser->previous.line);
+            size_t length = (size_t) parser->previous.length;
+            uint64_t bits = 0;
+            if (!xr_decimal_float_parse(parser->previous.start, length, 64, &bits))
+                xr_parser_error_at_previous(parser, "invalid decimal floating literal");
+            _Static_assert(sizeof(xr_Number) == sizeof(bits), "binary64 AST value width");
+            xr_Number value;
+            memcpy(&value, &bits, sizeof(bits));
+            AstNode *node = xr_ast_literal_float(parser->compiler_session, value, parser->previous.line);
+            char *text = ast_alloc(parser->compiler_session, length + 1);
+            memcpy(text, parser->previous.start, length); text[length] = 0;
+            node->as.literal.decimal_text = text; node->as.literal.decimal_length = length;
             node->column = column;
             return node;
         }

@@ -46,10 +46,11 @@ versions, including otherwise integer-only artifacts.
 
 Source admits f32/f64 annotations, explicit numeric casts, float negation and
 comparisons. The only implicit floating conversion is f32 to f64, including
-conditional joins. Integer/float mixing requires explicit casts. Ordinary
+conditional joins. Already typed integer/float mixing requires explicit casts. Ordinary
 generic bodies cannot perform numeric operations without concrete proof.
-Decimal literals, floating arithmetic and floating typed output remain rejected
-until their parsing/arithmetic/formatting contracts are implemented. No product
+Decimal literals and exact integer contextual admission follow
+`xir-decimal-literals.md`. Floating arithmetic and floating typed output remain
+rejected until their arithmetic/formatting contracts are implemented. No product
 or cross-platform qualification is implied by this subset.
 
 verification-test: test_xir_execution

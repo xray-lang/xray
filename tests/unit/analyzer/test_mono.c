@@ -763,6 +763,23 @@ TEST(mono_mangle_structural_object_identity_is_complete) {
     free(readonly_user_name);
 }
 
+TEST(ast_clone_decimal_spelling) {
+    char spelling[] = "1.000000059604644775390625000000000000000000000000000000001";
+    AstNode node = {.type = AST_LITERAL_FLOAT, .line = 1};
+    node.as.literal.decimal_text = spelling;
+    node.as.literal.decimal_length = sizeof(spelling) - 1;
+    node.as.literal.raw_value.float_val = 1.0;
+    AstNode *clone = xr_ast_clone(&node, NULL, 0);
+    ASSERT_NOT_NULL(clone);
+    ASSERT_TRUE(clone->as.literal.decimal_text != spelling);
+    ASSERT_TRUE(clone->as.literal.decimal_length == sizeof(spelling) - 1);
+    ASSERT_TRUE(strcmp(clone->as.literal.decimal_text, spelling) == 0);
+    spelling[0] = '9';
+    ASSERT_TRUE(clone->as.literal.decimal_text[0] == '1');
+    free((void *) clone->as.literal.decimal_text);
+    free(clone);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -792,6 +809,7 @@ int main(void) {
     RUN_TEST_SUITE("AST Clone");
     RUN_TEST(ast_clone_null);
     RUN_TEST(ast_clone_literal_int);
+    RUN_TEST(ast_clone_decimal_spelling);
     RUN_TEST(ast_clone_literal_string);
     RUN_TEST(ast_clone_binary);
     RUN_TEST(ast_clone_variable);

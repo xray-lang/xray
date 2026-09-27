@@ -12,6 +12,8 @@
 #include "xxir_source.h"
 #include "xxir_generic.h"
 #include "xxir_callable.h"
+#include "xxir_float.h"
+#include "../shared/xr_decimal_float.h"
 #include "../module/xmodule_graph.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xast_walk.h"
@@ -288,8 +290,49 @@ static bool source_direct_integer(SourceContext *ctx, AstNode *node, SourceInteg
     }
     return true;
 }
+typedef struct SourceDecimal { AstNode *node; bool negative; } SourceDecimal;
+static bool source_direct_decimal(SourceContext *ctx, AstNode *node, SourceDecimal *literal) {
+    *literal = (SourceDecimal) {0}; bool negative = false;
+    for (unsigned depth = 0; node; ++depth) {
+        if (!source_work(ctx, node)) return false;
+        if (depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "decimal literal depth exhausted");
+        if (node->type == AST_GROUPING) { node = node->as.grouping; continue; }
+        if (node->type == AST_UNARY_NEG && !negative) { negative = true; node = node->as.unary.operand; continue; }
+        if (node->type == AST_LITERAL_FLOAT) *literal = (SourceDecimal) {node, negative};
+        return true;
+    }
+    return true;
+}
+static bool source_decimal(SourceContext *ctx, const SourceDecimal *literal, XrXirType expected, SourceValue *value) {
+    AstNode *node = literal->node;
+    XrXirType type = xr_xir_float_bits(expected) ? expected : XR_XIR_F64;
+    size_t length = node->as.literal.decimal_length;
+    if (!node->as.literal.decimal_text || !length) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "decimal spelling is missing");
+    if (length > ctx->budget.work) return source_fail(ctx, node, XR_XIR_BUDGET, "decimal literal work budget exhausted");
+    ctx->budget.work -= length;
+    uint64_t bits = 0;
+    if (!xr_decimal_float_parse(node->as.literal.decimal_text, length, xr_xir_float_bits(type), &bits))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid decimal literal");
+    if (literal->negative) bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
+    int64_t payload; memcpy(&payload, &bits, sizeof(payload));
+    return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_FLOAT, type, {0}, {0}, payload}, value);
+}
+static bool source_integer_float(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
+    XrXirType type, SourceValue *value) {
+    int64_t magnitude; memcpy(&magnitude, &literal->magnitude, sizeof(magnitude));
+    uint64_t bits = 0; int64_t exact = 0;
+    XrXirIntegerFormat format = {64, false};
+    if (xr_xir_integer_to_float(format, xr_xir_float_bits(type), magnitude, &bits) != XR_XIR_NUMERIC_OK ||
+        xr_xir_float_to_integer(xr_xir_float_bits(type), format, bits, &exact) != XR_XIR_NUMERIC_OK ||
+        (uint64_t) exact != literal->magnitude)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer literal is not exactly representable in its floating context");
+    if (literal->negative) bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
+    int64_t payload; memcpy(&payload, &bits, sizeof(payload));
+    return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_FLOAT, type, {0}, {0}, payload}, value);
+}
 static bool source_integer(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
     XrXirType expected, SourceValue *value) {
+    if (xr_xir_float_bits(expected)) return source_integer_float(ctx, node, literal, expected, value);
     XrXirType type = xr_xir_type_is_integer(expected) ? expected : XR_XIR_I64;
     uint32_t width = xr_xir_integer_bits(type);
     bool sign = xr_xir_integer_signed(type);
@@ -614,8 +657,11 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, XrXirType expec
         SourceInteger first, second;
         if (!source_direct_integer(ctx, node->as.binary.left, &first) ||
             !source_direct_integer(ctx, node->as.binary.right, &second)) return false;
+        SourceDecimal a, b;
+        if (!source_direct_decimal(ctx, node->as.binary.left, &a) || !source_direct_decimal(ctx, node->as.binary.right, &b)) return false;
+        first.present = first.present || a.node; second.present = second.present || b.node;
         bool shift = node->type == AST_BINARY_LSHIFT || node->type == AST_BINARY_RSHIFT;
-        XrXirType context = xr_xir_type_is_integer(expected) ? expected : XR_XIR_UNIT;
+        XrXirType context = xr_xir_type_is_number(expected) ? expected : a.node || b.node ? XR_XIR_F64 : XR_XIR_UNIT;
         if (!shift && first.present && !second.present) {
             if (!expression(ctx, node->as.binary.right, &right) ||
                 !expression_in(ctx, node->as.binary.left, right.type, &left)) return false;
@@ -798,9 +844,10 @@ static bool expression_in(SourceContext *ctx, AstNode *node, XrXirType expected,
     if (!node || !source_work(ctx, node)) return false;
     if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source expression depth exhausted");
     ++ctx->depth;
-    SourceInteger literal;
-    bool result = source_direct_integer(ctx, node, &literal) && (literal.present ?
-        source_integer(ctx, node, &literal, expected, value) : expression_body(ctx, node, expected, value));
+    SourceInteger literal; SourceDecimal decimal;
+    bool result = source_direct_integer(ctx, node, &literal) && source_direct_decimal(ctx, node, &decimal) &&
+        (literal.present ? source_integer(ctx, node, &literal, expected, value) : decimal.node ?
+         source_decimal(ctx, &decimal, expected, value) : expression_body(ctx, node, expected, value));
     --ctx->depth;
     return result && source_expect(ctx, node, expected, value);
 }

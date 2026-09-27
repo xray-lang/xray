@@ -420,10 +420,22 @@ TEST(indented_block_template_keeps_margin_outside_interpolation) {
 /* Driver                                                                  */
 /* ====================================================================== */
 
+TEST(decimal_spelling_round_trip) {
+    const char *spelling = "1.00000005960464477539062500000000000000000000000000000000000000000000000000000001";
+    char source[256];
+    snprintf(source, sizeof(source), "const x: f32 = %s\nconst y = 1_234.5_678e-0_2\n", spelling);
+    char *out = assert_round_trip(source, "decimal_spelling");
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(strstr(out, spelling) != NULL);
+    ASSERT_TRUE(strstr(out, "1_234.5_678e-0_2") != NULL);
+    free(out);
+}
+
 TEST_MAIN_BEGIN()
 setup();
 RUN_TEST_SUITE("string / template round-trip");
 RUN_TEST(regular_string_round_trip_basic);
+RUN_TEST(decimal_spelling_round_trip);
 RUN_TEST(raw_string_form_is_preserved);
 RUN_TEST(template_string_round_trip);
 RUN_TEST(idempotence_after_two_passes);

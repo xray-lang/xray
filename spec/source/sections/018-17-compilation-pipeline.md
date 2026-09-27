@@ -335,8 +335,14 @@ CONST_FLOAT、NEG_FLOAT、六种浮点比较与唯一 CONVERT_NUMBER 经同一 C
 CONVERT_NUMBER 原子替换先前仅限整数的转换指令；浮点转整数先截断再检查完整范围，失败为 NUMERIC_RANGE，清理后结果为 unit。
 NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。所有转换遵循17.23且不改变宿主浮点环境。
 源码接受显式数值 cast、浮点负号/比较、f32 到 f64 隐式宽化及条件合流；整数/浮点混合必须显式 cast。
-拷贝、槽、cell、闭包、泛型实例与挂起保留位型。十进制字面量、浮点算术及浮点输出仍未准入。
+拷贝、槽、cell、闭包、泛型实例与挂起保留位型。十进制字面量及精确整数上下文准入见§17.25；浮点算术及浮点输出仍未准入。
 唯一版本为 Value8/Call12/Program7、Checked schema4/semantic13，旧版本拒绝，无兼容路径。
+
+### 17.25 精确十进制字面量
+
+十进制浮点token的完整拼写由AST拥有；共享转换不截断输入，不使用strtod、locale或宿主浮点指令。按目标binary32/binary64精度一次ties-to-even舍入，溢出为带符号无穷，渐进下溢保留负零；所有指数位和分隔符仍验证。固定大整数保存有理数，1152有效数字及非零尾标志足以区分所有IEEE舍入中点；不把缓冲截断当作数学截断。
+无唯一浮点上下文默认f64；注解、赋值、已声明返回和实例化后参数直接选f32/f64，括号及直接负号保留上下文。已成形f64不隐式窄化。直接整数处于浮点上下文时必须完整精确可表示；显式as允许舍入。泛型定义仍先按声明约束检查。格式化保留原始拼写，AST拷贝复制到目标owner。现有CONST_FLOAT、Checked复验与唯一Lowered执行不变，浮点算术/输出另行准入。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -776,6 +782,12 @@ CONST_FLOAT, NEG_FLOAT, six floating comparisons and the sole CONVERT_NUMBER run
 CONVERT_NUMBER atomically replaces the former integer-only conversion. Float-to-integer truncates then checks the full range; NUMERIC_RANGE faults clean up with a unit result.
 NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Conversions follow 17.23 without changing the host floating environment.
 Source admits explicit numeric casts, floating negation/comparison, implicit f32-to-f64 widening and conditional joins; integer/float mixing requires explicit casts.
-Copies, slots, cells, closures, generic instances and suspension preserve bits. Decimal literals, floating arithmetic and floating output remain unadmitted.
+Copies, slots, cells, closures, generic instances and suspension preserve bits. Decimal literals and exact contextual integers follow §17.25; floating arithmetic and floating output remain unadmitted.
 The sole versions are Value8/Call12/Program7 and Checked schema4/semantic13; older versions reject without compatibility paths.
+
+### 17.25 Exact decimal literals
+
+The AST owns each complete decimal floating token. Shared conversion never truncates input or uses strtod, locale or host floating instructions. It rounds once at the requested binary32/binary64 precision, ties to even; overflow produces signed infinity and gradual underflow preserves signed zero. Every exponent digit and separator is validated. A bounded integer rational with 1152 significant digits and a nonzero sticky tail distinguishes all IEEE rounding boundaries; buffer truncation never substitutes for mathematical rounding.
+Without a unique floating context the default is f64. Annotations, assignments, declared returns and substituted parameters directly select f32/f64; grouping and direct negation retain context. Formed f64 expressions never narrow implicitly. Direct integers in a floating context must be exactly representable in full; explicit as permits rounding. Generic definitions remain constraint checked. Formatting preserves spelling and AST cloning copies it into the destination owner. Existing CONST_FLOAT, Checked revalidation and the sole Lowered execution remain unchanged; floating arithmetic/output require separate admission.
+
 <!-- /xr-spec:en -->

@@ -35,7 +35,8 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_fmt(ctx, "%lld", (long long) node->as.literal.raw_value.int_val);
             break;
         case AST_LITERAL_FLOAT:
-            xfmt_emit_float_literal(ctx, node->as.literal.raw_value.float_val);
+            if (node->as.literal.decimal_text) xfmt_write_str(ctx, node->as.literal.decimal_text);
+            else xfmt_emit_float_literal(ctx, node->as.literal.raw_value.float_val);
             break;
         case AST_LITERAL_BIGINT:
             xfmt_write_str(ctx, node->as.literal.raw_value.bigint_val);
