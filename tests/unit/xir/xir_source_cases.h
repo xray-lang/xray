@@ -117,8 +117,10 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
         if (mode <= 2) {
             CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_DRAINING && output.calls == 0);
-            XrXirValue failure = {0};
-            CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_CANCELLED && failure.type == XR_XIR_UNIT);
+            XrXirCallResult failure = {0};
+            CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_CANCELLED &&
+                failure.status == XR_XIR_CALL_CANCELLED && failure.value.type == XR_XIR_UNIT &&
+                xr_xir_fault_empty(failure.fault));
             CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_CANCELLED);
         } else CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);

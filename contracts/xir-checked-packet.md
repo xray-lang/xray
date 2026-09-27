@@ -7,7 +7,7 @@ no Built, Lowered, legacy, or alternate executable format reader.
 
 All integers use fixed-width little endian, with no native struct padding.
 The 64-byte header contains magic `XRCHK\0\0\0`, schema u32 5, semantic-contract
-u32 14, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
+u32 15, stage u32 2, reserved u32 zero, payload length u64, then SHA-256 (32 bytes)
 over header bytes 0..31 followed by the payload. Unknown versions, stage or
 reserved fields, length mismatch, trailing bytes and digest mismatch reject.
 The digest is content identity/integrity, not authentication. Schema or semantic
@@ -27,7 +27,14 @@ CALLABLE (kind 1) carries parameter count, ordered type/mode u32 pairs, result
 type and flags. ARRAY (kind 2) and CELL (kind 3) each carry one u32 element ID.
 Zero count has no pool owner. Nested identity, kind-specific payloads and canonical
 contracts follow `xir-constructed-types.md`; descriptor admission alone does not
-implement Array source syntax or runtime operations. Earlier revisions reject without
+implement Array source syntax or runtime operations. `xir-array-values.md` owns
+the semantic-15 operation tags 63..69, exact operand roles and logical places.
+The fixed instruction/type-node wire shape stays schema 5. Projection IDs are
+ordinary instruction indices with restricted roles, never serialized addresses,
+physical offsets or capability proofs. NEW/SET operand-table ranges participate
+in the same complete partition and decode/work budgets. Rehashed packets still
+must pass role, mutability, declaration, generic-scope and dominance checks.
+Earlier revisions reject without
 a compatibility reader. All IDs retain their
 Checked meaning. No source path, pointer, native code, target layout, runtime
 state, arena address or trusted verification result is persisted.

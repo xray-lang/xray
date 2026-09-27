@@ -25,6 +25,7 @@ import sys
 COMPILER_MODULE_RE = re.compile(
     r"^\s*//\s*@compiler-module\s+[A-Za-z_][A-Za-z0-9_]*\s*$", re.MULTILINE
 )
+NATIVE_DECLARATION_RE = re.compile(r"^\s*//\s*@native-type\s+id=[1-9][0-9]*\s*$", re.MULTILINE)
 
 def escape_c_string(s):
     """Escape a string for embedding as a C string literal."""
@@ -55,7 +56,7 @@ def render(types_dir):
         name = os.path.splitext(os.path.basename(path))[0]
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
-        if COMPILER_MODULE_RE.search(content):
+        if COMPILER_MODULE_RE.search(content) or NATIVE_DECLARATION_RE.search(content):
             continue
         var_name = f"xr_native_def_{name}"
         escaped = escape_c_string(content)

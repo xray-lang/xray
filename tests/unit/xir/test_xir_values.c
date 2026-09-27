@@ -170,13 +170,13 @@ static XrXirAction typed_resume(XrXirCallView *view) {
     TypedFrame *state = view->state;
     if (state->pc++ == 0) {
         state->value = (XrXirValue) {XR_XIR_BOOL, 0, 1};
-        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, &state->value, 1, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, &state->value, 1, {0}, {0}};
     }
     if (state->pc == 2) {
         state->value = (XrXirValue) {XR_XIR_I64, 0, INT64_MIN};
-        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDERR, &state->value, 1, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDERR, &state->value, 1, {0}, {0}};
     }
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {0, 0, 0}};
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {0, 0, 0}, {0}};
 }
 static void typed_output(void) {
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
@@ -195,7 +195,7 @@ static void typed_output(void) {
     }
 }
 static XrXirAction atomic_output_resume(XrXirCallView *view) {
-    return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, view->arguments, 1, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, view->arguments, 1, {0}, {0}};
 }
 static void atomic_boundaries(void) {
     XrXirDomain *domain = NULL;
@@ -298,7 +298,9 @@ static void arena_identity_and_revocation(void) {
     CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
     xr_xir_domain_drop(domain);
 }
+#include "xir_array_value_cases.h"
 int main(void) {
+    array_value_cases();
     arena_identity_and_revocation(); unicode_cases(); cow_cases(); concurrent_copies(0); concurrent_copies(1); concurrent_copies(2); typed_output(); atomic_boundaries();
     puts("Strict Unicode, CoW growth, independent lifetime and concurrent owned copies passed");
     return 0;

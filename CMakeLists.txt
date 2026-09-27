@@ -540,6 +540,18 @@ add_custom_command(
     COMMENT "embedding stdlib native type declarations"
 )
 
+add_custom_command(
+    OUTPUT ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
+           ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_index_methods.def
+           ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_push_method.def
+    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
+            ${CMAKE_SOURCE_DIR}/stdlib/types/array.xr
+            ${CMAKE_SOURCE_DIR}/stdlib/prelude/builtin_symbols.def
+    COMMENT "projecting governed native value declarations"
+)
+
 add_custom_target(gen-xi-ops DEPENDS
     ${XRAY_GEN_XI_OPS_DEPS}
 )
@@ -615,6 +627,9 @@ add_custom_target(gen-stdlib-metadata DEPENDS
 
 add_custom_target(gen-native-type-defs DEPENDS
     ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
+    ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
+    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_index_methods.def
+    ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_array_push_method.def
 )
 
 # CoreSpec is the target-neutral semantic registry introduced by Task 295.
@@ -1882,7 +1897,8 @@ set(CORE_ALL_SOURCES
 # frontend analyzer directory; the backend/install source lists below also
 # name the same source in their intentionally separate static archives.
 list(APPEND CORE_ALL_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_core_intrinsic_registry.c")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_core_intrinsic_registry.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xnative_declaration.c")
 set(CORE_COMMON_SOURCES ${CORE_ALL_SOURCES})
 list(REMOVE_ITEM CORE_COMMON_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/module/stdlib_embedded.c")
 list(LENGTH CORE_ALL_SOURCES _core_all_count)

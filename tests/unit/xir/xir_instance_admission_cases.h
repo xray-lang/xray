@@ -59,7 +59,7 @@ static void admission_gate_owner_case(void) {
         CHECK(xr_xir_value_valid(&function));
         CHECK(xr_xir_instance_start_function(instance, &function, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
         CHECK(xr_xir_instance_start(instance, 4, &function, 1) == XR_XIR_CALL_BAD_ARGUMENT);
-        XrXirValueAdmission admission = instance_admission(instance);
+        XrXirValueAdmission admission = instance_candidate_admission(instance);
         XrXirValue unpublished = {0};
         CHECK(xr_xir_function_new(instance->domain, program->arena, (XrXirType) function.type,
             &object->binding, &admission, &unpublished) == XR_XIR_VALUE_BAD_ARGUMENT);
@@ -92,7 +92,7 @@ static void admission_replacement_budget_case(void) {
     /* One function admission costs one value plus its capture-prefix/signature
      * scan. The replacement has no work left for its own boundary validation. */
     instance->config.poll_limit = 3;
-    XrXirValueAdmission admission = instance_admission(instance);
+    XrXirValueAdmission admission = instance_candidate_admission(instance);
     CHECK(xr_xir_value_admit(&function, (XrXirType) function.type, &admission) == XR_XIR_VALUE_OK);
     CHECK(!admission.work);
     CHECK(xr_xir_instance_start(instance, 4, &function, 1) == XR_XIR_CALL_LIMIT);

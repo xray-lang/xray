@@ -376,7 +376,10 @@ static void constructed_metadata(void) {
     xr_xir_types_free(copy);
 }
 
+#include "xir_array_stage_cases.h"
+
 int main(void) {
+    array_metadata_cases();
     constructed_metadata();
     numeric_admission();
     for (uint32_t op = 1; op < XR_XIR_OP_COUNT; ++op)

@@ -67,7 +67,8 @@ typedef struct XrXirValue {
 } XrXirValue;
 typedef enum XrXirValueStatus {
     XR_XIR_VALUE_OK, XR_XIR_VALUE_BAD_ARGUMENT, XR_XIR_VALUE_BAD_UTF8,
-    XR_XIR_VALUE_OOM, XR_XIR_VALUE_LIMIT, XR_XIR_VALUE_REFCOUNT_LIMIT
+    XR_XIR_VALUE_OOM, XR_XIR_VALUE_LIMIT, XR_XIR_VALUE_REFCOUNT_LIMIT,
+    XR_XIR_VALUE_BOUNDS
 } XrXirValueStatus;
 typedef struct XrXirDomain XrXirDomain;
 typedef struct XrXirTypeArena XrXirTypeArena;

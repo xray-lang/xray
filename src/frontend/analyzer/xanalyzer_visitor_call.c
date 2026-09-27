@@ -6586,8 +6586,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                   (call->callee->as.optional_chain.chain_type == 3 ||
                                    call->callee->as.optional_chain.chain_type == 2);
 
-    if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
-        strcmp(call->callee->as.variable.name, "len") == 0 && call->arg_count == 1) {
+    XaSymbol *length_symbol = call->callee && call->callee->type == AST_VARIABLE ?
+        xa_resolve_variable_symbol(ctx, call->callee) : NULL;
+    if (length_symbol && length_symbol->is_builtin &&
+        length_symbol->links.core_builtin_id == XR_CORE_BUILTIN_LEN && call->arg_count == 1) {
+        call->callee->as.variable.symbol_id = length_symbol->id;
         if (xa_call_has_explicit_arg_access(call)) {
             xa_report_arg_accesses_require_known_contract(ctx, node, call);
             return xr_type_new_int(ctx->analyzer->isolate);

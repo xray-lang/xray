@@ -14,7 +14,12 @@ copy, and CELL_WRITE copies before exchanging and dropping the previous value.
 CELL_NEW carries the already interned CELL ID; execution does not register or
 derive a new type. A runtime cell owns its TypeArena, and cell argument admission
 requires the expected arena as well as the local type ID. A descriptor allowing
-an ARRAY element does not implement runtime Array values or mutation operations.
+an ARRAY element does not by itself implement Array operations; their separate
+contract is `xir-array-values.md`. CELL_PLACE binds a dominating ordinary
+CELL<ARRAY<T>> holder to a storage-free logical Array root. It neither reads nor
+retains the contents at projection time and cannot extend holder lifetime. An
+Array mutation resolves the cell's current contents after argument evaluation;
+it uses the same common COW publication core as local and module-slot roots.
 The expression's value is separate from its shared storage identity.
 
 All aliases observe the same mutable storage. Cell RC is atomic; content access
@@ -33,7 +38,7 @@ cycles remain possible and require explicit breaking while an owner remains.
 Unreachable strong-cycle reclamation is OPEN: no collector, automatic cycle
 reclamation or universal leak-freedom claim is introduced by this contract.
 
-Value9/Call13/Program8 and schema5/semantic14 replace previous admission versions
+Value9/Call14/Program9 and schema5/semantic15 replace previous admission versions
 without compatibility readers. Source var production must preserve aliases;
 capturing a snapshot in place of a cell is forbidden.
 

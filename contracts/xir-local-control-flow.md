@@ -4,7 +4,11 @@ A mutable local binding is a typed activation-local place, distinct from an SSA
 value. It must have an initializer. LOCAL_NEW defines the place; LOCAL_READ
 copies its current value; LOCAL_WRITE replaces it from an already evaluated value.
 A place cannot be returned, passed, printed, copied as a value or used as another
-place's initializer. Only the first operand of local read/write can name a place.
+place's initializer. Local read/write use a place only as their first operand.
+`xir-array-values.md` additionally admits an ARRAY local place in the dedicated
+GET/LEN/SET/PUSH receiver role, with its independent read/write permission check;
+it does not turn that place into a normal value. CELL_PLACE/SLOT_PLACE projections
+remain distinct producers and cannot be used by local read/write.
 The initializer must dominate every access. Types match exactly, including generic
 parameters before specialization. Read parameters and const bindings stay values.
 
@@ -12,8 +16,10 @@ Checked operations remain abstract. Lowering selects SCALAR_LOCAL or OWNED_LOCAL
 new/read/write, preserving the place/value distinction and frozen frame offsets.
 Owned replacement retains the source before dropping the previous destination;
 self-assignment and aliases stay valid. Reads are independent owned snapshots.
-All owned offsets, including places and read temporaries, are cleared on every
-activation exit. Current copyable values have no user destructor; precise last-use
+All real owned offsets, including local-place payloads and read temporaries,
+are cleared on every activation exit. Storage-free CELL_PLACE/SLOT_PLACE Array
+projections have UINT32_MAX offsets and no cleanup entry; role-aware layout
+verification rejects fake payload/cleanup for them. Current copyable values have no user destructor; precise last-use
 release and noncopyable scope cleanup are separate unqualified responsibilities.
 
 Source if/else, while and C-style for require bool conditions. Conditions are reevaluated on
@@ -30,7 +36,7 @@ budgets. Block zero has no incoming edge. All stored blocks must be reachable;
 every block ends in exactly one terminator. Scope state must not leak between
 branches, functions or compiler-session requests. Loops obey the existing runtime
 step budget and cancellation boundary. Failures publish no partial artifact.
-Checked wire schema is 5; semantic contract is 14. Older
+Checked wire schema is 5; semantic contract is 15. Older
 semantic revisions reject with no compatibility reader.
 
 verification-test: test_xir_locals

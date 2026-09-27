@@ -29,7 +29,7 @@ argument; definition checking cannot gain a constraint from a future body.
 Checked transitions and packets own every descriptor and parameter record; parser
 arenas, borrowed construction buffers and input bytes may be destroyed afterwards.
 Specialization substitutes components, interns a fresh closed constructed pool and
-remaps all type uses before rechecking. Checked schema 5, semantic contract 14
+remaps all type uses before rechecking. Checked schema 5, semantic contract 15
 places the unified tagged pool after generic metadata; earlier schema/contract
 pairs reject without an alternate reader. The exact record layout belongs to
 `xir-checked-packet.md`. Wire records contain only bounded IDs and descriptor
@@ -59,5 +59,5 @@ bodies or revisit AST during specialization. Read-only ordinary callable types
 still do not satisfy Sendable. Substitution and matching spend the aggregate work
 and memory budgets; recursive structural traversal is bounded to 128 levels.
 The tagged wire record carries the verified span immediately after kind, before
-the callable payload. Schema 5/contract 14, Value ABI 9, Call ABI 13 and Program
-ABI 8 replace previous versions atomically, without an alternate reader.
+the callable payload. Schema 5/contract 15, Value ABI 9, Call ABI 14 and Program
+ABI 9 replace previous versions atomically, without an alternate reader.

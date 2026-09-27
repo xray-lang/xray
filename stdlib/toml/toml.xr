@@ -52,6 +52,10 @@ export class TomlFloat {
     }
 }
 
+fn _tomlArrayLength(values: Array<TomlValue>) -> i64 {
+    return len(values)
+}
+
 export class TomlArray {
     values: Array<TomlValue>
 
@@ -64,12 +68,12 @@ export class TomlArray {
     }
 
     at(index: i64) -> TomlValue? {
-        if (index < 0 || index >= len(this.values)) { return null }
+        if (index < 0 || index >= _tomlArrayLength(this.values)) { return null }
         return this.values[index]
     }
 
     len() -> i64 {
-        return len(this.values)
+        return _tomlArrayLength(this.values)
     }
 }
 

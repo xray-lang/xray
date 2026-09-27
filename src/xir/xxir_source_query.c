@@ -55,6 +55,7 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
     if (!decls) return;
     for (uint32_t i = 0; i < source->declaration_count && copy->status == XR_XIR_OK; ++i) {
         decls[i].name = query_string(copy, source->declarations[i].name);
+        decls[i].signature = query_string(copy, source->declarations[i].signature);
         decls[i].parameters = query_copy(copy, source->declarations[i].parameters,
             decls[i].parameter_count, sizeof(*decls[i].parameters));
     }

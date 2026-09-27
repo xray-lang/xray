@@ -7,7 +7,7 @@ driving require their own qualification. No legacy artifact reader is admitted.
 A program seals a verified Lowered closure before execution. It owns copied
 module/function identities, exact signatures, dependency edges, slot declarations,
 literal bytes, a closed constructed-type arena, and a deterministic initialization
-order. Program ABI 8, Call ABI 13 and Value ABI 9 are admitted atomically. The
+order. Program ABI 9, Call ABI 14 and Value ABI 9 are admitted atomically. The
 ProgramSpec supplies the unique type pool; sealing verifies and deep-copies its
 descriptors into the arena before publishing the Program. Code environments are
 either explicitly process-static or transferred to the program with one release
@@ -50,7 +50,15 @@ Success advances once to the next initializer; the root initializer is never
 replayed as the entry body. Failure, cancellation, OOM and runtime faults during
 initialization are sticky and release published slots in reverse publication
 order. A later start returns the same failure without replaying effects; only a
-new instance retries. A failure-copy operation returns an independent owned value.
+new instance retries. Failure caches the complete CallResult, including Bounds
+detail, before releasing the activation and slots. The sole failure-copy API
+accepts an empty CallResult output (READY, unit, zero wake and detail), copies
+the value with independent ownership and copies detail by value. Failure leaves
+the output unchanged. The old value-only signature is removed atomically with
+Program ABI 9. Repeated failed polls/copies preserve the original index/length
+without rereading released storage or replaying initialization effects. An
+ordinary entry Bounds fault does not change an already-ready Instance into an
+initialization-failed Instance. These new assertions remain OPEN until tested.
 
 After readiness, entry calls share the instance's slots and providers. Different
 instances share code but no state or initialization progress. Replacing a root
@@ -80,6 +88,26 @@ activation, result, epoch or Instance state. Successful replacement releases the
 terminal activation before publishing execution progress. Both activations share
 the Instance's single value Domain and `value_limit`; replacement grants no second
 value budget. There is no third retained activation or uncharged frame cache.
+
+Each candidate start receives one unpublished value-admission work account,
+initially bounded by the configured poll_limit independently of resume count.
+Starting a function value charges its gate resolution and argument preparation
+to that same candidate account. Call construction receives its remaining work;
+successful publication carries that balance into the activation. Rejected host
+input, budget or allocation failure cannot debit an existing activation or change
+its result, epoch or initialization state. A new independent start may obtain a
+new account; repeated helpers, child calls, polls and suspension within an
+activation may not. All existing Instance helper admission consumers borrow the
+current CallView's account instead of recreating a full per-helper allowance.
+
+`value_limit` charges physical allocations made in that Domain, not all bytes
+reachable from an Instance. Retaining imported shared storage does not charge
+it twice. The allocating Domain remains alive with its backing after the origin
+Instance is destroyed. New Array allocations caused by mutation use the current
+admission Domain; a sufficient unique backing may be changed in place without
+retagging its existing charge. Cross-Domain growth prepares replacement storage
+in the receiving Domain and publishes it only after every fallible step succeeds.
+Domain identity grants neither write permission nor function execution authority.
 
 CONST_STRING indexes a literal; SLOT_LOAD returns an owned copy or scalar value.
 SLOT_INIT and SLOT_STORE have a unit result and one exactly typed operand. The

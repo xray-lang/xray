@@ -30,7 +30,8 @@ typedef struct XrXirSourceType {
 } XrXirSourceType;
 typedef enum XrXirSourceDeclarationKind {
     XR_XIR_SOURCE_FUNCTION, XR_XIR_SOURCE_BINDING, XR_XIR_SOURCE_PARAMETER,
-    XR_XIR_SOURCE_IMPORT, XR_XIR_SOURCE_MODULE
+    XR_XIR_SOURCE_IMPORT, XR_XIR_SOURCE_MODULE, XR_XIR_SOURCE_TYPE,
+    XR_XIR_SOURCE_TYPE_PARAMETER, XR_XIR_SOURCE_MEMBER, XR_XIR_SOURCE_INTRINSIC
 } XrXirSourceDeclarationKind;
 typedef struct XrXirSourceDeclaration {
     uint32_t id, parent, target;
@@ -41,10 +42,12 @@ typedef struct XrXirSourceDeclaration {
     const XrXirSourceType *parameters;
     uint32_t parameter_count;
     bool mutable, exported;
+    uint32_t native_identity;
+    const char *signature;
 } XrXirSourceDeclaration;
 typedef enum XrXirSourceAccess {
     XR_XIR_SOURCE_READ, XR_XIR_SOURCE_WRITE, XR_XIR_SOURCE_READ_WRITE,
-    XR_XIR_SOURCE_CALL, XR_XIR_SOURCE_FUNCTION_VALUE
+    XR_XIR_SOURCE_CALL, XR_XIR_SOURCE_FUNCTION_VALUE, XR_XIR_SOURCE_TYPE_USE
 } XrXirSourceAccess;
 typedef struct XrXirSourceReference {
     XrXirSourceRange range;

@@ -1,0 +1,2 @@
+var values = ["kept"]
+values[-1] = "uncommitted"

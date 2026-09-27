@@ -79,6 +79,7 @@ typedef struct XaBuiltinType {
     const char *name;
     const XaBuiltinMember *members;
     int member_count;
+    unsigned declaration_kind;
 } XaBuiltinType;
 
 // Handle type field info (for C module handle types like Connection, Listener)

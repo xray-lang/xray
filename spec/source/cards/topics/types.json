@@ -39,7 +39,8 @@
         "types-map",
         "types-set",
         "types-channel"
-      ]
+      ],
+      "markdown": "The new-XIR implementation subset is Array<T> as described in spec §17.26, including nested admitted arrays and function elements through the unified constructed-type pool. Elements must be copyable and storable; unit, internal cells, views and unadmitted noncopyable resources reject. Inventory presence does not qualify other container or user struct/class families."
     },
     {
       "heading": "Union types",

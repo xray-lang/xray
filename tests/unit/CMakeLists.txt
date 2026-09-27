@@ -226,6 +226,33 @@ target_link_libraries(test_xir_source_native PRIVATE xray_xir_scalar)
 add_xray_bootstrap_executable(test_xir_source_mixed xir/test_xir_source_mixed.c ${XIR_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_mixed PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_mixed PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
+add_xray_bootstrap_executable(test_xir_source_arrays xir/test_xir_source_arrays.c)
+target_link_libraries(test_xir_source_arrays PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_source_arrays PRIVATE XR_ARRAY_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source")
+set(XIR_ARRAY_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_source.xrc)
+set(XIR_ARRAY_BOUNDS_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_bounds.xrc)
+set(XIR_ARRAY_SOURCE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_source.c)
+add_custom_command(OUTPUT ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_source_arrays> ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}
+    DEPENDS test_xir_source_arrays
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/root.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/producer.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/bounds.xr
+    VERBATIM)
+add_executable(test_xir_array_packet_vm xir/test_xir_array_packet_vm.c ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED})
+target_link_libraries(test_xir_array_packet_vm PRIVATE xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}")
+target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_BOUNDS_CHECKED_FIXTURE="${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}")
+add_custom_command(OUTPUT ${XIR_ARRAY_SOURCE_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_array_packet_vm> ${XIR_ARRAY_SOURCE_GENERATED}
+    DEPENDS test_xir_array_packet_vm ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}
+    VERBATIM)
+add_executable(test_xir_source_array_native xir/test_xir_source_array_native.c ${XIR_ARRAY_SOURCE_GENERATED})
+target_link_libraries(test_xir_source_array_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_source_array_mixed xir/test_xir_source_array_mixed.c ${XIR_ARRAY_SOURCE_GENERATED})
+target_link_libraries(test_xir_source_array_mixed PRIVATE xray_xir_vm)
+target_compile_definitions(test_xir_source_array_mixed PRIVATE XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}")
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
@@ -234,7 +261,8 @@ foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generic
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
     test_xir_emit_program test_xir_program_vm test_xir_program_native
     test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native
-    test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics test_xir_source_query)
+    test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics test_xir_source_query
+    test_xir_source_arrays test_xir_array_packet_vm test_xir_source_array_native test_xir_source_array_mixed)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()
@@ -3052,6 +3080,9 @@ set_property(TEST test_prelude_init test_xi_emit test_xi_encoding_slice_native
     APPEND PROPERTY FIXTURES_SETUP prelude_enum_identity)
 add_xray_unit_test(test_native_type_surface stdlib/test_native_type_surface.c)
 set_tests_properties(test_native_type_surface PROPERTIES LABELS "stdlib;metadata;native-types")
+add_test(NAME test_native_declaration_schema
+    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/unit/frontend/test_native_declaration_schema.py)
+set_tests_properties(test_native_declaration_schema PROPERTIES LABELS "stdlib;metadata;native-types")
 if(XRAY_STDLIB_VM_FASTPATHS)
     add_xray_unit_test(test_stdlib_vm_fastpath_abi stdlib/test_stdlib_vm_fastpath_abi.c)
     set_tests_properties(test_stdlib_vm_fastpath_abi PROPERTIES
@@ -3119,6 +3150,10 @@ add_test(
 set_tests_properties(test_api_inventory_enum_metadata PROPERTIES
     LABELS "api;metadata;tooling;enum"
 )
+add_test(NAME test_api_inventory_native_declarations
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_native_declarations.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(test_api_inventory_native_declarations PROPERTIES LABELS "api;metadata;tooling;native-types")
 add_test(
     NAME test_param_mode_tooling_display
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_param_mode_tooling_display.py

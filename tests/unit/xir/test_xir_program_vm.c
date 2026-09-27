@@ -18,6 +18,8 @@
 #include "xir_program_cases.h"
 #include "xir_capture_fixture.h"
 #include "xir_capture_cases.h"
+#include "xir_array_program_fixture.h"
+#include "xir_array_program_cases.h"
 static void admission(void) {
     for (uint32_t invalid = 0; invalid < 23; ++invalid) {
         XrXirArtifact *artifact = program_fixture(0), *saved = artifact;
@@ -91,7 +93,48 @@ static void capture_mixed(void) {
         capture_cases(program); CHECK(mixed_releases == parity+1);
     }
 }
+typedef struct ArrayMixedOwner {
+    XrXirArtifact *artifact;
+    XrXirVmBinding bindings[8];
+    XrXirCallEntry entries[8];
+} ArrayMixedOwner;
+static uint32_t array_mixed_releases;
+static void array_mixed_release(void *pointer) {
+    ArrayMixedOwner *owner = pointer;
+    xr_xir_artifact_free(owner->artifact); xr_free(owner); ++array_mixed_releases;
+}
+extern const XrXirProgramSpec array_program0_program, array_program1_program;
+static void array_mixed(void) {
+    const XrXirProgramSpec *native[] = {&array_program0_program,&array_program1_program};
+    for (uint32_t mode = 0; mode < 2; ++mode) {
+        for (uint32_t parity = 0; parity < 2; ++parity) {
+            ArrayMixedOwner *owner = xr_calloc(1,sizeof(*owner)); CHECK(owner);
+            owner->artifact = array_program_fixture(mode != 0);
+            const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
+            for (uint32_t i = 0; i < 8; ++i) {
+                CHECK(xr_xir_vm_bind(owner->artifact,i,&owner->bindings[i],&owner->entries[i]) == XR_XIR_OK);
+                if (i % 2 == parity) owner->entries[i] = native[mode]->entries[i];
+            }
+            CHECK((owner->entries[2].resume == native[mode]->entries[2].resume) !=
+                (owner->entries[3].resume == native[mode]->entries[3].resume));
+            XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
+                {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,8,module->declarations,
+                {owner,array_mixed_release},module->types};
+            XrXirProgram *program = NULL;
+            CHECK(xr_xir_program_seal(&spec,65536,&program) == XR_XIR_OK);
+            array_program_cases(program,mode != 0);
+            CHECK(array_mixed_releases == mode * 2 + parity + 1);
+        }
+    }
+}
 int main(void) {
+    array_mixed();
+    for (uint32_t mode = 0; mode < 2; ++mode) {
+        XrXirArtifact *array = array_program_fixture(mode != 0);
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_vm_program_take(&array,65536,&program) == XR_XIR_OK);
+        array_program_cases(program,mode != 0);
+    }
     admission(); capture_mixed();
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *artifact = program_fixture(mode), *saved = artifact;

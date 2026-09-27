@@ -12,6 +12,7 @@
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 #include "module/xmodule_resolver.h"
+#include "../test_win_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,6 +90,36 @@ static void snapshot_type_allocations(void) {
     fail_at = SIZE_MAX; attempts = 0;
     printf("Constructed query snapshot: %zu allocation failure sites; no partial snapshot\n", sites);
 }
+static void array_source_allocations(XrCompilerSession *session) {
+    char directory[XR_TEST_PATH_MAX] = "xir-array-allocation-XXXXXX", absolute[XR_TEST_PATH_MAX], path[XR_TEST_PATH_MAX];
+    CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory, absolute, sizeof(absolute)));
+    CHECK(snprintf(path, sizeof(path), "%s/root.xr", absolute) > 0);
+    FILE *file = fopen(path, "wb"); CHECK(file);
+    CHECK(fputs("fn first<T>(a:Array<T>)->T{return a[0]}\nvar a=[\"x\"]\na.push(a[0])\na.set(0,\"y\")\n"
+        "print(len(a),first<string>(a),a.get(1))\n", file) >= 0 && fclose(file) == 0);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
+    XrXirSourceRequest request = {session, path, &authority, NULL, NULL};
+    size_t sites = 0;
+    for (size_t site = 0; site <= sites; ++site) {
+        attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
+        XrXirSourceResult result = {0};
+        XrXirStatus status = xr_xir_source_check(&request, &result, NULL);
+        if (!site) { CHECK(status == XR_XIR_OK && result.checked && result.snapshot); sites = attempts; }
+        else CHECK(status == XR_XIR_OUT_OF_MEMORY && !result.checked && !result.snapshot);
+        xr_xir_source_result_free(&result); CHECK(!live);
+    }
+    fail_at = SIZE_MAX;
+    for (unsigned kind = 0; kind < 2; ++kind) {
+        XrXirBudget budget = xr_xir_default_budget();
+        if (kind) budget.work = 100; else budget.metadata_bytes = 128;
+        request.budget = &budget;
+        XrXirSourceResult result = {0};
+        CHECK(xr_xir_source_check(&request, &result, NULL) == XR_XIR_BUDGET);
+        CHECK(!result.checked && !result.snapshot && !live);
+    }
+    CHECK(xr_test_unlink(path) == 0 && xr_test_rmdir(directory) == 0);
+    printf("Array source and owned native facts: %zu OOM sites; no partial publication\n", sites);
+}
 int main(void) {
     snapshot_type_allocations();
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
@@ -119,6 +150,7 @@ int main(void) {
         CHECK(!result.checked && !result.snapshot && !live);
     }
     resolver_fault = 0;
+    array_source_allocations(session);
     xr_compiler_session_delete(session);
     printf("Source-owner allocation failures: %zu; no partial artifact or live metadata\n", count);
     return 0;

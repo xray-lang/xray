@@ -9,8 +9,8 @@ visibility and initializer restrictions. Describing a type never grants access.
 Program sealing owns an independently retained TypeArena for the verified closed
 constructed pool. A function's identity is its arena plus local type ID; the node
 must have kind CALLABLE. The function object owns its arena, independently of
-its execution gate. Boxed value ABI 9, call ABI 13
-and Program ABI 8 replace their predecessors without an alternate runtime path.
+its execution gate. Boxed value ABI 9, call ABI 14
+and Program ABI 9 replace their predecessors without an alternate runtime path.
 A value owns its allocation domain and the admission record. The record retains
 the immutable Program and code lease, but only observes its originating instance;
 it does not own module slots, providers, active frames or instance allocations.
@@ -47,7 +47,7 @@ resolved before Program sealing. CALL_INDIRECT records an SSA callee ID in its
 immediate and the existing ordered argument range. Callee dominance, value role,
 full signature and result are checked without enumerating implementation targets.
 Both operations use the canonical owned frame layout and resumable ABI. Semantic
-contract 14 rejects previous packets; wire schema is 5. Function-valued root
+contract 15 rejects previous packets; wire schema is 5. Function-valued root
 slots are instance state; non-root ordinary callable slots have no Sendable proof.
 
 Source admission uses the existing fn(...) -> R spelling (unit omits the arrow).
@@ -107,7 +107,7 @@ can clean up. No borrowed environment survives independently of its owner.
 
 Last-reference destruction drains nested immutable environments without host
 recursion or allocation. stop/free revokes entry but not escaped value lifetime.
-Value9/Call13/Program8 and schema5/semantic14 replace earlier contracts.
+Value9/Call14/Program9 and schema5/semantic15 replace earlier contracts.
 Strong-cycle reclamation, full callable contracts and concurrency remain open;
 this contract never substitutes snapshot capture for shared mutable bindings.
 
@@ -131,8 +131,8 @@ it cannot declare its own first-class generic parameter list. Both its body and
 the FUNCTION_REF capture prefix go through ordinary Checked validation,
 specialization and recheck. No source/AST retry occurs during instantiation.
 
-Source closure production consumes the current schema5/semantic14 and
-Value9/Call13/Program8 environment contract. Captured cells and callable signatures
+Source closure production consumes the current schema5/semantic15 and
+Value9/Call14/Program9 environment contract. Captured cells and callable signatures
 share the constructed pool; no standalone signature table or encoded cell type
 survives this cutover. ARRAY descriptors in that pool do not yet qualify runtime
 arrays, arrays of functions or transitive array-element admission. Those require

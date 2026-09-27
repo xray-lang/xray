@@ -363,7 +363,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "typeName", fn_typename);
     // len: compiler-known query; operand support is checked by xa_visit_call.
     XrType *fn_len = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
-    register_builtin_func(analyzer, "len", fn_len);
+    register_core_builtin_func(analyzer, XR_CORE_BUILTIN_LEN, fn_len);
     // chr: fn(int) -> string
     XrType *fn_chr = xr_type_new_function(analyzer->isolate, &t_int, 1, t_string, false);
     register_builtin_func(analyzer, "chr", fn_chr);

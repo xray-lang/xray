@@ -13,34 +13,8 @@
 
 #include "xxir_internal.h"
 #include "xxir_types.h"
+#include "xxir_array_helpers.h"
 #include "../base/xmalloc.h"
-
-XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
-                        XrXirLayoutContext context, XrXirLayout *layout) {
-    if (!layout)
-        return XR_XIR_BAD_LAYOUT;
-    *layout = (XrXirLayout) {0, 0};
-    if (!target || target->architecture != XR_XIR_ARCH_X86_64 ||
-        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
-        context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
-        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && !xr_xir_type_is_number((XrXirType) type) && !xr_xir_type_is_owned(types, type)) ||
-        (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER) || xr_xir_type_span(types, type))
-        return XR_XIR_BAD_LAYOUT;
-    if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
-        context == XR_XIR_LAYOUT_BOXED)
-        *layout = (XrXirLayout) {16, 8};
-    else if (type == XR_XIR_UNIT)
-        *layout = (XrXirLayout) {0, 1};
-    else if (type == XR_XIR_BOOL && context == XR_XIR_LAYOUT_STORAGE)
-        *layout = (XrXirLayout) {1, 1};
-    else if (context == XR_XIR_LAYOUT_STORAGE && xr_xir_type_is_integer(type))
-        *layout = (XrXirLayout) {xr_xir_integer_bits(type) / 8, xr_xir_integer_bits(type) / 8};
-    else if (context == XR_XIR_LAYOUT_STORAGE && xr_xir_float_bits(type))
-        *layout = (XrXirLayout) {xr_xir_float_bits(type) / 8, xr_xir_float_bits(type) / 8};
-    else
-        *layout = (XrXirLayout) {8, 8};
-    return XR_XIR_OK;
-}
 
 static bool layout_equal(XrXirLayout left, XrXirLayout right) {
     return left.size == right.size && left.alignment == right.alignment;
@@ -110,6 +84,12 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     }
     uint32_t bytes = 0, owned = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
+        XrXirPlaceKind place = xr_xir_place_kind(function, slot);
+        if (place == XR_XIR_PLACE_CELL || place == XR_XIR_PLACE_SLOT) {
+            if (create) ((uint32_t *) layout->offsets)[slot] = UINT32_MAX;
+            else if (layout->offsets[slot] != UINT32_MAX) return XR_XIR_BAD_LAYOUT;
+            continue;
+        }
         XrXirLayout physical;
         XrXirType type = slot_type(function, slot);
         XrXirStatus status = xr_xir_layout(artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_FRAME, &physical);
@@ -155,7 +135,8 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         const XrXirInstruction *op = &function->instructions[i];
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
-            op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT ? op->args[1] : 0;
+            op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT ||
+            op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;
     }
     uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue);

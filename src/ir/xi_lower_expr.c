@@ -4632,7 +4632,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         return v;
     }
     /* len(x) is a compiler-known query, never an ordinary public member call. */
-    if (strcmp(fname, "len") == 0 && call->arg_count == 1) {
+    if (lower_core_builtin_id(l, call->callee) == XR_CORE_BUILTIN_LEN && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         struct XrType *query_type = xi_lower_node_type(l, call->arguments[0]);
         if (arg && query_type && !xi_lower_type_is_unknown(query_type) &&

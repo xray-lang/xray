@@ -66,6 +66,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 
 
 #include "xir/xxir_types.c"
+#include "xir/xxir_type_layout.c"
 #include "xir/xxir_type_arena.c"
 #include "xir/xxir_value.c"
 #include "xir/xxir_call.c"
@@ -107,7 +108,7 @@ static void output_allocation(void) {
     CHECK(calls == before && published == 1 && !live);
 }
 static XrXirAction identity_resume(XrXirCallView *view) {
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->arguments[0]};
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->arguments[0], {0}};
 }
 static void fail_sequence(void) {
     XrXirDomain *domain = NULL;
@@ -345,13 +346,14 @@ static void deep_arena_release(void) {
     CHECK(!live && calls == allocations); fail_at = SIZE_MAX;
 }
 #include "xir_cell_allocation_cases.h"
+#include "xir_array_allocation_cases.h"
 int main(void) {
     fail_at = SIZE_MAX; calls = 0; fail_sequence();
     size_t count = calls;
     for (size_t i = 0; i < count; ++i) { fail_at = i; calls = 0; fail_sequence(); }
     fail_at = SIZE_MAX; saturation(); output_allocation(); capture_ownership(); deep_capture_release();
     cell_allocation_cases(); cell_cycles_and_domains(); deep_cell_release();
-    arena_allocation_cases(); deep_arena_release();
+    arena_allocation_cases(); deep_arena_release(); array_allocation_cases();
     printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
     return 0;
 }

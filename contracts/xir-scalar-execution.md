@@ -11,8 +11,13 @@ ABI versions, and layout contexts reject explicitly.
 The layout service takes the owning constructed pool, type, target, context, and
 ABI identity. Constructed kinds are resolved from that pool, never a bare numeric
 range; equal widths do not grant conversions. Scalar leaf execution still rejects
-managed/constructed values. ARRAY descriptors and handle layouts do not qualify
-Array operations or backing storage. Storage bool is
+managed/constructed values. ARRAY descriptors and handle layouts do not alone
+qualify Array operations or backing storage. Their contracts are
+`xir-array-values.md` and `xir-array-storage.md`. Both runtime compact element
+storage and compiler frame layout call the one pure `xr_xir_layout` authority;
+runtime cannot duplicate its widths or depend on compiler artifact allocation.
+Array storage uses the verified element's STORAGE layout, not boxed boundary or
+frame-lane width. Storage bool is
 one byte; i64 is eight bytes aligned to eight. SSA and frame scalar lanes are
 eight bytes. Boxed, parameter, and result boundary values are sixteen bytes,
 aligned to eight, with u32 type, zero reserved u32, and signed i64 payload. Bool
@@ -21,8 +26,11 @@ the canonical zero boxed value. Unit parameters are outside the initial subset.
 
 Lowering stores the target identity, parameter/result boundary layouts, and each
 function's slot offsets and frame byte count in the immutable artifact. Unit
-instructions have no slot. VM and C emission consume these decisions and cannot
-derive a different layout. Checked artifacts are never executable. Layout
+instructions have no slot. CELL_PLACE/SLOT_PLACE likewise have no payload:
+their offsets are UINT32_MAX and they have no owned cleanup entries. Actual
+local-place payloads keep their normal storage. ARRAY_NEW's element staging
+contributes to the frozen outgoing maximum and frame-byte budget. VM and C
+emission consume these decisions and cannot derive a different layout. Checked artifacts are never executable. Layout
 construction and validation participate in metadata, work, and frame budgets.
 
 Scalar execution validates argument count, type, reserved fields, and canonical

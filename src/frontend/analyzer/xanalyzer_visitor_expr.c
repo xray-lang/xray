@@ -616,6 +616,16 @@ static XrType *xa_builtin_receiver_method_type_from_spec(XaInferContext *ctx, Xr
     return fn;
 }
 
+static bool xa_receiver_requires_checked_value_operations(XaInferContext *ctx, AstNode *node,
+    const XaBuiltinReceiverMethodSpec *spec) {
+    if (!spec || (spec->method_id != XA_BUILTIN_RECEIVER_METHOD_ARRAY_GET &&
+        spec->method_id != XA_BUILTIN_RECEIVER_METHOD_ARRAY_SET)) return false;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+        "Array get/set require the checked XIR value-operation pipeline", &loc);
+    return true;
+}
+
 static void xa_report_builtin_receiver_unsafe_requirement(XaInferContext *ctx, AstNode *node,
                                                           XrType *receiver,
                                                           const XaBuiltinReceiverMethodSpec *spec) {
@@ -2728,6 +2738,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     const XaBuiltinReceiverMethodSpec *builtin_receiver_spec =
         xa_find_builtin_receiver_method_spec(obj_type, ma->name);
     if (builtin_receiver_spec) {
+        if (xa_receiver_requires_checked_value_operations(ctx, node, builtin_receiver_spec)) {
+            return xr_type_new_error(ctx->analyzer->isolate);
+        }
         xa_report_builtin_receiver_unsafe_requirement(ctx, node, obj_type, builtin_receiver_spec);
         XrType *builtin_receiver_method =
             xa_builtin_receiver_method_type_from_spec(ctx, obj_type, builtin_receiver_spec);
@@ -5198,6 +5211,9 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
         }
 
         // Built-in methods on primitive/container types (e.g. string?.toI64())
+        if (xa_receiver_requires_checked_value_operations(ctx, node,
+            xa_find_builtin_receiver_method_spec(base_type, prop_name)))
+            return xa_optional_error(ctx);
         if (xa_builtin_is_method(base_type, prop_name)) {
             const char *sig = xa_builtin_get_member_signature(base_type, prop_name);
             if (sig) {

@@ -15,11 +15,12 @@
 #include "xxir_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_array_helpers.h"
 #include "../base/xmalloc.h"
 #include <limits.h>
 
 typedef enum ResultRule {
-    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_NUMBER, RULE_FLOAT, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_CALL, RULE_ATOMIC
+    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_NUMBER, RULE_FLOAT, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_CALL, RULE_ATOMIC, RULE_ARRAY
 } ResultRule;
 typedef struct OpRule {
     uint8_t stages;
@@ -76,7 +77,7 @@ static bool scalar(XrXirType type) {
 static uint32_t operand_count(const XrXirFunction *function, const XrXirInstruction *op,
                               const XrXirModule *module) {
     (void) module;
-    if (op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT) return op->args[1];
+    if (xr_xir_op_uses_operand_table(op->op)) return op->args[1];
     return op->op == XR_XIR_RETURN ? (function->result != XR_XIR_UNIT) : op_rules[op->op].operands;
 }
 
@@ -87,13 +88,14 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
         return d && op->immediate >= 0 && (uint64_t) op->immediate < d->literal_count ?
             XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_ATOMIC_I64_NEW) return d ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
-    if (op->op != XR_XIR_SLOT_LOAD && op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE)
+    if (op->op != XR_XIR_SLOT_LOAD && op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
+        op->op != XR_XIR_SLOT_PLACE)
         return XR_XIR_OK;
     if (!d || op->immediate < 0 || (uint64_t) op->immediate >= d->slot_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirSlot *slot = &d->slots[op->immediate];
     uint32_t caller = (uint32_t) (function - module->functions);
     if (d->functions[caller].module != slot->module) return XR_XIR_BAD_STRUCTURE;
-    if (op->op == XR_XIR_SLOT_LOAD && op->type != slot->type) return XR_XIR_BAD_TYPE;
+    if ((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_SLOT_PLACE) && op->type != slot->type) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_SLOT_INIT && d->modules[slot->module].initializer != caller)
         return XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_SLOT_STORE && (!slot->mutable || slot->module != d->root_module))
@@ -111,11 +113,12 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         return XR_XIR_BAD_STAGE;
     XrXirStatus declared = declaration_instruction(function, op, module);
     if (declared != XR_XIR_OK) return declared;
-    bool range = op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI;
+    bool range = xr_xir_op_uses_operand_table(op->op);
     if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
+    if (op->op == XR_XIR_ARRAY_SET && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
     if (op->op == XR_XIR_CELL_NEW && (!module->declarations || !xr_xir_type_is_cell(module->types, op->type))) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_CELL_READ && xr_xir_type_is_cell(module->types, op->type)) return XR_XIR_BAD_TYPE;
@@ -169,6 +172,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_OWNED && (!xr_xir_type_is_owned(module->types, op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
         (rule->result == RULE_ATOMIC && op->type != XR_XIR_ATOMIC_I64) ||
+        (rule->result == RULE_ARRAY && (!xr_xir_type_is_array(module->types, op->type) ||
+            !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_VALUE && !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
@@ -194,7 +199,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CALL &&
                op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
-               op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->immediate) {
+               op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
+               op->op != XR_XIR_SLOT_PLACE && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -267,7 +273,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
                 if (op->targets[0] != type_end) return XR_XIR_BAD_STRUCTURE;
                 type_end += op->targets[1];
             }
-            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI) && op->args[1]) {
+            if (xr_xir_op_uses_operand_table(op->op) && op->args[1]) {
                 if (op->args[0] != operand_end) return XR_XIR_BAD_STRUCTURE;
                 operand_end += op->args[1];
             }
@@ -412,9 +418,6 @@ static XrXirStatus value_use(const XrXirFunction *function, const Graph *graph,
     return (bits & (UINT64_C(1) << (from % 64))) ? XR_XIR_OK : XR_XIR_BAD_DOMINANCE;
 }
 
-static bool local_place(XrXirOp op) {
-    return op == XR_XIR_LOCAL_NEW || op == XR_XIR_SCALAR_LOCAL_NEW || op == XR_XIR_OWNED_LOCAL_NEW;
-}
 static bool local_access(XrXirOp op) {
     return op == XR_XIR_LOCAL_READ || op == XR_XIR_LOCAL_WRITE ||
         op == XR_XIR_SCALAR_LOCAL_READ || op == XR_XIR_SCALAR_LOCAL_WRITE ||
@@ -425,10 +428,10 @@ static bool local_write(XrXirOp op) {
 }
 static XrXirStatus local_operand(const XrXirTypes *types, const XrXirFunction *function, const XrXirInstruction *op,
                                   uint32_t id, uint32_t operand) {
-    bool place = id >= function->parameter_count && id - function->parameter_count < function->instruction_count &&
-        local_place(function->instructions[id - function->parameter_count].op);
-    if (place != (operand == 0 && local_access(op->op))) return XR_XIR_BAD_VALUE;
-    if (place) {
+    XrXirPlaceKind place = xr_xir_place_kind(function, id);
+    bool local = operand == 0 && local_access(op->op);
+    if (local ? place != XR_XIR_PLACE_LOCAL : place != XR_XIR_PLACE_NONE) return XR_XIR_BAD_VALUE;
+    if (local) {
         XrXirType type = function->instructions[id - function->parameter_count].type;
         if ((op->op == XR_XIR_SCALAR_LOCAL_WRITE && !scalar(type)) ||
             (op->op == XR_XIR_OWNED_LOCAL_WRITE && !xr_xir_type_is_owned(types, type))) return XR_XIR_BAD_TYPE;
@@ -467,6 +470,60 @@ static XrXirStatus phi_uses(const Graph *graph, const XrXirFunction *function,
     return XR_XIR_OK;
 }
 
+static XrXirStatus array_operand(const XrXirFunction *function, const Graph *graph,
+                                VerifyContext *context, uint32_t instruction,
+                                uint32_t ordinal, XrXirType expected) {
+    const XrXirInstruction *op = &function->instructions[instruction];
+    uint32_t id = xr_xir_op_uses_operand_table(op->op) ?
+        function->operands[op->args[0] + ordinal] : op->args[ordinal];
+    XrXirPlaceKind place = xr_xir_place_kind(function, id);
+    XrXirArrayOperandRole role = xr_xir_array_operand_role(op->op, ordinal);
+    if ((role == XR_XIR_ARRAY_OPERAND_VALUE && place != XR_XIR_PLACE_NONE) ||
+        (role == XR_XIR_ARRAY_OPERAND_WRITE && place == XR_XIR_PLACE_NONE)) return XR_XIR_BAD_VALUE;
+    if (role == XR_XIR_ARRAY_OPERAND_WRITE && place == XR_XIR_PLACE_SLOT) {
+        const XrXirDeclarations *d = context->module->declarations;
+        const XrXirInstruction *projection = &function->instructions[id - function->parameter_count];
+        if (!d || projection->immediate < 0 || (uint64_t) projection->immediate >= d->slot_count)
+            return XR_XIR_BAD_STRUCTURE;
+        const XrXirSlot *slot = &d->slots[projection->immediate];
+        if (!slot->mutable || slot->module != d->root_module) return XR_XIR_BAD_STRUCTURE;
+    }
+    return value_use(function, graph, instruction, id, expected);
+}
+
+static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
+                             VerifyContext *context, uint32_t instruction) {
+    const XrXirInstruction *op = &function->instructions[instruction];
+    if (op->op == XR_XIR_SLOT_PLACE) return XR_XIR_OK;
+    const XrXirTypes *types = context->module->types;
+    XrXirType array = op->type, cell = XR_XIR_UNIT;
+    if (op->op == XR_XIR_CELL_PLACE) {
+        cell = xr_xir_operand_type(function, op->args[0]);
+        if (!xr_xir_type_is_cell(types, cell) || xr_xir_cell_element(types, cell) != array)
+            return XR_XIR_BAD_TYPE;
+    } else if (op->op != XR_XIR_ARRAY_NEW) {
+        uint32_t receiver = op->op == XR_XIR_ARRAY_SET ? function->operands[op->args[0]] : op->args[0];
+        array = xr_xir_operand_type(function, receiver);
+        if (!xr_xir_type_is_array(types, array)) return XR_XIR_BAD_TYPE;
+    }
+    XrXirType element = xr_xir_array_element(types, array);
+    XrXirStatus status = xr_xir_type_satisfies(context->module, context->location.function,
+        element, 0, &context->remaining);
+    if (status != XR_XIR_OK) return status;
+    if (op->op == XR_XIR_ARRAY_GET && op->type != element) return XR_XIR_BAD_TYPE;
+    uint32_t count = operand_count(function, op, context->module);
+    if (!spend(&context->remaining.work, count)) return XR_XIR_BUDGET;
+    for (uint32_t a = 0; a < count; ++a) {
+        XrXirType expected = a ? element : array;
+        if (op->op == XR_XIR_CELL_PLACE) expected = cell;
+        if (op->op == XR_XIR_ARRAY_NEW) expected = element;
+        if ((op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET) && a == 1) expected = XR_XIR_I64;
+        status = array_operand(function, graph, context, instruction, a, expected);
+        if (status != XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -475,6 +532,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!spend(&context->remaining.work, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if (op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) {
+            XrXirStatus status = array_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
         if (op->op == XR_XIR_PHI) {
             XrXirStatus status = phi_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;
