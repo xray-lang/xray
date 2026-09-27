@@ -1,0 +1,228 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_xir_source_query.c - Owned facts agree with the single source checker
+ *
+ * KEY CONCEPT:
+ *   Queries survive source destruction without granting rejected capabilities.
+ */
+#include "xir/xxir_source.h"
+#include "xir/xxir_callable.h"
+#include "toolchain/xcompiler_session.h"
+#include "../test_win_compat.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+static void write_source(const char *path, const char *source) {
+    FILE *file = fopen(path, "wb"); CHECK(file);
+    size_t length = strlen(source);
+    CHECK(fwrite(source, 1, length, file) == length && fclose(file) == 0);
+}
+static const XrXirSourceDeclaration *declaration(const XrXirSourceView *view, const char *name, uint32_t parent) {
+    for (uint32_t i = 0; i < view->declaration_count; ++i) {
+        const XrXirSourceDeclaration *decl = &view->declarations[i];
+        CHECK(decl->id == i + 1);
+        if (decl->parent == parent && !strcmp(decl->name, name)) return decl;
+    }
+    return NULL;
+}
+static unsigned references(const XrXirSourceView *view, uint32_t binding, uint32_t target) {
+    unsigned count = 0;
+    for (uint32_t i = 0; i < view->reference_count; ++i) {
+        const XrXirSourceReference *ref = &view->references[i];
+        CHECK(ref->declaration && ref->declaration <= view->declaration_count);
+        CHECK(ref->target && ref->target <= view->declaration_count);
+        if (ref->declaration == binding && ref->target == target) ++count;
+    }
+    return count;
+}
+static void generic_facts(const XrXirSourceView *view) {
+    const XrXirSourceDeclaration *first = declaration(view, "first", 0), *second = declaration(view, "second", 0);
+    const XrXirSourceDeclaration *capture = declaration(view, "capture", 0);
+    CHECK(first && second && capture && first->id != second->id);
+    CHECK(first->type.known && second->type.known && first->type.type == second->type.type);
+    CHECK(first->type.type == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
+    CHECK(first->type.generic_owner == first->id && second->type.generic_owner == second->id);
+    CHECK(first->parameter_count == 1 && first->parameters[0].generic_owner == first->id);
+    const XrXirSourceDeclaration *parameter = declaration(view, "value", capture->id); CHECK(parameter);
+    CHECK(parameter->kind == XR_XIR_SOURCE_PARAMETER && parameter->type.generic_owner == capture->id);
+    CHECK(parameter->range.line == 5 && parameter->range.column == 15 && parameter->range.end_column == 20);
+    CHECK(references(view, parameter->id, parameter->id) == 1);
+    CHECK(capture->type.generic_owner == capture->id && view->callables);
+    const XrXirCallableSignature *signature = xr_xir_callable_signature(view->callables, capture->type.type);
+    CHECK(signature && signature->parameter_count == 0 && signature->result == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
+    unsigned closures = 0, generic_expressions = 0;
+    for (uint32_t i = 0; i < view->declaration_count; ++i) {
+        const XrXirSourceDeclaration *decl = &view->declarations[i];
+        if (decl->parent == capture->id && decl->kind == XR_XIR_SOURCE_FUNCTION) {
+            CHECK(decl->type.known && decl->type.type == signature->result);
+            CHECK(decl->type.generic_owner == capture->id && decl->type.generic_owner != decl->id);
+            CHECK(decl->parameter_count == 0); ++closures;
+        }
+    }
+    for (uint32_t i = 0; i < view->expression_count; ++i) {
+        const XrXirSourceExpression *expr = &view->expressions[i];
+        CHECK(expr->node && expr->type.known);
+        if (expr->range.line == 5 && expr->type.type == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE) {
+            CHECK(expr->type.generic_owner == capture->id); ++generic_expressions;
+        }
+    }
+    CHECK(closures == 1 && generic_expressions == 1);
+}
+static void shadow_and_imports(const XrXirSourceView *view) {
+    const XrXirSourceDeclaration *alias = declaration(view, "alias", 0), *module = declaration(view, "lib", 0);
+    const XrXirSourceDeclaration *visible = declaration(view, "visible", 0), *hidden = declaration(view, "hidden", 0);
+    CHECK(alias && module && visible && hidden);
+    CHECK(alias->kind == XR_XIR_SOURCE_IMPORT && alias->target == visible->id);
+    CHECK(visible->exported && !hidden->exported && visible->parameter_count == 1);
+    CHECK(visible->type.type == XR_XIR_I64 && visible->parameters[0].type == XR_XIR_I64);
+    const XrXirSourceDeclaration *parameter = declaration(view, "value", visible->id);
+    CHECK(parameter && !parameter->exported);
+    CHECK(references(view, alias->id, visible->id) == 1);
+    CHECK(references(view, module->id, visible->id) == 2);
+    CHECK(references(view, module->id, hidden->id) == 0);
+    const XrXirSourceDeclaration *shadow = declaration(view, "shadow", 0); CHECK(shadow);
+    unsigned bindings = 0, uses = 0;
+    for (uint32_t i = 0; i < view->declaration_count; ++i) {
+        const XrXirSourceDeclaration *decl = &view->declarations[i];
+        if (decl->parent != shadow->id || strcmp(decl->name, "value")) continue;
+        CHECK(decl->type.known && decl->type.type == XR_XIR_I64);
+        CHECK(references(view, decl->id, decl->id) == 1); ++bindings; ++uses;
+    }
+    CHECK(bindings == 2 && uses == 2);
+}
+static const char accepted_source[] =
+    "import { visible as alias } from \"./lib\"\r\n"
+    "import \"./lib\" as lib\r\n"
+    "fn first<T>(value:T)->T { const kept=value; return kept }\r\n"
+    "fn second<T>(value:T)->T { return value }\r\n"
+    "fn capture<T>(value:T)->fn()->T { return fn()->T { return value } }\r\n"
+    "fn shadow(value:i64)->i64 { { const value=2; print(value) }; return value }\r\n"
+    "const text=\"\xF0\x9F\x98\x80\"; const answer=alias(7)\r\n"
+    "const again=lib.visible(answer)\r\n"
+    "const callback=lib.visible\r\n"
+    "const result=callback(9)\r\n";
+static XrXirSourceResult accepted(const XrXirSourceRequest *request) {
+    write_source(request->entry_path, accepted_source);
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic;
+    XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr, "source: %s\n", diagnostic.message);
+    CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot); CHECK(view);
+    CHECK(view->complete && view->diagnostic.status == XR_XIR_OK && view->module_count == 2);
+    generic_facts(view); shadow_and_imports(view);
+    const XrXirSourceDeclaration *answer = declaration(view, "answer", 0); CHECK(answer);
+    const char *line = strstr(accepted_source, "const text="), *name = strstr(line, "answer="); CHECK(line && name);
+    CHECK(answer->range.line == 7 && answer->range.column == (int) (name - line) + 1);
+    CHECK(answer->range.end_line == 7 && answer->range.end_column == answer->range.column + 6);
+    CHECK(answer->type.known && answer->type.type == XR_XIR_I64);
+    const XrXirModule *module = xr_xir_artifact_module(result.checked);
+    const XrXirSourceModule *checked_module = &module->declarations->modules[answer->range.module];
+    const char *query_identity = view->modules[answer->range.module].identity;
+    CHECK(checked_module->name != query_identity);
+    CHECK(checked_module->name_length == strlen(query_identity));
+    CHECK(!memcmp(checked_module->name, query_identity, checked_module->name_length));
+    CHECK(module->callables && module->callables != view->callables && module->callables->signatures != view->callables->signatures);
+    CHECK(module->callables->count == view->callables->count);
+    return result;
+}
+static void publication_budgets(XrXirSourceRequest *request) {
+    write_source(request->entry_path, "const ok=1\n");
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        uint64_t low = 0, high = 65536;
+        XrXirBudget budget = xr_xir_default_budget();
+        request->budget = &budget;
+        while (low + 1 < high) {
+            uint64_t middle = low + (high - low) / 2;
+            if (mode) budget.work = middle; else budget.metadata_bytes = middle;
+            XrXirSourceResult result = {0};
+            XrXirStatus status = xr_xir_source_check(request, &result, NULL);
+            CHECK(status == XR_XIR_OK || status == XR_XIR_BUDGET);
+            if (status == XR_XIR_OK) { CHECK(result.checked && result.snapshot); high = middle; }
+            else { CHECK(!result.checked && !result.snapshot); low = middle; }
+            xr_xir_source_result_free(&result);
+        }
+        if (mode) budget.work = low; else budget.metadata_bytes = low;
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic;
+        CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BUDGET);
+        CHECK(!result.checked && !result.snapshot);
+        CHECK(!strcmp(diagnostic.message, "source query snapshot publication failed"));
+    }
+    request->budget = NULL;
+}
+static void multiline_declaration(const XrXirSourceRequest *request) {
+    write_source(request->entry_path, "fn\r\nname(value:i64)->i64 { return value }\r\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *name = declaration(view, "name", 0); CHECK(name);
+    CHECK(name->range.line == 2 && name->range.column == 1 && name->range.end_line == 2 && name->range.end_column == 5);
+    xr_xir_source_result_free(&result);
+}
+static void failures(XrXirSourceRequest *request) {
+    write_source(request->entry_path, "const kept=1\nprint(kept)\nprint(missing)\nconst later=2\n");
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic;
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BAD_VALUE);
+    CHECK(!result.checked && result.snapshot);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    CHECK(!view->complete && view->diagnostic.status == diagnostic.status && diagnostic.line == 3);
+    CHECK(!strcmp(view->diagnostic.message, diagnostic.message));
+    const XrXirSourceDeclaration *kept = declaration(view, "kept", 0), *later = declaration(view, "later", 0);
+    CHECK(kept && kept->type.known && later && !later->type.known);
+    CHECK(references(view, kept->id, kept->id) == 1);
+    xr_xir_source_result_free(&result); CHECK(!result.checked && !result.snapshot);
+    write_source(request->entry_path, "import \"./lib\" as lib\nconst kept=1\nlib.hidden(1)\n");
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) != XR_XIR_OK);
+    view = xr_xir_source_snapshot_view(result.snapshot); CHECK(view && !view->complete && !result.checked);
+    const XrXirSourceDeclaration *alias = declaration(view, "lib", 0), *hidden = declaration(view, "hidden", 0);
+    CHECK(alias && hidden && !alias->target && !references(view, alias->id, hidden->id));
+    xr_xir_source_result_free(&result);
+    write_source(request->entry_path, "import { hidden } from \"./lib\"\n");
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) != XR_XIR_OK);
+    view = xr_xir_source_snapshot_view(result.snapshot); CHECK(view && !view->complete && !view->reference_count);
+    CHECK(view->declarations[0].kind == XR_XIR_SOURCE_IMPORT && !view->declarations[0].target);
+    CHECK(diagnostic.module == 0 && view->diagnostic.module == 0 && strstr(view->modules[0].path, "root.xr"));
+    xr_xir_source_result_free(&result);
+    write_source(request->entry_path, "const ok=1\n");
+    for (unsigned mode = 0; mode < 2; ++mode) {
+        XrXirBudget budget = xr_xir_default_budget();
+        if (mode) budget.work = 0; else budget.metadata_bytes = 1;
+        request->budget = &budget;
+        CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BUDGET);
+        CHECK(!result.checked && !result.snapshot && diagnostic.status == XR_XIR_BUDGET);
+    }
+    request->budget = NULL;
+    CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_OK);
+    view = xr_xir_source_snapshot_view(result.snapshot);
+    CHECK(view && view->complete && view->declaration_count == 1 && !strcmp(view->declarations[0].name, "ok"));
+    xr_xir_source_result_free(&result);
+}
+int main(void) {
+    char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
+    CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory, absolute, sizeof(absolute)));
+    char root[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
+    CHECK(snprintf(root, sizeof(root), "%s/root.xr", absolute) > 0);
+    CHECK(snprintf(library, sizeof(library), "%s/lib.xr", absolute) > 0);
+    write_source(library, "export fn visible(value:i64)->i64 { return value }\nfn hidden(value:i64)->i64 { return value }\n");
+    XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
+    XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
+    failures(&request);
+    publication_budgets(&request);
+    multiline_declaration(&request);
+    XrXirSourceResult result = accepted(&request);
+    xr_xir_artifact_free(result.checked); result.checked = NULL;
+    xr_compiler_session_delete(session);
+    CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    generic_facts(view); shadow_and_imports(view);
+    CHECK(view->modules[0].identity[0] && strstr(view->modules[0].path, "root.xr"));
+    xr_xir_source_result_free(&result); xr_xir_source_result_free(&result);
+    CHECK(!result.checked && !result.snapshot && !xr_xir_source_snapshot_view(NULL));
+    puts("Owned source facts: lifetime, lexical binding, generic owner, byte ranges and fail-closed publication passed");
+    return 0;
+}

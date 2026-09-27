@@ -11,7 +11,7 @@
  */
 #ifndef XXIR_SOURCE_H
 #define XXIR_SOURCE_H
-#include "xxir.h"
+#include "xxir_source_query.h"
 #include "../module/xmodule_identity.h"
 struct XrCompilerSession;
 typedef struct XrXirSourceRequest {
@@ -21,12 +21,6 @@ typedef struct XrXirSourceRequest {
     const XrXirBudget *budget;
     const char *stdlib_path;
 } XrXirSourceRequest;
-typedef struct XrXirSourceDiagnostic {
-    XrXirStatus status;
-    uint32_t module;
-    int line, column;
-    char message[192];
-} XrXirSourceDiagnostic;
 XR_FUNC XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
-    XrXirArtifact **output, XrXirSourceDiagnostic *diagnostic);
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic);
 #endif // XXIR_SOURCE_H

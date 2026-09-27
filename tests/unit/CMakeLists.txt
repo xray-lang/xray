@@ -196,6 +196,8 @@ target_link_libraries(test_xir_source PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source PRIVATE XR_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_source")
 add_xray_bootstrap_executable(test_xir_source_admission xir/test_xir_source_admission.c)
 add_xray_bootstrap_executable(test_xir_source_generics xir/test_xir_source_generics.c)
+add_xray_bootstrap_executable(test_xir_source_query xir/test_xir_source_query.c)
+target_link_libraries(test_xir_source_query PRIVATE xray_xir_source)
 target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
 add_xray_bootstrap_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
@@ -232,7 +234,7 @@ foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generic
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
     test_xir_emit_program test_xir_program_vm test_xir_program_native
     test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native
-    test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics)
+    test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics test_xir_source_query)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()

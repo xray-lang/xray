@@ -16,7 +16,11 @@ static void source_decimal_contexts(const XrXirSourceRequest *request, const cha
         CHECK(length > 0 && (size_t) length < sizeof(source)); write_source(root, source);
         XrXirArtifact *artifact = NULL;
         XrXirSourceDiagnostic diagnostic;
-        XrXirStatus status = xr_xir_source_check(request, &artifact, &diagnostic);
+        XrXirSourceResult query_result_1 = {0};
+        XrXirStatus query_status_1 = xr_xir_source_check(request, &query_result_1, &diagnostic);
+        artifact = query_result_1.checked; query_result_1.checked = NULL;
+        xr_xir_source_result_free(&query_result_1);
+        XrXirStatus status = query_status_1;
         if (status != XR_XIR_OK) fprintf(stderr, "source decimal witness %zu width %u: %s\n", i, cases[i].width, diagnostic.message);
         CHECK(status == XR_XIR_OK && artifact);
         const XrXirModule *module = xr_xir_artifact_module(artifact);

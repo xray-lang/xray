@@ -1,0 +1,105 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_source_query.c - Independent ownership for immutable semantic facts
+ *
+ * KEY CONCEPT:
+ *   The snapshot owns facts and strings, never parser or construction state.
+ */
+#include "xxir_source_query_internal.h"
+#include "../base/xmalloc.h"
+#include <string.h>
+typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
+struct XrXirSourceSnapshot {
+    XrXirSourceView view;
+    SourceQueryMemory *memory;
+};
+typedef struct SourceQueryCopy {
+    XrXirSourceSnapshot *snapshot;
+    XrXirBudget *remaining;
+    XrXirStatus status;
+} SourceQueryCopy;
+static void *query_copy(SourceQueryCopy *copy, const void *source, size_t count, size_t size) {
+    if (copy->status != XR_XIR_OK || !count) return NULL;
+    if (!size || count > (SIZE_MAX - sizeof(SourceQueryMemory)) / size ||
+        count > copy->remaining->work ||
+        sizeof(SourceQueryMemory) + count * size > copy->remaining->metadata_bytes) {
+        copy->status = XR_XIR_BUDGET; return NULL;
+    }
+    size_t bytes = sizeof(SourceQueryMemory) + count * size;
+    SourceQueryMemory *memory = xr_calloc(1, bytes);
+    if (!memory) { copy->status = XR_XIR_OUT_OF_MEMORY; return NULL; }
+    copy->remaining->metadata_bytes -= bytes; copy->remaining->work -= count;
+    memory->next = copy->snapshot->memory; copy->snapshot->memory = memory;
+    if (source) memcpy(memory + 1, source, count * size);
+    return memory + 1;
+}
+static const char *query_string(SourceQueryCopy *copy, const char *source) {
+    return source ? query_copy(copy, source, strlen(source) + 1, 1) : NULL;
+}
+static void query_modules(SourceQueryCopy *copy, const XrXirSourceView *source) {
+    XrXirSourceQueryModule *modules = query_copy(copy, source->modules, source->module_count, sizeof(*modules));
+    copy->snapshot->view.modules = modules;
+    if (!modules) return;
+    for (uint32_t i = 0; i < source->module_count && copy->status == XR_XIR_OK; ++i) {
+        modules[i].identity = query_string(copy, source->modules[i].identity);
+        modules[i].path = query_string(copy, source->modules[i].path);
+    }
+}
+static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *source) {
+    XrXirSourceDeclaration *decls = query_copy(copy, source->declarations, source->declaration_count, sizeof(*decls));
+    copy->snapshot->view.declarations = decls;
+    if (!decls) return;
+    for (uint32_t i = 0; i < source->declaration_count && copy->status == XR_XIR_OK; ++i) {
+        decls[i].name = query_string(copy, source->declarations[i].name);
+        decls[i].parameters = query_copy(copy, source->declarations[i].parameters,
+            decls[i].parameter_count, sizeof(*decls[i].parameters));
+    }
+}
+static void query_callables(SourceQueryCopy *copy, const XrXirCallableTypes *source) {
+    if (!source || !source->count) { copy->snapshot->view.callables = NULL; return; }
+    XrXirCallableTypes *types = query_copy(copy, source, 1, sizeof(*types));
+    if (!types) return;
+    copy->snapshot->view.callables = types;
+    XrXirCallableSignature *signatures = query_copy(copy, source->signatures, source->count, sizeof(*signatures));
+    types->signatures = signatures;
+    if (!signatures) return;
+    for (uint32_t i = 0; i < source->count && copy->status == XR_XIR_OK; ++i)
+        signatures[i].parameters = query_copy(copy, source->signatures[i].parameters,
+            signatures[i].parameter_count, sizeof(*signatures[i].parameters));
+}
+XrXirStatus xr_xir_source_snapshot_copy(const XrXirSourceView *view,
+    XrXirBudget *remaining, XrXirSourceSnapshot **output) {
+    if (output) *output = NULL;
+    if (!view || !remaining || !output) return XR_XIR_BAD_STRUCTURE;
+    if (remaining->metadata_bytes < sizeof(XrXirSourceSnapshot) || !remaining->work) return XR_XIR_BUDGET;
+    XrXirSourceSnapshot *snapshot = xr_calloc(1, sizeof(*snapshot));
+    if (!snapshot) return XR_XIR_OUT_OF_MEMORY;
+    remaining->metadata_bytes -= sizeof(*snapshot); --remaining->work;
+    snapshot->view = *view;
+    SourceQueryCopy copy = {snapshot, remaining, XR_XIR_OK};
+    query_modules(&copy, view); query_declarations(&copy, view); query_callables(&copy, view->callables);
+    snapshot->view.references = query_copy(&copy, view->references, view->reference_count, sizeof(*view->references));
+    snapshot->view.expressions = query_copy(&copy, view->expressions, view->expression_count, sizeof(*view->expressions));
+    if (copy.status != XR_XIR_OK) { xr_xir_source_snapshot_free(snapshot); return copy.status; }
+    *output = snapshot; return XR_XIR_OK;
+}
+const XrXirSourceView *xr_xir_source_snapshot_view(const XrXirSourceSnapshot *snapshot) {
+    return snapshot ? &snapshot->view : NULL;
+}
+void xr_xir_source_snapshot_free(XrXirSourceSnapshot *snapshot) {
+    if (!snapshot) return;
+    while (snapshot->memory) {
+        SourceQueryMemory *next = snapshot->memory->next;
+        xr_free(snapshot->memory); snapshot->memory = next;
+    }
+    xr_free(snapshot);
+}
+void xr_xir_source_result_free(XrXirSourceResult *result) {
+    if (!result) return;
+    xr_xir_artifact_free(result->checked); xr_xir_source_snapshot_free(result->snapshot);
+    memset(result, 0, sizeof(*result));
+}

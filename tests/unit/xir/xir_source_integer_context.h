@@ -34,7 +34,11 @@ static void source_integer_bounds(const XrXirSourceRequest *request, const char 
             test->name, test->low, test->name, test->high);
         CHECK(length > 0 && (size_t) length < sizeof(text)); write_source(root, text);
         XrXirArtifact *artifact = NULL;
-        CHECK(xr_xir_source_check(request, &artifact, NULL) == XR_XIR_OK && artifact);
+        XrXirSourceResult query_result_1 = {0};
+        XrXirStatus query_status_1 = xr_xir_source_check(request, &query_result_1, NULL);
+        artifact = query_result_1.checked; query_result_1.checked = NULL;
+        xr_xir_source_result_free(&query_result_1);
+        CHECK(query_status_1 == XR_XIR_OK && artifact);
         const XrXirModule *module = xr_xir_artifact_module(artifact);
         CHECK(module->declarations->slot_count == 2);
         for (uint32_t s = 0; s < 2; ++s) CHECK(module->declarations->slots[s].type == test->type);
@@ -52,7 +56,11 @@ static void source_large_integer_casts(const XrXirSourceRequest *request, const 
         int length = snprintf(text, sizeof(text), "const result=((18446744073709551615)) as %s\n", source_integer_types[i].name);
         CHECK(length > 0 && (size_t) length < sizeof(text)); write_source(root, text);
         XrXirArtifact *artifact = NULL;
-        CHECK(xr_xir_source_check(request, &artifact, NULL) == XR_XIR_OK && artifact);
+        XrXirSourceResult query_result_2 = {0};
+        XrXirStatus query_status_2 = xr_xir_source_check(request, &query_result_2, NULL);
+        artifact = query_result_2.checked; query_result_2.checked = NULL;
+        xr_xir_source_result_free(&query_result_2);
+        CHECK(query_status_2 == XR_XIR_OK && artifact);
         const XrXirModule *module = xr_xir_artifact_module(artifact);
         const XrXirInstruction *ops = module->functions[0].instructions;
         CHECK(ops[0].op == XR_XIR_CONST_INT && ops[0].type == XR_XIR_U64 && ops[0].immediate == -1);
@@ -73,7 +81,11 @@ static void source_integer_joins(const XrXirSourceRequest *request, const char *
                 reverse ? "b" : "a", reverse ? "a" : "b");
             CHECK(length > 0 && (size_t) length < sizeof(text)); write_source(root, text);
             XrXirArtifact *artifact = NULL;
-            CHECK(xr_xir_source_check(request, &artifact, NULL) == XR_XIR_OK && artifact);
+            XrXirSourceResult query_result_3 = {0};
+            XrXirStatus query_status_3 = xr_xir_source_check(request, &query_result_3, NULL);
+            artifact = query_result_3.checked; query_result_3.checked = NULL;
+            xr_xir_source_result_free(&query_result_3);
+            CHECK(query_status_3 == XR_XIR_OK && artifact);
             const XrXirFunction *function = &xr_xir_artifact_module(artifact)->functions[1];
             uint32_t conversion = UINT32_MAX, predecessor = UINT32_MAX, phi = UINT32_MAX, join = UINT32_MAX;
             for (uint32_t b = 0; b < function->block_count; ++b) {
@@ -118,7 +130,11 @@ static void source_integer_contexts(const XrXirSourceRequest *request, const cha
             from->name, to->name, from->name, to->name, to->name, to->name, to->name, to->name, to->name);
         CHECK(length > 0 && (size_t) length < sizeof(text)); write_source(root, text);
         XrXirArtifact *artifact = NULL;
-        CHECK(xr_xir_source_check(request, &artifact, NULL) == XR_XIR_OK && artifact);
+        XrXirSourceResult query_result_4 = {0};
+        XrXirStatus query_status_4 = xr_xir_source_check(request, &query_result_4, NULL);
+        artifact = query_result_4.checked; query_result_4.checked = NULL;
+        xr_xir_source_result_free(&query_result_4);
+        CHECK(query_status_4 == XR_XIR_OK && artifact);
         const XrXirModule *module = xr_xir_artifact_module(artifact);
         unsigned conversions = 0;
         for (uint32_t f = 0; f < module->function_count; ++f) {

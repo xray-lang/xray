@@ -601,10 +601,10 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
 // Parse function declaration: fn add(a, b) { return a + b }
 AstNode *xr_parse_function_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_function_declaration: NULL parser");
-    int line = parser->previous.line;
 
     xr_parser_consume(parser, TK_NAME, "expected function name");
     Token name_token = parser->previous;
+    int line = name_token.line;
     int name_column = name_token.column;
 
     char *func_name = (char *) ast_alloc(parser->compiler_session, (size_t) name_token.length + 1);

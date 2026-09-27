@@ -27,7 +27,11 @@ int main(int argc, char **argv) {
     XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirSourceDiagnostic diagnostic;
-    XrXirStatus status = xr_xir_source_check(&request, &checked, &diagnostic);
+    XrXirSourceResult query_result_1 = {0};
+    XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, &diagnostic);
+    checked = query_result_1.checked; query_result_1.checked = NULL;
+    xr_xir_source_result_free(&query_result_1);
+    XrXirStatus status = query_status_1;
     if (status != XR_XIR_OK) fprintf(stderr, "source %u:%d:%d: %s (%u)\n", diagnostic.module,
         diagnostic.line, diagnostic.column, diagnostic.message, (unsigned) status);
     CHECK(status == XR_XIR_OK && checked);

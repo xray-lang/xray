@@ -37,7 +37,11 @@ int main(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB};
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_source_check(&request, &checked, NULL) == XR_XIR_OK);
+    XrXirSourceResult query_result_1 = {0};
+    XrXirStatus query_status_1 = xr_xir_source_check(&request, &query_result_1, NULL);
+    checked = query_result_1.checked; query_result_1.checked = NULL;
+    xr_xir_source_result_free(&query_result_1);
+    CHECK(query_status_1 == XR_XIR_OK);
     xr_compiler_session_delete(session);
     XrXirArtifact *specialized = NULL;
     CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);

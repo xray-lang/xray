@@ -2,9 +2,47 @@
 
 The source owner reuses the real lexer/parser, module resolver and parsed module
 graph. It performs its own declaration/type checks and directly constructs Built;
-Checked is the only published compiler result. It never invokes the legacy
+Checked is the only published XIR artifact. It never invokes the legacy
 analyzer, IR producer or executor. Parsed AST storage and resolver identities are
 borrowed only during construction; Checked owns its complete snapshot.
+
+## Owned source query snapshot
+
+One source check publishes an owned result containing Checked and a read-only
+semantic snapshot. The snapshot records decisions made by the same source owner;
+queries never parse, infer, specialize, check, execute, or grant visibility. It is
+not another executable IR. Neither result retains AST nodes, source-name objects,
+parser arenas, the compiler session, or the construction context. Either owned
+component may outlive the other, the session, and the source files.
+
+Declaration IDs are nonzero indices stable within that snapshot. They are not
+portable across edits, checks, or sessions. Module indices refer to owned durable
+canonical identities and source-content fingerprints; physical paths are locators
+only. A reference preserves both the lexical declaration (including an import
+alias) and the resolved target. Captures preserve the original binding identity.
+Function declarations expose their checked signature; their type field is the
+result type. Other typed declarations expose their value type. A type carries its
+generic declaration owner: equal parameter ordinals in two functions do not mean
+equal type identities. Callable IDs refer only to the snapshot's owned copy of
+the same callable descriptor table, interpreted under that generic owner.
+
+Source ranges use 1-based lines and UTF-8 byte columns, with exclusive ends.
+Zero coordinates mean unavailable, never a guessed location; parameter names use
+their own parser positions. These coordinates are not LSP UTF-16 positions.
+Source AST IDs, when present on expression facts, are snapshot-local only.
+
+Success publishes both Checked and a complete snapshot. A non-resource source
+failure publishes no Checked and may publish an explicitly incomplete snapshot
+with its first diagnostic and only facts established before failure. A declaration
+without a successfully checked type is explicitly untyped. Facts in an incomplete
+snapshot do not certify an entire declaration body or program. Parse/graph
+failures and unsuccessful or incomplete resolver identities publish no snapshot because those reused boundaries do not distinguish
+all allocation failures from invalid input. This does not qualify parser
+or IDE recovery. OOM or budget exhaustion publishes neither component, including
+when allocation fails while copying query metadata. Snapshot storage is charged
+to the same source metadata/work budgets. Result destruction releases both owned
+components and clears the result; transferring a component requires clearing its
+field before destroying the remaining result.
 
 The admitted family is ordinary named functions with explicit read bool/i64/string/Atomic<i64>
 parameters and explicit results (absent annotation denotes unit in this subset),
@@ -71,6 +109,7 @@ verification-test: test_xir_source_native
 verification-test: test_xir_source_mixed
 verification-test: test_xir_source_admission
 verification-test: test_xir_source_allocations
+verification-test: test_xir_source_query
 verification-test: test_parser_recoverable
 verification-test: meta_ownership_inventory
 

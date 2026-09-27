@@ -111,6 +111,7 @@ XIR_TESTS = (
     "test_xir_packet_vm",
     "test_xir_generics",
     "test_xir_source_generics",
+    "test_xir_source_query",
     "test_xir_locals",
     "test_xir_local_native",
 )

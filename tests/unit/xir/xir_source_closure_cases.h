@@ -34,7 +34,11 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
     for (unsigned i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_generic_source(request->entry_path, rejected[i]);
         XrXirArtifact *checked = NULL; XrXirSourceDiagnostic diagnostic;
-        XrXirStatus status = xr_xir_source_check(request, &checked, &diagnostic);
+        XrXirSourceResult query_result_1 = {0};
+        XrXirStatus query_status_1 = xr_xir_source_check(request, &query_result_1, &diagnostic);
+        checked = query_result_1.checked; query_result_1.checked = NULL;
+        xr_xir_source_result_free(&query_result_1);
+        XrXirStatus status = query_status_1;
         if (status == XR_XIR_OK) fprintf(stderr, "incorrectly accepted closure case %u\n", i);
         CHECK(status != XR_XIR_OK && !checked && diagnostic.status == status);
     }
@@ -62,7 +66,11 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         write_generic_source(request->entry_path, accepted[i]);
         XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
         XrXirSourceDiagnostic diagnostic;
-        XrXirStatus status = xr_xir_source_check(request, &checked, &diagnostic);
+        XrXirSourceResult query_result_2 = {0};
+        XrXirStatus query_status_2 = xr_xir_source_check(request, &query_result_2, &diagnostic);
+        checked = query_result_2.checked; query_result_2.checked = NULL;
+        xr_xir_source_result_free(&query_result_2);
+        XrXirStatus status = query_status_2;
         if (status != XR_XIR_OK) fprintf(stderr, "closure case %u: %s (%u)\n", i, diagnostic.message, status);
         CHECK(status == XR_XIR_OK && checked);
         const XrXirModule *module = xr_xir_artifact_module(checked);
