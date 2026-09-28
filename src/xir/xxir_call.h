@@ -15,7 +15,7 @@
 #include "xxir_scalar.h"
 #include "xxir_fault.h"
 
-#define XR_XIR_CALL_ABI_VERSION 14u
+#define XR_XIR_CALL_ABI_VERSION 15u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -24,7 +24,7 @@ typedef enum XrXirCallStatus {
     XR_XIR_CALL_OOM, XR_XIR_CALL_BAD_ARGUMENT, XR_XIR_CALL_BAD_ABI,
     XR_XIR_CALL_BAD_STATE, XR_XIR_CALL_BUSY, XR_XIR_CALL_DIVIDE_BY_ZERO,
     XR_XIR_CALL_CONSUMED, XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_NUMERIC_RANGE,
-    XR_XIR_CALL_BOUNDS
+    XR_XIR_CALL_BOUNDS, XR_XIR_CALL_MATCH_FAILURE
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
@@ -49,6 +49,7 @@ typedef struct XrXirAction {
 /* Normalize failures inside an admitted entry; admission errors are separate. */
 XR_FUNC XrXirAction xr_xir_call_fault(XrXirRunStatus status);
 XR_FUNC XrXirAction xr_xir_call_bounds(int64_t index, int64_t length);
+XR_FUNC XrXirAction xr_xir_call_match_failure(void);
 typedef struct XrXirCallView {
     XrXirCall *activation;
     void *instance;

@@ -92,4 +92,41 @@ static void bounds_fault_boundary(void) {
         if (variant < 5) CHECK(result.fault.index == index && result.fault.length == length);
     }
 }
+static void match_fault_boundary(void) {
+    const XrXirCallEntry entries[] = {
+        {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,fault_parent,bounds_cleanup,&identities[0]},
+        {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,bounds_child,bounds_cleanup,&identities[1]},
+    };
+    for (unsigned variant=0;variant<12;++variant) {
+        BoundsWitness witness={0}; witness.action=xr_xir_call_match_failure();
+        witness.expected=variant ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_MATCH_FAILURE;
+        switch (variant) {
+        case 1: witness.action.fault.code=430; break;
+        case 2: witness.action.fault.reserved=1; break;
+        case 3: witness.action.fault.index=-1; break;
+        case 4: witness.action.fault.length=1; break;
+        case 5: witness.action.value.payload=XR_XIR_CALL_BOUNDS; break;
+        case 6: witness.action.value.reserved=1; break;
+        case 7: witness.action.value.type=XR_XIR_BOOL; break;
+        case 8: witness.action.kind=XR_XIR_ACTION_THROW; break;
+        case 9: witness.action.callee=1; break;
+        case 10: witness.action.arguments=&witness.action.value; break;
+        case 11: witness.action.argument_count=1; break;
+        default: break;
+        }
+        XrXirCallAccounting accounting={0}; witness.accounting=&accounting;
+        XrXirCallConfig config={entries,2,&witness,65536,10,2,&accounting,{bounds_output,&witness},{0}};
+        XrXirCall *call=NULL;
+        CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_READY);
+        XrXirCallResult result=xr_xir_call_poll(call);
+        CHECK(result.status==witness.expected && result.value.type==XR_XIR_UNIT && !result.value.payload && !result.wake);
+        CHECK(witness.cleanups==2 && !witness.outputs && !accounting.depth && accounting.allocations==witness.fault_allocations);
+        CHECK(variant ? xr_xir_fault_empty(result.fault) : xr_xir_fault_match_valid(result.fault));
+        XrXirCallResult repeated=xr_xir_call_poll(call);
+        CHECK(repeated.status==result.status && !memcmp(&result.fault,&repeated.fault,sizeof(result.fault)));
+        CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
+        CHECK(!accounting.live_bytes && accounting.allocations==accounting.frees);
+        CHECK(variant ? xr_xir_fault_empty(result.fault) : xr_xir_fault_match_valid(result.fault));
+    }
+}
 #endif // XIR_BOUNDS_CALL_CASES_H

@@ -11,7 +11,7 @@ No process-global current instance is used. Inputs are copied before a call is
 accepted; scalar results own their inline payload. Unit, canonical bool, i64, and strings are admitted. Managed ownership, output
 and one-shot result transfer are governed by `xir-managed-values.md`. ABI mismatches fail before publication.
 
-Call ABI 14 retains the admission TypeArena for the activation lifetime and
+Call ABI 15 retains the admission TypeArena for the activation lifetime and
 passes it through each CallView. Typed argument, return, inbox and action
 admission checks the expected arena/type as well as existing execution authority.
 VM frame copies and emitted native frame copies use that same arena. Scalar
@@ -55,13 +55,13 @@ instruction wire layout or opcode identity.
 
 ## Allocation-free bounds fault detail
 
-Call ABI 14 atomically adds `fault` to Action and CallResult. The only admitted
+Call ABI 14 atomically adds `fault` to Action and CallResult. The bounds
 detail is a 24-byte, alignment-eight record: u32 code, u32 reserved, i64 index,
 i64 length. Bounds uses code 430, reserved zero, nonnegative length and an index
 less than zero or at least length. Index and length retain their full signed
-values. Every non-Bounds action/result carries an all-zero detail. Unknown codes,
+values. Except for the match-failure extension below, non-Bounds actions/results carry all-zero detail. Unknown codes,
 nonzero reserved bits, a negative length, an in-range Bounds index, or detail
-on a non-Bounds action reject as BAD_STATE before any action side effect.
+on an unrelated action reject as BAD_STATE before any action side effect.
 
 Bounds is a distinct fatal CALL_BOUNDS status, never language THROW, numeric
 range, OOM or a successful result. Its FAULT action has no callee or arguments
@@ -154,3 +154,19 @@ verification-test: test_xir_source_native
 verification-test: test_xir_source_mixed
 verification-test: test_xir_packet_vm
 verification-test: test_xir_source_allocations
+
+## Match-failure fault transport
+
+Call and Program ABI 15 admit MATCH_FAILURE with detail code 442 and zero
+reserved/index/length fields. Every other status/detail combination rejects
+before publication or output. The result is unit with no wake, survives cleanup
+and owner destruction, and allocates no diagnostic object. Existing child-first
+cleanup and initialization failure stickiness apply. This is the low-level panic
+transport; it does not yet implement the language PanicInfo object or catch panic.
+It is never represented as an i64 language THROW or a process termination.
+
+Checked semantic revision 28 adds MATCH_FAIL, opcode 89, in all three stages.
+It is a unit terminator with no operands, successors or immediate. VM and native
+resumable entries produce the same validated E0442 fault action. Scalar leaf
+optimization rejects this effect. Packets and native entries of earlier semantic
+or ABI revisions reject; there is no compatibility reader or duplicate executor.

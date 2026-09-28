@@ -144,3 +144,8 @@ variant count after the flat fields. Each ordered variant has a length-prefixed
 name followed by field-begin u32 and field-count u32. The owned reader validates
 contiguous complete ranges and per-variant field names before publication.
 Schema 8 is rejected; there is no absent-kind compatibility interpretation.
+
+Semantic 28 adds the zero-operand, unit MATCH_FAIL terminator at tag 89;
+schema 9 record layout is unchanged. Semantic 27 packets reject even after
+digest repair. The independently constructed scalar witness header/payload
+digest is `a47d194ca998371680c86fb9077c4f831848d28abde79cd2f3361f98b992a3e4`.

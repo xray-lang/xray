@@ -4076,7 +4076,10 @@ match (x) {
 }
 ```
 
-- Any sub-pattern matching is a success.
+- Alternatives are tried in source order; the first success skips the remaining alternatives of that arm.
+- Every alternative must bind the same names with exactly the same static types. Bindings are immutable and belong to the common arm scope.
+- After joining the successful bindings, the arm guard runs once. A false guard advances to the next arm without retrying the remaining alternatives of the current arm.
+- Unguarded alternatives contribute coverage together; a guarded arm contributes no unconditional coverage.
 
 ### 6.7 Wildcard `_`
 

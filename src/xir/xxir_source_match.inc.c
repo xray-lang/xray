@@ -8,19 +8,15 @@
  */
 #include "xxir_source_pattern.inc.c"
 #include "xxir_source_pattern_coverage.inc.c"
-static bool source_match_bind(SourceContext *ctx, AstNode *node, SourceValue value) {
-    for (SourceName *p=ctx->locals;p!=ctx->scope;p=p->next) {
-        if (!source_work(ctx,node)) return false;
-        if (!strcmp(p->name,node->as.variable.name)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"duplicate pattern binding");
-    }
+#include "xxir_source_pattern_bindings.inc.c"
+static bool source_match_bind(SourceContext *ctx, SourceName *symbol, SourceValue value) {
+    if (!symbol || symbol->type!=value.type) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"pattern binding type is inconsistent");
     SourceName *binding=source_alloc(ctx,1,sizeof(*binding));
     if (!binding) return false;
-    *binding=(SourceName){ctx->locals,node->as.variable.name,NULL,node,SOURCE_LOCAL,value.id,ctx->module,value.type,false,false,0};
-    ctx->locals=binding;
-    if (!source_query_declare(ctx,binding,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,
-        source_query_range(ctx,node,binding->name))) return false;
-    source_query_binding_type(ctx,binding); return true;
+    *binding=*symbol; binding->next=ctx->locals; binding->index=value.id; ctx->locals=binding;
+    return true;
 }
+
 typedef struct SourceMatchFailure {
     struct SourceMatchFailure *next;
     uint32_t instruction, target;
@@ -34,14 +30,41 @@ static bool source_match_test(SourceContext *ctx, SourceValue condition, bool tr
     branch.targets[truth?0:1]=body->block_count;
     return emit(ctx,branch,NULL) && begin_block(ctx);
 }
+static bool source_pattern_integer_value(SourceContext *ctx, XrXirType type, uint64_t key, SourceValue *value) {
+    uint64_t bias=source_pattern_integer_bias(type), bits=key^bias;
+    if (bits&bias) bits|=~source_pattern_integer_max(type);
+    int64_t payload=bits<=INT64_MAX?(int64_t)bits:-1-(int64_t)(UINT64_MAX-bits);
+    return emit(ctx,(XrXirInstruction){XR_XIR_CONST_INT,type,{0},{0},payload},value);
+}
 static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern,
     SourceValue receiver, bool test, SourceMatchFailure **failures, uint32_t depth) {
     if (!pattern) return true;
     if (!source_work(ctx,pattern->node)) return false;
     if (depth>=128) return source_fail(ctx,pattern->node,XR_XIR_BUDGET,"pattern generation depth exhausted");
-    if (pattern->binding) return source_match_bind(ctx,pattern->binding,receiver);
+    if (pattern->binding) return source_match_bind(ctx,pattern->symbol,receiver);
     if (pattern->any) return true;
     if (pattern->boolean) return !test || source_match_test(ctx,receiver,pattern->truth,failures);
+    if (pattern->node->type==AST_PATTERN_RANGE) {
+        if (!test) return true;
+        SourceValue low,high,condition;
+        if (pattern->empty) return emit(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},0},&condition) &&
+            source_match_test(ctx,condition,true,failures);
+        return source_pattern_integer_value(ctx,pattern->type,pattern->low,&low) &&
+            source_binary(ctx,pattern->node,AST_BINARY_GE,receiver,low,&condition) &&
+            source_match_test(ctx,condition,true,failures) &&
+            source_pattern_integer_value(ctx,pattern->type,pattern->high,&high) &&
+            source_binary(ctx,pattern->node,AST_BINARY_LE,receiver,high,&condition) &&
+            source_match_test(ctx,condition,true,failures);
+    }
+    if (pattern->literal) {
+        SourceValue literal,condition;
+        if (pattern->type==XR_XIR_STRING) {
+            if (!source_literal(ctx,pattern->literal,&literal)) return false;
+        } else if (!emit(ctx,(XrXirInstruction){xr_xir_float_bits(pattern->type)?XR_XIR_CONST_FLOAT:XR_XIR_CONST_INT,
+            pattern->type,{0},{0},pattern->literal_payload},&literal)) return false;
+        return !test || (source_binary(ctx,pattern->node,AST_BINARY_EQ,receiver,literal,&condition) &&
+            source_match_test(ctx,condition,true,failures));
+    }
     SourceEnumSelection *selected=&pattern->selection;
     if (test) {
         SourceValue tag,ordinal,condition;
@@ -60,6 +83,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
     }
     return true;
 }
+#include "xxir_source_match_alternatives.inc.c"
 static bool source_match_body(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     if (node->type != AST_BLOCK) return expression_in(ctx,node,expected,value);
     *value=(SourceValue){0,XR_XIR_UNIT};
@@ -79,31 +103,22 @@ static bool source_match(SourceContext *ctx, AstNode *node, XrXirType expected, 
     MatchExprNode *match=&node->as.match_expr; SourceValue receiver;
     if (match->arm_count<=0 || (uint32_t)match->arm_count>UINT32_MAX/2 || !expression(ctx,match->expr,&receiver))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"match requires arms and a scrutinee");
-    if (!xr_xir_type_is_enum(&ctx->types,receiver.type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"match scrutinee family is not admitted");
+    if (!xr_xir_type_is_enum(&ctx->types,receiver.type) && receiver.type!=XR_XIR_BOOL &&
+        receiver.type!=XR_XIR_STRING && !xr_xir_type_is_number(receiver.type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"match scrutinee family is not admitted");
     uint32_t count=(uint32_t)match->arm_count;
-    SourceMatchPattern *patterns=source_alloc(ctx,count,sizeof(*patterns));
-    SourceMatchPattern **rows=source_alloc(ctx,count,sizeof(*rows));
+    SourceMatchArm *patterns=NULL; bool exhaustive=false;
+    if (!source_match_normalize_arms(ctx,node,receiver.type,&patterns,&exhaustive)) return false;
     SourceValue *inputs=source_alloc(ctx,count*2,sizeof(*inputs)); uint32_t *jumps=source_alloc(ctx,count,sizeof(*jumps));
-    if (!patterns || !rows || !inputs || !jumps) return false;
-    uint32_t row_count=0; bool complete=false;
-    for (uint32_t i=0;i<count;++i) {
-        AstNode *arm=match->arms[i];
-        if (!source_work(ctx,arm) || arm->type!=AST_MATCH_ARM ||
-            !source_match_pattern(ctx,arm->as.match_arm.pattern,receiver.type,&patterns[i],0)) return false;
-        if (complete) return source_fail(ctx,arm,XR_XIR_BAD_STRUCTURE,"unreachable match arm is not admitted");
-        if (!arm->as.match_arm.guard) {
-            rows[row_count++]=&patterns[i];
-            if (!source_pattern_coverage(ctx,(SourcePatternMatrix){&receiver.type,rows,1,row_count},0,&complete)) return false;
-        }
-    }
-    if (!complete) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum match is not exhaustive");
+    if (!inputs || !jumps) return false;
     SourceFunction *body=&ctx->bodies[ctx->function];
     SourceName *saved=ctx->locals,*scope=ctx->scope; XrXirType result=XR_XIR_UNIT;
+    if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t continuing=0;
     for (uint32_t i=0;i<count;++i) {
         MatchArmNode *arm=&match->arms[i]->as.match_arm; SourceMatchFailure *failures=NULL;
         ctx->locals=saved; ctx->scope=saved;
-        if (!source_match_payload(ctx,&patterns[i],receiver,i+1<count,&failures,0)) return false;
+        if (!source_match_alternatives(ctx,&patterns[i],receiver,i+1<count || !exhaustive,&failures)) return false;
         if (arm->guard) {
             SourceValue condition;
             if (!expression(ctx,arm->guard,&condition)) return false;
@@ -124,6 +139,8 @@ static bool source_match(SourceContext *ctx, AstNode *node, XrXirType expected, 
         if (i+1<count && !begin_block(ctx)) return false;
     }
     ctx->locals=saved; ctx->scope=scope;
+    if (!exhaustive && (!begin_block(ctx) ||
+        !emit(ctx,(XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0},NULL))) return false;
     if (!continuing) {
         if (result_required) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"never-valued expression context is not admitted");
         ctx->returned=true; *value=(SourceValue){0,XR_XIR_UNIT}; return true;

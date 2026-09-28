@@ -677,6 +677,63 @@ static void nested_pattern_facts(XrXirSourceRequest *request) {
     CHECK(references(view,item->id,item->id)==1 && references(view,other->id,other->id)==1);
     xr_xir_source_result_free(&result);
 }
+static void range_pattern_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "enum E{A{x:i8}}\nfn pick(v:E)->i64{return match(v){\n"
+        "E.A{x:-128..0}->1,\nE.A{x:0..=127}->2}}\n");
+    XrXirSourceResult result={0};
+    CHECK(xr_xir_source_check(request,&result,NULL)==XR_XIR_OK && result.checked && result.snapshot);
+    xr_xir_artifact_free(result.checked); result.checked=NULL;
+    write_source(request->entry_path,"print(0)\n");
+    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    unsigned endpoints[2]={0};
+    for (uint32_t i=0;i<view->expression_count;++i) {
+        const XrXirSourceExpression *expr=&view->expressions[i];
+        if (expr->range.line>=3 && expr->range.line<=4 && expr->type.known && expr->type.type==XR_XIR_I8) {
+            CHECK(!expr->type.generic_owner); ++endpoints[expr->range.line-3];
+        }
+    }
+    CHECK(endpoints[0]==2 && endpoints[1]==2);
+    xr_xir_source_result_free(&result);
+}
+static void alternative_pattern_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "enum E{A{x:string},B{x:string}}\nfn pick(v:E)->string{return match(v){\n"
+        "E.A{x:item},\nE.B{x:item} if(item==\"yes\")->item,\n_->\"no\"}}\n");
+    XrXirSourceResult result={0};
+    CHECK(xr_xir_source_check(request,&result,NULL)==XR_XIR_OK && result.checked && result.snapshot);
+    xr_xir_artifact_free(result.checked); result.checked=NULL;
+    write_source(request->entry_path,"print(0)\n");
+    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *pick=declaration(view,"pick",0); CHECK(pick);
+    const XrXirSourceDeclaration *item=declaration(view,"item",pick->id); CHECK(item);
+    CHECK(item->kind==XR_XIR_SOURCE_BINDING && item->type.known && item->type.type==XR_XIR_STRING && !item->mutable);
+    unsigned declarations=0,reads=0,writes=0;
+    for (uint32_t i=0;i<view->declaration_count;++i)
+        if (view->declarations[i].parent==pick->id && !strcmp(view->declarations[i].name,"item")) ++declarations;
+    for (uint32_t i=0;i<view->reference_count;++i) {
+        const XrXirSourceReference *ref=&view->references[i];
+        if (ref->target!=item->id) continue;
+        CHECK(ref->declaration==item->id && ref->range.line==4);
+        if (ref->access==XR_XIR_SOURCE_WRITE) ++writes;
+        else { CHECK(ref->access==XR_XIR_SOURCE_READ); ++reads; }
+    }
+    CHECK(declarations==1 && reads==2 && writes==1 && item->range.line==3);
+    xr_xir_source_result_free(&result);
+}
+static void unreachable_pattern_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,"fn f(v:f32)->i64{return match(v){\n_,\n16777216->1}}\n");
+    XrXirSourceResult result={0};
+    CHECK(xr_xir_source_check(request,&result,NULL)==XR_XIR_OK && result.checked && result.snapshot);
+    xr_xir_artifact_free(result.checked); result.checked=NULL;
+    write_source(request->entry_path,"print(0)\n");
+    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot); unsigned facts=0;
+    for (uint32_t i=0;i<view->expression_count;++i) {
+        const XrXirSourceExpression *expr=&view->expressions[i];
+        if (expr->range.line==3 && expr->type.known && expr->type.type==XR_XIR_F32) ++facts;
+    }
+    CHECK(facts==1); xr_xir_source_result_free(&result);
+}
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -691,6 +748,9 @@ int main(void) {
     source_struct_facts(&request);
     source_enum_facts(&request);
     nested_pattern_facts(&request);
+    range_pattern_facts(&request);
+    alternative_pattern_facts(&request);
+    unreachable_pattern_facts(&request);
     source_constructor_facts(&request);
     source_default_argument_facts(&request);
     source_static_method_facts(&request);

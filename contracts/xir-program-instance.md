@@ -7,7 +7,7 @@ driving require their own qualification. No legacy artifact reader is admitted.
 A program seals a verified Lowered closure before execution. It owns copied
 module/function identities, exact signatures, dependency edges, slot declarations,
 literal bytes, a closed constructed-type arena, and a deterministic initialization
-order. Program ABI 14, Call ABI 14 and Value ABI 11 are admitted atomically. The
+order. Program ABI 15, Call ABI 15 and Value ABI 11 are admitted atomically. The
 ProgramSpec supplies the unique type pool; sealing verifies and deep-copies its
 descriptors into the arena before publishing the Program. Code environments are
 either explicitly process-static or transferred to the program with one release

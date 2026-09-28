@@ -127,7 +127,8 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 9 && XR_XIR_CHECKED_CONTRACT == 27 && XR_XIR_OP_COUNT == 89, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 9 && XR_XIR_CHECKED_CONTRACT == 28 && XR_XIR_OP_COUNT == 90, "packet revision");
+    _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
     _Static_assert(XR_XIR_ENUM_NEW == 86 && XR_XIR_ENUM_TAG == 87 && XR_XIR_ENUM_GET == 88, "enum wire operations");
     _Static_assert(XR_XIR_STRING_INDEX_OF == 84 && XR_XIR_STRING_LAST_INDEX_OF == 85, "search wire operations");
     _Static_assert(XR_XIR_STRING_CONTAINS == 81 && XR_XIR_STRING_STARTS_WITH == 82 && XR_XIR_STRING_ENDS_WITH == 83, "string predicate wire operations");
@@ -156,8 +157,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0xc3, 0x6d, 0xeb, 0x3c, 0x43, 0xc9, 0x2e, 0x01, 0xd3, 0x5b, 0x32, 0xa8, 0x36, 0x87, 0x95, 0xce,
-        0xef, 0x9f, 0x7d, 0x27, 0x40, 0x47, 0x34, 0x3b, 0xe6, 0xa4, 0x14, 0x4b, 0x60, 0x36, 0x80, 0x75};
+        0xa4, 0x7d, 0x19, 0x4c, 0xa9, 0x98, 0x37, 0x16, 0x80, 0xc8, 0x6f, 0xb9, 0x07, 0x7c, 0x4f, 0x83,
+        0x18, 0x48, 0xd2, 0x8a, 0xbd, 0xe7, 0x9c, 0xd2, 0xf3, 0x36, 0x1f, 0x98, 0xb9, 0x92, 0xa3, 0xe4};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
@@ -167,7 +168,7 @@ static void byte_order(void) {
     XrXirArtifact *narrow = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &narrow, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(narrow);
-    put32(packet.bytes + 12, 25); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 27); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
     put32(packet.bytes + 8, 6); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
@@ -901,7 +902,36 @@ static void enum_packet_cases(void) {
 #include "xir_enum_layout_cases.h"
 #include "xir_enum_generic_fixture.h"
 #include "xir_enum_packet_cases.h"
+static void match_fault_shape(void) {
+    XrXirInstruction op={XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0};
+    const XrXirBlock block={0,1};
+    const XrXirFunction fn={"fault",5,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0};
+    const XrXirModule module={XR_XIR_BUILT,&fn,1,NULL,NULL,NULL,NULL};
+    for (unsigned variant=0;variant<7;++variant) {
+        op=(XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0};
+        switch (variant) {
+        case 1: op.args[0]=1; break;
+        case 2: op.args[1]=1; break;
+        case 3: op.targets[0]=1; break;
+        case 4: op.targets[1]=1; break;
+        case 5: op.immediate=442; break;
+        case 6: op.type=XR_XIR_I64; break;
+        default: break;
+        }
+        XrXirArtifact *checked=NULL;
+        XrXirStatus status=xr_xir_check(&module,NULL,&checked,NULL);
+        if (variant) { CHECK(status!=XR_XIR_OK && !checked); continue; }
+        CHECK(status==XR_XIR_OK && checked);
+        XrXirCheckedPacket packet={0}; XrXirArtifact *decoded=NULL;
+        CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
+        xr_xir_artifact_free(checked);
+        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_artifact_module(decoded)->functions[0].instructions[0].op==XR_XIR_MATCH_FAIL);
+        xr_xir_checked_packet_free(&packet); xr_xir_artifact_free(decoded);
+    }
+}
 int main(void) {
+    match_fault_shape();
     enum_generic_cases(); enum_instruction_packet_cases();
     enum_storage_layout(); enum_tag_widths();
     enum_packet_cases();

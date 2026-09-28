@@ -19,7 +19,7 @@
 int main(int argc, char **argv) {
     FILE *file = argc == 2 ? fopen(argv[1], "wb") : NULL;
     CHECK(argc == 1 || (argc == 2 && file));
-    for (uint32_t mode = 0; mode < 3; ++mode) {
+    for (uint32_t mode = 0; mode < 4; ++mode) {
         XrXirArtifact *artifact = call_fixture(mode);
         XrXirCSource source;
         CHECK(xr_xir_emit_leaf_c(artifact, "leaf", 65536, &source) == XR_XIR_BAD_STAGE);

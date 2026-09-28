@@ -454,6 +454,9 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_SUSPEND:
         action->kind = XR_XIR_ACTION_SUSPEND;
         break;
+    case XR_XIR_MATCH_FAIL:
+        *action = xr_xir_call_match_failure();
+        break;
     case XR_XIR_THROW:
         *action = (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {XR_XIR_I64, 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}};
@@ -619,7 +622,8 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
             return XR_XIR_RUN_BAD_ARGUMENT;
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_SUSPEND ||
-            body->instructions[i].op == XR_XIR_THROW || xr_xir_type_is_owned(module->types, body->instructions[i].type) ||
+            body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
+            xr_xir_type_is_owned(module->types, body->instructions[i].type) ||
             body->instructions[i].op == XR_XIR_OUTPUT || body->instructions[i].op == XR_XIR_PRINT ||
             body->instructions[i].op == XR_XIR_WRITE_STREAM)
             return XR_XIR_RUN_BAD_ARTIFACT;

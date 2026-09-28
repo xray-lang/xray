@@ -117,6 +117,26 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "fn f(v:f32)->i64{return match(v){_,16777217->1}}\n",
+    "enum E{A{x:f32}}\nfn f(v:E)->i64{return match(v){E.A{},E.A{x:16777217}->1}}\n",
+    "enum E{A{x:i64},B{x:string}}\nfn f(v:E)->i64{return match(v){E.A{x},E.B{x}->1}}\n",
+    "enum E{A{x:i64},B}\nfn f(v:E)->i64{return match(v){E.A{x},E.B->1}}\n",
+    "enum E{A,B{x:i64}}\nfn f(v:E)->i64{return match(v){E.A,E.B{x}->1}}\n",
+    "enum E{A{x:i64,y:i64},B{x:i64}}\nfn f(v:E)->i64{return match(v){E.B{x},E.A{x,y:x}->x}}\n",
+    "enum E{A,B}\nfn f(v:E)->i64{return match(v){E.A,E.B if(true)->1}}\n",
+    "enum E{A{x:i8}}\nfn f(v:E)->i64{return match(v){E.A{x:-128..127}->1}}\n",
+    "enum E{A{x:i8,b:bool}}\nfn f(v:E)->i64{return match(v){E.A{x:-128..0,b:true}->1,E.A{x:0..=127,b:false}->2}}\n",
+    "enum E{A{x:u8}}\nfn f(v:E)->i64{return match(v){E.A{x:0..256}->1,E.A{}->2}}\n",
+    "enum E{A{x:f32}}\nfn f(v:E)->i64{return match(v){E.A{x:0..1}->1,E.A{}->2}}\n",
+    "enum E{A{x:f32}}\nfn f(v:E)->i64{return match(v){E.A{x:16777217}->1,E.A{}->2}}\n",
+    "enum E{A{x:i8}}\nfn f(v:E)->i64{return match(v){E.A{x:-128..=127} if(true)->1}}\n",
+
+    "enum E{A{x:i8}}\nfn f(v:E)->i64{return match(v){E.A{x:128}->1,E.A{}->2}}\n",
+    "enum E{A{x:u64}}\nfn f(v:E)->i64{return match(v){E.A{x:-1}->1,E.A{}->2}}\n",
+    "enum E{A{x:string}}\nfn f(v:E)->i64{return match(v){E.A{x:1}->1,E.A{}->2}}\n",
+    "enum E<T>{A{x:T}}\nfn f<T>(v:E<T>)->i64{return match(v){E.A{x:1}->1,E.A{}->2}}\n",
+    "enum E{A{x:i64}}\nfn f(v:E)->i64{return match(v){E.A{x:1}->1}}\n",
+
     "enum E{A,B}\nfn f(v:E)->i64{match(v){E.A->{break},E.B->{return 0}}}\n",
     "enum E{A,B}\nfn f(v:E)->i64{match(v){E.A->{return 1\nprint(2)},E.B->{return 0}}}\n",
 
@@ -496,6 +516,20 @@ static void constructor_admission(const XrXirSourceRequest *request, const char 
 }
 static void enum_admission(const XrXirSourceRequest *request, const char *root) {
     const char *sources[] = {
+        "fn f(x:i64)->i64{return match(x){1,2->3}}\n",
+        "fn f(x:bool)->i64{return match(x){true->3}}\n",
+        "fn f(x:bool)->bool{return match(x){v->v}}\n",
+        "fn f(x:f32)->i64{return match(x){_,16777216->1}}\n",
+        "fn f(x:f32)->i64{return match(x){1.0->3}}\n",
+        "fn f(x:string)->string{return match(x){\"x\"->\"yes\"}}\n",
+        "fn f(x:i64)->i64{match(x){1->{return 3}}}\n",
+        "enum E{A{x:i8}}\nfn f(v:E)->i64{return match(v){E.A{x:-128..0}->1,E.A{x:0..=127}->2}}\n",
+        "enum E{A{x:u64}}\nfn f(v:E)->i64{return match(v){E.A{x:0..18446744073709551615}->1,E.A{x:18446744073709551615}->2}}\n",
+        "enum E{A{x:i8,b:bool}}\nfn f(v:E)->i64{return match(v){E.A{x:-128..0,b:true}->1,E.A{x:-128..0,b:false}->2,E.A{x:0..=127}->3}}\n",
+        "enum E{A{x:f32}}\nfn f(v:E)->i64{return match(v){E.A{x:16777216}->1,E.A{}->2}}\n",
+
+        "enum E{A{x:i8,y:u64,s:string,f:f32},B}\nfn f(v:E)->i64{return match(v){E.A{x:-128}->1,E.A{y:18446744073709551615}->2,E.A{s:\"yes\",f:-0.0}->3,E.A{}->4,E.B->5}}\n",
+
         "enum I{A,B{value:string}}\nenum O{None,Some{inner:I,flag:bool}}\nfn pick(v:O)->string{return match(v){O.None->\"none\",O.Some{inner:I.A,flag:true}->\"at\",O.Some{inner:I.A,flag:false}->\"af\",O.Some{inner:I.B{value},flag:true}->value,O.Some{inner:I.B{value},flag:false}->\"bf\"}}\nprint(pick(O.Some{inner:I.B{value:\"yes\"},flag:true}))\n",
         "enum I<T>{None,Some{value:T}}\nenum O<T>{Wrap{inner:I<T>}}\nfn pick<T>(v:O<T>,fallback:T)->T{return match(v){O.Wrap{inner:I.None}->fallback,O.Wrap{inner:I.Some{value}}->value}}\nprint(pick<i64>(O<i64>.Wrap{inner:I<i64>.Some{value:42}},0))\n",
         "enum E{A{x:bool,y:bool}}\nconst n=match(E.A{x:true,y:false}){E.A{x:true,y:true}->1,E.A{x:true,y:false}->2,E.A{x:false,y:true}->3,E.A{x:false,y:false}->4}\nprint(n)\n",
@@ -507,6 +541,13 @@ static void enum_admission(const XrXirSourceRequest *request, const char *root) 
         "enum E<T> { Empty, Some { value:T } }\nfn pick<T>(v:E<T>,fallback:T)->T{return match(v){E.Some{value}->value,E.Empty->fallback}}\nprint(pick<i64>(E<i64>.Some{value:42},0))\n",
         "enum E { A { x:string }, B }\nconst v=E.A{x:\"yes\"}\nconst x=match(v){E.A{x} if(false)->x,E.A{x}-> {Coro.yield()\nx},E.B->\"empty\"}\nprint(x)\n",
         "enum E { A { x:i64 }, B }\nfn f(v:E)->i64{const x=\"outer\"\nconst read=fn()->i64{return match(v){E.A{x}->x,E.B->0}}\nreturn read()}\nprint(f(E.A{x:42}))\n",
+        "enum E{A{x:string},B{x:string}}\nfn f(v:E)->string{return match(v){E.A{x},E.B{x}->x}}\nprint(f(E.B{x:\"b\"}))\n",
+        "enum E{A{x:i64,y:string},B{x:i64,y:string}}\nfn f(v:E)->string{return match(v){E.A{x,y},E.B{y,x}->y}}\nprint(f(E.B{x:1,y:\"b\"}))\n",
+        "enum E<T>{A{x:T},B{x:T}}\nfn f<T>(v:E<T>)->T{return match(v){E.A{x},E.B{x}->x}}\nprint(f<string>(E<string>.B{x:\"b\"}))\n",
+        "enum E{A,B}\nfn f(v:E)->i64{return match(v){E.A,E.B->1}}\nprint(f(E.A))\n",
+        "enum E{A,B}\nfn f(v:E)->i64{return match(v){_,_->1}}\nprint(f(E.B))\n",
+        "enum E{A,B}\nfn f(v:E)->i64{return match(v){x,x->x.ordinal}}\nprint(f(E.B))\n",
+        "enum E{A{x:i64},B{x:i64}}\nfn f(v:E)->i64{const x=\"outer\"\nconst read=fn()->i64{return match(v){E.A{x},E.B{x}->x}}\nreturn read()}\nprint(f(E.B{x:42}))\n",
         "enum Color { Red, Blue }\nprint(Color.Red.ordinal, Color.Blue.ordinal)\n",
         "enum Choice { Empty, Some { value:i64, label:string } }\nconst v=Choice.Some { label:\"yes\", value:42 }\nprint(v.ordinal)\n",
         "enum Choice<T> { Empty, Some { value:T } }\nconst v=Choice<i64>.Some { value:42 }\nprint(v.ordinal)\n",

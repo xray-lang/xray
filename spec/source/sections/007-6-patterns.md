@@ -150,7 +150,10 @@ match (x) {
 }
 ```
 
-- 任一子模式匹配即成功。
+- 按源码顺序尝试备选，首次成功后不再尝试该 arm 的其他备选。
+- 所有备选必须绑定相同的名称集合，且每个同名绑定的确切静态类型相同；绑定不可变，属于该 arm 的共同作用域。
+- 成功备选的绑定合并后，arm 的 guard 只求值一次；guard 失败进入下一 arm，不重试当前 arm 的剩余备选。
+- 无 guard 的备选共同贡献穷举覆盖；有 guard 的整个 arm 不贡献无条件覆盖。
 
 ### 6.7 通配符 `_`
 
@@ -347,7 +350,10 @@ match (x) {
 }
 ```
 
-- Any sub-pattern matching is a success.
+- Alternatives are tried in source order; the first success skips the remaining alternatives of that arm.
+- Every alternative must bind the same names with exactly the same static types. Bindings are immutable and belong to the common arm scope.
+- After joining the successful bindings, the arm guard runs once. A false guard advances to the next arm without retrying the remaining alternatives of the current arm.
+- Unguarded alternatives contribute coverage together; a guarded arm contributes no unconditional coverage.
 
 ### 6.7 Wildcard `_`
 

@@ -17,6 +17,36 @@ typedef struct SourcePatternMatrix {
 static bool source_pattern_any(const SourceMatchPattern *pattern) {
     return !pattern || pattern->any;
 }
+static bool source_pattern_cut(SourceContext *ctx, uint64_t *cuts, uint32_t *count, uint64_t key) {
+    uint32_t at=0;
+    while (at<*count) {
+        if (!source_work(ctx,NULL)) return false;
+        if (cuts[at]==key) return true;
+        if (cuts[at]>key) break;
+        ++at;
+    }
+    for (uint32_t i=*count;i>at;--i) {
+        if (!source_work(ctx,NULL)) return false;
+        cuts[i]=cuts[i-1];
+    }
+    cuts[at]=key; ++*count; return true;
+}
+static bool source_pattern_integer_cuts(SourceContext *ctx, SourcePatternMatrix input,
+    uint64_t **output, uint32_t *count) {
+    if (input.rows>(UINT32_MAX-1)/2) return source_fail(ctx,NULL,XR_XIR_BUDGET,"pattern cut capacity overflow");
+    uint64_t *cuts=source_alloc(ctx,(size_t)input.rows*2+1,sizeof(*cuts));
+    if (!cuts) return false;
+    *count=1; cuts[0]=0;
+    uint64_t maximum=source_pattern_integer_max(input.types[0]);
+    for (uint32_t r=0;r<input.rows;++r) {
+        if (!source_work(ctx,NULL)) return false;
+        SourceMatchPattern *head=input.patterns[(size_t)r*input.width];
+        if (source_pattern_any(head) || !head->interval || head->empty) continue;
+        if (!source_pattern_cut(ctx,cuts,count,head->low) ||
+            (head->high<maximum && !source_pattern_cut(ctx,cuts,count,head->high+1))) return false;
+    }
+    *output=cuts; return true;
+}
 static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix input, uint32_t depth, bool *complete) {
     const XrXirType *types=input.types;
     SourceMatchPattern *const *matrix=input.patterns;
@@ -36,9 +66,12 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
     }
     bool enumeration=xr_xir_type_is_enum(&ctx->types,types[0]);
     bool boolean=types[0]==XR_XIR_BOOL;
+    bool integer=xr_xir_type_is_integer(types[0]);
+    uint64_t *cuts=NULL;
     uint32_t constructors=1;
     if (enumeration) constructors=ctx->nominals.declarations[xr_xir_type_node(&ctx->types,types[0])->nominal.declaration].variant_count;
     else if (boolean) constructors=2;
+    else if (integer && !source_pattern_integer_cuts(ctx,input,&cuts,&constructors)) return false;
     for (uint32_t v=0;v<constructors;++v) {
         if (!source_work(ctx,NULL)) return false;
         uint32_t fields=0; XrXirType *field_types=NULL;
@@ -57,7 +90,14 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
         for (uint32_t r=0;r<rows;++r) {
             if (!source_work(ctx,NULL)) return false;
             SourceMatchPattern *head=matrix[(size_t)r*width]; bool any=source_pattern_any(head);
-            if (!any && !(enumeration?!head->boolean && head->selection.variant==v:boolean && head->boolean && head->truth==(v!=0))) continue;
+            bool selected=any;
+            if (!any && enumeration) selected=head->selection.variant==v;
+            else if (!any && boolean) selected=head->boolean && head->truth==(v!=0);
+            else if (!any && integer) {
+                uint64_t high=v+1<constructors?cuts[v+1]-1:source_pattern_integer_max(types[0]);
+                selected=head->interval && !head->empty && head->low<=cuts[v] && head->high>=high;
+            }
+            if (!selected) continue;
             for (uint32_t c=0;c<next_width;++c) {
                 if (!source_work(ctx,NULL)) return false;
                 next[(size_t)next_rows*next_width+c]=c<fields?(any?NULL:head->fields[c]):matrix[(size_t)r*width+c-fields+1];

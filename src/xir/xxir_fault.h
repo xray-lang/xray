@@ -27,4 +27,7 @@ static inline bool xr_xir_fault_bounds_valid(XrXirFaultDetail fault) {
     return fault.code == 430 && !fault.reserved && fault.length >= 0 &&
         (fault.index < 0 || fault.index >= fault.length);
 }
+static inline bool xr_xir_fault_match_valid(XrXirFaultDetail fault) {
+    return fault.code == 442 && !fault.reserved && !fault.index && !fault.length;
+}
 #endif // XXIR_FAULT_H

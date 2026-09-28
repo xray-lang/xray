@@ -359,10 +359,18 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
     return XR_XIR_CALL_READY;
 }
 
+XrXirAction xr_xir_call_match_failure(void) {
+    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
+        {XR_XIR_I64, 0, XR_XIR_CALL_MATCH_FAILURE}, {442, 0, 0, 0}};
+}
+
 static void accept_action(XrXirCall *call, XrXirAction action) {
     bool bounds = action.kind == XR_XIR_ACTION_FAULT &&
         boundary_value(action.value, XR_XIR_I64) && action.value.payload == XR_XIR_CALL_BOUNDS;
-    if (bounds ? !xr_xir_fault_bounds_valid(action.fault) : !xr_xir_fault_empty(action.fault)) {
+    bool match = action.kind == XR_XIR_ACTION_FAULT &&
+        boundary_value(action.value, XR_XIR_I64) && action.value.payload == XR_XIR_CALL_MATCH_FAILURE;
+    if (bounds ? !xr_xir_fault_bounds_valid(action.fault) :
+        match ? !xr_xir_fault_match_valid(action.fault) : !xr_xir_fault_empty(action.fault)) {
         unwind(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
@@ -428,7 +436,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_FAULT) {
         XrXirCallStatus reason = XR_XIR_CALL_BAD_STATE;
         if (boundary_value(action.value, XR_XIR_I64) &&
-            (bounds || action.value.payload == XR_XIR_CALL_NUMERIC_RANGE || action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
+            (bounds || match || action.value.payload == XR_XIR_CALL_NUMERIC_RANGE || action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
              action.value.payload == XR_XIR_CALL_LIMIT))
             reason = (XrXirCallStatus) action.value.payload;
         unwind(call, reason);

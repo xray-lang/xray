@@ -1,7 +1,7 @@
 # XIR nominal declarations and field type ownership
 
-Current executable identities are Checked schema 9 / semantic 27, Program ABI 14,
-Value ABI 11 and Call ABI 14. Later admission sections define the supported source
+Current executable identities are Checked schema 9 / semantic 28, Program ABI 15,
+Value ABI 11 and Call ABI 15. Later admission sections define the supported source
 subsets; historical implementation order does not introduce alternative protocols.
 
 ## Abstract nominal expression admission
@@ -951,3 +951,72 @@ that every value reaching that arm matches it. Existing flat cases use this same
 owner, with no fallback matcher or second coverage table. Range/multiple/scalar
 root patterns and union/never result generalization remain separate unfinished
 language obligations, not reasons to weaken the actual language rules.
+
+## Scalar literal payload pattern contract
+
+Integer, decimal and string literal payload patterns use the scrutinee field's
+ordinary contextual literal rules and the same typed equality operations as
+expressions. Negative numeric literals retain their exact sign and width;
+string comparison uses the complete byte length. Literal operands are emitted
+only after enclosing constructor tests succeed, with normal value ownership.
+No expression call, lookup side effect or missing generic constraint becomes a
+literal pattern implicitly. A typed pattern does not create a second equality
+implementation in either VM or native code.
+
+Float and string coverage currently requires an unguarded binding/wildcard
+path; finite integer literals and intervals use the partition proof below.
+Unimplemented families remain admission boundaries, not new language policy.
+Non-exhaustive scalar root matches still require a real E0442 fault path and
+ultimately typed PanicInfo; integer THROW cannot impersonate that contract.
+Ranges, multi-pattern binding joins, nullable/type/structural patterns and
+union/never result propagation remain open until their own executable gates.
+
+## Integer interval payload pattern contract
+
+Integer literal and range patterns share contextual integer validation with
+ordinary expressions. A half-open interval excludes its upper endpoint; a
+closed interval includes it. Empty or reversed intervals match no values and
+contribute no coverage. Integer-to-float literal context retains the ordinary
+exact-representability rule; floating range patterns remain invalid.
+
+Normalize finite integer intervals to inclusive unsigned order keys using the
+source width and a sign-bit bias. Split matrix columns only at observed lower
+bounds and checked successors of upper bounds, together with the domain start.
+Never enumerate the integer domain, overflow MAX+1, depend on signed C overflow,
+or require host int128. Each partition retains complete row correlations and
+only unguarded rows prove coverage. Literal endpoints are admitted first;
+general compile-time constant endpoints remain an unfinished CTFE obligation.
+Endpoint validation and owned query facts precede publication; all allocation,
+sorting, matrix work and recursion remain budgeted. Runtime range tests use
+ordinary typed GE/LE after enclosing tag tests, with no second comparison ABI.
+
+## Ordered multi-pattern binding contract
+
+Comma alternatives share one arm. Check every alternative at definition time,
+including unreachable alternatives, with identical binding-name sets and exact
+substituted types. Publish one immutable query declaration per logical binding;
+later binding occurrences reference that identity as initialization writes.
+Contextual numeric validation runs during pattern normalization, not contingent
+on generating its test. Patterns store the checked integer/float payload; runtime
+emission consumes that payload after required constructor tests. Thus unreachable
+alternatives still reject inexact floating integer literals and retain typed query
+facts without executing or allocating their runtime literal values.
+Try alternatives in source order, testing each constructor before projection.
+Join successful binding values through ordinary typed PHI ownership and run
+the guard once. Guard failure advances to the next arm, never another alternative.
+Only unguarded rows enter the existing coverage matrix. Capture scanning treats
+the common names as arm-local and does not capture shadowed outer names.
+All collection, lookup, branching and merging obey existing budgets and fail
+without publishing partial artifacts. No eager OR matcher or duplicated body.
+
+## Scalar root matching and failure
+
+Bool, fixed-width integer, float and string roots use the same typed pattern
+tree, coverage matrix, ordered alternatives and owned bindings as enum payloads.
+Only enum roots require static exhaustiveness. A non-exhaustive admitted scalar
+match retains every refutable test, including the last arm, and reaches MATCH_FAIL
+only after all patterns/guards fail. A proved complete match omits that unreachable
+fault block. Result joins contain only successful continuing arms; the fault path
+never fabricates a result value. Scrutinees are evaluated once and owned snapshots
+survive guards and suspension. E0442 transport is governed by the resumable-call
+contract; full PanicInfo/catch panic integration remains an open language obligation.

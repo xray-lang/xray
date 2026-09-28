@@ -10,13 +10,32 @@
  *   Checking, coverage and projection share the same substituted pattern types.
  */
 typedef struct SourceMatchPattern {
-    AstNode *node, *binding;
+    AstNode *node, *binding, *literal;
     SourceEnumSelection selection;
+    SourceName *symbol;
     struct SourceMatchPattern **fields;
     XrXirType type;
     uint32_t count;
     bool any, boolean, truth;
+    bool interval, empty;
+    uint64_t low, high;
+    int64_t literal_payload;
 } SourceMatchPattern;
+static uint64_t source_pattern_integer_max(XrXirType type) {
+    uint32_t width=xr_xir_integer_bits(type);
+    return width==64?UINT64_MAX:(UINT64_C(1)<<width)-1;
+}
+static uint64_t source_pattern_integer_bias(XrXirType type) {
+    return xr_xir_integer_signed(type)?UINT64_C(1)<<(xr_xir_integer_bits(type)-1):0;
+}
+static bool source_pattern_integer_key(SourceContext *ctx, AstNode *node, XrXirType type, uint64_t *key) {
+    SourceInteger literal; uint64_t bits;
+    if (!source_direct_integer(ctx,node,&literal)) return false;
+    if (!literal.present) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoint constant is not admitted");
+    if (!source_integer_payload(ctx,node,&literal,type,&bits)) return false;
+    *key=(bits&source_pattern_integer_max(type))^source_pattern_integer_bias(type);
+    return true;
+}
 static bool source_pattern_binding(AstNode *node) {
     return node && node->type == AST_PATTERN_LITERAL && node->as.pattern_literal.value &&
         node->as.pattern_literal.value->type == AST_VARIABLE;
@@ -40,6 +59,17 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
     if (!node || !source_work(ctx,node)) return false;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"pattern depth exhausted");
     out->node=node; out->type=type;
+    if (node->type==AST_PATTERN_RANGE) {
+        PatternRangeNode *range=&node->as.pattern_range;
+        if (!xr_xir_type_is_integer(type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range pattern requires integer fields");
+        if (!source_pattern_integer_key(ctx,range->start,type,&out->low) ||
+            !source_pattern_integer_key(ctx,range->end,type,&out->high) ||
+            !source_query_expression(ctx,range->start,type) || !source_query_expression(ctx,range->end,type)) return false;
+        out->interval=true;
+        out->empty=range->inclusive_end?out->low>out->high:out->low>=out->high;
+        if (!range->inclusive_end && !out->empty) --out->high;
+        return true;
+    }
     if (node->type==AST_PATTERN_WILDCARD || source_pattern_binding(node)) {
         out->any=true;
         if (source_pattern_binding(node)) out->binding=node->as.pattern_literal.value;
@@ -50,7 +80,33 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
     else if (node->type==AST_PATTERN_LITERAL) path=node->as.pattern_literal.value;
     if (path && (path->type==AST_LITERAL_TRUE || path->type==AST_LITERAL_FALSE)) {
         if (type!=XR_XIR_BOOL) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"bool pattern requires bool");
-        out->boolean=true; out->truth=path->type==AST_LITERAL_TRUE; return true;
+        out->boolean=true; out->truth=path->type==AST_LITERAL_TRUE;
+        return source_query_expression(ctx,path,type);
+    }
+    AstNode *atom=path;
+    if (atom && atom->type==AST_UNARY_NEG) atom=atom->as.unary.operand;
+    if (atom && (atom->type==AST_LITERAL_INT || atom->type==AST_LITERAL_FLOAT ||
+        (atom==path && atom->type==AST_LITERAL_STRING))) {
+        bool admitted=atom->type==AST_LITERAL_INT?(xr_xir_type_is_integer(type) || xr_xir_float_bits(type)):
+            atom->type==AST_LITERAL_FLOAT?xr_xir_float_bits(type)!=0:type==XR_XIR_STRING;
+        if (!admitted) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"literal pattern type differs from its field");
+        out->literal=path;
+        uint64_t bits=0;
+        if (atom->type==AST_LITERAL_INT) {
+            SourceInteger integer;
+            if (!source_direct_integer(ctx,path,&integer) || !integer.present) return false;
+            if (xr_xir_type_is_integer(type)) {
+                if (!source_integer_payload(ctx,path,&integer,type,&bits)) return false;
+                out->interval=true;
+                out->low=(bits&source_pattern_integer_max(type))^source_pattern_integer_bias(type); out->high=out->low;
+            } else if (!source_integer_float_payload(ctx,path,&integer,type,&bits)) return false;
+        } else if (atom->type==AST_LITERAL_FLOAT) {
+            SourceDecimal decimal;
+            if (!source_direct_decimal(ctx,path,&decimal) || !decimal.node ||
+                !source_decimal_payload(ctx,&decimal,type,&bits)) return false;
+        }
+        memcpy(&out->literal_payload,&bits,sizeof(bits));
+        return source_query_expression(ctx,path,type);
     }
     if (!xr_xir_type_is_enum(&ctx->types,type) || !path || path->type!=AST_MEMBER_ACCESS)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"pattern family is not admitted");

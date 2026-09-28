@@ -43,6 +43,8 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
         compare[0] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 0};
         compare[1] = (XrXirInstruction) {XR_XIR_DIV_INT, XR_XIR_I64, {0, 2}, {0, 0}, 0};
         compare[2] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {3, 0}, {0, 0}, 0};
+    } else if (mode == 3) {
+        compare[2] = (XrXirInstruction) {XR_XIR_MATCH_FAIL, XR_XIR_UNIT, {0}, {0}, 0};
     }
     const XrXirFunction functions[] = {
         {"entry", 5, params, 2, XR_XIR_I64, &root_block, 1, root, 2, operands, 2},

@@ -82,6 +82,14 @@ export fn update(value: i64, up: bool) -> i64 {
 }
 
 export fn calculate(kind:i64, left:i64, right:i64)->i64 {
+    if (kind == 27) { return match(left) {1,2->71} }
+    if (kind == 28) { return match(left==1) {true->72} }
+    if (kind == 29) { return match(left as f64) {1.0->73} }
+    if (kind == 30) {
+        const text=left==1 ? "owned"+"match" : "owned"+"miss"
+        return match(text) {"ownedmatch"->74}
+    }
+    if (kind == 31) { return match(left) {x if(matchPause(x))->75} }
     if (kind == 26) { return "A中😀B".indexOf("B",left) }
     var held = "arith" + "metic"
     if (kind == 20) {
@@ -627,3 +635,74 @@ const nestedSnapshot=match(nestedRoot) {
     NestedBox.None -> fn()->string {return "none"}
 }
 print(nestedBits(NestedBits.Pair{left:true,right:true}),nestedBits(NestedBits.Pair{left:true,right:false}),nestedBits(NestedBits.Pair{left:false,right:true}),nestedBits(NestedBits.Pair{left:false,right:false}),nestedPick<string>(NestedBox<string>.Some{inner:alpha.event<string>("nested"),enabled:true},"fallback"),nestedPick<string>(NestedBox<string>.Some{inner:alpha.event<string>("nested"),enabled:false},"fallback"),nestedSnapshot(),nestedGuardCalls)
+
+
+enum ScalarPayload { Empty, Data { small:i8, wide:u64, decimal:f32, text:string } }
+fn scalarPattern(v:ScalarPayload)->i64 {
+    return match(v) {
+        ScalarPayload.Data { small:-128 } -> 1,
+        ScalarPayload.Data { wide:18446744073709551615 } -> 2,
+        ScalarPayload.Data { decimal:-0.0 } -> 3,
+        ScalarPayload.Data { decimal:1 } -> 4,
+        ScalarPayload.Data { text:"literal" } -> 5,
+        ScalarPayload.Data { text:"" } -> 6,
+        ScalarPayload.Data {} -> 7,
+        ScalarPayload.Empty -> 8
+    }
+}
+print(scalarPattern(ScalarPayload.Data{small:-128,wide:0,decimal:2.0,text:"x"}),
+    scalarPattern(ScalarPayload.Data{small:0,wide:18446744073709551615,decimal:2.0,text:"x"}),
+    scalarPattern(ScalarPayload.Data{small:0,wide:0,decimal:0.0,text:"x"}),
+    scalarPattern(ScalarPayload.Data{small:0,wide:0,decimal:1.0,text:"x"}),
+    scalarPattern(ScalarPayload.Data{small:0,wide:0,decimal:2.0,text:"literal"}),
+    scalarPattern(ScalarPayload.Data{small:0,wide:0,decimal:2.0,text:""}),
+    scalarPattern(ScalarPayload.Data{small:0,wide:0,decimal:(0.0 as f32)/(0.0 as f32),text:"literal-extra"}),
+    scalarPattern(ScalarPayload.Empty))
+
+
+enum SignedRange { Data { value:i64 } }
+fn signedRange(v:SignedRange)->i64 {
+    return match(v) {
+        SignedRange.Data { value:0..0 } -> 99,
+        SignedRange.Data { value:1..=0 } -> 98,
+        SignedRange.Data { value:-9223372036854775808..0 } -> 1,
+        SignedRange.Data { value:0..=9223372036854775807 } -> 2
+    }
+}
+enum UnsignedRange { Data { value:u64 } }
+fn unsignedRange(v:UnsignedRange)->i64 {
+    return match(v) {
+        UnsignedRange.Data { value:0..18446744073709551615 } -> 3,
+        UnsignedRange.Data { value:18446744073709551615 } -> 4
+    }
+}
+print(signedRange(SignedRange.Data{value:-9223372036854775808}),signedRange(SignedRange.Data{value:-1}),
+    signedRange(SignedRange.Data{value:0}),signedRange(SignedRange.Data{value:9223372036854775807}),
+    unsignedRange(UnsignedRange.Data{value:0}),unsignedRange(UnsignedRange.Data{value:18446744073709551614}),
+    unsignedRange(UnsignedRange.Data{value:18446744073709551615}))
+
+enum Alternatives<T> { Left { first:T, second:T }, Right { value:T } }
+fn alternativeClosure<T>(v:Alternatives<T>)->fn()->T {
+    return match(v) {
+        Alternatives.Left{first:item}, Alternatives.Right{value:item} -> fn()->T {return item}
+    }
+}
+var alternativeGuards=0
+fn alternativeGuard(text:string)->bool {
+    alternativeGuards=alternativeGuards+1
+    Coro.yield()
+    return text=="second"
+}
+fn alternativeOrder(v:Alternatives<string>)->string {
+    return match(v) {
+        Alternatives.Left{first:item}, Alternatives.Left{second:item} if(alternativeGuard(item)) -> "wrong",
+        Alternatives.Left{first:item}, Alternatives.Right{value:item} -> item
+    }
+}
+const alternativeLeft=alternativeClosure<string>(Alternatives<string>.Left{first:"left",second:"unused"})
+const alternativeRight=alternativeClosure<string>(Alternatives<string>.Right{value:"right"})
+print(alternativeLeft(),alternativeRight(),alternativeOrder(Alternatives<string>.Left{first:"first",second:"second"}),alternativeGuards)
+
+fn matchPause(value:i64)->bool { Coro.yield(); return value==1 }
+print(match(true){true->"bool",false->"wrong"},match(-128 as i8){-128..0->1,0..=127->2},
+    match(-0.0){0.0->"zero",_->"wrong"},match("text"){"prefix"->"wrong",x->x})

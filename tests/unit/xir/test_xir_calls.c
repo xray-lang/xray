@@ -237,15 +237,16 @@ static void bounded_stack(void) {
 XR_DATA const XrXirCallEntry fixture_calls0_entries[3];
 XR_DATA const XrXirCallEntry fixture_calls1_entries[3];
 XR_DATA const XrXirCallEntry fixture_calls2_entries[3];
+XR_DATA const XrXirCallEntry fixture_calls3_entries[3];
 static void xir_instruction_calls(void) {
-    for (uint32_t mode = 0; mode < 3; ++mode) for (uint32_t native = 0; native < 2; ++native) {
+    for (uint32_t mode = 0; mode < 4; ++mode) for (uint32_t native = 0; native < 2; ++native) {
         XrXirArtifact *artifact = call_fixture(mode);
         XrXirVmBinding bindings[3];
         XrXirCallEntry entries[3];
         for (uint32_t i = 0; i < 3; ++i)
             CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
         if (native) {
-            const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries};
+            const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries, fixture_calls3_entries};
             entries[1] = tables[mode][1];
         }
         XrXirCallAccounting accounting = {0};
@@ -262,6 +263,7 @@ static void xir_instruction_calls(void) {
         if (mode == 0) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 4);
         if (mode == 1) CHECK(result.status == XR_XIR_CALL_THROWN && result.value.payload == 91);
         if (mode == 2) CHECK(result.status == XR_XIR_CALL_DIVIDE_BY_ZERO && result.value.type == XR_XIR_UNIT);
+        if (mode == 3) CHECK(result.status == XR_XIR_CALL_MATCH_FAILURE && result.value.type == XR_XIR_UNIT && xr_xir_fault_match_valid(result.fault));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
         xr_xir_artifact_free(artifact);
@@ -393,6 +395,7 @@ static void fault_boundary(void) {
 
 int main(void) {
     bounds_fault_boundary();
+    match_fault_boundary();
     fault_boundary();
     callback_cases();
     bounded_stack();

@@ -19,11 +19,20 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 static size_t attempts, fail_at = SIZE_MAX, live;
 static unsigned resolver_fault;
-static void *owned[4096];
+static void **owned;
+static size_t owned_capacity;
 static void *source_counted_calloc(size_t count, size_t size) {
     if (attempts++ == fail_at) return NULL;
     void *pointer = xr_calloc(count, size);
-    if (pointer) { CHECK(live < 4096); owned[live++] = pointer; }
+    if (pointer) {
+        if (live == owned_capacity) {
+            CHECK(owned_capacity <= SIZE_MAX / 2 / sizeof(*owned));
+            size_t capacity = owned_capacity ? owned_capacity * 2 : 256;
+            void **grown = xr_realloc(owned, capacity * sizeof(*owned));
+            CHECK(grown); owned = grown; owned_capacity = capacity;
+        }
+        owned[live++] = pointer;
+    }
     return pointer;
 }
 static void source_counted_free(void *pointer) {
@@ -279,5 +288,6 @@ int main(void) {
     array_source_allocations(session);
     xr_compiler_session_delete(session);
     printf("Source-owner allocation failures: %zu; no partial artifact or live metadata\n", count);
+    CHECK(!live); xr_free(owned); owned = NULL; owned_capacity = 0;
     return 0;
 }

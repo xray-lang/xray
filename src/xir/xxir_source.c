@@ -476,44 +476,61 @@ static bool source_direct_decimal(SourceContext *ctx, AstNode *node, SourceDecim
     }
     return true;
 }
-static bool source_decimal(SourceContext *ctx, const SourceDecimal *literal, XrXirType expected, SourceValue *value) {
+static bool source_decimal_payload(SourceContext *ctx, const SourceDecimal *literal, XrXirType type, uint64_t *bits) {
     AstNode *node = literal->node;
-    XrXirType type = xr_xir_float_bits(expected) ? expected : XR_XIR_F64;
     size_t length = node->as.literal.decimal_length;
     if (!node->as.literal.decimal_text || !length) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "decimal spelling is missing");
     if (length > ctx->budget.work) return source_fail(ctx, node, XR_XIR_BUDGET, "decimal literal work budget exhausted");
     ctx->budget.work -= length;
-    uint64_t bits = 0;
-    if (!xr_decimal_float_parse(node->as.literal.decimal_text, length, xr_xir_float_bits(type), &bits))
+    *bits = 0;
+    if (!xr_decimal_float_parse(node->as.literal.decimal_text, length, xr_xir_float_bits(type), bits))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid decimal literal");
-    if (literal->negative) bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
+    if (literal->negative) *bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
+    return true;
+}
+static bool source_decimal(SourceContext *ctx, const SourceDecimal *literal, XrXirType expected, SourceValue *value) {
+    XrXirType type = xr_xir_float_bits(expected) ? expected : XR_XIR_F64;
+    uint64_t bits;
+    if (!source_decimal_payload(ctx,literal,type,&bits)) return false;
     int64_t payload; memcpy(&payload, &bits, sizeof(payload));
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_FLOAT, type, {0}, {0}, payload}, value);
+}
+static bool source_integer_float_payload(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
+    XrXirType type, uint64_t *bits) {
+    int64_t magnitude; memcpy(&magnitude, &literal->magnitude, sizeof(magnitude));
+    *bits = 0; int64_t exact = 0;
+    XrXirIntegerFormat format = {64, false};
+    if (xr_xir_integer_to_float(format, xr_xir_float_bits(type), magnitude, bits) != XR_XIR_NUMERIC_OK ||
+        xr_xir_float_to_integer(xr_xir_float_bits(type), format, *bits, &exact) != XR_XIR_NUMERIC_OK ||
+        (uint64_t) exact != literal->magnitude)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer literal is not exactly representable in its floating context");
+    if (literal->negative) *bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
+    return true;
 }
 static bool source_integer_float(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
     XrXirType type, SourceValue *value) {
-    int64_t magnitude; memcpy(&magnitude, &literal->magnitude, sizeof(magnitude));
-    uint64_t bits = 0; int64_t exact = 0;
-    XrXirIntegerFormat format = {64, false};
-    if (xr_xir_integer_to_float(format, xr_xir_float_bits(type), magnitude, &bits) != XR_XIR_NUMERIC_OK ||
-        xr_xir_float_to_integer(xr_xir_float_bits(type), format, bits, &exact) != XR_XIR_NUMERIC_OK ||
-        (uint64_t) exact != literal->magnitude)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer literal is not exactly representable in its floating context");
-    if (literal->negative) bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
+    uint64_t bits;
+    if (!source_integer_float_payload(ctx,node,literal,type,&bits)) return false;
     int64_t payload; memcpy(&payload, &bits, sizeof(payload));
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_FLOAT, type, {0}, {0}, payload}, value);
 }
-static bool source_integer(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
-    XrXirType expected, SourceValue *value) {
-    if (xr_xir_float_bits(expected)) return source_integer_float(ctx, node, literal, expected, value);
-    XrXirType type = xr_xir_type_is_integer(expected) ? expected : XR_XIR_I64;
+static bool source_integer_payload(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
+    XrXirType type, uint64_t *bits) {
     uint32_t width = xr_xir_integer_bits(type);
     bool sign = xr_xir_integer_signed(type);
     uint64_t limit = sign ? (UINT64_C(1) << (width - 1)) - (literal->negative ? 0 : 1) :
         (width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1);
     if (literal->magnitude > limit || (!sign && literal->negative && literal->magnitude))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer literal is outside its contextual type");
-    uint64_t bits = literal->negative ? UINT64_C(0) - literal->magnitude : literal->magnitude;
+    *bits = literal->negative ? UINT64_C(0) - literal->magnitude : literal->magnitude;
+    return true;
+}
+static bool source_integer(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
+    XrXirType expected, SourceValue *value) {
+    if (xr_xir_float_bits(expected)) return source_integer_float(ctx, node, literal, expected, value);
+    XrXirType type = xr_xir_type_is_integer(expected) ? expected : XR_XIR_I64;
+    uint64_t bits;
+    if (!source_integer_payload(ctx,node,literal,type,&bits)) return false;
     int64_t payload = bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) (UINT64_MAX - bits);
     return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, type, {0}, {0}, payload}, value);
 }
@@ -1602,6 +1619,10 @@ static bool capture_scope(SourceCaptureScan *scan, AstNode *node) {
 static bool capture_pattern(SourceCaptureScan *scan, AstNode *node, uint32_t depth) {
     if (depth>=128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"pattern capture depth exhausted");
     if (!node || !source_work(scan->ctx,node)) return false;
+    if (node->type==AST_PATTERN_MULTI) {
+        if (node->as.pattern_multi.count<=0) return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"empty multi-pattern");
+        return capture_pattern(scan,node->as.pattern_multi.patterns[0],depth+1);
+    }
     if (source_pattern_binding(node)) return capture_bind(scan,node->as.pattern_literal.value->as.variable.name,node);
     if (node->type==AST_PATTERN_ADT) {
         for (int i=0;i<node->as.pattern_adt.count;++i)
