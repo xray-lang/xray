@@ -95,6 +95,7 @@ static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     type.nominal.arguments = arguments; type.nominal.argument_count = count;
     if (!source_intern_type(ctx, type, &symbol->type) ||
         !source_query_declare(ctx, symbol, XR_XIR_SOURCE_TYPE, 0, source_query_range(ctx, node, decl->name))) return false;
+    ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_parameter_count = count;
     ctx->nominal_generic_owner = count ? symbol->declaration : 0;
     source_query_binding_type(ctx, symbol); ctx->nominal_generic_owner = 0; return true;
 }
@@ -146,6 +147,8 @@ static bool source_struct_fields(SourceContext *ctx) {
 static void source_struct_function_scope(SourceContext *ctx, uint32_t index, SourceName *symbol) {
     const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
     ctx->bodies[index].type_owner = symbol->node;
+    ctx->bodies[index].type_parameters = symbol->node->as.struct_decl.type_params;
+    ctx->bodies[index].type_parameter_count = nominal->parameter_count;
     ctx->bodies[index].generic_owner = nominal->parameter_count ? symbol->declaration : 0;
     ctx->generics[index].parameter_count = nominal->parameter_count;
     ctx->generics[index].constraints = nominal->constraints;

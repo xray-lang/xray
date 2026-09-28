@@ -488,3 +488,10 @@ const staticMake=alpha.StaticFactory<string>.make
 const staticIdentity=alpha.StaticFactory<i64>.identity
 const staticPrivate=alpha.StaticFactory<string>.exported()
 print(alpha.StaticFactory<string>.make("direct").value,staticRelay(staticMake("value")).value,alpha.StaticFactory<string>.identity("generic"),staticIdentity(17,fn(item:i64)->i64 { return item+1 }),staticPrivate())
+
+var methodGenericBox=alpha.MethodBox<string>{value:"outer"}
+const methodGenericBound=methodGenericBox.map<string>
+const methodGenericStatic=alpha.MethodBox<i64>.choose<string>
+const methodGenericPrivate=methodGenericBox.bound<string>()
+methodGenericBox.value="changed"
+print(methodGenericBox.map<i64>(41),methodGenericBound("tail",fn(outer:string,item:string)->string {return outer+item}),methodGenericStatic(7,"static"),alpha.MethodBox<string>.choose<i64>("unused",23),methodGenericPrivate("private"))

@@ -223,3 +223,33 @@ shadowing, invalid qualification, unused bad bodies/defaults, private factories,
 independent VM/native results and physical release. Class/enum methods, static
 fields, initialization and independently published declaration metadata retain
 their own unfinished admission and validation obligations.
+
+## Enclosing and method generic scopes
+
+A method with its own parameters uses one function parameter sequence: all
+declaring-type parameters first, followed by its own parameters. Duplicate or
+shadowing parameter names reject. Source lookup, default helpers and nested
+closures retain this exact scope; declaration AST union payloads are never
+reinterpreted as a different declaration kind. Definitions prove only declared
+constraints. Calls supply enclosing arguments from the qualified type or receiver
+and supply method arguments separately. No AST replay or runtime specialization
+is admitted. Explicit static and bound instance function values obey the same
+substitution, authority and receiver-ownership contracts as direct calls.
+
+Query declarations expose generic_parent, generic_parent_count and
+generic_parameter_count (the total including the parent prefix). A type's
+generic_owner identifies the scope interpreting its ordinal. Prefix ordinals
+resolve through generic_parent without renumbering; remaining ordinals belong
+to the current declaration after subtracting the prefix count. A parentless
+scope has zero parent prefix. Methods without own parameters can keep their
+declaring type as the interpreting owner. Closures/default helpers keep the
+original interpreting scope. These owned scalar facts grant no visibility,
+constraint or construction authority and introduce no executable IR.
+
+Required evidence includes mixed nominal/method parameters in callable and
+nominal signatures, definition-time rejection, exact argument-group arity,
+marker constraints, imported private authority, default/closure inheritance,
+source-query lifetime and budget behavior, Checked packet revalidation,
+independent VM/native results and physical failure release. Constructor-owned
+generics, witnesses, inference and other unimplemented declaration families
+remain separate obligations, not implicit consequences of method admission.

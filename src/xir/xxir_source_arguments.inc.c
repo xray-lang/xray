@@ -62,6 +62,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             SourceFunction *target = &ctx->bodies[helper];
             target->node = node; target->type_owner = body->type_owner; target->module = body->module;
             target->declaration = body->declaration; target->generic_owner = body->generic_owner;
+            target->type_parameters = body->type_parameters; target->type_parameter_count = body->type_parameter_count;
             target->default_expression = expression;
             ctx->generics[helper] = ctx->generics[f];
             ctx->identities[helper] = ctx->identities[f];

@@ -174,3 +174,13 @@ export struct StaticFactory<T> {
     private static label()->string { return "private"+"static" }
     static exported()->fn()->string { return StaticFactory<T>.label }
 }
+
+export struct MethodBox<T> {
+    value:T
+    private hidden<U>(value:U)->U { return value }
+    bound<U>()->fn(U)->U { return this.hidden<U> }
+    map<U>(value:U, transform:fn(T,U)->U=fn(outer:T,item:U)->U { return item })->U {
+        return transform(this.value,value)
+    }
+    static choose<U>(outer:T,value:U)->U { return value }
+}

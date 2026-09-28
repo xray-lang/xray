@@ -40,6 +40,8 @@ typedef struct SourceName {
 } SourceName;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
+    XrGenericParam **type_parameters;
+    uint32_t type_parameter_count;
     bool infer_result, saw_return;
     uint32_t module, count, capacity;
     XrXirType *parameters;
@@ -156,7 +158,7 @@ static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
     symbol->declaration = ctx->query.declaration_count;
     *record = (XrXirSourceDeclaration) {symbol->declaration, parent, 0, kind, symbol->name, range,
         {0}, NULL, 0, symbol->mutable,
-        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE) && !parent && symbol->node && symbol->node->is_exported, 0, NULL};
+        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0};
     return true;
 }
 static void source_query_binding_type(SourceContext *ctx, SourceName *symbol) {
@@ -194,6 +196,12 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[declaration - 1];
     record->type = source_query_type(ctx, function->result);
     record->parameters = parameters; record->parameter_count = function->parameter_count;
+    record->generic_parameter_count = ctx->generics[ctx->function].parameter_count;
+    uint32_t owner = ctx->bodies[ctx->function].generic_owner;
+    if (owner && owner != declaration) {
+        record->generic_parent = owner;
+        record->generic_parent_count = record->generic_parameter_count;
+    }
     return true;
 }
 static SourceName *find_name(SourceContext *ctx, SourceName *names, const char *name) {
@@ -277,13 +285,13 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
 static XrGenericParam **source_type_parameters(SourceContext *ctx, int *count) {
-    AstNode *owner = ctx->bodies[ctx->function].type_owner;
-    ClassDeclNode *nominal = ctx->nominal_type_owner ? ctx->nominal_type_owner :
-        owner && owner->type == AST_STRUCT_DECL ? &owner->as.struct_decl : NULL;
-    if (nominal) { *count = nominal->type_param_count; return nominal->type_params; }
-    FunctionDeclNode *function = owner ? &owner->as.function_decl : NULL;
-    *count = function ? function->type_param_count : 0;
-    return function ? function->type_params : NULL;
+    if (ctx->nominal_type_owner) {
+        *count = ctx->nominal_type_owner->type_param_count;
+        return ctx->nominal_type_owner->type_params;
+    }
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    *count = (int)body->type_parameter_count;
+    return body->type_parameters;
 }
 #include "xxir_source_native.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
@@ -647,8 +655,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         }
         if (!source_static_select(ctx, callee, &selected)) return false;
         if (selected.method) {
-            if (call->type_arg_count)
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method-owned type arguments are not admitted");
+            SourceTypeArguments arguments = {call->type_args, (uint32_t)call->type_arg_count, {0}};
+            if (!source_method_instantiation(ctx, node, selected.method->index, selected.substitution, &arguments)) return false;
+            selected.substitution = arguments.substitution;
             binding = target = selected.method;
         } else if (base && base->kind == SOURCE_MODULE) { binding = base; target = imported_declaration(ctx, base, member->name); }
         else if (source_constructor_receiver(ctx, member->object) &&
@@ -1008,6 +1017,10 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceV
         MemberAccessNode *member = &callee->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx,member->object->as.variable.name) : NULL;
         if (base && base->kind == SOURCE_MODULE) { binding = base; symbol = imported_declaration(ctx,base,member->name); }
+        else {
+            SourceTypeArguments arguments = {node->as.function_ref.type_args, (uint32_t)node->as.function_ref.type_arg_count, {0}};
+            return source_member_value(ctx, callee, &arguments, value);
+        }
     }
     return source_function_value(ctx,node,binding,symbol,value);
 }
@@ -1033,7 +1046,8 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
     case AST_MEMBER_ACCESS: {
         MemberAccessNode *member = &node->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
-        if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, value);
+        SourceTypeArguments arguments = {0};
+        if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, &arguments, value);
         return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), value);
     }
     case AST_THIS_EXPR: case AST_VARIABLE: {
@@ -1309,6 +1323,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, 0, source_query_range(ctx, node, decl->name))) return false;
     body->declaration = symbol->declaration;
     body->generic_owner = decl->type_param_count ? symbol->declaration : 0;
+    body->type_parameters = decl->type_params; body->type_parameter_count = (uint32_t)decl->type_param_count;
     uint32_t *constraints = decl->type_param_count ? source_alloc(ctx, (size_t) decl->type_param_count, sizeof(*constraints)) : NULL;
     if (decl->type_param_count && !constraints) return false;
     ctx->generics[index].constraints = constraints;
@@ -1658,6 +1673,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value
     SourceFunction *body = &ctx->bodies[index];
     body->node = node; body->type_owner = ctx->bodies[outer].type_owner; body->module = ctx->module;
     body->generic_owner = ctx->bodies[outer].generic_owner;
+    body->type_parameters = ctx->bodies[outer].type_parameters;
+    body->type_parameter_count = ctx->bodies[outer].type_parameter_count;
     body->infer_result = !decl->return_type;
     ctx->generics[index].parameter_count = ctx->generics[outer].parameter_count;
     ctx->generics[index].constraints = ctx->generics[outer].constraints;
@@ -1693,6 +1710,9 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value
         XrXirSourceDeclaration *query_declaration = (XrXirSourceDeclaration *) &ctx->query.declarations[body->declaration - 1];
         query_declaration->type = source_query_type(ctx, ctx->functions[index].result);
         query_declaration->parameters = query_parameters; query_declaration->parameter_count = (uint32_t) decl->param_count;
+        query_declaration->generic_parent = body->generic_owner;
+        query_declaration->generic_parent_count = body->type_parameter_count;
+        query_declaration->generic_parameter_count = body->type_parameter_count;
     }
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
     if (!ok) return false;

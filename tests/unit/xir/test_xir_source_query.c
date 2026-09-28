@@ -46,6 +46,8 @@ static void generic_facts(const XrXirSourceView *view) {
     const XrXirSourceDeclaration *first = declaration(view, "first", 0), *second = declaration(view, "second", 0);
     const XrXirSourceDeclaration *capture = declaration(view, "capture", 0);
     CHECK(first && second && capture && first->id != second->id);
+    CHECK(first->generic_parameter_count == 1 && !first->generic_parent && !first->generic_parent_count);
+    CHECK(second->generic_parameter_count == 1 && !second->generic_parent && !second->generic_parent_count);
     CHECK(first->type.known && second->type.known && first->type.type == second->type.type);
     CHECK(first->type.type == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
     CHECK(first->type.generic_owner == first->id && second->type.generic_owner == second->id);
@@ -384,6 +386,32 @@ static void nominal_query_boundary(void) {
     CHECK(xr_xir_source_snapshot_copy(&view, &budget, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
     CHECK(!memcmp(&budget, &original, sizeof(budget)));
 }
+static void source_method_generic_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "struct C<T>{static choose<U>(outer:T,value:U, transform:fn(T,U)->U=fn(a:T,b:U)->U{return b})->U{return transform(outer,value)}}\n"
+        "const value=C<i64>.choose<string>(7,\"ok\")\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK && result.checked);
+    xr_xir_artifact_free(result.checked); result.checked = NULL;
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *owner = declaration(view, "C", 0); CHECK(owner);
+    const XrXirSourceDeclaration *method = declaration(view, "choose", owner->id); CHECK(method);
+    CHECK(method->generic_parent == owner->id && method->generic_parent_count == 1 && method->generic_parameter_count == 2);
+    CHECK(method->parameter_count == 3 && method->parameters[0].generic_owner == method->id && method->parameters[1].generic_owner == method->id);
+    CHECK(method->parameters[0].type == XR_XIR_TYPE_PARAMETER_BASE && method->parameters[1].type == XR_XIR_TYPE_PARAMETER_BASE + 1);
+    CHECK(method->type.generic_owner == method->id && method->type.type == XR_XIR_TYPE_PARAMETER_BASE + 1);
+    CHECK(!declaration(view, "this", method->id));
+    unsigned closures = 0;
+    for (uint32_t i = 0; i < view->declaration_count; ++i) {
+        const XrXirSourceDeclaration *nested = &view->declarations[i];
+        if (nested->parent != method->id || nested->kind != XR_XIR_SOURCE_FUNCTION) continue;
+        CHECK(nested->generic_parent == method->id && nested->generic_parent_count == 2 && nested->generic_parameter_count == 2);
+        CHECK(nested->type.generic_owner == method->id && nested->type.type == XR_XIR_TYPE_PARAMETER_BASE + 1);
+        ++closures;
+    }
+    CHECK(closures == 1);
+    xr_xir_source_result_free(&result);
+}
 static void source_static_method_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,
         "struct C<T> { static identity(value:T)->T { return value } }\n"
@@ -395,6 +423,8 @@ static void source_static_method_facts(XrXirSourceRequest *request) {
     CHECK(owner);
     const XrXirSourceDeclaration *method = declaration(view, "identity", owner->id);
     CHECK(method && method->parameter_count == 1 && method->parameters[0].generic_owner == owner->id);
+    CHECK(owner->generic_parameter_count == 1 && !owner->generic_parent && !owner->generic_parent_count);
+    CHECK(method->generic_parent == owner->id && method->generic_parent_count == 1 && method->generic_parameter_count == 1);
     CHECK(method->type.generic_owner == owner->id && !declaration(view, "this", method->id));
     const XrXirSourceDeclaration *parameter = declaration(view, "value", method->id);
     CHECK(parameter && parameter->type.generic_owner == owner->id && references(view, parameter->id, parameter->id) == 1);
@@ -417,12 +447,14 @@ static void source_default_argument_facts(XrXirSourceRequest *request) {
     const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
     const XrXirSourceDeclaration *owner = declaration(view, "choose", 0);
     CHECK(owner && owner->parameter_count == 2 && owner->type.generic_owner == owner->id);
+    CHECK(owner->generic_parameter_count == 1 && !owner->generic_parent);
     CHECK(owner->parameters[1].known && owner->parameters[1].generic_owner == owner->id);
     unsigned closures = 0, calls = 0;
     for (uint32_t i = 0; i < view->declaration_count; ++i) {
         const XrXirSourceDeclaration *nested = &view->declarations[i];
         if (nested->parent == owner->id && nested->kind == XR_XIR_SOURCE_FUNCTION) {
             CHECK(nested->parameter_count == 1 && nested->type.generic_owner == owner->id);
+            CHECK(nested->generic_parent == owner->id && nested->generic_parent_count == 1 && nested->generic_parameter_count == 1);
             const XrXirSourceDeclaration *item = declaration(view, "item", nested->id);
             CHECK(item && item->type.generic_owner == owner->id);
             CHECK(references(view, item->id, item->id) == 1); ++closures;
@@ -583,6 +615,7 @@ int main(void) {
     source_constructor_facts(&request);
     source_default_argument_facts(&request);
     source_static_method_facts(&request);
+    source_method_generic_facts(&request);
     failures(&request);
     publication_budgets(&request);
     multiline_declaration(&request);

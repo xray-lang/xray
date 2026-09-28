@@ -18,9 +18,10 @@ typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     SourceOutput *output = context;
     CHECK(stream == (output->calls == 6 ? XR_XIR_STDERR : XR_XIR_STDOUT));
-    CHECK(output->calls < 42);
+    CHECK(output->calls < 43);
     if (!output->calls) CHECK(length == 8 && !memcmp(bytes, "a\xE4\xB8\xAD 20\n", 8));
     else if (output->calls == 36) CHECK(length == 18 && !memcmp(bytes, "changed method 97\n", 18));
+    else if (output->calls == 42) CHECK(length == 31 && !memcmp(bytes, "41 outertail static 23 private\n", 31));
     else if (output->calls == 41) CHECK(length == 38 && !memcmp(bytes, "direct value generic 18 privatestatic\n", 38));
     else if (output->calls == 40) CHECK(length == 63 && !memcmp(bytes, "explicitdefault XY againdefault vdefault default generic 12222\n", 63));
     else if (output->calls == 39) CHECK(length == 41 && !memcmp(bytes, "made ctor fallback made 5 early loop 123\n", 41));
@@ -76,6 +77,20 @@ static bool source_output(void *context, const XrXirOutputGroup *group) {
             CHECK(length == strlen(expected[i]) && !memcmp(bytes, expected[i], length));
         }
         CHECK(group->values[2].type == XR_XIR_I64 && group->values[2].payload == 97);
+    }
+    if (output->calls == 42) {
+        CHECK(group && group->count == 5 && group->line && group->stream == XR_XIR_STDOUT);
+        CHECK(group->values[0].type == XR_XIR_I64 && group->values[0].payload == 41);
+        CHECK(group->values[3].type == XR_XIR_I64 && group->values[3].payload == 23);
+        const char *private_bytes = NULL; size_t private_length = 0;
+        CHECK(group->values[4].type == XR_XIR_STRING && xr_xir_string_view(&group->values[4], &private_bytes, &private_length));
+        CHECK(private_length == 7 && !memcmp(private_bytes, "private", 7));
+        const char *expected[] = {"outertail", "static"};
+        for (uint32_t i = 0; i < 2; ++i) {
+            const char *bytes = NULL; size_t length = 0;
+            CHECK(group->values[i + 1].type == XR_XIR_STRING && xr_xir_string_view(&group->values[i + 1], &bytes, &length));
+            CHECK(length == strlen(expected[i]) && !memcmp(bytes, expected[i], length));
+        }
     }
     if (output->calls == 41) {
         CHECK(group && group->count == 5 && group->line && group->stream == XR_XIR_STDOUT);
@@ -256,7 +271,7 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
         CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
         if (mode > 2) {
-            CHECK(source_drive(instance, 8).status == XR_XIR_CALL_RETURNED && output.calls == 42);
+            CHECK(source_drive(instance, 8).status == XR_XIR_CALL_RETURNED && output.calls == 43);
             XrXirValue arg = {XR_XIR_BOOL, 0, 1};
             CHECK(xr_xir_instance_start(instance, resume_text, &arg, 1) == XR_XIR_CALL_READY);
         }
@@ -463,7 +478,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
             if (result.outcome.status != XR_XIR_CALL_RETURNED)
                 fprintf(stderr, "Source initialization status=%u outputs=%u\n", result.outcome.status, outputs[i].calls);
             CHECK(result.outcome.status == XR_XIR_CALL_RETURNED && result.outcome.value.type == XR_XIR_I64 && !result.outcome.value.payload);
-            CHECK(outputs[i].calls == 42 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
+            CHECK(outputs[i].calls == 43 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
         }
     }
     source_cancel_cases(program, entry, functions.resume_text);
@@ -483,7 +498,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
     for (int64_t expected = 15; expected < 17; ++expected) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.advance, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 42);
+        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 43);
     }
     XrXirValue bound[2] = {{0}, {0}}, bound_text[2] = {{0}, {0}};
     for (uint32_t i = 0; i < 2; ++i) {

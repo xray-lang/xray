@@ -4938,6 +4938,10 @@ monomorphization instance, or AOT branch; cyclic aliases are rejected.
 
 ### 9.2 Type Constraints: `<T: Constraint>` and Intersection Constraints `&`
 
+Methods may declare their own type parameters, such as `map<U>(value: U)` inside `struct Box<T>`. Enclosing and method parameters have distinct declaration identities; method parameters cannot duplicate or shadow enclosing type parameters. In `Box<i64>.make<string>(value)`, the first argument group belongs to the type and the second to the static method. An instance call `box.map<string>(value)` obtains enclosing arguments from the receiver type. Explicit method function values use the same grouping: `Box<i64>.make<string>` and `box.map<string>`. Missing explicit arguments are not filled automatically and one group cannot substitute for another.
+
+Ordinary generic method signatures, bodies, defaults and nested closures are checked against both declared constraint scopes at definition time, even when unused; future arguments grant no additional capabilities. Defaults and captures inherit their original type-parameter identities and authority. Specialization substitutes only Checked parameters and rechecks before Lowered; ordinary instances exist before Program sealing. An instance method value evaluates and saves its receiver once, while a static value has no receiver. Both retain the full indirect-call signature and ordinary value ownership, effect, suspension and failure-cleanup rules.
+
 Xray's constraint syntax uses a colon `:` uniformly, with multiple constraints joined by `&` (read as "must satisfy simultaneously"). It **does not use** Java/TS `extends` / `implements` as constraint keywords.
 
 ```xray

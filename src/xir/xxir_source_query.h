@@ -44,6 +44,7 @@ typedef struct XrXirSourceDeclaration {
     bool mutable, exported;
     uint32_t native_identity;
     const char *signature;
+    uint32_t generic_parent, generic_parent_count, generic_parameter_count;
 } XrXirSourceDeclaration;
 typedef enum XrXirSourceAccess {
     XR_XIR_SOURCE_READ, XR_XIR_SOURCE_WRITE, XR_XIR_SOURCE_READ_WRITE,

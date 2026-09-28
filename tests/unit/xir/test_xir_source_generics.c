@@ -140,8 +140,8 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
 }
 static void member_call_authority(XrXirSourceRequest *request, bool is_static) {
     write_generic_source(request->entry_path, is_static ?
-        "struct S<T>{value:T;private static hidden(value:T)->T{return value};static get(value:T)->T{return S<T>.hidden(value)}}\n"
-        "const n=S<i64>.get(7);const f=S<string>.get;const value=f(\"yes\")\n" :
+        "struct S<T>{value:T;private static hidden<U>(value:U)->U{return value};static get<U>(value:U)->U{return S<T>.hidden<U>(value)}}\n"
+        "const n=S<i64>.get<i64>(7);const f=S<string>.get<string>;const value=f(\"yes\")\n" :
         "struct S<T>{value:T;private hidden()->T{return this.value};get()->T{return this.hidden()}}\n"
         "const s=S<i64>{value:7};const n=s.get()\n");
     XrXirSourceResult result = {0};

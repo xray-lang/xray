@@ -14,6 +14,7 @@ static SourceName *source_method_find(SourceContext *ctx, XrXirType type, const 
     return node && node->kind == XR_XIR_TYPE_NOMINAL ?
         find_name(ctx, ctx->nominal_methods[node->nominal.declaration], name) : NULL;
 }
+#include "xxir_source_method_generics.inc.c"
 typedef struct SourceStaticMethod {
     SourceName *method;
     SourceSubstitution substitution;
@@ -53,7 +54,10 @@ static bool source_static_select(SourceContext *ctx, AstNode *node, SourceStatic
     const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires its declaration owner");
-    if (!source_instantiation(ctx, node, &ctx->generics[method->index], &arguments) ||
+    XrXirGeneric enclosing = {0};
+    enclosing.parameter_count = ctx->nominals.declarations[owner->index].parameter_count;
+    enclosing.constraints = enclosing.parameter_count ? ctx->generics[method->index].constraints : NULL;
+    if (!source_instantiation(ctx, node, &enclosing, &arguments) ||
         !source_query_reference(ctx, path, binding, owner, XR_XIR_SOURCE_TYPE_USE)) return false;
     selected->method = method; selected->substitution = arguments.substitution;
     return true;
@@ -82,10 +86,13 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its declaration owner");
     const XrXirFunction *function = &ctx->functions[method->index];
-    if (call->type_arg_count || !source_argument_arity(ctx, node, method->index, (uint32_t)call->arg_count + 1))
+    if (!source_argument_arity(ctx, node, method->index, (uint32_t)call->arg_count + 1))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its exact value arguments");
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, receiver.type);
-    SourceSubstitution substitution = {type->nominal.arguments, type->nominal.argument_count};
+    SourceTypeArguments type_arguments = {call->type_args, (uint32_t)call->type_arg_count, {0}};
+    if (!source_method_instantiation(ctx, node, method->index,
+        (SourceSubstitution) {type->nominal.arguments, type->nominal.argument_count}, &type_arguments)) return false;
+    SourceSubstitution substitution = type_arguments.substitution;
     SourceValue *arguments = source_alloc(ctx, function->parameter_count, sizeof(*arguments));
     if (!arguments) return false;
     arguments[0] = receiver;
@@ -107,23 +114,32 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
             method->declaration, XR_XIR_SOURCE_CALL) &&
         emit_group(ctx, op, arguments, function->parameter_count, value);
 }
-static bool source_member_value(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments, SourceValue *value) {
     SourceStaticMethod selected = {0};
     if (!source_static_select(ctx, node, &selected)) return false;
-    if (selected.method) return source_static_value(ctx, node, &selected, value);
+    if (selected.method) {
+        if (!source_method_instantiation(ctx, node, selected.method->index, selected.substitution, type_arguments)) return false;
+        selected.substitution = type_arguments->substitution;
+        return source_static_value(ctx, node, &selected, value);
+    }
     if (source_constructor_receiver(ctx, node->as.member_access.object)) {
         const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[ctx->identities[ctx->function].nominal_owner - 1];
         for (uint32_t f = 0; f < decl->field_count; ++f) {
             if (!source_work(ctx, node)) return false;
             const XrXirLiteral *name = &decl->fields[f].name;
-            if (strlen(node->as.member_access.name) == name->length && !memcmp(node->as.member_access.name, name->bytes, name->length))
+            if (strlen(node->as.member_access.name) == name->length && !memcmp(node->as.member_access.name, name->bytes, name->length)) {
+                if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field value has no method type parameters");
                 return source_constructor_field(ctx, node, node->as.member_access.name, value, NULL);
+            }
         }
     }
     SourceValue receiver;
     if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
     SourceName *method = source_method_find(ctx, receiver.type, node->as.member_access.name);
-    if (!method) return source_struct_get_value(ctx, node, receiver, value);
+    if (!method) {
+        if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field value has no method type parameters");
+        return source_struct_get_value(ctx, node, receiver, value);
+    }
     if (method->node->as.method_decl.is_static)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method value requires type-qualified access");
     const XrXirFunctionIdentity *identity = &ctx->identities[method->index];
@@ -131,7 +147,9 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceValue *
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method value requires its declaration owner");
     const XrXirFunction *function = &ctx->functions[method->index];
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, receiver.type);
-    SourceSubstitution substitution = {type->nominal.arguments, type->nominal.argument_count};
+    if (!source_method_instantiation(ctx, node, method->index,
+        (SourceSubstitution) {type->nominal.arguments, type->nominal.argument_count}, type_arguments)) return false;
+    SourceSubstitution substitution = type_arguments->substitution;
     uint32_t count = function->parameter_count - 1;
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
@@ -162,7 +180,7 @@ static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
             if ((method->is_private && method->is_protected) ||
                 method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
                 method->is_variadic || method->is_operator || method->receiver_mode != XR_PARAM_READ ||
-                method->attr_count || method->type_param_count || method->borrow_origin_count ||
+                method->attr_count || method->borrow_origin_count ||
                 method->borrow_origin_syntax || !method->body || method->param_count < 0 || method->param_count >= 65536)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method declaration contract is not admitted");
             for (int f = 0; f < decl->field_count; ++f) {
@@ -181,6 +199,7 @@ static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
             if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
                 source_query_range(ctx, node, method->name))) return false;
             body->declaration = symbol->declaration;
+            if (!source_method_scope(ctx, owner, index)) return false;
             uint32_t offset = method->is_static ? 0 : 1;
             uint32_t count = (uint32_t)method->param_count + offset;
             body->parameters = count ? source_alloc(ctx, count, sizeof(*body->parameters)) : NULL;

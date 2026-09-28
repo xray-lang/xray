@@ -51,6 +51,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     ctx->array_declaration = symbol.declaration;
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
     record->native_identity = native->id; record->exported = true;
+    record->generic_parameter_count = 1;
     symbol = (SourceName) {0}; symbol.name = source_owned_text(ctx, native->parameter_name);
     if (!symbol.name) return false;
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE_PARAMETER, ctx->array_declaration,

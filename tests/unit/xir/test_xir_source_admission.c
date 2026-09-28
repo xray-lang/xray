@@ -117,6 +117,17 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "struct C<T>{static f<T>(value:T)->T{return value}}\n",
+    "struct C{static f<T,T>(value:T)->T{return value}}\n",
+    "struct C<T>{static f<U>(value:T)->U{return value}}\n",
+    "struct C<T>{static f<U>(value:U=1)->U{return value}}\n",
+    "struct C<T>{static f<U>(value:U)->U{return value}}\nC<i64>.f(1)\n",
+    "struct C<T>{static f<U>(value:U)->U{return value}}\nC.f<i64,string>(\"bad\")\n",
+    "struct C<T>{value:T\nf<U>(value:U)->U{return value}}\nconst c=C<i64>{value:1}\nconst f=c.f\n",
+    "fn require<T:Sendable>(value:T)->T{return value}\nstruct C<T>{static f<U>(value:U)->U{return require<U>(value)}}\n",
+    "struct C{static f<U:Sendable>(value:U)->U{return value}}\nC.f<fn()->i64>(fn()->i64{return 1})\n",
+    "struct C{const value:i64\nconstructor(){this.value=1\nconst f=this.value<i64>\n}}\n",
+
     "struct C { static value()->i64 { return this.x } }\n",
     "struct C { static value(x:i64=this.x)->i64 { return x } }\n",
     "struct C { static value()->i64 { return 1 } }\nconst c=C()\nc.value()\n",
@@ -131,7 +142,6 @@ static const char *const rejected[] = {
     "struct C<T> { static value(x:T)->T { return x } }\nC.value<i64>(1)\n",
     "struct C { static value()->i64 { return 1 } }\nfn bad(){const C=7\nC.value()}\n",
     "struct C { static value(x:i64=\"bad\")->i64 { return x } }\n",
-    "struct C { static value<T>(x:T)->T { return x } }\n",
 
     "fn value(x:i64=caller)->i64 { return x }\nfn use()->i64 { const caller=7; return value() }\n",
     "struct C { const value:i64\n private constructor(value:i64=7) { this.value=value } }\nconst c=C()\n",
@@ -399,6 +409,11 @@ static void static_import_authority(const XrXirSourceRequest *request, const cha
 }
 static void constructor_admission(const XrXirSourceRequest *request, const char *root) {
     const char *const sources[] = {
+        "fn require<T:Sendable>(value:T)->T{return value}\nstruct C<T:Sendable>{static f<U:Sendable>(outer:T,value:U)->U{return require<U>(value)}}\nprint(C<i64>.f<string>(7,\"yes\"))\n",
+
+        "struct C { static value<T>(x:T)->T { return x } }\nprint(C.value<i64>(7))\nconst f=C.value<string>\nprint(f(\"yes\"))\n",
+        "struct C<T> { value:T\n map<U>(x:U, f:fn(T,U)->U)->U { return f(this.value,x) }\n static choose<U>(x:T,y:U)->U { return y } }\nconst c=C<i64>{value:7}\nprint(C<i64>.choose<string>(7,\"yes\"))\nconst f=c.map<string>\nprint(f(\"ok\",fn(a:i64,b:string)->string {return b}))\n",
+
         "struct C { static value(x:i64=7)->i64 { return x } }\nprint(C.value(),C.value(9))\nconst f=C.value\nprint(f(8))\n",
         "struct C<T> { static value(x:T)->T { return x } }\nprint(C<i64>.value(7))\nconst f=C<string>.value\nprint(f(\"yes\"))\n",
         "struct C { const value:string\n private constructor(value) { this.value=value }\n private static secret()->string { return \"private\" }\n static make(value:string=C.secret())->C { return C(value) }\n static capture()->fn()->string { return C.secret } }\nprint(C.make().value)\nconst f=C.capture()\nprint(f())\n",
