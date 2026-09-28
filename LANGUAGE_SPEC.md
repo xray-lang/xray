@@ -3244,8 +3244,12 @@ class Vector2 {
 
 - The keyword is `constructor` (not `init`, not the class name).
 - A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
-- Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise it is inferred from the call-site argument type.
+- Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise an explicit type is required; call sites do not infer definition types or capabilities.
 - The constructor implicitly returns `this` (compiler-injected).
+- An explicit struct constructor evaluates declaration defaults in field declaration order before its body. Fields without a declaration default remain uninitialized, including numeric fields. A legal default constructor is synthesized only when no explicit constructor is declared.
+- A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
+- A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
+- Field literals and constructor calls obey field and constructor permissions respectively. Declaring an explicit constructor neither disables otherwise legal struct field literals nor grants private-field construction permission.
 - Derived class constructors must call `super(...)` first.
 - A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 

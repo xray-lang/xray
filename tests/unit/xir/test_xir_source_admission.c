@@ -117,6 +117,24 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "struct C { const value:string\n constructor(value,n:i64) { var i=0\n while(i<n) { this.value=value\n i=i+1 }\n this.value=value } }\n",
+    "struct C { const value:string\n constructor(value,flag:bool) { if(flag) { return }\n this.value=value } }\n",
+    "struct C { const value:string\n constructor(value) { this.get()\n this.value=value }\n get()->string{return this.value} }\n",
+    "struct C<T> { const value:T\n constructor(value) { this.value=value+value } }\n",
+    "struct C { private const value:string\n constructor(value){this.value=value} }\nconst bad=C{value:\"hidden\"}\n",
+    "struct C { const value:string\n constructor(value){this.value=value} }\nconst bad=C()\n",
+
+    "struct C { const value:string\n constructor(value) {} }\n",
+    "struct C { const value:string\n constructor(value) { this.value=value\n this.value=value } }\n",
+    "struct C { const value:string\n constructor(value, ok:bool) { if(ok) { this.value=value } } }\n",
+    "struct C { const value:string\n constructor(value) { return\n this.value=value } }\n",
+    "struct C { const value:string\n constructor(other) { this.value=other } }\n",
+    "struct C { const value:string\n constructor(value) { const capture=fn()->string { return this.value }\n this.value=value } }\n",
+    "struct C { const value:string=\"default\"\n constructor(value) { this.value=value } }\n",
+    "struct C { const value:string\n private constructor(value) { this.value=value } }\nconst c=C(\"bad\")\n",
+    "struct C { const value:string\n constructor(value) { this.value=value } }\nconst c=C(1)\n",
+    "struct C { const value:string\n constructor(value) { this.value=value\n return this } }\n",
+
     "var values=[]\n",
     "const values:Array<i64>=[\"wrong\"]\n",
     "const values=[1,\"wrong\"]\n",
@@ -322,6 +340,25 @@ static const char *const rejected[] = {
 };
 #include "xir_source_integer_context.h"
 #include "xir_source_decimal_context.h"
+static void constructor_admission(const XrXirSourceRequest *request, const char *root) {
+    const char *const sources[] = {
+        "struct C { const factory:fn()->string=fn()->string { return \"ready\" }\n const value:string\n constructor() { this.value=this.factory() } }\nconst c=C()\n",
+        "struct C { const value:string\n constructor(value) { this.value=value } }\nconst c=C(\"yes\")\nprint(c.value)\n",
+        "struct C<T> { const value:T\n constructor(value) { this.value=value } }\nconst c=C<string>(\"yes\")\nprint(c.value)\n",
+        "struct C { const value:string\n constructor(value,ok:bool) { if(ok) { this.value=value } else { this.value=\"no\" } } }\nconst c=C(\"yes\",true)\n",
+        "struct C { const value:string=\"default\"\n constructor() {} }\nconst c=C()\n",
+        "struct C { const first:string\n const second:string\n constructor(first) { this.first=first\n this.second=this.first } }\nconst c=C(\"yes\")\n",
+        "struct C { const value:string\n constructor(value) { this.value=value\n const capture=fn()->string { return this.value }\n print(capture())\n return } }\nconst c=C(\"yes\")\n",
+    };
+    for (unsigned i = 0; i < sizeof(sources)/sizeof(sources[0]); ++i) {
+        write_source(root, sources[i]);
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        if (status != XR_XIR_OK) fprintf(stderr, "constructor case %u: %s\n", i, diagnostic.message);
+        CHECK(status == XR_XIR_OK && result.checked);
+        xr_xir_source_result_free(&result);
+    }
+}
 int main(void) {
     stdlib_resolution();
 
@@ -398,6 +435,7 @@ int main(void) {
     xr_xir_source_result_free(&query_result_14);
     CHECK(query_status_14 == XR_XIR_OK && artifact);
     xr_xir_artifact_free(artifact);
+    constructor_admission(&request, root);
     shadowed_coro(&request, root);
     xr_compiler_session_delete(session);
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);

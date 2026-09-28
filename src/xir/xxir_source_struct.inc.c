@@ -179,7 +179,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
     return true;
 }
 static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType type,
-    const char *name, bool write, uint32_t *index, XrXirType *field_type) {
+    const char *name, unsigned write, uint32_t *index, XrXirType *field_type) {
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
     if (!found || found->kind != XR_XIR_TYPE_NOMINAL)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "member receiver is not a nominal value");
@@ -189,7 +189,7 @@ static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType typ
         const XrXirNominalField *field = &decl->fields[f];
         if (strlen(name) != field->name.length || memcmp(name, field->name.bytes, field->name.length)) continue;
         bool owner = ctx->identities[ctx->function].nominal_owner == found->nominal.declaration + 1;
-        if ((!owner && (field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))) || (write && !(field->flags & XR_XIR_FIELD_MUTABLE)))
+        if ((!owner && (field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))) || (write == 1 && !(field->flags & XR_XIR_FIELD_MUTABLE)) || (write == 2 && !owner))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field access is not permitted");
         uint32_t declaration = found->nominal.declaration;
         SourceSubstitution substitution = {found->nominal.arguments, found->nominal.argument_count};
@@ -266,6 +266,7 @@ static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceVal
 }
 static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     MemberSetNode *set = &node->as.member_set;
+    if (source_constructor_receiver(ctx, set->object)) return source_constructor_field(ctx, node, set->member, value, set->value);
     SourceName *root = set->object->type == AST_VARIABLE ? visible_name(ctx, set->object->as.variable.name) : NULL;
     if (!root || !root->mutable || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field mutation requires a mutable named root");

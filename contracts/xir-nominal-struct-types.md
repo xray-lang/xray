@@ -771,3 +771,23 @@ rejection; packet roundtrip, specialization and native proof correspondence;
 independent VM/native output, failed allocation release and full batch gates.
 Static/ref/move, method-local generics and user
 constructors remain separate obligations.
+
+## Explicit struct construction
+
+An explicit constructor is an ordinary declaration-owned Checked function with
+explicit value parameters and a nominal result; it has no receiver argument.
+Omitted parameter types come only from same-name declared fields. Declaration
+defaults run first in field order, and every other field starts uninitialized.
+Per-field places preserve must/may initialization, including const assign-once.
+Normal completion and bare return assemble a complete STRUCT_NEW. Reading one
+field needs that field initialized; whole-this use, method binding/call and
+capture require every field. Captures own a complete value snapshot. A callable
+field may be read/called independently once that field is initialized.
+
+Constructor visibility uses ordinary function member authority. Field literals
+retain independent field visibility and do not call the constructor; neither
+form grants private field access. Constructor call queries retain the lexical
+type/import binding and target the actual constructor declaration. Parameter
+ranges come from parser parameter positions. This subset does not qualify class
+inheritance, default arguments, variadic/ref/move constructors or every valid
+constant-condition control-flow proof. Those remain open language obligations.

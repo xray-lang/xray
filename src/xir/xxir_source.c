@@ -35,7 +35,7 @@ typedef struct SourceName {
     SourceKind kind;
     uint32_t index, module;
     XrXirType type;
-    bool mutable;
+    bool mutable, construction;
     uint32_t declaration;
 } SourceName;
 typedef struct SourceFunction {
@@ -49,6 +49,7 @@ typedef struct SourceFunction {
     uint32_t block_count, block_capacity;
     XrXirInstruction *ops;
     uint32_t declaration, generic_owner;
+    uint32_t *constructor_places;
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
 typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; } SourceLoop;
@@ -603,8 +604,11 @@ static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
     *substitution = arguments.substitution; return true;
 }
 #include "xxir_source_array.inc.c"
+static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
+static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
 #include "xxir_source_defaults.inc.c"
+#include "xxir_source_constructors.inc.c"
 #include "xxir_source_methods.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -640,7 +644,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             return emit(ctx, (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0}, value);
         }
         if (base && base->kind == SOURCE_MODULE) { binding = base; target = imported_declaration(ctx, base, member->name); }
-        else {
+        else if (source_constructor_receiver(ctx, member->object) &&
+            !source_method_find(ctx, ctx->functions[ctx->function].result, member->name)) {
+            if (!expression(ctx, callee, &indirect)) return false;
+            indirect_ready = true;
+        } else {
             if (base && xr_xir_type_is_array(&ctx->types, base->type))
                 return source_array_call(ctx, node, NULL, value);
             if (!expression(ctx, member->object, &receiver)) return false;
@@ -661,12 +669,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     }
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
     if (target && target->kind == SOURCE_NOMINAL) {
-        if (call->arg_count || call->type_arg_count < 0)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "default struct construction takes no value arguments");
+        if (call->type_arg_count < 0)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid constructor type arguments");
         XrXirType type;
         return source_nominal_apply(ctx, target, call->type_args, (uint32_t)call->type_arg_count, &type) &&
-            source_query_reference(ctx, callee, binding, target, XR_XIR_SOURCE_CALL) &&
-            source_default_value(ctx, node, type, value);
+            source_constructor_call(ctx, node, type, binding, target, value);
     }
     XrXirTypeNode signature = {0};
     if (!print && !atomic && !stream && method == XR_XIR_INVALID && (!target || target->kind != SOURCE_FUNCTION)) {
@@ -1021,6 +1028,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ)) return false;
         if (symbol->kind == SOURCE_LOCAL) {
+            if (symbol->construction) return source_constructor_value(ctx, node, value);
             if (symbol->mutable) return emit(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, symbol->type,
                 {symbol->index, 0}, {0}, 0}, value);
             *value = (SourceValue) {symbol->index, symbol->type}; return true;
@@ -1099,7 +1107,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         if (!source_cell_type(ctx, initial.type, &cell) ||
             !emit(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, cell, {initial.id, 0}, {0}, 0}, &initial)) return false;
     }
-    *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_LOCAL, initial.id, ctx->module, logical_type, !decl->is_const, 0};
+    *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_LOCAL, initial.id, ctx->module, logical_type, !decl->is_const, false, 0};
     ctx->locals = symbol;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
         source_query_range(ctx, node, symbol->name))) return false;
@@ -1246,6 +1254,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_EXPR_STMT: { SourceValue value; return expression(ctx, node->as.expr_stmt, &value); }
     case AST_RETURN_STMT: {
+        if (source_constructor_active(ctx)) return source_constructor_return(ctx, node);
         if (top || !ctx->bodies[ctx->function].node || node->as.return_stmt.value_count > 1)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid return placement or arity");
         SourceValue value = {0};
@@ -1659,7 +1668,9 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value
     for (SourceCapture *p = scan.captures; p; p = p->next) {
         XrXirType capture_type = p->source->type;
         if (p->source->mutable && !source_cell_type(ctx, capture_type, &capture_type)) return false;
-        captures[p->index] = (SourceValue) {p->source->index, capture_type};
+        if (p->source->construction) {
+            if (!source_constructor_value(ctx, node, &captures[p->index])) return false;
+        } else captures[p->index] = (SourceValue) {p->source->index, capture_type};
     }
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, index};
     uint32_t count = ctx->generics[index].parameter_count;
@@ -1693,7 +1704,7 @@ static bool build_bodies(SourceContext *ctx) {
             continue;
         }
         if (ctx->bodies[f].node->type == AST_METHOD_DECL) {
-            if (!source_method_body(ctx) || !finish_body(ctx)) return false;
+            if (!(ctx->bodies[f].node->as.method_decl.is_constructor ? source_constructor_body(ctx) : source_method_body(ctx)) || !finish_body(ctx)) return false;
             continue;
         }
         FunctionDeclNode *decl = &ctx->bodies[f].node->as.function_decl;

@@ -84,3 +84,49 @@ export struct ReadBox<T> {
     bound()->fn()->T{return this.fetch}
 }
 export struct MethodSecret { private hidden:i64=97; private fetch()->i64{return this.hidden}; get()->i64{return this.fetch()} }
+
+export struct Construct<T> {
+    private const value:T
+    copy:T
+    const label:string
+    const stamp:i64=5
+    constructor(value, yes:bool) {
+        this.value=value
+        this.copy=value
+        if(yes) { this.label="ctor" } else { this.label="fallback" }
+        const capture=fn()->T { return this.value }
+        this.copy=capture()
+    }
+    get()->T { return this.value }
+}
+
+export struct ConstructorControl {
+    const value:string
+    constructor(value, branch:i64) {
+        if(branch<0) { this.value="early"; return }
+        var i=0
+        while(i<branch) { i=i+1 }
+        this.value=value
+    }
+}
+const constructorOrder=Atomic(0)
+fn constructorStep(value:i64)->i64 {
+    const prior=constructorOrder.load()
+    constructorOrder.fetchAdd(prior*9+value)
+    return value
+}
+export struct ConstructorOrder {
+    private const first:i64=constructorStep(1)
+    private const second:i64=constructorStep(2)
+    const order:i64
+    constructor() { constructorStep(3); this.order=constructorOrder.load() }
+}
+export struct ConstructorFault {
+    private const held:string
+    const value:i64
+    constructor(left:i64,right:i64) {
+        this.held="partial"+"owned"
+        Coro.yield()
+        this.value=left/right
+    }
+}

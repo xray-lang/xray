@@ -92,6 +92,23 @@ static void rejected_initialization(const XrXirArtifact *artifact) {
     ops[2] = (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_STRING, {3}, {0}, 0};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
 }
+static void initialize_once(const XrXirArtifact *artifact) {
+    XrXirModule module = *xr_xir_artifact_module(artifact);
+    XrXirFunction function = module.functions[3];
+    XrXirInstruction ops[10]; memcpy(ops, function.instructions, sizeof(ops));
+    module.functions = &function; module.function_count = 1; function.instructions = ops;
+    ops[0].immediate = 1;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    /* Exclusive first writes are legal, but a join cannot write again. */
+    ops[6] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {3, 0}, {0}, 0};
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+    ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+    ops[2] = ops[4];
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    ops[0].immediate = 2;
+    CHECK(xr_xir_verify(&module, NULL, NULL) != XR_XIR_OK);
+}
 /* A write on a backedge cannot justify the first visit to its header. */
 static void initialization_loops(void) {
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_BOOL};
@@ -109,6 +126,9 @@ static void initialization_loops(void) {
     XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    ops[0].immediate = 1;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
+    ops[0].immediate = 0;
     ops[1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
     /* Store the body before its header, retaining exactly the same CFG. */
@@ -132,6 +152,8 @@ static void initialization_loops(void) {
     function.instructions = reset_ops; function.instruction_count = 6;
     function.blocks = reset_blocks; function.block_count = 3;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
+    reset_ops[1].immediate = 1;
+    CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     XrXirInstruction write = reset_ops[2]; reset_ops[2] = reset_ops[3]; reset_ops[3] = write;
     reset_ops[5].args[0] = 4;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
@@ -139,7 +161,7 @@ static void initialization_loops(void) {
 int main(int argc, char **argv) {
     initialization_loops();
     XrXirArtifact *checked = local_fixture(), *decoded = NULL, *lowered = NULL;
-    rejected_places(checked); rejected_phis(checked); rejected_initialization(checked);
+    rejected_places(checked); rejected_phis(checked); rejected_initialization(checked); initialize_once(checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);

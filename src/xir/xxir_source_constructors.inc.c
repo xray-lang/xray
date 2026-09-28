@@ -1,0 +1,159 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_source_constructors.inc.c - Declaration-owned construction and field storage
+ *
+ * KEY CONCEPT:
+ *   A complete nominal value is assembled only from initialized field places.
+ */
+static bool source_constructor_active(SourceContext *ctx) {
+    AstNode *node = ctx->bodies[ctx->function].node;
+    return node && node->type == AST_METHOD_DECL && node->as.method_decl.is_constructor;
+}
+static bool source_constructor_receiver(SourceContext *ctx, AstNode *node) {
+    if (!node || (node->type != AST_THIS_EXPR &&
+        (node->type != AST_VARIABLE || strcmp(node->as.variable.name, "this")))) return false;
+    SourceName *symbol = visible_name(ctx, "this");
+    return symbol && symbol->construction;
+}
+static bool source_constructor_value(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    XrXirType type = ctx->functions[ctx->function].result;
+    const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, type);
+    uint32_t count = nominal->nominal.field_count;
+    SourceValue *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
+    if (count && !fields) return false;
+    for (uint32_t f = 0; f < count; ++f) {
+        if (!source_work(ctx, node) || !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ,
+            nominal->nominal.fields[f], {ctx->bodies[ctx->function].constructor_places[f], 0}, {0}, 0}, &fields[f])) return false;
+    }
+    return emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, type, {0}, {0}, 0}, fields, count, value);
+}
+static bool source_constructor_return(SourceContext *ctx, AstNode *node) {
+    if (node && node->type == AST_RETURN_STMT && node->as.return_stmt.value_count)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor return must be implicit or bare");
+    SourceValue value;
+    if (!source_constructor_value(ctx, node, &value) ||
+        !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0}, NULL)) return false;
+    ctx->returned = true; return true;
+}
+static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name,
+    SourceValue *value, AstNode *incoming) {
+    uint32_t field; XrXirType type;
+    if (!source_struct_field(ctx, node, ctx->functions[ctx->function].result, name, incoming ? 2u : 0u, &field, &type)) return false;
+    uint32_t place = ctx->bodies[ctx->function].constructor_places[field];
+    if (!incoming) return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, type, {place, 0}, {0}, 0}, value);
+    if (!expression_in(ctx, incoming, type, value)) return false;
+    if (value->type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor field type mismatch");
+    return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place, value->id}, {0}, 0}, NULL);
+}
+static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, AstNode *node, uint32_t *next) {
+    MethodDeclNode *method = &node->as.method_decl;
+    if (ctx->nominal_constructors[owner->index] || *next >= ctx->first_closure || method->is_static ||
+        method->is_override || method->is_static_constructor || method->is_getter || method->is_setter ||
+        method->is_variadic || method->is_operator || method->attr_count || method->type_param_count ||
+        method->borrow_origin_count || method->borrow_origin_syntax || !method->body ||
+        method->param_count < 0 || method->param_count > 65536 || (method->is_private && method->is_protected))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor declaration contract is not admitted");
+    uint32_t index = (*next)++; ctx->function = index; ctx->nominal_constructors[owner->index] = index;
+    SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
+    source_struct_function_scope(ctx, index, owner);
+    SourceName symbol = {0}; symbol.name = "constructor"; symbol.node = node;
+    if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
+        source_query_range(ctx, node, "constructor"))) return false;
+    body->declaration = symbol.declaration;
+    uint32_t count = (uint32_t)method->param_count;
+    body->parameters = count ? source_alloc(ctx, count, sizeof(*body->parameters)) : NULL;
+    if (count && !body->parameters) return false;
+    ctx->functions[index] = (XrXirFunction) {"constructor", 11, body->parameters, count, owner->type, NULL, 0, NULL, 0, NULL, 0};
+    const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner->index];
+    for (uint32_t p = 0; p < count; ++p) {
+        XrParamNode *param = method->params[p];
+        if (param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest || !strcmp(param->name, "this"))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter contract is not admitted");
+        if (param->type) { if (!source_type(ctx, param->type, &body->parameters[p])) return false; }
+        else {
+            for (uint32_t f = 0; f < decl->field_count; ++f) {
+                if (!source_work(ctx, node)) return false;
+                if (strlen(param->name) == decl->fields[f].name.length &&
+                    !memcmp(param->name, decl->fields[f].name.bytes, decl->fields[f].name.length)) body->parameters[p] = decl->fields[f].type;
+            }
+        }
+        if (body->parameters[p] == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter needs a declaration type");
+        for (uint32_t q = 0; q < p; ++q) {
+            if (!source_work(ctx, node)) return false;
+            if (!strcmp(param->name, method->params[q]->name)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate constructor parameter");
+        }
+    }
+    uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
+    ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : decl->exported, owner->index + 1, access};
+    return source_query_parameters(ctx, symbol.declaration);
+}
+static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType type,
+    SourceName *binding, SourceName *target, SourceValue *value) {
+    const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, type);
+    uint32_t index = ctx->nominal_constructors[nominal->nominal.declaration];
+    if (!index) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type has no admitted constructor");
+    const XrXirFunction *function = &ctx->functions[index];
+    CallExprNode *call = &node->as.call_expr;
+    if ((uint32_t)call->arg_count != function->parameter_count ||
+        (ctx->identities[index].member_access && ctx->identities[ctx->function].nominal_owner != ctx->identities[index].nominal_owner))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor arity or authority mismatch");
+    SourceName called = *target;
+    if (ctx->bodies[index].node->type == AST_METHOD_DECL) called.declaration = ctx->bodies[index].declaration;
+    if (!source_query_reference(ctx, call->callee, binding, &called, XR_XIR_SOURCE_CALL)) return false;
+    SourceSubstitution substitution = {nominal->nominal.arguments, nominal->nominal.argument_count};
+    SourceValue *arguments = function->parameter_count ? source_alloc(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
+    if (function->parameter_count && !arguments) return false;
+    for (uint32_t p = 0; p < function->parameter_count; ++p) {
+        XrXirType expected;
+        if (call->arg_accesses && call->arg_accesses[p] != XR_CALL_ARG_PLAIN)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument requires a value");
+        if (!source_substitute(ctx, &substitution, function->parameters[p], 0, &expected) ||
+            !expression_in(ctx, call->arguments[p], expected, &arguments[p])) return false;
+        if (arguments[p].type != expected) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument type mismatch");
+    }
+    XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, index};
+    return source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
+        emit_group(ctx, op, arguments, function->parameter_count, value);
+}
+static bool source_constructor_body(SourceContext *ctx) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    MethodDeclNode *method = &body->node->as.method_decl;
+    uint32_t owner = ctx->identities[ctx->function].nominal_owner - 1;
+    const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner];
+    body->constructor_places = decl->field_count ? source_alloc(ctx, decl->field_count, sizeof(*body->constructor_places)) : NULL;
+    if (decl->field_count && !body->constructor_places) return false;
+    for (uint32_t p = 0; p < (uint32_t)method->param_count; ++p) {
+        SourceName *symbol = add_name(ctx, &ctx->locals, method->params[p]->name, body->node);
+        if (!symbol) return false;
+        symbol->kind = SOURCE_LOCAL; symbol->index = p; symbol->type = body->parameters[p];
+        XrParamNode *parameter = method->params[p];
+        XrXirSourceRange range = {ctx->module, parameter->line, parameter->column, parameter->line, 0};
+        if (parameter->column > 0 && strlen(symbol->name) <= (size_t)(INT_MAX - parameter->column))
+            range.end_column = parameter->column + (int)strlen(symbol->name);
+        if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
+        source_query_binding_type(ctx, symbol);
+    }
+    SourceName *self = add_name(ctx, &ctx->locals, "this", body->node);
+    if (!self) return false;
+    self->kind = SOURCE_LOCAL; self->type = ctx->functions[ctx->function].result; self->construction = true;
+    if (!source_query_declare(ctx, self, XR_XIR_SOURCE_BINDING, body->declaration, source_query_range(ctx, body->node, NULL))) return false;
+    source_query_binding_type(ctx, self);
+    for (uint32_t f = 0; f < decl->field_count; ++f) {
+        SourceValue place;
+        if (!source_work(ctx, body->node) || !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_UNINIT,
+            decl->fields[f].type, {0}, {0}, (decl->fields[f].flags & XR_XIR_FIELD_MUTABLE) ? 0 : 1}, &place)) return false;
+        body->constructor_places[f] = place.id;
+        uint32_t initializer = ctx->nominal_defaults[owner][f];
+        if (initializer) {
+            const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, self->type);
+            SourceValue value; XrXirInstruction op = {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, initializer};
+            if (!source_type_arguments(ctx, body->node, nominal->nominal.arguments, nominal->nominal.argument_count, &op) ||
+                !emit(ctx, op, &value) || !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place.id, value.id}, {0}, 0}, NULL)) return false;
+        }
+    }
+    return statement(ctx, method->body, false) && (ctx->returned || source_constructor_return(ctx, NULL));
+}

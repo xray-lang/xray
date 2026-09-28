@@ -125,7 +125,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 21 && XR_XIR_OP_COUNT == 78, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 22 && XR_XIR_OP_COUNT == 78, "packet revision");
     _Static_assert(XR_XIR_STRUCT_NEW == 74 && XR_XIR_STRUCT_GET == 75 && XR_XIR_STRUCT_SET == 76, "struct wire operations");
     _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 54 &&
         XR_XIR_CONST_FLOAT == 55 && XR_XIR_NEG_FLOAT == 56 && XR_XIR_EQ_FLOAT == 57 && XR_XIR_GE_FLOAT == 62, "numeric wire identities");
@@ -150,8 +150,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x76, 0xd7, 0xc6, 0xe4, 0x25, 0xf4, 0x38, 0x44, 0x3e, 0x25, 0x88, 0x0c, 0x2d, 0xd8, 0xb5, 0x9c,
-        0x79, 0x27, 0x22, 0xf0, 0xd3, 0x88, 0x5b, 0x59, 0xd0, 0xbc, 0x93, 0xb8, 0xda, 0x46, 0xaf, 0xbb};
+        0x8b, 0x17, 0x6a, 0xe1, 0x15, 0x17, 0x56, 0x42, 0x65, 0x77, 0x86, 0x49, 0xc3, 0x79, 0x5d, 0x57,
+        0x57, 0x77, 0x99, 0x78, 0x98, 0x44, 0xeb, 0xd0, 0x2b, 0xc3, 0xcb, 0xd5, 0x3f, 0x79, 0xe9, 0x23};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
@@ -734,6 +734,16 @@ static void uninitialized_packet(void) {
     CHECK(packet.length == 253 && packet.bytes[105] == XR_XIR_LOCAL_UNINIT && packet.bytes[137] == XR_XIR_LOCAL_WRITE);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(decoded);
+    uint8_t original[253]; memcpy(original, packet.bytes, sizeof(original));
+    /* A second write is valid for mutable storage, but not initialize-once. */
+    put32(packet.bytes + 169, XR_XIR_LOCAL_WRITE); put32(packet.bytes + 173, XR_XIR_UNIT);
+    put32(packet.bytes + 181, 0); put32(packet.bytes + 209, 0); digest_packet(&packet);
+    decoded = NULL;
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded); decoded = NULL;
+    put32(packet.bytes + 129, 1); digest_packet(&packet);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_BAD_VALUE && !decoded);
+    memcpy(packet.bytes, original, sizeof(original));
     /* Repairing the digest must not hide removal of the initializing write. */
     put32(packet.bytes + 137, XR_XIR_SUSPEND); put32(packet.bytes + 145, 0);
     digest_packet(&packet);

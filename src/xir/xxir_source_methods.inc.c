@@ -45,6 +45,15 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         emit_group(ctx, op, arguments, function->parameter_count, value);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    if (source_constructor_receiver(ctx, node->as.member_access.object)) {
+        const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[ctx->identities[ctx->function].nominal_owner - 1];
+        for (uint32_t f = 0; f < decl->field_count; ++f) {
+            if (!source_work(ctx, node)) return false;
+            const XrXirLiteral *name = &decl->fields[f].name;
+            if (strlen(node->as.member_access.name) == name->length && !memcmp(node->as.member_access.name, name->bytes, name->length))
+                return source_constructor_field(ctx, node, node->as.member_access.name, value, NULL);
+        }
+    }
     SourceValue receiver;
     if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
     SourceName *method = source_method_find(ctx, receiver.type, node->as.member_access.name);
@@ -78,7 +87,11 @@ static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
             AstNode *node = decl->methods[m];
             if (!source_work(ctx, node) || node->type != AST_METHOD_DECL) return false;
             MethodDeclNode *method = &node->as.method_decl;
-            if (method->is_constructor || method->is_static || (method->is_private && method->is_protected) ||
+            if (method->is_constructor) {
+                if (!source_constructor_declare(ctx, owner, node, next)) return false;
+                continue;
+            }
+            if (method->is_static || (method->is_private && method->is_protected) ||
                 method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
                 method->is_variadic || method->is_operator || method->receiver_mode != XR_PARAM_READ ||
                 method->attr_count || method->type_param_count || method->borrow_origin_count ||

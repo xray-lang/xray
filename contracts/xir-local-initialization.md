@@ -32,3 +32,12 @@ verification-test: test_xir_checked
 verification-test: test_xir_execution
 verification-test: test_xir_emit
 verification-test: test_xir_native
+
+Constructor extension frozen before implementation: LOCAL_UNINIT immediate zero
+is mutable storage; immediate one is initialize-once storage. Other immediates
+reject. The verifier also computes may-initialized using union, starting empty;
+a write to initialize-once storage rejects when any predecessor path has written.
+Redeclaration resets both must and may states. Other write-through operations
+cannot mutate initialize-once storage. This advances the semantic revision;
+packet shape and runtime ABI remain unchanged. Source constructor admission is
+qualified only by its source tests, not these internal storage tests.

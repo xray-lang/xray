@@ -336,7 +336,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
  *   - No inheritance (extends)
  *   - No interface implementation
  *   - No abstract/override modifiers
- *   - No constructor keyword (auto-generated)
+ *   - Explicit constructors and field literals share the declaration syntax
  *   - Fields must have type annotations
  */
 AstNode *xr_parse_struct_declaration(Parser *parser) {
@@ -418,13 +418,6 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
                                            "'override' is not allowed in struct declarations");
             continue;
         }
-        if (xr_parser_check(parser, TK_CONSTRUCTOR)) {
-            xr_parser_error_at_current(
-                parser,
-                "structs cannot have explicit constructors; use struct literal syntax instead");
-            xr_parser_advance(parser);
-            continue;
-        }
         if (xr_parser_check(parser, TK_FINAL)) {
             bool ignored = false;
             reject_removed_member_modifier(parser, &ignored,
@@ -452,7 +445,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
             !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
             !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_OPERATOR) &&
-            !xr_parser_check(parser, TK_AT)) {
+            !xr_parser_check(parser, TK_CONSTRUCTOR) && !xr_parser_check(parser, TK_AT)) {
             xr_parser_error_expected_name(parser, "expected field or method name in struct");
             xr_parser_advance(parser);
             continue;

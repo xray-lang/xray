@@ -384,6 +384,30 @@ static void nominal_query_boundary(void) {
     CHECK(xr_xir_source_snapshot_copy(&view, &budget, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
     CHECK(!memcmp(&budget, &original, sizeof(budget)));
 }
+static void source_constructor_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path, "struct C<T>{\n const value:T\n constructor(\n value\n ){this.value=value}\n}\nconst c=C<i64>(7)\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *owner = declaration(view, "C", 0);
+    CHECK(owner);
+    const XrXirSourceDeclaration *constructor = declaration(view, "constructor", owner->id);
+    CHECK(constructor && constructor->kind == XR_XIR_SOURCE_FUNCTION && constructor->parameter_count == 1);
+    CHECK(constructor->parameters[0].known && constructor->parameters[0].generic_owner == owner->id);
+    const XrXirSourceDeclaration *parameter = declaration(view, "value", constructor->id);
+    CHECK(parameter && parameter->range.line == 4 && parameter->range.column == 2);
+    CHECK(parameter->range.end_line == 4 && parameter->range.end_column == 7);
+    unsigned calls = 0;
+    for (uint32_t i = 0; i < view->reference_count; ++i) {
+        const XrXirSourceReference *reference = &view->references[i];
+        if (reference->access == XR_XIR_SOURCE_CALL) {
+            CHECK(reference->target == constructor->id && reference->declaration == owner->id);
+            ++calls;
+        }
+    }
+    CHECK(calls == 1);
+    xr_xir_source_result_free(&result);
+}
 static void source_struct_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path, "struct Box<T>{value:T}\nstruct Outer<T>{inner:Box<T>}\n"
         "fn wrap<T>(x:T)->Outer<T>{return Outer<T>{inner:Box<T>{value:x}}}\n"
@@ -500,6 +524,7 @@ int main(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
     source_struct_facts(&request);
+    source_constructor_facts(&request);
     failures(&request);
     publication_budgets(&request);
     multiline_declaration(&request);

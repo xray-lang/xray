@@ -520,8 +520,12 @@ class Vector2 {
 
 - 关键字 `constructor`（不是 `init` 也不是与类同名）。
 - 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
-- 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况推断为调用位点的实参类型。
+- 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
 - 构造器隐式返回 `this`（编译期注入）。
+- struct 显式构造器按字段声明顺序先执行声明处的默认表达式；无声明默认表达式的字段保持未初始化（包括数值字段），由构造体负责初始化。只有没有显式构造器时才生成合法的默认构造器。
+- 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
+- const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
+- 字段字面量与构造器调用分别遵循字段权限和构造器权限；声明显式构造器本身不取消合法的 struct 字段字面量，也不扩大私有字段的构造权限。
 - 派生类构造器必须首行调 `super(...)`。
 - struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
@@ -1701,8 +1705,12 @@ class Vector2 {
 
 - The keyword is `constructor` (not `init`, not the class name).
 - A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
-- Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise it is inferred from the call-site argument type.
+- Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise an explicit type is required; call sites do not infer definition types or capabilities.
 - The constructor implicitly returns `this` (compiler-injected).
+- An explicit struct constructor evaluates declaration defaults in field declaration order before its body. Fields without a declaration default remain uninitialized, including numeric fields. A legal default constructor is synthesized only when no explicit constructor is declared.
+- A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
+- A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
+- Field literals and constructor calls obey field and constructor permissions respectively. Declaring an explicit constructor neither disables otherwise legal struct field literals nor grants private-field construction permission.
 - Derived class constructors must call `super(...)` first.
 - A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 

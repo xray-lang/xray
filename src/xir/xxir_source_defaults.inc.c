@@ -23,6 +23,13 @@ static bool source_struct_defaultability(SourceContext *ctx) {
             SourceName *symbol = ctx->nominal_sources[d];
             if (!source_work(ctx, symbol->node)) return false;
             if (ctx->nominal_defaultable[d]) continue;
+            bool explicit_constructor = false;
+            ClassDeclNode *source = &symbol->node->as.struct_decl;
+            for (int m = 0; m < source->method_count; ++m) {
+                if (!source_work(ctx, source->methods[m])) return false;
+                if (source->methods[m]->type == AST_METHOD_DECL && source->methods[m]->as.method_decl.is_constructor) explicit_constructor = true;
+            }
+            if (explicit_constructor) continue;
             const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[d];
             bool available = true;
             for (uint32_t f = 0; f < decl->field_count; ++f) {
