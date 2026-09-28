@@ -15,7 +15,7 @@
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
     if (!module || function >= module->function_count) return false;
-    if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64) return true;
+    if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR) return true;
     uint32_t count = module->generics ? module->generics[function].parameter_count : 0;
     const XrXirTypeNode *node = xr_xir_type_node(module->types, type);
     if (node) return (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
@@ -27,13 +27,13 @@ XrXirStatus xr_xir_type_constraints(const XrXirModule *module, uint32_t function
     XrXirType type, uint32_t constraints, XrXirBudget *remaining) {
     if (!remaining || !remaining->work) return XR_XIR_BUDGET;
     --remaining->work;
-    if (!module || constraints & ~XR_XIR_CONSTRAINT_SENDABLE || !xr_xir_type_in_context(module, function, type) ||
+    if (!module || constraints & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
     const XrXirGeneric *generic = module->generics ? &module->generics[function] : NULL;
     XrXirStatus context = xr_xir_type_context_verify(module->types, type,
         generic ? generic->constraints : NULL, generic ? generic->parameter_count : 0, remaining);
     if (context != XR_XIR_OK || !constraints) return context;
-    return xr_xir_type_sendable(module->types, type, generic ? generic->constraints : NULL,
+    return xr_xir_type_markers(module->types, type, constraints, generic ? generic->constraints : NULL,
         generic ? generic->parameter_count : 0, &remaining->work);
 }
 XrXirStatus xr_xir_type_satisfies(const XrXirModule *module, uint32_t function,
@@ -61,7 +61,7 @@ XrXirStatus xr_xir_generics_verify(const XrXirModule *module, XrXirBudget *remai
             (g->argument_count != 0) != (g->arguments != NULL)) return XR_XIR_BAD_STRUCTURE;
         templates |= g->parameter_count != 0;
         for (uint32_t p = 0; p < g->parameter_count; ++p)
-            if (g->constraints[p] & ~XR_XIR_CONSTRAINT_SENDABLE) return XR_XIR_BAD_TYPE;
+            if (g->constraints[p] & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
         for (uint32_t a = 0; a < g->argument_count; ++a) {
             XrXirStatus status = xr_xir_type_satisfies(module, f, g->arguments[a], 0, remaining);
             if (status != XR_XIR_OK) return status;

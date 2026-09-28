@@ -49,7 +49,8 @@ XR_FUNC XrXirValueStatus xr_xir_enum_new(XrXirType type, uint32_t variant,
     memcpy(&output->payload, &record, sizeof(record)); return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_enum_variant(const XrXirValue *value, uint32_t *output) {
-    if (!output || !xr_xir_value_valid(value) || !owned_carrier_type((XrXirType) value->type))
+    if (!output || !xr_xir_value_valid(value) || value->type == XR_XIR_ERROR ||
+        !owned_carrier_type((XrXirType) value->type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     const XirObject *object = object_pointer(value);
     if (!xr_xir_type_is_enum(xr_xir_type_arena_types(object->arena), object->type)) return XR_XIR_VALUE_BAD_ARGUMENT;

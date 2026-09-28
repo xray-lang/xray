@@ -186,10 +186,12 @@ export struct MethodBox<T> {
 }
 
 export enum Event<T:Sendable> { Empty, Data { value:T, label:string } }
+fn raiseError<E:Error>(error:E)->i64 { throw error }
+fn eraseError<E:Error>(error:E)->Error { return error }
 export fn failEvent<T:Sendable>(value:T)->i64 {
-    const error=Event<T>.Data { value:value, label:"owned" }
+    const error:Error=eraseError<Event<T>>(Event<T>.Data { value:value, label:"owned" })
     Coro.yield()
-    throw error
+    return raiseError<Error>(eraseError<Error>(error))
 }
 export fn event<T:Sendable>(v:T)->Event<T> { return Event<T>.Data { label:"owned", value:v } }
 export fn eventValue<T:Sendable>(v:Event<T>,fallback:T)->T {

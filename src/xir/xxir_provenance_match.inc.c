@@ -214,8 +214,8 @@ static XrXirStatus provenance_lowered_nominals(ProvenanceMatch *c,
         if ((uint64_t)d->parameter_count + d->field_count > c->remaining->work) return XR_XIR_BUDGET;
         c->remaining->work -= (uint64_t)d->parameter_count + d->field_count;
         for (uint32_t a = 0; a < d->parameter_count; ++a)
-            if (d->constraints[a] & XR_XIR_CONSTRAINT_SENDABLE) {
-                XrXirStatus status = xr_xir_type_sendable(types, node->nominal.arguments[a], NULL, 0, &c->remaining->work);
+            if (d->constraints[a]) {
+                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a], NULL, 0, &c->remaining->work);
                 if (status != XR_XIR_OK) return status;
             }
         for (uint32_t f = 0; f < d->field_count; ++f) {

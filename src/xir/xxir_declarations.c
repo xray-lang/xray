@@ -149,7 +149,7 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
         *bytes = access_budget.metadata_bytes; *work = access_budget.work;
         if (status != XR_XIR_OK) return status;
         if (slot->module != d->root_module) {
-            XrXirStatus sendable = xr_xir_type_sendable(types, slot->type, NULL, 0, work);
+            XrXirStatus sendable = xr_xir_type_markers(types, slot->type, XR_XIR_CONSTRAINT_SENDABLE, NULL, 0, work);
             if (sendable != XR_XIR_OK) return sendable;
         }
         if (slot->mutable && slot->type == XR_XIR_ATOMIC_I64) return XR_XIR_BAD_STRUCTURE;

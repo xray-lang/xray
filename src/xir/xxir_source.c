@@ -351,6 +351,25 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     if (!source_type(ctx, ref->children[count], &result)) return false;
     --ctx->depth; return source_signature(ctx, parameters, count, result, type);
 }
+static bool source_parameter_markers(SourceContext *ctx, AstNode *node,
+    const XrGenericParam *parameter, uint32_t *markers) {
+    *markers = 0;
+    if (!parameter || !parameter->name || !strcmp(parameter->name, "Sendable") ||
+        !strcmp(parameter->name, "Error") || parameter->constraint_count < 0 || parameter->constraint_count > 2)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic parameter contract is not admitted");
+    for (int i = 0; i < parameter->constraint_count; ++i) {
+        if (!source_work(ctx, node)) return false;
+        XrTypeRef *constraint = parameter->constraints[i];
+        if (!constraint || constraint->kind != XR_TREF_NAMED || !constraint->name || constraint->nchildren)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic marker must be an unparameterized builtin");
+        uint32_t bit = !strcmp(constraint->name, "Sendable") ? XR_XIR_CONSTRAINT_SENDABLE :
+            !strcmp(constraint->name, "Error") ? XR_XIR_CONSTRAINT_ERROR : 0;
+        if (!bit || (*markers & bit))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unknown or duplicate generic marker");
+        *markers |= bit;
+    }
+    return true;
+}
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     if (!ref) { *type = XR_XIR_UNIT; return true; }
     switch (ref->kind) {
@@ -368,6 +387,9 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
             if (!strcmp(ref->name, parameters[i]->name)) {
                 *type = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + (uint32_t) i); return true;
             }
+        }
+        if (!strcmp(ref->name, "Error") && !source_nominal_name(ctx, ref->name)) {
+            *type = XR_XIR_ERROR; return true;
         }
         return source_nominal_type(ctx, ref->name, type);
     }
@@ -438,6 +460,13 @@ static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool expression_in(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value);
 static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     if (!expected || value->type == expected) return true;
+    if (expected == XR_XIR_ERROR) {
+        const XrXirGeneric *generic = &ctx->generics[ctx->function];
+        XrXirStatus status = xr_xir_type_markers(&ctx->types, value->type, XR_XIR_CONSTRAINT_ERROR,
+            generic->constraints, generic->parameter_count, &ctx->budget.work);
+        if (status != XR_XIR_OK) return source_fail(ctx, node, status, "Error conversion requires an enum proof");
+        return emit(ctx, (XrXirInstruction) {XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {value->id, 0}, {0}, 0}, value);
+    }
     if (!(value->type == XR_XIR_F32 && expected == XR_XIR_F64) &&
         (!xr_xir_type_is_integer(value->type) || !xr_xir_type_is_integer(expected) ||
          xr_xir_integer_signed(value->type) != xr_xir_integer_signed(expected) ||
@@ -1324,8 +1353,11 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_THROW_STMT: {
         SourceValue value = {0};
         if (!expression(ctx, node->as.throw_stmt.expression, &value)) return false;
-        if (!xr_xir_type_is_enum(&ctx->types, value.type))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "throw requires an enum error value");
+        const XrXirGeneric *generic = &ctx->generics[ctx->function];
+        XrXirStatus status = xr_xir_type_markers(&ctx->types, value.type, XR_XIR_CONSTRAINT_ERROR,
+            generic->constraints, generic->parameter_count, &ctx->budget.work);
+        if (status != XR_XIR_OK)
+            return source_fail(ctx, node, status, "throw requires a proved enum error value");
         ctx->returned = true;
         return emit(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {value.id, 0}, {0, 0}, 0}, NULL);
     }
@@ -1377,18 +1409,11 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     ctx->has_generics |= decl->type_param_count != 0;
     for (int i = 0; i < decl->type_param_count; ++i) {
         XrGenericParam *parameter = decl->type_params[i];
-        if (!parameter->name || !strcmp(parameter->name, "Sendable") || parameter->constraint_count < 0 || parameter->constraint_count > 1)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic parameter contract is not admitted");
+        if (!source_parameter_markers(ctx, node, parameter, &constraints[i])) return false;
         for (int j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (!strcmp(parameter->name, decl->type_params[j]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate type parameter");
-        }
-        if (parameter->constraint_count) {
-            XrTypeRef *constraint = parameter->constraints[0];
-            if (constraint->kind != XR_TREF_NAMED || !constraint->name || strcmp(constraint->name, "Sendable"))
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "only the Sendable marker constraint is admitted");
-            constraints[i] = XR_XIR_CONSTRAINT_SENDABLE;
         }
     }
     body->parameters = decl->param_count ? source_alloc(ctx, (size_t) decl->param_count, sizeof(*body->parameters)) : NULL;

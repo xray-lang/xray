@@ -72,18 +72,11 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     for (uint32_t i = 0; i < count; ++i) {
         XrGenericParam *parameter = parameters[i];
         if (!source_work(ctx, node)) return false;
-        if (!parameter->name || !strcmp(parameter->name, "Sendable") || parameter->constraint_count < 0 || parameter->constraint_count > 1)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic parameter contract is not admitted");
+        if (!source_parameter_markers(ctx, node, parameter, &constraints[i])) return false;
         for (uint32_t j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (!strcmp(parameter->name, parameters[j]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate nominal type parameter");
-        }
-        if (parameter->constraint_count) {
-            XrTypeRef *constraint = parameter->constraints[0];
-            if (constraint->kind != XR_TREF_NAMED || !constraint->name || strcmp(constraint->name, "Sendable"))
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "only the Sendable marker constraint is admitted");
-            constraints[i] = XR_XIR_CONSTRAINT_SENDABLE;
         }
         arguments[i] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + i);
     }

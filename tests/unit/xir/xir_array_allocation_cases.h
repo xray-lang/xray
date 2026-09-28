@@ -185,9 +185,12 @@ static void array_nested_gate_scratch(void) {
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_OOM);
     fail_at = SIZE_MAX;
     CHECK(admission.scratch_bytes == scratch && live == physical && domain->stats.live_bytes == bytes);
-    admission.scratch_bytes = 2 * sizeof(ArrayAdmissionFrame) - 1;
+    admission.scratch_bytes = sizeof(ValueAdmissionFrame) - 1;
     size_t allocations = calls;
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations);
+    admission.scratch_bytes = 3 * sizeof(ValueAdmissionFrame) - 1;
+    CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT && calls == allocations + 1);
+    CHECK(admission.scratch_bytes == 3 * sizeof(ValueAdmissionFrame) - 1 && live == physical && domain->stats.live_bytes == bytes);
     admission.scratch_bytes = scratch;
     admission.work = 5;
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_LIMIT);

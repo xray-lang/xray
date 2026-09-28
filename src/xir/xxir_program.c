@@ -17,9 +17,7 @@
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
     if (xr_xir_type_is_cell(spec->types, type)) type = xr_xir_cell_element(spec->types, type);
-    return type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ATOMIC_I64 || xr_xir_callable_signature(spec->types, type) ||
-        xr_xir_type_is_array(spec->types, type) || xr_xir_type_is_nominal(spec->types, type);
+    return type == XR_XIR_BOOL || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
 }
 static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, uint64_t *work) {
     if (!spec || !spec->entries || !spec->entry_count || spec->entry_count > 65535 ||

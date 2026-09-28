@@ -154,3 +154,13 @@ Semantic 29 requires enum operands for THROW instead of integer tokens. Schema 9
 layout and opcode tags are unchanged. Rehashed semantic 28 packets reject. The
 independent scalar header/payload digest is `69ba73ca80e6df7cf5f5891a26cea32bef0e2c0412e12eaa4095e91404b38d97`; a
 rehashed scalar RETURN changed to THROW rejects under the new type contract.
+
+Semantic 30 admits the Error constraint bit alongside Sendable. A generic THROW
+must prove Error from its own parameter declaration; removing that bit, replacing
+it with Sendable, or introducing unknown bits rejects after digest recomputation.
+Nominal argument obligations and specialization-origin proofs consume the same
+marker judgment. The same uncommitted semantic 30 cutover adds Error type 14 and
+ERROR_ERASE opcode 90 without changing schema 9 field widths. Its operand proves
+the Error marker; its result must be Error. Rehashed operand-type, result-type,
+self-reference and unused-target attacks reject. Runtime identity is Value 12
+and Call/Program 17; older revisions reject without a compatibility decoder.

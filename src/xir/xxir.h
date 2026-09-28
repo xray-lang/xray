@@ -106,6 +106,8 @@ typedef struct XrXirFunction {
 } XrXirFunction;
 
 #define XR_XIR_CONSTRAINT_SENDABLE 1u
+#define XR_XIR_CONSTRAINT_ERROR 2u
+#define XR_XIR_CONSTRAINT_MASK (XR_XIR_CONSTRAINT_SENDABLE | XR_XIR_CONSTRAINT_ERROR)
 typedef struct XrXirGeneric {
     const uint32_t *constraints;
     uint32_t parameter_count;

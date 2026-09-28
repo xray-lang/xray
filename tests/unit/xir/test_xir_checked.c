@@ -127,7 +127,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 9 && XR_XIR_CHECKED_CONTRACT == 29 && XR_XIR_OP_COUNT == 90, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 9 && XR_XIR_CHECKED_CONTRACT == 30 && XR_XIR_OP_COUNT == 91, "packet revision");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
     _Static_assert(XR_XIR_ENUM_NEW == 86 && XR_XIR_ENUM_TAG == 87 && XR_XIR_ENUM_GET == 88, "enum wire operations");
     _Static_assert(XR_XIR_STRING_INDEX_OF == 84 && XR_XIR_STRING_LAST_INDEX_OF == 85, "search wire operations");
@@ -157,8 +157,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x69, 0xba, 0x73, 0xca, 0x80, 0xe6, 0xdf, 0x7c, 0xf5, 0xf5, 0x89, 0x1a, 0x26, 0xce, 0xa3, 0x2b,
-        0xef, 0x0e, 0x2c, 0x04, 0x12, 0xe1, 0x2e, 0xaa, 0x40, 0x95, 0xe9, 0x14, 0x04, 0xb3, 0x8d, 0x97};
+        0x3f, 0xbb, 0x1f, 0x0b, 0xa9, 0x57, 0xfc, 0xe4, 0x67, 0x46, 0x01, 0x25, 0xb4, 0xb0, 0x43, 0x38,
+        0x36, 0x4b, 0x8a, 0x0b, 0x13, 0x3f, 0xf0, 0xf4, 0x7b, 0x01, 0x60, 0x3b, 0xf7, 0x60, 0x7a, 0xab};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes+133,XR_XIR_THROW); digest_packet(&packet);
@@ -171,7 +171,7 @@ static void byte_order(void) {
     XrXirArtifact *narrow = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &narrow, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(narrow);
-    put32(packet.bytes + 12, 28); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 29); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
     put32(packet.bytes + 8, 6); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));

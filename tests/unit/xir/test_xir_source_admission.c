@@ -117,6 +117,21 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "fn raise<E:Error>(value:E){throw value}\nraise<i64>(1)\n",
+    "fn raise<E:Error>(value:E){throw value}\nfn bad<T>(value:T){raise<T>(value)}\n",
+    "fn bad<E:Error>(value:E)->i64{return value+1}\n",
+    "struct S{value:i64}\nfn raise<E:Error>(value:E){throw value}\nraise<S>(S{value:1})\n",
+    "struct Box<E:Error>{value:E}\nconst bad=Box<string>{value:\"wrong\"}\n",
+    "struct Box<E:Error>{value:E}\nfn bad<T>(value:T){const box=Box<T>{value:value}}\n",
+    "fn bad<Error>(value:Error){throw value}\n",
+    "fn bad<E:Error & Error>(value:E){throw value}\n",
+    "fn bad<E:Error<string>>(value:E){throw value}\n",
+    "fn bad()->Error{return 1}\n",
+    "fn bad<T>(value:T)->Error{return value}\n",
+    "struct S{value:i64}\nfn bad(value:S)->Error{return value}\n",
+    "fn bad(value:Error)->i64{return value.ordinal}\n",
+    "fn bad(value:Error)->i64{return value+1}\n",
+    "fn consume<T:Sendable>(value:T){}\nfn bad(value:Error){consume<Error>(value)}\n",
     "throw 91\n",
     "fn unused(){throw \"error\"}\n",
     "fn unused<T>(value:T){throw value}\n",
@@ -522,6 +537,15 @@ static void constructor_admission(const XrXirSourceRequest *request, const char 
 }
 static void enum_admission(const XrXirSourceRequest *request, const char *root) {
     const char *sources[] = {
+        "enum E{Bad}\nfn erase<T:Error>(value:T)->Error{return value}\nfn raise(value:Error){throw value}\nraise(erase<E>(E.Bad))\n",
+        "enum E{Bad}\nstruct Box{value:Error}\nfn raise(value:Box){throw value.value}\nraise(Box{value:E.Bad})\n",
+        "fn first(values:Array<Error>)->Error{return values[0]}\n",
+        "fn relay(value:Error)->Error{return value}\n",
+        "enum E{Bad}\nfn raise<T:Error>(value:T)->i64{throw value}\nraise<E>(E.Bad)\n",
+        "fn forward<E:Error & Sendable>(value:E)->i64{throw value}\n",
+        "fn raise<T:Error>(value:T)->i64{throw value}\nfn forward<U:Error>(value:U)->i64{return raise<U>(value)}\n",
+        "enum E{Bad}\nstruct Box<T:Error>{value:T\nraise()->i64{throw this.value}}\nBox<E>{value:E.Bad}.raise()\n",
+        "enum E{Bad}\nstruct Box{static raise<T:Error>(value:T)->i64{throw value}}\nBox.raise<E>(E.Bad)\n",
         "enum E{Bad}\nthrow E.Bad\n",
         "enum E{Bad{message:string}}\nfn unused()->i64{throw E.Bad{message:\"owned\"}}\n",
         "enum E<T:Sendable>{Bad{value:T}}\nfn unused<T:Sendable>(value:T)->i64{throw E<T>.Bad{value:value}}\n",

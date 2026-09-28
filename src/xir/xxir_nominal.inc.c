@@ -64,7 +64,7 @@ static void nominal_variants_free(const XrXirNominalVariant *variants, uint32_t 
 }
 static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t parameters) {
     if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ATOMIC_I64) return true;
+        type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR) return true;
     uint32_t id = (uint32_t) type;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
         return id - XR_XIR_TYPE_PARAMETER_BASE < parameters;
@@ -88,7 +88,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, b);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p)
-        if (d->constraints[p] & ~XR_XIR_CONSTRAINT_SENDABLE) return XR_XIR_BAD_TYPE;
+        if (d->constraints[p] & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
@@ -287,8 +287,8 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirBudget *bu
         for (uint32_t a = 0; a < d->parameter_count; ++a) {
             if (!nominal_charge(budget, 0, 1)) return XR_XIR_BUDGET;
             if (!xr_xir_type_span(types, node->nominal.arguments[a]) &&
-                (d->constraints[a] & XR_XIR_CONSTRAINT_SENDABLE)) {
-                XrXirStatus status = xr_xir_type_sendable(types, node->nominal.arguments[a], NULL, 0, &budget->work);
+                d->constraints[a]) {
+                XrXirStatus status = xr_xir_type_markers(types, node->nominal.arguments[a], d->constraints[a], NULL, 0, &budget->work);
                 if (status != XR_XIR_OK) return status;
             }
         }

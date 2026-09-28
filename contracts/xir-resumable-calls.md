@@ -182,5 +182,92 @@ exact arena/type and transitive payload authority, takes ownership before child
 cleanup, and transfers the owned inbox to the surviving parent. Admission or
 copy failure publishes no partial error. Pending errors, one-shot result take,
 initialization failure and cancellation retain the same physical release rules.
-Runtime faults remain a separate channel. Source try/catch, Error marker rethrow,
+Runtime faults remain a separate channel. Source try/catch, catch-all Error values,
 full effects and panic objects are separate open capabilities.
+
+## Catch error ownership contract (runtime value implementation in progress)
+
+Value ABI 12 adds the enum-only Error handle; Call/Program ABI 17 reject older
+entries at independent runtime boundaries. The value conversion APIs implement
+retained erasure and exact nominal narrowing. The current implementation increment
+admits Error type expressions and ERROR_ERASE in the same uncommitted semantic 30
+cutover from revision 29. ERROR_ERASE has one value operand and an Error result;
+the operand must prove Error in its own declaration context. The proof is checked
+again after specialization, including an Error actual argument. Error is storable
+and copyable but does not prove Sendable or grant enum field authority.
+
+Source expected-type conversion emits ERROR_ERASE only after that proof. A
+declared nominal type named Error retains ordinary nominal name resolution;
+otherwise the built-in Error type names the enum existential. Error-constrained
+generic conversion remains ordinary Checked code, not AST instantiation. The
+VM and native emitter canonicalize an Error THROW to a borrowed concrete enum
+action, while the driver preserves its exact-arena admission and ownership rules.
+Invoke/catch execution and checked narrowing control flow remain pending.
+
+Nominal and authority-bearing array admission share one iterative value walker.
+Traversal depth is bounded by work and scratch, not the number of type nodes.
+Each visit spends work before inspection; stack growth accounts for simultaneous
+old and new buffers. All exits free scratch and restore its allowance, including
+allocation failure during growth. Basic arrays without transitive executable
+authority retain their type-validated fast path. Error fields and components use
+the same nominal/callable/array type-expression checks and iterative admission.
+Finite storage layout does not bound existential value depth; tests must cover
+values deeper than the descriptor count and restore scratch on every failure.
+
+The catch-all binding has the static type Error. Error is an enum-only owned
+existential, not an unrestricted value or a finite ordinary union. It preserves
+the concrete nominal identity, ordered generic arguments and active variant.
+It supplies no construction, member-access, visibility or Sendable authority.
+Concrete enum and Error values may be rethrown; no public throws annotation or
+error-set component is added to ordinary function types.
+
+The representation reuses the existing enum object pointer. The owning handle
+has static Error type; the object retains its concrete enum type and arena.
+Erasure must not mutate that object or allocate a wrapper. Nonempty payloads
+retain the object; empty variants retain the arena lease, exactly as concrete
+enum values do. Copy, drop, frame cleanup and escaped-result lifetime use the
+actual object representation. This is an ownership requirement, not a claim
+that recursive admission requires no scratch allocation.
+
+Every Error admission validates a closed enum object in the exact admitted
+arena and recursively validates its active payload, including callable
+capabilities. A primitive-range Error tag must not bypass the arena check.
+Invalid tags, structs disguised as Error, foreign arenas, invalid variants and
+exhausted budgets fail before publishing an output. Erasure and narrowing leave
+their source unchanged and publish an owned output only after successful checks
+and retain. Normal outputs begin as canonical unit handles.
+
+Narrowing compares exact concrete type identity within that arena. The compiler
+must prove permission to name the target type; successful identity comparison
+does not confer permission to construct a variant or access a private field.
+Existing enum tag/field operations require a concrete enum handle, so an Error
+handle cannot use them without checked narrowing. The host throw action retains
+one canonical representation: concrete enum type plus payload. Rethrowing an
+Error canonicalizes the borrowed action while its frame still owns the value;
+the driver validates and fixes the independent owner before releasing the frame.
+
+Locally handled calls require explicit normal and error CFG successors. Generic
+CALL targets currently encode a type-argument range, so handler edges must not
+reuse those fields without a complete schema migration. An invoke terminator
+does not define a normally usable SSA value. Successor values need an explicitly
+verified edge-result representation, including dominance, predecessor identity,
+type, initialization and ownership. Its precise packet encoding remains open;
+no handler stack, hidden mid-block edge or legacy executor is admitted.
+
+Before source catch is admitted, verification must cover both successors even
+for unused templates and statically unselected source branches. Catch clauses
+match in source order, unmatched errors propagate, and a catch body uses its
+enclosing error continuation rather than catching its own rethrow. A binding
+must survive another suspend/call independently of the transient inbox. Error
+and panic handlers remain distinct. Effects are derived from the same Checked
+graph and rechecked after specialization; unknown effects never prove no-throw.
+
+Required gates include payload and empty-variant ownership, allocation counts
+around erasure, foreign-arena and disguised-value rejection, retain/budget
+failure atomicity, escaped owners after Program/Instance release, and physical
+release after catch, rethrow, suspend and cancellation. VM, generated native C
+and mixed calls each need independent expected results. Forged Checked edges
+and result use on the wrong successor must reject after digest recomputation.
+Adding executable Error types or invoke metadata requires an atomic semantic,
+schema and ABI review of the actual affected readers and runtime boundaries;
+no compatibility reader or alternate error transport is permitted.

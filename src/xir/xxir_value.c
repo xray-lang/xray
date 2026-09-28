@@ -17,6 +17,7 @@
 #include "xxir_array.h"
 #include "xxir_struct.h"
 #include "xxir_enum.h"
+#include "xxir_error.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -59,8 +60,6 @@ _Static_assert(sizeof(void *) == sizeof(int64_t), "XIR pointer payload width");
 _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8,
                "XIR bounds detail layout");
 
-static XrXirValueStatus array_admit(XirArray *array, XrXirValueAdmission *admission);
-static XrXirValueStatus nominal_admit(XirNominalValue *value, XrXirValueAdmission *admission);
 
 static void domain_lock(XrXirDomain *domain) {
     while (atomic_exchange_explicit(&domain->locked, true, memory_order_acquire)) { }
@@ -85,7 +84,7 @@ static XrXirValue string_value(XirString *string) {
     return value;
 }
 static bool owned_carrier_type(XrXirType type) {
-    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||
+    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
         ((uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
          (uint32_t) type < XR_XIR_CONSTRUCTED_TYPE_LIMIT);
 }
@@ -133,8 +132,12 @@ static bool value_header_valid(const XrXirValue *value) {
         (type == XR_XIR_BOOL && (value->payload == 0 || value->payload == 1))) return true;
     if (!owned_carrier_type(type)) return false;
     XirObject *object = object_pointer(value);
-    if (!object || object->type != type || !object->domain ||
+    if (!object || (type != XR_XIR_ERROR && object->type != type) || !object->domain ||
         !atomic_load_explicit(&object->references, memory_order_relaxed)) return false;
+    if (type == XR_XIR_ERROR) {
+        if (!xr_xir_type_is_enum(xr_xir_type_arena_types(object->arena), object->type)) return false;
+        type = object->type;
+    }
     if (type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64)
         return !object->arena && !object->kind;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(object->arena), type);
@@ -187,7 +190,7 @@ XR_FUNC const XrXirTypeArena *xr_xir_value_arena(const XrXirValue *value) {
 }
 XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena *arena, XrXirType type) {
     if (!value || value->type != (uint32_t) type || !xr_xir_value_valid(value)) return false;
-    if ((uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
+    if (type == XR_XIR_ERROR || (uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
         return arena && object_pointer(value)->arena == arena;
     return type != XR_XIR_UNIT;
 }
@@ -596,28 +599,7 @@ static bool admission_owner(const XrXirValueAdmission *admission,
                              const XrXirTypeArena *arena, XrXirDomain *domain) {
     return admission && arena && domain && admission->arena == arena && admission->domain == domain;
 }
-XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
-                                           XrXirValueAdmission *admission) {
-    if (!admission) return XR_XIR_VALUE_BAD_ARGUMENT;
-    for (;;) {
-        if (!admission->work) return XR_XIR_VALUE_LIMIT;
-        --admission->work;
-        if (!xr_xir_value_argument(value, admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
-        if (!owned_carrier_type(type)) return XR_XIR_VALUE_OK;
-        XirObject *object = object_pointer(value);
-        if (!object->kind) return XR_XIR_VALUE_OK;
-        if (object->kind == XR_XIR_TYPE_ARRAY) return array_admit((XirArray *) object, admission);
-        if (object->kind == XR_XIR_TYPE_NOMINAL) return nominal_admit((XirNominalValue *) object, admission);
-        if (object->domain != admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
-        if (object->kind == XR_XIR_TYPE_CALLABLE) {
-            if (!admission->function) return XR_XIR_VALUE_BAD_ARGUMENT;
-            return admission->function(admission->context, &((XirFunction *) object)->binding, type, &admission->work);
-        }
-        if (object->kind != XR_XIR_TYPE_CELL) return XR_XIR_VALUE_BAD_ARGUMENT;
-        type = xr_xir_cell_element(xr_xir_type_arena_types(object->arena), type);
-        value = &((XirCell *) object)->value;
-    }
-}
+#include "xxir_value_admission.inc.c"
 XR_FUNC XrXirValueStatus xr_xir_function_new(XrXirDomain *domain, XrXirTypeArena *arena,
     XrXirType type, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission,
     XrXirValue *output) {
@@ -700,68 +682,6 @@ XR_FUNC XrXirValueStatus xr_xir_cell_write(const XrXirValue *cell, const XrXirVa
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirValue previous = target->value; target->value = replacement;
     xr_xir_value_drop(&previous); return XR_XIR_VALUE_OK;
-}
-
-typedef struct ArrayAdmissionFrame {
-    XirArray *array;
-    size_t next;
-} ArrayAdmissionFrame;
-
-static XrXirValueStatus array_callable_depth(const XirArray *array,
-    XrXirValueAdmission *admission, uint32_t *depth) {
-    const XrXirTypes *types = xr_xir_type_arena_types(array->object.arena);
-    XrXirType type = array->object.type;
-    uint32_t count = 0;
-    for (;;) {
-        if (!admission->work) return XR_XIR_VALUE_LIMIT;
-        --admission->work;
-        const XrXirTypeNode *node = xr_xir_type_node(types, type);
-        if (!node) { *depth = 0; return XR_XIR_VALUE_OK; }
-        if (node->kind == XR_XIR_TYPE_CALLABLE) { *depth = count; return XR_XIR_VALUE_OK; }
-        if (node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_VALUE_BAD_ARGUMENT;
-        ++count; type = node->element;
-    }
-}
-
-static XrXirValueStatus array_admit(XirArray *array, XrXirValueAdmission *admission) {
-    uint32_t depth = 0;
-    XrXirValueStatus status = array_callable_depth(array, admission, &depth);
-    if (status != XR_XIR_VALUE_OK || !depth || !array->length) return status;
-    ArrayAdmissionFrame local = {array, 0};
-    ArrayAdmissionFrame *frames = &local;
-    size_t bytes = depth > 1 ? (size_t) depth * sizeof(*frames) : 0;
-    if (bytes) {
-        if (bytes > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
-        if (!admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
-        frames = xr_xir_domain_allocate(admission->domain, bytes, &status);
-        if (!frames) return status;
-        admission->scratch_bytes -= bytes;
-        frames[0] = local;
-    }
-    uint32_t count = 1;
-    while (count) {
-        ArrayAdmissionFrame *frame = &frames[count - 1];
-        if (frame->next == frame->array->length) { --count; continue; }
-        XrXirValue child = array_element_value(frame->array, frame->next++);
-        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(admission->arena),
-                                                   frame->array->element);
-        if (node && node->kind == XR_XIR_TYPE_ARRAY) {
-            if (!admission->work) { status = XR_XIR_VALUE_LIMIT; break; }
-            --admission->work;
-            if (count >= depth || !xr_xir_value_argument(&child, admission->arena, frame->array->element)) {
-                status = XR_XIR_VALUE_BAD_ARGUMENT; break;
-            }
-            frames[count++] = (ArrayAdmissionFrame) {(XirArray *) object_pointer(&child), 0};
-        } else {
-            status = xr_xir_value_admit(&child, frame->array->element, admission);
-            if (status != XR_XIR_VALUE_OK) break;
-        }
-    }
-    if (bytes) {
-        xr_xir_domain_deallocate(admission->domain, frames, bytes);
-        admission->scratch_bytes += bytes;
-    }
-    return status;
 }
 
 static XrXirValue array_value(XirArray *array) {
@@ -980,3 +900,4 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 
 #include "xxir_struct_value.inc.c"
 #include "xxir_enum_value.inc.c"
+#include "xxir_error_value.inc.c"

@@ -6,36 +6,6 @@
  *
  * xxir_struct_value.inc.c - Failure-atomic nominal boxed snapshots
  */
-typedef struct NominalAdmissionFrame { XirNominalValue *value; uint32_t next; } NominalAdmissionFrame;
-static XrXirValueStatus nominal_admit(XirNominalValue *value, XrXirValueAdmission *admission) {
-    if (!admission->domain || !admission->arena) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!value->count) return XR_XIR_VALUE_OK;
-    uint32_t maximum = xr_xir_type_arena_types(admission->arena)->count;
-    uint64_t bytes = (uint64_t) maximum * sizeof(NominalAdmissionFrame);
-    if (!maximum || bytes > SIZE_MAX || bytes > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
-    XrXirValueStatus status = XR_XIR_VALUE_OK;
-    NominalAdmissionFrame *stack = xr_xir_domain_allocate(admission->domain, (size_t) bytes, &status);
-    if (!stack) return status;
-    admission->scratch_bytes -= bytes;
-    uint32_t depth = 1; stack[0] = (NominalAdmissionFrame) {value, 0};
-    while (depth && status == XR_XIR_VALUE_OK) {
-        NominalAdmissionFrame *frame = &stack[depth - 1];
-        if (frame->next == frame->value->count) { --depth; continue; }
-        if (!admission->work) { status = XR_XIR_VALUE_LIMIT; break; }
-        --admission->work;
-        const XrXirValue *field = &frame->value->fields[frame->next++];
-        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(admission->arena), (XrXirType) field->type);
-        if (node && node->kind == XR_XIR_TYPE_NOMINAL) {
-            if (depth >= maximum || !xr_xir_value_argument(field, admission->arena, (XrXirType) field->type)) {
-                status = XR_XIR_VALUE_BAD_ARGUMENT; break;
-            }
-            stack[depth++] = (NominalAdmissionFrame) {(XirNominalValue *) object_pointer(field), 0};
-        } else status = xr_xir_value_admit(field, (XrXirType) field->type, admission);
-    }
-    xr_xir_domain_deallocate(admission->domain, stack, (size_t) bytes);
-    admission->scratch_bytes += bytes;
-    return status;
-}
 XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||

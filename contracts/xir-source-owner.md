@@ -169,12 +169,15 @@ this admission. Existing refusal of unsupported function contracts remains.
 
 ## Enum error source admission
 
-Source throw admits enum values through ordinary expression checking, including
+Source throw admits enum and erased Error values through ordinary expression checking, including
 generic enum applications checked at definition and rechecked after specialization.
 It terminates the current source path with typed THROW; its result is independent
 of the callable's normal return type. Initializers and constructors use the same
-error transport and release completed local values. The operand is evaluated once
-and may suspend before throwing. This does not certify catch, Error-marker rethrow,
+error transport and release completed local values. Error-constrained ordinary
+parameters prove enum membership at definition and specialize before execution.
+Expected Error types insert checked ERROR_ERASE after proving the operand marker;
+generic conversion is rechecked after specialization, including Error actuals.
+The operand is evaluated once and may suspend before throwing. This does not certify catch,
 error-set inference, panic handlers or language defer; unsupported syntax remains
 rejected. No integer token error path or alternate interpreter is retained.
 

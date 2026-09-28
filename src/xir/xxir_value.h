@@ -14,14 +14,15 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 11u
+#define XR_XIR_VALUE_ABI_VERSION 12u
 #define XR_XIR_CONSTRUCTED_TYPE_BASE 256u
 #define XR_XIR_CONSTRUCTED_TYPE_LIMIT 65536u
 #define XR_XIR_TYPE_PARAMETER_BASE 65536u
 #define XR_XIR_TYPE_PARAMETER_LIMIT 131072u
 #define XR_XIR_ARCH_X86_64 1u
 typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING, XR_XIR_ATOMIC_I64,
-    XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64 } XrXirType;
+    XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
+    XR_XIR_ERROR } XrXirType;
 static inline uint32_t xr_xir_integer_bits(XrXirType type) {
     switch (type) {
     case XR_XIR_I8: case XR_XIR_U8: return 8;

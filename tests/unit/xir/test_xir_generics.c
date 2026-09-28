@@ -193,6 +193,67 @@ static void rehash_generic(XrXirCheckedPacket *packet) {
     xr_sha256_update(&sha, packet->bytes + 64, packet->length - 64);
     xr_sha256_final(&sha, packet->bytes + 32);
 }
+static void error_erasure_packet(void) {
+    _Static_assert(XR_XIR_ERROR_ERASE == 90 && XR_XIR_ERROR == 14, "error wire identities");
+    XrXirType parameter = XR_XIR_ERROR;
+    XrXirInstruction ops[] = {{XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {0}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0}};
+    XrXirBlock block = {0, 2};
+    XrXirFunction function = {"erase", 5, &parameter, 1, XR_XIR_ERROR, &block, 1, ops, 2, NULL, 0};
+    XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
+    XrXirArtifact *checked = NULL, *decoded = NULL;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded); decoded = NULL;
+    const uint8_t instruction[32] = {90, 0, 0, 0, 14};
+    size_t offset = 0; unsigned found = 0;
+    for (size_t i = 64; i + sizeof(instruction) <= packet.length; ++i)
+        if (!memcmp(packet.bytes + i, instruction, sizeof(instruction))) { offset = i; ++found; }
+    CHECK(found == 1 && offset >= 88 && packet.bytes[offset - 24] == 14);
+    const size_t positions[] = {offset - 24, offset + 4, offset + 8, offset + 16};
+    const uint8_t replacements[] = {XR_XIR_I64, XR_XIR_I64, 1, 1};
+    for (unsigned i = 0; i < 4; ++i) {
+        uint8_t saved = packet.bytes[positions[i]];
+        packet.bytes[positions[i]] = replacements[i]; rehash_generic(&packet);
+        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) != XR_XIR_OK && !decoded);
+        packet.bytes[positions[i]] = saved;
+    }
+    rehash_generic(&packet);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded); xr_xir_checked_packet_free(&packet);
+}
+static void error_marker_definition(void) {
+    uint32_t constraint = XR_XIR_CONSTRAINT_ERROR;
+    XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirInstruction instruction = {XR_XIR_THROW,XR_XIR_UNIT,{0},{0},0};
+    XrXirBlock block = {0,1};
+    XrXirFunction function = {"e",1,&parameter,1,XR_XIR_I64,&block,1,&instruction,1,NULL,0};
+    XrXirGeneric generic = {&constraint,1,NULL,0};
+    XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL};
+    XrXirArtifact *checked=NULL,*decoded=NULL;
+    CHECK(xr_xir_check(&built,NULL,&checked,NULL)==XR_XIR_OK);
+    XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
+    xr_xir_artifact_free(checked);
+    CHECK(packet.length==169 && packet.bytes[149]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);
+    xr_xir_artifact_free(decoded); decoded=NULL;
+    const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
+    for (unsigned i=0;i<sizeof(forged);++i) {
+        packet.bytes[149]=forged[i]; rehash_generic(&packet);
+        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_BAD_TYPE && !decoded);
+    }
+    xr_xir_checked_packet_free(&packet);
+    XrXirBudget budget=xr_xir_default_budget(); budget.work=0;
+    CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_ERROR,&constraint,1,&budget.work)==XR_XIR_BUDGET);
+    budget=xr_xir_default_budget();
+    CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_MASK,&constraint,1,&budget.work)==XR_XIR_BAD_TYPE);
+    constraint=XR_XIR_CONSTRAINT_MASK;
+    CHECK(xr_xir_type_markers(NULL,parameter,XR_XIR_CONSTRAINT_MASK,&constraint,1,&budget.work)==XR_XIR_OK);
+}
 static void rejected_templates(void) {
     for (unsigned mode = 0; mode < 12; ++mode) {
         XrXirArtifact *checked = generic_fixture();
@@ -200,7 +261,7 @@ static void rejected_templates(void) {
         XrXirGeneric *generics = (XrXirGeneric *) checked->module.generics;
         XrXirInstruction *caller = (XrXirInstruction *) functions[0].instructions;
         XrXirInstruction *body = (XrXirInstruction *) functions[1].instructions;
-        if (mode == 0) ((uint32_t *) generics[1].constraints)[0] = 2;
+        if (mode == 0) ((uint32_t *) generics[1].constraints)[0] = 4;
         if (mode == 1) caller[1].targets[0] = 0;
         if (mode == 2) caller[1].targets[1] = 0;
         if (mode == 3) ((XrXirType *) generics[0].arguments)[0] = XR_XIR_UNIT;
@@ -376,6 +437,8 @@ static void deep_body_substitution(void) {
 }
 
 int main(void) {
+    error_erasure_packet();
+    error_marker_definition();
     nominal_function_closure();
     nominal_expression_closure();
     nominal_field_closure();

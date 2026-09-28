@@ -34,7 +34,7 @@ static void floating_ir_rejections(void) {
         case 9: ops[0].op = XR_XIR_OUTPUT; ops[0].type = XR_XIR_UNIT; ops[0].args[1] = 0;
             ops[0].immediate = 1; ops[1].args[0] = 0; types[0] = XR_XIR_ATOMIC_I64; break;
         case 10: ops[0].op = XR_XIR_EQ_FLOAT; types[0] = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; module.generics = &generic; break;
-        case 11: types[0] = (XrXirType) 14; break;
+        case 11: types[0] = (XrXirType) 15; break;
         case 12: ops[0].op = XR_XIR_ADD_FLOAT; ops[0].type = XR_XIR_F32; types[1] = XR_XIR_F64; break;
         case 13: ops[0].op = XR_XIR_SUB_FLOAT; ops[0].type = XR_XIR_I32; break;
         case 14: ops[0].op = XR_XIR_MUL_FLOAT; ops[0].type = XR_XIR_F32; types[0] = XR_XIR_I32; break;

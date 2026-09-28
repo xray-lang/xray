@@ -8,7 +8,7 @@ order: 009
 
 ## 8. 错误处理 (Error Handling)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_errorset.c`、`src/ir/xi_lower_stmt.c`、`src/vm/xvm_dispatch_exception.inc.c`、`src/runtime/object/xpanic_info.c`、`stdlib/types/panic_info.xr`。
+> 值语义与单一 XIR 实现入口：`src/xir/xxir_verify.c`、`src/xir/xxir_error_value.inc.c`、`src/xir/xxir_call.c`。catch、效应与 panic/defer 的迁移状态见 Task 316；旧 analyzer/IR/VM 代码作为迁移参考，不构成第二条目标执行管线。
 
 ### 8.0 设计哲学：值返回 + panic 边界
 
@@ -24,7 +24,7 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
-- **错误集合不进入函数类型**：具体错误 enum/variant 集合仍由 analyzer effect database 维护；函数类型只携带内部三态 throw-effect bit（`UNKNOWN` / `MAY_THROW` / `NO_THROW`），供安全约束和构造性代码生成消费。
+- **错误集合不进入公开函数类型**：具体错误 enum/variant 集合由同一已检查程序的效应分析维护；内部三态 throw-effect 事实（`UNKNOWN` / `MAY_THROW` / `NO_THROW`）关联相应函数与可调用节点，供安全约束和代码生成消费。
 - **no-throw 始终推导**：需要冻结 no-throw 保证时使用 `xray verify` 合同；未知或不完整证明按 may-throw 处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用**块作用域**的 `defer`（绑定最近的真实 `{}` 块，见 §4.9 / §8.3）。
 - **清理边不是错误传播边**：`defer` 体不得让错误逃逸，该约束由编译期规则强制（`E0387`），见 §8.3.1。
@@ -33,7 +33,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 #### 8.1.1 `throw` 语句
 
-`throw expr` 抛出一个枚举错误值。`expr` 必须是枚举类型的变体值：
+`throw expr` 抛出一个枚举错误值。其实际值必须是枚举变体；静态类型可以是具体 enum、内置 `Error`，或定义处已证明 `Error` 约束的普通类型参数：
 
 ```xray
 enum AppErr { NotFound, InvalidInput { message: string } }
@@ -45,7 +45,7 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 抛出后行为：
 
 ```
-抛出点 → 写入 pending_error → 沿调用栈返回 → 执行每条跨域边上的静态 cleanup 区域 → catch 处理 → 否则继续返回 → 顶层诊断
+抛出点 → 交付拥有独立所有权的错误值 → 沿调用栈返回 → 执行每条跨域边上的静态 cleanup 区域 → catch 处理 → 否则继续返回 → 顶层诊断
 ```
 
 - 不展开栈帧（不同于传统异常的 unwind）
@@ -93,11 +93,13 @@ try {
 ```
 
 **规则**：
-- 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值
+- 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值，绑定的静态类型为内置 `Error`
 - 有类型注解的 `catch (e: SomeErr)` 仅当错误值 `is SomeErr` 为真时匹配，其中 `SomeErr` 是具体 enum 错误类型
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
 - 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
+
+内置 `Error` 是只容纳 enum 的持有值类型。enum 到 Error 的值转换保留实际名义身份、泛型实参、活动变体与载荷；复制、保存、返回和重新抛出均遵守相同值所有权规则。Error 不提供任意字段、构造或可见性权限，也不隐式证明 `Sendable`。读取具体变体载荷前必须完成有权限的类型窄化。普通泛型转换在定义处按约束检查，特化后复验，不能等调用处看到具体 enum 才补充证明。
 
 `catch` 也可以直接使用 enum variant pattern。unit variant 写作
 `catch NetErr.Timeout { ... }`，其中唯一一对花括号是 catch 块体；payload variant 写作
@@ -554,7 +556,7 @@ main()
 
 ## 8. Error Handling
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_errorset.c`, `src/ir/xi_lower_stmt.c`, `src/vm/xvm_dispatch_exception.inc.c`, `src/runtime/object/xpanic_info.c`, and `stdlib/types/panic_info.xr`.
+> Value semantics and single-XIR implementation entry points: `src/xir/xxir_verify.c`, `src/xir/xxir_error_value.inc.c`, and `src/xir/xxir_call.c`. Task 316 tracks catch, effects, and panic/defer migration; the previous analyzer/IR/VM code is migration reference material, not a second target execution pipeline.
 
 ### 8.0 Design philosophy: value-return + panic boundary
 
@@ -570,7 +572,7 @@ Design principles:
 - **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
-- **Error sets are not part of function types**: concrete error enum/variant sets remain in the analyzer effect database. A function type carries only the internal three-state throw-effect bit (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) used by safety constraints and constructive code generation.
+- **Error sets are not part of public function types**: concrete error enum/variant sets belong to effect analysis of the same checked program. Internal three-state throw-effect facts (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) are associated with the corresponding functions and callable nodes for safety constraints and code generation.
 - **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses **block-scoped** `defer` (bound to the nearest real `{}` block, see §4.9 / §8.3).
 - **A cleanup edge is not an error-propagation edge**: no error may escape a `defer` body. The constraint is enforced at compile time (`E0387`), see §8.3.1.
@@ -579,7 +581,7 @@ Design principles:
 
 #### 8.1.1 `throw` statement
 
-`throw expr` raises an enum error value. `expr` must be a variant of an enum type:
+`throw expr` raises an enum error value. Its actual value must be an enum variant; its static type may be a concrete enum, the built-in `Error`, or an ordinary type parameter whose `Error` constraint is proved at definition:
 
 ```xray
 enum AppErr { NotFound, InvalidInput { message: string } }
@@ -591,7 +593,7 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ ADT enum variant with
 After a throw:
 
 ```
-throw point → write to pending_error → return up the call stack → run static cleanup regions on every crossed scope edge → catch handles → otherwise keep returning → top-level diagnostic
+throw point → deliver an independently owned error value → return up the call stack → run static cleanup regions on every crossed scope edge → catch handles → otherwise keep returning → top-level diagnostic
 ```
 
 - No stack frame unwinding (unlike traditional exception unwinding)
@@ -639,11 +641,13 @@ try {
 ```
 
 **Rules**:
-- An untyped `catch (e)` is the catch-all and matches any error value.
+- An untyped `catch (e)` is the catch-all and matches any error value; its binding has the built-in static type `Error`.
 - A typed `catch (e: SomeErr)` matches only when the error value satisfies `is SomeErr`, where `SomeErr` is a concrete enum error type.
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
 - If every typed clause fails and there is no catch-all, the error continues propagating.
 - A `try` **must** be followed by at least one of `catch` or `catch panic`.
+
+The built-in `Error` is an owned value type containing only enums. Converting an enum to Error preserves its concrete nominal identity, generic arguments, active variant, and payload; copying, storing, returning, and rethrowing obey the same value-ownership rules. Error grants no arbitrary field, construction, or visibility authority and does not implicitly prove `Sendable`. Accessing a concrete variant payload requires authorized type narrowing. Ordinary generic conversion is checked against constraints at definition and rechecked after specialization; a concrete enum at a call site cannot supply a missing definition-time proof.
 
 `catch` may also use an enum variant pattern directly. A unit variant is written as
 `catch NetErr.Timeout { ... }`, where the only brace group is the catch body. A payload variant is

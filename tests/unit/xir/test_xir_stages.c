@@ -357,10 +357,10 @@ static void constructed_metadata(void) {
     CHECK(!xr_xir_type_is_owned(NULL,(XrXirType)256));
     CHECK(!xr_xir_type_node(&types,(XrXirType)261));
     CHECK(!xr_xir_type_node(&types,(XrXirType)XR_XIR_CONSTRUCTED_TYPE_LIMIT));
-    CHECK(xr_xir_type_sendable(&types,(XrXirType)256,NULL,0,&budget.work) == XR_XIR_OK);
-    CHECK(xr_xir_type_sendable(&types,(XrXirType)259,NULL,0,&budget.work) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_type_markers(&types,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,NULL,0,&budget.work) == XR_XIR_OK);
+    CHECK(xr_xir_type_markers(&types,(XrXirType)259,XR_XIR_CONSTRAINT_SENDABLE,NULL,0,&budget.work) == XR_XIR_BAD_TYPE);
     budget.work = 0;
-    CHECK(xr_xir_type_sendable(&types,(XrXirType)256,NULL,0,&budget.work) == XR_XIR_BUDGET);
+    CHECK(xr_xir_type_markers(&types,(XrXirType)256,XR_XIR_CONSTRAINT_SENDABLE,NULL,0,&budget.work) == XR_XIR_BUDGET);
     XrXirLayout layout;
     CHECK(xr_xir_layout(&types,(XrXirType)256,&fixture_target,XR_XIR_LAYOUT_STORAGE,&layout) == XR_XIR_OK);
     CHECK(layout.size == 8 && layout.alignment == 8);
@@ -373,7 +373,7 @@ static void constructed_metadata(void) {
         if (attack == 1) nodes[0].kind = 4;
         if (attack == 2) nodes[0].element = (XrXirType)256;
         if (attack == 3) nodes[0].element = (XrXirType)258;
-        if (attack == 4) nodes[0].element = (XrXirType)14;
+        if (attack == 4) nodes[0].element = (XrXirType)15;
         if (attack == 5) nodes[0].element = (XrXirType)255;
         if (attack == 6) nodes[0].element = (XrXirType)XR_XIR_TYPE_PARAMETER_LIMIT;
         if (attack == 7) nodes[0].element = (XrXirType)0x40000003u;
@@ -429,7 +429,7 @@ static void nominal_metadata_cases(void) {
     nominal_fixture(&f); f.declarations[0].parameter_count = 0; f.declarations[0].constraints = NULL;
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
-    nominal_fixture(&f); f.constraint = 2;
+    nominal_fixture(&f); f.constraint = 4;
     b = xr_xir_default_budget();
     CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.fields[0].flags = XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED;

@@ -522,7 +522,9 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
             (uint32_t) op->type, op->args[1] ? "state->arguments" : "NULL", op->args[1]);
     } else {
         append(buffer, "        XrXirValue receiver = "); emit_value(buffer, function, layout, op->args[0]);
-        if (op->op == XR_XIR_ENUM_TAG)
+        if (op->op == XR_XIR_ERROR_ERASE)
+            append(buffer, ";\n        status = xr_xir_error_erase(&receiver, xr_xir_call_admission(view), &value);\n");
+        else if (op->op == XR_XIR_ENUM_TAG)
             append(buffer, ";\n        uint32_t variant = 0; status = xr_xir_enum_variant(&receiver, &variant);\n"
                 "        value = (XrXirValue) {XR_XIR_I64, 0, variant};\n");
         else if (op->op == XR_XIR_ENUM_GET)
@@ -547,7 +549,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     uint32_t destination = layout->offsets[function->parameter_count + index];
     append(buffer, "    case %uu:\n        state->pc = %uu;\n", index, index + 1);
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
-        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET)) {
+        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE) {
         emit_nominal_step(buffer, function, op, layout, destination); return;
     }
     if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
@@ -688,6 +690,13 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_THROW:
     case XR_XIR_RETURN: {
         uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) function->result;
+        if (op->op == XR_XIR_THROW && type == XR_XIR_ERROR) {
+            append(buffer, "        { XrXirValue erased = "); emit_value(buffer, function, layout, op->args[0]);
+            append(buffer, "; XrXirValue concrete = {0};\n"
+                "        if (!xr_xir_error_borrow(&erased, &concrete)) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);\n"
+                "        return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, concrete, {0}}; }\n");
+            return;
+        }
         append(buffer, "        return (XrXirAction) {%s, 0, NULL, 0, {%uu, 0, ",
                op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN", type);
         if (type == XR_XIR_UNIT) append(buffer, "0");
@@ -957,7 +966,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     if (status != XR_XIR_OK) return status;
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types};
     append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
-           "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_enum.h\"\n"
+           "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

@@ -53,6 +53,11 @@ static void enum_metadata_descriptors(void) {
     variants[0] = enum_metadata_program.types->nominals->identities[0].variants[0];
     spec.abi_version = 13;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
+    spec.abi_version = 16;
+    CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
+    spec.abi_version = XR_XIR_PROGRAM_ABI_VERSION;
+    spec.target.abi_version = 11;
+    CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
 }
 int main(void) {
     XrXirProgram *enum_program = NULL;

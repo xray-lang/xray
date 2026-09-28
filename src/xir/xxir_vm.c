@@ -19,6 +19,7 @@
 #include "xxir_instance_value.h"
 #include "xxir_struct.h"
 #include "xxir_enum.h"
+#include "xxir_error.h"
 #include "../base/xmalloc.h"
 
 typedef struct ScalarRun {
@@ -191,7 +192,8 @@ static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
             xr_xir_struct_new(op->type, op->args[1] ? state->arguments : NULL, op->args[1], admission, &output);
     } else {
         XrXirValue receiver = vm_value_operand(run, op->args[0]);
-        if (op->op == XR_XIR_ENUM_TAG) {
+        if (op->op == XR_XIR_ERROR_ERASE) status = xr_xir_error_erase(&receiver, admission, &output);
+        else if (op->op == XR_XIR_ENUM_TAG) {
             uint32_t variant = 0; status = xr_xir_enum_variant(&receiver, &variant);
             output = (XrXirValue) {XR_XIR_I64, 0, variant};
         } else status = op->op == XR_XIR_ENUM_GET ?
@@ -286,7 +288,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return XR_XIR_RUN_OK;
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
-        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET)) {
+        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE) {
         state->instruction = next;
         return vm_nominal_step(run, state, op, run->layout->offsets[result_id]);
     }
@@ -460,6 +462,11 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_THROW:
         *action = (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {(uint32_t) xr_xir_operand_type(run->function, op->args[0]), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}};
+        if (action->value.type == XR_XIR_ERROR) {
+            XrXirValue concrete = {0};
+            if (!xr_xir_error_borrow(&action->value, &concrete)) return XR_XIR_RUN_BAD_ARTIFACT;
+            action->value = concrete;
+        }
         return XR_XIR_RUN_OK;
     case XR_XIR_RETURN:
         action->kind = XR_XIR_ACTION_RETURN;

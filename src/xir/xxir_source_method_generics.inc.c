@@ -27,20 +27,13 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
             continue;
         }
         XrGenericParam *parameter = method->type_params[p - prefix];
-        if (!parameter->name || !strcmp(parameter->name, "Sendable") || parameter->constraint_count < 0 || parameter->constraint_count > 1)
-            return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method type parameter contract is not admitted");
+        if (!source_parameter_markers(ctx, body->node, parameter, &constraints[p])) return false;
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
             if (!source_work(ctx, body->node)) return false;
             if (!strcmp(parameter->name, parameters[earlier]->name))
                 return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method type parameter duplicates or shadows a parameter");
         }
         parameters[p] = parameter;
-        if (parameter->constraint_count) {
-            XrTypeRef *constraint = parameter->constraints[0];
-            if (constraint->kind != XR_TREF_NAMED || !constraint->name || strcmp(constraint->name, "Sendable"))
-                return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "only the Sendable marker constraint is admitted");
-            constraints[p] = XR_XIR_CONSTRAINT_SENDABLE;
-        }
     }
     body->type_parameters = parameters; body->type_parameter_count = count;
     body->generic_owner = body->declaration;

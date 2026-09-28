@@ -633,9 +633,12 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (op->op == XR_XIR_CONVERT_NUMBER ? !xr_xir_type_is_number(expected) : !xr_xir_float_bits(expected))
                 return XR_XIR_BAD_TYPE;
         }
-        if (op->op == XR_XIR_THROW) {
+        if (op->op == XR_XIR_THROW || op->op == XR_XIR_ERROR_ERASE) {
+            if (op->op == XR_XIR_ERROR_ERASE && op->type != XR_XIR_ERROR) return XR_XIR_BAD_TYPE;
             expected = xr_xir_operand_type(function, op->args[0]);
-            if (!xr_xir_type_is_enum(context->module->types, expected)) return XR_XIR_BAD_TYPE;
+            XrXirStatus status = xr_xir_type_constraints(context->module, context->location.function,
+                expected, XR_XIR_CONSTRAINT_ERROR, &context->remaining);
+            if (status != XR_XIR_OK) return status;
         }
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;

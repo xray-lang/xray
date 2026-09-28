@@ -63,7 +63,7 @@ XR_FUNC bool xr_xir_type_is_enum(const XrXirTypes *types, XrXirType type) {
 }
 bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||
+    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
         (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL));
 }
@@ -88,8 +88,19 @@ uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node ? node->parameter_span : 0;
 }
-XrXirStatus xr_xir_type_sendable(const XrXirTypes *types, XrXirType type,
+XrXirStatus xr_xir_type_markers(const XrXirTypes *types, XrXirType type, uint32_t required,
     const uint32_t *constraints, uint32_t parameter_count, uint64_t *work) {
+    if (required & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+    if (required & XR_XIR_CONSTRAINT_ERROR) {
+        if (!work || !*work) return XR_XIR_BUDGET;
+        --*work;
+        uint32_t id = (uint32_t) type;
+        bool parameter = id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT;
+        if (parameter ? (!constraints || id - XR_XIR_TYPE_PARAMETER_BASE >= parameter_count ||
+            !(constraints[id - XR_XIR_TYPE_PARAMETER_BASE] & XR_XIR_CONSTRAINT_ERROR)) :
+            (type != XR_XIR_ERROR && !xr_xir_type_is_enum(types, type))) return XR_XIR_BAD_TYPE;
+    }
+    if (!(required & XR_XIR_CONSTRAINT_SENDABLE)) return XR_XIR_OK;
     for (;;) {
         if (!work || !*work) return XR_XIR_BUDGET;
         --*work;
@@ -110,7 +121,7 @@ XrXirStatus xr_xir_type_sendable(const XrXirTypes *types, XrXirType type,
 static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     uint32_t id = (uint32_t) type;
     if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ATOMIC_I64) return true;
+        type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR) return true;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&

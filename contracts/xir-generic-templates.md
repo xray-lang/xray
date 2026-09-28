@@ -1,5 +1,30 @@
 # Definition-checked ordinary generic templates
 
+## Error marker admission contract
+
+Error proves that a value is an enum error, without granting methods, payload
+access, visibility, construction, Sendable or a concrete future type. A concrete
+enum or erased Error value satisfies Error; a type parameter does so only through its own declaration's
+Error bit. Integers, strings, structs, arrays, callable values and unconstrained
+parameters do not satisfy it. Named functions, nominal declarations and method
+parameters use the same marker parser and entailment check. Conjunction requires
+every marker; unknown or duplicate markers reject. Error and Sendable cannot be
+type-parameter names. Nominal Sendable remains a separate unimplemented proof.
+
+THROW accepts an enum, erased Error or Error-constrained parameter at definition.
+Ordinary specialization substitutes and rechecks the operand before execution;
+runtime transport still receives concrete enum values. No dynamic dictionary,
+AST recheck, implicit payload access or compatibility constraint encoding is added.
+Checked semantic 30 admits the Error bit with unchanged schema 9. The marker
+itself requires no runtime dictionary because open parameters never execute.
+The subsequent Error value representation uses Value ABI 12 and Call/Program
+ABI 17 under the resumable-call ownership contract. ERROR_ERASE proves its
+operand constraint and preserves owned Error values after specialization.
+Checked and source conversion/rethrow share that representation; source catch
+and checked narrowing control flow remain separate unimplemented capabilities.
+
+## Ordinary templates
+
 Ordinary type parameters range over copyable, storable values. Unit, views and
 noncopyable resources and internal CELL types are not ordinary arguments.
 Admitted primitives, including the fixed-width numeric family, string and
@@ -15,9 +40,9 @@ parameter gains no additional Sendable authority. Constraint entailment uses dec
 The admitted source declarations are named `fn f<T, U:Sendable>(x:T)->T` and
 explicit ordinary calls `f<string, i64>(x)`. An own-parameter `where T:Sendable`
 is normalized by the parser into the same declaration constraint; it does not
-create a second checking path. Sendable is reserved as a type-parameter name. Type parameters have distinct local
+create a second checking path. Error and Sendable are reserved as type-parameter names. Type parameters have distinct local
 names, no defaults and no inferred members. Their only additional admitted
-constraint is the builtin Sendable marker. Copy/assignment/read passing/return
+constraints are the builtin Sendable and Error markers. Copy/assignment/read passing/return
 follow from the ordinary argument domain. Marker constraints confer no methods,
 operators, reflection, zero construction or display capability. Every body,
 including unused templates, is checked once against these facts. Generic
@@ -28,7 +53,7 @@ Built/Checked use function-local type parameter IDs 65536+ordinal, bounded above
 by 131071 and by that function's declared parameter count. Equal ordinals in
 different declarations do not identify the same type. A module may
 own one generic metadata row per function: parameter constraint bits and a type
-argument table. Only bit 1 (Sendable) is admitted. CALL targets[0]/targets[1]
+argument table. Bits 1 (Sendable) and 2 (Error) are admitted. CALL targets[0]/targets[1]
 describe a first/count range in that caller's type argument table; nongeneric
 calls use zero/zero. Nonempty ranges exactly partition the table in instruction
 order, with no gaps, overlap or trailing entries. Value argument ranges remain

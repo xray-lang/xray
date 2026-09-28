@@ -4315,7 +4315,7 @@ READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，�
 
 ## 8. 错误处理 (Error Handling)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_errorset.c`、`src/ir/xi_lower_stmt.c`、`src/vm/xvm_dispatch_exception.inc.c`、`src/runtime/object/xpanic_info.c`、`stdlib/types/panic_info.xr`。
+> 值语义与单一 XIR 实现入口：`src/xir/xxir_verify.c`、`src/xir/xxir_error_value.inc.c`、`src/xir/xxir_call.c`。catch、效应与 panic/defer 的迁移状态见 Task 316；旧 analyzer/IR/VM 代码作为迁移参考，不构成第二条目标执行管线。
 
 ### 8.0 设计哲学：值返回 + panic 边界
 
@@ -4331,7 +4331,7 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
-- **错误集合不进入函数类型**：具体错误 enum/variant 集合仍由 analyzer effect database 维护；函数类型只携带内部三态 throw-effect bit（`UNKNOWN` / `MAY_THROW` / `NO_THROW`），供安全约束和构造性代码生成消费。
+- **错误集合不进入公开函数类型**：具体错误 enum/variant 集合由同一已检查程序的效应分析维护；内部三态 throw-effect 事实（`UNKNOWN` / `MAY_THROW` / `NO_THROW`）关联相应函数与可调用节点，供安全约束和代码生成消费。
 - **no-throw 始终推导**：需要冻结 no-throw 保证时使用 `xray verify` 合同；未知或不完整证明按 may-throw 处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用**块作用域**的 `defer`（绑定最近的真实 `{}` 块，见 §4.9 / §8.3）。
 - **清理边不是错误传播边**：`defer` 体不得让错误逃逸，该约束由编译期规则强制（`E0387`），见 §8.3.1。
@@ -4340,7 +4340,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 #### 8.1.1 `throw` 语句
 
-`throw expr` 抛出一个枚举错误值。`expr` 必须是枚举类型的变体值：
+`throw expr` 抛出一个枚举错误值。其实际值必须是枚举变体；静态类型可以是具体 enum、内置 `Error`，或定义处已证明 `Error` 约束的普通类型参数：
 
 ```xray
 enum AppErr { NotFound, InvalidInput { message: string } }
@@ -4352,7 +4352,7 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 抛出后行为：
 
 ```
-抛出点 → 写入 pending_error → 沿调用栈返回 → 执行每条跨域边上的静态 cleanup 区域 → catch 处理 → 否则继续返回 → 顶层诊断
+抛出点 → 交付拥有独立所有权的错误值 → 沿调用栈返回 → 执行每条跨域边上的静态 cleanup 区域 → catch 处理 → 否则继续返回 → 顶层诊断
 ```
 
 - 不展开栈帧（不同于传统异常的 unwind）
@@ -4400,11 +4400,13 @@ try {
 ```
 
 **规则**：
-- 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值
+- 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值，绑定的静态类型为内置 `Error`
 - 有类型注解的 `catch (e: SomeErr)` 仅当错误值 `is SomeErr` 为真时匹配，其中 `SomeErr` 是具体 enum 错误类型
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
 - 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
+
+内置 `Error` 是只容纳 enum 的持有值类型。enum 到 Error 的值转换保留实际名义身份、泛型实参、活动变体与载荷；复制、保存、返回和重新抛出均遵守相同值所有权规则。Error 不提供任意字段、构造或可见性权限，也不隐式证明 `Sendable`。读取具体变体载荷前必须完成有权限的类型窄化。普通泛型转换在定义处按约束检查，特化后复验，不能等调用处看到具体 enum 才补充证明。
 
 `catch` 也可以直接使用 enum variant pattern。unit variant 写作
 `catch NetErr.Timeout { ... }`，其中唯一一对花括号是 catch 块体；payload variant 写作
