@@ -496,6 +496,10 @@ class Dog extends Animal {
 
 **修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: i64 = 0`。
 
+静态方法通过声明类型限定访问，例如 `Box<i64>.make(value)` 或 `module.Box<i64>.make(value)`；实例限定的静态访问和类型限定的实例方法调用/取值均非法。局部同名绑定按正常名称解析遮蔽类型。静态方法没有隐式接收者，体内及默认参数中不提供 `this`。类型实参属于声明类型；方法自身的类型实参属于方法，不能互相代替。普通泛型体按定义处约束检查，实例化不得扩大可见性或构造权限。
+
+静态方法的直接调用沿用尾部默认参数、从左到右求值、效应、挂起和失败清理合同；其函数值不捕获接收者，间接调用必须提供完整签名参数。私有静态方法以及静态工厂中的私有构造操作按声明所有者授权；公开工厂不会使调用方获得私有成员的直接访问权。返回值沿用普通函数的值语义和所有权规则。静态字段、静态初始化及继承规则不由静态方法准入隐式开启。
+
 > `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
 
 #### 5.3.4 构造器
@@ -1683,6 +1687,10 @@ class Dog extends Animal {
 | `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
 
 **Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: i64 = 0`.
+
+Static methods are qualified by their declaring type, for example `Box<i64>.make(value)` or `module.Box<i64>.make(value)`. Instance-qualified static access and type-qualified instance method calls or values are invalid. Ordinary name resolution lets a local binding shadow a type. Static methods have no implicit receiver and provide no `this` in their body or parameter defaults. Type arguments belong to the declaring type; a method's own type arguments belong to that method and cannot substitute for the former. Ordinary generic bodies are checked against definition constraints; instantiation cannot expand visibility or construction authority.
+
+Direct static calls obey the trailing default-argument, left-to-right evaluation, effect, suspension and failure-cleanup contracts. Their function values capture no receiver and indirect calls require the full signature. Private static methods and private construction inside a static factory require declaration-owner authority; a public factory grants callers no direct access to private members. Results obey ordinary function value and ownership rules. Admitting static methods does not implicitly admit static fields, static initialization or inheritance rules.
 
 > `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
 

@@ -3220,6 +3220,10 @@ class Dog extends Animal {
 
 **Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: i64 = 0`.
 
+Static methods are qualified by their declaring type, for example `Box<i64>.make(value)` or `module.Box<i64>.make(value)`. Instance-qualified static access and type-qualified instance method calls or values are invalid. Ordinary name resolution lets a local binding shadow a type. Static methods have no implicit receiver and provide no `this` in their body or parameter defaults. Type arguments belong to the declaring type; a method's own type arguments belong to that method and cannot substitute for the former. Ordinary generic bodies are checked against definition constraints; instantiation cannot expand visibility or construction authority.
+
+Direct static calls obey the trailing default-argument, left-to-right evaluation, effect, suspension and failure-cleanup contracts. Their function values capture no receiver and indirect calls require the full signature. Private static methods and private construction inside a static factory require declaration-owner authority; a public factory grants callers no direct access to private members. Results obey ordinary function value and ownership rules. Admitting static methods does not implicitly admit static fields, static initialization or inheritance rules.
+
 > `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
 
 #### 5.3.4 Constructors

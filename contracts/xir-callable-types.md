@@ -6,8 +6,8 @@ ordered parameter modes/types and its result. Missing effect promises stay unkno
 they must not be inferred from one selected body and exported as ABI guarantees.
 
 The admitted metadata family records read-only signatures over the admitted
-primitive values, enclosing-function type parameters and earlier CALLABLE or
-ARRAY nodes in the unified pool. Unit is a result only. ARRAY descriptor admission
+primitive values, enclosing-function type parameters and earlier CALLABLE,
+ARRAY or NOMINAL nodes in the unified pool. Unit is a result only. ARRAY descriptor admission
 does not qualify source Array syntax, runtime Array construction or operations.
 Parameter mode zero means read; signature flags zero mean an ordinary function
 with no Sendable, no_suspend, no_blocking or borrow-call promise. Nonzero modes or
@@ -61,3 +61,14 @@ and memory budgets; recursive structural traversal is bounded to 128 levels.
 The tagged wire record carries the verified span immediately after kind, before
 the callable payload. Schema 5/contract 16, Value ABI 9, Call ABI 14 and Program
 ABI 9 replace previous versions atomically, without an alternate reader.
+
+## Nominal signature components
+
+Semantic contract 23 admits earlier nominal nodes as callable parameters and
+results. Their exact declaration identity, arguments, visibility and verified
+parameter span are retained through substitution and Checked revalidation.
+Nominal components grant no construction or member authority. Forward/self
+references and CELL components remain invalid; nominal Array components are
+not enabled by this change. Closed field layout and ordinary owned transport
+remain mandatory before lowering and execution. Independently checked packets,
+VM and native execution must cover nominal-returning function values.

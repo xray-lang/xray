@@ -384,6 +384,30 @@ static void nominal_query_boundary(void) {
     CHECK(xr_xir_source_snapshot_copy(&view, &budget, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
     CHECK(!memcmp(&budget, &original, sizeof(budget)));
 }
+static void source_static_method_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "struct C<T> { static identity(value:T)->T { return value } }\n"
+        "const direct=C<i64>.identity(7)\nconst saved=C<string>.identity\nconst text=saved(\"ok\")\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK && result.checked);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *owner = declaration(view, "C", 0);
+    CHECK(owner);
+    const XrXirSourceDeclaration *method = declaration(view, "identity", owner->id);
+    CHECK(method && method->parameter_count == 1 && method->parameters[0].generic_owner == owner->id);
+    CHECK(method->type.generic_owner == owner->id && !declaration(view, "this", method->id));
+    const XrXirSourceDeclaration *parameter = declaration(view, "value", method->id);
+    CHECK(parameter && parameter->type.generic_owner == owner->id && references(view, parameter->id, parameter->id) == 1);
+    unsigned calls = 0, values = 0, types = 0;
+    for (uint32_t i = 0; i < view->reference_count; ++i) {
+        const XrXirSourceReference *ref = &view->references[i];
+        if (ref->target == method->id && ref->access == XR_XIR_SOURCE_CALL) ++calls;
+        if (ref->target == method->id && ref->access == XR_XIR_SOURCE_FUNCTION_VALUE) ++values;
+        if (ref->target == owner->id && ref->access == XR_XIR_SOURCE_TYPE_USE) ++types;
+    }
+    CHECK(calls == 1 && values == 1 && types == 2);
+    xr_xir_source_result_free(&result);
+}
 static void source_default_argument_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,
         "fn choose<T>(value:T, transform:fn(T)->T=fn(item:T)->T { return item })->T { return transform(value) }\n"
@@ -558,6 +582,7 @@ int main(void) {
     source_struct_facts(&request);
     source_constructor_facts(&request);
     source_default_argument_facts(&request);
+    source_static_method_facts(&request);
     failures(&request);
     publication_budgets(&request);
     multiline_declaration(&request);

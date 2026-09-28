@@ -117,6 +117,22 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "struct C { static value()->i64 { return this.x } }\n",
+    "struct C { static value(x:i64=this.x)->i64 { return x } }\n",
+    "struct C { static value()->i64 { return 1 } }\nconst c=C()\nc.value()\n",
+    "struct C { static value()->i64 { return 1 } }\nconst c=C()\nconst f=c.value\n",
+    "struct C { value()->i64 { return 1 } }\nC.value()\n",
+    "struct C { value()->i64 { return 1 } }\nconst f=C.value\n",
+    "struct C { private static value()->i64 { return 1 } }\nC.value()\n",
+    "struct C { private static value()->i64 { return 1 } }\nconst f=C.value\n",
+    "struct C { static value(x:i64=7)->i64 { return x } }\nconst f=C.value\nf()\n",
+    "struct C<T> { static value()->T { return 1 } }\n",
+    "struct C<T> { static value(x:T=1)->T { return x } }\n",
+    "struct C<T> { static value(x:T)->T { return x } }\nC.value<i64>(1)\n",
+    "struct C { static value()->i64 { return 1 } }\nfn bad(){const C=7\nC.value()}\n",
+    "struct C { static value(x:i64=\"bad\")->i64 { return x } }\n",
+    "struct C { static value<T>(x:T)->T { return x } }\n",
+
     "fn value(x:i64=caller)->i64 { return x }\nfn use()->i64 { const caller=7; return value() }\n",
     "struct C { const value:i64\n private constructor(value:i64=7) { this.value=value } }\nconst c=C()\n",
     "struct C { value:i64=7\n private get(x:i64=7)->i64 { return x } }\nprint(C().get())\n",
@@ -351,8 +367,44 @@ static const char *const rejected[] = {
 };
 #include "xir_source_integer_context.h"
 #include "xir_source_decimal_context.h"
+static void static_import_authority(const XrXirSourceRequest *request, const char *root, const char *library) {
+    write_source(library,
+        "export struct Factory<T> { const value:T\n private constructor(value){this.value=value}\n"
+        " static make(value:T)->Factory<T>{return Factory<T>(value)}\n"
+        " private static secret()->i64{return 7}\n }\n"
+        "struct Hidden {static value()->i64{return 1}}\n");
+    const char *const accepted[] = {
+        "import {Factory} from \"./lib\"\nconst f=Factory<i64>.make\nconst c=f(7)\nprint(c.value)\n",
+        "import \"./lib\" as lib\nconst c=lib.Factory<string>.make(\"ok\")\nprint(c.value)\n"
+    };
+    const char *const invalid[] = {
+        "import \"./lib\" as lib\nlib.Factory<i64>.secret()\n",
+        "import \"./lib\" as lib\nconst f=lib.Factory<i64>.secret\n",
+        "import {Factory} from \"./lib\"\nconst c=Factory<i64>(7)\n",
+        "import \"./lib\" as lib\nlib.Hidden.value()\n",
+        "import {Factory} from \"./lib\"\nfn bad(){const Factory=7\nFactory<i64>.make(1)}\n"
+    };
+    for (unsigned group = 0; group < 2; ++group) {
+        const char *const *sources = group ? invalid : accepted;
+        size_t count = group ? sizeof(invalid)/sizeof(invalid[0]) : sizeof(accepted)/sizeof(accepted[0]);
+        for (size_t i = 0; i < count; ++i) {
+            write_source(root, sources[i]);
+            XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+            XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+            if (!group && status != XR_XIR_OK) fprintf(stderr, "static import %zu: %s\n", i, diagnostic.message);
+            CHECK(group ? status != XR_XIR_OK && !result.checked : status == XR_XIR_OK && result.checked);
+            xr_xir_source_result_free(&result);
+        }
+    }
+}
 static void constructor_admission(const XrXirSourceRequest *request, const char *root) {
     const char *const sources[] = {
+        "struct C { static value(x:i64=7)->i64 { return x } }\nprint(C.value(),C.value(9))\nconst f=C.value\nprint(f(8))\n",
+        "struct C<T> { static value(x:T)->T { return x } }\nprint(C<i64>.value(7))\nconst f=C<string>.value\nprint(f(\"yes\"))\n",
+        "struct C { const value:string\n private constructor(value) { this.value=value }\n private static secret()->string { return \"private\" }\n static make(value:string=C.secret())->C { return C(value) }\n static capture()->fn()->string { return C.secret } }\nprint(C.make().value)\nconst f=C.capture()\nprint(f())\n",
+        "struct C<T> { static value(x:T, f:fn(T)->T=fn(y:T)->T { return y })->T { return f(x) } }\nprint(C<i64>.value(7))\n",
+        "struct C { static value()->i64 { return 7 } }\nfn shadow()->i64 { const C=fn()->i64 { return 9 }\nreturn C() }\nprint(shadow())\n",
+
         "struct C { const value:i64\n private constructor(value:i64=7) { this.value=value }\n get(other:C=C())->i64 { return other.value } }\n",
         "fn value(x:string=\"ok\")->string { return x }\nprint(value())\nprint(value(\"explicit\"))\n",
         "fn make<T>(x:fn()->T)->T { return x() }\nfn value<T>(x:fn()->T=fn()->T { var items:Array<T> = []\n return items[0] })->T { return x() }\n",
@@ -453,6 +505,8 @@ int main(void) {
     xr_xir_source_result_free(&query_result_14);
     CHECK(query_status_14 == XR_XIR_OK && artifact);
     xr_xir_artifact_free(artifact);
+    static_import_authority(&request, root, library);
+    write_source(library, "export fn visible() -> i64 { return 2 }\n");
     constructor_admission(&request, root);
     shadowed_coro(&request, root);
     xr_compiler_session_delete(session);

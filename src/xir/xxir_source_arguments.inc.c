@@ -38,7 +38,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             parameters = node->as.function_decl.params; count = (uint32_t)node->as.function_decl.param_count;
         } else if (node->type == AST_METHOD_DECL) {
             parameters = node->as.method_decl.params; count = (uint32_t)node->as.method_decl.param_count;
-            offset = node->as.method_decl.is_constructor ? 0 : 1;
+            offset = node->as.method_decl.is_constructor || node->as.method_decl.is_static ? 0 : 1;
         } else continue;
         bool seen = false;
         for (uint32_t p = 0; p < count; ++p) {

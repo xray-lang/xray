@@ -160,3 +160,17 @@ export fn argumentFailure(first:string,second:i64=argumentFault())->i64 {
     argumentOrder.fetchAdd(1000000)
     return second
 }
+
+export struct StaticFactory<T> {
+    const value:T
+    private constructor(value) { this.value=value }
+    static failure(first:string, second:i64=argumentFault())->i64 {
+        argumentOrder.fetchAdd(1000000)
+        return second
+    }
+    static relay(value:StaticFactory<T>)->StaticFactory<T> { return value }
+    static make(value:T)->StaticFactory<T> { return StaticFactory<T>(value) }
+    static identity(value:T, transform:fn(T)->T=fn(item:T)->T { return item })->T { return transform(value) }
+    private static label()->string { return "private"+"static" }
+    static exported()->fn()->string { return StaticFactory<T>.label }
+}

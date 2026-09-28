@@ -622,6 +622,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     AstNode *callee = call->callee;
     SourceValue receiver = {0}, indirect = {0};
     bool indirect_ready = false;
+    SourceStaticMethod selected = {0};
     XrXirOp method = XR_XIR_INVALID;
     if (callee->type == AST_VARIABLE) {
         const char *name = callee->as.variable.name;
@@ -644,7 +645,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Coro.yield accepts no value or type arguments");
             return emit(ctx, (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0}, value);
         }
-        if (base && base->kind == SOURCE_MODULE) { binding = base; target = imported_declaration(ctx, base, member->name); }
+        if (!source_static_select(ctx, callee, &selected)) return false;
+        if (selected.method) {
+            if (call->type_arg_count)
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method-owned type arguments are not admitted");
+            binding = target = selected.method;
+        } else if (base && base->kind == SOURCE_MODULE) { binding = base; target = imported_declaration(ctx, base, member->name); }
         else if (source_constructor_receiver(ctx, member->object) &&
             !source_method_find(ctx, ctx->functions[ctx->function].result, member->name)) {
             if (!expression(ctx, callee, &indirect)) return false;
@@ -688,7 +694,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     if ((print || atomic || stream || method != XR_XIR_INVALID) && call->type_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "primitive does not admit explicit type arguments");
     XrXirInstruction op = {0}; SourceSubstitution substitution = {0};
-    if (target && target->kind == SOURCE_FUNCTION && !prepare_call(ctx, node, target, &substitution, &op)) return false;
+    if (selected.method) {
+        substitution = selected.substitution;
+        op = (XrXirInstruction) {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, target->index};
+        if (!source_argument_arity(ctx, node, target->index, (uint32_t)call->arg_count) ||
+            !source_substitute(ctx, &substitution, ctx->functions[target->index].result, 0, &op.type)) return false;
+    } else if (target && target->kind == SOURCE_FUNCTION && !prepare_call(ctx, node, target, &substitution, &op)) return false;
     if (target && target->kind == SOURCE_FUNCTION &&
         !source_query_reference(ctx, callee, binding, target, XR_XIR_SOURCE_CALL)) return false;
     uint32_t argument_count = op.op == XR_XIR_CALL ? ctx->functions[target->index].parameter_count : (uint32_t)call->arg_count;

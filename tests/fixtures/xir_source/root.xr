@@ -92,6 +92,7 @@ export fn calculate(kind:i64, left:i64, right:i64)->i64 {
     if (kind == 21) { return floatState as i64 }
     if (kind == 23) { return alpha.argumentFailure("caller"+"owned") }
     if (kind == 24) { return alpha.argumentCount() }
+    if (kind == 25) { return alpha.StaticFactory<string>.failure("static"+"owned") }
     if (kind == 22) { const value=alpha.ConstructorFault(left,right); return value.value }
     if (kind == 0) { return left + right }
     if (kind == 1) { return left - right }
@@ -481,3 +482,9 @@ const argumentOverride=alpha.argumentCall("X","Y")
 const argumentAgain=alpha.argumentCall("again")
 const argumentBox=alpha.ArgumentBox<string>("v")
 print(argumentFirst,argumentOverride,argumentAgain,argumentBox.suffix(),argumentBox.label,alpha.argumentIdentity<string>("generic"),alpha.argumentCount())
+
+const staticRelay=alpha.StaticFactory<string>.relay
+const staticMake=alpha.StaticFactory<string>.make
+const staticIdentity=alpha.StaticFactory<i64>.identity
+const staticPrivate=alpha.StaticFactory<string>.exported()
+print(alpha.StaticFactory<string>.make("direct").value,staticRelay(staticMake("value")).value,alpha.StaticFactory<string>.identity("generic"),staticIdentity(17,fn(item:i64)->i64 { return item+1 }),staticPrivate())

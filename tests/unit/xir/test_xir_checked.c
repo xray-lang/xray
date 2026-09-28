@@ -125,7 +125,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 22 && XR_XIR_OP_COUNT == 78, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 23 && XR_XIR_OP_COUNT == 78, "packet revision");
     _Static_assert(XR_XIR_STRUCT_NEW == 74 && XR_XIR_STRUCT_GET == 75 && XR_XIR_STRUCT_SET == 76, "struct wire operations");
     _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 54 &&
         XR_XIR_CONST_FLOAT == 55 && XR_XIR_NEG_FLOAT == 56 && XR_XIR_EQ_FLOAT == 57 && XR_XIR_GE_FLOAT == 62, "numeric wire identities");
@@ -150,8 +150,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x8b, 0x17, 0x6a, 0xe1, 0x15, 0x17, 0x56, 0x42, 0x65, 0x77, 0x86, 0x49, 0xc3, 0x79, 0x5d, 0x57,
-        0x57, 0x77, 0x99, 0x78, 0x98, 0x44, 0xeb, 0xd0, 0x2b, 0xc3, 0xcb, 0xd5, 0x3f, 0x79, 0xe9, 0x23};
+        0x40, 0xfc, 0xc4, 0x9b, 0x31, 0x2c, 0x2c, 0x3b, 0xe4, 0xa7, 0x60, 0x57, 0xa4, 0x85, 0xb0, 0xf8,
+        0x9f, 0xea, 0x71, 0xfe, 0xcd, 0xcc, 0x09, 0x9c, 0x46, 0x42, 0x0c, 0x76, 0x14, 0xa7, 0xfc, 0x2a};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
@@ -161,7 +161,7 @@ static void byte_order(void) {
     XrXirArtifact *narrow = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &narrow, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(narrow);
-    put32(packet.bytes + 12, 18); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 22); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
     put32(packet.bytes + 8, 6); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
@@ -752,7 +752,38 @@ static void uninitialized_packet(void) {
     CHECK(!decoded);
     xr_xir_checked_packet_free(&packet);
 }
+static void nominal_callable_components(void) {
+    XrXirArtifact *base = nominal_chain_fixture(1, 1), *checked = NULL, *decoded = NULL;
+    XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+    XrXirCallableParameter parameter = {(XrXirType)256, 0};
+    XrXirTypeNode nodes[2] = {built.types->nodes[0],
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, (XrXirType)256, 0, 0, {0}}};
+    XrXirTypes types = {nodes, 2, built.types->nominals}; built.types = &types;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded); xr_xir_artifact_free(checked); checked = NULL;
+    uint8_t pattern[28]; const uint32_t words[] = {1, 0, 1, 256, 0, 256, 0};
+    for (unsigned i = 0; i < 7; ++i) put32(pattern + i * 4, words[i]);
+    size_t offset = 0; unsigned matches = 0;
+    for (size_t i = 64; i + sizeof(pattern) <= packet.length; ++i)
+        if (!memcmp(packet.bytes + i, pattern, sizeof(pattern))) { offset = i; ++matches; }
+    CHECK(matches == 1);
+    put32(packet.bytes + offset + 20, 257); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    xr_xir_checked_packet_free(&packet);
+    nodes[1].result = (XrXirType)257;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    nodes[1].result = (XrXirType)256; nodes[1].parameter_span = 1;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    nodes[1].parameter_span = 0; parameter.type = XR_XIR_UNIT;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    parameter.type = (XrXirType)257;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    xr_xir_artifact_free(base);
+}
 int main(void) {
+    nominal_callable_components();
     uninitialized_packet();
     for (unsigned invalid = 1; invalid <= 11; ++invalid) CHECK(!struct_set_checked(invalid));
     for (unsigned invalid = 1; invalid <= 11; ++invalid) CHECK(!struct_ops_checked(invalid));

@@ -100,6 +100,11 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY);
 }
+static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return type_component(types, type, earlier) || (node && node->kind == XR_XIR_TYPE_NOMINAL &&
+        (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier);
+}
 static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBudget *remaining) {
     const XrXirTypeNode *node = &types->nodes[index];
     uint32_t span = 0;
@@ -108,7 +113,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
          node->nominal.fields || node->nominal.field_count)) return XR_XIR_BAD_STRUCTURE;
     if (node->kind == XR_XIR_TYPE_CALLABLE) {
         if (node->element != XR_XIR_UNIT || node->flags ||
-            (node->result != XR_XIR_UNIT && !type_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
+            (node->result != XR_XIR_UNIT && !callable_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
         if (node->parameter_count > 65536 || node->parameter_count > remaining->parameters) return XR_XIR_BUDGET;
         uint64_t bytes = (uint64_t) node->parameter_count * sizeof(*node->parameters);
         if (bytes > SIZE_MAX || bytes > remaining->metadata_bytes || node->parameter_count > remaining->work)
@@ -118,7 +123,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
         if ((node->parameter_count != 0) != (node->parameters != NULL)) return XR_XIR_BAD_STRUCTURE;
         span = xr_xir_type_span(types, node->result);
         for (uint32_t p = 0; p < node->parameter_count; ++p) {
-            if (node->parameters[p].mode || !type_component(types, node->parameters[p].type, index)) return XR_XIR_BAD_TYPE;
+            if (node->parameters[p].mode || !callable_component(types, node->parameters[p].type, index)) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, node->parameters[p].type);
             if (component > span) span = component;
         }

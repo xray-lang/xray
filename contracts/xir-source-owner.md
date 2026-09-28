@@ -202,3 +202,24 @@ expectations. Physical allocation-failure release and instance isolation cover
 the resulting ordinary call graphs. Full declaration-family and package
 publication completion remain unproven until their corresponding consumers and
 checks are implemented.
+
+## Static method declaration admission
+
+Type-qualified static selection resolves lexical/imported nominal identity and
+its explicit type arguments before emitting an ordinary CALL or capture-free
+FUNCTION_REF. It never evaluates a fabricated receiver. Instance-qualified
+static selection and type-qualified instance selection fail closed. Local
+shadowing, export visibility and declaration-owner member authority remain
+mandatory. Static signatures and default helpers have no receiver parameter;
+bodies and defaults have no implicit `this`. Generic type and method argument
+owners are distinct; unsupported method-owned generics must be rejected.
+
+Definition-time checks, ordinary default evaluation, effects, result ownership,
+suspension and failure cleanup remain unchanged. Private factories may construct
+their own type without granting callers direct private access. Checked consumers
+must reject forged member authority independently of source resolution. Required
+evidence covers imported and generic type selection, static function values,
+shadowing, invalid qualification, unused bad bodies/defaults, private factories,
+independent VM/native results and physical release. Class/enum methods, static
+fields, initialization and independently published declaration metadata retain
+their own unfinished admission and validation obligations.

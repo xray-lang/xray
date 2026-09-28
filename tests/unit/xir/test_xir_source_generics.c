@@ -138,8 +138,10 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
         xr_xir_artifact_free(closed); xr_xir_artifact_free(decoded);
     }
 }
-static void member_call_authority(XrXirSourceRequest *request) {
-    write_generic_source(request->entry_path,
+static void member_call_authority(XrXirSourceRequest *request, bool is_static) {
+    write_generic_source(request->entry_path, is_static ?
+        "struct S<T>{value:T;private static hidden(value:T)->T{return value};static get(value:T)->T{return S<T>.hidden(value)}}\n"
+        "const n=S<i64>.get(7);const f=S<string>.get;const value=f(\"yes\")\n" :
         "struct S<T>{value:T;private hidden()->T{return this.value};get()->T{return this.hidden()}}\n"
         "const s=S<i64>{value:7};const n=s.get()\n");
     XrXirSourceResult result = {0};
@@ -166,7 +168,7 @@ static void member_call_authority(XrXirSourceRequest *request) {
         if (module->declarations->functions[f].nominal_owner) continue;
         for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
             XrXirInstruction *op = (XrXirInstruction *)&module->functions[f].instructions[i];
-            if (op->op != XR_XIR_CALL || op->immediate != public_method) continue;
+            if ((op->op != XR_XIR_CALL && op->op != XR_XIR_FUNCTION_REF) || op->immediate != public_method) continue;
             op->immediate = hidden;
             CHECK(xr_xir_artifact_verify(result.checked, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
             XrXirCheckedPacket bad = {0};
@@ -303,7 +305,8 @@ int main(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
     member_reference_authority(&request, library);
-    member_call_authority(&request);
+    member_call_authority(&request, false);
+    member_call_authority(&request, true);
     nominal_specialization_authority(&request, library);
     write_generic_source(library,
         "export fn required<T:Sendable>(x:T)->T { return x }\n"

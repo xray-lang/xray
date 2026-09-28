@@ -6,9 +6,9 @@ Semantic contract 20 uses the sole schema 8 pool with nominal expressions
 whose ordered arguments may contain enclosing parameters and earlier nominal
 expressions. The exact parameter span is derived from the argument sequence.
 Declaration identity and ordered arguments form identity; derived field vectors
-do not. Array and
-callable nominal components and nominal Sendable
-remain outside the current executable source family.
+do not. Semantic contract 23 additionally admits nominal components in callable
+signatures under `xir-callable-types.md`. Array nominal components and nominal
+Sendable remain outside the current executable source family.
 
 Each declaration field and function use proves nominal argument constraints in
 its own parameter context. Visibility follows every nominal expression argument
