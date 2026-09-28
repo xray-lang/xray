@@ -13,6 +13,7 @@
 
 #ifndef XIR_STRING_CASES_H
 #define XIR_STRING_CASES_H
+#include "xir_error_fixture.h"
 #include "xir/xxir_call.h"
 static const char string_left[] = "A\0\xE4\xB8\xAD";
 static const char string_right[] = "\xF0\x9F\x98\x80!";
@@ -40,9 +41,16 @@ static bool string_output(void *context, const XrXirOutputGroup *group) {
         CHECK(xr_xir_call_cancel(output->call) == XR_XIR_CALL_CANCELLED);
     return output->mode != 3;
 }
+static void string_error_bytes(const XrXirValue *value, XrXirDomain *domain) {
+    XrXirValueAdmission admission={xr_xir_value_arena(value),domain,NULL,NULL,10000,65536};
+    XrXirValue field={0}; CHECK(xr_xir_enum_get(value,1,0,&admission,&field)==XR_XIR_VALUE_OK);
+    string_bytes(&field,string_expected,sizeof(string_expected)-1); xr_xir_value_drop(&field);
+}
 static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, uint32_t mode) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(mode == 8 ? 240 : 65536, &domain) == XR_XIR_VALUE_OK);
+    XrXirDomain *metadata=NULL; CHECK(xr_xir_domain_new(65536,&metadata)==XR_XIR_VALUE_OK);
+    XrXirTypeArena *arena=error_fixture_arena(metadata);
     XrXirDomainStats baseline = xr_xir_domain_stats(domain);
     XrXirValue arguments[2] = {{0}, {0}};
     CHECK(xr_xir_string_new(domain, string_left, sizeof(string_left) - 1, &arguments[0]) == XR_XIR_VALUE_OK);
@@ -51,6 +59,7 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
     StringOutput output = {0, mode, NULL};
     XrXirCallConfig config = {entries, 3, NULL, 65536, mode == 5 ? 15 : 100, 10,
         &accounting, {mode == 4 ? NULL : string_output, &output}, {0}};
+    config.admission=error_fixture_admission(domain,arena);
     XrXirCall *call = NULL;
     CHECK(xr_xir_call_new(&config, mode == 5 || mode == 6 ? 2 : 0, arguments, 2, &call) == XR_XIR_CALL_READY);
     output.call = call;
@@ -69,7 +78,9 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
         else if (mode != 2) {
             CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
             result = xr_xir_call_poll(call);
-            if (variant) CHECK(result.status == XR_XIR_CALL_THROWN && result.value.payload == 91);
+            if (variant) {
+                CHECK(result.status == XR_XIR_CALL_THROWN); string_error_bytes(&result.value,domain);
+            }
             else {
                 CHECK(result.status == XR_XIR_CALL_RETURNED && output.calls == 2);
                 string_bytes(&result.value, string_expected, sizeof(string_expected) - 1);
@@ -84,13 +95,15 @@ static XrXirValue string_cases(const XrXirCallEntry *entries, uint32_t variant, 
     }
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees && !accounting.depth);
-    if (owned.type != XR_XIR_STRING) {
+    if (owned.type == XR_XIR_UNIT) {
         XrXirDomainStats stats = xr_xir_domain_stats(domain);
         CHECK(stats.live_bytes == baseline.live_bytes && stats.allocations == stats.frees + 1);
     } else {
-        string_bytes(&owned, string_expected, sizeof(string_expected) - 1);
+        if (owned.type==XR_XIR_STRING) string_bytes(&owned, string_expected, sizeof(string_expected) - 1);
+        else string_error_bytes(&owned,domain);
         CHECK(xr_xir_domain_stats(domain).live_bytes > baseline.live_bytes);
     }
+    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(metadata);
     xr_xir_domain_drop(domain);
     return owned;
 }

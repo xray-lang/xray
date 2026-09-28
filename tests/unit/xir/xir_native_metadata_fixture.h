@@ -7,10 +7,11 @@
  * xir_native_metadata_fixture.h - Metadata witnesses for trusted test callbacks
  *
  * KEY CONCEPT:
- *   Synthetic throwing bodies establish metadata only; callbacks are tested separately.
+ *   Synthetic faulting bodies establish metadata only; callbacks are tested separately.
  */
 #ifndef XIR_NATIVE_METADATA_FIXTURE_H
 #define XIR_NATIVE_METADATA_FIXTURE_H
+#include "xir/xxir_generic.h"
 static XrXirStatus native_metadata_fixture(const XrXirProgramSpec *spec, XrXirArtifact **output) {
     *output = NULL;
     CHECK(spec->entry_count <= 16);
@@ -23,14 +24,17 @@ static XrXirStatus native_metadata_fixture(const XrXirProgramSpec *spec, XrXirAr
         int length = snprintf(names[i], sizeof(names[i]), "native_test_%u", i);
         CHECK(length > 0 && (size_t)length < sizeof(names[i]));
         instructions[i][0] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0};
-        instructions[i][1] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {entry->parameter_count}, {0}, 0};
+        instructions[i][1] = (XrXirInstruction) {XR_XIR_MATCH_FAIL, XR_XIR_UNIT, {0}, {0}, 0};
         functions[i] = (XrXirFunction) {names[i], (uint32_t)length, entry->parameters,
             entry->parameter_count, entry->result, &block, 1, instructions[i], 2, NULL, 0};
     }
     XrXirModule module = {XR_XIR_BUILT, functions, spec->entry_count, spec->declarations, NULL, spec->types, NULL};
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xr_xir_check(&module, NULL, &checked, NULL);
-    if (status == XR_XIR_OK) status = xr_xir_lower(checked, &spec->target, NULL, output, NULL);
+    XrXirArtifact *closed=NULL;
+    if (status == XR_XIR_OK) status=xr_xir_specialize(checked,NULL,&closed,NULL);
+    if (status == XR_XIR_OK) status = xr_xir_lower(closed, &spec->target, NULL, output, NULL);
+    xr_xir_artifact_free(closed);
     xr_xir_artifact_free(checked);
     return status;
 }

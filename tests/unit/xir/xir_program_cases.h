@@ -12,6 +12,7 @@
 #ifndef XIR_PROGRAM_CASES_H
 #define XIR_PROGRAM_CASES_H
 #include "xir/xxir_program.h"
+#include "xir_error_fixture.h"
 typedef struct ProgramLog {
     XrXirValue values[32];
     XrXirOutputStream streams[32];
@@ -62,6 +63,8 @@ static XrXirValue program_result(XrXirInstance *instance, uint32_t entry) {
     return value;
 }
 static void program_cases(XrXirProgram *program, uint32_t mode) {
+    XrXirDomain *reader=NULL; CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
+    XrXirValue errors[2]={{0}};
     ProgramLog logs[2] = {0}; XrXirInstance *instances[2] = {0};
     XrXirInstanceResult suspended[2] = {0};
     XrXirValue strings[2] = {0}, cells[2] = {0};
@@ -80,7 +83,8 @@ static void program_cases(XrXirProgram *program, uint32_t mode) {
         if (mode) CHECK(xr_xir_instance_resume(instances[i], suspended[i].epoch, suspended[i].outcome.wake) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
         if (mode == 2) {
-            CHECK(result.outcome.status == XR_XIR_CALL_THROWN && result.outcome.value.payload == 91);
+            CHECK(result.outcome.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.outcome.value,reader,91));
+            CHECK(xr_xir_value_copy(&result.outcome.value,&errors[i])==XR_XIR_VALUE_OK);
             CHECK(xr_xir_instance_start(instances[i], 3, NULL, 0) == XR_XIR_CALL_THROWN);
             CHECK(logs[i].outputs == 1 && logs[i].released == 2);
             CHECK(logs[i].releases[0] == 2 && logs[i].releases[1] == 0);
@@ -106,8 +110,11 @@ static void program_cases(XrXirProgram *program, uint32_t mode) {
         CHECK(xr_xir_atomic_i64_load(&cells[1], &other) && other == 12);
     }
     for (uint32_t i = 0; i < 2; ++i) {
+        if (mode==2) CHECK(error_fixture_is_code(&errors[i],reader,91));
+        xr_xir_value_drop(&errors[i]);
         xr_xir_value_drop(&strings[i]); xr_xir_value_drop(&cells[i]);
         for (uint32_t j = 0; j < logs[i].outputs; ++j) xr_xir_value_drop(&logs[i].values[j]);
     }
+    xr_xir_domain_drop(reader);
 }
 #endif

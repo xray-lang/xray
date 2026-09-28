@@ -18,8 +18,8 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_string_fixture.h"
 #include "xir_string_cases.h"
-XR_DATA const XrXirCallEntry fixture_strings0_entries[3];
-XR_DATA const XrXirCallEntry fixture_strings1_entries[3];
+XR_DATA const XrXirCallEntry fixture_strings0_entries[5];
+XR_DATA const XrXirCallEntry fixture_strings1_entries[5];
 int main(void) {
     const XrXirCallEntry *tables[] = {fixture_strings0_entries, fixture_strings1_entries};
     for (uint32_t mixed = 0; mixed < 2; ++mixed)
@@ -36,6 +36,10 @@ int main(void) {
         XrXirValue value = string_cases(entries, variant, mode);
         xr_xir_artifact_free(artifact);
         if (value.type == XR_XIR_STRING) string_bytes(&value, string_expected, sizeof(string_expected) - 1);
+        else if (value.type) {
+            XrXirDomain *reader=NULL; CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
+            string_error_bytes(&value,reader); xr_xir_domain_drop(reader);
+        }
         xr_xir_value_drop(&value);
     }
     puts("VM and mixed native string execution and artifact-independent results passed");

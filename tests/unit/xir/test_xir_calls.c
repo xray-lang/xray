@@ -23,6 +23,7 @@
 
 typedef struct Witness {
     const XrXirArtifact *comparator;
+    XrXirValue error;
     uint32_t mode, comparisons, cleaned, cleanup_ids[16];
     uint64_t recursive_cleanups;
     uintptr_t stack_low, stack_high;
@@ -94,7 +95,13 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
     if ((witness->mode == 1 && before == 0) || (witness->mode == 5 && before < 2))
         return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}};
     if (witness->mode == 2)
-        return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {XR_XIR_I64, 0, 91}, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, witness->error, {0}};
+    if (witness->mode == 9)
+        return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,{XR_XIR_I64,0,91},{0}};
+    if (witness->mode == 10) {
+        XrXirValue invalid=witness->error; invalid.reserved=1;
+        return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,invalid,{0}};
+    }
     if (witness->mode == 3)
         CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCELLED);
     if (witness->mode == 4)
@@ -134,17 +141,21 @@ static XrXirArtifact *comparator_artifact(void) {
 
 static void callback_cases(void) {
     XrXirArtifact *artifact = comparator_artifact();
-    for (uint32_t mode = 0; mode < 9; ++mode) {
+    for (uint32_t mode = 0; mode < 11; ++mode) {
         Witness witness = {0};
         witness.comparator = artifact;
-        witness.mode = mode >= 6 ? 1 : mode;
+        witness.mode = mode >= 6 && mode <= 8 ? 1 : mode;
         XrXirCallEntry entries[] = {
             {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(uint32_t), root_resume, cleanup, &identities[0]},
             {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(NativeSortState), native_sort_resume, cleanup, &identities[1]},
             {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_BOOL, sizeof(uint32_t), comparator_resume, cleanup, &identities[2]}
         };
+        XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+        XrXirTypeArena *arena=error_fixture_arena(domain);
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {entries, 3, &witness, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
+        config.admission=error_fixture_admission(domain,arena);
+        witness.error=error_fixture_code(&config.admission,91);
         XrXirValue args[] = {{XR_XIR_I64, 0, 3}, {XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 3, &call) == XR_XIR_CALL_READY);
@@ -172,9 +183,9 @@ static void callback_cases(void) {
                 CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_BAD_STATE);
                 result = xr_xir_call_poll(call);
             }
-            if (mode == 2) CHECK(result.status == XR_XIR_CALL_THROWN && result.value.payload == 91);
+            if (mode == 2) CHECK(result.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.value,domain,91));
             else if (mode == 3 || mode == 6) CHECK(result.status == XR_XIR_CALL_CANCELLED);
-            else if (mode == 4) CHECK(result.status == XR_XIR_CALL_BAD_STATE);
+            else if (mode == 4 || mode == 9 || mode == 10) CHECK(result.status == XR_XIR_CALL_BAD_STATE);
             else if (mode != 7) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 123);
             CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
             CHECK(witness.cleaned >= 3 && witness.cleanup_ids[witness.cleaned - 1] == 0);
@@ -183,6 +194,7 @@ static void callback_cases(void) {
             if (mode == 0 || mode == 1 || mode == 5) CHECK(witness.comparisons == 3 && witness.cleaned == 5);
         }
         CHECK(accounting.live_bytes == 0 && accounting.depth == 0 && accounting.allocations == accounting.frees);
+        xr_xir_value_drop(&witness.error); xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
     }
     xr_xir_artifact_free(artifact);
 }
@@ -234,10 +246,10 @@ static void bounded_stack(void) {
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
     }
 }
-XR_DATA const XrXirCallEntry fixture_calls0_entries[3];
-XR_DATA const XrXirCallEntry fixture_calls1_entries[3];
-XR_DATA const XrXirCallEntry fixture_calls2_entries[3];
-XR_DATA const XrXirCallEntry fixture_calls3_entries[3];
+XR_DATA const XrXirCallEntry fixture_calls0_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls1_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls2_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls3_entries[5];
 static void xir_instruction_calls(void) {
     for (uint32_t mode = 0; mode < 4; ++mode) for (uint32_t native = 0; native < 2; ++native) {
         XrXirArtifact *artifact = call_fixture(mode);
@@ -249,8 +261,11 @@ static void xir_instruction_calls(void) {
             const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries, fixture_calls3_entries};
             entries[1] = tables[mode][1];
         }
+        XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+        XrXirTypeArena *arena=error_fixture_arena(domain);
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
+        config.admission=error_fixture_admission(domain,arena);
         XrXirValue args[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 2, &call) == XR_XIR_CALL_READY);
@@ -261,11 +276,12 @@ static void xir_instruction_calls(void) {
             result = xr_xir_call_poll(call);
         }
         if (mode == 0) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 4);
-        if (mode == 1) CHECK(result.status == XR_XIR_CALL_THROWN && result.value.payload == 91);
+        if (mode == 1) CHECK(result.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.value,domain,91));
         if (mode == 2) CHECK(result.status == XR_XIR_CALL_DIVIDE_BY_ZERO && result.value.type == XR_XIR_UNIT);
         if (mode == 3) CHECK(result.status == XR_XIR_CALL_MATCH_FAILURE && result.value.type == XR_XIR_UNIT && xr_xir_fault_match_valid(result.fault));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
+        xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
         xr_xir_artifact_free(artifact);
     }
 }
@@ -276,6 +292,11 @@ static XrXirAction wrong_comparator(XrXirCallView *view) {
 static void call_admission(void) {
     XrXirArtifact *artifact = call_fixture(0);
     const XrXirModule *module = xr_xir_artifact_module(artifact);
+    XrXirInstruction *throw_op=(XrXirInstruction *)&module->functions[2].instructions[3];
+    XrXirInstruction saved=*throw_op;
+    *throw_op=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{4},{0},0};
+    CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_BAD_TYPE);
+    *throw_op=saved;
     XrXirInstruction *op = (XrXirInstruction *) module->functions[0].instructions;
     op[0].immediate = -1;
     CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) == XR_XIR_BAD_STRUCTURE);

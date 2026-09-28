@@ -82,6 +82,7 @@ export fn update(value: i64, up: bool) -> i64 {
 }
 
 export fn calculate(kind:i64, left:i64, right:i64)->i64 {
+    if (kind == 32) { return alpha.failEvent<string>("error"+" payload") }
     if (kind == 27) { return match(left) {1,2->71} }
     if (kind == 28) { return match(left==1) {true->72} }
     if (kind == 29) { return match(left as f64) {1.0->73} }

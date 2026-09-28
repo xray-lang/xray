@@ -1321,6 +1321,14 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         --ctx->depth;
         return ok && (ctx->returned || source_query_expression(ctx,expr,value.type));
     }
+    case AST_THROW_STMT: {
+        SourceValue value = {0};
+        if (!expression(ctx, node->as.throw_stmt.expression, &value)) return false;
+        if (!xr_xir_type_is_enum(&ctx->types, value.type))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "throw requires an enum error value");
+        ctx->returned = true;
+        return emit(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {value.id, 0}, {0, 0}, 0}, NULL);
+    }
     case AST_RETURN_STMT: {
         if (source_constructor_active(ctx)) return source_constructor_return(ctx, node);
         if (top || !ctx->bodies[ctx->function].node || node->as.return_stmt.value_count > 1)

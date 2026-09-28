@@ -457,8 +457,12 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         unwind(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
-    XrXirCallStatus admitted = admit_value(&action.value,
-        returning ? call->top->entry->result : XR_XIR_I64, &call->config.admission);
+    XrXirType result_type = returning ? call->top->entry->result : (XrXirType) action.value.type;
+    if (!returning && !xr_xir_type_is_enum(xr_xir_type_arena_types(call->config.admission.arena), result_type)) {
+        unwind(call, XR_XIR_CALL_BAD_STATE);
+        return;
+    }
+    XrXirCallStatus admitted = admit_value(&action.value, result_type, &call->config.admission);
     if (admitted != XR_XIR_CALL_READY) {
         unwind(call, admitted == XR_XIR_CALL_BAD_ARGUMENT ? XR_XIR_CALL_BAD_STATE : admitted);
         return;

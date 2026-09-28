@@ -11,7 +11,7 @@ No process-global current instance is used. Inputs are copied before a call is
 accepted; scalar results own their inline payload. Unit, canonical bool, i64, and strings are admitted. Managed ownership, output
 and one-shot result transfer are governed by `xir-managed-values.md`. ABI mismatches fail before publication.
 
-Call ABI 15 retains the admission TypeArena for the activation lifetime and
+Call ABI 16 retains the admission TypeArena for the activation lifetime and
 passes it through each CallView. Typed argument, return, inbox and action
 admission checks the expected arena/type as well as existing execution authority.
 VM frame copies and emitted native frame copies use that same arena. Scalar
@@ -39,7 +39,7 @@ from cleanup rejects as busy: cleanup cannot reopen completion arbitration.
 The initial context is exclusively driven by one host thread. Concurrent access
 is not admitted; these rules do not replace the later scheduler's atomic
 completion/cancellation arbitration. Suspension is not generator output or EOF.
-Language throw carries an i64 error token in this scalar subset. Runtime faults
+Language throw carries a verified enum value with its exact arena-owned nominal identity. Integer error tokens are rejected. Runtime faults
 remain distinct and unwind the activation without a partial language result.
 
 VM and generated C translate scalar runtime failures through the same fault
@@ -170,3 +170,17 @@ It is a unit terminator with no operands, successors or immediate. VM and native
 resumable entries produce the same validated E0442 fault action. Scalar leaf
 optimization rejects this effect. Packets and native entries of earlier semantic
 or ABI revisions reject; there is no compatibility reader or duplicate executor.
+
+## Owned enum error transport
+
+Checked semantic revision 29 and Call/Program ABI 16 replace integer THROW
+without a compatibility entry. THROW accepts an enum-typed operand, including
+generic applications checked at definition and specialized before execution;
+normal result types are unchanged. VM and emitted C
+publish the same borrowed typed action. The driver validates enum classification,
+exact arena/type and transitive payload authority, takes ownership before child
+cleanup, and transfers the owned inbox to the surviving parent. Admission or
+copy failure publishes no partial error. Pending errors, one-shot result take,
+initialization failure and cancellation retain the same physical release rules.
+Runtime faults remain a separate channel. Source try/catch, Error marker rethrow,
+full effects and panic objects are separate open capabilities.

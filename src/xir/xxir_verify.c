@@ -633,8 +633,10 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (op->op == XR_XIR_CONVERT_NUMBER ? !xr_xir_type_is_number(expected) : !xr_xir_float_bits(expected))
                 return XR_XIR_BAD_TYPE;
         }
-        if (op->op == XR_XIR_THROW)
-            expected = XR_XIR_I64;
+        if (op->op == XR_XIR_THROW) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            if (!xr_xir_type_is_enum(context->module->types, expected)) return XR_XIR_BAD_TYPE;
+        }
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
         if (op->op == XR_XIR_ATOMIC_I64_NEW) expected = XR_XIR_I64;

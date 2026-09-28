@@ -186,6 +186,11 @@ export struct MethodBox<T> {
 }
 
 export enum Event<T:Sendable> { Empty, Data { value:T, label:string } }
+export fn failEvent<T:Sendable>(value:T)->i64 {
+    const error=Event<T>.Data { value:value, label:"owned" }
+    Coro.yield()
+    throw error
+}
 export fn event<T:Sendable>(v:T)->Event<T> { return Event<T>.Data { label:"owned", value:v } }
 export fn eventValue<T:Sendable>(v:Event<T>,fallback:T)->T {
     return match(v) { Event.Data { value } -> value, Event.Empty -> fallback }

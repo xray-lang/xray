@@ -13,6 +13,7 @@
 #define XIR_SEGMENT_CASES_H
 typedef struct SegmentState { uint32_t phase; XrXirValue child; } SegmentState;
 typedef struct SegmentWitness {
+    XrXirValue error;
     void *states[64];
     const XrXirValue *arguments[64];
     uint32_t root, state_bytes, passes, mode, cleanups, last_cleanup;
@@ -62,7 +63,7 @@ static XrXirAction segment_resume(XrXirCallView *view) {
             return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0}, {0}};
         }
     }
-    if (w->mode == 2) return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {XR_XIR_I64, 0, 71}, {0}};
+    if (w->mode == 2) return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, w->error, {0}};
     return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, level}, {0}};
 }
 static void segment_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
@@ -83,6 +84,12 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
     witness.mode = mode; witness.passes = passes; witness.last_cleanup = UINT32_MAX;
     XrXirCallEntry entry = segment_entry(bytes); XrXirCallAccounting accounting = {0};
     XrXirCallConfig config = {&entry, 1, &witness, 2 * 1024 * 1024, 100000, 64, &accounting, {0}, {0}};
+    XrXirDomain *domain=NULL; XrXirTypeArena *arena=NULL;
+    if (mode==2) {
+        CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK); arena=error_fixture_arena(domain);
+        config.admission=error_fixture_admission(domain,arena);
+        witness.error=error_fixture_code(&config.admission,71);
+    }
     XrXirValue argument = {XR_XIR_I64, 0, 48}; XrXirCall *call = NULL;
     XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
     uint32_t wakes = 0;
@@ -101,12 +108,13 @@ static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
         status = result.status;
         if (fail_at != SIZE_MAX) CHECK(status == XR_XIR_CALL_OOM);
         else if (mode == 1) CHECK(status == XR_XIR_CALL_CANCELLED && witness.cleanups == 49);
-        else if (mode == 2) CHECK(status == XR_XIR_CALL_THROWN && result.value.payload == 71 && witness.cleanups == 49);
+        else if (mode == 2) CHECK(status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.value,domain,71) && witness.cleanups == 49);
         else if (mode != 4) CHECK(status == XR_XIR_CALL_RETURNED && result.value.payload == 48 && witness.cleanups == 48 * passes + 1);
         if (status != XR_XIR_CALL_SUSPENDED) CHECK(!call->segment && accounting.live_bytes == call->allocation_bytes);
     } else if (!call) CHECK(fail_at != SIZE_MAX && status == XR_XIR_CALL_OOM);
     size_t sites = calls;
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+    xr_xir_value_drop(&witness.error); xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(!live && !accounting.live_bytes && !accounting.depth && accounting.allocations == accounting.frees);
     if (fail_at == SIZE_MAX) {
         CHECK(witness.cleanups == (mode == 3 ? 1u : mode ? 49u : 48 * passes + 1));

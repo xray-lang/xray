@@ -458,7 +458,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         *action = xr_xir_call_match_failure();
         break;
     case XR_XIR_THROW:
-        *action = (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {XR_XIR_I64, 0,
+        *action = (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {(uint32_t) xr_xir_operand_type(run->function, op->args[0]), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}};
         return XR_XIR_RUN_OK;
     case XR_XIR_RETURN:

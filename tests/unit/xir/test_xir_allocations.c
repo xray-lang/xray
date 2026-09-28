@@ -75,6 +75,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_types.c"
 #include "xir/xxir_type_layout.c"
 #include "xir/xxir_generic.c"
+#include "xir/xxir_specialize.c"
 #include "xir/xxir.c"
 #include "xir/xxir_checked.c"
 #include "base/xsha256.c"
@@ -198,8 +199,8 @@ static bool allocation_output(void *context, const XrXirOutputGroup *group) {
     (void) context; (void) stream;
     return value->type == XR_XIR_STRING;
 }
-static void managed_allocation_run(XrXirArtifact *artifact) {
-    XrXirDomain *domain = NULL;
+static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
+    XrXirDomain *domain = NULL; XrXirTypeArena *arena=NULL;
     XrXirValue arguments[2] = {{0}, {0}}, owned = {0};
     XrXirCall *call = NULL;
     XrXirCallEntry entries[3];
@@ -212,6 +213,10 @@ static void managed_allocation_run(XrXirArtifact *artifact) {
     }
     XrXirValueStatus status = xr_xir_domain_new(65536, &domain);
     if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
+    XrXirBudget budget=xr_xir_default_budget();
+    status=xr_xir_type_arena_new(domain,xr_xir_artifact_module(artifact)->types,&budget,&arena);
+    if (status!=XR_XIR_VALUE_OK) { CHECK(status==XR_XIR_VALUE_OOM); goto done; }
+    config.admission=error_fixture_admission(domain,arena);
     for (uint32_t i = 0; i < 2; ++i) {
         status = xr_xir_string_new(domain, "x", 1, &arguments[i]);
         if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
@@ -223,32 +228,33 @@ static void managed_allocation_run(XrXirArtifact *artifact) {
         CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
         result = xr_xir_call_poll(call);
     }
-    if (result.status == XR_XIR_CALL_RETURNED)
-        CHECK(xr_xir_call_take_result(call, &owned) == XR_XIR_CALL_RETURNED);
+    if (result.status == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED)) {
+        CHECK(xr_xir_call_take_result(call,&owned)==result.status);
+        if (throwing) {
+            uint32_t variant=99; CHECK(xr_xir_enum_variant(&owned,&variant)==XR_XIR_VALUE_OK && variant==1);
+        }
+    }
     else CHECK(result.status == XR_XIR_CALL_OOM);
  done:
     CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
-    xr_xir_domain_drop(domain);
+    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
     xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]); xr_xir_value_drop(&owned);
 }
 static size_t managed_allocation_failures(void) {
-    fail_at = SIZE_MAX;
-    XrXirArtifact *artifact = string_fixture(0);
-    size_t baseline = live;
-    calls = 0;
-    managed_allocation_run(artifact);
-    size_t sites = calls;
-    CHECK(live == baseline);
-    for (size_t i = 0; i < sites; ++i) {
-        fail_at = i; calls = 0;
-        managed_allocation_run(artifact);
-        CHECK(live == baseline);
+    size_t total=0;
+    for (uint32_t mode=0;mode<2;++mode) {
+        fail_at=SIZE_MAX;
+        XrXirArtifact *artifact=string_fixture(mode); size_t baseline=live;
+        calls=0; managed_allocation_run(artifact,mode!=0); size_t sites=calls;
+        CHECK(live==baseline);
+        for (size_t i=0;i<sites;++i) {
+            fail_at=i; calls=0; managed_allocation_run(artifact,mode!=0); CHECK(live==baseline);
+        }
+        fail_at=SIZE_MAX; xr_xir_artifact_free(artifact); CHECK(!live); total+=sites;
+        printf("Managed call release: throw=%u allocation failure sites=%zu\n",mode,sites);
     }
-    fail_at = SIZE_MAX;
-    xr_xir_artifact_free(artifact);
-    CHECK(!live);
-    return sites;
+    return total;
 }
 
 typedef struct AllocationFrame { bool entered; XrXirValue argument; } AllocationFrame;

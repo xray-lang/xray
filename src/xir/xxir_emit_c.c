@@ -687,7 +687,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     case XR_XIR_THROW:
     case XR_XIR_RETURN: {
-        uint32_t type = op->op == XR_XIR_THROW ? XR_XIR_I64 : (uint32_t) function->result;
+        uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) function->result;
         append(buffer, "        return (XrXirAction) {%s, 0, NULL, 0, {%uu, 0, ",
                op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN", type);
         if (type == XR_XIR_UNIT) append(buffer, "0");

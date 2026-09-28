@@ -16,6 +16,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 
 #include "xir_native_metadata_fixture.h"
+#include "xir_error_fixture.h"
 
 typedef struct Witness { uint32_t mode, releases, begins[3]; } Witness;
 typedef struct Environment { Witness *witness; uint32_t module; } Environment;
@@ -53,8 +54,10 @@ static XrXirAction initializer(XrXirCallView *view) {
         if (module == 2 && (env->witness->mode == 1 || env->witness->mode == 2))
             return action(XR_XIR_ACTION_SUSPEND, (XrXirValue) {0});
     }
-    if (module == 2 && env->witness->mode == 2)
-        return action(XR_XIR_ACTION_THROW, (XrXirValue) {XR_XIR_I64, 0, 91});
+    if (module == 2 && env->witness->mode == 2) {
+        frame->value=error_fixture_code(xr_xir_call_admission(view),91);
+        return action(XR_XIR_ACTION_THROW,frame->value);
+    }
     if (module == 2 && env->witness->mode == 4)
         return xr_xir_call_bounds(INT64_MIN, 3);
     return done();
@@ -125,6 +128,7 @@ typedef struct Fixture {
     XrXirDeclarations declarations;
     XrXirProgramSpec spec;
     XrXirArtifact *proof;
+    ErrorFixture error;
 } Fixture;
 static const XrXirType string_parameter = XR_XIR_STRING;
 static void fixture(Fixture *f, uint32_t mode) {
@@ -158,7 +162,9 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, 10, &f->declarations, {&f->witness, release}, NULL, {0}};
+    if (mode==2) { error_fixture_init(&f->error,false); f->spec.types=&f->error.types; }
     CHECK(native_metadata_fixture(&f->spec, &f->proof) == XR_XIR_OK);
+    f->spec.types=xr_xir_artifact_module(f->proof)->types;
     f->spec.proof = xr_xir_program_proof(f->proof);
 }
 static XrXirInstance *new_instance(XrXirProgram *program, Trace *log) {
@@ -273,12 +279,13 @@ static void failed_initialization(void) {
         CHECK(result.outcome.status == expected);
         CHECK(log.count == (mode == 3 ? 1u : 3u));
         if (mode != 3) CHECK(log.events[2] == 30);
+        XrXirDomain *reader=NULL; CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
         XrXirCallResult escaped = {0};
         for (uint32_t repeat = 0; repeat < 3; ++repeat) {
             CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == expected);
             XrXirCallResult copy = {0};
             CHECK(xr_xir_instance_copy_failure(instance, &copy) == expected);
-            CHECK(copy.status == expected && copy.value.payload == (mode == 2 ? 91 : 0) && !copy.wake);
+            CHECK(copy.status == expected && (mode == 2 ? error_fixture_is_code(&copy.value,reader,91) : copy.value.payload == 0) && !copy.wake);
             if (mode == 4) {
                 CHECK(copy.fault.code == 430 && !copy.fault.reserved &&
                     copy.fault.index == INT64_MIN && copy.fault.length == 3);
@@ -292,6 +299,7 @@ static void failed_initialization(void) {
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
         xr_xir_program_drop(program); CHECK(f.witness.releases == 1);
         if (mode == 4) CHECK(escaped.fault.code == 430 && escaped.fault.index == INT64_MIN && escaped.fault.length == 3);
+        xr_xir_domain_drop(reader);
     }
 }
 static void seal_rejection(void) {

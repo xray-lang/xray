@@ -149,3 +149,8 @@ Semantic 28 adds the zero-operand, unit MATCH_FAIL terminator at tag 89;
 schema 9 record layout is unchanged. Semantic 27 packets reject even after
 digest repair. The independently constructed scalar witness header/payload
 digest is `a47d194ca998371680c86fb9077c4f831848d28abde79cd2f3361f98b992a3e4`.
+
+Semantic 29 requires enum operands for THROW instead of integer tokens. Schema 9
+layout and opcode tags are unchanged. Rehashed semantic 28 packets reject. The
+independent scalar header/payload digest is `69ba73ca80e6df7cf5f5891a26cea32bef0e2c0412e12eaa4095e91404b38d97`; a
+rehashed scalar RETURN changed to THROW rejects under the new type contract.

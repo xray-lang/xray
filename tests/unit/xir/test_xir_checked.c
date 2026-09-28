@@ -127,7 +127,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 9 && XR_XIR_CHECKED_CONTRACT == 28 && XR_XIR_OP_COUNT == 90, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 9 && XR_XIR_CHECKED_CONTRACT == 29 && XR_XIR_OP_COUNT == 90, "packet revision");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
     _Static_assert(XR_XIR_ENUM_NEW == 86 && XR_XIR_ENUM_TAG == 87 && XR_XIR_ENUM_GET == 88, "enum wire operations");
     _Static_assert(XR_XIR_STRING_INDEX_OF == 84 && XR_XIR_STRING_LAST_INDEX_OF == 85, "search wire operations");
@@ -157,10 +157,13 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0xa4, 0x7d, 0x19, 0x4c, 0xa9, 0x98, 0x37, 0x16, 0x80, 0xc8, 0x6f, 0xb9, 0x07, 0x7c, 0x4f, 0x83,
-        0x18, 0x48, 0xd2, 0x8a, 0xbd, 0xe7, 0x9c, 0xd2, 0xf3, 0x36, 0x1f, 0x98, 0xb9, 0x92, 0xa3, 0xe4};
+        0x69, 0xba, 0x73, 0xca, 0x80, 0xe6, 0xdf, 0x7c, 0xf5, 0xf5, 0x89, 0x1a, 0x26, 0xce, 0xa3, 0x2b,
+        0xef, 0x0e, 0x2c, 0x04, 0x12, 0xe1, 0x2e, 0xaa, 0x40, 0x95, 0xe9, 0x14, 0x04, 0xb3, 0x8d, 0x97};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
+    put32(packet.bytes+133,XR_XIR_THROW); digest_packet(&packet);
+    rejected(packet.bytes,packet.length);
+    memcpy(packet.bytes,original,sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
     memset(packet.bytes + 125, 0, 8); put32(packet.bytes + 125, 256); digest_packet(&packet);
     rejected(packet.bytes, packet.length);
@@ -168,7 +171,7 @@ static void byte_order(void) {
     XrXirArtifact *narrow = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &narrow, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(narrow);
-    put32(packet.bytes + 12, 27); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 28); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
     put32(packet.bytes + 8, 6); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));

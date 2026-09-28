@@ -117,6 +117,12 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "throw 91\n",
+    "fn unused(){throw \"error\"}\n",
+    "fn unused<T>(value:T){throw value}\n",
+    "enum E{Bad{message:string}}\nfn unused(){throw E.Bad{message:1}}\n",
+    "enum E<T:Sendable>{Bad{value:T}}\nfn unused<T>(value:T){throw E<T>.Bad{value:value}}\n",
+    "enum E{Bad}\nfn unused(){if(false){throw 1}else{throw E.Bad}}\n",
     "fn f(v:f32)->i64{return match(v){_,16777217->1}}\n",
     "enum E{A{x:f32}}\nfn f(v:E)->i64{return match(v){E.A{},E.A{x:16777217}->1}}\n",
     "enum E{A{x:i64},B{x:string}}\nfn f(v:E)->i64{return match(v){E.A{x},E.B{x}->1}}\n",
@@ -516,6 +522,11 @@ static void constructor_admission(const XrXirSourceRequest *request, const char 
 }
 static void enum_admission(const XrXirSourceRequest *request, const char *root) {
     const char *sources[] = {
+        "enum E{Bad}\nthrow E.Bad\n",
+        "enum E{Bad{message:string}}\nfn unused()->i64{throw E.Bad{message:\"owned\"}}\n",
+        "enum E<T:Sendable>{Bad{value:T}}\nfn unused<T:Sendable>(value:T)->i64{throw E<T>.Bad{value:value}}\n",
+        "enum E{Bad{message:string}}\nfn make(value:string)->fn()->i64{return fn()->i64{throw E.Bad{message:value}}}\n",
+        "enum E{Bad}\nstruct S{value:string\ninit(){throw E.Bad}}\n",
         "fn f(x:i64)->i64{return match(x){1,2->3}}\n",
         "fn f(x:bool)->i64{return match(x){true->3}}\n",
         "fn f(x:bool)->bool{return match(x){v->v}}\n",

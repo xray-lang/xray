@@ -12,6 +12,8 @@
 #ifndef XIR_PROGRAM_FIXTURE_H
 #define XIR_PROGRAM_FIXTURE_H
 #include "xir/xxir.h"
+#include "xir/xxir_generic.h"
+#include "xir_error_fixture.h"
 static XrXirArtifact *program_fixture(uint32_t mode) {
     XrXirInstruction alpha[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 10},
@@ -22,12 +24,17 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 2},
         {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 91},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
     };
-    XrXirInstruction beta[9]; memcpy(beta, alpha, sizeof(beta));
+    XrXirInstruction beta[10]; memcpy(beta, alpha, sizeof(beta));
     beta[0].immediate = 20; beta[2].immediate = 1; beta[3].immediate = 1; beta[4].immediate = 3;
     if (mode) alpha[6] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
-    if (mode == 2) alpha[8] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {7}, {0}, 0};
+    const uint32_t error_operand=7;
+    if (mode == 2) {
+        alpha[8]=(XrXirInstruction){XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},0};
+        alpha[9]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{8},{0},0};
+    }
     XrXirInstruction init[] = {
         {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2},
         {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 4},
@@ -67,11 +74,11 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {1}, {0}, 1},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
     };
-    const XrXirBlock blocks[] = {{0, 4}, {0, 9}, {0, 11}, {0, 6}, {0, 2}};
+    const XrXirBlock blocks[] = {{0, 4}, {0, 10}, {0, 11}, {0, 6}, {0, 2}};
     const XrXirFunction functions[] = {
         {"init_root", 9, NULL, 0, XR_XIR_UNIT, &blocks[0], 1, init, 4, NULL, 0},
-        {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 9, NULL, 0},
-        {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, alpha, 9, NULL, 0},
+        {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 10, NULL, 0},
+        {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, alpha, 10, mode == 2 ? &error_operand : NULL, mode == 2 ? 1u : 0u},
         {"main", 4, NULL, 0, XR_XIR_I64, &blocks[2], 1, root, 11, NULL, 0},
         {"alpha_next", 10, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_alpha, 6, NULL, 0},
         {"beta_next", 9, NULL, 0, XR_XIR_I64, &blocks[3], 1, get_beta, 6, NULL, 0},
@@ -87,11 +94,14 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
         {2, XR_XIR_STRING, 0}, {1, XR_XIR_STRING, 0}, {0, XR_XIR_STRING, 1}};
     const XrXirLiteral literals[] = {{"A\0\xe4\xb8\xad", 5}, {"B\xf0\x9f\x98\x80", 5}, {"root", 4}, {"updated", 7}, {NULL, 0}};
     const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3};
-    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, NULL, NULL};
+    ErrorFixture error; error_fixture_init(&error,false);
+    const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, mode == 2 ? &error.types : NULL, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+    XrXirArtifact *closed=NULL; CHECK(xr_xir_specialize(checked,NULL,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(closed);
     xr_xir_artifact_free(checked);
     return lowered;
 }

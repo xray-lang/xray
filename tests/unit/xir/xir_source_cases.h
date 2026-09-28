@@ -13,6 +13,7 @@
 #define XIR_SOURCE_CASES_H
 #include "xir/xxir_program.h"
 #include "xir/xxir_output.h"
+#include "xir/xxir_enum.h"
 #include "xir_bitwise_cases.h"
 typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
@@ -580,6 +581,31 @@ static void source_match_faults(XrXirInstance *instance, uint32_t function) {
     }
 }
 typedef struct SourceFunctions { uint32_t result, advance, update, calculate, resume_text, stack_depth, numeric_pause, bound_result; } SourceFunctions;
+static XrXirValue source_error(XrXirInstance *instance, uint32_t function) {
+    XrXirValue args[]={{XR_XIR_I64,0,32},{XR_XIR_I64,0,0},{XR_XIR_I64,0,0}}, error={0};
+    CHECK(xr_xir_instance_start(instance,function,args,3)==XR_XIR_CALL_READY);
+    XrXirInstanceResult result=xr_xir_instance_poll(instance);
+    CHECK(result.outcome.status==XR_XIR_CALL_SUSPENDED);
+    source_resume_once(instance,result);
+    CHECK(xr_xir_instance_poll(instance).outcome.status==XR_XIR_CALL_THROWN);
+    CHECK(xr_xir_instance_take_result(instance,&error)==XR_XIR_CALL_THROWN);
+    return error;
+}
+static void source_error_drop(XrXirValue *error) {
+    XrXirDomain *domain=NULL;
+    CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+    XrXirValueAdmission admission={xr_xir_value_arena(error),domain,NULL,NULL,1000000,65536};
+    uint32_t variant=UINT32_MAX;
+    CHECK(xr_xir_enum_variant(error,&variant)==XR_XIR_VALUE_OK && variant==1);
+    const char *expected[]={"error payload","owned"};
+    for (uint32_t i=0;i<2;++i) {
+        XrXirValue field={0}; const char *bytes=NULL; size_t length=0;
+        CHECK(xr_xir_enum_get(error,1,i,&admission,&field)==XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_view(&field,&bytes,&length) && length==strlen(expected[i]) && !memcmp(bytes,expected[i],length));
+        xr_xir_value_drop(&field);
+    }
+    xr_xir_value_drop(error); xr_xir_domain_drop(domain);
+}
 static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions functions, XrXirValue *results) {
     SourceOutput outputs[2] = {{0, false}, {0, true}};
     XrXirOutputSink sinks[2] = {{source_bytes, &outputs[0], 65536}, {source_bytes, &outputs[1], 65536}};
@@ -604,6 +630,8 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
             CHECK(outputs[i].calls == 55 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
         }
     }
+    XrXirValue errors[2]={{0},{0}};
+    for (unsigned i=0;i<2;++i) errors[i]=source_error(instances[i],functions.calculate);
     for (unsigned i = 0; i < 2; ++i) source_match_faults(instances[i],functions.calculate);
     for (unsigned i = 0; i < 2; ++i) source_search_bounds(instances[i], functions.calculate);
     source_cancel_cases(program, entry, functions.resume_text);
@@ -642,6 +670,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
         CHECK(xr_xir_instance_stop(instances[i]) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start_function(instances[i], &bound[i], NULL, 0) == XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
+        source_error_drop(&errors[i]);
         XrXirValue copy = {0};
         CHECK(xr_xir_value_copy(&bound[i], &copy) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&bound[i]); xr_xir_value_drop(&copy);

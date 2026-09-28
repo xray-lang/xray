@@ -167,6 +167,17 @@ canonical valueless RETURN encoding. No explicit no_suspend/no_blocking proof,
 work-stealing, generator/Task/source go or concurrent cancellation is certified by
 this admission. Existing refusal of unsupported function contracts remains.
 
+## Enum error source admission
+
+Source throw admits enum values through ordinary expression checking, including
+generic enum applications checked at definition and rechecked after specialization.
+It terminates the current source path with typed THROW; its result is independent
+of the callable's normal return type. Initializers and constructors use the same
+error transport and release completed local values. The operand is evaluated once
+and may suspend before throwing. This does not certify catch, Error-marker rethrow,
+error-set inference, panic handlers or language defer; unsupported syntax remains
+rejected. No integer token error path or alternate interpreter is retained.
+
 ## Direct-call default arguments: frozen implementation contract
 
 This declaration-family extension is frozen before source admission. A default
