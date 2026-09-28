@@ -39,6 +39,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "xaot_prepare_calls.inc.c"
+
 static bool value_reps_equal(XaotValueRep a, XaotValueRep b) {
     return xaot_value_reps_equal(a, b);
 }
@@ -5235,7 +5237,8 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
     return true;
 }
 
-static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFunc *func) {
+static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFunc *func,
+                                                       const XaotBoundaryFunctionCalls *facts) {
     if (!bundle || !func)
         return false;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
@@ -5251,7 +5254,12 @@ static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFun
             if (!call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
                           call->op != XI_CALL_METHOD_DIRECT))
                 continue;
-            target = xaot_boundary_resolve_direct_call_target(bundle, func, call, NULL);
+            const XaotBoundaryCallTargets *fact = prepare_call_fact(facts, func, call);
+            if (!fact) {
+                bundle->error_msg = "AOT aggregate return lacks admitted call facts";
+                return false;
+            }
+            target = fact->uncovered_direct;
             target_plan = target ? xaot_bundle_find_func_plan(bundle, target) : NULL;
             if (!target_plan)
                 continue;
@@ -5506,7 +5514,8 @@ static bool prepare_seed_source_export_call_place_reps(XaotBundle *bundle, XiFun
     return true;
 }
 
-static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func) {
+static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func,
+                                               const XaotBoundaryFunctionCalls *facts) {
     if (!bundle || !func)
         return false;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
@@ -5519,32 +5528,22 @@ static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func
             if (!call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
                           call->op != XI_CALL_METHOD_DIRECT))
                 continue;
-            XaotLeafAggregateTargetView leaf_aggregate = {0};
-            XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_call_view(
-                bundle, func, call, &leaf_aggregate, NULL, 0);
-            if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
-                bundle->error_msg =
-                    "AOT leaf-aggregate place seed has invalid TargetPlan authority";
+            const XaotBoundaryCallTargets *fact = prepare_call_fact(facts, func, call);
+            if (!fact) {
+                bundle->error_msg = "AOT place seed lacks admitted call facts";
                 return false;
             }
-            if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+            if (facts->coverage == XAOT_BOUNDARY_FUNCTION_LEAF_AGGREGATE)
                 continue;
             bool source_export = false;
             if (!prepare_seed_source_export_call_place_reps(bundle, func, call, &source_export))
                 return false;
             if (source_export)
                 continue;
-            XaotDirectI64TargetView direct_i64 = {0};
-            XaotDirectI64TargetStatus direct_i64_status =
-                xaot_boundary_direct_i64_call_view(bundle, func, call, &direct_i64, NULL, 0);
-            if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
-                bundle->error_msg = "AOT direct-i64 place seed has invalid TargetPlan authority";
-                return false;
-            }
-            if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND)
+            if (facts->coverage == XAOT_BOUNDARY_FUNCTION_DIRECT_I64)
                 continue;
-            const XiFunc *target =
-                xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
+            const XiFunc *target = fact->uncovered_direct;
+            first_arg = fact->first_arg;
             const XaotFuncPlan *target_plan =
                 target ? xaot_bundle_find_func_plan(bundle, target) : NULL;
             if (!target_plan || !target_plan->abi.params)
@@ -5627,7 +5626,8 @@ static bool prepare_seed_place_load_aggregate_reps(XaotBundle *bundle, XiFunc *f
 }
 
 static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPlan *caller_plan,
-                                           const XiValue *call) {
+                                           const XiValue *call,
+                                           const XaotBoundaryFunctionCalls *facts) {
     const XiFunc *target;
     const XaotFuncPlan *target_plan;
     uint16_t first_arg;
@@ -5638,25 +5638,15 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
         return true;
     if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
         return true;
-    XaotLeafAggregateTargetView leaf_aggregate = {0};
-    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_call_view(
-        bundle, caller_plan->func, call, &leaf_aggregate, NULL, 0);
-    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
-        bundle->error_msg = "AOT leaf-aggregate call has invalid TargetPlan authority";
+    const XaotBoundaryCallTargets *fact = prepare_call_fact(facts, caller_plan->func, call);
+    if (!fact) {
+        bundle->error_msg = "AOT call boundary lacks admitted call facts";
         return false;
     }
-    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+    if (facts->coverage != XAOT_BOUNDARY_FUNCTION_UNCOVERED)
         return true;
-    XaotDirectI64TargetView direct_i64 = {0};
-    XaotDirectI64TargetStatus direct_i64_status =
-        xaot_boundary_direct_i64_call_view(bundle, caller_plan->func, call, &direct_i64, NULL, 0);
-    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
-        bundle->error_msg = "AOT direct-i64 call has invalid TargetPlan authority";
-        return false;
-    }
-    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND)
-        return true;
-    target = xaot_boundary_resolve_direct_call_target(bundle, caller_plan->func, call, &first_arg);
+    target = fact->uncovered_direct;
+    first_arg = fact->first_arg;
     if (!target)
         return true;
     target_plan = xaot_bundle_find_func_plan(bundle, target);
@@ -5703,7 +5693,8 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
     return prepare_direct_call_ret_boundary(bundle, caller_plan, call, target, target_plan);
 }
 
-static bool prepare_func_boundary_steps(XaotBundle *bundle, const XaotFuncPlan *func_plan) {
+static bool prepare_func_boundary_steps(XaotBundle *bundle, const XaotFuncPlan *func_plan,
+                                        const XaotBoundaryFunctionCalls *facts) {
     uint32_t bi;
 
     if (!bundle || !func_plan || !func_plan->func)
@@ -5751,7 +5742,7 @@ static bool prepare_func_boundary_steps(XaotBundle *bundle, const XaotFuncPlan *
             }
             if ((value->op == XI_CALL || value->op == XI_CALL_METHOD ||
                  value->op == XI_CALL_METHOD_DIRECT) &&
-                !prepare_direct_call_boundaries(bundle, func_plan, value))
+                !prepare_direct_call_boundaries(bundle, func_plan, value, facts))
                 return false;
         }
     }
@@ -6037,7 +6028,8 @@ static bool prepare_func_body_plans(XaotBundle *bundle, const XaotFuncPlan *plan
 /* Materialize foreign declarations from executable callsites, never from the
  * mere presence of an extern item.  This is the pruning boundary that keeps
  * unused symbols and dylibs out of generated units. */
-static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func) {
+static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func,
+                                      const XaotBoundaryFunctionCalls *facts) {
     if (!bundle || !func)
         return false;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
@@ -6046,7 +6038,6 @@ static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func) {
             continue;
         for (uint32_t vi = 0; vi < block->nvalues; vi++) {
             const XiValue *call = block->values ? block->values[vi] : NULL;
-            uint16_t first_arg = 0;
             if (!call)
                 continue;
             if ((call->op == XI_CLOSURE_NEW ||
@@ -6060,9 +6051,12 @@ static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func) {
             if (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
                 call->op != XI_CALL_METHOD_DIRECT)
                 continue;
-            XiFunc *target =
-                (XiFunc *) xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
-            (void) first_arg;
+            const XaotBoundaryCallTargets *fact = prepare_call_fact(facts, func, call);
+            if (!fact) {
+                bundle->error_msg = "AOT extern call lacks admitted call facts";
+                return false;
+            }
+            XiFunc *target = (XiFunc *) fact->uncovered_direct;
             if (target && target->is_extern &&
                 !xaot_bundle_register_extern_decl(bundle, target, call->line))
                 return false;
@@ -6200,17 +6194,23 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
         if (!prepare_func_body_plans(bundle, &bundle->func_plans[mi]))
             return false;
     }
+    PrepareCallFacts calls = {0};
+    if (!prepare_call_facts_build(bundle, &calls)) {
+        bundle->error_msg = "failed to admit AOT preparation call facts";
+        return false;
+    }
+    bool prepared = false;
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!bundle->func_plans[mi].reachable)
             continue;
-        if (!prepare_func_extern_decls(bundle, bundle->func_plans[mi].func))
-            return false;
+        if (!prepare_func_extern_decls(bundle, bundle->func_plans[mi].func, &calls.functions[mi]))
+            goto cleanup;
     }
     if (!prepare_extern_c_bindings(bundle))
-        return false;
+        goto cleanup;
     if (!xaot_bundle_sync_transfer_capability_plans(bundle)) {
         bundle->error_msg = "failed to sync AOT transfer capability plan";
-        return false;
+        goto cleanup;
     }
     /* Cross-module value-aggregate calls can only be resolved after every
      * module/function ABI plan exists. Seed their result representation first,
@@ -6220,41 +6220,44 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
         if (!bundle->func_plans[mi].reachable)
             continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
-        if (!prepare_seed_direct_call_aggregate_returns(bundle, func))
-            return false;
-        if (!prepare_seed_direct_call_place_reps(bundle, func))
-            return false;
+        if (!prepare_seed_direct_call_aggregate_returns(bundle, func, &calls.functions[mi]))
+            goto cleanup;
+        if (!prepare_seed_direct_call_place_reps(bundle, func, &calls.functions[mi]))
+            goto cleanup;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!bundle->func_plans[mi].reachable)
             continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_apply_aggregate_value_plans(bundle, func))
-            return false;
+            goto cleanup;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!bundle->func_plans[mi].reachable)
             continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_seed_place_load_aggregate_reps(bundle, func))
-            return false;
+            goto cleanup;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!bundle->func_plans[mi].reachable)
             continue;
         XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
         if (!prepare_apply_aggregate_value_plans(bundle, func))
-            return false;
+            goto cleanup;
     }
     prepare_target_vector_value_plans(bundle);
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!bundle->func_plans[mi].reachable)
             continue;
-        if (!prepare_func_boundary_steps(bundle, &bundle->func_plans[mi]))
-            return false;
+        if (!prepare_func_boundary_steps(bundle, &bundle->func_plans[mi], &calls.functions[mi]))
+            goto cleanup;
     }
 
     if (out_stats)
         *out_stats = bundle->stats;
-    return true;
+    prepared = true;
+cleanup:
+    prepare_call_facts_dispose(&calls);
+    return prepared;
 }

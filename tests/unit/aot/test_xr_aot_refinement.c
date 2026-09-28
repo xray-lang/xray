@@ -2840,6 +2840,38 @@ static void test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed(
             caller = candidate;
     }
     REQUIRE(parameter && caller && callee && place);
+    XrAotScalarRefV1Scope scope = {0};
+    REQUIRE(xr_aot_scalar_ref_v1_parameter_in_scope(&scope, parameter->value) ==
+            XR_AOT_SCALAR_REF_V1_INVALID);
+    REQUIRE(xr_aot_scalar_ref_v1_scope_init(&scope, semantic, target));
+    uint32_t address_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); ++i) {
+        const XrSemanticOperationRecord *op = xr_semantic_plan_operation(semantic, i);
+        if (op && op->opcode == XI_LOCAL_ADDR && op->result_value == argument->semantic_value)
+            address_operation = i;
+    }
+    REQUIRE(address_operation != XR_SEMANTIC_INDEX_NONE);
+    for (uint32_t i = 0; i < 10000; ++i) {
+        REQUIRE(xr_aot_scalar_ref_v1_parameter_in_scope(&scope, parameter->value) ==
+                XR_AOT_SCALAR_REF_V1_EXACT);
+        REQUIRE(xr_aot_scalar_ref_v1_local_addr_in_scope(&scope, address_operation, NULL) ==
+                XR_AOT_SCALAR_REF_V1_EXACT);
+        REQUIRE(xr_aot_scalar_ref_v1_call_use_in_scope(&scope, call->semantic_operation,
+                1, argument->semantic_value) == XR_AOT_SCALAR_REF_V1_EXACT);
+    }
+    scope = (XrAotScalarRefV1Scope) {0};
+    XrFingerprint intact = target->fingerprint;
+    memset(&target->fingerprint, 0, sizeof(target->fingerprint));
+    REQUIRE(!xr_aot_scalar_ref_v1_scope_init(&scope, semantic, target));
+    REQUIRE(!scope.semantic && !scope.target);
+    REQUIRE(xr_aot_scalar_ref_v1_local_addr_in_scope(&scope, address_operation, NULL) ==
+            XR_AOT_SCALAR_REF_V1_INVALID);
+    target->fingerprint = intact;
+    REQUIRE(xr_aot_scalar_ref_v1_scope_init(&scope, semantic, target));
+    REQUIRE(xr_aot_scalar_ref_v1_call_use_in_scope(&scope, call->semantic_operation,
+            1, argument->semantic_value) == XR_AOT_SCALAR_REF_V1_EXACT);
+    scope = (XrAotScalarRefV1Scope) {0};
+
     REQUIRE(parameter->mode == XR_PARAM_REF);
     REQUIRE(argument->call == call->id && argument->ordinal == 0);
     REQUIRE(argument->mode == XR_TARGET_CALL_REFERENCE &&

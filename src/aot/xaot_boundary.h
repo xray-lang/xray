@@ -63,6 +63,7 @@ struct XaotBundle;
 typedef struct XaotBoundaryCallTargets {
     const XiFunc *direct;
     const XiFunc *parameter_target;
+    const XiFunc *uncovered_direct;
     uint16_t first_arg;
     uint16_t first_param;
 } XaotBoundaryCallTargets;

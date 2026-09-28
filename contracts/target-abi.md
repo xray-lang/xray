@@ -1372,19 +1372,19 @@ the compiler core does not download a provider.
 
 anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de082761402165a3c36919
 anchor-sha256: src/aot/xaot_callable.c 8fe3745d0c3e98ea9ad84684c0c647a7a20f46a54486bf7c36f217330887adb3
-anchor-sha256: src/aot/xaot_prepare.c 450a6a387ef4aad2ed27e85d281c06aaa6ff3f184e80f491d6c7b8960e61ed3f
+anchor-sha256: src/aot/xaot_prepare.c ef7a64ad2732b49d1fe54ae7f52a610de266dcecb25db67ce78996d19ae0370e
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c 22a955023d50d374c684299decf272258ff987908dbbf7afc50ad433c4ce98c4
 anchor-sha256: src/aot/xaot_verify.c bae55927291480a94df6a52cef43a5e8c918be9bc5c6a7e04d70488525afa26b
 anchor-sha256: src/aot/refine/xr_aot_refinement.h 5d275c7ba1f9d1bcee80ab1f98cf0507b7ee5a148d9a39119ba2901026da1231
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 70e4123e133582d987dba0c2b1936eb4a65edc0a1898b2079ab11bcd22ba7851
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c d77f571acad3eacab945477286febce3377bcfce7a48bc68a54fe99ffebc590d
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.h 4a5e0dcc2a7cb10707bfeb45d2b5437d4751664edd89854ffeb241311ef766ee
-anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
-anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
+anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h 0a58cfb21092445bdebe6993e001b242b68cc44df3c5f80b9d0ed8f405eb01e5
+anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c 88547909063f5d5a9e67e3531469ee0e2beaf80487e48e32706d7695ab07cd0c
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 0e8279c12aff4420603bcd09f38a70bad449fd27b99c1caa978657fd4bd2d9c3
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 4b97fe55b1b38c7fd0106cdd2be47b9bcd811b9a669457491c54ba1ba00bb152
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 41a5cf5642f64bbc42a9336d3c008fb8fbdf83f07732f40a4e988d44cf5cead7
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 651d80b3dd0aa2cf2036182efac20e73b287310575813eccb2542a8c50dd3934
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 30a871e40895837c1cf4818464ffb7766b9bea5bf1c4d5c73b3816497f16123c
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 650a3f6009010841b462567a86b104c00feb2112cc180905511da4f2f3040dff
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.h e95422b2cf84d1dc5e0a94e542344172e569660196da81ac2a9a79fc7d8123a4
@@ -1437,8 +1437,8 @@ anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 0488c328fc9d2eda313728e80c1eb
 anchor-sha256: src/aot/xrt_provider_abi.h c38c4c8f9bf7893f6d6dbc0b0c518f703d80a2493d2829a07d4f7aa2972b0f44
 anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1bfd9f84613580b3b6b5ece8bfd9eaa4
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
-anchor-sha256: src/aot/xaot_boundary.h 68b659ce8507f314986e3b2f234feab033a5682d4e037dd46406903b695aef84
-anchor-sha256: src/aot/xaot_boundary.c 9f58c653651b4395d0ec34f13eb1e3223ad179d900a06f120023065cb81ab40e
+anchor-sha256: src/aot/xaot_boundary.h 6f365ea3bd326e7754de0228baf5e090d7e2d3323a27228dbff4d88a30b61411
+anchor-sha256: src/aot/xaot_boundary.c 21a505e7940c96b5ab06b45dddda91558e93544c64f825097ab6056c7f41f32c
 anchor-sha256: src/aot/xaot_driver.c c2abf8701a94321beada41f0fe97f8d4ceb25accd0a564a918b58f1a3f88677c
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 2125ba8aabbd72632be8d1cb55a177d68da28e09b93e95f39f934fba6413692f
 
@@ -2389,3 +2389,43 @@ declaration header. Both synchronous and coroutine emission share this include
 owner. These fixes do not qualify all generated-C families or other providers.
 
 verification-test: test_native_stdlib_portability
+
+
+## Traversal-owned preparation call facts
+
+One synchronous preparation traversal may reuse call facts after complete
+TargetPlan content admission. TargetPlan, SemanticPlan and Xi function/value
+identity inputs remain unchanged throughout that traversal; only AOT-owned
+representation and boundary plans may change. Facts are owned scratch storage,
+freed on every exit, never attached to a Program, serialized or cached across
+invocations. Each fresh traversal repeats admission, and independent public
+queries retain their checks. Corrupt authority, out-of-range value identity,
+incomplete tables and allocation failures publish no usable facts.
+
+The uncovered direct callee is distinct from a constructor parameter target.
+Constructor fallback cannot silently seed a direct-call return or ref-place
+representation. Covered leaf/direct families retain their exact existing
+TargetPlan row checks; uncovered status never absorbs invalid authority.
+The change does not alter language syntax, public ABI or execution semantics.
+It reduces repeated preparation work for retained build consumers and does not
+extend their lifetime beyond the final consumer migration and deletion.
+
+anchor-sha256: src/aot/xaot_prepare_calls.inc.c b4d023c762b28cd7d021f90e6ffdd74aba020293ef1ed8edf45898bb0d8b27a0
+
+## Traversal-owned scalar-ref verification scope
+
+Scalar-ref representation verification may admit one immutable SemanticPlan and
+TargetPlan pair for a synchronous traversal. Scope creation verifies the complete
+target content fingerprint and exact semantic partition before publishing the
+borrowed pair. Failure clears the scope and fails the enclosing verifier; it must
+not publish an unrelated or absent fact that permits another representation.
+
+The scope belongs to one verifier invocation. Its inputs cannot mutate during
+that invocation, it owns no executable authority, and it is neither serialized
+nor retained in Program or a global cache. Fresh traversals repeat admission.
+Unscoped queries retain their own content checks. Scoped queries preserve exact
+parameter, local-address, call-use, place-use, slot, ownership, transfer and effect
+checks; nested queries reuse the same admitted pair. This changes no language or
+runtime ABI. Tests must cover repeated and nested queries, empty scope rejection,
+corruption between traversals and precise mismatched claims. The retained scalar
+refinement consumer remains subject to final old-chain deletion.

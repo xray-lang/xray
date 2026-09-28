@@ -376,6 +376,7 @@ static void collect_indices_dispose(CollectContext *ctx) {
 #define XR_AOT_REP_VERIFY_MAX_FUNCTION_DEPTH UINT32_C(1024)
 
 typedef struct VerifyAuthority {
+    XrAotScalarRefV1Scope scalar_ref_scope;
     const XrTargetPlan *target_plan;
     const XrSemanticPlan *semantic;
     XrFingerprint semantic_fingerprint;
@@ -468,7 +469,7 @@ static bool aot_program_function_is_reachable(const VerifyAuthority *ctx, uint32
  * resolver.  It independently joins the verified semantic root to one target
  * partition using stable module facts, then every local value lookup is
  * qualified by that partition. */
-static bool verify_target_scope_init(VerifyAuthority *ctx) {
+static bool verify_target_scope_identity_init(VerifyAuthority *ctx) {
     static const XrStableId zero = {{0}};
     if (!ctx || !xr_target_plan_is_verified(ctx->target_plan) || !ctx->semantic)
         return false;
@@ -534,6 +535,11 @@ static bool verify_target_scope_init(VerifyAuthority *ctx) {
         matches++;
     }
     return matches == 1u;
+}
+
+static bool verify_target_scope_init(VerifyAuthority *ctx) {
+    return verify_target_scope_identity_init(ctx) &&
+        xr_aot_scalar_ref_v1_scope_init(&ctx->scalar_ref_scope, ctx->semantic, ctx->target_plan);
 }
 
 static const XrTargetValueRepRecord *verify_target_value_rep(const VerifyAuthority *ctx,
@@ -8318,7 +8324,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             return true;
         }
         XrAotScalarRefV1Status scalar_ref =
-            xr_aot_scalar_ref_v1_parameter_status(ctx->semantic, ctx->target_plan, semantic_value);
+            xr_aot_scalar_ref_v1_parameter_in_scope(&ctx->scalar_ref_scope, semantic_value);
         if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
             return false;
         if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
@@ -8453,8 +8459,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 return true;
             break;
         case XI_LOCAL_ADDR: {
-            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_local_addr_status(
-                ctx->semantic, ctx->target_plan, operation_index, NULL);
+            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_local_addr_in_scope(&ctx->scalar_ref_scope, operation_index, NULL);
             if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
                 return false;
             if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
@@ -9467,8 +9472,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             if (operand_index != 0 || source_value >= ctx->value_count)
                 return false;
             {
-                XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_place_use_status(
-                    ctx->semantic, ctx->target_plan, operation_index, operand_index, source_value);
+                XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_place_use_in_scope(&ctx->scalar_ref_scope, operation_index, operand_index, source_value);
                 if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
                     return false;
                 if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
@@ -9518,8 +9522,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_PLACE_STORE: {
             const XrSemanticOperandRecord *place = NULL;
             const XrSemanticOperandRecord *stored = NULL;
-            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_place_use_status(
-                ctx->semantic, ctx->target_plan, operation_index, operand_index, source_value);
+            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_place_use_in_scope(&ctx->scalar_ref_scope, operation_index, operand_index, source_value);
             if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
                 return false;
             if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
@@ -9537,8 +9540,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return false;
             {
                 uint32_t scalar_ref_source = XR_SEMANTIC_INDEX_NONE;
-                XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_local_addr_status(
-                    ctx->semantic, ctx->target_plan, operation_index, &scalar_ref_source);
+                XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_local_addr_in_scope(&ctx->scalar_ref_scope, operation_index, &scalar_ref_source);
                 if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID ||
                     (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT && scalar_ref_source != source_value))
                     return false;
@@ -9791,8 +9793,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return oracle_native_direct_argument_storage(ctx, operation_index, operand_index,
                                                              source_value, out_storage);
             }
-            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_call_use_status(
-                ctx->semantic, ctx->target_plan, operation_index, operand_index, source_value);
+            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_call_use_in_scope(&ctx->scalar_ref_scope, operation_index, operand_index, source_value);
             if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
                 return false;
             if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
@@ -10890,6 +10891,7 @@ static bool authority_collect_obligations(CollectContext *ctx) {
         .layout_by_type = ctx->layout_by_type,
     };
     bool valid =
+        xr_aot_scalar_ref_v1_scope_init(&oracle.scalar_ref_scope, oracle.semantic, oracle.target_plan) &&
         aot_program_reachability_init(&oracle) && aot_index_direct_local_callee_values(&oracle) &&
         aot_index_direct_local_go_callee_values(&oracle) &&
         aot_index_source_namespace_values(&oracle) &&

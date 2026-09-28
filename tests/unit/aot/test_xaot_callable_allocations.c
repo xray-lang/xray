@@ -115,7 +115,8 @@ static void test_imported_constructor_binding(void) {
     XaotBoundaryCallTargets targets[2];
     REQUIRE(xaot_boundary_resolve_function_calls(&bundle, &caller, targets, 2));
     REQUIRE(targets[1].direct == &constructor && targets[1].parameter_target == &constructor &&
-            targets[1].first_arg == 1 && targets[1].first_param == 1);
+            targets[1].first_arg == 1 && targets[1].first_param == 1 &&
+            targets[1].uncovered_direct == NULL);
     import.member_name = "Missing";
     REQUIRE(xaot_boundary_resolve_function_calls(&bundle, &caller, targets, 2));
     REQUIRE(targets[1].direct == NULL && targets[1].parameter_target == NULL);
@@ -160,7 +161,8 @@ int main(void) {
     REQUIRE(root->next_value_id <= XR_COUNTOF(targets));
     REQUIRE(xaot_boundary_resolve_function_calls(&bundle, root, targets, XR_COUNTOF(targets)));
     REQUIRE(targets[call->id].direct == callee && targets[call->id].parameter_target == callee &&
-            targets[call->id].first_arg == 1 && targets[call->id].first_param == 0);
+            targets[call->id].first_arg == 1 && targets[call->id].first_param == 0 &&
+            targets[call->id].uncovered_direct == callee);
     closure->aux = root;
     REQUIRE(xaot_boundary_resolve_function_calls(&bundle, root, targets, XR_COUNTOF(targets)));
     REQUIRE(targets[call->id].direct == root && targets[call->id].parameter_target == root);

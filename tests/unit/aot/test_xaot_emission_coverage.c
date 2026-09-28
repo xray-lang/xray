@@ -56,9 +56,10 @@ static bool counted_fingerprint(const XrTargetPlan *plan) {
 
 static size_t allocation_attempts, live_allocations;
 static bool fail_allocation;
+static size_t fail_allocation_at = SIZE_MAX;
 static void *coverage_calloc(size_t count, size_t size) {
-    allocation_attempts++;
-    if (fail_allocation)
+    size_t attempt = allocation_attempts++;
+    if (fail_allocation || attempt == fail_allocation_at)
         return NULL;
     void *pointer = xr_calloc(count, size);
     if (pointer)
@@ -79,11 +80,68 @@ static void coverage_free(void *pointer) {
 #define xr_calloc coverage_calloc
 #define xr_free coverage_free
 #include "../../../src/aot/xi_cgen_emission_coverage.inc.c"
+#include "../../../src/aot/xaot_prepare_calls.inc.c"
 #undef xr_calloc
 #undef xr_free
 
 static XrType integer = {.kind = XR_KIND_INT, .id = 29001,
                          .scalar_rep = XR_NATIVE_I64, .frozen = true};
+
+static void test_preparation_facts(XaotBundle *bundle, XiFunc *root, XrTargetPlan *target) {
+    XiFunc callee = {0};
+    XiValue closure = {.op = XI_CLOSURE_NEW, .aux = &callee};
+    XiValue *arguments[] = {&closure};
+    XiValue call = {.op = XI_CALL, .id = 1, .nargs = 1, .args = arguments};
+    XiValue *values[] = {&call};
+    XiBlock block = {.values = values, .nvalues = 1};
+    XiBlock *blocks[] = {&block};
+    XiFunc caller = {.blocks = blocks, .nblocks = 1, .next_value_id = 2};
+    bundle->func_plans[0].func = &caller;
+    bundle->func_plans[0].reachable = true;
+    PrepareCallFacts facts = {0};
+    fingerprint_checks = 0;
+    REQUIRE(prepare_call_facts_build(bundle, &facts));
+    REQUIRE(fingerprint_checks == 1 && facts.count == 2 && live_allocations == 2);
+    const XaotBoundaryCallTargets *fact = prepare_call_fact(&facts.functions[0], &caller, &call);
+    REQUIRE(fact && fact->uncovered_direct == &callee && fact->first_arg == 1);
+    for (uint32_t i = 0; i < 10000; ++i)
+        REQUIRE(prepare_call_fact(&facts.functions[0], &caller, &call) == fact);
+    REQUIRE(fingerprint_checks == 1);
+    REQUIRE(!prepare_call_fact(&facts.functions[0], root, &call));
+    prepare_call_facts_dispose(&facts);
+    REQUIRE(!facts.functions && !facts.targets && !facts.count && !live_allocations);
+
+    closure.aux = root;
+    REQUIRE(prepare_call_facts_build(bundle, &facts));
+    REQUIRE(fingerprint_checks == 2);
+    REQUIRE(prepare_call_fact(&facts.functions[0], &caller, &call)->uncovered_direct == root);
+    prepare_call_facts_dispose(&facts);
+    target->fingerprint.bytes[0] ^= 1;
+    REQUIRE(!prepare_call_facts_build(bundle, &facts));
+    REQUIRE(!facts.functions && !facts.targets && !facts.count && !live_allocations);
+    target->fingerprint.bytes[0] ^= 1;
+    call.id = 2;
+    REQUIRE(!prepare_call_facts_build(bundle, &facts));
+    REQUIRE(!facts.functions && !facts.targets && !facts.count && !live_allocations);
+    call.id = 1;
+    for (size_t offset = 0; offset < 2; ++offset) {
+        fail_allocation_at = allocation_attempts + offset;
+        REQUIRE(!prepare_call_facts_build(bundle, &facts));
+        REQUIRE(!facts.functions && !facts.targets && !facts.count && !live_allocations);
+    }
+    fail_allocation_at = SIZE_MAX;
+    caller.next_value_id = UINT32_MAX;
+    size_t attempts = allocation_attempts;
+    REQUIRE(!prepare_call_facts_build(bundle, &facts));
+    REQUIRE(attempts == allocation_attempts && !live_allocations);
+    caller.next_value_id = 2;
+    REQUIRE(prepare_call_facts_build(bundle, &facts));
+    prepare_call_facts_dispose(&facts);
+    REQUIRE(!live_allocations);
+    bundle->func_plans[0].func = root;
+    bundle->func_plans[0].reachable = false;
+    puts("PASS: preparation facts, fresh identity, corrupt authority, bounds and both OOM sites");
+}
 
 int main(void) {
     char error[512] = {0};
@@ -166,6 +224,8 @@ int main(void) {
     REQUIRE(cg_emission_coverage_build(&bundle, &coverage));
     cg_emission_coverage_dispose(&coverage);
     REQUIRE(!live_allocations);
+
+    test_preparation_facts(&bundle, root, target);
 
     xr_target_plan_free(target);
     xr_target_profile_free(profile);

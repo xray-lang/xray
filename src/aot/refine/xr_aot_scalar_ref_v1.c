@@ -77,6 +77,17 @@ static bool authority_scope_is_intact(const XrSemanticPlan *semantic, const XrTa
            xr_target_plan_program_module(target, partition) == semantic;
 }
 
+XR_FUNC bool xr_aot_scalar_ref_v1_scope_init(XrAotScalarRefV1Scope *scope,
+    const XrSemanticPlan *semantic, const XrTargetPlan *target) {
+    if (!scope)
+        return false;
+    *scope = (XrAotScalarRefV1Scope) {0};
+    if (!authority_scope_is_intact(semantic, target))
+        return false;
+    *scope = (XrAotScalarRefV1Scope) {semantic, target};
+    return true;
+}
+
 static const XrTargetValueRepRecord *
 scoped_value_binding(const XrSemanticPlan *semantic, const XrTargetPlan *target, uint32_t value) {
     uint32_t partition = UINT32_MAX;
@@ -398,11 +409,12 @@ static bool parameter_calls_are_exact(const XrSemanticPlan *semantic,
     return matches != 0;
 }
 
-XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_parameter_status(
-    const XrSemanticPlan *semantic, const XrTargetPlan *target,
-    uint32_t semantic_value) {
-    if (!authority_scope_is_intact(semantic, target))
-        return XR_AOT_SCALAR_REF_V1_UNRELATED;
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_parameter_in_scope(
+    const XrAotScalarRefV1Scope *scope, uint32_t semantic_value) {
+    if (!scope || !scope->semantic || !scope->target)
+        return XR_AOT_SCALAR_REF_V1_INVALID;
+    const XrSemanticPlan *semantic = scope->semantic;
+    const XrTargetPlan *target = scope->target;
     uint32_t parameter_index = XR_SEMANTIC_INDEX_NONE;
     const XrSemanticParameterRecord *parameter =
         parameter_for_value(semantic, semantic_value, &parameter_index);
@@ -414,11 +426,12 @@ XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_parameter_status(
                : XR_AOT_SCALAR_REF_V1_INVALID;
 }
 
-XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_call_use_status(
-    const XrSemanticPlan *semantic, const XrTargetPlan *target,
-    uint32_t operation_index, uint16_t operand_index, uint32_t source_value) {
-    if (!authority_scope_is_intact(semantic, target))
-        return XR_AOT_SCALAR_REF_V1_UNRELATED;
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_call_use_in_scope(
+    const XrAotScalarRefV1Scope *scope, uint32_t operation_index, uint16_t operand_index, uint32_t source_value) {
+    if (!scope || !scope->semantic || !scope->target)
+        return XR_AOT_SCALAR_REF_V1_INVALID;
+    const XrSemanticPlan *semantic = scope->semantic;
+    const XrTargetPlan *target = scope->target;
     ScalarRefClaim claim = {0};
     XrAotScalarRefV1Status status =
         semantic_claim(semantic, operation_index, operand_index, source_value,
@@ -430,13 +443,14 @@ XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_call_use_status(
                      : XR_AOT_SCALAR_REF_V1_INVALID;
 }
 
-XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_local_addr_status(
-    const XrSemanticPlan *semantic, const XrTargetPlan *target,
-    uint32_t operation_index, uint32_t *source_value) {
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_local_addr_in_scope(
+    const XrAotScalarRefV1Scope *scope, uint32_t operation_index, uint32_t *source_value) {
     if (source_value)
         *source_value = XR_SEMANTIC_INDEX_NONE;
-    if (!authority_scope_is_intact(semantic, target))
-        return XR_AOT_SCALAR_REF_V1_UNRELATED;
+    if (!scope || !scope->semantic || !scope->target)
+        return XR_AOT_SCALAR_REF_V1_INVALID;
+    const XrSemanticPlan *semantic = scope->semantic;
+    const XrTargetPlan *target = scope->target;
     const XrSemanticOperationRecord *address =
         xr_semantic_plan_operation(semantic, operation_index);
     uint32_t operand_count = 0;
@@ -459,8 +473,8 @@ XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_local_addr_status(
             if (operands[call->operand_begin + operand].value !=
                 address->result_value)
                 continue;
-            XrAotScalarRefV1Status status = xr_aot_scalar_ref_v1_call_use_status(
-                semantic, target, i, operand, address->result_value);
+            XrAotScalarRefV1Status status = xr_aot_scalar_ref_v1_call_use_in_scope(
+                scope, i, operand, address->result_value);
             if (status == XR_AOT_SCALAR_REF_V1_INVALID)
                 return status;
             if (status == XR_AOT_SCALAR_REF_V1_EXACT)
@@ -474,11 +488,12 @@ XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_local_addr_status(
     return XR_AOT_SCALAR_REF_V1_EXACT;
 }
 
-XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_place_use_status(
-    const XrSemanticPlan *semantic, const XrTargetPlan *target,
-    uint32_t operation_index, uint16_t operand_index, uint32_t source_value) {
-    if (!authority_scope_is_intact(semantic, target))
-        return XR_AOT_SCALAR_REF_V1_UNRELATED;
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_place_use_in_scope(
+    const XrAotScalarRefV1Scope *scope, uint32_t operation_index, uint16_t operand_index, uint32_t source_value) {
+    if (!scope || !scope->semantic || !scope->target)
+        return XR_AOT_SCALAR_REF_V1_INVALID;
+    const XrSemanticPlan *semantic = scope->semantic;
+    const XrTargetPlan *target = scope->target;
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(semantic, operation_index);
     uint32_t operand_count = 0;
@@ -512,8 +527,8 @@ XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_place_use_status(
         owner_type = parameter->type;
         owner_function = parameter->function;
     } else if (address && address->opcode == XI_LOCAL_ADDR) {
-        owner = xr_aot_scalar_ref_v1_local_addr_status(
-            semantic, target, address_index, NULL);
+        owner = xr_aot_scalar_ref_v1_local_addr_in_scope(
+            scope, address_index, NULL);
         owner_type = address->result_type;
         owner_function = address->function;
     }
@@ -560,4 +575,38 @@ XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_place_use_status(
         operand_index == 0 ? place->value : (place + 1)->value;
     return source_value == expected ? XR_AOT_SCALAR_REF_V1_EXACT
                                     : XR_AOT_SCALAR_REF_V1_INVALID;
+}
+
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_parameter_status(
+    const XrSemanticPlan *semantic, const XrTargetPlan *target, uint32_t semantic_value) {
+    XrAotScalarRefV1Scope scope = {0};
+    return xr_aot_scalar_ref_v1_scope_init(&scope, semantic, target)
+        ? xr_aot_scalar_ref_v1_parameter_in_scope(&scope, semantic_value)
+        : XR_AOT_SCALAR_REF_V1_UNRELATED;
+}
+
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_local_addr_status(
+    const XrSemanticPlan *semantic, const XrTargetPlan *target, uint32_t operation_index, uint32_t *source_value) {
+    if (source_value)
+        *source_value = XR_SEMANTIC_INDEX_NONE;
+    XrAotScalarRefV1Scope scope = {0};
+    return xr_aot_scalar_ref_v1_scope_init(&scope, semantic, target)
+        ? xr_aot_scalar_ref_v1_local_addr_in_scope(&scope, operation_index, source_value)
+        : XR_AOT_SCALAR_REF_V1_UNRELATED;
+}
+
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_place_use_status(
+    const XrSemanticPlan *semantic, const XrTargetPlan *target, uint32_t operation_index, uint16_t operand_index, uint32_t source_value) {
+    XrAotScalarRefV1Scope scope = {0};
+    return xr_aot_scalar_ref_v1_scope_init(&scope, semantic, target)
+        ? xr_aot_scalar_ref_v1_place_use_in_scope(&scope, operation_index, operand_index, source_value)
+        : XR_AOT_SCALAR_REF_V1_UNRELATED;
+}
+
+XR_FUNC XrAotScalarRefV1Status xr_aot_scalar_ref_v1_call_use_status(
+    const XrSemanticPlan *semantic, const XrTargetPlan *target, uint32_t operation_index, uint16_t operand_index, uint32_t source_value) {
+    XrAotScalarRefV1Scope scope = {0};
+    return xr_aot_scalar_ref_v1_scope_init(&scope, semantic, target)
+        ? xr_aot_scalar_ref_v1_call_use_in_scope(&scope, operation_index, operand_index, source_value)
+        : XR_AOT_SCALAR_REF_V1_UNRELATED;
 }

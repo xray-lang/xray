@@ -503,8 +503,8 @@ anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd4706068
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 39c2cbedd4bc84650f6faa2e098f93ea67a2389bf74ba54909ed3fc5871d0736
 anchor-sha256: tests/unit/CMakeLists.txt f4578972ac4127fdf562d90b656faed234dc12733fc7d3d1532ee949965cedc7
-anchor-sha256: src/aot/xaot_boundary.h 68b659ce8507f314986e3b2f234feab033a5682d4e037dd46406903b695aef84
-anchor-sha256: src/aot/xaot_boundary.c 9f58c653651b4395d0ec34f13eb1e3223ad179d900a06f120023065cb81ab40e
+anchor-sha256: src/aot/xaot_boundary.h 6f365ea3bd326e7754de0228baf5e090d7e2d3323a27228dbff4d88a30b61411
+anchor-sha256: src/aot/xaot_boundary.c 21a505e7940c96b5ab06b45dddda91558e93544c64f825097ab6056c7f41f32c
 anchor-sha256: src/aot/xaot_bundle.c 22a955023d50d374c684299decf272258ff987908dbbf7afc50ad433c4ce98c4
 
 Imported static methods bind a SOURCE_STATIC_METHOD_DEPENDENCY target. The
@@ -549,3 +549,25 @@ and accepted generic/comparison grammar; it adds no PSC or execution authority.
 
 verification-test: test_parser_recoverable
 verification-test: test_parser
+
+
+## Traversal-owned preparation call facts
+
+One synchronous preparation traversal may reuse call facts after complete
+TargetPlan content admission. TargetPlan, SemanticPlan and Xi function/value
+identity inputs remain unchanged throughout that traversal; only AOT-owned
+representation and boundary plans may change. Facts are owned scratch storage,
+freed on every exit, never attached to a Program, serialized or cached across
+invocations. Each fresh traversal repeats admission, and independent public
+queries retain their checks. Corrupt authority, out-of-range value identity,
+incomplete tables and allocation failures publish no usable facts.
+
+The uncovered direct callee is distinct from a constructor parameter target.
+Constructor fallback cannot silently seed a direct-call return or ref-place
+representation. Covered leaf/direct families retain their exact existing
+TargetPlan row checks; uncovered status never absorbs invalid authority.
+The change does not alter language syntax, public ABI or execution semantics.
+It reduces repeated preparation work for retained build consumers and does not
+extend their lifetime beyond the final consumer migration and deletion.
+
+anchor-sha256: src/aot/xaot_prepare_calls.inc.c b4d023c762b28cd7d021f90e6ffdd74aba020293ef1ed8edf45898bb0d8b27a0

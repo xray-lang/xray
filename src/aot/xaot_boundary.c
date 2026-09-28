@@ -1659,8 +1659,9 @@ static bool resolve_function_calls(const BoundaryCallAdmission *admission,
                     goto invalid;
                 call->direct = view.callee;
             } else {
-                call->parameter_target =
+                call->uncovered_direct =
                     resolve_uncovered_direct_call(bundle, function, value, &call->first_arg);
+                call->parameter_target = call->uncovered_direct;
             }
             if (!call->parameter_target)
                 call->parameter_target = xaot_boundary_resolve_constructor_call_target(

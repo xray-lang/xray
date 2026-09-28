@@ -146,6 +146,7 @@ CONTRACT_SPECS = (
     ContractSpec(
         "target-abi.md",
         (
+            "src/aot/xaot_prepare_calls.inc.c",
             "src/aot/xaot_link.c",
             "src/aot/xaot_boundary.h",
             "src/aot/xaot_boundary.c",
@@ -384,6 +385,7 @@ CONTRACT_SPECS = (
     ContractSpec(
         "program-semantic-closure.md",
         (
+            "src/aot/xaot_prepare_calls.inc.c",
             "CMakeLists.txt",
             "src/module/xmodule_identity.h",
             "src/module/xmodule_identity_view.c",
