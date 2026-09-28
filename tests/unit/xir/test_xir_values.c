@@ -401,7 +401,54 @@ static void string_queries(void) {
     CHECK(xr_xir_string_length(&b, &length) == XR_XIR_VALUE_OK && length == 4);
     xr_xir_value_drop(&b); xr_xir_value_drop(&prefix); xr_xir_value_drop(&empty); xr_xir_value_drop(&different);
 }
+static void string_predicates(void) {
+    static const struct { const char *text, *pattern; size_t text_length, pattern_length;
+        bool contains, starts, ends; } cases[] = {
+        {"", "", 0, 0, true, true, true},
+        {"", "a", 0, 1, false, false, false},
+        {"abc", "", 3, 0, true, true, true},
+        {"abc", "abc", 3, 3, true, true, true},
+        {"abc", "abcd", 3, 4, false, false, false},
+        {"abc", "b", 3, 1, true, false, false},
+        {"a\0b", "a\0", 3, 2, true, true, false},
+        {"a\0b", "\0b", 3, 2, true, false, true},
+        {"a\0b", "a\0c", 3, 3, false, false, false},
+        {"\xE4\xB8\xAD\xF0\x9F\x98\x80", "\xF0\x9F\x98\x80", 7, 4, true, false, true},
+        {"e\xCC\x81", "\xC3\xA9", 3, 2, false, false, false},
+        {"xxabcdefghijklmnop", "abcdefghijklmnop", 18, 16, true, false, true},
+        {"xxabcdefghijklmnoq", "abcdefghijklmnop", 18, 16, false, false, false},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        XrXirDomain *domain = NULL;
+        CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+        XrXirValue text = {0}, pattern = {0}, copy = {0};
+        CHECK(xr_xir_string_new(domain, cases[i].text, cases[i].text_length, &text) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_new(domain, cases[i].pattern, cases[i].pattern_length, &pattern) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_value_copy(&text, &copy) == XR_XIR_VALUE_OK);
+        XrXirDomainStats before = xr_xir_domain_stats(domain); bool result;
+        CHECK(xr_xir_string_contains(&text, &pattern, &result) && result == cases[i].contains);
+        CHECK(xr_xir_string_starts_with(&text, &pattern, &result) && result == cases[i].starts);
+        CHECK(xr_xir_string_ends_with(&text, &pattern, &result) && result == cases[i].ends);
+        CHECK(xr_xir_string_contains(&text, &copy, &result) && result);
+        XrXirValue invalid = {0}; result = true;
+        CHECK(!xr_xir_string_contains(&invalid, &pattern, &result) && result);
+        CHECK(!xr_xir_string_starts_with(&text, &invalid, &result) && result);
+        CHECK(!xr_xir_string_ends_with(&invalid, &pattern, &result) && result);
+        CHECK(!xr_xir_string_contains(&text, &pattern, NULL));
+        CHECK(!xr_xir_string_starts_with(&text, &pattern, NULL));
+        CHECK(!xr_xir_string_ends_with(&text, &pattern, NULL));
+        XrXirDomainStats after = xr_xir_domain_stats(domain);
+        CHECK(before.live_bytes == after.live_bytes && before.allocations == after.allocations &&
+            before.frees == after.frees && before.reallocations == after.reallocations);
+        xr_xir_domain_drop(domain); xr_xir_value_drop(&text);
+        CHECK(xr_xir_string_contains(&copy, &pattern, &result) && result == cases[i].contains);
+        CHECK(xr_xir_string_starts_with(&copy, &pattern, &result) && result == cases[i].starts);
+        CHECK(xr_xir_string_ends_with(&copy, &pattern, &result) && result == cases[i].ends);
+        xr_xir_value_drop(&copy); xr_xir_value_drop(&pattern);
+    }
+}
 int main(void) {
+    string_predicates();
     string_queries();
     struct_value_cases();
     nominal_arena_ownership();

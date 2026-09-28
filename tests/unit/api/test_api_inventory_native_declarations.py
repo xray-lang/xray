@@ -78,15 +78,55 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual("(fn: fn(item: T, index: i64) -> U): Array<U>", actual["map"]["signature"])
         self.assertEqual("(value: T, start?: i64, end?: i64): Array<T>", actual["fill"]["signature"])
 
+    def test_string_identity_contracts_and_member_completeness(self) -> None:
+        path = ROOT / "stdlib/types/string.xr"
+        source = path.read_text(encoding="utf-8")
+        header, members = declarations.parse_source(source, self.prelude)
+        entries = [entry for entry in inventory.collect_native_types(ROOT) if entry["namespace"] == "string"]
+        self.assertEqual(len(entries), 20)
+        declaration = next(entry for entry in entries if entry["kind"] == "type")
+        self.assertEqual(declaration["signature"], "string")
+        self.assertEqual(declaration["native_type_id"], 2)
+        self.assertEqual(declaration["declaration_kind"], "struct")
+        actual = {entry["name"]: entry for entry in entries if entry["kind"] != "type"}
+        self.assertEqual(set(actual), {member.name for member in members})
+        for index, member in enumerate(members, 1):
+            entry = actual[member.name]
+            self.assertEqual(entry["native_type_id"], 2)
+            self.assertEqual(entry["native_member_id"], index)
+            self.assertEqual(entry["line"], member.line)
+            self.assertEqual(entry["column"], member.column)
+            self.assertEqual(entry["source"], "stdlib/types/string.xr")
+            self.assertEqual(entry["operation"], member.operation)
+            self.assertEqual(entry["xir_admitted"], member.name in {"contains", "startsWith", "endsWith"})
+            if entry["xir_admitted"]:
+                self.assertEqual(entry["allocation"], "no_heap")
+                self.assertEqual(entry["failures"], [])
+                self.assertEqual(entry["ownership"], "owned")
+        with self.assertRaises(ValueError):
+            inventory.collect_native_declaration(ROOT, path,
+                source.replace("contains(search: string)", "contains(search: i64)"), "stdlib", "string")
+
+    def test_native_identity_rejects_relocated_declarations(self) -> None:
+        with self.assertRaises(ValueError):
+            inventory.collect_native_declaration(ROOT, self.path.with_name("imposter.xr"),
+                self.source, "stdlib", "array")
+        string_path = ROOT / "stdlib/types/string.xr"
+        with self.assertRaises(ValueError):
+            inventory.collect_native_declaration(ROOT, string_path.with_name("imposter.xr"),
+                string_path.read_text(encoding="utf-8"), "stdlib", "string")
+
     def test_collector_uses_shared_parser_and_rejects_invalid_admission(self) -> None:
         with patch.object(declarations, "parse_source", wraps=declarations.parse_source) as parse:
             inventory.collect_native_types(ROOT)
-        parse.assert_called_once_with(self.source, self.prelude)
+        self.assertEqual(parse.call_count, 2)
+        parse.assert_any_call(self.source, self.prelude)
+        parse.assert_any_call((ROOT / "stdlib/types/string.xr").read_text(encoding="utf-8"), self.prelude)
         for source in (self.source.replace("struct Array", "class Array"),
                        self.source.replace("get(index: i64)", "get(index: i32)"),
                        self.source.replace("ARRAY_PUSH", "UNKNOWN_OP")):
             with self.subTest(source=source[:80]), self.assertRaises(ValueError):
-                inventory.collect_native_array(ROOT, self.path, source, "stdlib", "array")
+                inventory.collect_native_declaration(ROOT, self.path, source, "stdlib", "array")
 
 
 if __name__ == "__main__":

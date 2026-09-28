@@ -109,6 +109,39 @@ TEST(native_array_value_declaration_is_shared) {
     ASSERT_FALSE(xr_native_declaration_validate(&mutation));
 }
 
+TEST(native_string_value_declaration_is_shared) {
+    const XrNativeTypeDeclaration *declaration = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
+    ASSERT_NOT_NULL(declaration);
+    ASSERT_TRUE(xr_native_declaration_validate(declaration));
+    ASSERT_EQ_INT(declaration->parameter_count, 0);
+    const XaBuiltinType *string = xa_builtin_get_by_name("string");
+    ASSERT_NOT_NULL(string);
+    ASSERT_EQ_INT(string->declaration_kind, XR_NATIVE_DECLARATION_VALUE);
+    ASSERT_EQ_INT(string->member_count, declaration->member_count);
+    const char *names[] = {"contains", "startsWith", "endsWith"};
+    for (unsigned i = 0; i < 3; ++i) {
+        const XrNativeMemberDeclaration *source = xr_native_declaration_member(declaration, names[i]);
+        const XaBuiltinMember *member = find_type_member("string", names[i]);
+        ASSERT_NOT_NULL(source); ASSERT_NOT_NULL(member);
+        ASSERT_EQ_INT(source->result, XR_NATIVE_TERM_BOOL);
+        ASSERT_EQ_INT(source->parameters[0].type, XR_NATIVE_TERM_STRING);
+        ASSERT_EQ_INT(member->allocation_contract, XA_ALLOCATION_CONTRACT_NO_HEAP);
+        ASSERT_EQ_INT(member->return_ownership, XA_BUILTIN_RETURN_UNKNOWN);
+        ASSERT_STR_EQ(member->signature, source->signature);
+    }
+    XrNativeTypeDeclaration mutation = *declaration;
+    mutation.parameter_count = 1;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration; mutation.line++;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration; mutation.id = UINT32_MAX;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    XrNativeMemberDeclaration members[64];
+    memcpy(members, declaration->members, declaration->member_count * sizeof(*members));
+    mutation = *declaration; mutation.members = members; members[0].column++;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+}
+
 TEST(native_receiver_alias_contracts_are_typed_data) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);

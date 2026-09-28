@@ -1,23 +1,17 @@
-// Built-in string type — implementation in src/runtime/object/xstring_methods.c
-//
-// Most methods declared here exist in the VM method table
-// (xstring_methods.c) with matching semantics. Compiler-lowered view
-// constructors such as bytes() may bypass the bound-method table to preserve
-// zero-allocation value semantics. Methods also supported by the AOT dispatch
-// (src/aot/xrt_method.h + xi_method_sym.def) compile to native code, while
-// VM-only methods fail AOT codegen with an explicit "unsupported AOT method"
-// error (never a silent null).
+// Governed immutable string value declaration.
 enum Utf8Error {
     InvalidUtf8
 }
 enum StringSliceError {
     InvalidByteRange
 }
-class string {
+// @native-type id=2
+struct string {
     static fromUtf8(bytes: Slice<u8>) -> string
     static fromUtf8Lossy(bytes: Slice<u8>) -> string
     static fromRune(value: rune) -> string
     static join(parts: Array<string>, separator?: string) -> string
+    // @native-operation STRING_CONTAINS allocation=no_heap failures=none ownership=owned
     contains(search: string) -> bool
     indexOf(search: string, start?: i64) -> i64
     lastIndexOf(search: string) -> i64
@@ -28,7 +22,9 @@ class string {
     replace(search: string, replacement: string) -> string
     replaceAll(search: string, replacement: string) -> string
     repeat(count: i64) -> string
+    // @native-operation STRING_STARTS_WITH allocation=no_heap failures=none ownership=owned
     startsWith(search: string) -> bool
+    // @native-operation STRING_ENDS_WITH allocation=no_heap failures=none ownership=owned
     endsWith(search: string) -> bool
     // Owned UTF-8 byte bridge.
     copyBytes() -> Array<u8>

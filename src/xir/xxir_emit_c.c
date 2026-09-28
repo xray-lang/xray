@@ -592,6 +592,15 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                "            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
                "{XR_XIR_I64, 0, status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT}, {0}}; }\n");
         break;
+    case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:
+        append(buffer, "        { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        bool result = false; if (!%s(&left, &right, &result)) goto limit;\n"
+            "        xr_xir_scalar_store(state->frame, %uu, result); }\n",
+            layout->offsets[op->args[0]], layout->offsets[op->args[1]],
+            op->op == XR_XIR_STRING_CONTAINS ? "xr_xir_string_contains" :
+            op->op == XR_XIR_STRING_STARTS_WITH ? "xr_xir_string_starts_with" : "xr_xir_string_ends_with", destination);
+        break;
     case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING:
         append(buffer, "        { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             "        int64_t result = 0; XrXirValueStatus status;\n", layout->offsets[op->args[0]]);

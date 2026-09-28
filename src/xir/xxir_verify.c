@@ -641,7 +641,9 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (!xr_xir_type_is_cell(context->module->types, expected)) return XR_XIR_BAD_TYPE;
         }
         if (op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_STRING_LEN ||
-            op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING) expected = XR_XIR_STRING;
+            op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
+            op->op == XR_XIR_STRING_CONTAINS || op->op == XR_XIR_STRING_STARTS_WITH ||
+            op->op == XR_XIR_STRING_ENDS_WITH) expected = XR_XIR_STRING;
         if (op->op == XR_XIR_ATOMIC_I64_LOAD || op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
             expected = XR_XIR_ATOMIC_I64;
         if (local_write(op->op)) {

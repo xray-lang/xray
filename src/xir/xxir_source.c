@@ -89,6 +89,7 @@ typedef struct SourceContext {
     XrXirSourceView query;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
     uint32_t query_module_capacity, array_module, array_declaration, array_members[4], length_declaration;
+    uint32_t string_module, string_declaration, string_members[3];
 } SourceContext;
 
 static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, const char *message) {
@@ -613,6 +614,7 @@ static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
     *substitution = arguments.substitution; return true;
 }
 #include "xxir_source_array.inc.c"
+#include "xxir_source_string.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
@@ -670,6 +672,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             if (!expression(ctx, member->object, &receiver)) return false;
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
+            if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
             if (xr_xir_type_is_nominal(&ctx->types, receiver.type)) {
                 SourceName *member_method = source_method_find(ctx, receiver.type, member->name);
                 if (member_method) return source_method_call(ctx, node, receiver, member_method, value);

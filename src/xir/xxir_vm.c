@@ -341,6 +341,17 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return value_run_status(status);
     }
+    case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: {
+        XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+        bool result = false;
+        bool valid = op->op == XR_XIR_STRING_CONTAINS ? xr_xir_string_contains(&left, &right, &result) :
+            op->op == XR_XIR_STRING_STARTS_WITH ? xr_xir_string_starts_with(&left, &right, &result) :
+            xr_xir_string_ends_with(&left, &right, &result);
+        if (valid) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
+        state->instruction = next;
+        return value_run_status(valid ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT);
+    }
     case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: {
         XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         int64_t result = 0;

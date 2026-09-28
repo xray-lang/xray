@@ -113,3 +113,13 @@ The independent scalar KAT uses a 121-byte payload and digest
 Rehashed string-query records must revalidate result/operand types, dominance,
 zero unused fields and immediate; scalar result types never permit treating
 string operands as integer payloads.
+
+Semantic contract 25 admits STRING_CONTAINS=81, STRING_STARTS_WITH=82 and
+STRING_ENDS_WITH=83. Each has two string operands, one bool result and zero
+unused fields. Schema 8 and the 32-byte instruction record remain unchanged.
+Semantic 24 rejects even after digest repair. The independent 121-byte scalar
+fixture digest is
+`0432aecd7c074ba0883c93aefc7d45439b986662aba9fc513d4b8c0a744b8340`.
+Queries do not allocate or alter input ownership; runtime evaluation preserves
+receiver snapshots across argument effects and suspension. Declaration names
+do not grant authority without canonical native identity and exact types.

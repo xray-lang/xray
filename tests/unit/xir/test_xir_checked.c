@@ -125,7 +125,8 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 24 && XR_XIR_OP_COUNT == 81, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 25 && XR_XIR_OP_COUNT == 84, "packet revision");
+    _Static_assert(XR_XIR_STRING_CONTAINS == 81 && XR_XIR_STRING_STARTS_WITH == 82 && XR_XIR_STRING_ENDS_WITH == 83, "string predicate wire operations");
     _Static_assert(XR_XIR_STRING_LEN == 78 && XR_XIR_EQ_STRING == 79 && XR_XIR_NE_STRING == 80, "string query wire operations");
     _Static_assert(XR_XIR_STRUCT_NEW == 74 && XR_XIR_STRUCT_GET == 75 && XR_XIR_STRUCT_SET == 76, "struct wire operations");
     _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 54 &&
@@ -151,8 +152,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x4c, 0xad, 0xb7, 0xd8, 0x50, 0xaa, 0x5c, 0xd1, 0x30, 0xbc, 0x01, 0x3f, 0x0f, 0x13, 0x3f, 0x65,
-        0x36, 0x8c, 0xe8, 0x04, 0x30, 0xb1, 0xc0, 0x57, 0xc6, 0x9f, 0x34, 0x55, 0x9e, 0x48, 0x0b, 0x1a};
+        0x04, 0x32, 0xae, 0xcd, 0x7c, 0x07, 0x4b, 0xa0, 0x88, 0x3c, 0x93, 0xae, 0xfc, 0x7d, 0x45, 0x43,
+        0x9b, 0x98, 0x66, 0x62, 0xab, 0xa9, 0xfc, 0x51, 0x3d, 0x4b, 0x8c, 0x0a, 0x74, 0x4b, 0x83, 0x40};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
@@ -162,7 +163,7 @@ static void byte_order(void) {
     XrXirArtifact *narrow = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &narrow, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(narrow);
-    put32(packet.bytes + 12, 23); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 24); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
     put32(packet.bytes + 8, 6); digest_packet(&packet); rejected(packet.bytes, packet.length);
     memcpy(packet.bytes, original, sizeof(original));
@@ -789,15 +790,18 @@ static void string_query_contracts(void) {
         {XR_XIR_STRING_LEN, XR_XIR_I64, {0}, {0}, 0},
         {XR_XIR_EQ_STRING, XR_XIR_BOOL, {0,1}, {0}, 0},
         {XR_XIR_NE_STRING, XR_XIR_BOOL, {0,1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {4,0}, {0}, 0}};
-    XrXirBlock block = {0,4};
-    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,4,NULL,0};
+        {XR_XIR_STRING_CONTAINS, XR_XIR_BOOL, {0,1}, {0}, 0},
+        {XR_XIR_STRING_STARTS_WITH, XR_XIR_BOOL, {0,1}, {0}, 0},
+        {XR_XIR_STRING_ENDS_WITH, XR_XIR_BOOL, {0,1}, {0}, 0},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {7,0}, {0}, 0}};
+    XrXirBlock block = {0,7};
+    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,NULL,0};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xr_xir_check(&built,NULL,&checked,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
-    for (unsigned i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < 6; ++i) {
         uint8_t pattern[32] = {0};
         put32(pattern, (uint32_t)ops[i].op); put32(pattern+4,(uint32_t)ops[i].type);
         put32(pattern+8,ops[i].args[0]); put32(pattern+12,ops[i].args[1]);

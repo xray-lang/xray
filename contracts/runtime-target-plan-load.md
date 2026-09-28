@@ -527,7 +527,15 @@ verification-test: test_semantic_dependency_method_authority
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 47ae3b3c4f665118a0c4f63d7e59a883d10d59191bdc5e85b73646b896f95a51
+The CMake source anchor now includes the governed string declaration as a
+native-metadata generator dependency. Inspection from its prior anchored source
+also found only registration of the float_arithmetic and float_format vector
+checks. All four numeric vector checks pass. These build-registration changes
+alter no runtime provider, debug operation, packet identity or load authority;
+existing runtime verification failures remain failures. Other source anchors
+and artifact fingerprints are unchanged.
+
+anchor-sha256: CMakeLists.txt 01556e94fa2f5d6f0510a0ada7d263d64a8462f5ba246a348e07876d39b77bcc
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h 816a42a2d3d0843c90cf00b567eec69c45822d2545ed65b8807e86d4fe4dc62f
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d

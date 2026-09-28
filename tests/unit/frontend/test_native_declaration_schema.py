@@ -31,6 +31,33 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'NONE')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
 
+    def test_string_value_identity_and_full_member_spans(self):
+        source = (ROOT / 'stdlib/types/string.xr').read_text(encoding='utf-8')
+        header, members = schema.parse_source(source, self.prelude)
+        self.assertEqual(header[:3], (2, 'string', ''))
+        self.assertEqual(len(members), 19)
+        rows = source.splitlines()
+        self.assertEqual(rows[header[3] - 1][header[4] - 1:], 'string {')
+        for member in members:
+            self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
+        admitted = [m for m in members if m.operation != 'NONE']
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith'})
+        for member in admitted:
+            self.assertEqual(schema.simple_term(member.result, ''), 'BOOL')
+            self.assertEqual(member.allocation, 'no_heap')
+            self.assertEqual(member.failures, 'none')
+        self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
+        for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
+                              ('struct string {', 'struct string<T> {'),
+                              ('contains(search: string)', 'contains(search: i64)'),
+                              ('startsWith(search: string)', 'ref startsWith(search: string)'),
+                              ('failures=none', 'failures=allocation'),
+                              ('-> bool', '-> string'),
+                              ('STRING_ENDS_WITH', 'ARRAY_PUSH'),
+                              ('InvalidUtf8', 'InvalidUtf8(')]:
+            with self.subTest(before=before), self.assertRaises(ValueError):
+                schema.parse_source(source.replace(before, after), self.prelude)
+
     def test_reject_class_or_unregistered_type(self):
         for source, prelude in ((self.source.replace('struct Array', 'class Array'), self.prelude),
                                 (self.source.replace('struct Array', 'struct Set'), self.prelude),
@@ -67,10 +94,31 @@ class NativeDeclarations(unittest.TestCase):
             with self.assertRaises(ValueError):
                 schema.parse_source(source, self.prelude)
 
+    def test_legacy_embedding_preserves_unchanged_outputs(self):
+        with tempfile.TemporaryDirectory(prefix='xray-native-embedding-') as directory:
+            root = Path(directory)
+            source = root / 'atomic.xr'
+            source.write_text('class Atomic<T> {\n    load() -> T\n}\n', encoding='utf-8')
+            output = root / 'generated.inc.c'
+            command = [sys.executable, str(Path(embed.__file__)), str(root), '--output', str(output)]
+            subprocess.run(command, check=True, capture_output=True)
+            for newline in (b'\n', b'\r\n'):
+                output.write_bytes(output.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', newline))
+                os.utime(output, ns=(1600000000123456700, 1600000000123456700))
+                expected = output.read_bytes(), output.stat().st_mtime_ns
+                subprocess.run(command, check=True, capture_output=True)
+                self.assertEqual((output.read_bytes(), output.stat().st_mtime_ns), expected)
+            source.write_text('// Changed provenance.\n' + source.read_text(encoding='utf-8'), encoding='utf-8')
+            subprocess.run(command, check=True, capture_output=True)
+            self.assertIn('Changed provenance', output.read_text(encoding='utf-8'))
+            self.assertNotEqual(output.stat().st_mtime_ns, expected[1])
+            subprocess.run([sys.executable, str(Path(embed.__file__)), str(root), '--check', str(output)],
+                           check=True, capture_output=True)
+
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())

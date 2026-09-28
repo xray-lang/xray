@@ -135,3 +135,37 @@ Evidence must cover empty/ASCII/multibyte/supplementary/combining/NUL content,
 distinct equal allocations, prefixes, mutation after snapshot, operand effects
 and suspension, dead producers, bad unused generic definitions, forged packets,
 VM/native independent expected outputs, cleanup and allocation-failure walks.
+
+## String predicate implementation contract
+
+The pending predicate batch adds contains, startsWith and endsWith over two
+strict UTF-8 strings. Empty patterns match; overlong patterns do not. Full byte
+payloads include NUL and are not normalized. Queries borrow inputs and publish
+a bool only after validation; invalid native arguments leave output unchanged.
+They allocate no heap storage, change no reference counts, and add no suspension
+or throw. Operand evaluation and snapshot acquisition retain ordinary failures.
+
+Source calls bind the governed string declaration and exact public member
+identity. One generated registry supplies compiler and tool queries; method
+spelling alone grants no authority. Receiver snapshots precede argument effects
+and suspension. Generic definitions gain no capability from future arguments.
+
+VM and native lowering consume verified predicate instructions with bool
+results, two string values and zero unused fields. Checked semantic versioning
+must change atomically at instruction admission; this contract alone does not
+establish implementation. Reuse runtime-neutral byte helpers without old
+isolate, intern or GC ownership.
+
+Evidence covers empty/overlong patterns, distinct/shared objects, Unicode/NUL,
+dead producers, allocation accounting, receiver mutation and suspension, source
+member queries, hostile packets, independent VM/native output and physical
+release. Source NUL remains closed until remaining consumers migrate or retire.
+
+The string declaration uses native identity 2, value kind, and zero generic
+parameters. Its declaration schema spells struct string; this does not create
+a user-constructible nominal struct or grant field construction authority.
+Array retains identity 1 and its one-parameter prelude binding. The registry
+validates each type against its canonical generated row, including source
+spans and generic arity. Primitive string binding remains the existing scalar
+type authority. The old analyzer projects the same rows when its embedded
+string declaration is removed; no second string declaration loader remains.

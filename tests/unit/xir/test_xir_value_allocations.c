@@ -441,7 +441,32 @@ static void struct_allocation_failures(void) {
     XrXirValue deep = struct_deep_value(); size_t before = calls; fail_at = calls;
     xr_xir_value_drop(&deep); CHECK(!live && calls == before); fail_at = SIZE_MAX;
 }
+static void string_predicate_allocations(void) {
+    XrXirDomain *domain = NULL;
+    XrXirValue text = {0}, pattern = {0}, copy = {0};
+    CHECK(!live && fail_at == SIZE_MAX);
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, "a\0abcdefghijklmnop", 18, &text) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, "abcdefghijklmnop", 16, &pattern) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_value_copy(&text, &copy) == XR_XIR_VALUE_OK);
+    xr_xir_domain_drop(domain); xr_xir_value_drop(&text);
+    size_t before = calls, allocations = live;
+    uint32_t text_references = atomic_load(&object_pointer(&copy)->references);
+    uint32_t pattern_references = atomic_load(&object_pointer(&pattern)->references);
+    fail_at = calls;
+    bool result = false;
+    CHECK(xr_xir_string_contains(&copy, &pattern, &result) && result);
+    CHECK(xr_xir_string_starts_with(&copy, &pattern, &result) && !result);
+    CHECK(xr_xir_string_ends_with(&copy, &pattern, &result) && result);
+    CHECK(calls == before && live == allocations);
+    CHECK(atomic_load(&object_pointer(&copy)->references) == text_references);
+    CHECK(atomic_load(&object_pointer(&pattern)->references) == pattern_references);
+    xr_xir_value_drop(&copy); xr_xir_value_drop(&pattern);
+    CHECK(!live && calls == before);
+    fail_at = SIZE_MAX;
+}
 int main(void) {
+    string_predicate_allocations();
     struct_allocation_failures();
     struct_value_cases(); CHECK(!live);
     nominal_arena_allocation();

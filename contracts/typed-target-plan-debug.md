@@ -153,5 +153,13 @@ anchor-sha256: src/vm/xr_typed_dispatch.c a7e7ea6e44cd53e78ef74d2410cfa29a110f82
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 0da767e005e18d0c836267554f6fde719516c1ef0096825ddb14e04b8e2180c0
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py ce359885c88ab943fb5e8b61782770361083568db413aa3e6b940809457cb75c
-anchor-sha256: CMakeLists.txt 47ae3b3c4f665118a0c4f63d7e59a883d10d59191bdc5e85b73646b896f95a51
+The CMake source anchor now includes the governed string declaration as a
+native-metadata generator dependency. Inspection from its prior anchored source
+also found only registration of the float_arithmetic and float_format vector
+checks. All four numeric vector checks pass. These build-registration changes
+alter no runtime provider, debug operation, packet identity or load authority;
+existing runtime verification failures remain failures. Other source anchors
+and artifact fingerprints are unchanged.
+
+anchor-sha256: CMakeLists.txt 01556e94fa2f5d6f0510a0ada7d263d64a8462f5ba246a348e07876d39b77bcc
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c d9a9dcdfc2a9231c75e1ed3e35a0cb5dcc54a423aa60741b14d2e7c25e7930cb

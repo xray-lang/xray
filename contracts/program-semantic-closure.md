@@ -431,7 +431,15 @@ and column, including when a newline separates the keyword and identifier. The
 source query regression checks this parser-owned location directly. This source
 anchor update changes no PSC schema, runtime identity, or artifact fingerprint.
 
-anchor-sha256: CMakeLists.txt 47ae3b3c4f665118a0c4f63d7e59a883d10d59191bdc5e85b73646b896f95a51
+The CMake source anchor now includes the governed string declaration as a
+native-metadata generator dependency. Inspection from its prior anchored source
+also found only registration of the float_arithmetic and float_format vector
+checks. All four numeric vector checks pass. These build-registration changes
+alter no runtime provider, debug operation, packet identity or load authority;
+existing runtime verification failures remain failures. Other source anchors
+and artifact fingerprints are unchanged.
+
+anchor-sha256: CMakeLists.txt 01556e94fa2f5d6f0510a0ada7d263d64a8462f5ba246a348e07876d39b77bcc
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d

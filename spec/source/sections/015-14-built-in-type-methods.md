@@ -102,6 +102,8 @@ order: 015
 
 `len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
 
+`contains`、`startsWith`、`endsWith` 接受一个 string 并返回 bool，按完整 UTF-8 字节查询，不做大小写折叠或 Unicode 归一化，NUL 不终止匹配。空模式对任意字符串返回 true，非空模式对空字符串返回 false。接收者先求值并取得值快照，再求值模式，各一次；实参求值期间修改原变量不改变快照。查询本身不分配、不修改或转移输入，不引入挂起或语言异常；操作数求值及持有仍可失败。普通泛型必须在定义处具备相应能力。
+
 string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
 ### 14.6 `Array<u8>`
@@ -430,6 +432,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `toString()` | return self |
 
 `len(s)` reads the cached Unicode scalar count of validated UTF-8 and returns i64; the empty string has length zero and embedded NUL counts as one scalar. The query itself does not allocate; its argument evaluates exactly once with ordinary evaluation, initialization and retention failures. `==`/`!=` require two strings and compare their full byte lengths and contents, independently of object identity, with no case folding or Unicode normalization. Combining and precomposed sequences can differ. Operands evaluate left to right as value snapshots. These operations grant no string or Lengthable capability to an unconstrained generic definition.
+
+`contains`, `startsWith`, and `endsWith` accept one string and return bool over complete UTF-8 bytes, without case folding or normalization; NUL does not end matching. Empty patterns match every string; nonempty patterns do not match empty strings. The receiver evaluates once into a value snapshot before the pattern evaluates once; changing the original variable during argument evaluation cannot change the snapshot. Queries allocate nothing, do not mutate or transfer inputs, and introduce no suspension or language exception; operand evaluation and retention can still fail. Generic definitions must have the required capability when checked.
 
 Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
 

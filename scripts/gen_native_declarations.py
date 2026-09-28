@@ -53,6 +53,9 @@ class TypeParser:
     def type(self, depth=0):
         if depth >= 64:
             raise ValueError('native signature nesting exceeds its format limit')
+        if self.peek() == 'const':
+            self.take('const')
+            return ('const', self.type(depth + 1))
         if self.peek() == '(':
             self.take('(')
             children = []
@@ -136,7 +139,11 @@ def simple_term(term, binder):
         return 'UNIT'
     if term == ('name', 'i64', ()):
         return 'I64'
-    if term == ('name', binder, ()):
+    if term == ('name', 'string', ()):
+        return 'STRING'
+    if term == ('name', 'bool', ()):
+        return 'BOOL'
+    if binder and term == ('name', binder, ()):
         return 'ELEMENT'
     return 'UNADMITTED'
 
@@ -145,6 +152,19 @@ def parse_source(source, prelude):
     marks = TYPE_MARKER.findall(source)
     if len(marks) != 1:
         raise ValueError('a governed native source needs exactly one type identity')
+    # Companion error enums are syntax-checked but grant no native operation authority.
+    enum_pattern = re.compile(r'^enum\s+([A-Za-z_]\w*)\s*\{\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*\}', re.M)
+    prefix = source[:TYPE_MARKER.search(source).start()]
+    if int(marks[0]) == 2:
+        seen = set()
+        for enum in enum_pattern.finditer(prefix):
+            if enum.group(1) in seen:
+                raise ValueError('duplicate companion enum')
+            seen.add(enum.group(1))
+        prefix = enum_pattern.sub(lambda m: '\n' * m.group().count('\n'), prefix)
+        if any(line.strip() and not line.strip().startswith('//') for line in prefix.splitlines()):
+            raise ValueError('invalid native declaration preamble')
+        source = prefix + source[TYPE_MARKER.search(source).start():]
     rows = source.splitlines()
     header = None
     members = []
@@ -166,15 +186,15 @@ def parse_source(source, prelude):
                 lowered = True
             continue
         if header is None:
-            match = re.fullmatch(r'(struct|class)\s+([A-Za-z_]\w*)<([A-Za-z_]\w*)>\s*\{', line)
+            match = re.fullmatch(r'(struct|class)\s+([A-Za-z_]\w*)(?:<([A-Za-z_]\w*)>)?\s*\{', line)
             if not match:
-                raise ValueError('expected a complete generic native declaration header')
+                raise ValueError('expected a complete native declaration header')
             kind, name, binder = match.groups()
-            if int(marks[0]) != 1 or name != 'Array':
-                raise ValueError('native identity 1 belongs only to Array')
-            if kind != 'struct':
-                raise ValueError('governed Array declaration must be a value struct')
-            if not re.search(r'XR_BUILTIN_PRELUDE_TYPE\("' + re.escape(name) + r'",\s*1,', prelude):
+            binder = binder or ''
+            identity = int(marks[0])
+            if kind != 'struct' or (identity, name, bool(binder)) not in ((1, 'Array', True), (2, 'string', False)):
+                raise ValueError('native identity, value kind or generic arity mismatch')
+            if identity == 1 and not re.search(r'XR_BUILTIN_PRELUDE_TYPE\("Array",\s*1,', prelude):
                 raise ValueError('native declaration has no exact one-parameter prelude binding')
             header = (int(marks[0]), name, binder, number, len(raw[:raw.index(name)].encode('utf-8')) + 1)
             continue
@@ -242,34 +262,39 @@ def parse_source(source, prelude):
             'ARRAY_GET': ('get', 'READ', ('I64',), 'ELEMENT', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'ARRAY_SET': ('set', 'REF', ('I64', 'ELEMENT'), 'UNIT', 'may_heap', 'bounds,allocation,retain,limit', 'unit'),
             'ARRAY_PUSH': ('push', 'REF', ('ELEMENT',), 'UNIT', 'may_heap', 'allocation,retain,limit', 'unit'),
+            'STRING_CONTAINS': ('contains', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
+            'STRING_STARTS_WITH': ('startsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
+            'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
         }.get(member.operation)
         if shape != expected or member.static or not member.method or any(p[3] or p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
-    if used != {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'}:
-        raise ValueError('missing admitted Array operation declaration')
+    required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} if header[0] == 1 else {
+        'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH'}
+    if used != required:
+        raise ValueError('incorrect admitted native operation set')
     return header, members
 
 
-def render(root):
-    path = root / 'stdlib/types/array.xr'
+def render_type(root, stem):
+    path = root / f'stdlib/types/{stem}.xr'
     source = path.read_text(encoding='utf-8').replace('\r\n', '\n')
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     header, members = parse_source(source, prelude)
     identity, name, binder, line, column = header
-    if identity != 1:
-        raise ValueError('Array native declaration identity is immutable')
-    lines = ['/* Generated by gen_native_declarations.py; do not edit. */']
+    if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string')):
+        raise ValueError('native source path does not own this declaration identity')
+    lines = []
     for index, member in enumerate(members):
         if not member.parameters:
             continue
-        lines.append(f'static const XrNativeParameter xr_native_parameters_{index}[] = {{')
+        lines.append(f'static const XrNativeParameter xr_native_{stem}_parameters_{index}[] = {{')
         for pname, term, text, optional, variadic in member.parameters:
             lines.append(f'    {{{c_string(pname)}, {c_string(text)}, XR_NATIVE_TERM_{simple_term(term, binder)}, '
                          f'{str(optional).lower()}, {str(variadic).lower()}}},')
         lines.append('};')
-    lines.append('static const XrNativeMemberDeclaration xr_native_array_members[] = {')
+    lines.append(f'static const XrNativeMemberDeclaration xr_native_{stem}_members[] = {{')
     for index, member in enumerate(members):
-        params = f'xr_native_parameters_{index}' if member.parameters else 'NULL'
+        params = f'xr_native_{stem}_parameters_{index}' if member.parameters else 'NULL'
         fields = [str(index + 1), c_string(member.name), c_string(member.signature),
                   c_string(member.result_text), str(member.line), str(member.column),
                   'XR_NATIVE_RECEIVER_' + member.receiver, str(member.static).lower(),
@@ -280,10 +305,19 @@ def render(root):
                   'XR_NATIVE_TERM_' + simple_term(member.result, binder)]
         lines.append('    {' + ', '.join(fields) + '},')
     digest = hashlib.sha256(source.encode()).digest()
-    lines += ['};', 'static const XrNativeTypeDeclaration xr_native_array = {',
-              f'    {identity}, XR_NATIVE_DECLARATION_VALUE, {c_string(name)}, {c_string(binder)}, 1,',
-              f'    "stdlib/types/array.xr", "xray-native:prelude/Array", {{{{{", ".join(str(b) for b in digest)}}}}},',
-              f'    {line}, {column}, xr_native_array_members, {len(members)}', '};', '']
+    lines += ['};', f'static const XrNativeTypeDeclaration xr_native_{stem} = {{',
+              f'    {identity}, XR_NATIVE_DECLARATION_VALUE, {c_string(name)}, {c_string(binder)}, {int(bool(binder))},',
+              f'    "stdlib/types/{stem}.xr", "xray-native:prelude/{name}", {{{{{", ".join(str(b) for b in digest)}}}}},',
+              f'    {line}, {column}, xr_native_{stem}_members, {len(members)}', '};', '']
+    return lines, header, members
+
+
+def render(root):
+    lines = ['/* Generated by gen_native_declarations.py; do not edit. */']
+    array_lines, header, members = render_type(root, "array")
+    string_lines, _, _ = render_type(root, "string")
+    lines += array_lines + string_lines
+    binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):
         member = next(m for m in members if m.operation == operation)

@@ -14,10 +14,13 @@
 #include "xnative_declarations.inc.c"
 
 const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id) {
-    return id == xr_native_array.id ? &xr_native_array : NULL;
+    return id == xr_native_array.id ? &xr_native_array :
+        id == xr_native_string.id ? &xr_native_string : NULL;
 }
 const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char *name) {
-    return name && !strcmp(name, xr_native_array.name) ? &xr_native_array : NULL;
+    if (!name) return NULL;
+    return !strcmp(name, xr_native_array.name) ? &xr_native_array :
+        !strcmp(name, xr_native_string.name) ? &xr_native_string : NULL;
 }
 const XrNativeMemberDeclaration *xr_native_declaration_member(
     const XrNativeTypeDeclaration *declaration, const char *name) {
@@ -28,13 +31,15 @@ const XrNativeMemberDeclaration *xr_native_declaration_member(
     return NULL;
 }
 bool xr_native_declaration_validate(const XrNativeTypeDeclaration *declaration) {
-    if (!declaration || declaration->id != XR_NATIVE_DECLARATION_ARRAY ||
-        declaration->kind != XR_NATIVE_DECLARATION_VALUE || declaration->parameter_count != 1 ||
+    if (!declaration ||
         !declaration->name || !declaration->parameter_name || !declaration->source_path ||
         !declaration->identity || !declaration->members || !declaration->member_count ||
         declaration->member_count > 64) return false;
     const XrNativeTypeDeclaration *canonical = xr_native_declaration_by_id(declaration->id);
-    if (strcmp(declaration->identity, canonical->identity) ||
+    if (!canonical || declaration->kind != canonical->kind ||
+        declaration->parameter_count != canonical->parameter_count ||
+        declaration->line != canonical->line || declaration->column != canonical->column ||
+        strcmp(declaration->identity, canonical->identity) ||
         strcmp(declaration->source_path, canonical->source_path) ||
         strcmp(declaration->name, canonical->name) ||
         strcmp(declaration->parameter_name, canonical->parameter_name) ||
@@ -44,7 +49,8 @@ bool xr_native_declaration_validate(const XrNativeTypeDeclaration *declaration) 
     for (uint32_t i = 0; i < declaration->member_count; ++i) {
         const XrNativeMemberDeclaration *member = &declaration->members[i], *expected = &canonical->members[i];
         if (!member->name || !member->signature || !member->result_text || !member->failures ||
-            member->id != expected->id || strcmp(member->name, expected->name) ||
+            member->id != expected->id || member->line != expected->line || member->column != expected->column ||
+            strcmp(member->name, expected->name) ||
             strcmp(member->signature, expected->signature) || strcmp(member->result_text, expected->result_text) ||
             member->receiver != expected->receiver || member->is_static != expected->is_static ||
             member->is_method != expected->is_method || member->lowered != expected->lowered ||

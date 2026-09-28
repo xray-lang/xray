@@ -1031,13 +1031,16 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
     return out
 
 
-def collect_native_array(root: Path, path: Path, text: str,
+def collect_native_declaration(root: Path, path: Path, text: str,
                          doc_surface: str, doc_module: str) -> list[dict[str, Any]]:
     prelude = (root / "stdlib/prelude/builtin_symbols.def").read_text(encoding="utf-8")
     header, members = gen_native_declarations.parse_source(text, prelude)
     identity, name, binder, line, column = header
+    owner = {1: ("Array", "array.xr"), 2: ("string", "string.xr")}.get(identity)
+    if not owner or name != owner[0] or path != root / "stdlib/types" / owner[1]:
+        raise ValueError("native declaration identity does not belong to this source path")
     declaration = item(category="native-type", namespace=name, name=name, kind="type",
-                       signature=f"{name}<{binder}>", source=rel(root, path), line=line,
+                       signature=f"{name}<{binder}>" if binder else name, source=rel(root, path), line=line,
                        doc_surface=doc_surface, doc_module=doc_module)
     declaration.update(native_type_id=identity, declaration_kind="struct", column=column)
     out = [declaration]
@@ -1058,7 +1061,7 @@ def collect_native_array(root: Path, path: Path, text: str,
         entry.update(native_type_id=identity, native_member_id=member_id,
                      column=member.column, receiver=member.receiver.lower(),
                      operation=member.operation, xir_admitted=member.operation != "NONE",
-                     failures=member.failures.split(",") if member.failures else [],
+                     failures=member.failures.split(",") if member.failures not in ("", "none") else [],
                      ownership=member.ownership)
         out.append(entry)
     return out
@@ -1069,9 +1072,9 @@ def collect_native_types(root: Path) -> list[dict[str, Any]]:
     cards = {path.stem for path in (root / "spec/source/cards/stdlib").glob("*.json")}
     for path in sorted((root / "stdlib/types").glob("*.xr")):
         text = path.read_text(encoding="utf-8")
-        if path.name == "array.xr":
-            doc_module = "array" if "array" in cards else ""
-            out.extend(collect_native_array(root, path, text,
+        if gen_native_declarations.TYPE_MARKER.search(text):
+            doc_module = path.stem if path.stem in cards else ""
+            out.extend(collect_native_declaration(root, path, text,
                                             "stdlib" if doc_module else "", doc_module))
             continue
         for match in CLASS_RE.finditer(text):

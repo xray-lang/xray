@@ -6161,6 +6161,8 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 
 `len(s)` reads the cached Unicode scalar count of validated UTF-8 and returns i64; the empty string has length zero and embedded NUL counts as one scalar. The query itself does not allocate; its argument evaluates exactly once with ordinary evaluation, initialization and retention failures. `==`/`!=` require two strings and compare their full byte lengths and contents, independently of object identity, with no case folding or Unicode normalization. Combining and precomposed sequences can differ. Operands evaluate left to right as value snapshots. These operations grant no string or Lengthable capability to an unconstrained generic definition.
 
+`contains`, `startsWith`, and `endsWith` accept one string and return bool over complete UTF-8 bytes, without case folding or normalization; NUL does not end matching. Empty patterns match every string; nonempty patterns do not match empty strings. The receiver evaluates once into a value snapshot before the pattern evaluates once; changing the original variable during argument evaluation cannot change the snapshot. Queries allocate nothing, do not mutate or transfer inputs, and introduce no suspension or language exception; operand evaluation and retention can still fail. Generic definitions must have the required capability when checked.
+
 Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
 
 ### 14.6 `Array<u8>`

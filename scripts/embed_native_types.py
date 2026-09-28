@@ -18,6 +18,7 @@ native-type loader so the two ownership paths cannot parse the same class.
 import argparse
 import glob
 import os
+from pathlib import Path
 import re
 import sys
 
@@ -102,8 +103,9 @@ def main():
         return 0
 
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as generated_file:
-            generated_file.write(generated)
+        output = Path(args.output)
+        if not output.exists() or output.read_text(encoding="utf-8") != generated:
+            output.write_text(generated, encoding="utf-8")
     else:
         sys.stdout.write(generated)
     return 0

@@ -19,6 +19,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
+#include "../shared/xr_string_core.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -427,6 +428,27 @@ XR_FUNC bool xr_xir_string_equal(const XrXirValue *left, const XrXirValue *right
         !xr_xir_value_argument(right, NULL, XR_XIR_STRING)) return false;
     const XirString *a = string_pointer(left), *b = string_pointer(right);
     *equal = a == b || (a->length == b->length && (!a->length || !memcmp(a->bytes, b->bytes, a->length)));
+    return true;
+}
+XR_FUNC bool xr_xir_string_contains(const XrXirValue *value, const XrXirValue *pattern, bool *result) {
+    if (!result || !xr_xir_value_argument(value, NULL, XR_XIR_STRING) ||
+        !xr_xir_value_argument(pattern, NULL, XR_XIR_STRING)) return false;
+    const XirString *text = string_pointer(value), *search = string_pointer(pattern);
+    *result = xr_string_core_contains(text->bytes, text->length, search->bytes, search->length);
+    return true;
+}
+XR_FUNC bool xr_xir_string_starts_with(const XrXirValue *value, const XrXirValue *pattern, bool *result) {
+    if (!result || !xr_xir_value_argument(value, NULL, XR_XIR_STRING) ||
+        !xr_xir_value_argument(pattern, NULL, XR_XIR_STRING)) return false;
+    const XirString *text = string_pointer(value), *search = string_pointer(pattern);
+    *result = xr_string_core_starts_with(text->bytes, text->length, search->bytes, search->length);
+    return true;
+}
+XR_FUNC bool xr_xir_string_ends_with(const XrXirValue *value, const XrXirValue *pattern, bool *result) {
+    if (!result || !xr_xir_value_argument(value, NULL, XR_XIR_STRING) ||
+        !xr_xir_value_argument(pattern, NULL, XR_XIR_STRING)) return false;
+    const XirString *text = string_pointer(value), *search = string_pointer(pattern);
+    *result = xr_string_core_ends_with(text->bytes, text->length, search->bytes, search->length);
     return true;
 }
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count) {

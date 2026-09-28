@@ -93,6 +93,9 @@ XR_FUNC bool xr_xir_string_view(const XrXirValue *value, const char **bytes, siz
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count);
 XR_FUNC XrXirValueStatus xr_xir_string_length(const XrXirValue *value, int64_t *length);
 XR_FUNC bool xr_xir_string_equal(const XrXirValue *left, const XrXirValue *right, bool *equal);
+XR_FUNC bool xr_xir_string_contains(const XrXirValue *value, const XrXirValue *pattern, bool *result);
+XR_FUNC bool xr_xir_string_starts_with(const XrXirValue *value, const XrXirValue *pattern, bool *result);
+XR_FUNC bool xr_xir_string_ends_with(const XrXirValue *value, const XrXirValue *pattern, bool *result);
 XR_FUNC void xr_xir_owned_slot_clear(void *frame, uint32_t offset);
 XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, const XrXirTypeArena *arena,
                                                 XrXirType type, int64_t payload);

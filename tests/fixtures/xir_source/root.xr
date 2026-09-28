@@ -185,7 +185,18 @@ fn resumedNative(flag:bool)->string {
     return text
 }
 
-export fn resumeText(flag:bool)->string { const expected=flag ? "ry!" : "rn!"; if (expected != resumedNative(flag) || len(expected)!=3) { return "bad" }; return expected }
+fn predicatePause(expected:string)->string { Coro.yield(); predicateText="after"; return expected }
+export fn resumeText(flag:bool)->string {
+    const expected=flag ? "ry!" : "rn!"
+    if (expected != resumedNative(flag) || len(expected)!=3) { return "bad" }
+    predicateText=expected
+    if (!predicateText.contains(predicatePause(expected))) { return "bad" }
+    predicateText=expected
+    if (!predicateText.startsWith(predicatePause(expected))) { return "bad" }
+    predicateText=expected
+    if (!predicateText.endsWith(predicatePause(expected))) { return "bad" }
+    return expected
+}
 
 export fn stackDepth(n:i64)->string {
     const held = "f" + "r"
@@ -504,3 +515,12 @@ fn stringQueryCount()->i64 { return stringQueryOrder }
 fn stringQueryLength()->i64 { return len(stringQueryText) }
 
 print(len(""),len(alpha.identity<string>("A中😀é")),""=="",("ab"+"cd")=="abcd","é"=="é","abc"!="ab",stringQueryLeft()==stringQueryRight(),stringQueryCount(),stringQueryLength())
+
+var predicateText="before"
+var predicateOrder=0
+fn predicateLeft()->string { predicateOrder=predicateOrder*10+1; return predicateText }
+fn predicateRight()->string { predicateOrder=predicateOrder*10+2; predicateText="after"; return "before" }
+fn predicateCount()->i64 { return predicateOrder }
+print("".contains(""),"".startsWith(""),"".endsWith(""),"".contains("a"),"abc".contains("abcd"),"中😀".contains("😀"),"中😀".startsWith("😀"),"中😀".endsWith("😀"),"é".contains("é"),predicateLeft().startsWith(predicateRight()),"xxabcdefghijklmnop".endsWith("abcdefghijklmnop"),"xxabcdefghijklmnoq".contains("abcdefghijklmnop"),predicateCount())
+
+print("abc".endsWith("a"),"abc".startsWith("a"),"abcz".contains("bc"),"abcz".endsWith("bc"))
