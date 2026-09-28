@@ -592,3 +592,38 @@ const enumEscaped=match(enumGeneric) {
     alpha.Event.Empty -> fn()->string {return "empty"}
 }
 print(enumPreserved,enumEarly(enumPayload),enumEarly(alpha.Event<i64>.Empty),enumMixed(enumPayload),enumMixed(alpha.event<i64>(-5)),enumLoop(Mode.Cold),enumLoop(Mode.Warm),enumEscaped(),enumMutable.ordinal)
+
+
+enum NestedBits { Pair { left:bool, right:bool } }
+fn nestedBits(v:NestedBits)->i64 {
+    return match(v) {
+        NestedBits.Pair { left:true, right:true } -> 1,
+        NestedBits.Pair { left:true, right:false } -> 2,
+        NestedBits.Pair { left:false, right:true } -> 3,
+        NestedBits.Pair { left:false, right:false } -> 4
+    }
+}
+enum NestedBox<T:Sendable> { None, Some { inner:alpha.Event<T>, enabled:bool } }
+fn nestedPick<T:Sendable>(v:NestedBox<T>,fallback:T)->T {
+    return match(v) {
+        NestedBox.None -> fallback,
+        NestedBox.Some { inner:alpha.Event.Empty } -> fallback,
+        NestedBox.Some { inner:alpha.Event.Data { value }, enabled:true } -> value,
+        NestedBox.Some { inner:alpha.Event.Data { value }, enabled:false } -> fallback
+    }
+}
+var nestedRoot=NestedBox<string>.Some { inner:alpha.event<string>("snapshot"), enabled:true }
+var nestedGuardCalls=0
+fn nestedGuard()->bool {
+    nestedRoot=NestedBox<string>.None
+    nestedGuardCalls=nestedGuardCalls+1
+    Coro.yield()
+    return false
+}
+const nestedSnapshot=match(nestedRoot) {
+    NestedBox.Some { inner:alpha.Event.Data { value }, enabled:true } if(nestedGuard()) -> fn()->string {return "wrong"},
+    NestedBox.Some { inner:alpha.Event.Data { value } } -> fn()->string {return value},
+    NestedBox.Some { inner:alpha.Event.Empty } -> fn()->string {return "empty"},
+    NestedBox.None -> fn()->string {return "none"}
+}
+print(nestedBits(NestedBits.Pair{left:true,right:true}),nestedBits(NestedBits.Pair{left:true,right:false}),nestedBits(NestedBits.Pair{left:false,right:true}),nestedBits(NestedBits.Pair{left:false,right:false}),nestedPick<string>(NestedBox<string>.Some{inner:alpha.event<string>("nested"),enabled:true},"fallback"),nestedPick<string>(NestedBox<string>.Some{inner:alpha.event<string>("nested"),enabled:false},"fallback"),nestedSnapshot(),nestedGuardCalls)

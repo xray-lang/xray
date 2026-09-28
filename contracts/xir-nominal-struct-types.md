@@ -917,15 +917,37 @@ in the arm scope, visible to the guard and body but not to subsequent arms.
 Guards are bool and run only after their pattern succeeds; false advances in
 source order. A guarded wildcard cannot prove exhaustiveness.
 
-The first admitted patterns are unit variants, named payload subsets with
-binding/wildcard subpatterns, whole-value bindings and wildcard. All unguarded
-variants or an unguarded catch-all are required. Blocks may precede their final
+Admitted patterns include unit variants, named payload subsets with nested
+enum, bool literal, binding and wildcard subpatterns, whole-value bindings and
+wildcards. Unguarded rows must cover every constructor and its payload values. Blocks may precede their final
 value expression with ordinary statements. Return/break/continue terminate an
 arm through the existing function/loop exit path and contribute no PHI input.
 A statement match whose every arm terminates has no join block. A value-context
 match requires at least one continuing arm until general never-valued expression
 propagation is implemented; this limit does not redefine the language. Arm results require
-one exact admitted type and join through PHI; unit results need no PHI. Nested,
-literal/range/multiple patterns, union joins and general never-valued expressions remain
+one exact admitted type and join through PHI; unit results need no PHI. Other scalar literals,
+range/multiple patterns, union joins and general never-valued expressions remain
 language obligations, explicitly rejected until implemented. Closure capture
 scanning must respect match binding scope, not capture shadowed outer names.
+
+
+## Structural enum pattern extension contract
+
+The source producer normalizes enum payload patterns into one typed constructor
+and field tree. Omitted fields are wildcards. Nested declaration paths prove
+visibility and exact substituted types independently; a pattern cannot invent
+constraints. Bool literals partition bool into false and true. A field's
+constructor test precedes its payload projection, and failure transfers to the
+next arm without evaluating that arm's guard or body. Bindings retain ordinary
+owned snapshots and remain immutable and arm-scoped.
+
+Exhaustiveness is a constructor/field matrix proof over unguarded rows, preserving
+correlations between fields. Seeing a variant name alone does not cover its
+refutable payload. Wildcards specialize into each constructor's fields. Recursive
+analysis and code generation have explicit depth, metadata and work limits;
+exhaustion rejects without publishing a partial artifact. The final remaining
+pattern tests may be omitted only after the complete matrix proof establishes
+that every value reaching that arm matches it. Existing flat cases use this same
+owner, with no fallback matcher or second coverage table. Range/multiple/scalar
+root patterns and union/never result generalization remain separate unfinished
+language obligations, not reasons to weaken the actual language rules.

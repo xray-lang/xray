@@ -652,6 +652,31 @@ static void source_enum_facts(XrXirSourceRequest *request) {
     CHECK(references(view,ordinal->id,ordinal->id)==1 && references(view,text->id,text->id)==1);
     xr_xir_source_result_free(&result);
 }
+static void nested_pattern_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "enum Inner<T>{A,B{value:T}}\nenum Outer<T>{Wrap{inner:Inner<T>,flag:bool}}\n"
+        "fn pick(v:Outer<string>)->string{return match(v){Outer.Wrap{inner:Inner.A}->\"empty\","
+        "Outer.Wrap{inner:Inner.B{value:item},flag:true}->item,"
+        "Outer.Wrap{inner:Inner.B{value:other},flag:false}->other}}\n");
+    XrXirSourceResult result={0};
+    CHECK(xr_xir_source_check(request,&result,NULL)==XR_XIR_OK && result.checked && result.snapshot);
+    xr_xir_artifact_free(result.checked); result.checked=NULL;
+    write_source(request->entry_path,"print(0)\n");
+    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *inner=declaration(view,"Inner",0), *outer=declaration(view,"Outer",0);
+    const XrXirSourceDeclaration *pick=declaration(view,"pick",0); CHECK(inner && outer && pick);
+    const XrXirSourceDeclaration *b=declaration(view,"B",inner->id), *wrap=declaration(view,"Wrap",outer->id);
+    CHECK(b && wrap);
+    const XrXirSourceDeclaration *field=declaration(view,"value",b->id), *flag=declaration(view,"flag",wrap->id);
+    const XrXirSourceDeclaration *item=declaration(view,"item",pick->id), *other=declaration(view,"other",pick->id);
+    CHECK(field && flag && item && other && item->id!=other->id);
+    CHECK(item->type.known && item->type.type==XR_XIR_STRING && !item->mutable);
+    CHECK(other->type.known && other->type.type==XR_XIR_STRING && !other->mutable);
+    CHECK(references(view,b->id,b->id)==2 && references(view,field->id,field->id)==2);
+    CHECK(references(view,wrap->id,wrap->id)==3 && references(view,flag->id,flag->id)==2);
+    CHECK(references(view,item->id,item->id)==1 && references(view,other->id,other->id)==1);
+    xr_xir_source_result_free(&result);
+}
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -665,6 +690,7 @@ int main(void) {
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
     source_struct_facts(&request);
     source_enum_facts(&request);
+    nested_pattern_facts(&request);
     source_constructor_facts(&request);
     source_default_argument_facts(&request);
     source_static_method_facts(&request);

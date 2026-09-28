@@ -1599,12 +1599,13 @@ static bool capture_scope(SourceCaptureScan *scan, AstNode *node) {
     SourceName *saved = scan->bound;
     bool ok = capture_scan(node, scan); scan->bound = saved; return ok;
 }
-static bool capture_pattern(SourceCaptureScan *scan, AstNode *node) {
+static bool capture_pattern(SourceCaptureScan *scan, AstNode *node, uint32_t depth) {
+    if (depth>=128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"pattern capture depth exhausted");
     if (!node || !source_work(scan->ctx,node)) return false;
     if (source_pattern_binding(node)) return capture_bind(scan,node->as.pattern_literal.value->as.variable.name,node);
     if (node->type==AST_PATTERN_ADT) {
         for (int i=0;i<node->as.pattern_adt.count;++i)
-            if (!capture_pattern(scan,node->as.pattern_adt.patterns[i])) return false;
+            if (!capture_pattern(scan,node->as.pattern_adt.patterns[i],depth+1)) return false;
     }
     return true;
 }
@@ -1616,7 +1617,7 @@ static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
         for (int i=0;i<node->as.match_expr.arm_count;++i) {
             MatchArmNode *arm=&node->as.match_expr.arms[i]->as.match_arm;
             scan->bound=saved;
-            if (!capture_pattern(scan,arm->pattern) || !capture_scan(arm->guard,scan) || !capture_scan(arm->body,scan)) return false;
+            if (!capture_pattern(scan,arm->pattern,0) || !capture_scan(arm->guard,scan) || !capture_scan(arm->body,scan)) return false;
         }
         scan->bound=saved; return true;
     }
