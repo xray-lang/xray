@@ -190,7 +190,7 @@ full effects and panic objects are separate open capabilities.
 Value ABI 12 adds the enum-only Error handle; Call/Program ABI 17 reject older
 entries at independent runtime boundaries. The value conversion APIs implement
 retained erasure and exact nominal narrowing. Error type expressions and ERROR_ERASE were admitted in semantic 30;
-the current schema 10 / semantic 31 additionally admits explicit invoke edges. ERROR_ERASE has one value operand and an Error result;
+schema 10 / semantic 31 introduced explicit invoke edges; semantic 32 adds exact Error filters and guarded narrowing. ERROR_ERASE has one value operand and an Error result;
 the operand must prove Error in its own declaration context. The proof is checked
 again after specialization, including an Error actual argument. Error is storable
 and copyable but does not prove Sendable or grant enum field authority.
@@ -301,3 +301,49 @@ and result use on the wrong successor must reject after digest recomputation.
 Adding executable Error types or invoke metadata requires an atomic semantic,
 schema and ABI review of the actual affected readers and runtime boundaries;
 no compatibility reader or alternate error transport is permitted.
+
+
+## Exact Error filtering and guarded narrowing
+
+Frozen before implementation: ERROR_IS has one Error SSA operand, bool result,
+and an immediate naming an enum type in the current type table. ERROR_NARROW
+has the same Error operand and the matched enum result type. Both target types
+must pass definition-context constraints and naming visibility; no construction
+or payload-read permission is granted. Concrete generic enum applications are
+allowed; Error itself and bare type parameters are not concrete enum filters.
+The ERROR_IS type immediate is substituted, remapped during Lowered type compaction, and independently checked against
+the original template during specialization and provenance verification.
+
+ERROR_NARROW must be the first instruction of a dedicated non-entry block with
+one incoming edge. Its sole predecessor terminates in BRANCH of an ERROR_IS
+of exactly the same SSA value and target type; the true edge enters this block
+and the false edge is distinct. SSA dominance is checked normally. Therefore
+false branches, bypass edges, changed Error values and target substitutions
+cannot grant unchecked payload access. This is an admission invariant for all
+stages and decoded Checked packets, not a source-only optimization assumption.
+
+Runtime type mismatch returns false successfully, without retaining a value.
+Malformed values, foreign arenas, budget exhaustion and allocation failure are
+faults, never ordinary mismatch. Successful narrowing owns a retained enum view;
+retention failure leaves the Error owner intact. No wrapper is allocated and
+all admission scratch is released. Existing Value/Call/Program layouts remain
+unchanged. The new instruction meanings require semantic 32, retaining schema
+10 field widths; semantic 31 packets reject without a compatibility reader.
+
+Required evidence: matching and mismatching nominal identities, generic target
+substitution, inaccessible targets, forged guard/control-flow and repaired
+packet rejection, independent VM/native results, source ordered catch fallthrough,
+rethrow, dead-handler checking, reference limits, OOM and physical release.
+Source typed catch and full effect/panic/cleanup qualification remain open until
+those consumers and tests are complete.
+
+verification-test: test_xir_stages
+verification-test: test_xir_values
+verification-test: test_xir_generics
+verification-test: test_xir_checked
+
+Source typed handler targets are checked with the same type_satisfies context,
+constraints and visibility proof before pruning any handler, including unused
+generic definitions with no runtime error predecessors. Parsed type expressions
+alone do not discharge these obligations. Dead handler bodies retain the shared
+initialization and return-inference checks. No fake executable edge is added.

@@ -17,6 +17,17 @@ XR_FUNC XrXirValueStatus xr_xir_error_erase(const XrXirValue *value,
     XrXirValue borrowed = {XR_XIR_ERROR, 0, value->payload};
     return xr_xir_value_copy(&borrowed, output);
 }
+XR_FUNC XrXirValueStatus xr_xir_error_is(const XrXirValue *value, XrXirType type,
+    XrXirValueAdmission *admission, bool *matches) {
+    if (!matches) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *matches = false;
+    if (!admission || !value || value->type != XR_XIR_ERROR ||
+        !xr_xir_type_is_enum(xr_xir_type_arena_types(admission->arena), type))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status = xr_xir_value_admit(value, XR_XIR_ERROR, admission);
+    if (status == XR_XIR_VALUE_OK) *matches = object_pointer(value)->type == type;
+    return status;
+}
 XR_FUNC XrXirValueStatus xr_xir_error_narrow(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !unit_value(output) || !value || value->type != XR_XIR_ERROR ||

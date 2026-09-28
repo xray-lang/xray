@@ -118,6 +118,13 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             if (a->op == XR_XIR_CALL || a->op == XR_XIR_INVOKE || a->op == XR_XIR_FUNCTION_REF) {
                 XrXirStatus status = provenance_call_match(c, origin, a, b);
                 if (status != XR_XIR_OK) return status;
+            } else if (a->op == XR_XIR_ERROR_IS) {
+                if (a->type_arguments[0] || a->type_arguments[1] || b->type_arguments[0] || b->type_arguments[1] ||
+                    a->immediate < 0 || b->immediate < 0 || (uint64_t) a->immediate > UINT32_MAX ||
+                    (uint64_t) b->immediate > UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+                XrXirStatus status = xr_xir_type_substitution_matches_between(c->source->types, c->destination->types,
+                    origin->arguments, origin->argument_count, (XrXirType) a->immediate, (XrXirType) b->immediate, c->remaining);
+                if (status != XR_XIR_OK) return status;
             } else if (a->immediate != b->immediate || a->type_arguments[0] != b->type_arguments[0] || a->type_arguments[1] != b->type_arguments[1])
                 return XR_XIR_BAD_STRUCTURE;
         }

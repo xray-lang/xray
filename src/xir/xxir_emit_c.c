@@ -530,6 +530,11 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
         append(buffer, "        XrXirValue receiver = "); emit_value(buffer, function, layout, op->args[0]);
         if (op->op == XR_XIR_ERROR_ERASE)
             append(buffer, ";\n        status = xr_xir_error_erase(&receiver, xr_xir_call_admission(view), &value);\n");
+        else if (op->op == XR_XIR_ERROR_NARROW)
+            append(buffer, ";\n        status = xr_xir_error_narrow(&receiver, (XrXirType) %uu, xr_xir_call_admission(view), &value);\n", (uint32_t) op->type);
+        else if (op->op == XR_XIR_ERROR_IS)
+            append(buffer, ";\n        bool matches = false; status = xr_xir_error_is(&receiver, (XrXirType) %uu, xr_xir_call_admission(view), &matches);\n"
+                "        value = (XrXirValue) {XR_XIR_BOOL, 0, matches};\n", (uint32_t) op->immediate);
         else if (op->op == XR_XIR_ENUM_TAG)
             append(buffer, ";\n        uint32_t variant = 0; status = xr_xir_enum_variant(&receiver, &variant);\n"
                 "        value = (XrXirValue) {XR_XIR_I64, 0, variant};\n");
@@ -555,7 +560,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     uint32_t destination = layout->offsets[function->parameter_count + index];
     append(buffer, "    case %uu:\n        state->pc = %uu;\n", index, index + 1);
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
-        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE) {
+        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
+        op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
         emit_nominal_step(buffer, function, op, layout, destination); return;
     }
     if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {

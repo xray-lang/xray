@@ -211,6 +211,8 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     for (uint32_t p = 0; p < source->parameter_count; ++p) parameters[p] = spec_type(c, instance, source->parameters[p]);
     for (uint32_t i = 0; i < source->instruction_count; ++i) {
         ops[i] = source->instructions[i]; ops[i].type = spec_type(c, instance, ops[i].type);
+        if (ops[i].op == XR_XIR_ERROR_IS)
+            ops[i].immediate = spec_type(c, instance, (XrXirType) ops[i].immediate);
     }
     if (c->diagnostic.status != XR_XIR_OK) return UINT32_MAX;
     if (!spec_name(c, to, instance)) return UINT32_MAX;

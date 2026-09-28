@@ -15,6 +15,8 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_internal.h"
+#include "xir/xxir_checked.h"
+#include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -669,7 +671,86 @@ static void enum_metadata_cases(void) {
     CHECK(xr_xir_types_verify(&types, &b) == XR_XIR_OK);
 }
 
+static void error_filter_packets(const XrXirArtifact *checked) {
+    XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL;
+    CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded); decoded = NULL;
+    _Static_assert(XR_XIR_ERROR_IS == 95 && XR_XIR_ERROR_NARROW == 96, "error filter wire identity");
+    const uint8_t needle[40] = {[0]=95, [4]=1, [25]=1};
+    size_t offset = 0; uint32_t found = 0;
+    for (size_t i = 64; i + 120 <= packet.length; ++i)
+        if (!memcmp(packet.bytes+i,needle,sizeof(needle))) {offset=i; ++found;}
+    CHECK(found == 1 && packet.bytes[offset+40] == XR_XIR_BRANCH && packet.bytes[offset+80] == 96);
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        size_t position = mode == 0 ? offset+88 : mode == 1 ? offset+24 : mode == 2 ? offset+56 :
+            mode == 3 ? offset+60 : mode == 4 ? offset+80 : 12;
+        uint8_t saved = packet.bytes[position];
+        packet.bytes[position] = mode == 0 ? 1 : mode == 1 ? 1 : mode == 2 ? 2 :
+            mode == 3 ? 1 : mode == 4 ? XR_XIR_COPY : 31;
+        XrSHA256Context hash; xr_sha256_init(&hash);
+        xr_sha256_update(&hash,packet.bytes,32);
+        xr_sha256_update(&hash,packet.bytes+64,packet.length-64);
+        xr_sha256_final(&hash,packet.bytes+32);
+        CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL) != XR_XIR_OK && !decoded);
+        packet.bytes[position] = saved;
+    }
+    xr_xir_checked_packet_free(&packet);
+}
+
+static void error_filter_guards(void) {
+    for (unsigned mode = 0; mode < 9; ++mode) {
+        EnumMetadataFixture f; enum_metadata_fixture(&f);
+        XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING};
+        XrXirTypeNode node = {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {0, NULL, 0, fields, 2}};
+        XrXirTypes types = {&node, 1, &f.table};
+        XrXirType parameters[] = {XR_XIR_ERROR, XR_XIR_ERROR};
+        XrXirInstruction ops[] = {
+            {XR_XIR_ERROR_IS, XR_XIR_BOOL, {0}, {0}, 256, {0}},
+            {XR_XIR_BRANCH, XR_XIR_UNIT, {2}, {1, 2}, 0, {0}},
+            {XR_XIR_ERROR_NARROW, (XrXirType)256, {0}, {0}, 0, {0}},
+            {XR_XIR_ENUM_TAG, XR_XIR_I64, {4}, {0}, 0, {0}},
+            {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}},
+            {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, -1, {0}},
+            {XR_XIR_RETURN, XR_XIR_UNIT, {7}, {0}, 0, {0}}};
+        XrXirBlock blocks[] = {{0, 2}, {2, 3}, {5, 2}};
+        XrXirFunction function = {"filter", 6, parameters, 2, XR_XIR_I64, blocks, 3, ops, 7, NULL, 0};
+        XrXirInstruction ret = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
+        XrXirBlock empty = {0, 1}, entry_block = {0, 2};
+        XrXirInstruction entry_ops[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
+            {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+        XrXirFunction functions[] = {
+            {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &empty, 1, &ret, 1, NULL, 0},
+            {"init_root", 9, NULL, 0, XR_XIR_UNIT, &empty, 1, &ret, 1, NULL, 0},
+            {"entry", 5, NULL, 0, XR_XIR_I64, &entry_block, 1, entry_ops, 2, NULL, 0}, function};
+        uint32_t dependency = 0;
+        XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0}, {"root", 4, &dependency, 1, 1}};
+        XrXirFunctionIdentity identities[] = {{0, 0, 0, 0}, {1, 0, 0, 0}, {1, 0, 0, 0}, {1, 0, 0, 0}};
+        XrXirDeclarations declarations = {modules, 2, identities, NULL, 0, NULL, 0, 1, 2};
+        XrXirModule module = {XR_XIR_BUILT, functions, 4, &declarations, NULL, &types, NULL};
+        if (mode == 1) ops[2].args[0] = 1;
+        if (mode == 2) { ops[1].targets[0] = 2; ops[1].targets[1] = 1; }
+        if (mode == 3) ops[0].immediate = XR_XIR_I64;
+        if (mode == 4) ops[0].immediate = INT64_MAX;
+        if (mode == 5) ops[0] = (XrXirInstruction){XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}};
+        if (mode == 6) parameters[0] = (XrXirType)256;
+        if (mode == 7) { ops[5] = (XrXirInstruction){XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0, {0}}; blocks[2].count = 1; function.instruction_count = 6; }
+        if (mode == 8) f.declaration.exported = false;
+        functions[3] = function;
+        XrXirArtifact *checked = NULL, *lowered = NULL;
+        XrXirStatus status = xr_xir_check(&module, NULL, &checked, NULL);
+        if (mode ? status == XR_XIR_OK : status != XR_XIR_OK) fprintf(stderr, "error filter mode %u status %u\n", mode, (unsigned) status);
+        CHECK(mode ? status != XR_XIR_OK && !checked : status == XR_XIR_OK);
+        if (!mode) {
+            error_filter_packets(checked);
+            CHECK(xr_xir_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
+            xr_xir_artifact_free(lowered); xr_xir_artifact_free(checked);
+        }
+    }
+}
+
 int main(void) {
+    error_filter_guards();
     nominal_kind_boundaries();
     enum_metadata_cases();
     cumulative_verification_budget();

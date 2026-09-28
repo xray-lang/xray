@@ -193,7 +193,11 @@ static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
     } else {
         XrXirValue receiver = vm_value_operand(run, op->args[0]);
         if (op->op == XR_XIR_ERROR_ERASE) status = xr_xir_error_erase(&receiver, admission, &output);
-        else if (op->op == XR_XIR_ENUM_TAG) {
+        else if (op->op == XR_XIR_ERROR_NARROW) status = xr_xir_error_narrow(&receiver, op->type, admission, &output);
+        else if (op->op == XR_XIR_ERROR_IS) {
+            bool matches = false; status = xr_xir_error_is(&receiver, (XrXirType) op->immediate, admission, &matches);
+            output = (XrXirValue) {XR_XIR_BOOL, 0, matches};
+        } else if (op->op == XR_XIR_ENUM_TAG) {
             uint32_t variant = 0; status = xr_xir_enum_variant(&receiver, &variant);
             output = (XrXirValue) {XR_XIR_I64, 0, variant};
         } else status = op->op == XR_XIR_ENUM_GET ?
@@ -290,7 +294,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return XR_XIR_RUN_OK;
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
-        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE) {
+        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
+        op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
         state->instruction = next;
         return vm_nominal_step(run, state, op, run->layout->offsets[result_id]);
     }

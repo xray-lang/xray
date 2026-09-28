@@ -15,14 +15,14 @@ THROW accepts an enum, erased Error or Error-constrained parameter at definition
 Ordinary specialization substitutes and rechecks the operand before execution;
 runtime transport still receives concrete enum values. No dynamic dictionary,
 AST recheck, implicit payload access or compatibility constraint encoding is added.
-Checked semantic 30 introduced the Error bit. The current schema 10 / semantic 31
+Checked semantic 30 introduced the Error bit. The current schema 10 / semantic 32
 also separates generic argument ranges from invoke CFG targets. The marker
 itself requires no runtime dictionary because open parameters never execute.
 The subsequent Error value representation uses Value ABI 12 and Call/Program
 ABI 17 under the resumable-call ownership contract. ERROR_ERASE proves its
 operand constraint and preserves owned Error values after specialization.
 Checked and source conversion/rethrow share that representation; source catch
-and checked narrowing control flow remain separate unimplemented capabilities.
+and guarded narrowing control flow now use the same definition proofs; full effects and panic cleanup remain open.
 
 ## Ordinary templates
 

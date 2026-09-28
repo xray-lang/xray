@@ -12,6 +12,10 @@
 /* Outputs own a retained value; failure preserves the source and unit output. */
 XR_FUNC XrXirValueStatus xr_xir_error_erase(const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirValue *output);
+/* Exact matching consumes no value ownership; faults leave matches false.
+ * Trusted callers must prove permission to name the concrete target type. */
+XR_FUNC XrXirValueStatus xr_xir_error_is(const XrXirValue *value, XrXirType type,
+    XrXirValueAdmission *admission, bool *matches);
 /* Trusted callers must prove permission to name the concrete target type. */
 XR_FUNC XrXirValueStatus xr_xir_error_narrow(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission, XrXirValue *output);

@@ -210,7 +210,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
-               op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->immediate) {
+               op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -596,6 +596,7 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
 #include "xxir_enum_verify.inc.c"
 
 #include "xxir_invoke_verify.inc.c"
+#include "xxir_error_verify.inc.c"
 
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
@@ -605,6 +606,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!spend(&context->remaining.work, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
+            XrXirStatus status = error_filter_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
         if (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) {
             XrXirStatus status = enum_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;

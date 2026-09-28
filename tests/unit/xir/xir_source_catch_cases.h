@@ -36,7 +36,17 @@ static void source_catch_cases(XrXirSourceRequest *request, const char *path) {
         {"enum Failure { Bad }\nfn run() {try {throw Failure.Bad} catch(e) {e=e}}\nrun()\n",false},
         {"enum Failure { Bad }\nfn run() {try {throw Failure.Bad} catch(e) {var saved=e; saved=e; throw saved}}\nrun()\n",true},
         {"struct C { const value:string\n constructor() { try {} catch(e) { const f=fn()->string{return this.value} }; this.value=\"normal\" } }\nconst c=C()\n",false},
-        {"enum Failure { Bad }\nfn run(e:Error)->Error {try {throw e} catch(inner) {return inner}}\nconst result=run(Failure.Bad)\n",true}
+        {"enum Failure { Bad }\nfn run(e:Error)->Error {try {throw e} catch(inner) {return inner}}\nconst result=run(Failure.Bad)\n",true},
+        {"enum E { Bad }\nfn run()->i64 {try {throw E.Bad} catch(e:E){return 1}}\nrun()\n",true},
+        {"enum E { Bad }\nfn run(){try {} catch(e:E){const x=missing}}\nrun()\n",false},
+        {"fn run(){try {} catch(e:i64){}}\nrun()\n",false},
+        {"enum E { Bad }\nfn run(){try {throw E.Bad} catch(e:Error){}}\nrun()\n",false},
+        {"enum E { Bad }\nfn run(){try {throw E.Bad} catch(e:E){e=E.Bad}}\nrun()\n",false},
+        {"enum E<T> { Bad {value:T} }\nfn run<T>(v:T)->T {try {throw E<T>.Bad{value:v}} catch(e:E<T>){return match(e){E.Bad{value:x}->x}}}\nrun<i64>(1)\n",true},
+        {"enum E { Bad }\nfn run(){try {throw E.Bad} catch(e){} catch(later:E){const x=missing}}\nrun()\n",false},
+        {"enum E<T:Sendable> { Bad }\nfn unused<T>() {try {} catch(e:E<T>){}}\n",false},
+        {"enum E<T:Sendable> { Bad }\nfn unused<T:Sendable>() {try {} catch(e:E<T>){}}\n",true},
+        {"enum E<T:Sendable> { Bad }\nfn unused() {try {} catch(e:E<Error>){}}\n",false}
     };
     uint32_t failures = 0;
     for (uint32_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {

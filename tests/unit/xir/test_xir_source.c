@@ -49,7 +49,11 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_specialize(checked, NULL, &specialized, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked); checked = specialized;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+    XrXirDiagnostic lower_diagnostic;
+    status = xr_xir_lower(checked, &target, NULL, &lowered, &lower_diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr, "lower status %u function %u block %u instruction %u\n",
+        (unsigned) status, lower_diagnostic.function, lower_diagnostic.block, lower_diagnostic.instruction);
+    CHECK(status == XR_XIR_OK);
     xr_xir_artifact_free(checked);
     const XrXirModule *module = xr_xir_artifact_module(lowered);
     uint32_t result = UINT32_MAX, advance = UINT32_MAX, update = UINT32_MAX, calculate = UINT32_MAX, resume_text = UINT32_MAX, stack_depth = UINT32_MAX, numeric_pause = UINT32_MAX, bound_result = UINT32_MAX;

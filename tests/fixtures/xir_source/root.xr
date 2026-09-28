@@ -212,7 +212,7 @@ export fn resumeText(flag:bool)->string {
     if (predicateText.lastIndexOf(predicatePause(expected)) != 0) { return "bad" }
     predicateText=expected
     if (predicateText.indexOf("!",searchStartPause()) != 2) { return "bad" }
-    return expected
+    return typedResumedText(expected)
 }
 
 export fn stackDepth(n:i64)->string {
@@ -751,4 +751,46 @@ fn catchParameter(error:Error)->Error {
 }
 fn catchParameterResult()->i64 {
     try {throw catchParameter(CatchFailure.Bad{text:"parameter"})} catch(e) {return 41}
+}
+
+
+enum TypedOther { Bad }
+enum TypedFailure<T> { Value { item:T } }
+fn typedErrorValue<T>(value:T)->T {
+    try {throw TypedFailure<T>.Value{item:value}}
+    catch(wrong:TypedOther) {throw wrong}
+    catch(e:TypedFailure<T>) {return match(e){TypedFailure.Value{item:x}->x}}
+}
+fn typedSecond()->i64 {
+    try {throw TypedOther.Bad}
+    catch(wrong:CatchFailure) {return 0}
+    catch(e:TypedOther) {return 43}
+}
+fn typedOrder()->i64 {
+    try {throw TypedOther.Bad}
+    catch(first:TypedOther) {return 47}
+    catch(second:TypedOther) {return 0}
+}
+fn typedUnmatched()->i64 {
+    try {
+        try {throw TypedOther.Bad} catch(wrong:CatchFailure) {return 0}
+    } catch(e:TypedOther) {return 53}
+}
+fn typedFallthrough()->i64 {
+    var value=0
+    try {throw TypedOther.Bad} catch(e:TypedOther) {value=59}
+    return value
+}
+print(typedErrorValue<string>("typed"),typedSecond(),typedOrder(),typedUnmatched(),typedFallthrough())
+
+
+fn typedResumedText(text:string)->string {
+    try {alpha.failEvent<string>(text)}
+    catch(wrong:CatchFailure) {return "bad"}
+    catch(e:alpha.Event<string>) {
+        const read=fn()->string {return alpha.eventValue<string>(e,"bad")}
+        Coro.yield()
+        return read()
+    }
+    return "bad"
 }

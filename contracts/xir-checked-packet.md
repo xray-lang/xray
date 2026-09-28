@@ -2,7 +2,11 @@
 
 ## Instruction layout and protected-call execution
 
-The atomic instruction-layout cutover uses schema 10 and semantic 31.
+The instruction-layout cutover introduced schema 10 and semantic 31.
+The current semantic 32 adds ERROR_IS/ERROR_NARROW without changing field widths.
+ERROR_IS carries a type immediate that participates in specialization, Lowered
+type compaction and independent provenance matching. ERROR_NARROW is admitted
+only at its matching dedicated true successor. Earlier semantics reject.
 Each instruction is exactly 40 wire bytes: op/type/args[2]/targets[2] as six
 little-endian u32 values, immediate as a two's-complement u64, then
 type_arguments[2] as two u32 values. The final pair exclusively describes the
@@ -11,13 +15,13 @@ schemas and semantics reject even with a valid recomputed digest. Allocation
 minimums, scalar KATs, hostile-packet offsets, source production, generic
 verification, specialization and provenance all migrate together.
 
-The current reader accepts only schema 10 and semantic 31. No dual reader or runtime conversion is
+The current reader accepts only schema 10 and semantic 32. No dual reader or runtime conversion is
 allowed. Runtime Value ABI 12 and Call/Program ABI 17 need no bump solely for
 this instruction-layout change. Invoke uses the existing CALL action and owned
 inbox without changing public action, result, value or entry fields. Generated
 continuation fields are private to each entry; state_bytes continues to carry
 its actual state size. Embedded Checked proof is decoded by the schema 10 /
-semantic 31 reader, so older proofs reject before Program publication. Raw host
+semantic 32 reader, so older proofs reject before Program publication. Raw host
 entries remain trusted ABI-bound entries; this does not qualify a native cache
 format or grant unchecked artifact admission.
 

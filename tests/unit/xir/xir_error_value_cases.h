@@ -83,6 +83,16 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     CHECK(xr_xir_enum_new((XrXirType)256, 0, NULL, 0, &receiving, &concrete) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_erase(&concrete, &receiving, &error) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)257, &receiving, &output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
+    bool matches = true;
+    size_t allocations = calls; uint32_t references = atomic_load(&object_pointer(&error)->references);
+    CHECK(xr_xir_error_is(&error, (XrXirType)257, &receiving, &matches) == XR_XIR_VALUE_OK && !matches);
+    CHECK(xr_xir_error_is(&error, (XrXirType)256, &receiving, &matches) == XR_XIR_VALUE_OK && matches);
+    CHECK(calls == allocations && atomic_load(&object_pointer(&error)->references) == references);
+    CHECK(xr_xir_error_is(&error, (XrXirType)258, &receiving, &matches) == XR_XIR_VALUE_BAD_ARGUMENT && !matches);
+    CHECK(xr_xir_error_is(&error, (XrXirType)256, admission, &matches) == XR_XIR_VALUE_BAD_ARGUMENT && !matches);
+    XrXirValueAdmission limited = receiving; limited.work = 0; matches = true;
+    CHECK(xr_xir_error_is(&error, (XrXirType)256, &limited, &matches) == XR_XIR_VALUE_LIMIT && !matches);
+
     const XirNominalValue *payload = (const XirNominalValue *) object_pointer(pair);
     CHECK(xr_xir_struct_new((XrXirType)258, payload->fields, 2, &receiving, &record) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_erase(&record, &receiving, &output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);

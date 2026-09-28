@@ -75,8 +75,15 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
         for (uint32_t p = 0; p < function->parameter_count; ++p)
             if (!lower_type_id(&parameters[p], map, count)) return XR_XIR_BAD_TYPE;
         XrXirInstruction *ops = (XrXirInstruction *) function->instructions;
-        for (uint32_t i = 0; i < function->instruction_count; ++i)
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
             if (!lower_type_id(&ops[i].type, map, count)) return XR_XIR_BAD_TYPE;
+            if (ops[i].op == XR_XIR_ERROR_IS) {
+                XrXirType target = (XrXirType) ops[i].immediate;
+                if (!lower_type_work(budget, 1)) return XR_XIR_BUDGET;
+                if (!lower_type_id(&target, map, count)) return XR_XIR_BAD_TYPE;
+                ops[i].immediate = target;
+            }
+        }
     }
     if (module->declarations) {
         if (!lower_type_work(budget, module->declarations->slot_count)) return XR_XIR_BUDGET;

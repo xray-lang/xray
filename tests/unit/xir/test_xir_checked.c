@@ -127,7 +127,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 10 && XR_XIR_CHECKED_CONTRACT == 31 && XR_XIR_OP_COUNT == 95, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 10 && XR_XIR_CHECKED_CONTRACT == 32 && XR_XIR_OP_COUNT == 97, "packet revision");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
     _Static_assert(XR_XIR_ENUM_NEW == 86 && XR_XIR_ENUM_TAG == 87 && XR_XIR_ENUM_GET == 88, "enum wire operations");
     _Static_assert(XR_XIR_STRING_INDEX_OF == 84 && XR_XIR_STRING_LAST_INDEX_OF == 85, "search wire operations");
@@ -157,8 +157,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0xfa, 0xd4, 0x3f, 0xbe, 0xf2, 0xc1, 0x24, 0x98, 0xe4, 0x26, 0x0c, 0x47, 0xac, 0x2c, 0xaf, 0xde,
-        0x76, 0xdb, 0x0c, 0x71, 0x9b, 0x07, 0xae, 0xb5, 0x96, 0x7e, 0x58, 0x55, 0x0a, 0x97, 0x1b, 0xc7};
+        0xb6, 0xb2, 0x2e, 0x6e, 0xef, 0x5c, 0xd8, 0x02, 0xac, 0x38, 0x29, 0x19, 0x25, 0x71, 0xdf, 0x95,
+        0xa3, 0x15, 0x0f, 0x6c, 0xaa, 0x44, 0x77, 0xfc, 0x3b, 0xfc, 0x34, 0x15, 0xb6, 0x04, 0x00, 0xeb};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[201]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 133; offset <= 137; offset += 4) {
