@@ -16,8 +16,8 @@ static XrXirArtifact *nominal_expression_fixture(void) {
     uint32_t constraint = 0;
     XrXirNominalField fields[] = {{{"value", 5}, t, 0}, {{"inner", 5}, box, 0}};
     XrXirNominalDeclaration definitions[] = {
-        {{"alpha", 5}, {"Box", 3}, 1, &constraint, 1, fields, 1},
-        {{"alpha", 5}, {"Outer", 5}, 1, &constraint, 1, fields + 1, 1}};
+        {{"alpha", 5}, {"Box", 3}, 1, &constraint, 1, fields, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0},
+        {{"alpha", 5}, {"Outer", 5}, 1, &constraint, 1, fields + 1, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0}};
     XrXirNominalTable table = {definitions, 2, NULL};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {0, &t, 1, NULL, 0}},

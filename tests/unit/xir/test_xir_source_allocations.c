@@ -200,6 +200,7 @@ static bool source_nominal_substitution_case(SourceContext *ctx) {
     XrXirNominalDeclaration declaration = {0}; declaration.fields = fields; declaration.field_count = 3;
     declaration.parameter_count = 2;
     ctx->nominals = (XrXirNominalTable) {&declaration, 1, NULL};
+    ctx->types.nominals = &ctx->nominals;
     uint32_t members[] = {1,2,3}, *member_tables[] = {members}; ctx->nominal_members = member_tables;
     XrXirFunctionIdentity identity = {0}; ctx->identities = &identity;
     uint32_t field_index; XrXirType field_type;

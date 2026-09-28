@@ -15,8 +15,11 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 13u
+#define XR_XIR_PROGRAM_ABI_VERSION 14u
 typedef struct XrXirProgram XrXirProgram;
+typedef struct XrXirProgramBudget {
+    uint64_t metadata_bytes, work;
+} XrXirProgramBudget;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
     void *owner;
@@ -61,7 +64,7 @@ typedef struct XrXirInstanceResult {
 } XrXirInstanceResult;
 
 /* Successful sealing takes the code lease. A null lease declares static code. */
-XR_FUNC XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, uint64_t byte_limit,
+XR_FUNC XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget budget,
                                       XrXirProgram **output);
 XR_FUNC void xr_xir_program_drop(XrXirProgram *program);
 XR_FUNC XrXirInstanceConfig xr_xir_instance_defaults(void);

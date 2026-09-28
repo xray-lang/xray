@@ -70,9 +70,11 @@ typedef struct SourceContext {
     XrXirGeneric *generics;
     XrXirTypes types;
     XrXirNominalTable nominals;
-    ClassDeclNode *nominal_type_owner;
+    XrGenericParam **nominal_type_parameters;
+    int nominal_type_parameter_count;
+    bool nominal_type_context;
     uint32_t nominal_generic_owner;
-    uint32_t **nominal_members;
+    uint32_t **nominal_members, **nominal_variants;
     uint32_t **nominal_defaults;
     SourceName **nominal_sources, **nominal_methods;
     bool *nominal_defaultable;
@@ -286,9 +288,9 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
 static XrGenericParam **source_type_parameters(SourceContext *ctx, int *count) {
-    if (ctx->nominal_type_owner) {
-        *count = ctx->nominal_type_owner->type_param_count;
-        return ctx->nominal_type_owner->type_params;
+    if (ctx->nominal_type_context) {
+        *count = ctx->nominal_type_parameter_count;
+        return ctx->nominal_type_parameters;
     }
     SourceFunction *body = &ctx->bodies[ctx->function];
     *count = (int)body->type_parameter_count;
@@ -618,6 +620,7 @@ static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
+#include "xxir_source_enum.inc.c"
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_methods.inc.c"
@@ -993,6 +996,7 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, XrXirType expe
     }
     return emit_group(ctx, (XrXirInstruction) {XR_XIR_PHI, yes.type, {0}, {0}, 0}, inputs, 4, value);
 }
+#include "xxir_source_match.inc.c"
 static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName *binding, SourceName *symbol, SourceValue *value) {
     if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     if (!symbol || symbol->kind != SOURCE_FUNCTION)
@@ -1043,11 +1047,13 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
         return source_literal(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, expected, value);
+    case AST_MATCH_EXPR: return source_match(ctx, node, expected, true, value);
     case AST_GROUPING: return expression_in(ctx, node->as.grouping, expected, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
     case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, value);
     case AST_FUNCTION_EXPR: return source_closure(ctx, node, value);
-    case AST_STRUCT_LITERAL: case AST_ENUM_CONSTRUCT: return source_struct_literal(ctx, node, value);
+    case AST_STRUCT_LITERAL: return source_struct_literal(ctx, node, value);
+    case AST_ENUM_CONSTRUCT: return source_enum_literal(ctx, node, value);
     case AST_MEMBER_SET: return source_struct_set(ctx, node, value);
     case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);
     case AST_MEMBER_ACCESS: {
@@ -1286,10 +1292,18 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_FOR_STMT: return source_for(ctx, node);
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_IMPORT_STMT: case AST_FUNCTION_DECL: case AST_STRUCT_DECL:
+    case AST_IMPORT_STMT: case AST_FUNCTION_DECL: case AST_STRUCT_DECL: case AST_ENUM_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
-    case AST_EXPR_STMT: { SourceValue value; return expression(ctx, node->as.expr_stmt, &value); }
+    case AST_EXPR_STMT: {
+        SourceValue value; AstNode *expr=node->as.expr_stmt;
+        if (expr->type!=AST_MATCH_EXPR) return expression(ctx,expr,&value);
+        if (ctx->depth>=128) return source_fail(ctx,expr,XR_XIR_BUDGET,"source match depth exhausted");
+        ++ctx->depth;
+        bool ok=source_match(ctx,expr,XR_XIR_UNIT,false,&value);
+        --ctx->depth;
+        return ok && (ctx->returned || source_query_expression(ctx,expr,value.type));
+    }
     case AST_RETURN_STMT: {
         if (source_constructor_active(ctx)) return source_constructor_return(ctx, node);
         if (top || !ctx->bodies[ctx->function].node || node->as.return_stmt.value_count > 1)
@@ -1445,7 +1459,7 @@ static bool collect_declarations(SourceContext *ctx) {
             AstNode *node = ast->as.program.statements[i];
             if (!source_work(ctx, node)) return false;
             if (node->type == AST_FUNCTION_DECL) ++functions;
-            if (node->type == AST_STRUCT_DECL) ++nominals;
+            if (node->type == AST_STRUCT_DECL || node->type == AST_ENUM_DECL) ++nominals;
             if (node->type == AST_STRUCT_DECL) {
                 ClassDeclNode *decl = &node->as.struct_decl;
                 if (functions > ctx->budget.functions || decl->method_count < 0 || (uint32_t)decl->method_count > ctx->budget.functions - functions)
@@ -1483,6 +1497,7 @@ static bool collect_declarations(SourceContext *ctx) {
     ctx->slots = source_alloc(ctx, slots, sizeof(*ctx->slots));
     ctx->nominals.declarations = source_alloc(ctx, nominals, sizeof(*ctx->nominals.declarations));
     ctx->nominal_members = source_alloc(ctx, nominals, sizeof(*ctx->nominal_members));
+    ctx->nominal_variants = source_alloc(ctx, nominals, sizeof(*ctx->nominal_variants));
     ctx->nominal_defaults = source_alloc(ctx, nominals, sizeof(*ctx->nominal_defaults));
     ctx->nominal_sources = source_alloc(ctx, nominals, sizeof(*ctx->nominal_sources));
     ctx->nominal_methods = source_alloc(ctx, nominals, sizeof(*ctx->nominal_methods));
@@ -1496,10 +1511,11 @@ static bool collect_declarations(SourceContext *ctx) {
         for (int i = 0; i < ast->as.program.count; ++i) {
             AstNode *node = ast->as.program.statements[i];
             if (node->type == AST_STRUCT_DECL && !source_struct_declare(ctx, node)) return false;
+            if (node->type == AST_ENUM_DECL && !source_enum_declare(ctx, node)) return false;
             if (node->type == AST_IMPORT_STMT && !declare_import(ctx, node)) return false;
         }
     }
-    if (!source_struct_fields(ctx)) return false;
+    if (!source_struct_fields(ctx) || !source_enum_fields(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;
     uint32_t function = count, slot = 0;
     for (uint32_t m = 0; m < count; ++m) {
@@ -1583,8 +1599,27 @@ static bool capture_scope(SourceCaptureScan *scan, AstNode *node) {
     SourceName *saved = scan->bound;
     bool ok = capture_scan(node, scan); scan->bound = saved; return ok;
 }
+static bool capture_pattern(SourceCaptureScan *scan, AstNode *node) {
+    if (!node || !source_work(scan->ctx,node)) return false;
+    if (source_pattern_binding(node)) return capture_bind(scan,node->as.pattern_literal.value->as.variable.name,node);
+    if (node->type==AST_PATTERN_ADT) {
+        for (int i=0;i<node->as.pattern_adt.count;++i)
+            if (!capture_pattern(scan,node->as.pattern_adt.patterns[i])) return false;
+    }
+    return true;
+}
 static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
     switch (node->type) {
+    case AST_MATCH_EXPR: {
+        if (!capture_scan(node->as.match_expr.expr,scan)) return false;
+        SourceName *saved=scan->bound;
+        for (int i=0;i<node->as.match_expr.arm_count;++i) {
+            MatchArmNode *arm=&node->as.match_expr.arms[i]->as.match_arm;
+            scan->bound=saved;
+            if (!capture_pattern(scan,arm->pattern) || !capture_scan(arm->guard,scan) || !capture_scan(arm->body,scan)) return false;
+        }
+        scan->bound=saved; return true;
+    }
     case AST_THIS_EXPR: return capture_name(scan, "this", node);
     case AST_VARIABLE: return capture_name(scan, node->as.variable.name, node);
     case AST_INC: return capture_name(scan, node->as.inc.name, node);

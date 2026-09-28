@@ -35,7 +35,7 @@ static void source_array_bounds_packet(const char *output) {
     }
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 2097152, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !lowered);
     source_array_sticky_bounds(program, entry);
 }
 int main(int argc, char **argv) {
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     }
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 2097152, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !lowered);
     source_array_program_cases(program, functions);
     source_array_bounds_packet(argc == 2 ? argv[1] : NULL);
     puts("Parser-free Array Checked consumer matched independent expectations and generated native C");

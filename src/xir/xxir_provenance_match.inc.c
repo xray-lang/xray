@@ -164,12 +164,28 @@ static XrXirStatus provenance_nominal_fields(ProvenanceMatch *c,
     return status;
 }
 
+static XrXirStatus provenance_variants(ProvenanceMatch *c,
+    uint32_t kind, const XrXirNominalVariant *a, uint32_t count,
+    uint32_t actual_kind, const XrXirNominalVariant *b, uint32_t actual_count) {
+    if (kind != actual_kind || count != actual_count || (count && (!a || !b))) return XR_XIR_BAD_STRUCTURE;
+    if (count > c->remaining->work) return XR_XIR_BUDGET;
+    c->remaining->work -= count;
+    for (uint32_t i = 0; i < count; ++i) {
+        if (a[i].field_begin != b[i].field_begin || a[i].field_count != b[i].field_count) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status = provenance_bytes(c, a[i].name.bytes, a[i].name.length, b[i].name.bytes, b[i].name.length);
+        if (status != XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus provenance_lowered_nominals(ProvenanceMatch *c,
     const XrXirNominalTable *source, const XrXirNominalTable *output) {
     if (output->declarations || (output->count && !output->identities)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t d = 0; d < source->count; ++d) {
         const XrXirNominalDeclaration *a = &source->declarations[d];
         const XrXirNominalIdentity *b = &output->identities[d];
+        XrXirStatus variants = provenance_variants(c, a->kind, a->variants, a->variant_count,
+            b->kind, b->variants, b->variant_count);
+        if (variants != XR_XIR_OK) return variants;
         if (a->exported != b->exported || a->parameter_count != b->arity || a->field_count != b->field_count ||
             (b->field_count && !b->fields)) return XR_XIR_BAD_STRUCTURE;
         if ((uint64_t)a->field_count + 1 > c->remaining->work) return XR_XIR_BUDGET;
@@ -223,6 +239,9 @@ static XrXirStatus provenance_nominals(ProvenanceMatch *c) {
     c->remaining->work -= a->count;
     for (uint32_t d = 0; d < a->count; ++d) {
         const XrXirNominalDeclaration *from = &a->declarations[d], *to = &b->declarations[d];
+        XrXirStatus variants = provenance_variants(c, from->kind, from->variants, from->variant_count,
+            to->kind, to->variants, to->variant_count);
+        if (variants != XR_XIR_OK) return variants;
         if (from->exported != to->exported || from->parameter_count != to->parameter_count ||
             from->field_count != to->field_count || (to->parameter_count && !to->constraints) ||
             (to->field_count && !to->fields)) return XR_XIR_BAD_STRUCTURE;

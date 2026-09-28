@@ -63,6 +63,12 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, uint64_
         TRY(match_literal(u->module, v->module, work));
         TRY(match_literal(u->name, v->name, work));
         MATCH(u->exported, v->exported); MATCH(u->arity, v->arity);
+        MATCH(u->kind, v->kind); MATCH(u->variant_count, v->variant_count);
+        for (uint32_t j = 0; j < u->variant_count; ++j) {
+            TRY(match_literal(u->variants[j].name, v->variants[j].name, work));
+            MATCH(u->variants[j].field_begin, v->variants[j].field_begin);
+            MATCH(u->variants[j].field_count, v->variants[j].field_count);
+        }
         MATCH(u->field_count, v->field_count);
         for (uint32_t p = 0; p < u->field_count; ++p) {
             TRY(match_literal(u->fields[p].name, v->fields[p].name, work));

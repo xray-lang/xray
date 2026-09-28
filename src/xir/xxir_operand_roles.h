@@ -43,6 +43,6 @@ static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal)
 static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_FUNCTION_REF || op == XR_XIR_CALL_INDIRECT ||
         op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
-        op == XR_XIR_STRUCT_NEW || op == XR_XIR_STRING_INDEX_OF;
+        op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_STRING_INDEX_OF;
 }
 #endif // XXIR_OPERAND_ROLES_H

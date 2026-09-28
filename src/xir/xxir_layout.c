@@ -136,7 +136,8 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         const XrXirInstruction *op = &function->instructions[i];
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
             op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT ||
-            op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ? op->args[1] : 0;
+            op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
+            op->op == XR_XIR_ENUM_NEW ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;
     }
     uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue);

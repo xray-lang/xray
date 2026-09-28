@@ -1,8 +1,12 @@
-# XIR nominal struct declarations and field type ownership
+# XIR nominal declarations and field type ownership
+
+Current executable identities are Checked schema 9 / semantic 27, Program ABI 14,
+Value ABI 11 and Call ABI 14. Later admission sections define the supported source
+subsets; historical implementation order does not introduce alternative protocols.
 
 ## Abstract nominal expression admission
 
-Semantic contract 20 uses the sole schema 8 pool with nominal expressions
+Semantic contract 27 uses the sole schema 9 pool with nominal expressions
 whose ordered arguments may contain enclosing parameters and earlier nominal
 expressions. The exact parameter span is derived from the argument sequence.
 Declaration identity and ordered arguments form identity; derived field vectors
@@ -45,11 +49,11 @@ unsupported declarations rather than constructing a partially checked type.
 
 ### Specialization provenance and opaque substitution
 
-Checked wire admission now uses schema 8 / semantic 20. Program ABI 13 now requires complete specialized Checked evidence during sealing.
+Checked wire admission now uses schema 9 / semantic 27. Program ABI 14 now requires complete specialized Checked evidence during sealing.
 Ordinary generic specialization attaches the original definition and exact origins.
 Cross-module substitution reuses verified definition authority without adding imports.
 The complete cutover removes the preceding revisions; it adds no optional
-compatibility reader. Value ABI 10 and Call ABI 14 need no representation change.
+compatibility reader. Value ABI 11 includes enum arena leases; Call ABI 14 is unchanged.
 
 A specialized Checked module owns one original, unspecialized Checked module
 and one origin record per output function. A record contains a source function
@@ -91,9 +95,9 @@ Native descriptors need a verified signature-origin projection and bind it to
 the same Checked input/cache identity. Descriptor validation is not validation
 of arbitrary native machine code, and must not be described as such.
 
-Native Program 13 binds this projection to the complete specialized Checked
+Native Program 14 binds this projection to the complete specialized Checked
 packet retained at the Checked-to-Lowered boundary. The packet carries the
-original template and origins through schema 8; its digest is the cache content
+original template and origins through schema 9; its digest is the cache content
 identity, not authentication. Emitted C carries these bytes and their expected
 identity. Native sealing uses the same bounded Checked admission and lowering
 implementation, then compares target, function signatures/layouts, type pool,
@@ -445,6 +449,8 @@ verification-test: test_xir_values
 verification-test: test_xir_value_allocations
 verification-test: test_xir_source_admission
 verification-test: test_xir_source_query
+verification-test: test_xir_emit_program
+verification-test: test_xir_program_native
 
 Required metadata cases include same-shaped distinct declarations, same names
 from different modules, ordered generic argument identity, field substitution,
@@ -484,8 +490,8 @@ allocation with physical accounting restored.
 
 Kind 4 is NOMINAL. Its explicit payload contains a declaration index, owned
 ordered argument and derived-field pointer/count pairs, and no callable/element/result/flags payload.
-Other kinds require an entirely zero nominal payload. Checked schema 8 /
-contract 20 encodes kind, parameter span, declaration index, argument count,
+Other kinds require an entirely zero nominal payload. Checked schema 9 /
+contract 27 encodes kind, parameter span, declaration index, argument count,
 then that many u32 type IDs, followed by the derived field vector described below.
 Declaration records follow the node sequence.
 Zero-argument instances use a null argument pointer. The count must exactly
@@ -497,15 +503,15 @@ parameter or earlier nominal expressions. The exact free-parameter span is
 derived from arguments; declared constraints are proved in each use context.
 Unit, CELL, unknown types and forward expression edges reject. Direct closed nominal field dependencies,
 value operations, Lowered projection and runtime ownership follow the sections
-below. Nominal components of callable signatures remain unavailable.
+below. Nominal components of callable signatures follow `xir-callable-types.md`.
 The entire pool owns its argument arrays through clone, packet decode and
 cleanup, including every failed allocation prefix. Runtime projection owns its
 closed argument and field vectors instead of retaining compiler argument storage.
 
-The native descriptor and declaration authority require Program ABI 13; owned
-nominal values require Value ABI 10, with Call ABI 14 unchanged. Older Program
+The native descriptor and declaration authority require Program ABI 14; owned
+nominal values require Value ABI 11, with Call ABI 14 unchanged. Older Program
 and Value admissions fail before descriptor dereference. The independent opaque
-TypeArena is reached through runtime helpers. Checked uses schema 8 / semantic 20.
+TypeArena is reached through runtime helpers. Checked uses schema 9 / semantic 27.
 Full generated-native regressions rebuild descriptors
 and their runtime together; old generated C must retain a failing ABI assertion.
 
@@ -606,7 +612,7 @@ instructions; the boxed runtime owner below is a separate consumer.
 
 ## Boxed nominal value owner
 
-Value ABI 10 introduces owned NOMINAL carriers without changing XrXirValue's
+Value ABI 11 carries owned NOMINAL values without changing XrXirValue's
 16-byte tagged layout. The carrier pins its domain and exact TypeArena, and
 holds an ordered vector of owned boxed field values. This internal boxed object
 representation is not compact field storage: the nominal storage layout service
@@ -639,8 +645,8 @@ and the module entry have no nominal owner. Specialization preserves this
 declaration scope without granting additional generic constraints.
 
 Checked records encode module, exported, nominal_owner and member_access as four u32 words.
-The current schema8/semantic20 contract has only this representation. Native
-function identity layout changes Program ABI to13; Value10/Call14 remain.
+The current schema9/semantic27 contract has only this representation. Native
+function identity uses Program ABI14, Value ABI11 and Call ABI14.
 Older Program layouts must reject before reading its declarations or type metadata.
 
 One verified-module permission query serves construction and member operations.
@@ -660,8 +666,9 @@ copy, local or PHI value once its pool is verified. Referencing the type in a
 function requires same-module visibility or an explicit import of its exported
 declaration; this type-use check grants no field or construction authority.
 Specialization must produce complete field vectors before Lowered publication.
-Nominal Sendable proofs and Array/callable components containing nominal types
-remain unavailable until their separate dependency proof is implemented. Internal
+Nominal Sendable proofs and Array components containing nominal types remain
+unavailable until their separate dependency proof is implemented. Callable
+components follow `xir-callable-types.md`. Internal
 CELL roots follow the checked closed-nominal rule below.
 
 Executable SSA/frame payloads use the existing eight-byte owned carrier;
@@ -744,7 +751,7 @@ default/rest parameters and user constructors remain outside
 this initial admission. Reject these declarations explicitly; do not erase their
 receiver or access promises to fit READ. Their full contracts remain required.
 
-## Restricted struct method call authority (2026-09-28, qualification pending)
+## Restricted struct method call authority
 
 Function identities add member_access: PUBLIC=0, PRIVATE=1, PROTECTED=2.
 This is independent of module export and nominal_owner. Restricted entries must
@@ -762,7 +769,7 @@ that correspondence; concrete instantiation never grants extra permissions.
 
 The wire record becomes four u32 words under schema8/semantic20. Program ABI13
 updates native declaration layout atomically, rejecting earlier layouts before
-reading them. Value10/Call14 remain unchanged. Packet admission, canonical native
+reading them. Value11/Call14 apply. Packet admission, canonical native
 matching and generated C must all preserve access. No compatibility reader.
 
 Required evidence: same-owner generic and nested closure calls; outside/same-module
@@ -791,3 +798,134 @@ type/import binding and target the actual constructor declaration. Parameter
 ranges come from parser parameter positions. This subset does not qualify class
 inheritance, default arguments, variadic/ref/move constructors or every valid
 constant-condition control-flow proof. Those remain open language obligations.
+
+
+## Enum declaration metadata migration
+
+The declaration table explicitly distinguishes struct (kind 0) and enum (kind 1).
+A struct has no variants. An enum has at least one named variant, in declaration
+order; names are unique within that declaration. Each variant owns a contiguous
+range in the flat payload-field vector. Ranges start at the previous range end,
+including empty variants, and together cover exactly the complete vector. Field
+names are unique within their own variant. Enum payload fields have zero flags;
+struct visibility and mutation flags retain their existing meaning.
+
+Verification charges all names, ranges and field types before publication.
+Constraints are checked at the declaration, including inactive variants. Clone,
+Checked wire transport, specialization provenance, Lowered identity projection,
+independent arena copies and native descriptor comparison preserve kind and all
+ordered variant names/ranges. Failure, malformed data and exhausted budgets
+publish no partial metadata and release every initialized allocation prefix.
+The sole wire revision changes atomically; no older reader is retained.
+
+Closed enum type nodes share the complete field-substitution and finite by-value
+graph proof. STRUCT_NEW/GET/SET and struct runtime helpers require struct kind;
+classification alone grants neither descriptor validity nor member authority.
+Source enum construction and flat match follow the admission sections below.
+Typed enum errors remain unimplemented.
+Enum instruction admission is defined below. The single budgeted inline layout query computes sum-type storage as described
+below; mutually exclusive payload sizes are never concatenated.
+
+Runtime enum values use one nominal object record. The arena prebuilds immutable
+empty-variant records and lookup tables inside its single charged allocation.
+Descriptor backpointers are weak. Each empty value owns one arena reference;
+copy/drop never changes the descriptor sentinel reference or release link.
+Empty construction performs no allocation. Payload records own only the selected
+variant's fields, with exact substituted types and reverse-order release.
+Construction copies every field before publication and rolls back the initialized
+prefix on failure. Payload reads require the expected active variant before access.
+Runtime helpers are trusted consumers of checked authority, not source constructors.
+
+Checked schema 9 / semantic 27 preserves ordered kind and variant metadata.
+Native Program ABI 14 rejects earlier identity layouts. Value ABI 11 replaces
+Value ABI 10 because enum references may own an arena lease instead of an object
+reference; carrier size remains sixteen bytes and typed owned slots eight bytes.
+Call ABI 14 is unchanged. Earlier value protocols reject at target admission;
+there is no compatibility reader. Full source/VM/native/error qualification,
+concurrency and complete batch gates remain required.
+
+
+## Enum inline storage layout
+
+The target-bound nominal layout query is the sole authority for complete inline
+struct and enum storage. An enum discriminant has width zero for one variant,
+one byte for 2..256 variants, two bytes for 257..65536, and four bytes above that.
+Variant ordinals start at zero. This discriminant layout is not a second value
+carrier protocol; executable frames and owned boundaries retain Value ABI 11.
+
+Each variant lays out its own fields from offset zero using their exact closed
+storage types. The payload size and alignment are the maxima across variants.
+The shared payload starts after the discriminant, rounded up to payload alignment.
+The aggregate alignment is the larger of tag and payload alignment (at least one);
+the final size includes trailing aggregate padding. Root field offsets use the
+complete flat field vector and may overlap across variants. A single empty
+variant has size zero/alignment one. Nested structs/enums use the same iterative
+dependency traversal; infinite by-value graphs, incomplete substitutions, target
+mismatches, offset/size overflow, budget exhaustion and OOM publish no offsets or
+spent budget. Logical inline layout does not by itself qualify compact runtime
+storage, source construction, match, FFI export or enum errors.
+
+
+## Enum instruction admission
+
+ENUM_NEW (tag86, OP_COUNT89) has an enum result, nonnegative u32 variant ordinal in immediate, and
+an operand-table range in args[0..1] containing exactly that variant's fields.
+ENUM_TAG (tag87) returns i64, takes one enum value in args[0], and has zero remaining
+arguments/immediate. ENUM_GET (tag88) takes an enum value in args[0], a variant-local
+field ordinal in args[1] (metadata, not an SSA operand), and its expected variant
+in immediate. All three have zero targets and ordinary value/dominance rules.
+
+The verifier requires enum kind, declared variant/field bounds, declaration
+visibility/import authority and exact field substitution in the definition's
+constraint context. Construction grants no additional generic facts. Runtime
+GET checks the active variant before payload access; a mismatch faults without
+publishing a value. TAG does not construct values or grant payload access.
+All owned results enter the existing frame cleanup list. VM and generated C use
+the same helpers and admitted argument storage; no alternate executor is added.
+The sole unpublished schema9/semantic27 revision includes these instructions.
+Source match exhaustiveness, source constructors and typed errors remain separate
+required consumers, not claims implied by instruction admission.
+
+
+## Enum source declaration and construction admission
+
+Source enums reuse the parser's EnumDeclNode, named payload fields and variant
+paths. Declaration/type parameters use the same checked nominal identity and
+constraint machinery as structs without reinterpreting an enum AST as a struct.
+All variants and payload types are checked, including unused declarations.
+Only explicit generic arguments are admitted initially; inference remains an
+open language obligation. Unsupported methods/interfaces/attributes reject.
+
+Unit variants use E.Case; payload variants use E.Case {name: value}. Payloads
+require every declared field exactly once, without defaults. Evaluate provided
+fields once in source order, then place values in declaration order for ENUM_NEW.
+The same lexical/import path resolves the declaration and source query target;
+query data grants no construction authority. Generic parameters retain their
+owning declaration scope. Enums have no implicit default constructor. Member
+.ordinal lowers to ENUM_TAG; arbitrary payload member reads reject. Payload
+access uses the checked pattern bindings below. Name/string APIs, inference,
+methods, derived conformances and typed errors remain unimplemented consumers.
+
+## Enum match source admission
+
+Evaluate the scrutinee once and retain its ordinary owned value across arms,
+guards and suspension. Resolve every variant against that scrutinee's nominal
+declaration, including module visibility. Omitted generic path arguments in a
+pattern come from the scrutinee, never from payload values or missing constraints.
+Test the tag before any ENUM_GET. Payload bindings are immutable owned values
+in the arm scope, visible to the guard and body but not to subsequent arms.
+Guards are bool and run only after their pattern succeeds; false advances in
+source order. A guarded wildcard cannot prove exhaustiveness.
+
+The first admitted patterns are unit variants, named payload subsets with
+binding/wildcard subpatterns, whole-value bindings and wildcard. All unguarded
+variants or an unguarded catch-all are required. Blocks may precede their final
+value expression with ordinary statements. Return/break/continue terminate an
+arm through the existing function/loop exit path and contribute no PHI input.
+A statement match whose every arm terminates has no join block. A value-context
+match requires at least one continuing arm until general never-valued expression
+propagation is implemented; this limit does not redefine the language. Arm results require
+one exact admitted type and join through PHI; unit results need no PHI. Nested,
+literal/range/multiple patterns, union joins and general never-valued expressions remain
+language obligations, explicitly rejected until implemented. Closure capture
+scanning must respect match binding scope, not capture shadowed outer names.

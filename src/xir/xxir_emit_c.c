@@ -496,7 +496,7 @@ static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     append(buffer, "        }\n        return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}};\n");
 }
 
-static void emit_struct_step(CBuffer *buffer, const XrXirFunction *function,
+static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     if (op->op == XR_XIR_STRUCT_SET) {
         append(buffer, "        {\n"); emit_value_receiver(buffer, function, layout, op->args[0]);
@@ -509,17 +509,26 @@ static void emit_struct_step(CBuffer *buffer, const XrXirFunction *function,
         return;
     }
     append(buffer, "        { XrXirValue value = {0}; XrXirValueStatus status;\n");
-    if (op->op == XR_XIR_STRUCT_NEW) {
+    if (op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_ENUM_NEW) {
         for (uint32_t i = 0; i < op->args[1]; ++i) {
             append(buffer, "        state->arguments[%u] = ", i);
             emit_value(buffer, function, layout, function->operands[op->args[0] + i]);
             append(buffer, ";\n");
         }
-        append(buffer, "        status = xr_xir_struct_new((XrXirType) %uu, %s, %uu, xr_xir_call_admission(view), &value);\n",
+        if (op->op == XR_XIR_ENUM_NEW)
+            append(buffer, "        status = xr_xir_enum_new((XrXirType) %uu, %uu, %s, %uu, xr_xir_call_admission(view), &value);\n",
+                (uint32_t) op->type, (uint32_t) op->immediate, op->args[1] ? "state->arguments" : "NULL", op->args[1]);
+        else append(buffer, "        status = xr_xir_struct_new((XrXirType) %uu, %s, %uu, xr_xir_call_admission(view), &value);\n",
             (uint32_t) op->type, op->args[1] ? "state->arguments" : "NULL", op->args[1]);
     } else {
         append(buffer, "        XrXirValue receiver = "); emit_value(buffer, function, layout, op->args[0]);
-        append(buffer, ";\n        status = xr_xir_struct_get(&receiver, %uu, xr_xir_call_admission(view), &value);\n",
+        if (op->op == XR_XIR_ENUM_TAG)
+            append(buffer, ";\n        uint32_t variant = 0; status = xr_xir_enum_variant(&receiver, &variant);\n"
+                "        value = (XrXirValue) {XR_XIR_I64, 0, variant};\n");
+        else if (op->op == XR_XIR_ENUM_GET)
+            append(buffer, ";\n        status = xr_xir_enum_get(&receiver, %uu, %uu, xr_xir_call_admission(view), &value);\n",
+                (uint32_t) op->immediate, op->args[1]);
+        else append(buffer, ";\n        status = xr_xir_struct_get(&receiver, %uu, xr_xir_call_admission(view), &value);\n",
             (uint32_t) op->immediate);
     }
     append(buffer, "        if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
@@ -537,8 +546,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     const XrXirInstruction *op = &function->instructions[index];
     uint32_t destination = layout->offsets[function->parameter_count + index];
     append(buffer, "    case %uu:\n        state->pc = %uu;\n", index, index + 1);
-    if (op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) {
-        emit_struct_step(buffer, function, op, layout, destination); return;
+    if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
+        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET)) {
+        emit_nominal_step(buffer, function, op, layout, destination); return;
     }
     if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
         emit_array_step(buffer, function, op, layout, destination);
@@ -770,6 +780,17 @@ static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *ta
         }
         append(buffer, "};\n");
     }
+    for (uint32_t i = 0; i < table->count; ++i) {
+        const XrXirNominalIdentity *d = &table->identities[i];
+        if (!d->variant_count) continue;
+        append(buffer, "static const XrXirNominalVariant %s_nominal_variants_%u[] = {\n", prefix, i);
+        for (uint32_t v = 0; v < d->variant_count; ++v) {
+            const XrXirNominalVariant *variant = &d->variants[v];
+            append(buffer, "    {{"); emit_bytes(buffer, variant->name.bytes, variant->name.length);
+            append(buffer, ", %uu}, %uu, %uu},\n", variant->name.length, variant->field_begin, variant->field_count);
+        }
+        append(buffer, "};\n");
+    }
     append(buffer, "static const XrXirNominalIdentity %s_nominal_identities[] = {\n", prefix);
     for (uint32_t i = 0; i < table->count; ++i) {
         const XrXirNominalIdentity *d = &table->identities[i];
@@ -777,7 +798,9 @@ static void emit_nominal_identities(CBuffer *buffer, const XrXirNominalTable *ta
         append(buffer, ", %uu}, {", d->module.length); emit_bytes(buffer, d->name.bytes, d->name.length);
         append(buffer, ", %uu}, %uu, %uu, ", d->name.length, d->exported, d->arity);
         if (d->field_count) append(buffer, "%s_nominal_fields_%u", prefix, i); else append(buffer, "NULL");
-        append(buffer, ", %uu},\n", d->field_count);
+        append(buffer, ", %uu, %uu, ", d->field_count, d->kind);
+        if (d->variant_count) append(buffer, "%s_nominal_variants_%u", prefix, i); else append(buffer, "NULL");
+        append(buffer, ", %uu},\n", d->variant_count);
     }
     append(buffer, "};\nstatic const XrXirNominalTable %s_nominals = {NULL, %uu, %s_nominal_identities};\n",
         prefix, table->count, prefix);
@@ -931,7 +954,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     if (status != XR_XIR_OK) return status;
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types};
     append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
-           "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n"
+           "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_enum.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

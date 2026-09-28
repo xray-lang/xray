@@ -911,6 +911,8 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' R
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
 
+枚举类型的身份由所属模块、声明及有序类型实参共同确定；局部类型编号或相同 ordinal 不足以识别枚举类型。非 nullable enum 必须显式初始化，不隐式选择第一个变体。声明至少包含一个变体；变体名在声明内唯一，payload 字段名只须在所属变体内唯一。复制和销毁仅作用于活动变体的载荷；值逃逸不延长 Program 或 Instance 的执行权限。
+
 #### 5.6.1 简单枚举（0-payload enum）
 
 ```xray @id=decl-enum-simple
@@ -1051,13 +1053,13 @@ descriptor API 是封闭白名单：
 | `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
 | `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
 
-payload 字段的 `name` 始终是源码声明名；空名称、重复名称或名称/类型计数不一致的 metadata 必须拒绝。
+payload 字段的 `name` 始终是源码声明名；空名称、同一变体内重复名称或名称/类型计数不一致的 metadata 必须拒绝。
 
 这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
 
-该能力是编译器静态类型域，不是 `Iterable` 协议实现：直接循环和不逃逸 descriptor 在 VM/AOT 中以 ordinal/index 标量降低，不分配数组或 iterator。只有 descriptor 流入 `any`、擦除 union、泛型存储、容器、闭包或跨协程通道等需要身份的边界时才物化不可变 box；`.name`、payload schema 与 type token 由使用证据分别保留，未使用的 cold sidecar 可裁剪。
+该能力是编译器静态类型域，不是 `Iterable` 协议实现。直接循环和不逃逸 descriptor 可在 Lowered 中以 ordinal/index 标量表示，无需分配数组或 iterator。流入 union、泛型存储、容器、闭包或跨协程通道的描述值必须保留具体声明身份及有效的元数据生命周期；描述查询不得绕过泛型约束、可见性或构造权限。只有证明查询结果及生命周期不受影响时，才可消除描述符引用或裁剪未使用的元数据。
 
-unit-only enum 的实际值在 typed 路径中同样只携带 ordinal；一旦该值跨入 tagged/擦除边界，静态 sidecar 必须保留 enum 名与全部 case 名，使边界后的 `.name`、`toString()`、相等性和通用字符串格式化与 VM 语义一致。仍保持 typed 的 enum 不生成该 sidecar。
+unit-only enum 的实际值与带载荷 enum 具有相同的名义身份规则。保存 ordinal 不能替代所属模块、声明及有序类型实参；值跨越调用、存储或挂起边界后，`.name`、`toString()`、相等性和字符串格式化仍须保持完整语义，且逃逸值不得延长执行权限。物理载体由统一 Lowered 管线决定；仅在证明身份可恢复且元数据生命周期安全时，才可将值缩减为 ordinal。规范不要求保留某个旧载体宽度，也不要求每个值独立分配。
 
 泛型时必须知道具体 enum layout，例如 `Option<i64>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
 
@@ -2103,6 +2105,8 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' R
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
 
+An enum type is identified by its declaring module, declaration and ordered type arguments; a local type index or matching ordinal is not sufficient identity. A non-nullable enum requires explicit initialization and never implicitly selects its first variant. A declaration has at least one variant; variant names are unique within the declaration, while payload field names need only be unique within their own variant. Copy and destruction affect only the active payload; escaping values do not extend the execution authority of a Program or Instance.
+
 #### 5.6.1 Simple enums (0-payload enum)
 
 ```xray @id=decl-enum-simple
@@ -2243,13 +2247,13 @@ The descriptor API is a closed whitelist:
 | `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
 | `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
 
-Every payload-field `name` is its source declaration name. Metadata with an empty or duplicate name, or mismatched name/type counts, is rejected.
+Every payload-field `name` is its source declaration name. Metadata with an empty name, duplicate names within one variant, or mismatched name/type counts is rejected.
 
 Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
 
-This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors lower to ordinal/index scalars in VM and AOT without allocating an array or iterator. An immutable box is materialized only when a descriptor crosses an identity-requiring boundary such as `any`, an erased union, generic storage, a container, a closure, or a cross-coroutine channel. Use evidence independently retains `.name`, payload-schema, and type-token metadata; unused cold sidecars remain strippable.
+This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors may use ordinal/index scalars in Lowered without allocating an array or iterator. Description values crossing a union, generic storage, container, closure or cross-coroutine channel must preserve their concrete declaration identity and valid metadata lifetime. Description queries cannot bypass generic constraints, visibility or construction authority. Descriptor references or unused metadata may be eliminated only when query results and lifetime remain unchanged.
 
-An actual unit-only enum value likewise carries only its ordinal on typed paths. Once it crosses a tagged or erased boundary, its immutable static sidecar must retain the enum name and every case name so later `.name`, `toString()`, equality, and generic string formatting remain VM-equivalent. Enums that stay typed emit no such sidecar.
+Actual unit-only enum values follow the same nominal identity rules as payload enums. An ordinal cannot replace the declaring module, declaration and ordered type arguments. Across calls, storage and suspension, `.name`, `toString()`, equality and string formatting must retain their complete semantics, without extending execution authority for escaped values. The single Lowered pipeline determines physical carriers; reducing a value to an ordinal requires proof that identity is recoverable and metadata lifetime remains safe. The language requires neither a legacy carrier width nor a separate allocation per value.
 
 Generic code must identify a concrete enum layout. `Option<i64>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
 

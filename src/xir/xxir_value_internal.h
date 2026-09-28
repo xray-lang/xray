@@ -16,6 +16,24 @@
 #include "../base/xchecks.h"
 #include <stdatomic.h>
 
+typedef struct XirObject {
+    _Atomic(uint32_t) references;
+    XrXirDomain *domain;
+    XrXirTypeArena *arena;
+    XrXirType type;
+    uint32_t kind;
+    struct XirObject *release_next;
+} XirObject;
+/* Empty enum descriptors belong to the arena; their backpointers are weak.
+ * Each external value holds an arena lease instead of a descriptor reference. */
+typedef struct XirNominalValue {
+    XirObject object;
+    uint32_t count, variant;
+    XrXirValue *fields;
+} XirNominalValue;
+XR_FUNC const XirNominalValue *xr_xir_type_arena_empty_variant(
+    const XrXirTypeArena *arena, XrXirType type, uint32_t variant);
+
 static inline bool xr_xir_reference_retain(_Atomic(uint32_t) *references) {
     uint32_t count = atomic_load_explicit(references, memory_order_relaxed);
     for (;;) {

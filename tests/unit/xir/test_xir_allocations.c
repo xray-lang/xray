@@ -302,7 +302,7 @@ static size_t program_allocation_failures(void) {
         XrXirArtifact *artifact = program_fixture(0), *original = artifact;
         XrXirProgram *program = NULL;
         calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        XrXirStatus sealed = xr_xir_vm_program_take(&artifact, 2097152, &program);
+        XrXirStatus sealed = xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 16000000}, &program);
         if (sealed != XR_XIR_OK) {
             CHECK(attempt && sealed == XR_XIR_OUT_OF_MEMORY && !program && artifact == original);
         } else {

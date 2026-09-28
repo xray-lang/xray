@@ -58,6 +58,8 @@ match (color) {
 
 #### 6.3.2 ADT 变体（带 payload）解构
 
+被匹配值只求值一次。分支绑定为不可变值，作用域仅覆盖该分支的 guard 和分支体；同一模式不能重复绑定同名变量。绑定遵守普通值复制与所有权规则，不获得写回被匹配值的权限，跨挂起和闭包逃逸仍须保留有效载荷。泛型变体模式省略的类型实参来自被匹配值的具体静态类型，不补足声明处缺失的约束。
+
 ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
 ```xray
@@ -92,7 +94,7 @@ match (msg) {
 
 `match` 一个 ADT enum 时，编译器执行**穷举性分析**：
 
-- 若所有变体都被覆盖（含 `_` 兜底），通过
+- 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
 - 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
 
 ```xray
@@ -110,7 +112,7 @@ match (event) {
 }
 ```
 
-> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；只要包含 `_` 兜底分支即可跳过检查。对非 enum 变量（如 `i64`）不强制。
+> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。对非 enum 变量（如 `i64`）不强制。
 
 ### 6.4 类型模式 `is T`
 
@@ -253,6 +255,8 @@ match (color) {
 
 #### 6.3.2 ADT variant (with payload) destructuring
 
+The scrutinee is evaluated once. Pattern bindings are immutable values scoped to the arm's guard and body; a pattern cannot bind the same name twice. Ordinary copy and ownership rules apply, with no authority to write back into the scrutinee. Payload lifetime remains valid across suspension and escaping closures. Generic variant patterns take omitted type arguments from the scrutinee's static type without supplying missing definition-site constraints.
+
 ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
 ```xray
@@ -287,7 +291,7 @@ match (msg) {
 
 When `match` is performed on an ADT enum, the compiler runs **exhaustiveness analysis**:
 
-- If every variant is covered (including `_` as a catch-all), the check passes.
+- The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
 - If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
 
 ```xray
@@ -305,7 +309,7 @@ match (event) {
 }
 ```
 
-> Both simple enums (no payload) and ADT enums **require** exhaustiveness; including a `_` catch-all suffices to skip the check. Non-enum operands (such as `i64`) are not subject to the check.
+> Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. Non-enum operands (such as `i64`) are not subject to the check.
 
 ### 6.4 Type Patterns `is T`
 

@@ -22,7 +22,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
         for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
             SourceName *symbol = ctx->nominal_sources[d];
             if (!source_work(ctx, symbol->node)) return false;
-            if (ctx->nominal_defaultable[d]) continue;
+            if (ctx->nominals.declarations[d].kind != XR_XIR_NOMINAL_STRUCT || ctx->nominal_defaultable[d]) continue;
             bool explicit_constructor = false;
             ClassDeclNode *source = &symbol->node->as.struct_decl;
             for (int m = 0; m < source->method_count; ++m) {

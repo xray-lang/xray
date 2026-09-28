@@ -17,9 +17,9 @@ XR_DATA const XrXirProgramSpec array_bounds_program;
 XR_DATA const uint32_t array_source_functions[ARRAY_FUNCTION_COUNT];
 int main(void) {
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&array_source_program, 2097152, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&array_source_program, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     source_array_program_cases(program, array_source_functions);
-    CHECK(xr_xir_program_seal(&array_bounds_program, 2097152, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&array_bounds_program, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     source_array_sticky_bounds(program, array_bounds_program.declarations->entry_function);
     puts("Native Array source matched independent value, order, ownership and physical-release expectations");
     return 0;

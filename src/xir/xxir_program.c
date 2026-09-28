@@ -82,11 +82,11 @@ static void program_dispose(XrXirProgram *program) {
     xr_free(program->module_slots);
     xr_free(program);
 }
-XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, uint64_t byte_limit, XrXirProgram **output) {
+XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgramBudget limits, XrXirProgram **output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
     *output = NULL;
-    uint64_t proof_limit = byte_limit;
-    uint64_t work = UINT64_C(16000000);
+    uint64_t byte_limit = limits.metadata_bytes, proof_limit = byte_limit;
+    uint64_t work = limits.work;
     XrXirStatus status = program_shape(spec, &byte_limit, &work);
     if (status != XR_XIR_OK) return status;
     XrXirBudget phase = xr_xir_default_budget();

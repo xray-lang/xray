@@ -7,7 +7,7 @@ driving require their own qualification. No legacy artifact reader is admitted.
 A program seals a verified Lowered closure before execution. It owns copied
 module/function identities, exact signatures, dependency edges, slot declarations,
 literal bytes, a closed constructed-type arena, and a deterministic initialization
-order. Program ABI 13, Call ABI 14 and Value ABI 10 are admitted atomically. The
+order. Program ABI 14, Call ABI 14 and Value ABI 11 are admitted atomically. The
 ProgramSpec supplies the unique type pool; sealing verifies and deep-copies its
 descriptors into the arena before publishing the Program. Code environments are
 either explicitly process-static or transferred to the program with one release
@@ -55,7 +55,7 @@ detail, before releasing the activation and slots. The sole failure-copy API
 accepts an empty CallResult output (READY, unit, zero wake and detail), copies
 the value with independent ownership and copies detail by value. Failure leaves
 the output unchanged. The old value-only signature is removed atomically with
-Program ABI 9; current Program ABI 13 preserves this complete fault contract.
+Program ABI 9; current Program ABI 14 preserves this complete fault contract.
 Repeated failed polls/copies preserve the original index/length
 without rereading released storage or replaying initialization effects. An
 ordinary entry Bounds fault does not change an already-ready Instance into an
@@ -124,7 +124,7 @@ verification-test: test_xir_program_vm
 verification-test: test_xir_program_native
 verification-test: test_xir_allocations
 
-Program ABI 13 includes the native nominal type descriptors and the per-function
+Program ABI 14 includes the native nominal type descriptors and the per-function
 nominal_owner word. XrXirTypes owns a declaration/identity table, and each
 XrXirTypeNode includes ordered nominal arguments and substituted field types.
 Program ABI 11 and earlier reject before reading declarations or type metadata,
@@ -156,3 +156,31 @@ Sealing sets both stage metadata/scratch caps to total_bytes/7. The runtime
 metadata allocation phase starts after temporary proof artifacts are freed.
 Allocator overhead, OS pages and stack storage are outside this requested-byte
 accounting. Work uses conservative phase reservation; it is not a wall-time claim.
+
+
+The nominal descriptor revision adds explicit declaration kind and ordered variant
+names and payload ranges. Program ABI 14 rejects ABI 13 before dereferencing the
+extended identity records. Sealing compares every variant to the sole Checked
+schema 9 / semantic 27 proof; a well-formed renamed variant is not corresponding
+metadata. Declaration transport does not authorize enum value execution.
+
+## Explicit sealing work budget
+
+Program sealing and Lowered VM take receive XrXirProgramBudget by value, with
+independent metadata_bytes and work limits. The byte-only entry points are
+removed. Zero work cannot publish a Program or consume an input artifact/code
+lease. No automatic retry or unbounded allowance follows budget exhaustion.
+Sealing reserves fifteen stage-work shares and keeps the sixteenth for proof
+hashing, descriptor correspondence and final arena construction. VM take also
+reserves three shares for input digest/semantic/layout verification, using one
+nineteenth of the incoming work per share; the remainder enters sealing.
+Input verification metadata and scratch each use one third of the byte limit.
+This is conservative operation accounting, not elapsed-time measurement.
+
+The full source fixture explicitly supplies 64 million work with its existing
+16 MiB metadata ceiling in VM, native and mixed consumers. Smaller fixtures
+retain 16 million work. The observed 254742-byte proof failed the old fixed
+one-million-work decoder share (the Checked reader requires four work units
+per packet byte), despite enough metadata. Callers can now state their work
+budget; changing the limit does not bypass Checked revalidation or proof joins.
+The unpublished Program ABI14 revision includes this entry contract.

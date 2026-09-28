@@ -18,6 +18,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_instance_value.h"
 #include "xxir_struct.h"
+#include "xxir_enum.h"
 #include "../base/xmalloc.h"
 
 typedef struct ScalarRun {
@@ -170,7 +171,7 @@ static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
     return XR_XIR_RUN_OK;
 }
 
-static XrXirRunStatus vm_struct_step(ScalarRun *run, VmState *state,
+static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
                                       const XrXirInstruction *op, uint32_t destination) {
     XrXirValueAdmission *admission = xr_xir_call_admission(run->view);
     if (!admission) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -182,13 +183,20 @@ static XrXirRunStatus vm_struct_step(ScalarRun *run, VmState *state,
             status == XR_XIR_CALL_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT;
     }
     XrXirValue output = {0}; XrXirValueStatus status;
-    if (op->op == XR_XIR_STRUCT_NEW) {
+    if (op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_ENUM_NEW) {
         for (uint32_t i = 0; i < op->args[1]; ++i)
             state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0] + i]);
-        status = xr_xir_struct_new(op->type, op->args[1] ? state->arguments : NULL, op->args[1], admission, &output);
+        status = op->op == XR_XIR_ENUM_NEW ?
+            xr_xir_enum_new(op->type, (uint32_t) op->immediate, op->args[1] ? state->arguments : NULL, op->args[1], admission, &output) :
+            xr_xir_struct_new(op->type, op->args[1] ? state->arguments : NULL, op->args[1], admission, &output);
     } else {
         XrXirValue receiver = vm_value_operand(run, op->args[0]);
-        status = xr_xir_struct_get(&receiver, (uint32_t) op->immediate, admission, &output);
+        if (op->op == XR_XIR_ENUM_TAG) {
+            uint32_t variant = 0; status = xr_xir_enum_variant(&receiver, &variant);
+            output = (XrXirValue) {XR_XIR_I64, 0, variant};
+        } else status = op->op == XR_XIR_ENUM_GET ?
+            xr_xir_enum_get(&receiver, (uint32_t) op->immediate, op->args[1], admission, &output) :
+            xr_xir_struct_get(&receiver, (uint32_t) op->immediate, admission, &output);
     }
     if (status != XR_XIR_VALUE_OK) return value_run_status(status);
     if (xr_xir_type_is_owned(run->module->types, op->type)) xr_xir_owned_slot_move(run->frame, destination, &output);
@@ -277,9 +285,10 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return XR_XIR_RUN_OK;
     }
-    if (op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) {
+    if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
+        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET)) {
         state->instruction = next;
-        return vm_struct_step(run, state, op, run->layout->offsets[result_id]);
+        return vm_nominal_step(run, state, op, run->layout->offsets[result_id]);
     }
     if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
         state->instruction = next;
@@ -548,14 +557,20 @@ static void vm_program_release(void *pointer) {
     VmProgramOwner *owner = pointer;
     xr_xir_artifact_free(owner->artifact); xr_free(owner->bindings); xr_free(owner);
 }
-XrXirStatus xr_xir_vm_program_take(XrXirArtifact **artifact, uint64_t byte_limit, XrXirProgram **output) {
+XrXirStatus xr_xir_vm_program_take(XrXirArtifact **artifact, XrXirProgramBudget budget, XrXirProgram **output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
     *output = NULL;
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_artifact_module(*artifact);
     if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = xr_xir_artifact_verify(*artifact, NULL, NULL);
+    uint64_t byte_limit = budget.metadata_bytes;
+    XrXirBudget admission = xr_xir_default_budget();
+    admission.work = budget.work / 19;
+    admission.metadata_bytes = admission.scratch_bytes = byte_limit / 3;
+    if (!admission.work) return XR_XIR_BUDGET;
+    budget.work -= admission.work * 3;
+    XrXirStatus status = xr_xir_artifact_verify(*artifact, &admission, NULL);
     if (status != XR_XIR_OK) return status;
     uint64_t bytes = sizeof(VmProgramOwner) + (uint64_t) module->function_count *
         (sizeof(XrXirVmBinding) + sizeof(XrXirCallEntry));
@@ -571,7 +586,7 @@ XrXirStatus xr_xir_vm_program_take(XrXirArtifact **artifact, uint64_t byte_limit
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_artifact_target(*artifact),
         entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types, xr_xir_program_proof(*artifact)};
-    status = xr_xir_program_seal(&spec, byte_limit - bytes, output);
+    status = xr_xir_program_seal(&spec, (XrXirProgramBudget) {byte_limit - bytes, budget.work}, output);
     if (status == XR_XIR_OK) { owner->artifact = *artifact; *artifact = NULL; }
  finish:
     xr_free(entries);

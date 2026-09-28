@@ -498,7 +498,8 @@ static AstNode *parse_match_arm(Parser *parser) {
     // Parse arm body
     AstNode *body = NULL;
     if (xr_parser_match(parser, TK_LBRACE)) {
-        // Code block
+        // Only the direct arm block consumes its tail expression.
+        parser->match_value_block_pending = true;
         body = xr_parse_block(parser);
     } else {
         // Single expression; a line break followed by `is` ends the body and

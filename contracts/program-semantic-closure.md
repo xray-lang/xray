@@ -444,7 +444,7 @@ anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
 anchor-sha256: src/module/xmodule_graph.c df2a1ef9ff63dee28badae0307f1a1279f6e8b6697b296ec63275a10cde1ba4c
-anchor-sha256: src/frontend/parser/xparse.c dedcf2cb95e3e1f3b3d8b154de91ab4aa829c4910a7d6d352fc6590838144e7d
+anchor-sha256: src/frontend/parser/xparse.c 41cafa47c7fc4f15512b81db04cfadc6b450eec9ae5e587ff81fdbdac5c56f5c
 anchor-sha256: src/frontend/parser/xparse_decl.c 41f7992bcb8569f10e76c5b8e196bf7dc69adc88d09d563b41fab3d0a4de9428
 anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 4da1394baa34244c76f07d0f9a6bccf406d862ba38f5b20b9b78b02ce894564a
@@ -571,3 +571,17 @@ It reduces repeated preparation work for retained build consumers and does not
 extend their lifetime beyond the final consumer migration and deletion.
 
 anchor-sha256: src/aot/xaot_prepare_calls.inc.c b4d023c762b28cd7d021f90e6ffdd74aba020293ef1ed8edf45898bb0d8b27a0
+
+## Match arm tail parsing
+
+The shared parser observes the final expression of a match arm block, including
+an optional trailing semicolon. Ordinary blocks, nested functions and earlier
+statements still enforce E0208. The block context is saved/restored so nested
+syntax cannot inherit a value-consumption claim from its containing arm.
+This repairs the existing language contract, adds no legacy execution authority,
+and changes no PSC or packet fingerprint. The parser source anchor is refreshed
+after rebuilding and passing parser, recoverable-parser, ASI and XIR source
+admission tests in default and ASan builds; the prior rejected tail case is kept
+in enum-match-focused-a1 and the repair in enum-match-focused-a2.
+
+verification-test: test_parser_asi

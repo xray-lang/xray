@@ -117,6 +117,34 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "enum E{A,B}\nfn f(v:E)->i64{match(v){E.A->{break},E.B->{return 0}}}\n",
+    "enum E{A,B}\nfn f(v:E)->i64{match(v){E.A->{return 1\nprint(2)},E.B->{return 0}}}\n",
+
+    "enum E { A }\nconst v=match(E.A){_ if(1)->1,_ ->2}\n",
+    "enum E { A{x:i64} }\nconst v=match(E.A{x:1}){E.A{x}->{x=2\nx}}\n",
+
+    "enum E { A }\nconst v=match(E.A){E.A->{42\nprint(1)}}\n",
+    "enum E { A }\nconst v=match(E.A){E.A->{if(true){42}\n1}}\n",
+    "enum E { A }\nconst v=match(E.A){E.A->{const f=fn()->i64{42}\n1}}\n",
+
+    "enum E { A, B }\nconst v=match(E.A){E.A->1}\n",
+    "enum E { A, B }\nconst v=match(E.A){_ if(false)->1}\n",
+    "enum E { A, B }\nconst v=match(E.A){E.A if(false)->1,E.B->2}\n",
+    "enum E { A { x:i64 }, B }\nconst v=match(E.B){E.A{x,x}->1,E.B->2}\n",
+    "enum E { A { x:i64 }, B }\nconst v=match(E.B){E.A{y}->1,E.B->2}\n",
+    "enum E { A { x:i64 }, B }\nconst v=match(E.B){E.A{x}->x,E.B->x}\n",
+    "enum E { A, B }\nenum F { A, B }\nconst v=match(E.A){F.A->1,E.B->2}\n",
+
+    "enum E { A, B }\nconst e=E()\n",
+    "enum E { A, B }\nvar e:E\n",
+    "enum E { A { x:i64, y:string } }\nconst e=E.A { x:1 }\n",
+    "enum E { A { x:i64, y:i64 } }\nconst e=E.A { x:1, x:2 }\n",
+    "enum E { A { x:i64 } }\nconst e=E.A { x:\"bad\" }\n",
+    "enum E { A { x:i64 } }\nconst e=E.A\n",
+    "enum E { A }\nconst e=E.Missing\n",
+    "enum E<T:Sendable> { A { x:T } }\nfn unused<T>(v:T)->E<T>{return E<T>.A { x:v }}\n",
+    "enum E { A { x:Missing } }\n",
+
     "\"a\".contains(1)\n",
     "\"a\".contains()\n",
     "\"a\".endsWith(\"a\",\"b\")\n",
@@ -460,6 +488,34 @@ static void constructor_admission(const XrXirSourceRequest *request, const char 
         xr_xir_source_result_free(&result);
     }
 }
+static void enum_admission(const XrXirSourceRequest *request, const char *root) {
+    const char *sources[] = {
+        "enum E{A,B}\nfn f(v:E)->i64{match(v){E.A->{return 1},E.B->{return 2}}}\nprint(f(E.B))\n",
+        "enum E{A,B}\nfn f(v:E)->i64{const x=match(v){E.A->{return 1},E.B->2}\nreturn x}\nprint(f(E.B))\n",
+        "enum E{A,B}\nfn f(v:E)->i64{var n=0\nwhile(n<3){n=n+1\nmatch(v){E.A->{continue},E.B->{break}}}\nreturn n}\nprint(f(E.A))\n",
+        "enum E { A, B }\nconst x=match(E.B){E.A->1,E.B->2}\nprint(x)\n",
+        "enum E<T> { Empty, Some { value:T } }\nfn pick<T>(v:E<T>,fallback:T)->T{return match(v){E.Some{value}->value,E.Empty->fallback}}\nprint(pick<i64>(E<i64>.Some{value:42},0))\n",
+        "enum E { A { x:string }, B }\nconst v=E.A{x:\"yes\"}\nconst x=match(v){E.A{x} if(false)->x,E.A{x}-> {Coro.yield()\nx},E.B->\"empty\"}\nprint(x)\n",
+        "enum E { A { x:i64 }, B }\nfn f(v:E)->i64{const x=\"outer\"\nconst read=fn()->i64{return match(v){E.A{x}->x,E.B->0}}\nreturn read()}\nprint(f(E.A{x:42}))\n",
+        "enum Color { Red, Blue }\nprint(Color.Red.ordinal, Color.Blue.ordinal)\n",
+        "enum Choice { Empty, Some { value:i64, label:string } }\nconst v=Choice.Some { label:\"yes\", value:42 }\nprint(v.ordinal)\n",
+        "enum Choice<T> { Empty, Some { value:T } }\nconst v=Choice<i64>.Some { value:42 }\nprint(v.ordinal)\n",
+        "enum Choice<T:Sendable> { Empty, Some { value:T } }\nfn make<T:Sendable>(v:T)->Choice<T> { return Choice<T>.Some { value:v } }\nprint(make<i64>(42).ordinal)\n",
+    };
+    for (unsigned i=0;i<sizeof(sources)/sizeof(sources[0]);++i) {
+        write_source(root,sources[i]);
+        XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=xr_xir_source_check(request,&result,&diagnostic);
+        if(status!=XR_XIR_OK) fprintf(stderr,"enum case %u: %s\n",i,diagnostic.message);
+        CHECK(status==XR_XIR_OK && result.checked);
+        XrXirArtifact *closed=NULL,*lowered=NULL;
+        CHECK(xr_xir_specialize(result.checked,NULL,&closed,NULL)==XR_XIR_OK);
+        XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        CHECK(xr_xir_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);
+        xr_xir_artifact_free(lowered); xr_xir_artifact_free(closed);
+        xr_xir_source_result_free(&result);
+    }
+}
 int main(void) {
     stdlib_resolution();
 
@@ -477,6 +533,7 @@ int main(void) {
     XrXirSourceRequest request = {session, root, &authority, NULL, XR_SOURCE_STDLIB};
     source_integer_contexts(&request, root);
     source_decimal_contexts(&request, root);
+    enum_admission(&request, root);
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         write_source(root, rejected[i]);
         XrXirArtifact *artifact = NULL; XrXirSourceDiagnostic diagnostic;

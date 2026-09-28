@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     CHECK(result != UINT32_MAX && advance != UINT32_MAX && update != UINT32_MAX && calculate != UINT32_MAX && resume_text != UINT32_MAX && stack_depth != UINT32_MAX && numeric_pause != UINT32_MAX && bound_result != UINT32_MAX);
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
-    XrXirStatus seal_status = xr_xir_vm_program_take(&lowered, 16777216, &program);
+    XrXirStatus seal_status = xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {16777216, 64000000}, &program);
     if (seal_status != XR_XIR_OK) fprintf(stderr, "source seal status: %u\n", (unsigned)seal_status);
     CHECK(seal_status == XR_XIR_OK && !lowered);
     XrXirValue results[2] = {{0}, {0}};

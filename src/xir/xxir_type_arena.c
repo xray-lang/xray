@@ -20,9 +20,11 @@ struct XrXirTypeArena {
     XrXirDomain *domain;
     size_t allocation_bytes;
     XrXirTypes types;
+    XirNominalValue ***empty_variants;
 };
 
 #include "xxir_type_arena_nominal.inc.c"
+#include "xxir_type_arena_enum.inc.c"
 
 static XrXirValueStatus arena_pool_size(const XrXirTypes *types, XrXirBudget *budget,
                                        size_t *output) {
@@ -50,6 +52,7 @@ static XrXirValueStatus arena_pool_size(const XrXirTypes *types, XrXirBudget *bu
     ArenaNominalCursor nominal = {NULL, bytes, limit, remaining.work, XR_XIR_VALUE_OK};
     arena_nominal_nodes(&nominal, types, NULL);
     arena_nominals(&nominal, types ? types->nominals : NULL);
+    arena_empty_variants(&nominal, types, NULL);
     if (nominal.status != XR_XIR_VALUE_OK) return nominal.status;
     bytes = nominal.offset; remaining.work = nominal.work;
     if (bytes > SIZE_MAX || bytes > budget->metadata_bytes) return XR_XIR_VALUE_LIMIT;
@@ -89,6 +92,7 @@ XR_FUNC XrXirValueStatus xr_xir_type_arena_new(XrXirDomain *domain, const XrXirT
         bytes, UINT64_MAX, XR_XIR_VALUE_OK};
     arena_nominal_nodes(&nominal, types, nodes);
     arena->types.nominals = arena_nominals(&nominal, types ? types->nominals : NULL);
+    arena->empty_variants = arena_empty_variants(&nominal, types, arena);
     XR_CHECK(nominal.status == XR_XIR_VALUE_OK && nominal.offset == bytes, "type arena allocation mismatch");
     *budget = remaining;
     *output = arena;

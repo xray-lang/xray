@@ -103,6 +103,16 @@ void xr_parser_reject_effectless_expr_stmt(Parser *parser, const AstNode *expr, 
     // rather than discarded.
     if (parser->expr_value_observed)
         return;
+    if (parser->block_tail_value_observed) {
+        bool tail = xr_parser_check(parser, TK_RBRACE);
+        if (xr_parser_check(parser, TK_SEMICOLON)) {
+            XrParserStreamState saved = xr_parser_stream_save(parser);
+            xr_parser_advance(parser);
+            tail = xr_parser_check(parser, TK_RBRACE);
+            xr_parser_stream_restore(parser, &saved);
+        }
+        if (tail) return;
+    }
     if (!expr_stmt_is_effectless(expr))
         return;
 

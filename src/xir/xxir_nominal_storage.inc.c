@@ -11,7 +11,7 @@
  */
 typedef struct NominalStorageNode {
     XrXirLayout layout;
-    uint32_t next, state;
+    uint32_t next, state, variant, maximum;
 } NominalStorageNode;
 static bool nominal_storage_align(uint32_t size, uint32_t alignment, uint32_t *output) {
     if (!alignment || (alignment & (alignment - 1))) return false;
@@ -53,11 +53,46 @@ XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType typ
             types->nominals->declarations[nominal->declaration].field_count :
             types->nominals->identities[nominal->declaration].field_count;
         if (nominal->field_count != declared) { status = XR_XIR_BAD_LAYOUT; break; }
+        bool is_enum = xr_xir_type_is_enum(types, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + index));
+        const XrXirNominalVariant *variants = NULL; uint32_t variant_count = 0;
+        if (is_enum) {
+            if (types->nominals->declarations) {
+                const XrXirNominalDeclaration *d = &types->nominals->declarations[nominal->declaration];
+                variants = d->variants; variant_count = d->variant_count;
+            } else {
+                const XrXirNominalIdentity *d = &types->nominals->identities[nominal->declaration];
+                variants = d->variants; variant_count = d->variant_count;
+            }
+        }
         if (current->next == nominal->field_count) {
+            if (is_enum) {
+                uint32_t tag = variant_count == 1 ? 0 : variant_count <= 256 ? 1 : variant_count <= 65536 ? 2 : 4;
+                uint32_t base = 0;
+                if (!nominal_storage_align(tag, current->layout.alignment, &base) ||
+                    current->maximum > UINT32_MAX - base) { status = XR_XIR_BAD_LAYOUT; break; }
+                current->layout.size = base + current->maximum;
+                if (tag > current->layout.alignment) current->layout.alignment = tag;
+                if (index == root_index)
+                    for (uint32_t f = 0; f < field_count; ++f) {
+                        if (!budget.work) { status = XR_XIR_BUDGET; break; }
+                        --budget.work; offsets[f] += base;
+                    }
+                if (status != XR_XIR_OK) break;
+            }
             if (!nominal_storage_align(current->layout.size, current->layout.alignment, &current->layout.size)) {
                 status = XR_XIR_BAD_LAYOUT; break;
             }
             current->state = 2; --depth; continue;
+        }
+        if (is_enum) {
+            while (current->variant < variant_count && current->next >=
+                variants[current->variant].field_begin + variants[current->variant].field_count) {
+                if (!budget.work) { status = XR_XIR_BUDGET; break; }
+                --budget.work; ++current->variant;
+            }
+            if (status != XR_XIR_OK) break;
+            if (current->variant >= variant_count) { status = XR_XIR_BAD_LAYOUT; break; }
+            if (current->next == variants[current->variant].field_begin) current->layout.size = 0;
         }
         XrXirType field = nominal->fields[current->next];
         const XrXirTypeNode *child = xr_xir_type_node(types, field);
@@ -80,6 +115,7 @@ XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType typ
             physical.size > UINT32_MAX - offset) { status = XR_XIR_BAD_LAYOUT; break; }
         if (index == root_index) offsets[current->next] = offset;
         current->layout.size = offset + physical.size;
+        if (current->layout.size > current->maximum) current->maximum = current->layout.size;
         if (physical.alignment > current->layout.alignment) current->layout.alignment = physical.alignment;
         ++current->next;
     }

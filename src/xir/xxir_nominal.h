@@ -20,6 +20,12 @@ typedef struct XrXirNominalField {
     XrXirType type;
     uint32_t flags;
 } XrXirNominalField;
+typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM } XrXirNominalKind;
+typedef struct XrXirNominalVariant {
+    XrXirLiteral name;
+    uint32_t field_begin, field_count;
+} XrXirNominalVariant;
+
 typedef struct XrXirNominalDeclaration {
     XrXirLiteral module, name;
     uint32_t exported;
@@ -27,6 +33,9 @@ typedef struct XrXirNominalDeclaration {
     uint32_t parameter_count;
     const XrXirNominalField *fields;
     uint32_t field_count;
+    uint32_t kind;
+    const XrXirNominalVariant *variants;
+    uint32_t variant_count;
 } XrXirNominalDeclaration;
 typedef struct XrXirNominalFieldIdentity {
     XrXirLiteral name;
@@ -37,6 +46,9 @@ typedef struct XrXirNominalIdentity {
     uint32_t exported, arity;
     const XrXirNominalFieldIdentity *fields;
     uint32_t field_count;
+    uint32_t kind;
+    const XrXirNominalVariant *variants;
+    uint32_t variant_count;
 } XrXirNominalIdentity;
 typedef struct XrXirNominalTable {
     const XrXirNominalDeclaration *declarations;

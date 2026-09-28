@@ -84,6 +84,7 @@ static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
         const char *declared = node->type == AST_FUNCTION_DECL ? node->as.function_decl.name :
             node->type == AST_CLASS_DECL ? node->as.class_decl.name :
             node->type == AST_STRUCT_DECL ? node->as.struct_decl.name :
+            node->type == AST_ENUM_DECL ? node->as.enum_decl.name :
             node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ? node->as.var_decl.name : NULL;
         if (declared && !strcmp(declared, name)) return true;
         if (node->type == AST_IMPORT_STMT) {

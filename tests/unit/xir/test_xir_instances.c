@@ -184,7 +184,7 @@ static void strings_equal(const XrXirValue *value, const char *expected, size_t 
 static void isolation(void) {
     Fixture f; fixture(&f, 1);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f.spec, 2097152, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     xr_xir_artifact_free(f.proof); f.proof = NULL;
     /* Metadata inputs may die or change after sealing; code environments stay leased. */
     f.modules[2].name = "other"; f.dependencies[0] = 99; f.literals[0].bytes = "wrong";
@@ -229,7 +229,7 @@ static void isolation(void) {
 static void borrowed_restart(void) {
     Fixture f; fixture(&f, 0);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&f.spec, 2097152, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     xr_xir_artifact_free(f.proof); f.proof = NULL;
     Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
     CHECK(xr_xir_instance_start(instance, 8, NULL, 0) == XR_XIR_CALL_READY);
@@ -260,7 +260,7 @@ static void failed_initialization(void) {
     for (uint32_t mode = 1; mode <= 4; ++mode) {
         Fixture f; fixture(&f, mode);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&f.spec, 2097152, &program) == XR_XIR_OK);
+        CHECK(xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     xr_xir_artifact_free(f.proof); f.proof = NULL;
         Trace log = {0}; XrXirInstance *instance = new_instance(program, &log);
         CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_READY);
@@ -345,7 +345,7 @@ static void seal_rejection(void) {
         case 23: f.slots[0].mutable ^= 1; break;
         }
         XrXirProgram *program = NULL;
-        XrXirStatus status = xr_xir_program_seal(&f.spec, invalid == 9 ? 1 : 2097152, &program);
+        XrXirStatus status = xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {invalid == 9 ? 1 : 2097152, 16000000}, &program);
         xr_xir_artifact_free(f.proof); f.proof = NULL;
         CHECK(status != XR_XIR_OK);
         if (invalid >= 15 && invalid <= 18) CHECK(status == XR_XIR_BAD_LAYOUT);

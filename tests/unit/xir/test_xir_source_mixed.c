@@ -88,7 +88,7 @@ int main(void) {
         module->declarations, {owner, mixed_release}, module->types, xr_xir_program_proof(owner->artifact)};
     uint32_t entry = module->declarations->entry_function;
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&spec, 16777216, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {16777216, 64000000}, &program) == XR_XIR_OK);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result}, results);
     runtime_source_failures(program, entry, fixture_source_resume_text, fixture_source_numeric_pause);

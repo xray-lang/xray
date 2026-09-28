@@ -20,12 +20,24 @@
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_expression_fixture.h"
 #include "xir_nominal_chain_fixture.h"
+#include "xir_enum_checked_fixture.h"
 #include "xir_nominal_transport_fixture.h"
 #include "xir_struct_ops_fixture.h"
+#include "xir_enum_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
 int main(int argc, char **argv) {
     FILE *file = argc == 2 ? fopen(argv[1], "wb") : NULL;
     CHECK(argc == 1 || (argc == 2 && file));
+    XrXirArtifact *enum_ops = enum_ops_lowered(false); XrXirCSource enum_ops_source = {0};
+    CHECK(xr_xir_emit_c(enum_ops,"enum_ops",200000,&enum_ops_source) == XR_XIR_OK); xr_xir_artifact_free(enum_ops);
+    CHECK(!strstr(enum_ops_source.text,"xr_xir_vm") && !strstr(enum_ops_source.text,"({"));
+    if (file) CHECK(fwrite(enum_ops_source.text,1,enum_ops_source.length,file) == enum_ops_source.length);
+    xr_xir_c_source_free(&enum_ops_source);
+    enum_ops = enum_ops_lowered(true);
+    CHECK(xr_xir_emit_c(enum_ops,"enum_wrong",200000,&enum_ops_source) == XR_XIR_OK); xr_xir_artifact_free(enum_ops);
+    CHECK(!strstr(enum_ops_source.text,"xr_xir_vm") && !strstr(enum_ops_source.text,"({"));
+    if (file) CHECK(fwrite(enum_ops_source.text,1,enum_ops_source.length,file) == enum_ops_source.length);
+    xr_xir_c_source_free(&enum_ops_source);
     XrXirArtifact *struct_set = struct_set_lowered();
     XrXirCSource set_source = {0};
     CHECK(xr_xir_emit_c(struct_set,"struct_set",200000,&set_source) == XR_XIR_OK);
@@ -99,6 +111,16 @@ int main(int argc, char **argv) {
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_c_source_free(&source);
     }
+    XrXirArtifact *enum_checked = enum_checked_fixture(), *enum_closed = NULL, *enum_lowered = NULL;
+    const XrXirTarget enum_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_specialize(enum_checked, NULL, &enum_closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_lower(enum_closed, &enum_target, NULL, &enum_lowered, NULL) == XR_XIR_OK);
+    XrXirCSource enum_source = {0};
+    CHECK(xr_xir_emit_c(enum_lowered, "enum_metadata", 200000, &enum_source) == XR_XIR_OK);
+    CHECK(strstr(enum_source.text, "XrXirNominalVariant") && !strstr(enum_source.text, "xr_xir_vm"));
+    if (file) CHECK(fwrite(enum_source.text, 1, enum_source.length, file) == enum_source.length);
+    xr_xir_c_source_free(&enum_source); xr_xir_artifact_free(enum_lowered);
+    xr_xir_artifact_free(enum_closed); xr_xir_artifact_free(enum_checked);
     if (file) CHECK(fclose(file) == 0);
     puts("Native program code and immutable declarations emitted");
     return 0;

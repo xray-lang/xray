@@ -21,32 +21,9 @@ typedef struct SourceStaticMethod {
 } SourceStaticMethod;
 static bool source_static_select(SourceContext *ctx, AstNode *node, SourceStaticMethod *selected) {
     MemberAccessNode *member = &node->as.member_access;
-    AstNode *path = member->object;
-    SourceTypeArguments arguments = {0};
-    if (path->type == AST_FUNCTION_REF) {
-        if (path->as.function_ref.type_arg_count < 0)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid static owner type arguments");
-        arguments.refs = path->as.function_ref.type_args;
-        arguments.count = (uint32_t)path->as.function_ref.type_arg_count;
-        path = path->as.function_ref.callee;
-    }
+    AstNode *path = member->object; SourceTypeArguments arguments = {0};
     SourceName *owner = NULL, *binding = NULL;
-    if (path->type == AST_NEW_EXPR && path->as.new_expr.is_type_namespace) {
-        NewExprNode *space = &path->as.new_expr;
-        if (space->module_name || space->arg_count || space->type_arg_count < 0 || !space->class_name)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid static type namespace");
-        binding = owner = visible_name(ctx, space->class_name);
-        if (owner && owner->kind == SOURCE_IMPORT) owner = imported_declaration(ctx, owner, owner->imported);
-        arguments.refs = space->type_args; arguments.count = (uint32_t)space->type_arg_count;
-    } else if (path->type == AST_VARIABLE) {
-        binding = owner = visible_name(ctx, path->as.variable.name);
-        if (owner && owner->kind == SOURCE_IMPORT) owner = imported_declaration(ctx, owner, owner->imported);
-    } else if (path->type == AST_MEMBER_ACCESS && path->as.member_access.object->type == AST_VARIABLE) {
-        binding = visible_name(ctx, path->as.member_access.object->as.variable.name);
-        if (binding && binding->kind == SOURCE_MODULE)
-            owner = imported_declaration(ctx, binding, path->as.member_access.name);
-    }
-    if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    if (!source_nominal_path(ctx, path, &arguments, &binding, &owner)) return false;
     if (!owner || owner->kind != SOURCE_NOMINAL) return true;
     SourceName *method = find_name(ctx, ctx->nominal_methods[owner->index], member->name);
     if (!method || !method->node->as.method_decl.is_static)
@@ -115,6 +92,12 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         emit_group(ctx, op, arguments, function->parameter_count, value);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments, SourceValue *value) {
+    SourceEnumSelection enumeration = {0};
+    if (!source_enum_select(ctx, node, &enumeration)) return false;
+    if (enumeration.owner) {
+        if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum variant has no method type parameters");
+        return source_enum_construct(ctx, node, &enumeration, NULL, value);
+    }
     SourceStaticMethod selected = {0};
     if (!source_static_select(ctx, node, &selected)) return false;
     if (selected.method) {
@@ -135,6 +118,13 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     }
     SourceValue receiver;
     if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
+    if (xr_xir_type_is_enum(&ctx->types, receiver.type) && !strcmp(node->as.member_access.name, "ordinal")) {
+        if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum ordinal is not generic");
+        uint32_t declaration = xr_xir_type_node(&ctx->types, receiver.type)->nominal.declaration;
+        uint32_t member = ctx->nominal_variants[declaration][ctx->nominals.declarations[declaration].variant_count];
+        return source_query_target_reference(ctx, source_query_range(ctx, node, NULL), member, XR_XIR_SOURCE_READ) &&
+            emit(ctx, (XrXirInstruction) {XR_XIR_ENUM_TAG, XR_XIR_I64, {receiver.id,0}, {0}, 0}, value);
+    }
     SourceName *method = source_method_find(ctx, receiver.type, node->as.member_access.name);
     if (!method) {
         if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field value has no method type parameters");
@@ -167,6 +157,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
 static bool source_struct_methods(SourceContext *ctx, uint32_t *next) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
+        if (owner->node->type != AST_STRUCT_DECL) continue;
         ClassDeclNode *decl = &owner->node->as.struct_decl;
         ctx->module = owner->module;
         for (int m = 0; m < decl->method_count; ++m) {

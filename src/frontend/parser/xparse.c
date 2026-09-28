@@ -1219,6 +1219,8 @@ static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, 
     parser->bracket_depth = 0;
     parser->match_arm_body_depth = 0;
     parser->expr_value_observed = false;
+    parser->match_value_block_pending = false;
+    parser->block_tail_value_observed = false;
     parser->parsing_pattern = false;
 }
 
@@ -1968,6 +1970,9 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
 
 // Parse block: { ... }
 AstNode *xr_parse_block(Parser *parser) {
+    bool saved_tail = parser->block_tail_value_observed;
+    parser->block_tail_value_observed = parser->match_value_block_pending;
+    parser->match_value_block_pending = false;
     int line = parser->previous.line;
     AstNode *block = xr_ast_block(parser->compiler_session, line);
 
@@ -2037,6 +2042,7 @@ AstNode *xr_parse_block(Parser *parser) {
     // end column is column + 1.
     block->end_line = parser->previous.line;
     block->end_column = parser->previous.column + 1;
+    parser->block_tail_value_observed = saved_tail;
 
     return block;
 }

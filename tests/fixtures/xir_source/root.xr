@@ -541,3 +541,54 @@ fn searchStart()->i64 { searchTrace=searchTrace*10+3; searchText="again"; return
 print("A中😀B".indexOf("B"),"A中😀B".lastIndexOf("B"),"A中😀B".indexOf("😀",3),
     "abcabc".indexOf("bc",2),"中a中a".lastIndexOf("a"),"".indexOf(""),"A中😀B".indexOf("",4),
     "A中😀B".lastIndexOf(""),"é".indexOf("é"),searchReceiver().indexOf(searchPattern(),searchStart()),searchTrace)
+
+enum Mode { Cold, Warm }
+var enumTrace=0
+fn enumLabel()->string { enumTrace=enumTrace*10+1; return "label" }
+fn enumValue()->i64 { enumTrace=enumTrace*10+2; return 42 }
+const enumPayload=alpha.Event<i64>.Data { label:enumLabel(), value:enumValue() }
+const enumEmpty=alpha.Event<string>.Empty
+const enumGeneric=alpha.event<string>("text")
+Coro.yield()
+print(Mode.Cold.ordinal,Mode.Warm.ordinal,enumPayload.ordinal,enumEmpty.ordinal,enumGeneric.ordinal,enumTrace)
+
+var enumMatchTrace=0
+fn enumScrutinee()->alpha.Event<i64> { enumMatchTrace=enumMatchTrace*10+1; return enumPayload }
+fn enumGuard(digit:i64)->bool { enumMatchTrace=enumMatchTrace*10+digit; return false }
+const enumMatched=match(enumScrutinee()) {
+    alpha.Event.Empty if(enumGuard(9)) -> "wrong-unit",
+    alpha.Event.Data { label } if(enumGuard(2)) -> label,
+    alpha.Event.Data { label } -> { Coro.yield(); label; },
+    alpha.Event.Empty -> "empty"
+}
+fn enumReader(v:alpha.Event<string>)->fn()->string {
+    const value=99
+    return fn()->string { return match(v) { alpha.Event.Data { value } -> value, alpha.Event.Empty -> "empty" } }
+}
+const enumRead=enumReader(enumGeneric)
+print(enumMatched,alpha.eventValue<i64>(enumPayload,-1),alpha.eventValue<i64>(alpha.Event<i64>.Empty,-1),enumRead(),enumMatchTrace)
+
+var enumMutable=alpha.event<string>("snapshot")
+fn enumRebind()->bool { enumMutable=alpha.Event<string>.Empty; Coro.yield(); return false }
+const enumPreserved=match(enumMutable) {
+    alpha.Event.Data { value } if(enumRebind()) -> "wrong-guard",
+    alpha.Event.Data { value } -> value,
+    alpha.Event.Empty -> "wrong-empty"
+}
+fn enumEarly(v:alpha.Event<i64>)->i64 {
+    match(v) { alpha.Event.Data { value } -> { return value }, alpha.Event.Empty -> { return -1 } }
+}
+fn enumMixed(v:alpha.Event<i64>)->i64 {
+    const result=match(v) { alpha.Event.Data { value } -> { if(value>0){return value}; 0 }, alpha.Event.Empty -> -1 }
+    return result
+}
+fn enumLoop(v:Mode)->i64 {
+    var n=0
+    while(n<3) { n=n+1; match(v) { Mode.Cold -> { continue }, Mode.Warm -> { break } } }
+    return n
+}
+const enumEscaped=match(enumGeneric) {
+    alpha.Event.Data { value } -> fn()->string {return value},
+    alpha.Event.Empty -> fn()->string {return "empty"}
+}
+print(enumPreserved,enumEarly(enumPayload),enumEarly(alpha.Event<i64>.Empty),enumMixed(enumPayload),enumMixed(alpha.event<i64>(-5)),enumLoop(Mode.Cold),enumLoop(Mode.Warm),enumEscaped(),enumMutable.ordinal)

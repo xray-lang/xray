@@ -3621,6 +3621,8 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' R
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
 
+枚举类型的身份由所属模块、声明及有序类型实参共同确定；局部类型编号或相同 ordinal 不足以识别枚举类型。非 nullable enum 必须显式初始化，不隐式选择第一个变体。声明至少包含一个变体；变体名在声明内唯一，payload 字段名只须在所属变体内唯一。复制和销毁仅作用于活动变体的载荷；值逃逸不延长 Program 或 Instance 的执行权限。
+
 #### 5.6.1 简单枚举（0-payload enum）
 
 ```xray
@@ -3761,13 +3763,13 @@ descriptor API 是封闭白名单：
 | `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
 | `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
 
-payload 字段的 `name` 始终是源码声明名；空名称、重复名称或名称/类型计数不一致的 metadata 必须拒绝。
+payload 字段的 `name` 始终是源码声明名；空名称、同一变体内重复名称或名称/类型计数不一致的 metadata 必须拒绝。
 
 这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
 
-该能力是编译器静态类型域，不是 `Iterable` 协议实现：直接循环和不逃逸 descriptor 在 VM/AOT 中以 ordinal/index 标量降低，不分配数组或 iterator。只有 descriptor 流入 `any`、擦除 union、泛型存储、容器、闭包或跨协程通道等需要身份的边界时才物化不可变 box；`.name`、payload schema 与 type token 由使用证据分别保留，未使用的 cold sidecar 可裁剪。
+该能力是编译器静态类型域，不是 `Iterable` 协议实现。直接循环和不逃逸 descriptor 可在 Lowered 中以 ordinal/index 标量表示，无需分配数组或 iterator。流入 union、泛型存储、容器、闭包或跨协程通道的描述值必须保留具体声明身份及有效的元数据生命周期；描述查询不得绕过泛型约束、可见性或构造权限。只有证明查询结果及生命周期不受影响时，才可消除描述符引用或裁剪未使用的元数据。
 
-unit-only enum 的实际值在 typed 路径中同样只携带 ordinal；一旦该值跨入 tagged/擦除边界，静态 sidecar 必须保留 enum 名与全部 case 名，使边界后的 `.name`、`toString()`、相等性和通用字符串格式化与 VM 语义一致。仍保持 typed 的 enum 不生成该 sidecar。
+unit-only enum 的实际值与带载荷 enum 具有相同的名义身份规则。保存 ordinal 不能替代所属模块、声明及有序类型实参；值跨越调用、存储或挂起边界后，`.name`、`toString()`、相等性和字符串格式化仍须保持完整语义，且逃逸值不得延长执行权限。物理载体由统一 Lowered 管线决定；仅在证明身份可恢复且元数据生命周期安全时，才可将值缩减为 ordinal。规范不要求保留某个旧载体宽度，也不要求每个值独立分配。
 
 泛型时必须知道具体 enum layout，例如 `Option<i64>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
 
@@ -3967,6 +3969,8 @@ match (color) {
 
 #### 6.3.2 ADT 变体（带 payload）解构
 
+被匹配值只求值一次。分支绑定为不可变值，作用域仅覆盖该分支的 guard 和分支体；同一模式不能重复绑定同名变量。绑定遵守普通值复制与所有权规则，不获得写回被匹配值的权限，跨挂起和闭包逃逸仍须保留有效载荷。泛型变体模式省略的类型实参来自被匹配值的具体静态类型，不补足声明处缺失的约束。
+
 ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
 ```xray
@@ -4001,7 +4005,7 @@ match (msg) {
 
 `match` 一个 ADT enum 时，编译器执行**穷举性分析**：
 
-- 若所有变体都被覆盖（含 `_` 兜底），通过
+- 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
 - 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
 
 ```xray
@@ -4019,7 +4023,7 @@ match (event) {
 }
 ```
 
-> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；只要包含 `_` 兜底分支即可跳过检查。对非 enum 变量（如 `i64`）不强制。
+> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。对非 enum 变量（如 `i64`）不强制。
 
 ### 6.4 类型模式 `is T`
 

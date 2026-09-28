@@ -72,11 +72,11 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     if (prepared != XR_XIR_OK) return prepared;
     spec.proof = xr_xir_program_proof(proof);
     signature.result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; signature.parameter_span = 1;
-    XrXirStatus rejected = xr_xir_program_seal(&spec, 2097152, program);
+    XrXirStatus rejected = xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, program);
     if (rejected == XR_XIR_OUT_OF_MEMORY) { xr_xir_artifact_free(proof); return rejected; }
     CHECK(rejected == XR_XIR_BAD_TYPE && !*program);
     signature.result = XR_XIR_STRING; signature.parameter_span = 0;
-    XrXirStatus status = xr_xir_program_seal(&spec, 2097152, program);
+    XrXirStatus status = xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, program);
     xr_xir_artifact_free(proof); return status;
 }
 static bool function_case_run(bool cancel) {

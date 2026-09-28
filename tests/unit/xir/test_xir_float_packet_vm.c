@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     }
     xr_xir_c_source_free(&source);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 2097152, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !lowered);
     source_float_program_cases(program, functions);
     puts("Parser-free Float Checked consumer matched independent expectations and generated native C");
     return 0;

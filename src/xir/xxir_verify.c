@@ -183,7 +183,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
     uint32_t operands = operand_count(function, op, module);
-    for (uint32_t i = range ? 2 : operands; i < 2; ++i)
+    for (uint32_t i = range || op->op == XR_XIR_ENUM_GET ? 2 : operands; i < 2; ++i)
         if (op->args[i])
             return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < rule->edges; ++i)
@@ -205,7 +205,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
-               op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET && op->immediate) {
+               op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
+               op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -555,7 +556,7 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
     XrXirType type = construct ? op->type : xr_xir_operand_type(function, op->args[0]);
     const XrXirTypes *types = context->module->types;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    if (!node || node->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_BAD_TYPE;
+    if (!node || !xr_xir_type_is_struct(types, type)) return XR_XIR_BAD_TYPE;
     const XrXirNominalType *instance = &node->nominal;
     const XrXirNominalTable *table = types->nominals;
     const XrXirNominalDeclaration *declaration = table->declarations ?
@@ -587,6 +588,8 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
     return XR_XIR_OK;
 }
 
+#include "xxir_enum_verify.inc.c"
+
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -595,6 +598,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!spend(&context->remaining.work, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) {
+            XrXirStatus status = enum_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
         if (op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) {
             XrXirStatus status = struct_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;

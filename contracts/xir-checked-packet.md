@@ -129,9 +129,18 @@ Both return i64 rune ordinals under the managed-value search contract.
 INDEX_OF uses the existing operand table with exactly three entries:
 receiver string, pattern string, start i64. LAST_INDEX_OF has two direct
 string operands. Unused targets and immediate remain zero; instruction
-records remain 32 bytes and schema 8. Table extent, exact count, each type,
+records remain 32 bytes; the current schema is 9. Table extent, exact count, each type,
 value role and dominance are mandatory even after digest repair. Semantic25
 packets reject with repaired digests; there is no old-reader compatibility.
 The independent121-byte scalar payload digest is `2d208d11b593786586de389e44b40d4fd349bcfc1b2f9625403a6bbc2edbe0a3`.
 Bounds faults preserve the supplied start and receiver rune count through
 the existing call fault channel; no typed exception or suspension is added.
+
+
+## Nominal variant metadata revision
+
+Schema 9 / semantic 27 writes nominal kind after export visibility, and writes
+variant count after the flat fields. Each ordered variant has a length-prefixed
+name followed by field-begin u32 and field-count u32. The owned reader validates
+contiguous complete ranges and per-variant field names before publication.
+Schema 8 is rejected; there is no absent-kind compatibility interpretation.

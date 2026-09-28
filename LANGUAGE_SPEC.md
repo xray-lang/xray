@@ -3636,6 +3636,8 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' R
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
 
+An enum type is identified by its declaring module, declaration and ordered type arguments; a local type index or matching ordinal is not sufficient identity. A non-nullable enum requires explicit initialization and never implicitly selects its first variant. A declaration has at least one variant; variant names are unique within the declaration, while payload field names need only be unique within their own variant. Copy and destruction affect only the active payload; escaping values do not extend the execution authority of a Program or Instance.
+
 #### 5.6.1 Simple enums (0-payload enum)
 
 ```xray
@@ -3776,13 +3778,13 @@ The descriptor API is a closed whitelist:
 | `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
 | `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
 
-Every payload-field `name` is its source declaration name. Metadata with an empty or duplicate name, or mismatched name/type counts, is rejected.
+Every payload-field `name` is its source declaration name. Metadata with an empty name, duplicate names within one variant, or mismatched name/type counts is rejected.
 
 Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
 
-This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors lower to ordinal/index scalars in VM and AOT without allocating an array or iterator. An immutable box is materialized only when a descriptor crosses an identity-requiring boundary such as `any`, an erased union, generic storage, a container, a closure, or a cross-coroutine channel. Use evidence independently retains `.name`, payload-schema, and type-token metadata; unused cold sidecars remain strippable.
+This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors may use ordinal/index scalars in Lowered without allocating an array or iterator. Description values crossing a union, generic storage, container, closure or cross-coroutine channel must preserve their concrete declaration identity and valid metadata lifetime. Description queries cannot bypass generic constraints, visibility or construction authority. Descriptor references or unused metadata may be eliminated only when query results and lifetime remain unchanged.
 
-An actual unit-only enum value likewise carries only its ordinal on typed paths. Once it crosses a tagged or erased boundary, its immutable static sidecar must retain the enum name and every case name so later `.name`, `toString()`, equality, and generic string formatting remain VM-equivalent. Enums that stay typed emit no such sidecar.
+Actual unit-only enum values follow the same nominal identity rules as payload enums. An ordinal cannot replace the declaring module, declaration and ordered type arguments. Across calls, storage and suspension, `.name`, `toString()`, equality and string formatting must retain their complete semantics, without extending execution authority for escaped values. The single Lowered pipeline determines physical carriers; reducing a value to an ordinal requires proof that identity is recoverable and metadata lifetime remains safe. The language requires neither a legacy carrier width nor a separate allocation per value.
 
 Generic code must identify a concrete enum layout. `Option<i64>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
 
@@ -3982,6 +3984,8 @@ match (color) {
 
 #### 6.3.2 ADT variant (with payload) destructuring
 
+The scrutinee is evaluated once. Pattern bindings are immutable values scoped to the arm's guard and body; a pattern cannot bind the same name twice. Ordinary copy and ownership rules apply, with no authority to write back into the scrutinee. Payload lifetime remains valid across suspension and escaping closures. Generic variant patterns take omitted type arguments from the scrutinee's static type without supplying missing definition-site constraints.
+
 ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
 ```xray
@@ -4016,7 +4020,7 @@ match (msg) {
 
 When `match` is performed on an ADT enum, the compiler runs **exhaustiveness analysis**:
 
-- If every variant is covered (including `_` as a catch-all), the check passes.
+- The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
 - If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
 
 ```xray
@@ -4034,7 +4038,7 @@ match (event) {
 }
 ```
 
-> Both simple enums (no payload) and ADT enums **require** exhaustiveness; including a `_` catch-all suffices to skip the check. Non-enum operands (such as `i64`) are not subject to the check.
+> Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. Non-enum operands (such as `i64`) are not subject to the check.
 
 ### 6.4 Type Patterns `is T`
 

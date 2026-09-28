@@ -16,6 +16,7 @@
 #include "xxir_types.h"
 #include "xxir_array.h"
 #include "xxir_struct.h"
+#include "xxir_enum.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -29,14 +30,6 @@ struct XrXirDomain {
     uint64_t limit;
     XrXirDomainStats stats;
 };
-typedef struct XirObject {
-    _Atomic(uint32_t) references;
-    XrXirDomain *domain;
-    XrXirTypeArena *arena;
-    XrXirType type;
-    uint32_t kind;
-    struct XirObject *release_next;
-} XirObject;
 typedef struct XirAtomicI64 {
     XirObject object;
     _Atomic(int64_t) value;
@@ -56,12 +49,6 @@ typedef struct XirArray {
     XrXirType element;
     uint32_t stride;
 } XirArray;
-typedef struct XirStruct {
-    XirObject object;
-    uint32_t count;
-    XrXirValue *fields;
-} XirStruct;
-
 typedef struct XirString {
     XirObject object;
     char *bytes;
@@ -73,7 +60,7 @@ _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8
                "XIR bounds detail layout");
 
 static XrXirValueStatus array_admit(XirArray *array, XrXirValueAdmission *admission);
-static XrXirValueStatus struct_admit(XirStruct *value, XrXirValueAdmission *admission);
+static XrXirValueStatus nominal_admit(XirNominalValue *value, XrXirValueAdmission *admission);
 
 static void domain_lock(XrXirDomain *domain) {
     while (atomic_exchange_explicit(&domain->locked, true, memory_order_acquire)) { }
@@ -160,11 +147,21 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (!owned_carrier_type((XrXirType) value->type)) return true;
     XirObject *object = object_pointer(value);
     if (object->kind == XR_XIR_TYPE_NOMINAL) {
-        const XirStruct *record = (const XirStruct *) object;
-        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(object->arena), object->type);
-        if (record->count != node->nominal.field_count || record->fields != (const XrXirValue *) (record + 1)) return false;
-        for (uint32_t i = 0; i < record->count; ++i)
-            if (record->fields[i].type != (uint32_t) node->nominal.fields[i] || !value_header_valid(&record->fields[i])) return false;
+        const XirNominalValue *record = (const XirNominalValue *) object;
+        const XrXirTypes *types = xr_xir_type_arena_types(object->arena);
+        const XrXirTypeNode *node = xr_xir_type_node(types, object->type);
+        const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
+        uint32_t begin = 0, count = node->nominal.field_count;
+        if (identity->kind == XR_XIR_NOMINAL_ENUM) {
+            if (record->variant >= identity->variant_count) return false;
+            begin = identity->variants[record->variant].field_begin;
+            count = identity->variants[record->variant].field_count;
+            if (!count) return !record->count && !record->fields &&
+                record == xr_xir_type_arena_empty_variant(object->arena, object->type, record->variant);
+        } else if (identity->kind != XR_XIR_NOMINAL_STRUCT || record->variant) return false;
+        if (record->count != count || record->fields != (const XrXirValue *) (record + 1)) return false;
+        for (uint32_t i = 0; i < count; ++i)
+            if (record->fields[i].type != (uint32_t) node->nominal.fields[begin + i] || !value_header_valid(&record->fields[i])) return false;
         return true;
     }
     if (object->kind == XR_XIR_TYPE_ARRAY) return array_storage_valid((XirArray *) object);
@@ -317,12 +314,20 @@ XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *byte
     *output = string_value(string);
     return XR_XIR_VALUE_OK;
 }
+static bool empty_enum_object(const XirObject *object) {
+    return object->kind == XR_XIR_TYPE_NOMINAL &&
+        !((const XirNominalValue *) object)->count &&
+        xr_xir_type_is_enum(xr_xir_type_arena_types(object->arena), object->type);
+}
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output) {
     if (!unit_value(output) || !source ||
         !xr_xir_value_valid(source))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (owned_carrier_type((XrXirType) source->type) && !xr_xir_reference_retain(&object_pointer(source)->references))
-        return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    if (owned_carrier_type((XrXirType) source->type)) {
+        XirObject *object = object_pointer(source);
+        if (!(empty_enum_object(object) ? xr_xir_type_arena_retain(object->arena) :
+            xr_xir_reference_retain(&object->references))) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    }
     *output = *source;
     return XR_XIR_VALUE_OK;
 }
@@ -330,6 +335,7 @@ static void queue_release(const XrXirValue *value, XirObject **pending) {
     XR_CHECK(xr_xir_value_valid(value), "invalid nested owned value release");
     if (!owned_carrier_type((XrXirType) value->type)) return;
     XirObject *object = object_pointer(value);
+    if (empty_enum_object(object)) { xr_xir_type_arena_drop(object->arena); return; }
     if (xr_xir_reference_release(&object->references)) {
         object->release_next = *pending; *pending = object;
     }
@@ -362,7 +368,7 @@ XR_FUNC void xr_xir_value_drop(XrXirValue *value) {
                 (size_t) binding.capture_count * sizeof(XrXirValue));
             binding.release(binding.owner);
         } else if (object->kind == XR_XIR_TYPE_NOMINAL) {
-            XirStruct *record = (XirStruct *) object;
+            XirNominalValue *record = (XirNominalValue *) object;
             for (uint32_t i = record->count; i; --i) queue_release(&record->fields[i - 1], &pending);
             xr_xir_domain_deallocate(domain, record, sizeof(*record) + (size_t) record->count * sizeof(XrXirValue));
         } else if (object->kind == XR_XIR_TYPE_ARRAY) {
@@ -601,7 +607,7 @@ XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType t
         XirObject *object = object_pointer(value);
         if (!object->kind) return XR_XIR_VALUE_OK;
         if (object->kind == XR_XIR_TYPE_ARRAY) return array_admit((XirArray *) object, admission);
-        if (object->kind == XR_XIR_TYPE_NOMINAL) return struct_admit((XirStruct *) object, admission);
+        if (object->kind == XR_XIR_TYPE_NOMINAL) return nominal_admit((XirNominalValue *) object, admission);
         if (object->domain != admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (object->kind == XR_XIR_TYPE_CALLABLE) {
             if (!admission->function) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -973,3 +979,4 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 }
 
 #include "xxir_struct_value.inc.c"
+#include "xxir_enum_value.inc.c"

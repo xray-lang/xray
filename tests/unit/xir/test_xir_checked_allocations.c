@@ -72,6 +72,7 @@ static void packet_free(void *p) {
 #include "xir_nominal_chain_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
+#include "xir_enum_checked_fixture.h"
 static XrXirArtifact *array_packet_fixture(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     XrXirArtifact *checked = NULL;
@@ -79,7 +80,7 @@ static XrXirArtifact *array_packet_fixture(void) {
     return checked;
 }
 static void packet_failures(unsigned kind) {
-    XrXirArtifact *checked = kind >= 17 ? nominal_expression_fixture() : kind == 16 ? struct_set_checked(0) : kind == 15 ? struct_ops_checked(0) : kind == 14 ? nominal_chain_fixture(3, 2) : kind >= 9 ? nominal_checked_fixture(kind >= 12 ? 3 : kind == 11 ? 2 : kind == 10 ? 1 : 0) : kind == 8 ? array_generic_fixture() : kind == 7 ? array_packet_fixture() :
+    XrXirArtifact *checked = kind == 19 ? enum_checked_fixture() : kind >= 17 ? nominal_expression_fixture() : kind == 16 ? struct_set_checked(0) : kind == 15 ? struct_ops_checked(0) : kind == 14 ? nominal_chain_fixture(3, 2) : kind >= 9 ? nominal_checked_fixture(kind >= 12 ? 3 : kind == 11 ? 2 : kind == 10 ? 1 : 0) : kind == 8 ? array_generic_fixture() : kind == 7 ? array_packet_fixture() :
         kind == 6 ? constructed_fixture() : kind == 5 ? generic_callable_fixture() : kind == 4 ? function_ir_fixture() : kind == 3 ? callable_fixture() : kind == 2 ? local_fixture() : kind == 1 ? generic_fixture() : checked_fixture();
     if (kind == 13 || kind == 18) {
         XrXirArtifact *closed = NULL;
@@ -126,7 +127,7 @@ static void packet_failures(unsigned kind) {
 }
 
 static void specialization_failures(unsigned callable) {
-    XrXirArtifact *checked = callable == 8 ? nominal_expression_fixture() : callable == 7 ? nominal_chain_fixture(3, 2) : callable == 6 ? nominal_generic_fixture(true) : callable == 5 ? nominal_checked_fixture(3) : callable == 4 ? array_generic_fixture() : callable == 3 ? constructed_fixture() : callable == 2 ? generic_callable_fixture() : callable ? callable_fixture() : generic_fixture(), *output = NULL;
+    XrXirArtifact *checked = callable == 9 ? enum_checked_fixture() : callable == 8 ? nominal_expression_fixture() : callable == 7 ? nominal_chain_fixture(3, 2) : callable == 6 ? nominal_generic_fixture(true) : callable == 5 ? nominal_checked_fixture(3) : callable == 4 ? array_generic_fixture() : callable == 3 ? constructed_fixture() : callable == 2 ? generic_callable_fixture() : callable ? callable_fixture() : generic_fixture(), *output = NULL;
     XrXirModule built = *xr_xir_artifact_module(checked); built.stage = XR_XIR_BUILT;
     size_t baseline = live, sites[2] = {0};
     for (unsigned mode = 0; mode < 2; ++mode) {
@@ -612,6 +613,8 @@ static void specialization_correspondence_attacks(void) {
     xr_xir_artifact_free(closed); xr_xir_artifact_free(source); CHECK(!live);
 }
 int main(void) {
+    specialization_failures(9);
+    packet_failures(19);
     native_packet_proof();
     XrXirArtifact *forwarding = nominal_forwarding_checked();
     provenance_lowering(forwarding);

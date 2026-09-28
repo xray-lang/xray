@@ -26,7 +26,7 @@ static inline void nominal_fixture(NominalFixture *f) {
     f->fields[0] = (XrXirNominalField) {{f->field, 5}, (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, XR_XIR_FIELD_MUTABLE};
     f->fields[1] = (XrXirNominalField) {{"label", 5}, XR_XIR_STRING, XR_XIR_FIELD_PRIVATE};
     f->declarations[0] = (XrXirNominalDeclaration) {{f->module, 5}, {f->name, 4}, 1,
-        &f->constraint, 1, f->fields, 2};
+        &f->constraint, 1, f->fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0};
     f->declarations[1] = f->declarations[0];
     f->declarations[1].module = (XrXirLiteral) {"other", 5};
     f->table = (XrXirNominalTable) {f->declarations, 2, NULL};
@@ -42,7 +42,7 @@ static inline void nominal_identity_fixture(NominalIdentityFixture *f) {
     memcpy(f->module, "alpha", 5); memcpy(f->name, "Pair", 4); memcpy(f->field, "value", 5);
     f->fields[0] = (XrXirNominalFieldIdentity) {{f->field, 5}, XR_XIR_FIELD_MUTABLE};
     f->fields[1] = (XrXirNominalFieldIdentity) {{"label", 5}, XR_XIR_FIELD_PRIVATE};
-    f->identities[0] = (XrXirNominalIdentity) {{f->module, 5}, {f->name, 4}, 1, 0, f->fields, 2};
+    f->identities[0] = (XrXirNominalIdentity) {{f->module, 5}, {f->name, 4}, 1, 0, f->fields, 2, XR_XIR_NOMINAL_STRUCT, NULL, 0};
     f->identities[1] = f->identities[0]; f->identities[1].module = (XrXirLiteral) {"other", 5};
     f->table = (XrXirNominalTable) {NULL, 2, f->identities};
 }

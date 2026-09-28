@@ -45,6 +45,22 @@ bool xr_xir_type_is_cell(const XrXirTypes *types, XrXirType type) {
 bool xr_xir_type_is_nominal(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_NOMINAL);
 }
+static bool nominal_has_kind(const XrXirTypes *types, XrXirType type, uint32_t kind) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    const XrXirNominalTable *table = types ? types->nominals : NULL;
+    if (!node || node->kind != XR_XIR_TYPE_NOMINAL || !table ||
+        node->nominal.declaration >= table->count ||
+        (table->declarations != NULL) == (table->identities != NULL)) return false;
+    uint32_t declaration = node->nominal.declaration;
+    return (table->declarations ? table->declarations[declaration].kind :
+        table->identities[declaration].kind) == kind;
+}
+XR_FUNC bool xr_xir_type_is_struct(const XrXirTypes *types, XrXirType type) {
+    return nominal_has_kind(types, type, XR_XIR_NOMINAL_STRUCT);
+}
+XR_FUNC bool xr_xir_type_is_enum(const XrXirTypes *types, XrXirType type) {
+    return nominal_has_kind(types, type, XR_XIR_NOMINAL_ENUM);
+}
 bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||

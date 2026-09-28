@@ -65,7 +65,9 @@ static void boundaries(XrXirCheckedPacket *packet) {
         if (i == 6) budget.metadata_bytes = packet->length;
         if (i == 7) budget.functions = 7;
         if (i == 8) budget.parameters = 1;
-        CHECK(xr_xir_checked_read(packet->bytes, packet->length, &budget, &decoded, NULL) == XR_XIR_BUDGET);
+        XrXirStatus status = xr_xir_checked_read(packet->bytes, packet->length, &budget, &decoded, NULL);
+        if (status != XR_XIR_BUDGET) fprintf(stderr, "budget case %u returned %d\n", i, status);
+        CHECK(status == XR_XIR_BUDGET);
         CHECK(!decoded);
     }
 }
@@ -125,7 +127,8 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 8 && XR_XIR_CHECKED_CONTRACT == 26 && XR_XIR_OP_COUNT == 86, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 9 && XR_XIR_CHECKED_CONTRACT == 27 && XR_XIR_OP_COUNT == 89, "packet revision");
+    _Static_assert(XR_XIR_ENUM_NEW == 86 && XR_XIR_ENUM_TAG == 87 && XR_XIR_ENUM_GET == 88, "enum wire operations");
     _Static_assert(XR_XIR_STRING_INDEX_OF == 84 && XR_XIR_STRING_LAST_INDEX_OF == 85, "search wire operations");
     _Static_assert(XR_XIR_STRING_CONTAINS == 81 && XR_XIR_STRING_STARTS_WITH == 82 && XR_XIR_STRING_ENDS_WITH == 83, "string predicate wire operations");
     _Static_assert(XR_XIR_STRING_LEN == 78 && XR_XIR_EQ_STRING == 79 && XR_XIR_NE_STRING == 80, "string query wire operations");
@@ -153,8 +156,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[132] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum. */
     const uint8_t expected_digest[32] = {
-        0x2d, 0x20, 0x8d, 0x11, 0xb5, 0x93, 0x78, 0x65, 0x86, 0xde, 0x38, 0x9e, 0x44, 0xb4, 0x0d, 0x4f,
-        0xd3, 0x49, 0xbc, 0xfc, 0x1b, 0x2f, 0x96, 0x25, 0x40, 0x3a, 0x6b, 0xbc, 0x2e, 0xdb, 0xe0, 0xa3};
+        0xc3, 0x6d, 0xeb, 0x3c, 0x43, 0xc9, 0x2e, 0x01, 0xd3, 0x5b, 0x32, 0xa8, 0x36, 0x87, 0x95, 0xce,
+        0xef, 0x9f, 0x7d, 0x27, 0x40, 0x47, 0x34, 0x3b, 0xe6, 0xa4, 0x14, 0x4b, 0x60, 0x36, 0x80, 0x75};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[185]; memcpy(original, packet.bytes, sizeof(original));
     put32(packet.bytes + 81, XR_XIR_U8); put32(packet.bytes + 105, XR_XIR_U8);
@@ -490,7 +493,7 @@ static void nominal_packet_cases(void) {
             put32(packet.bytes + offset + 16, XR_XIR_I64); digest_packet(&packet);
         }
         uint32_t saved = XR_XIR_CHECKED_SCHEMA;
-        put32(packet.bytes + 8, 5); digest_packet(&packet); rejected(packet.bytes, packet.length);
+        put32(packet.bytes + 8, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
         put32(packet.bytes + 8, saved);
         size_t module_offset = 0;
         for (size_t i = 64; i + 5 <= packet.length; ++i)
@@ -498,11 +501,11 @@ static void nominal_packet_cases(void) {
         CHECK(module_offset != 0);
         packet.bytes[module_offset] = 'z'; digest_packet(&packet); rejected(packet.bytes, packet.length);
         packet.bytes[module_offset] = 'a';
-        put32(packet.bytes + packet.length - 8, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 8, XR_XIR_FIELD_PRIVATE);
-        put32(packet.bytes + packet.length - 12, XR_XIR_TYPE_PARAMETER_BASE + 1);
+        put32(packet.bytes + packet.length - 12, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
+        put32(packet.bytes + packet.length - 12, XR_XIR_FIELD_PRIVATE);
+        put32(packet.bytes + packet.length - 16, XR_XIR_TYPE_PARAMETER_BASE + 1);
         digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 12, XR_XIR_STRING);
+        put32(packet.bytes + packet.length - 16, XR_XIR_STRING);
         digest_packet(&packet);
         boundaries(&packet);
         xr_xir_artifact_free(source);
@@ -873,7 +876,35 @@ static void string_search_packets(void) {
         CHECK(xr_xir_check(&built,NULL,&checked,NULL) != XR_XIR_OK && !checked); operands[i]=saved;
     }
 }
+#include "xir_enum_checked_fixture.h"
+static void enum_packet_cases(void) {
+    XrXirArtifact *source = enum_checked_fixture(), *decoded = NULL, *closed = NULL, *lowered = NULL;
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_checked_write(source, NULL, &packet, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(source);
+    CHECK(xr_xir_specialize(decoded, NULL, &closed, NULL) == XR_XIR_OK);
+    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(decoded); xr_xir_artifact_free(closed);
+    const XrXirNominalIdentity *identity = xr_xir_artifact_module(lowered)->types->nominals->identities;
+    CHECK(identity->kind == XR_XIR_NOMINAL_ENUM && identity->variant_count == 3);
+    CHECK(identity->variants[2].field_begin == 1 && !memcmp(identity->variants[2].name.bytes, "Right", 5));
+    size_t at = 0;
+    for (size_t i = 64; i + 13 <= packet.length; ++i)
+        if (!memcmp(packet.bytes + i, "Right", 5)) { at = i + 5; break; }
+    CHECK(at); put32(packet.bytes + at, UINT32_MAX); digest_packet(&packet);
+    rejected(packet.bytes, packet.length);
+    xr_xir_checked_packet_free(&packet); xr_xir_artifact_free(lowered);
+}
+
+#include "xir_enum_layout_cases.h"
+#include "xir_enum_generic_fixture.h"
+#include "xir_enum_packet_cases.h"
 int main(void) {
+    enum_generic_cases(); enum_instruction_packet_cases();
+    enum_storage_layout(); enum_tag_widths();
+    enum_packet_cases();
     string_search_packets();
     string_query_contracts();
     nominal_callable_components();

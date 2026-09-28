@@ -589,7 +589,89 @@ static void nominal_context_proofs(void) {
     CHECK(xr_xir_types_verify(&types, &budget) == XR_XIR_OK);
 }
 
+#include "xir_enum_metadata_fixture.h"
+static void nominal_kind_boundaries(void) {
+    EnumMetadataFixture f; enum_metadata_fixture(&f);
+    XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
+    XrXirTypes types = {&node, 1, &f.table};
+    XrXirType type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
+    CHECK(xr_xir_type_is_nominal(&types, type));
+    CHECK(xr_xir_type_is_enum(&types, type) && !xr_xir_type_is_struct(&types, type));
+    XrXirBudget budget = xr_xir_default_budget();
+    XrXirNominalTable *projected = NULL;
+    CHECK(xr_xir_nominal_project(&f.table, &budget, &projected) == XR_XIR_OK);
+    if (!projected) return;
+    types.nominals = projected;
+    CHECK(xr_xir_type_is_enum(&types, type) && !xr_xir_type_is_struct(&types, type));
+    XrXirNominalIdentity identity = projected->identities[0];
+    XrXirNominalTable table = {NULL, 1, &identity}; types.nominals = &table;
+    identity.kind = XR_XIR_NOMINAL_STRUCT;
+    CHECK(xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    identity.kind = UINT32_MAX;
+    CHECK(!xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    table.declarations = &f.declaration;
+    CHECK(!xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    table.identities = NULL;
+    f.declaration.kind = XR_XIR_NOMINAL_STRUCT;
+    CHECK(xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    node.nominal.declaration = 1;
+    CHECK(!xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    node.nominal.declaration = 0; node.kind = XR_XIR_TYPE_ARRAY;
+    CHECK(!xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    node.kind = XR_XIR_TYPE_NOMINAL; table.declarations = NULL;
+    CHECK(!xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    types.nominals = NULL;
+    CHECK(!xr_xir_type_is_struct(&types, type) && !xr_xir_type_is_enum(&types, type));
+    CHECK(!xr_xir_type_is_struct(NULL, type) && !xr_xir_type_is_enum(NULL, type));
+    CHECK(!xr_xir_type_is_struct(&types, XR_XIR_I64) && !xr_xir_type_is_enum(&types, XR_XIR_I64));
+    xr_xir_nominal_free(projected);
+}
+static void enum_metadata_cases(void) {
+    EnumMetadataFixture f; enum_metadata_fixture(&f);
+    XrXirBudget b = xr_xir_default_budget();
+    CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
+    for (unsigned bad = 0; bad < 9; ++bad) {
+        enum_metadata_fixture(&f);
+        if (bad == 0) f.declaration.kind = 2;
+        if (bad == 1) f.declaration.kind = XR_XIR_NOMINAL_STRUCT;
+        if (bad == 2) { f.declaration.variants = NULL; f.declaration.variant_count = 0; }
+        if (bad == 3) f.variants[2].field_begin = 0;
+        if (bad == 4) f.variants[2].field_count = UINT32_MAX;
+        if (bad == 5) f.variants[2].name = f.variants[1].name;
+        if (bad == 6) f.fields[0].flags = XR_XIR_FIELD_PRIVATE;
+        if (bad == 7) { f.variants[1].field_count = 2; f.variants[2].field_begin = 2; f.variants[2].field_count = 0; }
+        if (bad == 8) f.variants[2].field_count = 0;
+        b = xr_xir_default_budget(); XrXirBudget original = b;
+        CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_STRUCTURE);
+        CHECK(!memcmp(&b, &original, sizeof(b)));
+    }
+    enum_metadata_fixture(&f); f.fields[0].type = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
+    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_BAD_TYPE);
+    uint32_t constraint = XR_XIR_CONSTRAINT_SENDABLE;
+    f.declaration.parameter_count = 1; f.declaration.constraints = &constraint;
+    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_verify(&f.table, NULL, &b) == XR_XIR_OK);
+    enum_metadata_fixture(&f); XrXirNominalTable *copy = NULL, *projected = NULL, *second = NULL;
+    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_clone(&f.table, NULL, &b, &copy) == XR_XIR_OK);
+    memset(&f, 0xCC, sizeof(f));
+    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_project(copy, &b, &projected) == XR_XIR_OK);
+    xr_xir_nominal_free(copy);
+    b = xr_xir_default_budget(); CHECK(xr_xir_nominal_clone(projected, NULL, &b, &second) == XR_XIR_OK);
+    xr_xir_nominal_free(projected);
+    CHECK(second->identities[0].kind == XR_XIR_NOMINAL_ENUM && second->identities[0].variant_count == 3);
+    CHECK(!memcmp(second->identities[0].variants[2].name.bytes, "Right", 5));
+    CHECK(second->identities[0].variants[2].field_begin == 1);
+    xr_xir_nominal_free(second);
+    enum_metadata_fixture(&f); b = xr_xir_default_budget(); b.work = 1;
+    CHECK(xr_xir_nominal_clone(&f.table, NULL, &b, &copy) == XR_XIR_BUDGET && !copy && b.work == 1);
+    XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING};
+    XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL; node.nominal.fields = fields; node.nominal.field_count = 2;
+    XrXirTypes types = {&node, 1, &f.table}; b = xr_xir_default_budget();
+    CHECK(xr_xir_types_verify(&types, &b) == XR_XIR_OK);
+}
+
 int main(void) {
+    nominal_kind_boundaries();
+    enum_metadata_cases();
     cumulative_verification_budget();
     nominal_context_proofs();
     nominal_argument_identity();

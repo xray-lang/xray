@@ -119,6 +119,9 @@ struct Parser {
     // is not a discarded result and E0208 must not fire. False for scripts and
     // modules, where a bare expression really is dead code.
     bool expr_value_observed;
+    // A match arm consumes the next block's tail value; nested blocks reset it.
+    bool match_value_block_pending;
+    bool block_tail_value_observed;
 
     // Nesting count of match-arm expression bodies currently being parsed.
     // `is` has no prefix rule (it is infix-only), so a line break before a

@@ -194,3 +194,18 @@ has linear cost and repeated queries can repeat that work.
 Source and Checked admission require canonical declaration identity and the
 ordinary definition-time constraints. This value-layer contract does not
 claim those consumers are implemented, nor does it admit source NUL literals.
+
+
+## Enum ownership protocol
+
+The current value admission is ABI 11; older protocol descriptions above record
+prior changes, not alternate supported versions. Closed enums share nominal
+identity and exact arena admission. Empty variants use presealed arena-owned
+immutable records: each external value owns one arena lease and record
+backpointers are weak. Payload variants own only active fields; copying retains
+the payload object, and final release drops its fields then its arena/domain.
+Constructors and projections validate the active variant and exact field types.
+A field-copy failure rolls back every initialized field without publication.
+The native helpers require prior checked authority; they do not authorize source
+construction, match or typed errors. Descriptor copies never retain execution
+permissions. The trusted pointer-origin rule remains in force.

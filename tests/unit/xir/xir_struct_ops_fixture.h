@@ -15,7 +15,7 @@ static XrXirArtifact *struct_ops_checked(unsigned invalid) {
     const XrXirType pair = (XrXirType)256;
     XrXirType parameters[] = {XR_XIR_I64,XR_XIR_STRING}, argument = XR_XIR_I64;
     NominalFixture nominal; nominal_fixture(&nominal);
-    nominal.declarations[1] = (XrXirNominalDeclaration) {{"alpha",5},{"Empty",5},1,NULL,0,NULL,0};
+    nominal.declarations[1] = (XrXirNominalDeclaration) {{"alpha",5},{"Empty",5},1,NULL,0,NULL,0, XR_XIR_NOMINAL_STRUCT, NULL, 0};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&argument,1,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,NULL,0,NULL,0}}};

@@ -623,6 +623,35 @@ static XrXirSourceResult native_string_facts(XrXirSourceRequest *request) {
     }
     return result;
 }
+static void source_enum_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "enum Choice<T> { Empty, Some { value:T }, Other { value:string } }\n"
+        "const v=Choice<i64>.Some { value:42 }\nprint(v.ordinal)\n"
+        "const got=match(v){Choice.Some{value:item}->item,Choice.Other{value:ignored}->0,Choice.Empty->-1}\n");
+    XrXirSourceResult result={0};
+    CHECK(xr_xir_source_check(request,&result,NULL)==XR_XIR_OK && result.checked && result.snapshot);
+    xr_xir_artifact_free(result.checked); result.checked=NULL;
+    write_source(request->entry_path,"print(0)\n");
+    const XrXirSourceView *view=xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *owner=declaration(view,"Choice",0); CHECK(owner);
+    const XrXirSourceDeclaration *some=declaration(view,"Some",owner->id);
+    const XrXirSourceDeclaration *other=declaration(view,"Other",owner->id);
+    const XrXirSourceDeclaration *ordinal=declaration(view,"ordinal",owner->id);
+    CHECK(some && other && ordinal && some->id!=other->id);
+    const XrXirSourceDeclaration *value=declaration(view,"value",some->id);
+    const XrXirSourceDeclaration *text=declaration(view,"value",other->id);
+    CHECK(value && text && value->id!=text->id);
+    CHECK(value->type.known && value->type.type==XR_XIR_TYPE_PARAMETER_BASE && value->type.generic_owner==owner->id);
+    CHECK(text->type.known && text->type.type==XR_XIR_STRING && !text->type.generic_owner);
+    CHECK(ordinal->kind==XR_XIR_SOURCE_INTRINSIC && ordinal->type.known && ordinal->type.type==XR_XIR_I64);
+    CHECK(!ordinal->range.line && !ordinal->range.column);
+    const XrXirSourceDeclaration *item=declaration(view,"item",0), *ignored=declaration(view,"ignored",0);
+    CHECK(item && ignored && item->type.known && item->type.type==XR_XIR_I64 && !item->mutable);
+    CHECK(ignored->type.known && ignored->type.type==XR_XIR_STRING && !ignored->mutable);
+    CHECK(references(view,some->id,some->id)==2 && references(view,value->id,value->id)==2);
+    CHECK(references(view,ordinal->id,ordinal->id)==1 && references(view,text->id,text->id)==1);
+    xr_xir_source_result_free(&result);
+}
 int main(void) {
     nominal_query_boundary();
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -635,6 +664,7 @@ int main(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
     source_struct_facts(&request);
+    source_enum_facts(&request);
     source_constructor_facts(&request);
     source_default_argument_facts(&request);
     source_static_method_facts(&request);

@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     XrXirArtifact *lowered = source_array_lower(checked);
     uint32_t functions[ARRAY_FUNCTION_COUNT]; source_array_find(xr_xir_artifact_module(lowered), functions);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_vm_program_take(&lowered, 2097152, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !lowered);
     source_array_program_cases(program, functions);
     session = xr_compiler_session_new(NULL); CHECK(session);
     request.session = session; request.entry_path = XR_ARRAY_SOURCE_FIXTURES "/bounds.xr";
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     xr_xir_checked_packet_free(&packet);
     lowered = source_array_lower(checked);
     uint32_t entry = xr_xir_artifact_module(lowered)->declarations->entry_function;
-    CHECK(xr_xir_vm_program_take(&lowered, 2097152, &program) == XR_XIR_OK && !lowered);
+    CHECK(xr_xir_vm_program_take(&lowered, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !lowered);
     source_array_sticky_bounds(program, entry);
     puts("Source Array VM: golden, COW, root rebinding, snapshots, result ownership and physical release passed");
     return 0;

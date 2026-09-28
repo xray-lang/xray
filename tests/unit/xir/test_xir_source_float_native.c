@@ -16,7 +16,7 @@ XR_DATA const XrXirProgramSpec float_source_program;
 XR_DATA const uint32_t float_source_functions[FLOAT_FUNCTION_COUNT];
 int main(void) {
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&float_source_program, 2097152, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&float_source_program, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     source_float_program_cases(program, float_source_functions);
     puts("Native Float source matched independent value, order, ownership and physical-release expectations");
     return 0;

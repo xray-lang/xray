@@ -57,14 +57,14 @@ static void source_array_mixed(bool root_native) {
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         owner->entries, module->function_count, module->declarations, {owner, source_array_mixed_free}, module->types, xr_xir_program_proof(owner->artifact)};
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&spec, 2097152, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     source_array_program_cases(program, functions);
 }
 int main(void) {
     source_array_mixed(false); CHECK(mixed_releases == 1);
     source_array_mixed(true); CHECK(mixed_releases == 2);
     XrXirProgram *bounds = NULL;
-    CHECK(xr_xir_program_seal(&array_bounds_program, 2097152, &bounds) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&array_bounds_program, (XrXirProgramBudget) {2097152, 16000000}, &bounds) == XR_XIR_OK);
     source_array_sticky_bounds(bounds, array_bounds_program.declarations->entry_function);
     puts("Array source VM-to-native and native-to-VM calls passed the same independent expectations");
     return 0;

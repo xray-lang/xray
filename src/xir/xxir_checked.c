@@ -218,6 +218,7 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.module = checked_nominal_name(c, d.module);
         d.name = checked_nominal_name(c, d.name);
         d.exported = checked_u32(c, d.exported);
+        d.kind = checked_u32(c, d.kind);
         uint32_t parameters = checked_count(c, d.parameter_count, &c->remaining.parameters);
         uint32_t *constraints = checked_array(c, d.constraints, parameters, sizeof(*constraints), 4);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
@@ -234,6 +235,16 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
             field.type = (XrXirType) checked_u32(c, (uint32_t) field.type);
             field.flags = checked_u32(c, field.flags);
             if (c->reading) members[j] = field;
+        }
+        uint32_t variants = checked_u32(c, d.variant_count);
+        XrXirNominalVariant *cases = checked_array(c, d.variants, variants, sizeof(*cases), 12);
+        d.variants = cases; d.variant_count = cases ? variants : 0;
+        for (uint32_t j = 0; j < d.variant_count && c->status == XR_XIR_OK; ++j) {
+            XrXirNominalVariant variant = cases[j];
+            variant.name = checked_nominal_name(c, variant.name);
+            variant.field_begin = checked_u32(c, variant.field_begin);
+            variant.field_count = checked_u32(c, variant.field_count);
+            if (c->reading) cases[j] = variant;
         }
         if (c->reading) declarations[i] = d;
     }

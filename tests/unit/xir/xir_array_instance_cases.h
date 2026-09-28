@@ -150,7 +150,7 @@ static void array_instance_cases(void) {
         CHECK(native_metadata_fixture(&spec, &proof) == XR_XIR_OK);
         spec.proof = xr_xir_program_proof(proof);
         XrXirProgram *program = NULL; XrXirInstance *instance = NULL;
-        CHECK(xr_xir_program_seal(&spec,2097152,&program) == XR_XIR_OK);
+        CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
         xr_xir_artifact_free(proof);
         XrXirInstanceConfig config = xr_xir_instance_defaults();
         if (mode) config.poll_limit = 64;

@@ -184,3 +184,9 @@ export struct MethodBox<T> {
     }
     static choose<U>(outer:T,value:U)->U { return value }
 }
+
+export enum Event<T:Sendable> { Empty, Data { value:T, label:string } }
+export fn event<T:Sendable>(v:T)->Event<T> { return Event<T>.Data { label:"owned", value:v } }
+export fn eventValue<T:Sendable>(v:Event<T>,fallback:T)->T {
+    return match(v) { Event.Data { value } -> value, Event.Empty -> fallback }
+}

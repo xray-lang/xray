@@ -22,7 +22,7 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
         {XR_XIR_TYPE_CELL, (XrXirType)257, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
     XrXirTypes types = {nodes, 3, &table};
     XrXirProgram *original = NULL;
-    CHECK(xr_xir_program_seal(base, 2097152, &original) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(base, (XrXirProgramBudget) {2097152, 16000000}, &original) == XR_XIR_OK);
     xr_xir_program_drop(original);
     for (unsigned mode = 0; mode < 4; ++mode) {
         XrXirProgramSpec spec = *base; spec.types = &types;
@@ -38,10 +38,10 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
         spec.declarations = &declarations; spec.entries = entries;
         XrXirProgram *program = NULL;
         /* Shape-valid descriptor edits still need a matching Checked producer. */
-        CHECK(xr_xir_program_seal(&spec, 2097152, &program) == XR_XIR_BAD_STRUCTURE && !program);
+        CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_STRUCTURE && !program);
         xr_xir_program_drop(program); program = NULL;
         identities[1].exported = 0;
-        CHECK(xr_xir_program_seal(&spec, 2097152, &program) == (mode ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !program);
+        CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == (mode ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !program);
         if (!mode) {
             uint64_t bytes = 65536, work = 100000;
             CHECK(xr_xir_declarations_verify(&declarations, &types, 9,

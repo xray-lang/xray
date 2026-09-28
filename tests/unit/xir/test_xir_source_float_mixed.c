@@ -56,7 +56,7 @@ static void source_float_mixed(bool root_native) {
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         owner->entries, module->function_count, module->declarations, {owner, source_float_mixed_free}, module->types, xr_xir_program_proof(owner->artifact)};
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_program_seal(&spec, 2097152, &program) == XR_XIR_OK);
+    CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
     source_float_program_cases(program, functions);
 }
 int main(void) {

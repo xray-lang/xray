@@ -32,6 +32,8 @@
 #include "xir_nominal_transport_cases.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_ops_cases.h"
+#include "xir_enum_ops_fixture.h"
+#include "xir_enum_ops_cases.h"
 #include "xir_struct_set_fixture.h"
 #include "xir_struct_set_cases.h"
 static void descriptor_correspondence(void) {
@@ -149,7 +151,7 @@ static void admission(void) {
         }
         XrXirProgram *program = NULL;
         CHECK(xr_xir_artifact_verify(artifact, NULL, NULL) != XR_XIR_OK);
-        CHECK(xr_xir_vm_program_take(&artifact, 2097152, &program) != XR_XIR_OK);
+        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 16000000}, &program) != XR_XIR_OK);
         CHECK(artifact == saved && !program);
         xr_xir_artifact_free(artifact);
     }
@@ -180,7 +182,7 @@ static void capture_mixed(void) {
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
             {owner,capture_mixed_release},module->types,xr_xir_program_proof(owner->artifact)};
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_program_seal(&spec,2097152,&program) == XR_XIR_OK);
+        CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
         capture_cases(program); CHECK(mixed_releases == parity+1);
     }
 }
@@ -212,7 +214,7 @@ static void array_mixed(void) {
                 {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,8,module->declarations,
                 {owner,array_mixed_release},module->types,xr_xir_program_proof(owner->artifact)};
             XrXirProgram *program = NULL;
-            CHECK(xr_xir_program_seal(&spec,2097152,&program) == XR_XIR_OK);
+            CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
             array_program_cases(program,mode != 0);
             CHECK(array_mixed_releases == mode * 2 + parity + 1);
         }
@@ -220,10 +222,20 @@ static void array_mixed(void) {
 }
 int main(void) {
     XrXirArtifact *struct_set = struct_set_lowered(); XrXirProgram *set_program = NULL;
-    CHECK(xr_xir_vm_program_take(&struct_set,2097152,&set_program) == XR_XIR_OK && !struct_set);
+    CHECK(xr_xir_vm_program_take(&struct_set,(XrXirProgramBudget) {2097152, 16000000},&set_program) == XR_XIR_OK && !struct_set);
     struct_set_cases(set_program);
+    for (unsigned i = 1; i <= 13; ++i) enum_ops_checked(i, false);
+    size_t enum_baseline = runtime_live, enum_bytes = runtime_bytes;
+    XrXirArtifact *enum_ops = enum_ops_lowered(false); XrXirProgram *enum_program = NULL;
+    CHECK(xr_xir_vm_program_take(&enum_ops,(XrXirProgramBudget) {2097152, 16000000},&enum_program) == XR_XIR_OK && !enum_ops);
+    enum_ops_cases(enum_program);
+    CHECK(runtime_live == enum_baseline && runtime_bytes == enum_bytes);
+    enum_ops = enum_ops_lowered(true); enum_program = NULL;
+    CHECK(xr_xir_vm_program_take(&enum_ops,(XrXirProgramBudget) {2097152, 16000000},&enum_program) == XR_XIR_OK && !enum_ops);
+    enum_wrong_variant_cases(enum_program);
+    CHECK(runtime_live == enum_baseline && runtime_bytes == enum_bytes);
     XrXirArtifact *struct_ops = struct_ops_lowered(); XrXirProgram *struct_program = NULL;
-    CHECK(xr_xir_vm_program_take(&struct_ops,2097152,&struct_program) == XR_XIR_OK && !struct_ops);
+    CHECK(xr_xir_vm_program_take(&struct_ops,(XrXirProgramBudget) {2097152, 16000000},&struct_program) == XR_XIR_OK && !struct_ops);
     struct_ops_cases(struct_program);
     for (unsigned mode = 0; mode < 3; ++mode) for (unsigned branch = 0; branch < 2; ++branch) {
         XrXirArtifact *transport = nominal_transport_fixture();
@@ -236,16 +248,16 @@ int main(void) {
     }
     XrXirArtifact *combined_artifact = nominal_generic_lowered();
     XrXirProgram *combined = NULL;
-    CHECK(xr_xir_vm_program_take(&combined_artifact, 2097152, &combined) == XR_XIR_OK && !combined_artifact);
+    CHECK(xr_xir_vm_program_take(&combined_artifact, (XrXirProgramBudget) {2097152, 16000000}, &combined) == XR_XIR_OK && !combined_artifact);
     nominal_generic_cases(combined);
     XrXirArtifact *expression_artifact = nominal_expression_lowered();
     XrXirProgram *expression_program = NULL;
-    CHECK(xr_xir_vm_program_take(&expression_artifact, 2097152, &expression_program) == XR_XIR_OK && !expression_artifact);
+    CHECK(xr_xir_vm_program_take(&expression_artifact, (XrXirProgramBudget) {2097152, 16000000}, &expression_program) == XR_XIR_OK && !expression_artifact);
     nominal_expression_cases(expression_program);
     for (unsigned i = 0; i < 3; ++i) {
         XrXirArtifact *nominal = i == 2 ? nominal_chain_lowered() : nominal_lowered_fixture(i ? 3 : 0);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&nominal, 2097152, &program) == XR_XIR_OK && !nominal);
+        CHECK(xr_xir_vm_program_take(&nominal, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK && !nominal);
         program_cases(program, 0);
     }
 
@@ -253,22 +265,25 @@ int main(void) {
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *array = array_program_fixture(mode == 1, mode == 2);
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&array,2097152,&program) == XR_XIR_OK);
+        CHECK(xr_xir_vm_program_take(&array,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
         array_program_cases(program,mode == 1);
     }
     descriptor_correspondence(); admission(); capture_mixed();
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *artifact = program_fixture(mode), *saved = artifact;
         XrXirProgram *program = NULL;
-        CHECK(xr_xir_vm_program_take(&artifact, 1, &program) == XR_XIR_BUDGET);
+        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {1, 16000000}, &program) == XR_XIR_BUDGET);
+        CHECK(artifact && !program);
+        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 0}, &program) == XR_XIR_BUDGET);
+        CHECK(artifact && !program);
         CHECK(artifact == saved && !program);
-        CHECK(xr_xir_vm_program_take(&artifact, 2097152, &program) == XR_XIR_OK);
+        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
         CHECK(!artifact && program);
         program_cases(program, mode);
     }
     XrXirArtifact *artifact = capture_fixture();
     XrXirProgram *captures = NULL;
-    CHECK(xr_xir_vm_program_take(&artifact,2097152,&captures) == XR_XIR_OK);
+    CHECK(xr_xir_vm_program_take(&artifact,(XrXirProgramBudget) {2097152, 16000000},&captures) == XR_XIR_OK);
     capture_cases(captures);
     puts("VM capture environments, two suspensions, cancellation and escaped ownership passed");
     puts("VM module programs match independent output, state and lifetime expectations");
