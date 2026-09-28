@@ -89,7 +89,7 @@ typedef struct SourceContext {
     XrXirSourceView query;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
     uint32_t query_module_capacity, array_module, array_declaration, array_members[4], length_declaration;
-    uint32_t string_module, string_declaration, string_members[3];
+    uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
 
 static bool source_fail(SourceContext *ctx, AstNode *node, XrXirStatus status, const char *message) {

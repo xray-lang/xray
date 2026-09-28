@@ -341,6 +341,23 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return value_run_status(status);
     }
+    case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: {
+        const uint32_t *args = op->op == XR_XIR_STRING_INDEX_OF ?
+            &run->function->operands[op->args[0]] : op->args;
+        XrXirValue left = vm_value_operand(run, args[0]), right = vm_value_operand(run, args[1]);
+        int64_t result = 0, start = op->op == XR_XIR_STRING_INDEX_OF ? vm_value_operand(run, args[2]).payload : 0;
+        XrXirValueStatus status = op->op == XR_XIR_STRING_INDEX_OF ?
+            xr_xir_string_index_of(&left, &right, start, &result) : xr_xir_string_last_index_of(&left, &right, &result);
+        state->instruction = next;
+        if (status == XR_XIR_VALUE_BOUNDS) {
+            int64_t length = 0;
+            if (xr_xir_string_length(&left, &length) != XR_XIR_VALUE_OK) return XR_XIR_RUN_BAD_ARTIFACT;
+            *action = xr_xir_call_bounds(start, length);
+            return XR_XIR_RUN_OK;
+        }
+        if (status == XR_XIR_VALUE_OK) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
+        return value_run_status(status);
+    }
     case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: {
         XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};

@@ -592,6 +592,22 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                "            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
                "{XR_XIR_I64, 0, status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT}, {0}}; }\n");
         break;
+    case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: {
+        const uint32_t *args = op->op == XR_XIR_STRING_INDEX_OF ? &function->operands[op->args[0]] : op->args;
+        append(buffer, "        { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        int64_t result = 0; XrXirValueStatus status;\n", layout->offsets[args[0]], layout->offsets[args[1]]);
+        if (op->op == XR_XIR_STRING_INDEX_OF)
+            append(buffer, "        int64_t start = xr_xir_scalar_load(state->frame, %uu);\n"
+                "        status = xr_xir_string_index_of(&left, &right, start, &result);\n"
+                "        if (status == XR_XIR_VALUE_BOUNDS) { int64_t length = 0;\n"
+                "            if (xr_xir_string_length(&left, &length) != XR_XIR_VALUE_OK) goto limit;\n"
+                "            return xr_xir_call_bounds(start, length); }\n", layout->offsets[args[2]]);
+        else append(buffer, "        status = xr_xir_string_last_index_of(&left, &right, &result);\n");
+        append(buffer, "        if (status != XR_XIR_VALUE_OK) goto limit;\n"
+            "        xr_xir_scalar_store(state->frame, %uu, result); }\n", destination);
+        break;
+    }
     case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:
         append(buffer, "        { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             "        XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"

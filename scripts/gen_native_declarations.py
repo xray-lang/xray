@@ -262,14 +262,18 @@ def parse_source(source, prelude):
             'ARRAY_GET': ('get', 'READ', ('I64',), 'ELEMENT', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'ARRAY_SET': ('set', 'REF', ('I64', 'ELEMENT'), 'UNIT', 'may_heap', 'bounds,allocation,retain,limit', 'unit'),
             'ARRAY_PUSH': ('push', 'REF', ('ELEMENT',), 'UNIT', 'may_heap', 'allocation,retain,limit', 'unit'),
+            'STRING_INDEX_OF': ('indexOf', 'READ', ('STRING', 'I64'), 'I64', 'no_heap', 'bounds,limit', 'owned'),
+            'STRING_LAST_INDEX_OF': ('lastIndexOf', 'READ', ('STRING',), 'I64', 'no_heap', 'limit', 'owned'),
             'STRING_CONTAINS': ('contains', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_STARTS_WITH': ('startsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
         }.get(member.operation)
-        if shape != expected or member.static or not member.method or any(p[3] or p[4] for p in member.parameters):
+        optional = tuple(p[3] for p in member.parameters)
+        expected_optional = (False, True) if member.operation == 'STRING_INDEX_OF' else (False,) * len(member.parameters)
+        if shape != expected or member.static or not member.method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} if header[0] == 1 else {
-        'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH'}
+        'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members

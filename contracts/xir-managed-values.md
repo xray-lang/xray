@@ -169,3 +169,28 @@ validates each type against its canonical generated row, including source
 spans and generic arity. Primitive string binding remains the existing scalar
 type authority. The old analyzer projects the same rows when its embedded
 string declaration is removed; no second string declaration loader remains.
+
+
+## String search rune coordinates
+
+The immutable string indexOf query takes a signed i64 rune start in the
+inclusive range zero through the receiver scalar count. Omitted source start
+is zero. Negative and excessive starts produce the existing bounds panic;
+there is no clamping or legacy byte-coordinate overload. Empty patterns match
+at start. lastIndexOf has no start argument and matches an empty pattern at
+the scalar count. Both return i64 rune ordinals, or minus one for no match.
+
+Valid UTF-8 byte search is an implementation mechanism, not the public
+coordinate system. Matching preserves NUL and does not normalize. The query
+borrows its operands without allocation, reference-count mutation, suspension
+or ownership transfer. Receiver, pattern and optional start evaluate once in
+that order, preserving snapshots across effects and suspension. Native invalid
+arguments, bounds and representability failures leave the output unchanged.
+Scalar counts beyond i64 produce LIMIT. Byte offsets beyond ptrdiff_t are
+rejected before using byte-search helpers. ASCII can use byte coordinates
+because its stored byte and scalar counts are equal; Unicode prefix counting
+has linear cost and repeated queries can repeat that work.
+
+Source and Checked admission require canonical declaration identity and the
+ordinary definition-time constraints. This value-layer contract does not
+claim those consumers are implemented, nor does it admit source NUL literals.

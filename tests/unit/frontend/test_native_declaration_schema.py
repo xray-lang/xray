@@ -41,11 +41,11 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf'})
         for member in admitted:
-            self.assertEqual(schema.simple_term(member.result, ''), 'BOOL')
+            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'BOOL')
             self.assertEqual(member.allocation, 'no_heap')
-            self.assertEqual(member.failures, 'none')
+            self.assertEqual(member.failures, 'bounds,limit' if member.name == 'indexOf' else 'limit' if member.name == 'lastIndexOf' else 'none')
         self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
         for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
                               ('struct string {', 'struct string<T> {'),
@@ -54,7 +54,11 @@ class NativeDeclarations(unittest.TestCase):
                               ('failures=none', 'failures=allocation'),
                               ('-> bool', '-> string'),
                               ('STRING_ENDS_WITH', 'ARRAY_PUSH'),
-                              ('InvalidUtf8', 'InvalidUtf8(')]:
+                              ('InvalidUtf8', 'InvalidUtf8('),
+                              ('start?: i64', 'start: i64'), ('start?: i64', 'start?: string'),
+                              ('indexOf(search: string', 'indexOf(search?: string'),
+                              ('lastIndexOf(search: string', 'lastIndexOf(search?: string'),
+                              ('failures=bounds,limit', 'failures=none')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(source.replace(before, after), self.prelude)
 

@@ -602,7 +602,7 @@ static void source_struct_facts(XrXirSourceRequest *request) {
 
 static XrXirSourceResult native_string_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,
-        "const a=\"abc\".contains(\"b\")\nconst b=\"abc\".startsWith(\"a\")\nconst c=\"abc\".endsWith(\"c\")\n");
+        "const a=\"abc\".contains(\"b\")\nconst b=\"abc\".startsWith(\"a\")\nconst c=\"abc\".endsWith(\"c\")\nconst d=\"abc\".indexOf(\"b\",1)\nconst e=\"abc\".lastIndexOf(\"a\")\n");
     XrXirSourceResult result = {0};
     CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK);
     const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
@@ -610,15 +610,16 @@ static XrXirSourceResult native_string_facts(XrXirSourceRequest *request) {
     CHECK(string && string->kind == XR_XIR_SOURCE_TYPE && string->native_identity == 2);
     CHECK(string->type.known && string->type.type == XR_XIR_STRING && !string->generic_parameter_count);
     CHECK(!strcmp(view->modules[string->range.module].identity, "xray-native:prelude/string"));
-    const char *names[] = {"contains", "startsWith", "endsWith"};
-    const uint32_t identities[] = {5, 15, 16};
-    for (unsigned i = 0; i < 3; ++i) {
-        const XrXirSourceDeclaration *member = declaration(view, names[i], string->id);
+    const char *names[] = {"contains", "startsWith", "endsWith", "indexOf", "lastIndexOf"};
+    const uint32_t identities[] = {5,15,16,6,7};
+    for (unsigned i = 0; i < 5; ++i) {
+        const XrXirSourceDeclaration *member = declaration(view,names[i],string->id);
         CHECK(member && member->kind == XR_XIR_SOURCE_MEMBER && member->native_identity == identities[i]);
-        CHECK(member->exported && !member->mutable && member->type.known && member->type.type == XR_XIR_BOOL);
-        CHECK(member->parameter_count == 1 && member->parameters[0].known && member->parameters[0].type == XR_XIR_STRING);
-        CHECK(!strcmp(member->signature, "(search: string) -> bool"));
-        CHECK(references(view, member->id, member->id) == 1);
+        CHECK(member->exported && !member->mutable && member->type.known && member->type.type == (i<3 ? XR_XIR_BOOL : XR_XIR_I64));
+        CHECK(member->parameter_count == (i==3 ? 2u : 1u) && member->parameters[0].known && member->parameters[0].type == XR_XIR_STRING);
+        if (i==3) CHECK(member->parameters[1].known && member->parameters[1].type == XR_XIR_I64);
+        CHECK(!strcmp(member->signature,i<3 ? "(search: string) -> bool" : i==3 ? "(search: string, start?: i64) -> i64" : "(search: string) -> i64"));
+        CHECK(references(view,member->id,member->id)==1);
     }
     return result;
 }
@@ -652,6 +653,7 @@ int main(void) {
     const XrXirSourceDeclaration *string_decl = declaration(string_view, "string", 0);
     CHECK(string_decl && !strcmp(string_view->modules[string_decl->range.module].path, "stdlib/types/string.xr"));
     CHECK(declaration(string_view, "contains", string_decl->id)->type.type == XR_XIR_BOOL);
+    CHECK(declaration(string_view, "indexOf", string_decl->id)->parameters[1].type == XR_XIR_I64);
     xr_xir_source_result_free(&strings);
     const XrXirSourceView *native_view = xr_xir_source_snapshot_view(native.snapshot);
     const XrXirSourceDeclaration *native_array = declaration(native_view, "Array", 0);

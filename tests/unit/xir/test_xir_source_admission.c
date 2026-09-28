@@ -123,7 +123,10 @@ static const char *const rejected[] = {
     "\"a\".startsWith<i64>(\"a\")\n",
     "fn unused<T>(x:T)->bool { return x.contains(\"a\") }\n",
     "fn unused<T>(x:T)->bool { return \"a\".endsWith(x) }\n",
-    "\"a\".indexOf(\"a\")\n",
+    "\"a\".indexOf(1)\n",
+    "\"a\".indexOf(\"a\",true)\n",
+    "\"a\".lastIndexOf(\"a\",0)\n",
+    "fn unused<T>(x:T)->i64{return x.indexOf(\"a\")}\n",
 
     "fn bad<T>(value:T)->i64{return len(value)}\n",
     "fn bad<T>(value:T)->bool{return value==\"x\"}\n",

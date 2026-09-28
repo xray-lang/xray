@@ -451,6 +451,44 @@ XR_FUNC bool xr_xir_string_ends_with(const XrXirValue *value, const XrXirValue *
     *result = xr_string_core_ends_with(text->bytes, text->length, search->bytes, search->length);
     return true;
 }
+static XrXirValueStatus string_search_arguments(const XrXirValue *value,
+    const XrXirValue *pattern, int64_t *result) {
+    if (!result || !xr_xir_value_argument(value, NULL, XR_XIR_STRING) ||
+        !xr_xir_value_argument(pattern, NULL, XR_XIR_STRING)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirString *text = string_pointer(value), *search = string_pointer(pattern);
+    if (text->runes > INT64_MAX || text->length > PTRDIFF_MAX || search->length > PTRDIFF_MAX)
+        return XR_XIR_VALUE_LIMIT;
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_string_index_of(const XrXirValue *value,
+    const XrXirValue *pattern, int64_t start, int64_t *result) {
+    XrXirValueStatus status = string_search_arguments(value, pattern, result);
+    if (status != XR_XIR_VALUE_OK) return status;
+    const XirString *text = string_pointer(value), *search = string_pointer(pattern);
+    if (start < 0 || (uint64_t) start > text->runes) return XR_XIR_VALUE_BOUNDS;
+    if (!search->length) { *result = start; return XR_XIR_VALUE_OK; }
+    if ((uint64_t) start == text->runes) { *result = -1; return XR_XIR_VALUE_OK; }
+    size_t offset = (size_t) start;
+    bool ascii = text->length == text->runes;
+    if (!ascii && !xr_string_core_utf8_rune_at(text->bytes, text->length, (size_t) start, NULL, &offset))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    ptrdiff_t found = xr_string_core_index_of(text->bytes + offset, text->length - offset,
+        search->bytes, search->length);
+    *result = found < 0 ? -1 : start + (int64_t) (ascii ? (size_t) found :
+        xr_string_core_utf8_rune_count(text->bytes + offset, (size_t) found));
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_string_last_index_of(const XrXirValue *value,
+    const XrXirValue *pattern, int64_t *result) {
+    XrXirValueStatus status = string_search_arguments(value, pattern, result);
+    if (status != XR_XIR_VALUE_OK) return status;
+    const XirString *text = string_pointer(value), *search = string_pointer(pattern);
+    if (!search->length) { *result = (int64_t) text->runes; return XR_XIR_VALUE_OK; }
+    ptrdiff_t found = xr_string_core_last_index_of(text->bytes, text->length, search->bytes, search->length);
+    *result = found < 0 ? -1 : (text->length == text->runes ? (int64_t) found :
+        (int64_t) xr_string_core_utf8_rune_count(text->bytes, (size_t) found));
+    return XR_XIR_VALUE_OK;
+}
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count) {
     if (!count || !xr_xir_value_argument(value, NULL, XR_XIR_STRING)) return false;
     *count = string_pointer(value)->runes;

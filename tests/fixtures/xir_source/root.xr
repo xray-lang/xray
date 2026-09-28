@@ -82,6 +82,7 @@ export fn update(value: i64, up: bool) -> i64 {
 }
 
 export fn calculate(kind:i64, left:i64, right:i64)->i64 {
+    if (kind == 26) { return "A中😀B".indexOf("B",left) }
     var held = "arith" + "metic"
     if (kind == 20) {
         Coro.yield()
@@ -185,6 +186,7 @@ fn resumedNative(flag:bool)->string {
     return text
 }
 
+fn searchStartPause()->i64 { Coro.yield(); predicateText="after"; return 1 }
 fn predicatePause(expected:string)->string { Coro.yield(); predicateText="after"; return expected }
 export fn resumeText(flag:bool)->string {
     const expected=flag ? "ry!" : "rn!"
@@ -195,6 +197,12 @@ export fn resumeText(flag:bool)->string {
     if (!predicateText.startsWith(predicatePause(expected))) { return "bad" }
     predicateText=expected
     if (!predicateText.endsWith(predicatePause(expected))) { return "bad" }
+    predicateText=expected
+    if (predicateText.indexOf(predicatePause(expected)) != 0) { return "bad" }
+    predicateText=expected
+    if (predicateText.lastIndexOf(predicatePause(expected)) != 0) { return "bad" }
+    predicateText=expected
+    if (predicateText.indexOf("!",searchStartPause()) != 2) { return "bad" }
     return expected
 }
 
@@ -524,3 +532,12 @@ fn predicateCount()->i64 { return predicateOrder }
 print("".contains(""),"".startsWith(""),"".endsWith(""),"".contains("a"),"abc".contains("abcd"),"中😀".contains("😀"),"中😀".startsWith("😀"),"中😀".endsWith("😀"),"é".contains("é"),predicateLeft().startsWith(predicateRight()),"xxabcdefghijklmnop".endsWith("abcdefghijklmnop"),"xxabcdefghijklmnoq".contains("abcdefghijklmnop"),predicateCount())
 
 print("abc".endsWith("a"),"abc".startsWith("a"),"abcz".contains("bc"),"abcz".endsWith("bc"))
+
+var searchText="A中😀B"
+var searchTrace=0
+fn searchReceiver()->string { searchTrace=searchTrace*10+1; return searchText }
+fn searchPattern()->string { searchTrace=searchTrace*10+2; searchText="changed"; return "B" }
+fn searchStart()->i64 { searchTrace=searchTrace*10+3; searchText="again"; return 2 }
+print("A中😀B".indexOf("B"),"A中😀B".lastIndexOf("B"),"A中😀B".indexOf("😀",3),
+    "abcabc".indexOf("bc",2),"中a中a".lastIndexOf("a"),"".indexOf(""),"A中😀B".indexOf("",4),
+    "A中😀B".lastIndexOf(""),"é".indexOf("é"),searchReceiver().indexOf(searchPattern(),searchStart()),searchTrace)

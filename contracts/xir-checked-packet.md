@@ -123,3 +123,15 @@ fixture digest is
 Queries do not allocate or alter input ownership; runtime evaluation preserves
 receiver snapshots across argument effects and suspension. Declaration names
 do not grant authority without canonical native identity and exact types.
+
+Semantic contract 26 admits STRING_INDEX_OF=84 and STRING_LAST_INDEX_OF=85.
+Both return i64 rune ordinals under the managed-value search contract.
+INDEX_OF uses the existing operand table with exactly three entries:
+receiver string, pattern string, start i64. LAST_INDEX_OF has two direct
+string operands. Unused targets and immediate remain zero; instruction
+records remain 32 bytes and schema 8. Table extent, exact count, each type,
+value role and dominance are mandatory even after digest repair. Semantic25
+packets reject with repaired digests; there is no old-reader compatibility.
+The independent121-byte scalar payload digest is `2d208d11b593786586de389e44b40d4fd349bcfc1b2f9625403a6bbc2edbe0a3`.
+Bounds faults preserve the supplied start and receiver rune count through
+the existing call fault channel; no typed exception or suspension is added.

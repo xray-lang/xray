@@ -447,7 +447,46 @@ static void string_predicates(void) {
         xr_xir_value_drop(&copy); xr_xir_value_drop(&pattern);
     }
 }
+static void string_search_coordinates(void) {
+    static const struct { const char *text, *pattern; size_t bytes, pattern_bytes;
+        int64_t start, first, last; } cases[] = {
+        {"", "", 0, 0, 0, 0, 0}, {"", "a", 0, 1, 0, -1, -1},
+        {"abcabc", "bc", 6, 2, 2, 4, 4}, {"abc", "", 3, 0, 3, 3, 3},
+        {"abc", "c", 3, 1, 3, -1, 2}, {"abc", "abcd", 3, 4, 0, -1, -1},
+        {"A\xE4\xB8\xAD\xF0\x9F\x98\x80" "B", "B", 9, 1, 0, 3, 3},
+        {"A\xE4\xB8\xAD\xF0\x9F\x98\x80" "B", "\xF0\x9F\x98\x80", 9, 4, 3, -1, 2},
+        {"\xE4\xB8\xAD" "a\xE4\xB8\xAD" "a", "a", 8, 1, 2, 3, 3},
+        {"e\xCC\x81", "\xC3\xA9", 3, 2, 0, -1, -1},
+        {"e\xCC\x81", "\xCC\x81", 3, 2, 0, 1, 1},
+        {"a\0b\0", "\0", 4, 1, 2, 3, 3},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        XrXirDomain *domain = NULL; XrXirValue text = {0}, pattern = {0};
+        CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_new(domain, cases[i].text, cases[i].bytes, &text) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_new(domain, cases[i].pattern, cases[i].pattern_bytes, &pattern) == XR_XIR_VALUE_OK);
+        XrXirDomainStats before = xr_xir_domain_stats(domain); int64_t result = 99, count = 0;
+        CHECK(xr_xir_string_index_of(&text, &pattern, cases[i].start, &result) == XR_XIR_VALUE_OK && result == cases[i].first);
+        CHECK(xr_xir_string_last_index_of(&text, &pattern, &result) == XR_XIR_VALUE_OK && result == cases[i].last);
+        CHECK(xr_xir_string_length(&text, &count) == XR_XIR_VALUE_OK);
+        result = 99;
+        CHECK(xr_xir_string_index_of(&text, &pattern, -1, &result) == XR_XIR_VALUE_BOUNDS && result == 99);
+        CHECK(xr_xir_string_index_of(&text, &pattern, count + 1, &result) == XR_XIR_VALUE_BOUNDS && result == 99);
+        XrXirValue invalid = {0};
+        CHECK(xr_xir_string_index_of(&invalid, &pattern, 0, &result) == XR_XIR_VALUE_BAD_ARGUMENT && result == 99);
+        CHECK(xr_xir_string_last_index_of(&text, &invalid, &result) == XR_XIR_VALUE_BAD_ARGUMENT && result == 99);
+        CHECK(xr_xir_string_index_of(&text, &pattern, 0, NULL) == XR_XIR_VALUE_BAD_ARGUMENT);
+        CHECK(xr_xir_string_last_index_of(&text, &pattern, NULL) == XR_XIR_VALUE_BAD_ARGUMENT);
+        XrXirDomainStats after = xr_xir_domain_stats(domain);
+        CHECK(before.allocations == after.allocations && before.frees == after.frees &&
+            before.live_bytes == after.live_bytes && before.reallocations == after.reallocations);
+        xr_xir_domain_drop(domain);
+        CHECK(xr_xir_string_index_of(&text, &pattern, cases[i].start, &result) == XR_XIR_VALUE_OK && result == cases[i].first);
+        xr_xir_value_drop(&text); xr_xir_value_drop(&pattern);
+    }
+}
 int main(void) {
+    string_search_coordinates();
     string_predicates();
     string_queries();
     struct_value_cases();

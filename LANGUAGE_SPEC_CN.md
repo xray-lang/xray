@@ -6123,6 +6123,8 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 
 `contains`、`startsWith`、`endsWith` 接受一个 string 并返回 bool，按完整 UTF-8 字节查询，不做大小写折叠或 Unicode 归一化，NUL 不终止匹配。空模式对任意字符串返回 true，非空模式对空字符串返回 false。接收者先求值并取得值快照，再求值模式，各一次；实参求值期间修改原变量不改变快照。查询本身不分配、不修改或转移输入，不引入挂起或语言异常；操作数求值及持有仍可失败。普通泛型必须在定义处具备相应能力。
 
+`indexOf(search, start?)` 的 start 是 rune 序号，省略为 0，合法范围为 `0..len(receiver)`（含两端）；负数或超界触发 bounds panic，不截断。查询返回从 start 开始的首个匹配的 rune 序号，未命中为 -1，空模式返回 start。`lastIndexOf(search)` 返回最后匹配的 rune 序号，未命中为 -1，空模式返回 `len(receiver)`。匹配按完整 UTF-8 字节，不归一化；rune 是 Unicode scalar，不是 grapheme。接收者、模式、start 按该顺序各求值一次并保留值快照。查询自身无分配、不挂起、不改变所有权；实参求值/持有失败照常传播。Unicode 坐标转换可能扫描前缀；连续查询不承诺恒定时间。
+
 string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
 ### 14.6 `Array<u8>`
