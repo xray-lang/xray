@@ -49,7 +49,8 @@ typedef struct SourceFunction {
     uint32_t block_count, block_capacity;
     XrXirInstruction *ops;
     uint32_t declaration, generic_owner;
-    uint32_t *constructor_places;
+    uint32_t *constructor_places, *argument_defaults;
+    AstNode *default_expression;
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
 typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; } SourceLoop;
@@ -591,12 +592,12 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, const XrXirG
     arguments->substitution = (SourceSubstitution) {types,count};
     return true;
 }
+#include "xxir_source_arguments.inc.c"
 static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
     SourceSubstitution *substitution, XrXirInstruction *op) {
     CallExprNode *call = &node->as.call_expr;
     const XrXirFunction *function = &ctx->functions[target->index];
-    if ((uint32_t) call->arg_count != function->parameter_count)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "call requires the declared value arguments");
+    if (!source_argument_arity(ctx, node, target->index, (uint32_t)call->arg_count)) return false;
     SourceTypeArguments arguments = {call->type_args,(uint32_t) call->type_arg_count,{0}};
     *op = (XrXirInstruction) {XR_XIR_CALL,XR_XIR_UNIT,{0},{0},target->index};
     if (!source_instantiation(ctx,node,&ctx->generics[target->index],&arguments) ||
@@ -690,8 +691,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     if (target && target->kind == SOURCE_FUNCTION && !prepare_call(ctx, node, target, &substitution, &op)) return false;
     if (target && target->kind == SOURCE_FUNCTION &&
         !source_query_reference(ctx, callee, binding, target, XR_XIR_SOURCE_CALL)) return false;
-    SourceValue *args = call->arg_count ? source_alloc(ctx, (size_t) call->arg_count, sizeof(*args)) : NULL;
-    if (call->arg_count && !args) return false;
+    uint32_t argument_count = op.op == XR_XIR_CALL ? ctx->functions[target->index].parameter_count : (uint32_t)call->arg_count;
+    SourceValue *args = argument_count ? source_alloc(ctx, argument_count, sizeof(*args)) : NULL;
+    if (argument_count && !args) return false;
     for (int i = 0; i < call->arg_count; ++i) {
         if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "ref and move arguments require an implemented contract");
@@ -729,9 +731,12 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Atomic fetchAdd requires i64");
         op = (XrXirInstruction) {method, XR_XIR_I64, {receiver.id, call->arg_count ? args[0].id : 0}, {0, 0}, 0};
     }
+    if (op.op == XR_XIR_CALL)
+        for (uint32_t p = (uint32_t)call->arg_count; p < argument_count; ++p)
+            if (!source_argument_default(ctx, node, target->index, p, &substitution, &args[p])) return false;
     if (op.op == XR_XIR_CALL && !source_type_arguments(ctx, node, substitution.types, substitution.count, &op)) return false;
     if (op.op == XR_XIR_CALL || op.op == XR_XIR_PRINT)
-        return emit_group(ctx, op, args, (uint32_t) call->arg_count, value);
+        return emit_group(ctx, op, args, argument_count, value);
     return emit(ctx, op, value);
 }
 static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
@@ -1322,7 +1327,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     if (!source_type(ctx, decl->return_type, &function->result)) return false;
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
-        if (!param->type || param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest ||
+        if (!param->type || param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest ||
             !source_type(ctx, param->type, &body->parameters[i]) || body->parameters[i] == XR_XIR_UNIT)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
         for (int j = 0; j < i; ++j) {
@@ -1370,7 +1375,7 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
     }
     return true;
 }
-typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth; } SourceClosureCount;
+typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults; } SourceClosureCount;
 static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
@@ -1378,6 +1383,18 @@ static bool count_closures(AstNode *node, void *pointer) {
     if (scan->depth == 128 || (node->type == AST_FUNCTION_EXPR && scan->count == scan->ctx->budget.functions))
         return source_fail(scan->ctx,node,XR_XIR_BUDGET,"closure declaration budget exhausted");
     if (node->type == AST_FUNCTION_EXPR) ++scan->count;
+    XrParamNode **parameters = node->type == AST_FUNCTION_DECL ? node->as.function_decl.params :
+        node->type == AST_METHOD_DECL ? node->as.method_decl.params : NULL;
+    int count = node->type == AST_FUNCTION_DECL ? node->as.function_decl.param_count :
+        node->type == AST_METHOD_DECL ? node->as.method_decl.param_count : 0;
+    for (int p = 0; p < count; ++p) {
+        if (!source_work(scan->ctx, node)) return false;
+        if (parameters[p]->default_value) {
+            if (scan->defaults == scan->ctx->budget.functions)
+                return source_fail(scan->ctx, node, XR_XIR_BUDGET, "default argument function budget exhausted");
+            ++scan->defaults;
+        }
+    }
     ++scan->depth;
     bool ok = xr_ast_for_each_child(node,count_closures,scan);
     --scan->depth;
@@ -1385,7 +1402,7 @@ static bool count_closures(AstNode *node, void *pointer) {
 }
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + 1, slots = 0, nominals = 0;
-    SourceClosureCount closures = {ctx,0,0};
+    SourceClosureCount closures = {ctx,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
@@ -1413,6 +1430,9 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) ++slots;
         }
     }
+    if (functions > ctx->budget.functions || closures.defaults > ctx->budget.functions - functions)
+        return source_fail(ctx, NULL, XR_XIR_BUDGET, "default argument function budget exhausted");
+    functions += closures.defaults;
     if (functions > ctx->budget.functions || closures.count > ctx->budget.functions - functions)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"function budget exhausted");
     ctx->first_closure = ctx->next_closure = functions - 1;
@@ -1473,7 +1493,7 @@ static bool collect_declarations(SourceContext *ctx) {
             }
         }
     }
-    if (!source_struct_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || function != ctx->first_closure)
+    if (!source_struct_methods(ctx, &function) || !source_struct_default_functions(ctx, &function) || !source_struct_constructors(ctx, &function) || !source_argument_functions(ctx, &function) || function != ctx->first_closure)
         return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "field initializer function inventory mismatch");
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
@@ -1695,9 +1715,10 @@ static bool build_bodies(SourceContext *ctx) {
             if (!source_struct_constructor_body(ctx) || !finish_body(ctx)) return false;
             continue;
         }
-        if (ctx->bodies[f].node->type == AST_FIELD_DECL) {
+        if (ctx->bodies[f].default_expression || ctx->bodies[f].node->type == AST_FIELD_DECL) {
             SourceValue value;
-            if (!expression_in(ctx, ctx->bodies[f].node->as.field_decl.initializer, ctx->functions[f].result, &value) ||
+            if (!expression_in(ctx, ctx->bodies[f].default_expression ? ctx->bodies[f].default_expression :
+                ctx->bodies[f].node->as.field_decl.initializer, ctx->functions[f].result, &value) ||
                 !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0}, NULL)) return false;
             ctx->returned = true;
             if (!finish_body(ctx)) return false;

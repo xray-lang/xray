@@ -117,6 +117,17 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "fn value(x:i64=caller)->i64 { return x }\nfn use()->i64 { const caller=7; return value() }\n",
+    "struct C { const value:i64\n private constructor(value:i64=7) { this.value=value } }\nconst c=C()\n",
+    "struct C { value:i64=7\n private get(x:i64=7)->i64 { return x } }\nprint(C().get())\n",
+    "struct C { value:i64=7\n get(x:i64=7)->i64 { return x } }\nconst get=C().get\nprint(get())\n",
+    "fn f(x:i64=\"bad\")->i64 { return x }\n",
+    "fn f(a:i64=1,b:i64)->i64 { return b }\n",
+    "fn f(a:i64,b:i64=a)->i64 { return b }\n",
+    "fn f<T>(x:T=1)->T { return x }\n",
+    "fn f(x:i64=1)->i64 { return x }\nconst g=f\nprint(g())\n",
+    "struct C { value:i64\n constructor(value=this.value) { this.value=value } }\n",
+    "struct C { value:i64=2\n f(x:i64=this.value)->i64 { return x } }\n",
     "struct C { const value:string\n constructor(value,n:i64) { var i=0\n while(i<n) { this.value=value\n i=i+1 }\n this.value=value } }\n",
     "struct C { const value:string\n constructor(value,flag:bool) { if(flag) { return }\n this.value=value } }\n",
     "struct C { const value:string\n constructor(value) { this.get()\n this.value=value }\n get()->string{return this.value} }\n",
@@ -342,6 +353,13 @@ static const char *const rejected[] = {
 #include "xir_source_decimal_context.h"
 static void constructor_admission(const XrXirSourceRequest *request, const char *root) {
     const char *const sources[] = {
+        "struct C { const value:i64\n private constructor(value:i64=7) { this.value=value }\n get(other:C=C())->i64 { return other.value } }\n",
+        "fn value(x:string=\"ok\")->string { return x }\nprint(value())\nprint(value(\"explicit\"))\n",
+        "fn make<T>(x:fn()->T)->T { return x() }\nfn value<T>(x:fn()->T=fn()->T { var items:Array<T> = []\n return items[0] })->T { return x() }\n",
+        "struct C { const value:string\n constructor(value=\"ok\") { this.value=value }\n read(s:string=\"method\")->string { return s+this.value } }\nconst c=C()\nprint(c.read())\n",
+        "fn privateValue()->string { return \"private\" }\nexport fn value(x:string=privateValue())->string { return x }\nprint(value())\n",
+        "fn nested(x:i64=3)->i64 { return x }\nfn outer(x:i64=nested())->i64 { return x }\nprint(outer())\n",
+        "const a:i64=9\nfn f(a:i64,b:i64=a)->i64 { return b }\nprint(f(1))\n",
         "struct C { const factory:fn()->string=fn()->string { return \"ready\" }\n const value:string\n constructor() { this.value=this.factory() } }\nconst c=C()\n",
         "struct C { const value:string\n constructor(value) { this.value=value } }\nconst c=C(\"yes\")\nprint(c.value)\n",
         "struct C<T> { const value:T\n constructor(value) { this.value=value } }\nconst c=C<string>(\"yes\")\nprint(c.value)\n",

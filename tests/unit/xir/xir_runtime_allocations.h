@@ -14,10 +14,10 @@
 #include "base/xmalloc.h"
 #include "xir/xxir_program.h"
 static size_t runtime_attempts, runtime_fail_at = SIZE_MAX, runtime_live, runtime_bytes;
-static struct { void *pointer; size_t bytes; } runtime_owned[8192];
+static struct { void *pointer; size_t bytes; } runtime_owned[16384];
 static void runtime_record(void *pointer, size_t bytes) {
     if (!pointer) return;
-    CHECK(runtime_live < 8192 && bytes <= SIZE_MAX - runtime_bytes);
+    CHECK(runtime_live < sizeof(runtime_owned) / sizeof(runtime_owned[0]) && bytes <= SIZE_MAX - runtime_bytes);
     runtime_owned[runtime_live].pointer = pointer;
     runtime_owned[runtime_live++].bytes = bytes; runtime_bytes += bytes;
 }

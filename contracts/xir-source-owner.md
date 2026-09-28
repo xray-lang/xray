@@ -166,3 +166,39 @@ are still checked. Unit return expressions execute their effect then use the
 canonical valueless RETURN encoding. No explicit no_suspend/no_blocking proof,
 work-stealing, generator/Task/source go or concurrent cancellation is certified by
 this admission. Existing refusal of unsupported function contracts remains.
+
+## Direct-call default arguments: frozen implementation contract
+
+This declaration-family extension is frozen before source admission. A default
+is an ordinary declaration-owned typed function, checked even when unused and
+inheriting the callable's type parameters, constraints and nominal authority.
+Invocation parameters and this are absent from its lexical scope. Private
+references resolve at the definition; exposing a legal default call grants no
+caller access to the referenced private declarations.
+
+Direct named function, method and constructor calls fill only a contiguous
+omitted suffix. Evaluate the callee/receiver once, then explicit arguments left
+to right, then each omitted default in parameter order. A supplied value, even
+null, suppresses its default. Indirect calls require the complete signature.
+Defaults produce ordinary owned values and may suspend or fail through ordinary
+CALL. Failure releases completed argument values, preserves preceding external
+effects and never starts the target body. Constructor argument defaults precede
+field initialization and cannot observe incomplete construction.
+
+Source admission must pre-count and budget default helper functions, publish
+all signatures before checking bodies, and preserve definition generic identity
+in source queries. Checked retains ordinary function signatures and full-arity
+CALLs; defaults introduce no missing-value sentinel or alternate interpreter.
+Any future independently consumed stdlib declaration metadata must own and bind
+its default-helper mapping to the same Checked artifact, preserve authority,
+and be revalidated before specialization or Program sealing. Source-only
+admission does not certify that publication obligation.
+
+Required evidence includes unused invalid defaults, generic constraint failure,
+private-definition/public-call authority, nontrailing defaults, indirect-call
+arity rejection, per-call side effects, explicit suppression, nested defaults,
+constructor ordering, suspension/failure cleanup and independent VM/native
+expectations. Physical allocation-failure release and instance isolation cover
+the resulting ordinary call graphs. Full declaration-family and package
+publication completion remain unproven until their corresponding consumers and
+checks are implemented.

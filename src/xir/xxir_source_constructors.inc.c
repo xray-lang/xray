@@ -71,7 +71,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner->index];
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *param = method->params[p];
-        if (param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest || !strcmp(param->name, "this"))
+        if (param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest || !strcmp(param->name, "this"))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter contract is not admitted");
         if (param->type) { if (!source_type(ctx, param->type, &body->parameters[p])) return false; }
         else {
@@ -98,7 +98,7 @@ static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType
     if (!index) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type has no admitted constructor");
     const XrXirFunction *function = &ctx->functions[index];
     CallExprNode *call = &node->as.call_expr;
-    if ((uint32_t)call->arg_count != function->parameter_count ||
+    if (!source_argument_arity(ctx, node, index, (uint32_t)call->arg_count) ||
         (ctx->identities[index].member_access && ctx->identities[ctx->function].nominal_owner != ctx->identities[index].nominal_owner))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor arity or authority mismatch");
     SourceName called = *target;
@@ -107,7 +107,7 @@ static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType
     SourceSubstitution substitution = {nominal->nominal.arguments, nominal->nominal.argument_count};
     SourceValue *arguments = function->parameter_count ? source_alloc(ctx, function->parameter_count, sizeof(*arguments)) : NULL;
     if (function->parameter_count && !arguments) return false;
-    for (uint32_t p = 0; p < function->parameter_count; ++p) {
+    for (uint32_t p = 0; p < (uint32_t)call->arg_count; ++p) {
         XrXirType expected;
         if (call->arg_accesses && call->arg_accesses[p] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument requires a value");
@@ -115,6 +115,8 @@ static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType
             !expression_in(ctx, call->arguments[p], expected, &arguments[p])) return false;
         if (arguments[p].type != expected) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument type mismatch");
     }
+    for (uint32_t p = (uint32_t)call->arg_count; p < function->parameter_count; ++p)
+        if (!source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
     XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, index};
     return source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
         emit_group(ctx, op, arguments, function->parameter_count, value);

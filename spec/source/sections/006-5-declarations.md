@@ -140,6 +140,9 @@ connect("localhost", 443, true)
 - 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
 - 有默认值的参数必须在尾部连续出现。
 - 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
+- 默认表达式在声明方模块、类型参数和成员权限作用域内按参数类型检查，包括未使用的声明；不引用调用方局部变量。本次调用的形参（包括前面的形参）及 `this` 不在默认表达式作用域内。普通泛型只使用定义处约束，不因某个具体实例而获得额外能力。
+- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
+- 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
 
 #### 5.2.3 多返回值
 
@@ -1334,6 +1337,9 @@ connect("localhost", 443, true)
 - Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
 - Parameters with default values must appear consecutively at the tail of the parameter list.
 - Default arguments apply only to **direct calls of a named function/method/constructor**. A call through a function value (a function-typed variable) carries no default expressions and must pass every argument.
+- Default expressions are checked against the parameter type in the declaring module, type-parameter and member-authority scope, including unused declarations; they cannot reference caller locals. Parameters of this invocation (including preceding parameters) and `this` are not in default-expression scope. Ordinary generics use only their definition constraints, without gaining capabilities from a concrete instance.
+- Evaluate the receiver or callee first, explicit arguments left to right next, and omitted trailing defaults once each in declaration order last. An explicit argument suppresses its default. Defaults permit ordinary admitted function effects; suspension, failure and owned-result cleanup follow ordinary call rules. Failure preserves earlier side effects and does not enter a callee body that has not started.
+- Defaults may use private names accessible to their declaration; exported callers gain no direct access to those names. Check defaults at their declaration and execute through the same Checked specialization and revalidation pipeline, without caller-side rebinding or runtime AST expansion that bypasses authority. Constructor argument defaults run before field defaults and the constructor body and cannot observe partially constructed `this`.
 
 #### 5.2.3 Multiple return values
 

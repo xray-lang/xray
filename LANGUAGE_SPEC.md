@@ -2873,6 +2873,9 @@ connect("localhost", 443, true)
 - Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
 - Parameters with default values must appear consecutively at the tail of the parameter list.
 - Default arguments apply only to **direct calls of a named function/method/constructor**. A call through a function value (a function-typed variable) carries no default expressions and must pass every argument.
+- Default expressions are checked against the parameter type in the declaring module, type-parameter and member-authority scope, including unused declarations; they cannot reference caller locals. Parameters of this invocation (including preceding parameters) and `this` are not in default-expression scope. Ordinary generics use only their definition constraints, without gaining capabilities from a concrete instance.
+- Evaluate the receiver or callee first, explicit arguments left to right next, and omitted trailing defaults once each in declaration order last. An explicit argument suppresses its default. Defaults permit ordinary admitted function effects; suspension, failure and owned-result cleanup follow ordinary call rules. Failure preserves earlier side effects and does not enter a callee body that has not started.
+- Defaults may use private names accessible to their declaration; exported callers gain no direct access to those names. Check defaults at their declaration and execute through the same Checked specialization and revalidation pipeline, without caller-side rebinding or runtime AST expansion that bypasses authority. Constructor argument defaults run before field defaults and the constructor body and cannot observe partially constructed `this`.
 
 #### 5.2.3 Multiple return values
 

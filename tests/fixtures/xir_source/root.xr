@@ -90,6 +90,8 @@ export fn calculate(kind:i64, left:i64, right:i64)->i64 {
         return floatState as i64
     }
     if (kind == 21) { return floatState as i64 }
+    if (kind == 23) { return alpha.argumentFailure("caller"+"owned") }
+    if (kind == 24) { return alpha.argumentCount() }
     if (kind == 22) { const value=alpha.ConstructorFault(left,right); return value.value }
     if (kind == 0) { return left + right }
     if (kind == 1) { return left - right }
@@ -473,3 +475,9 @@ export fn boundResult()->fn()->string{return boundPrivate}
 const constructedFirst=alpha.Construct<string>("made",true)
 const constructedSecond=alpha.Construct<string>("other",false)
 print(constructedFirst.get(),constructedFirst.label,constructedSecond.label,constructedFirst.copy,constructedFirst.stamp,alpha.ConstructorControl("unused",-1).value,alpha.ConstructorControl("loop",3).value,alpha.ConstructorOrder().order)
+
+const argumentFirst=alpha.argumentCall(alpha.argumentExplicit())
+const argumentOverride=alpha.argumentCall("X","Y")
+const argumentAgain=alpha.argumentCall("again")
+const argumentBox=alpha.ArgumentBox<string>("v")
+print(argumentFirst,argumentOverride,argumentAgain,argumentBox.suffix(),argumentBox.label,alpha.argumentIdentity<string>("generic"),alpha.argumentCount())

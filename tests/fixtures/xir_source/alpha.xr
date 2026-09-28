@@ -130,3 +130,33 @@ export struct ConstructorFault {
         this.value=left/right
     }
 }
+
+const argumentOrder=Atomic(0)
+fn argumentStep(label:string,digit:i64)->string {
+    const prior=argumentOrder.load()
+    argumentOrder.fetchAdd(prior*9+digit)
+    return label
+}
+export fn argumentExplicit()->string { return argumentStep("explicit",1) }
+fn argumentDefault()->string { Coro.yield(); return argumentStep("default",2) }
+export fn argumentCall(first:string,second:string=argumentDefault())->string { return first+second }
+export fn argumentCount()->i64 { return argumentOrder.load() }
+export fn argumentIdentity<T>(value:T,identity:fn(T)->T=fn(item:T)->T { return item })->T { return identity(value) }
+export struct ArgumentBox<T> {
+    const value:T
+    const label:string
+    constructor(value,label:string=argumentDefault()) { this.value=value; this.label=label }
+    suffix(text:string=argumentDefault())->string { return "v"+text }
+}
+
+fn argumentFault()->i64 {
+    const held="default"+"owned"
+    argumentStep("fault",3)
+    Coro.yield()
+    var zero:i64=0
+    return 18/zero
+}
+export fn argumentFailure(first:string,second:i64=argumentFault())->i64 {
+    argumentOrder.fetchAdd(1000000)
+    return second
+}

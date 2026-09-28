@@ -384,6 +384,38 @@ static void nominal_query_boundary(void) {
     CHECK(xr_xir_source_snapshot_copy(&view, &budget, &snapshot) == XR_XIR_BAD_STAGE && !snapshot);
     CHECK(!memcmp(&budget, &original, sizeof(budget)));
 }
+static void source_default_argument_facts(XrXirSourceRequest *request) {
+    write_source(request->entry_path,
+        "fn choose<T>(value:T, transform:fn(T)->T=fn(item:T)->T { return item })->T { return transform(value) }\n"
+        "const selected=choose<i64>(7)\n");
+    XrXirSourceResult result = {0};
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK && result.checked);
+    const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+    const XrXirSourceDeclaration *owner = declaration(view, "choose", 0);
+    CHECK(owner && owner->parameter_count == 2 && owner->type.generic_owner == owner->id);
+    CHECK(owner->parameters[1].known && owner->parameters[1].generic_owner == owner->id);
+    unsigned closures = 0, calls = 0;
+    for (uint32_t i = 0; i < view->declaration_count; ++i) {
+        const XrXirSourceDeclaration *nested = &view->declarations[i];
+        if (nested->parent == owner->id && nested->kind == XR_XIR_SOURCE_FUNCTION) {
+            CHECK(nested->parameter_count == 1 && nested->type.generic_owner == owner->id);
+            const XrXirSourceDeclaration *item = declaration(view, "item", nested->id);
+            CHECK(item && item->type.generic_owner == owner->id);
+            CHECK(references(view, item->id, item->id) == 1); ++closures;
+        }
+        CHECK(strcmp(nested->name, "$argument_default"));
+    }
+    for (uint32_t i = 0; i < view->reference_count; ++i)
+        if (view->references[i].access == XR_XIR_SOURCE_CALL && view->references[i].target == owner->id) ++calls;
+    CHECK(closures == 1 && calls == 1);
+    xr_xir_source_result_free(&result);
+    write_source(request->entry_path, "fn value(x:i64=7)->i64 { return x }\nprint(value())\n");
+    XrXirBudget budget = xr_xir_default_budget(); budget.functions = 3; request->budget = &budget;
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_BUDGET && !result.checked);
+    xr_xir_source_result_free(&result); budget.functions = 4;
+    CHECK(xr_xir_source_check(request, &result, NULL) == XR_XIR_OK && result.checked);
+    xr_xir_source_result_free(&result); request->budget = NULL;
+}
 static void source_constructor_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path, "struct C<T>{\n const value:T\n constructor(\n value\n ){this.value=value}\n}\nconst c=C<i64>(7)\n");
     XrXirSourceResult result = {0};
@@ -525,6 +557,7 @@ int main(void) {
     XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
     source_struct_facts(&request);
     source_constructor_facts(&request);
+    source_default_argument_facts(&request);
     failures(&request);
     publication_budgets(&request);
     multiline_declaration(&request);
