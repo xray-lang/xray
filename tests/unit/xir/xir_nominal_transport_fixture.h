@@ -19,23 +19,23 @@ static XrXirArtifact *nominal_transport_fixture(void) {
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
         {0, &argument, 1, NULL, 0}};
     XrXirTypes types = {&node, 1, &nominal.table};
-    XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
-    XrXirInstruction entry[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
+    XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+    XrXirInstruction entry[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirInstruction body[] = {
-        {XR_XIR_LOCAL_NEW, pair, {0}, {0}, 0},
-        {XR_XIR_LOCAL_READ, pair, {2}, {0}, 0},
-        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {1, 2}, 0},
-        {XR_XIR_COPY, pair, {3}, {0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {3}, 0},
-        {XR_XIR_COPY, pair, {0}, {0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {3}, 0},
-        {XR_XIR_PHI, pair, {0, 4}, {0}, 0},
-        {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0},
-        {XR_XIR_CALL, pair, {4, 1}, {0}, 3},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {11}, {0}, 0}};
-    XrXirInstruction leaf[] = {{XR_XIR_COPY, pair, {0}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0}};
+        {XR_XIR_LOCAL_NEW, pair, {0}, {0}, 0, {0}},
+        {XR_XIR_LOCAL_READ, pair, {2}, {0}, 0, {0}},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {1, 2}, 0, {0}},
+        {XR_XIR_COPY, pair, {3}, {0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {3}, 0, {0}},
+        {XR_XIR_COPY, pair, {0}, {0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {3}, 0, {0}},
+        {XR_XIR_PHI, pair, {0, 4}, {0}, 0, {0}},
+        {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}},
+        {XR_XIR_CALL, pair, {4, 1}, {0}, 3, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {11}, {0}, 0, {0}}};
+    XrXirInstruction leaf[] = {{XR_XIR_COPY, pair, {0}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     XrXirBlock one = {0, 1}, two = {0, 2}, blocks[] = {{0, 3}, {3, 2}, {5, 2}, {7, 4}};
     uint32_t operands[] = {1, 5, 2, 7, 9};
     XrXirFunction functions[] = {

@@ -358,7 +358,7 @@ int main(void) {
         if (function->name_length > 9 && !memcmp(function->name,"required$",9)) ++reference_instances;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op == XR_XIR_FUNCTION_REF) { ++references; CHECK(!op->targets[0] && !op->targets[1]); }
+            if (op->op == XR_XIR_FUNCTION_REF) { ++references; CHECK(!op->targets[0] && !op->targets[1] && !op->type_arguments[0] && !op->type_arguments[1]); }
             if (op->op == XR_XIR_CALL) {
                 const XrXirFunction *target = &module->functions[op->immediate];
                 CHECK(target->name_length < 9 || memcmp(target->name,"required$",9));

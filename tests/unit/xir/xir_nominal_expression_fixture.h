@@ -24,25 +24,25 @@ static XrXirArtifact *nominal_expression_fixture(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {1, &t, 1, NULL, 0}}};
     XrXirTypes types = {nodes, 2, &table};
     XrXirInstruction entry[] = {
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7},
-        {XR_XIR_CALL, XR_XIR_I64, {0, 1}, {0, 1}, 1},
-        {XR_XIR_CONST_INT, XR_XIR_U8, {0}, {0}, 9},
-        {XR_XIR_CALL, XR_XIR_U8, {1, 1}, {1, 1}, 1},
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0},
-        {XR_XIR_CALL, XR_XIR_STRING, {2, 1}, {2, 1}, 1},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {3, 3}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0}};
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7, {0}},
+        {XR_XIR_CALL, XR_XIR_I64, {0, 1}, {0}, 1, {0, 1}},
+        {XR_XIR_CONST_INT, XR_XIR_U8, {0}, {0}, 9, {0}},
+        {XR_XIR_CALL, XR_XIR_U8, {1, 1}, {0}, 1, {1, 1}},
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0, {0}},
+        {XR_XIR_CALL, XR_XIR_STRING, {2, 1}, {0}, 1, {2, 1}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {3, 3}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     XrXirInstruction body[] = {
-        {XR_XIR_STRUCT_NEW, box, {0, 1}, {0}, 0},
-        {XR_XIR_STRUCT_NEW, outer, {1, 1}, {0}, 0},
-        {XR_XIR_STRUCT_GET, box, {2}, {0}, 0},
-        {XR_XIR_STRUCT_GET, t, {3}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {4}, {0}, 0}};
-    XrXirInstruction init = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0};
+        {XR_XIR_STRUCT_NEW, box, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_STRUCT_NEW, outer, {1, 1}, {0}, 0, {0}},
+        {XR_XIR_STRUCT_GET, box, {2}, {0}, 0, {0}},
+        {XR_XIR_STRUCT_GET, t, {3}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {4}, {0}, 0, {0}}};
+    XrXirInstruction init = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     XrXirInstruction escape[] = {
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0},
-        {XR_XIR_CALL, XR_XIR_STRING, {0, 1}, {0, 1}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0}};
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0, {0}},
+        {XR_XIR_CALL, XR_XIR_STRING, {0, 1}, {0}, 1, {0, 1}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     uint32_t operands[] = {0, 2, 4, 1, 3, 5}, body_operands[] = {0, 1}, escape_operand = 0;
     XrXirBlock blocks[] = {{0, 8}, {0, 5}, {0, 1}, {0, 3}};
     XrXirFunction functions[] = {
@@ -72,15 +72,15 @@ static inline XrXirArtifact *nominal_forwarding_checked(void) {
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, outer = (XrXirType)257;
     uint32_t constraint = 0, operands[] = {0,1,2};
     XrXirInstruction body[6]; memcpy(body, functions[1].instructions, 2 * sizeof(*body));
-    body[2] = (XrXirInstruction) {XR_XIR_CALL, outer, {2,1}, {0,1}, 4};
-    body[3] = (XrXirInstruction) {XR_XIR_STRUCT_GET, (XrXirType)256, {3}, {0}, 0};
-    body[4] = (XrXirInstruction) {XR_XIR_STRUCT_GET, t, {4}, {0}, 0};
-    body[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0};
+    body[2] = (XrXirInstruction) {XR_XIR_CALL, outer, {2,1}, {0}, 4, {0,1}};
+    body[3] = (XrXirInstruction) {XR_XIR_STRUCT_GET, (XrXirType)256, {3}, {0}, 0, {0}};
+    body[4] = (XrXirInstruction) {XR_XIR_STRUCT_GET, t, {4}, {0}, 0, {0}};
+    body[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}};
     XrXirBlock block = {0,6}, identity_block = {0,2};
     functions[1].instructions = body; functions[1].instruction_count = 6;
     functions[1].blocks = &block; functions[1].operands = operands; functions[1].operand_count = 3;
     generics[1].arguments = &outer; generics[1].argument_count = 1;
-    XrXirInstruction identity[] = {{XR_XIR_COPY,t,{0},{0},0}, {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0}};
+    XrXirInstruction identity[] = {{XR_XIR_COPY,t,{0},{0},0, {0}}, {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0, {0}}};
     functions[4] = (XrXirFunction) {"identity",8,&t,1,t,&identity_block,1,identity,2,NULL,0};
     generics[4] = (XrXirGeneric) {&constraint,1,NULL,0};
     built.functions = functions; built.function_count = 5; built.generics = generics; built.declarations = &declarations;

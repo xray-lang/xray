@@ -24,7 +24,7 @@ static bool source_match_alternatives(SourceContext *ctx, SourceMatchArm *arm,
         if (!source_match_payload(ctx,&arm->patterns[i],receiver,test || i+1<arm->count,failures,0)) return false;
         if (!i && !*failures) return true;
         branches[i]=ctx->locals; ends[i]=body->block_count-1; jumps[i]=body->count; used=i+1;
-        if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0},NULL)) return false;
+        if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0, {0}},NULL)) return false;
         if (!*failures || i+1==arm->count) break;
         uint32_t next=body->block_count;
         for (SourceMatchFailure *f=*failures;f;f=f->next) body->ops[f->instruction].targets[f->target]=next;
@@ -46,7 +46,7 @@ static bool source_match_alternatives(SourceContext *ctx, SourceMatchArm *arm,
             inputs[i*2]=(SourceValue){ends[i],XR_XIR_UNIT}; inputs[i*2+1]=(SourceValue){bound->index,bound->type};
         }
         SourceValue value={0,XR_XIR_UNIT};
-        if (symbol->type!=XR_XIR_UNIT && !emit_group(ctx,(XrXirInstruction){XR_XIR_PHI,symbol->type,{0},{0},0},inputs,used*2,&value)) return false;
+        if (symbol->type!=XR_XIR_UNIT && !emit_group(ctx,(XrXirInstruction){XR_XIR_PHI,symbol->type,{0},{0},0, {0}},inputs,used*2,&value)) return false;
         if (!source_match_bind(ctx,symbol,value)) return false;
     }
     return true;

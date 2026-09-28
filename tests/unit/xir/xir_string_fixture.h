@@ -20,32 +20,32 @@ static XrXirArtifact *string_fixture(uint32_t mode) {
     const uint32_t operands[] = {0, 1, 0, 1};
     const XrXirType parameters[] = {XR_XIR_STRING, XR_XIR_STRING, XR_XIR_STRING, XR_XIR_STRING};
     XrXirInstruction root[] = {
-        {XR_XIR_CALL, XR_XIR_STRING, {0, 4}, {0, 0}, 1},
-        {XR_XIR_COPY, XR_XIR_STRING, {2, 0}, {0, 0}, 0},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3, 0}, {0, 0}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {3, 0}, {0, 0}, 0}
+        {XR_XIR_CALL, XR_XIR_STRING, {0, 4}, {0, 0}, 1, {0}},
+        {XR_XIR_COPY, XR_XIR_STRING, {2, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3, 0}, {0, 0}, 1, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {3, 0}, {0, 0}, 0, {0}}
     };
     XrXirInstruction child[] = {
-        {XR_XIR_COPY, XR_XIR_STRING, {2, 0}, {0, 0}, 0},
-        {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {4, 3}, {0, 0}, 0},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {5, 0}, {0, 0}, 2},
-        {XR_XIR_SUSPEND, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 91},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {5, 0}, {0, 0}, 0}
+        {XR_XIR_COPY, XR_XIR_STRING, {2, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {4, 3}, {0, 0}, 0, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {5, 0}, {0, 0}, 2, {0}},
+        {XR_XIR_SUSPEND, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 91, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5, 0}, {0, 0}, 0, {0}}
     };
     XrXirInstruction loop[] = {
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0},
-        {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {0, 1}, {0, 0}, 0},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3, 0}, {0, 0}, 1},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0}
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}},
+        {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {0, 1}, {0, 0}, 0, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3, 0}, {0, 0}, 1, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}}
     };
     const uint32_t error_operand=5;
     if (mode) {
-        child[4]=(XrXirInstruction){XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},1};
-        child[5]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{8},{0},0};
+        child[4]=(XrXirInstruction){XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},1, {0}};
+        child[5]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{8},{0},0, {0}};
     }
-    XrXirInstruction init={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0};
-    XrXirInstruction entry[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
+    XrXirInstruction init={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
+    XrXirInstruction entry[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0, {0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
     const XrXirBlock init_block={0,1},entry_block={0,2};
     const XrXirBlock root_blocks[] = {{0, 4}}, child_blocks[] = {{0, 6}}, loop_blocks[] = {{0, 1}, {1, 3}};
     const XrXirFunction functions[] = {

@@ -31,7 +31,7 @@ static void rejected_places(const XrXirArtifact *artifact) {
         if (mode == 4) ops[0].args[0] = 3;
         if (mode == 5) ops[1].op = XR_XIR_COPY;
         if (mode == 6) ops[0].type = XR_XIR_UNIT;
-        if (mode == 7) { ops[3] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, XR_XIR_STRING, {1}, {0}, 0}; ops[8].args[0] = 6; }
+        if (mode == 7) { ops[3] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, XR_XIR_STRING, {1}, {0}, 0, {0}}; ops[8].args[0] = 6; }
         if (mode == 8) { ops[8].op = XR_XIR_OWNED_LOCAL_READ; }
         CHECK(xr_xir_verify(&module, NULL, NULL) != XR_XIR_OK);
     }
@@ -86,10 +86,10 @@ static void rejected_initialization(const XrXirArtifact *artifact) {
     XrXirInstruction ops[10]; memcpy(ops, function.instructions, sizeof(ops));
     module.functions = &function; module.function_count = 1; function.instructions = ops;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
-    ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
+    ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
     ops[4] = xr_xir_artifact_module(artifact)->functions[3].instructions[4];
-    ops[2] = (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_STRING, {3}, {0}, 0};
+    ops[2] = (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_STRING, {3}, {0}, 0, {0}};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
 }
 static void initialize_once(const XrXirArtifact *artifact) {
@@ -100,9 +100,9 @@ static void initialize_once(const XrXirArtifact *artifact) {
     ops[0].immediate = 1;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     /* Exclusive first writes are legal, but a join cannot write again. */
-    ops[6] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {3, 0}, {0}, 0};
+    ops[6] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {3, 0}, {0}, 0, {0}};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
-    ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
+    ops[4] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
     ops[2] = ops[4];
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
@@ -113,14 +113,14 @@ static void initialize_once(const XrXirArtifact *artifact) {
 static void initialization_loops(void) {
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_BOOL};
     XrXirInstruction ops[] = {
-        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
-        {XR_XIR_LOCAL_READ, XR_XIR_I64, {2}, {0}, 0},
-        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {2, 3}, 0},
-        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0}
+        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0, {0}},
+        {XR_XIR_LOCAL_READ, XR_XIR_I64, {2}, {0}, 0, {0}},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {2, 3}, 0, {0}},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}
     };
     XrXirBlock blocks[] = {{0, 3}, {3, 2}, {5, 2}, {7, 1}};
     XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0};
@@ -129,7 +129,7 @@ static void initialization_loops(void) {
     ops[0].immediate = 1;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
     ops[0].immediate = 0;
-    ops[1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
+    ops[1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
     /* Store the body before its header, retaining exactly the same CFG. */
     XrXirInstruction read = ops[3], branch = ops[4];
@@ -137,16 +137,16 @@ static void initialization_loops(void) {
     ops[2].targets[0] = 2; ops[4].targets[0] = 2; ops[6].targets[0] = 1;
     ops[7].args[0] = 7;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_BAD_VALUE);
-    ops[1] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0};
+    ops[1] = (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
     /* Redeclaration kills the initialized state from the previous iteration. */
     XrXirInstruction reset_ops[] = {
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0},
-        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {3, 0}, {0}, 0},
-        {XR_XIR_LOCAL_READ, XR_XIR_I64, {3}, {0}, 0},
-        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {1, 2}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0}
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0, {0}},
+        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {3, 0}, {0}, 0, {0}},
+        {XR_XIR_LOCAL_READ, XR_XIR_I64, {3}, {0}, 0, {0}},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {1, 2}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}
     };
     const XrXirBlock reset_blocks[] = {{0, 1}, {1, 4}, {5, 1}};
     function.instructions = reset_ops; function.instruction_count = 6;

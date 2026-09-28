@@ -16,18 +16,18 @@ static XrXirArtifact *array_generic_fixture(void) {
     XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1, {0}};
     XrXirTypes types = {&node, 1, NULL};
     XrXirInstruction entry[] = {
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7},
-        {XR_XIR_CONST_INT, XR_XIR_U8, {0}, {0}, 9},
-        {XR_XIR_CALL, XR_XIR_I64, {0, 1}, {0, 1}, 1},
-        {XR_XIR_CALL, XR_XIR_U8, {1, 1}, {1, 1}, 2},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_U8, {0}, {0}, 9, {0}},
+        {XR_XIR_CALL, XR_XIR_I64, {0, 1}, {0}, 1, {0, 1}},
+        {XR_XIR_CALL, XR_XIR_U8, {1, 1}, {0}, 2, {1, 1}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
     XrXirInstruction body[] = {
-        {XR_XIR_ARRAY_NEW, array, {0, 1}, {0}, 0},
-        {XR_XIR_LOCAL_NEW, array, {1}, {0}, 0},
-        {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {2, 0}, {0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_ARRAY_GET, t, {2, 4}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0}};
+        {XR_XIR_ARRAY_NEW, array, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_LOCAL_NEW, array, {1}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_GET, t, {2, 4}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}};
     uint32_t entry_values[] = {0, 1}, value = 0, constraints[] = {0, XR_XIR_CONSTRAINT_SENDABLE};
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8};
     XrXirBlock blocks[] = {{0, 5}, {0, 6}};

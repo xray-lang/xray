@@ -227,16 +227,16 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         c->diagnostic.instruction = i;
         if (!spec_work(c, 1)) return false;
         XrXirInstruction *op = &ops[i];
-        if (op->op != XR_XIR_CALL && op->op != XR_XIR_FUNCTION_REF) continue;
-        uint32_t count = op->targets[1];
+        if (op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE && op->op != XR_XIR_FUNCTION_REF) continue;
+        uint32_t count = op->type_arguments[1];
         XrXirType *types = spec_alloc(c, count, sizeof(*types));
         if (count && !types) return false;
         if (!spec_work(c, count)) return false;
-        for (uint32_t a = 0; a < count; ++a) types[a] = spec_type(c, instance, generic->arguments[op->targets[0] + a]);
+        for (uint32_t a = 0; a < count; ++a) types[a] = spec_type(c, instance, generic->arguments[op->type_arguments[0] + a]);
         if (c->diagnostic.status != XR_XIR_OK) return false;
         uint32_t target = spec_intern(c, (uint32_t) op->immediate, types, count);
         if (target == UINT32_MAX) return false;
-        op->immediate = target; op->targets[0] = op->targets[1] = 0;
+        op->immediate = target; op->type_arguments[0] = op->type_arguments[1] = 0;
     }
     return true;
 }

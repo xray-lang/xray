@@ -100,8 +100,8 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
             if (!expression_in(ctx, call->arguments[1], XR_XIR_I64, &args[2])) return false;
             if (args[2].type != XR_XIR_I64)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string search start requires i64");
-        } else if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0}, &args[2])) return false;
-        if (!emit_group(ctx, (XrXirInstruction) {operation, result, {0}, {0}, 0}, args, 3, value)) return false;
-    } else if (!emit(ctx, (XrXirInstruction) {operation, result, {args[0].id, args[1].id}, {0}, 0}, value)) return false;
+        } else if (!emit(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &args[2])) return false;
+        if (!emit_group(ctx, (XrXirInstruction) {operation, result, {0}, {0}, 0, {0}}, args, 3, value)) return false;
+    } else if (!emit(ctx, (XrXirInstruction) {operation, result, {args[0].id, args[1].id}, {0}, 0, {0}}, value)) return false;
     return source_string_member_reference(ctx, call->callee, member);
 }

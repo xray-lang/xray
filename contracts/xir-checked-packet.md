@@ -1,5 +1,28 @@
 # Owned Checked packet admission
 
+## Instruction layout and protected-call execution
+
+The atomic instruction-layout cutover uses schema 10 and semantic 31.
+Each instruction is exactly 40 wire bytes: op/type/args[2]/targets[2] as six
+little-endian u32 values, immediate as a two's-complement u64, then
+type_arguments[2] as two u32 values. The final pair exclusively describes the
+generic first/count range. Targets exclusively name CFG successors. Earlier
+schemas and semantics reject even with a valid recomputed digest. Allocation
+minimums, scalar KATs, hostile-packet offsets, source production, generic
+verification, specialization and provenance all migrate together.
+
+The current reader accepts only schema 10 and semantic 31. No dual reader or runtime conversion is
+allowed. Runtime Value ABI 12 and Call/Program ABI 17 need no bump solely for
+this instruction-layout change. Invoke uses the existing CALL action and owned
+inbox without changing public action, result, value or entry fields. Generated
+continuation fields are private to each entry; state_bytes continues to carry
+its actual state size. Embedded Checked proof is decoded by the schema 10 /
+semantic 31 reader, so older proofs reject before Program publication. Raw host
+entries remain trusted ABI-bound entries; this does not qualify a native cache
+format or grant unchecked artifact admission.
+
+## Current implemented packet
+
 This format carries the implemented declaration/type/op subset and marker-constrained
 generic templates. It does not qualify member witnesses, effect/diagnostic serialization, package
 linking, native cache admission or publication. There is one Checked reader and
@@ -17,7 +40,7 @@ Payload order is function count, declaration-presence (0/1), then functions.
 Each function is name blob, parameter count/types, result type, block count and
 first/count pairs, instruction count and records, operand count and value IDs.
 An instruction contains op/type/args[2]/targets[2] u32s and immediate i64 encoded
-as two's-complement u64. A blob is u32 length followed by exactly those bytes.
+as two's-complement u64, followed by type_arguments[2] u32s. A blob is u32 length followed by exactly those bytes.
 Declaration data, when present, is module/slot/literal counts, root/entry IDs,
 modules (name blob, dependency count/IDs, initializer), one module/exported/nominal_owner/member_access u32 record
 per function, slots (module/type/mutable), and literal blobs. A generic-presence flag and per-function constraint/type-argument
@@ -129,7 +152,7 @@ Both return i64 rune ordinals under the managed-value search contract.
 INDEX_OF uses the existing operand table with exactly three entries:
 receiver string, pattern string, start i64. LAST_INDEX_OF has two direct
 string operands. Unused targets and immediate remain zero; instruction
-records remain 32 bytes; the current schema is 9. Table extent, exact count, each type,
+records were 32 bytes in schema 9; schema 10 uses the layout above. Table extent, exact count, each type,
 value role and dominance are mandatory even after digest repair. Semantic25
 packets reject with repaired digests; there is no old-reader compatibility.
 The independent121-byte scalar payload digest is `2d208d11b593786586de389e44b40d4fd349bcfc1b2f9625403a6bbc2edbe0a3`.

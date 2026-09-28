@@ -97,9 +97,9 @@ XrXirStatus xr_xir_generics_clone(const XrXirModule *module, XrXirGeneric **outp
 }
 XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
     const XrXirInstruction *call, XrXirBudget *remaining) {
-    if (!module->generics) return call->targets[0] || call->targets[1] ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+    if (!module->generics) return call->type_arguments[0] || call->type_arguments[1] ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
     const XrXirGeneric *from = &module->generics[caller], *to = &module->generics[call->immediate];
-    uint32_t first = call->targets[0], count = call->targets[1];
+    uint32_t first = call->type_arguments[0], count = call->type_arguments[1];
     if (count != to->parameter_count || first > from->argument_count ||
         count > from->argument_count - first || (!count && first)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t a = 0; a < count; ++a) {
@@ -110,7 +110,7 @@ XrXirStatus xr_xir_generic_call(const XrXirModule *module, uint32_t caller,
 }
 XrXirStatus xr_xir_call_type_matches(const XrXirModule *module, uint32_t caller,
     const XrXirInstruction *call, XrXirType type, XrXirType actual, XrXirBudget *remaining) {
-    uint32_t count = call->targets[1];
-    const XrXirType *arguments = count ? module->generics[caller].arguments + call->targets[0] : NULL;
+    uint32_t count = call->type_arguments[1];
+    const XrXirType *arguments = count ? module->generics[caller].arguments + call->type_arguments[0] : NULL;
     return xr_xir_type_substitution_matches(module->types, arguments, count, type, actual, remaining);
 }

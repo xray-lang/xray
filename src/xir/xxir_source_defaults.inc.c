@@ -68,15 +68,15 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
 static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType type, SourceValue *value) {
     if (!source_work(ctx, node)) return false;
     if (type == XR_XIR_BOOL)
-        return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, type, {0}, {0}, 0}, value);
+        return emit(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, type, {0}, {0}, 0, {0}}, value);
     if (xr_xir_type_is_number(type)) {
         XrXirOp op = type == XR_XIR_F32 || type == XR_XIR_F64 ? XR_XIR_CONST_FLOAT : XR_XIR_CONST_INT;
-        return emit(ctx, (XrXirInstruction) {op, type, {0}, {0}, 0}, value);
+        return emit(ctx, (XrXirInstruction) {op, type, {0}, {0}, 0, {0}}, value);
     }
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
     if (!found || found->kind != XR_XIR_TYPE_NOMINAL || !ctx->nominal_constructors[found->nominal.declaration])
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type has no admitted default initializer");
-    XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, ctx->nominal_constructors[found->nominal.declaration]};
+    XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, ctx->nominal_constructors[found->nominal.declaration], {0}};
     return source_type_arguments(ctx, node, found->nominal.arguments, found->nominal.argument_count, &op) &&
         emit(ctx, op, value);
 }
@@ -92,13 +92,13 @@ static bool source_struct_constructor_body(SourceContext *ctx) {
         uint32_t function = ctx->nominal_defaults[d][f];
         if (function) {
             const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, symbol->type);
-            XrXirInstruction op = {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, function};
+            XrXirInstruction op = {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, function, {0}};
             if (!source_type_arguments(ctx, field, type->nominal.arguments, type->nominal.argument_count, &op) ||
                 !emit(ctx, op, &fields[f])) return false;
         } else if (!source_default_value(ctx, field, decl->fields[f].type, &fields[f])) return false;
     }
     SourceValue value;
-    if (!emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, symbol->type, {0}, {0}, 0}, fields, decl->field_count, &value) ||
-        !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0}, NULL)) return false;
+    if (!emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, symbol->type, {0}, {0}, 0, {0}}, fields, decl->field_count, &value) ||
+        !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0, {0}}, NULL)) return false;
     ctx->returned = true; return true;
 }

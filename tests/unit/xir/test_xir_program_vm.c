@@ -156,7 +156,7 @@ static void admission(void) {
         xr_xir_artifact_free(artifact);
     }
 }
-extern const XrXirProgramSpec captures_program;
+extern const XrXirProgramSpec captures_program, captures_error_program;
 typedef struct CaptureMixedOwner {
     XrXirArtifact *artifact;
     XrXirVmBinding bindings[6];
@@ -168,22 +168,23 @@ static void capture_mixed_release(void *pointer) {
     xr_xir_artifact_free(owner->artifact); xr_free(owner); ++mixed_releases;
 }
 static void capture_mixed(void) {
-    for (unsigned parity = 0; parity < 2; ++parity) {
+    for (unsigned throwing = 0; throwing < 2; ++throwing) for (unsigned parity = 0; parity < 2; ++parity) {
+        const XrXirProgramSpec *native = throwing ? &captures_error_program : &captures_program;
         CaptureMixedOwner *owner = xr_calloc(1,sizeof(*owner)); CHECK(owner);
-        owner->artifact = capture_fixture();
+        owner->artifact = capture_fixture(throwing != 0);
         const XrXirModule *module = xr_xir_artifact_module(owner->artifact);
         for (uint32_t i = 0; i < 6; ++i) {
             CHECK(xr_xir_vm_bind(owner->artifact,i,&owner->bindings[i],&owner->entries[i]) == XR_XIR_OK);
-            if ((i == 3 ? 0u : 1u) == parity) owner->entries[i] = captures_program.entries[i];
+            if ((i == 3 ? 0u : 1u) == parity) owner->entries[i] = native->entries[i];
         }
-        CHECK((owner->entries[3].resume == captures_program.entries[3].resume) !=
-            (owner->entries[5].resume == captures_program.entries[5].resume));
+        CHECK((owner->entries[3].resume == native->entries[3].resume) !=
+            (owner->entries[5].resume == native->entries[5].resume));
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
             {owner,capture_mixed_release},module->types,xr_xir_program_proof(owner->artifact)};
         XrXirProgram *program = NULL;
         CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget) {2097152, 16000000},&program) == XR_XIR_OK);
-        capture_cases(program); CHECK(mixed_releases == parity+1);
+        capture_cases(program,throwing != 0); CHECK(mixed_releases == throwing*2+parity+1);
     }
 }
 typedef struct ArrayMixedOwner {
@@ -281,10 +282,12 @@ int main(void) {
         CHECK(!artifact && program);
         program_cases(program, mode);
     }
-    XrXirArtifact *artifact = capture_fixture();
+    for (unsigned throwing = 0; throwing < 2; ++throwing) {
+    XrXirArtifact *artifact = capture_fixture(throwing != 0);
     XrXirProgram *captures = NULL;
     CHECK(xr_xir_vm_program_take(&artifact,(XrXirProgramBudget) {2097152, 16000000},&captures) == XR_XIR_OK);
-    capture_cases(captures);
+    capture_cases(captures,throwing != 0);
+    }
     puts("VM capture environments, two suspensions, cancellation and escaped ownership passed");
     puts("VM module programs match independent output, state and lifetime expectations");
     CHECK(!runtime_live && !runtime_bytes);

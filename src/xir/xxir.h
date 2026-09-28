@@ -82,6 +82,7 @@ typedef struct XrXirInstruction {
     uint32_t args[2];
     uint32_t targets[2];
     int64_t immediate;
+    uint32_t type_arguments[2];
 } XrXirInstruction;
 
 typedef struct XrXirBlock {

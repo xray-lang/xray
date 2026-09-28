@@ -412,7 +412,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
 static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     append(buffer, "        { uint32_t callee = %uu; XrXirValue target = {0};\n", (uint32_t) op->immediate);
-    if (op->op == XR_XIR_CALL_INDIRECT) {
+    if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
         uint32_t id = (uint32_t) op->immediate;
         append(buffer, "        target = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             "        XrXirCallStatus status = xr_xir_instance_resolve_function(view, &target, &callee);\n"
@@ -420,6 +420,12 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
             "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}};\n",
             (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
+    if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT) {
+        uint32_t normal = function->blocks[op->targets[0]].first, error = function->blocks[op->targets[1]].first;
+        destination = op->type == XR_XIR_UNIT ? UINT32_MAX : layout->offsets[function->parameter_count + normal];
+        append(buffer, "        state->invoking = true; state->normal_pc = %uu; state->error_pc = %uu; state->error_destination = %uu;\n",
+            normal + (op->type != XR_XIR_UNIT), error + 1, layout->offsets[function->parameter_count + error]);
+    } else append(buffer, "        state->invoking = false;\n");
     append(buffer, "        state->waiting = true; state->destination = %uu; state->expected = %uu;\n",
         destination, (uint32_t) op->type);
     for (uint32_t p = 0; p < op->args[1]; ++p) {
@@ -678,9 +684,11 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_BRANCH:
         emit_branch(buffer, function, layout, index, true);
         break;
-    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT:
+    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         emit_resume_call(buffer, function, op, layout, destination);
         return;
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR:
+        append(buffer, "        goto invalid;\n"); return;
     case XR_XIR_SUSPEND:
         append(buffer, "        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}};\n");
         return;
@@ -721,7 +729,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
         return;
     }
     append(buffer, "typedef struct %s_state_%u {\n"
-           "    uint32_t pc, destination, expected; bool initialized, waiting;\n", prefix, index);
+           "    uint32_t pc, destination, expected, normal_pc, error_pc, error_destination; bool initialized, waiting, invoking;\n", prefix, index);
     if (layout->outgoing_count) append(buffer, "    XrXirValue arguments[%u];\n", layout->outgoing_count);
     append(buffer, "    unsigned char frame[%u];\n} %s_state_%u;\n",
            layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
@@ -741,17 +749,23 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     }
     append(buffer, "        state->initialized = true;\n    }\n"
            "    if (state->waiting) {\n        state->waiting = false;\n"
-           "        if (view->inbox.status == XR_XIR_CALL_THROWN)\n"
-           "            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value, {0}};\n"
-           "        if (view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
+           "        XrXirValue inbox = view->inbox.value;\n"
+           "        if (state->invoking) {\n"
+           "            bool error = view->inbox.status == XR_XIR_CALL_THROWN;\n"
+           "            if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
+           "            state->pc = error ? state->error_pc : state->normal_pc; state->invoking = false;\n"
+           "            if (error) { state->expected = XR_XIR_ERROR; state->destination = state->error_destination; inbox.type = XR_XIR_ERROR; }\n"
+           "        } else if (view->inbox.status == XR_XIR_CALL_THROWN)\n"
+           "            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}};\n"
+           "        if (view->inbox.status != XR_XIR_CALL_RETURNED && view->inbox.status != XR_XIR_CALL_THROWN) goto invalid;\n"
            "        if (state->expected == XR_XIR_UNIT) {\n"
-           "            if (view->inbox.value.type || view->inbox.value.reserved || view->inbox.value.payload) goto invalid;\n"
-           "        } else if (!xr_xir_value_argument(&view->inbox.value, view->arena, (XrXirType) state->expected)) goto invalid;\n"
+           "            if (inbox.type || inbox.reserved || inbox.payload) goto invalid;\n"
+           "        } else if (!xr_xir_value_argument(&inbox, view->arena, (XrXirType) state->expected)) goto invalid;\n"
            "        if (xr_xir_type_is_owned(xr_xir_type_arena_types(view->arena), (XrXirType) state->expected)) {\n"
-           "            if (xr_xir_owned_slot_copy(state->frame, state->destination, view->arena, (XrXirType) state->expected, view->inbox.value.payload) "
+           "            if (xr_xir_owned_slot_copy(state->frame, state->destination, view->arena, (XrXirType) state->expected, inbox.payload) "
            "!= XR_XIR_VALUE_OK) goto limit;\n"
            "        } else if (state->destination != UINT32_MAX)\n"
-           "            xr_xir_scalar_store(state->frame, state->destination, view->inbox.value.payload);\n"
+           "            xr_xir_scalar_store(state->frame, state->destination, inbox.payload);\n"
            "    }\n    switch (state->pc) {\n");
     for (uint32_t i = 0; i < function->instruction_count; ++i)
         emit_resume_step(buffer, module, function, layout, i);

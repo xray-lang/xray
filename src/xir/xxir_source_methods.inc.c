@@ -47,7 +47,7 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
     for (uint32_t p = 0; p < count; ++p)
         if (!source_substitute(ctx, &selected->substitution, function->parameters[p], 0, &parameters[p].type)) return false;
     XrXirType result;
-    XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, selected->method->index};
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, selected->method->index, {0}};
     return source_substitute(ctx, &selected->substitution, function->result, 0, &result) &&
         source_signature(ctx, parameters, count, result, &op.type) &&
         source_type_arguments(ctx, node, selected->substitution.types, selected->substitution.count, &op) &&
@@ -84,7 +84,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     }
     for (uint32_t p = (uint32_t)call->arg_count + 1; p < function->parameter_count; ++p)
         if (!source_argument_default(ctx, node, method->index, p, &substitution, &arguments[p])) return false;
-    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, method->index};
+    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, method->index, {0}};
     return source_substitute(ctx, &substitution, function->result, 0, &op.type) &&
         source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
         source_query_target_reference(ctx, source_query_range(ctx, call->callee, NULL),
@@ -123,7 +123,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         uint32_t declaration = xr_xir_type_node(&ctx->types, receiver.type)->nominal.declaration;
         uint32_t member = ctx->nominal_variants[declaration][ctx->nominals.declarations[declaration].variant_count];
         return source_query_target_reference(ctx, source_query_range(ctx, node, NULL), member, XR_XIR_SOURCE_READ) &&
-            emit(ctx, (XrXirInstruction) {XR_XIR_ENUM_TAG, XR_XIR_I64, {receiver.id,0}, {0}, 0}, value);
+            emit(ctx, (XrXirInstruction) {XR_XIR_ENUM_TAG, XR_XIR_I64, {receiver.id,0}, {0}, 0, {0}}, value);
     }
     SourceName *method = source_method_find(ctx, receiver.type, node->as.member_access.name);
     if (!method) {
@@ -146,7 +146,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     for (uint32_t p = 0; p < count; ++p)
         if (!source_substitute(ctx, &substitution, function->parameters[p + 1], 0, &parameters[p].type)) return false;
     XrXirType result;
-    XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index};
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index, {0}};
     return source_substitute(ctx, &substitution, function->result, 0, &result) &&
         source_signature(ctx, parameters, count, result, &op.type) &&
         source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&

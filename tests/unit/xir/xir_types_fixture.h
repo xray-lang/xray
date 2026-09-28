@@ -22,10 +22,10 @@ static XrXirArtifact *callable_fixture(void) {
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, fn0, 0, 0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
     XrXirTypes types = {signatures, 3, NULL};
-    XrXirInstruction caller_ops[] = {{XR_XIR_CALL, fn1, {0, 1}, {0, 1}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0}};
-    XrXirInstruction generic_ops[] = {{XR_XIR_COPY, generic, {0}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0}};
+    XrXirInstruction caller_ops[] = {{XR_XIR_CALL, fn1, {0, 1}, {0}, 1, {0, 1}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
+    XrXirInstruction generic_ops[] = {{XR_XIR_COPY, generic, {0}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
     XrXirBlock block = {0, 2}; uint32_t operand = 0, constraint = 0;
     XrXirFunction functions[] = {
         {"forward", 7, &fn1, 1, fn1, &block, 1, caller_ops, 2, &operand, 1},
@@ -45,13 +45,13 @@ static XrXirArtifact *function_ir_fixture(void) {
     XrXirCallableParameter input = {XR_XIR_I64, 0};
     XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input, 1, XR_XIR_I64, 0, 0, {0}};
     XrXirTypes types = {&signature, 1, NULL};
-    XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
-    XrXirInstruction root[] = {{XR_XIR_FUNCTION_REF, (XrXirType) 256, {0}, {0,1}, 2},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7},
-        {XR_XIR_CALL_INDIRECT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
-    XrXirInstruction target[] = {{XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
+    XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+    XrXirInstruction root[] = {{XR_XIR_FUNCTION_REF, (XrXirType) 256, {0}, {0}, 2, {0,1}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7, {0}},
+        {XR_XIR_CALL_INDIRECT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
+    XrXirInstruction target[] = {{XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirBlock blocks[] = {{0,1}, {0,4}, {0,2}};
     uint32_t argument = 1;
     XrXirFunction functions[] = {
@@ -76,10 +76,10 @@ static XrXirArtifact *generic_callable_fixture(void) {
     XrXirType parameters[] = {(XrXirType)257,XR_XIR_STRING,(XrXirType)256,t}, argument = XR_XIR_STRING;
     uint32_t constraint = 0, arguments[] = {0,1}, indirect = 1;
     XrXirGeneric generics[] = {{NULL,0,&argument,1}, {&constraint,1,NULL,0}};
-    XrXirInstruction caller[] = {{XR_XIR_CALL,XR_XIR_STRING,{0,2},{0,1},1},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
-    XrXirInstruction body[] = {{XR_XIR_CALL_INDIRECT,t,{0,1},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
+    XrXirInstruction caller[] = {{XR_XIR_CALL,XR_XIR_STRING,{0,2},{0},1, {0,1}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
+    XrXirInstruction body[] = {{XR_XIR_CALL_INDIRECT,t,{0,1},{0},0, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
     XrXirBlock block = {0,2};
     XrXirFunction functions[] = {
         {"caller",6,parameters,2,XR_XIR_STRING,&block,1,caller,2,arguments,2},
@@ -115,10 +115,10 @@ static XrXirArtifact *constructed_fixture(void) {
     XrXirType arguments[] = {XR_XIR_I64,XR_XIR_STRING};
     uint32_t constraint = XR_XIR_CONSTRAINT_SENDABLE, operands[] = {0,1,2,3};
     XrXirGeneric generics[] = {{NULL,0,arguments,2}, {&constraint,1,NULL,0}, {&constraint,1,NULL,0}};
-    XrXirInstruction caller[] = {{XR_XIR_CALL,(XrXirType)261,{0,2},{0,1},1},
-        {XR_XIR_CALL,(XrXirType)265,{2,2},{1,1},2}, {XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0}};
-    XrXirInstruction body[] = {{XR_XIR_COPY,(XrXirType)257,{0},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
+    XrXirInstruction caller[] = {{XR_XIR_CALL,(XrXirType)261,{0,2},{0},1, {0,1}},
+        {XR_XIR_CALL,(XrXirType)265,{2,2},{0},2, {1,1}}, {XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0, {0}}};
+    XrXirInstruction body[] = {{XR_XIR_COPY,(XrXirType)257,{0},{0},0, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
     XrXirBlock blocks[] = {{0,3},{0,2}};
     XrXirFunction functions[] = {
         {"caller",6,parameters,4,(XrXirType)265,blocks,1,caller,3,operands,4},

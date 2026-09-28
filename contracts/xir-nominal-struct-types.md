@@ -1,6 +1,6 @@
 # XIR nominal declarations and field type ownership
 
-Current executable identities are Checked schema 9 / semantic 30, Program ABI 17,
+Current executable identities are Checked schema 10 / semantic 31, Program ABI 17,
 Value ABI 12 and Call ABI 17. Later admission sections define the supported source
 subsets; historical implementation order does not introduce alternative protocols.
 

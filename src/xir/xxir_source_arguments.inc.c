@@ -22,7 +22,7 @@ static bool source_argument_arity(SourceContext *ctx, AstNode *node, uint32_t in
 static bool source_argument_default(SourceContext *ctx, AstNode *node, uint32_t index, uint32_t parameter,
     SourceSubstitution *substitution, SourceValue *value) {
     uint32_t helper = ctx->bodies[index].argument_defaults[parameter];
-    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, helper};
+    XrXirInstruction op = {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, helper, {0}};
     return source_work(ctx, node) &&
         source_substitute(ctx, substitution, ctx->functions[helper].result, 0, &op.type) &&
         source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && emit(ctx, op, value);

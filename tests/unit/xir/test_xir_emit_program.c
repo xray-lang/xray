@@ -84,13 +84,15 @@ int main(int argc, char **argv) {
         if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
         xr_xir_c_source_free(&source);
     }
-    XrXirArtifact *captures = capture_fixture();
+    for (unsigned throwing = 0; throwing < 2; ++throwing) {
+    XrXirArtifact *captures = capture_fixture(throwing != 0);
     XrXirCSource capture_source = {0};
-    CHECK(xr_xir_emit_c(captures,"captures",200000,&capture_source) == XR_XIR_OK);
+    CHECK(xr_xir_emit_c(captures,throwing ? "captures_error" : "captures",200000,&capture_source) == XR_XIR_OK);
     xr_xir_artifact_free(captures);
     CHECK(!strstr(capture_source.text,"xr_xir_vm") && !strstr(capture_source.text,"({"));
     if (file) CHECK(fwrite(capture_source.text,1,capture_source.length,file) == capture_source.length);
     xr_xir_c_source_free(&capture_source);
+    }
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirArtifact *array = array_program_fixture(mode == 1, mode == 2);
         XrXirCSource source = {0}; char prefix[32];

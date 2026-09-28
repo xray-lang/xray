@@ -19,18 +19,18 @@ typedef struct ProvenanceMatch {
 } ProvenanceMatch;
 static XrXirStatus provenance_call_match(ProvenanceMatch *c, const XrXirOrigin *origin,
     const XrXirInstruction *from, const XrXirInstruction *to) {
-    if (to->immediate < 0 || (uint64_t)to->immediate >= c->count || to->targets[0] || to->targets[1])
+    if (to->immediate < 0 || (uint64_t)to->immediate >= c->count || to->type_arguments[0] || to->type_arguments[1])
         return XR_XIR_BAD_STRUCTURE;
     const XrXirOrigin *target = &c->origins[to->immediate];
-    if (target->function != (uint32_t)from->immediate || target->argument_count != from->targets[1])
+    if (target->function != (uint32_t)from->immediate || target->argument_count != from->type_arguments[1])
         return XR_XIR_BAD_STRUCTURE;
     const XrXirGeneric *generic = c->source->generics ? &c->source->generics[origin->function] : NULL;
     uint32_t arguments = generic ? generic->argument_count : 0;
-    if (from->targets[0] > arguments || target->argument_count > arguments - from->targets[0])
+    if (from->type_arguments[0] > arguments || target->argument_count > arguments - from->type_arguments[0])
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t a = 0; a < target->argument_count; ++a) {
         XrXirStatus status = xr_xir_type_substitution_matches_between(c->source->types, c->destination->types,
-            origin->arguments, origin->argument_count, generic->arguments[from->targets[0] + a], target->arguments[a], c->remaining);
+            origin->arguments, origin->argument_count, generic->arguments[from->type_arguments[0] + a], target->arguments[a], c->remaining);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -113,11 +113,12 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             c->diagnostic->instruction = i;
             XrXirOp expected = c->destination->stage == XR_XIR_LOWERED ?
                 provenance_lowered_op(c->destination->types, to, a->op, b) : a->op;
-            if (expected != b->op || a->args[0] != b->args[0] || a->args[1] != b->args[1]) return XR_XIR_BAD_STRUCTURE;
-            if (a->op == XR_XIR_CALL || a->op == XR_XIR_FUNCTION_REF) {
+            if (expected != b->op || a->args[0] != b->args[0] || a->args[1] != b->args[1] ||
+                a->targets[0] != b->targets[0] || a->targets[1] != b->targets[1]) return XR_XIR_BAD_STRUCTURE;
+            if (a->op == XR_XIR_CALL || a->op == XR_XIR_INVOKE || a->op == XR_XIR_FUNCTION_REF) {
                 XrXirStatus status = provenance_call_match(c, origin, a, b);
                 if (status != XR_XIR_OK) return status;
-            } else if (a->immediate != b->immediate || a->targets[0] != b->targets[0] || a->targets[1] != b->targets[1])
+            } else if (a->immediate != b->immediate || a->type_arguments[0] != b->type_arguments[0] || a->type_arguments[1] != b->type_arguments[1])
                 return XR_XIR_BAD_STRUCTURE;
         }
         for (uint32_t t = 0; t < 1 + from->parameter_count + from->instruction_count; ++t) {
@@ -345,7 +346,7 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
         c->remaining->work -= function->instruction_count;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op != XR_XIR_CALL && op->op != XR_XIR_FUNCTION_REF) continue;
+            if (op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE && op->op != XR_XIR_FUNCTION_REF) continue;
             if (op->immediate < 0 || (uint64_t)op->immediate >= c->count) {
                 status = XR_XIR_BAD_STRUCTURE; goto done;
             }

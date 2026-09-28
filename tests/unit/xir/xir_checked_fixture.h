@@ -21,9 +21,9 @@ static XrXirArtifact *checked_fixture(void) {
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
     const uint32_t operands[] = {0, 2};
     const XrXirInstruction ops[] = {
-        {XR_XIR_COPY, XR_XIR_STRING, {1}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 2}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
+        {XR_XIR_COPY, XR_XIR_STRING, {1}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 2}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     const XrXirBlock block = {0, 3};
     functions[8] = (XrXirFunction) {"args", 4, parameters, 2, XR_XIR_I64, &block, 1, ops, 3, operands, 2};

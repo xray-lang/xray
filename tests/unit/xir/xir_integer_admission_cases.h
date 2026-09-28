@@ -15,8 +15,8 @@
 static void integer_ir_rejections(void) {
     for (unsigned test = 0; test < 12; ++test) {
         XrXirType parameters[] = {XR_XIR_I8, XR_XIR_I8};
-        XrXirInstruction ops[] = {{XR_XIR_ADD_INT, XR_XIR_I8, {0, 1}, {0}, 0},
-            {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
+        XrXirInstruction ops[] = {{XR_XIR_ADD_INT, XR_XIR_I8, {0, 1}, {0}, 0, {0}},
+            {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
         XrXirBlock block = {0, 2};
         XrXirFunction function = {"integer", 7, parameters, 2, XR_XIR_I8, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};

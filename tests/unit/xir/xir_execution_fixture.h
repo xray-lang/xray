@@ -23,10 +23,10 @@
 static XrXirArtifact *uninitialized_leaf_fixture(void) {
     const XrXirType parameter = XR_XIR_I64;
     const XrXirInstruction ops[] = {
-        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {1, 0}, {0}, 0},
-        {XR_XIR_LOCAL_READ, XR_XIR_I64, {1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {3}, {0}, 0}
+        {XR_XIR_LOCAL_UNINIT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}},
+        {XR_XIR_LOCAL_READ, XR_XIR_I64, {1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {3}, {0}, 0, {0}}
     };
     const XrXirBlock block = {0, 4};
     const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0};
@@ -42,18 +42,18 @@ static XrXirArtifact *uninitialized_leaf_fixture(void) {
 static XrXirFunction phi_leaf_fixture(void) {
     static const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64, XR_XIR_I64};
     static const XrXirInstruction ops[] = {
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1},
-        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
-        {XR_XIR_BRANCH, XR_XIR_UNIT, {5}, {2, 2}, 0},
-        {XR_XIR_SUB_INT, XR_XIR_I64, {9, 10}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {7}, {0}, 0},
-        {XR_XIR_PHI, XR_XIR_I64, {0, 4}, {0}, 0},
-        {XR_XIR_PHI, XR_XIR_I64, {4, 4}, {0}, 0},
-        {XR_XIR_PHI, XR_XIR_I64, {8, 4}, {0}, 0},
-        {XR_XIR_ADD_INT, XR_XIR_I64, {11, 4}, {0}, 0},
-        {XR_XIR_LT_INT, XR_XIR_BOOL, {11, 2}, {0}, 0},
-        {XR_XIR_BRANCH, XR_XIR_UNIT, {13}, {2, 1}, 0}
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1, {0}},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {5}, {2, 2}, 0, {0}},
+        {XR_XIR_SUB_INT, XR_XIR_I64, {9, 10}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {7}, {0}, 0, {0}},
+        {XR_XIR_PHI, XR_XIR_I64, {0, 4}, {0}, 0, {0}},
+        {XR_XIR_PHI, XR_XIR_I64, {4, 4}, {0}, 0, {0}},
+        {XR_XIR_PHI, XR_XIR_I64, {8, 4}, {0}, 0, {0}},
+        {XR_XIR_ADD_INT, XR_XIR_I64, {11, 4}, {0}, 0, {0}},
+        {XR_XIR_LT_INT, XR_XIR_BOOL, {11, 2}, {0}, 0, {0}},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {13}, {2, 1}, 0, {0}}
     };
     static const uint32_t inputs[] = {0, 0, 2, 10, 0, 1, 2, 9, 0, 3, 2, 12};
     static const XrXirBlock blocks[] = {{0, 4}, {4, 2}, {6, 6}};
@@ -70,97 +70,97 @@ static XrXirArtifact *fixture_checked(void) {
     const XrXirBlock loop_blocks[] = {{0, 1}, {1, 1}};
     const XrXirBlock reverse_blocks[] = {{0, 1}, {1, 1}, {2, 4}};
     const XrXirInstruction add[] = {
-        {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 2}, 0},
-        {XR_XIR_ADD_INT, XR_XIR_I64, {1, 2}, {0, 0}, 0},
-        {XR_XIR_COPY, XR_XIR_I64, {4, 0}, {0, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {5, 0}, {0, 0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, -7},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {7, 0}, {0, 0}, 0}
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 2}, 0, {0}},
+        {XR_XIR_ADD_INT, XR_XIR_I64, {1, 2}, {0, 0}, 0, {0}},
+        {XR_XIR_COPY, XR_XIR_I64, {4, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, -7, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {7, 0}, {0, 0}, 0, {0}}
     };
     const XrXirInstruction eq[] = {
-        {XR_XIR_EQ_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0}
+        {XR_XIR_EQ_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
     };
     const XrXirInstruction copy[] = {
-        {XR_XIR_COPY, XR_XIR_BOOL, {0, 0}, {0, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0}
+        {XR_XIR_COPY, XR_XIR_BOOL, {0, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0, {0}}
     };
-    const XrXirInstruction unit[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}};
+    const XrXirInstruction unit[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}};
     const XrXirInstruction minimum[] = {
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, INT64_MIN},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, INT64_MIN, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}
     };
     const XrXirInstruction loop[] = {
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0}
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}}
     };
     const XrXirInstruction reverse[] = {
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 7},
-        {XR_XIR_EQ_INT, XR_XIR_BOOL, {2, 2}, {0, 0}, 0},
-        {XR_XIR_COPY, XR_XIR_BOOL, {3, 0}, {0, 0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0}
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 7, {0}},
+        {XR_XIR_EQ_INT, XR_XIR_BOOL, {2, 2}, {0, 0}, 0, {0}},
+        {XR_XIR_COPY, XR_XIR_BOOL, {3, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}}
     };
     const XrXirInstruction boolean[] = {
-        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}
     };
     const XrXirInstruction maximum[] = {
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, INT64_MAX},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, INT64_MAX, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}
     };
     const XrXirInstruction numeric0[] = {
-        {XR_XIR_SUB_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_SUB_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction numeric1[] = {
-        {XR_XIR_MUL_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_MUL_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction numeric2[] = {
-        {XR_XIR_DIV_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_DIV_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction numeric3[] = {
-        {XR_XIR_REM_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_REM_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction numeric4[] = {
-        {XR_XIR_NE_INT, XR_XIR_BOOL, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_NE_INT, XR_XIR_BOOL, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction numeric5[] = {
-        {XR_XIR_LE_INT, XR_XIR_BOOL, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_LE_INT, XR_XIR_BOOL, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction numeric6[] = {
-        {XR_XIR_GT_INT, XR_XIR_BOOL, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_GT_INT, XR_XIR_BOOL, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction numeric7[] = {
-        {XR_XIR_GE_INT, XR_XIR_BOOL, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_GE_INT, XR_XIR_BOOL, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction bitwise0[] = {
-        {XR_XIR_AND_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_AND_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction bitwise1[] = {
-        {XR_XIR_OR_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_OR_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction bitwise2[] = {
-        {XR_XIR_XOR_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_XOR_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction bitwise3[] = {
-        {XR_XIR_SHL_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_SHL_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirInstruction bitwise4[] = {
-        {XR_XIR_SHR_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0}
+        {XR_XIR_SHR_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0}, 0, {0}}
     };
     const XrXirFunction functions[] = {
         {"add", 3, add_parameters, 3, XR_XIR_I64, add_blocks, 3, add, 6, NULL, 0},
@@ -188,8 +188,8 @@ static XrXirArtifact *fixture_checked(void) {
         phi_leaf_fixture(),
 #define XIR_INTEGER_CASE(id, type, op, rhs, result, count, left, right, expected) \
         {"integer" #id, sizeof("integer" #id) - 1, (const XrXirType[]) {type, rhs}, count, result, pair_blocks, 1, \
-            (const XrXirInstruction[]) {{op, result, {0, count == 2 ? 1 : 0}, {0}, 0}, \
-                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0}}, 2, NULL, 0},
+            (const XrXirInstruction[]) {{op, result, {0, count == 2 ? 1 : 0}, {0}, 0, {0}}, \
+                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0, {0}}}, 2, NULL, 0},
 #include "xir_integer_cases.def"
 #undef XIR_INTEGER_CASE
 #define FLOAT_PARAMETERS_0(type) NULL
@@ -197,8 +197,8 @@ static XrXirArtifact *fixture_checked(void) {
 #define FLOAT_PARAMETERS_2(type) (const XrXirType[]) {type, type}
 #define XIR_FLOAT_FUNCTION(id, type, op, result, count, immediate) \
         {"floating" #id, sizeof("floating" #id) - 1, FLOAT_PARAMETERS_##count(type), count, result, pair_blocks, 1, \
-            (const XrXirInstruction[]) {{op, result, {0, count == 2 ? 1 : 0}, {0}, immediate}, \
-                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0}}, 2, NULL, 0},
+            (const XrXirInstruction[]) {{op, result, {0, count == 2 ? 1 : 0}, {0}, immediate, {0}}, \
+                {XR_XIR_RETURN, XR_XIR_UNIT, {count}, {0}, 0, {0}}}, 2, NULL, 0},
 #include "xir_float_functions.def"
 #undef XIR_FLOAT_FUNCTION
 #undef FLOAT_PARAMETERS_0

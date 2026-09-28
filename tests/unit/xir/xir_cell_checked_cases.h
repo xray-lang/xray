@@ -21,10 +21,10 @@ static void cell_checked_cases(void) {
             {XR_XIR_TYPE_CELL,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}}};
         XrXirTypes types = {nodes,2, NULL}; built.types = &types;
         XrXirInstruction ops[] = {
-            {XR_XIR_CELL_NEW, (XrXirType)256, {1}, {0}, 0},
-            {XR_XIR_CELL_READ, XR_XIR_STRING, {2}, {0}, 0},
-            {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {2, 3}, {0}, 0},
-            {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
+            {XR_XIR_CELL_NEW, (XrXirType)256, {1}, {0}, 0, {0}},
+            {XR_XIR_CELL_READ, XR_XIR_STRING, {2}, {0}, 0, {0}},
+            {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {2, 3}, {0}, 0, {0}},
+            {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
         };
         XrXirBlock block = {0, 4};
         functions[8].instructions = ops; functions[8].instruction_count = 4;

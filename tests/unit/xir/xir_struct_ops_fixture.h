@@ -20,20 +20,20 @@ static XrXirArtifact *struct_ops_checked(unsigned invalid) {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&argument,1,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,NULL,0,NULL,0}}};
     XrXirTypes types = {nodes,2,&nominal.table};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[] = {
-        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23},
-        {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0},
-        {XR_XIR_CALL,pair,{0,2},{0},2},
-        {XR_XIR_STRUCT_GET,XR_XIR_I64,{2},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{3},{0},0}};
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},
+        {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
+        {XR_XIR_CALL,pair,{0,2},{0},2, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_I64,{2},{0},0, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{3},{0},0, {0}}};
     XrXirInstruction make[] = {
-        {XR_XIR_STRUCT_NEW,pair,{0,2},{0},0},
-        {XR_XIR_STRUCT_GET,XR_XIR_STRING,{2},{0},1},
-        {XR_XIR_OUTPUT,XR_XIR_UNIT,{3},{0},1},
-        {XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0},
-        {XR_XIR_STRUCT_NEW,(XrXirType)257,{0},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
+        {XR_XIR_STRUCT_NEW,pair,{0,2},{0},0, {0}},
+        {XR_XIR_STRUCT_GET,XR_XIR_STRING,{2},{0},1, {0}},
+        {XR_XIR_OUTPUT,XR_XIR_UNIT,{3},{0},1, {0}},
+        {XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0, {0}},
+        {XR_XIR_STRUCT_NEW,(XrXirType)257,{0},{0},0, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
     uint32_t operands[] = {0,1};
     XrXirBlock one = {0,1}, five = {0,5}, six = {0,6};
     XrXirFunction functions[] = {

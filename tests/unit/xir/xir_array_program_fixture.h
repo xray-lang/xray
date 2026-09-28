@@ -34,69 +34,69 @@ static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
     }
     XrXirTypes types = {nodes, nominal ? 4 : 2, nominal ? &f.table : NULL};
     XrXirInstruction init[] = {
-        {XR_XIR_CALL, a, {0}, {0}, 3},
-        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 1},
-        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 2},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
+        {XR_XIR_CALL, a, {0}, {0}, 3, {0}},
+        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 1, {0}},
+        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 2, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirInstruction lib[] = {
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0},
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 1},
-        {XR_XIR_ARRAY_NEW, a, {0, 2}, {0}, 0},
-        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {2}, {0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, fail_init ? -1 : 0},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {2, 4}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0, {0}},
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 1, {0}},
+        {XR_XIR_ARRAY_NEW, a, {0, 2}, {0}, 0, {0}},
+        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {2}, {0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, fail_init ? -1 : 0, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {2, 4}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     uint32_t lib_operands[] = {0, 1};
     XrXirInstruction main[] = {
-        {XR_XIR_SLOT_PLACE, a, {0}, {0}, 1},
-        {XR_XIR_SLOT_PLACE, a, {0}, {0}, 2},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {0, 2}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 1}, {0}, 0},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 3}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {1, 1}, {0}, 0},
-        {XR_XIR_ARRAY_LEN, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {2, 1}, {0}, 0},
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2},
-        {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {3, 3}, {0}, 0},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 3}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {6, 1}, {0}, 0},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {0, 3}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {7, 1}, {0}, 0},
-        {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {1, 12}, {0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 2},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 17}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {8, 1}, {0}, 0},
-        {XR_XIR_ARRAY_LEN, XR_XIR_I64, {1}, {0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {9, 1}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {20}, {0}, 0}};
+        {XR_XIR_SLOT_PLACE, a, {0}, {0}, 1, {0}},
+        {XR_XIR_SLOT_PLACE, a, {0}, {0}, 2, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {0, 2}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 3}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {1, 1}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_LEN, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {2, 1}, {0}, 0, {0}},
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2, {0}},
+        {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {3, 3}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 3}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {6, 1}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {0, 3}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {7, 1}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {1, 12}, {0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 2, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 17}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {8, 1}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_LEN, XR_XIR_I64, {1}, {0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {9, 1}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {20}, {0}, 0, {0}}};
     uint32_t main_operands[] = {4, 6, 8, 1, 3, 10, 12, 14, 18, 20};
-    XrXirInstruction make[] = {{XR_XIR_SLOT_LOAD, a, {0}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
-    XrXirInstruction escape[] = {{XR_XIR_SLOT_LOAD, a, {0}, {0}, 2},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}};
-    XrXirInstruction bounds[] = {{XR_XIR_SLOT_PLACE, a, {0}, {0}, 2},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 0}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
+    XrXirInstruction make[] = {{XR_XIR_SLOT_LOAD, a, {0}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+    XrXirInstruction escape[] = {{XR_XIR_SLOT_LOAD, a, {0}, {0}, 2, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+    XrXirInstruction bounds[] = {{XR_XIR_SLOT_PLACE, a, {0}, {0}, 2, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 0}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
     XrXirInstruction local[] = {
-        {XR_XIR_SLOT_LOAD, a, {0}, {0}, 1},
-        {XR_XIR_LOCAL_NEW, a, {0}, {0}, 0},
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0, 3}, {0}, 0},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 3}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0}};
+        {XR_XIR_SLOT_LOAD, a, {0}, {0}, 1, {0}},
+        {XR_XIR_LOCAL_NEW, a, {0}, {0}, 0, {0}},
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0, 3}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {1, 3}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}};
     uint32_t local_operands[] = {1, 3, 2};
     XrXirInstruction captured[] = {
-        {XR_XIR_SLOT_LOAD, a, {0}, {0}, 1},
-        {XR_XIR_CELL_NEW, cell, {0}, {0}, 0},
-        {XR_XIR_CELL_PLACE, a, {1}, {0}, 0},
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0, 3}, {0}, 0},
-        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {2, 4}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0}};
+        {XR_XIR_SLOT_LOAD, a, {0}, {0}, 1, {0}},
+        {XR_XIR_CELL_NEW, cell, {0}, {0}, 0, {0}},
+        {XR_XIR_CELL_PLACE, a, {1}, {0}, 0, {0}},
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0, 3}, {0}, 0, {0}},
+        {XR_XIR_ARRAY_GET, XR_XIR_STRING, {2, 4}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0, {0}}};
     uint32_t captured_operands[] = {2, 4, 3};
     XrXirBlock blocks[] = {{0,4},{0,7},{0,23},{0,2},{0,3},{0,8}};
     XrXirType index_type = XR_XIR_I64;

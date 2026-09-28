@@ -32,7 +32,7 @@ extern const XrXirProgramSpec nominal_transport_program;
 extern const XrXirProgramSpec nominal_generic_program;
 extern const XrXirProgramSpec nominal_expression_program;
 extern const XrXirProgramSpec array_program0_program, array_program1_program, array_program2_program;
-extern const XrXirProgramSpec captures_program;
+extern const XrXirProgramSpec captures_program, captures_error_program;
 extern const XrXirProgramSpec program0_program, program1_program, program2_program;
 extern const XrXirProgramSpec nominal0_program, nominal3_program, nominal_chain_program;
 extern const XrXirProgramSpec enum_metadata_program;
@@ -121,9 +121,11 @@ int main(void) {
         CHECK(xr_xir_program_seal(specs[mode], (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_OK);
         program_cases(program, mode);
     }
+    for (unsigned throwing = 0; throwing < 2; ++throwing) {
     XrXirProgram *captures = NULL;
-    CHECK(xr_xir_program_seal(&captures_program,(XrXirProgramBudget) {2097152, 16000000},&captures) == XR_XIR_OK);
-    capture_cases(captures);
+    CHECK(xr_xir_program_seal(throwing ? &captures_error_program : &captures_program,(XrXirProgramBudget) {2097152, 16000000},&captures) == XR_XIR_OK);
+    capture_cases(captures,throwing != 0);
+    }
     puts("Native capture environments, two suspensions, cancellation and escaped ownership passed");
     puts("Native module programs match independent output, state and lifetime expectations");
     CHECK(!runtime_live && !runtime_bytes);

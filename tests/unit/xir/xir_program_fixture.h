@@ -16,63 +16,63 @@
 #include "xir_error_fixture.h"
 static XrXirArtifact *program_fixture(uint32_t mode) {
     XrXirInstruction alpha[] = {
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 10},
-        {XR_XIR_ATOMIC_I64_NEW, XR_XIR_ATOMIC_I64, {0}, {0}, 0},
-        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {1}, {0}, 0},
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0},
-        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {3}, {0}, 2},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 2},
-        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 91},
-        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 10, {0}},
+        {XR_XIR_ATOMIC_I64_NEW, XR_XIR_ATOMIC_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {1}, {0}, 0, {0}},
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 0, {0}},
+        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {3}, {0}, 2, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 2, {0}},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 91, {0}},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     XrXirInstruction beta[10]; memcpy(beta, alpha, sizeof(beta));
     beta[0].immediate = 20; beta[2].immediate = 1; beta[3].immediate = 1; beta[4].immediate = 3;
-    if (mode) alpha[6] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0};
+    if (mode) alpha[6] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     const uint32_t error_operand=7;
     if (mode == 2) {
-        alpha[8]=(XrXirInstruction){XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},0};
-        alpha[9]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{8},{0},0};
+        alpha[8]=(XrXirInstruction){XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},0, {0}};
+        alpha[9]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{8},{0},0, {0}};
     }
     XrXirInstruction init[] = {
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2},
-        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 4},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {0}, {0}, 2},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 2, {0}},
+        {XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 4, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {0}, {0}, 2, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     XrXirInstruction get_alpha[] = {
-        {XR_XIR_SLOT_LOAD, XR_XIR_ATOMIC_I64, {0}, {0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1},
-        {XR_XIR_ATOMIC_I64_FETCH_ADD, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 2},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}
+        {XR_XIR_SLOT_LOAD, XR_XIR_ATOMIC_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1, {0}},
+        {XR_XIR_ATOMIC_I64_FETCH_ADD, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 2, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {3}, {0}, 1, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}
     };
     XrXirInstruction get_beta[6]; memcpy(get_beta, get_alpha, sizeof(get_beta));
     get_beta[0].immediate = 1; get_beta[3].immediate = 3;
     XrXirInstruction root[] = {
-        {XR_XIR_CALL, XR_XIR_I64, {0}, {0}, 4},
-        {XR_XIR_CALL, XR_XIR_I64, {0}, {0}, 5},
-        {XR_XIR_ADD_INT, XR_XIR_I64, {0, 1}, {0}, 0},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {2}, {0}, 1},
-        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {4}, {0}, 2},
-        {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 4},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {6}, {0}, 1},
-        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 3},
-        {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {8}, {0}, 4},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}
+        {XR_XIR_CALL, XR_XIR_I64, {0}, {0}, 4, {0}},
+        {XR_XIR_CALL, XR_XIR_I64, {0}, {0}, 5, {0}},
+        {XR_XIR_ADD_INT, XR_XIR_I64, {0, 1}, {0}, 0, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {2}, {0}, 1, {0}},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {4}, {0}, 2, {0}},
+        {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 4, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {6}, {0}, 1, {0}},
+        {XR_XIR_CONST_STRING, XR_XIR_STRING, {0}, {0}, 3, {0}},
+        {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {8}, {0}, 4, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}
     };
     XrXirInstruction get_string[] = {
-        {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 4},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
+        {XR_XIR_SLOT_LOAD, XR_XIR_STRING, {0}, {0}, 4, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     XrXirInstruction get_atomic[] = {
-        {XR_XIR_SLOT_LOAD, XR_XIR_ATOMIC_I64, {0}, {0}, 0},
-        {XR_XIR_ATOMIC_I64_LOAD, XR_XIR_I64, {0}, {0}, 0},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {1}, {0}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
+        {XR_XIR_SLOT_LOAD, XR_XIR_ATOMIC_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_ATOMIC_I64_LOAD, XR_XIR_I64, {0}, {0}, 0, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {1}, {0}, 1, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     const XrXirBlock blocks[] = {{0, 4}, {0, 10}, {0, 11}, {0, 6}, {0, 2}};
     const XrXirFunction functions[] = {

@@ -11,11 +11,19 @@
  */
 #ifndef XIR_CAPTURE_CASES_H
 #define XIR_CAPTURE_CASES_H
-static void capture_result(const XrXirValue *value) {
+static void capture_result(const XrXirValue *value, bool throwing) {
+    if (throwing) {
+        XrXirDomain *reader = NULL; XrXirValue code = {0};
+        CHECK(xr_xir_domain_new(65536,&reader) == XR_XIR_VALUE_OK);
+        XrXirValueAdmission admission = {xr_xir_value_arena(value),reader,NULL,NULL,10000,65536};
+        CHECK(xr_xir_enum_get(value,0,0,&admission,&code) == XR_XIR_VALUE_OK);
+        CHECK(code.type == XR_XIR_I64 && code.payload == 91);
+        xr_xir_value_drop(&code); xr_xir_domain_drop(reader); return;
+    }
     const char *bytes = NULL; size_t count = 0;
     CHECK(xr_xir_string_view(value,&bytes,&count) && count == 9 && !memcmp(bytes,"captured!",9));
 }
-static void capture_cases(XrXirProgram *program) {
+static void capture_cases(XrXirProgram *program, bool throwing) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     XrXirDomain *domain = NULL; XrXirValue suffix = {0};
     CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
@@ -51,8 +59,8 @@ static void capture_cases(XrXirProgram *program) {
             CHECK(xr_xir_instance_resume(instance,wait.epoch,wait.outcome.wake) == XR_XIR_CALL_READY);
         }
         if (mode != 2) {
-            CHECK(xr_xir_instance_poll(instance).outcome.status == XR_XIR_CALL_RETURNED);
-            CHECK(xr_xir_instance_take_result(instance,&result) == XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_poll(instance).outcome.status == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED));
+            CHECK(xr_xir_instance_take_result(instance,&result) == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED));
         }
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
         if (mode != 0) CHECK(xr_xir_instance_start_function(instance,&escaped,&suffix,1) == XR_XIR_CALL_BAD_STATE);
@@ -63,7 +71,7 @@ static void capture_cases(XrXirProgram *program) {
             const char *bytes; size_t count;
             CHECK(xr_xir_string_view(&inner->captures[0],&bytes,&count) && count == 8 && !memcmp(bytes,"captured",8));
         }
-        if (mode != 2) capture_result(&result);
+        if (mode != 2) capture_result(&result,throwing);
         xr_xir_value_drop(&result); xr_xir_value_drop(&escaped);
     }
     xr_xir_value_drop(&suffix); xr_xir_program_drop(program);

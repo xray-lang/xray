@@ -15,7 +15,8 @@ THROW accepts an enum, erased Error or Error-constrained parameter at definition
 Ordinary specialization substitutes and rechecks the operand before execution;
 runtime transport still receives concrete enum values. No dynamic dictionary,
 AST recheck, implicit payload access or compatibility constraint encoding is added.
-Checked semantic 30 admits the Error bit with unchanged schema 9. The marker
+Checked semantic 30 introduced the Error bit. The current schema 10 / semantic 31
+also separates generic argument ranges from invoke CFG targets. The marker
 itself requires no runtime dictionary because open parameters never execute.
 The subsequent Error value representation uses Value ABI 12 and Call/Program
 ABI 17 under the resumable-call ownership contract. ERROR_ERASE proves its
@@ -53,7 +54,7 @@ Built/Checked use function-local type parameter IDs 65536+ordinal, bounded above
 by 131071 and by that function's declared parameter count. Equal ordinals in
 different declarations do not identify the same type. A module may
 own one generic metadata row per function: parameter constraint bits and a type
-argument table. Bits 1 (Sendable) and 2 (Error) are admitted. CALL targets[0]/targets[1]
+argument table. Bits 1 (Sendable) and 2 (Error) are admitted. CALL type_arguments[0]/type_arguments[1]
 describe a first/count range in that caller's type argument table; nongeneric
 calls use zero/zero. Nonempty ranges exactly partition the table in instruction
 order, with no gaps, overlap or trailing entries. Value argument ranges remain

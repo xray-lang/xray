@@ -60,8 +60,8 @@ static void write_admission(XrXirArtifact *artifact) {
 static void wide_boundary(void) {
     uint32_t *operands = xr_calloc(65537, sizeof(*operands)); CHECK(operands);
     XrXirInstruction ops[] = {
-        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 65536}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0}
+        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 65536}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
     XrXirType type = XR_XIR_I64;
     XrXirBlock block = {0, 2};

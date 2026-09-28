@@ -155,7 +155,7 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     }
     return source_query_reference(ctx,selected->path,selected->binding,selected->owner,XR_XIR_SOURCE_TYPE_USE) &&
         source_query_target_reference(ctx,source_query_range(ctx,node,NULL),ctx->nominal_variants[selected->owner->index][selected->variant],XR_XIR_SOURCE_READ) &&
-        emit_group(ctx,(XrXirInstruction){XR_XIR_ENUM_NEW,selected->type,{0},{0},selected->variant},fields,(uint32_t)count,value);
+        emit_group(ctx,(XrXirInstruction){XR_XIR_ENUM_NEW,selected->type,{0},{0},selected->variant, {0}},fields,(uint32_t)count,value);
 }
 static bool source_enum_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
     EnumConstructNode *literal = &node->as.enum_construct; SourceEnumSelection selected = {0};

@@ -27,16 +27,16 @@ static bool source_constructor_value(SourceContext *ctx, AstNode *node, SourceVa
     if (count && !fields) return false;
     for (uint32_t f = 0; f < count; ++f) {
         if (!source_work(ctx, node) || !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ,
-            nominal->nominal.fields[f], {ctx->bodies[ctx->function].constructor_places[f], 0}, {0}, 0}, &fields[f])) return false;
+            nominal->nominal.fields[f], {ctx->bodies[ctx->function].constructor_places[f], 0}, {0}, 0, {0}}, &fields[f])) return false;
     }
-    return emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, type, {0}, {0}, 0}, fields, count, value);
+    return emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, type, {0}, {0}, 0, {0}}, fields, count, value);
 }
 static bool source_constructor_return(SourceContext *ctx, AstNode *node) {
     if (node && node->type == AST_RETURN_STMT && node->as.return_stmt.value_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor return must be implicit or bare");
     SourceValue value;
     if (!source_constructor_value(ctx, node, &value) ||
-        !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0}, NULL)) return false;
+        !emit(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0, {0}}, NULL)) return false;
     ctx->returned = true; return true;
 }
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name,
@@ -44,10 +44,10 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
     uint32_t field; XrXirType type;
     if (!source_struct_field(ctx, node, ctx->functions[ctx->function].result, name, incoming ? 2u : 0u, &field, &type)) return false;
     uint32_t place = ctx->bodies[ctx->function].constructor_places[field];
-    if (!incoming) return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, type, {place, 0}, {0}, 0}, value);
+    if (!incoming) return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, type, {place, 0}, {0}, 0, {0}}, value);
     if (!expression_in(ctx, incoming, type, value)) return false;
     if (value->type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor field type mismatch");
-    return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place, value->id}, {0}, 0}, NULL);
+    return emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place, value->id}, {0}, 0, {0}}, NULL);
 }
 static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, AstNode *node, uint32_t *next) {
     MethodDeclNode *method = &node->as.method_decl;
@@ -117,7 +117,7 @@ static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType
     }
     for (uint32_t p = (uint32_t)call->arg_count; p < function->parameter_count; ++p)
         if (!source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
-    XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, index};
+    XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, index, {0}};
     return source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
         emit_group(ctx, op, arguments, function->parameter_count, value);
 }
@@ -147,14 +147,14 @@ static bool source_constructor_body(SourceContext *ctx) {
     for (uint32_t f = 0; f < decl->field_count; ++f) {
         SourceValue place;
         if (!source_work(ctx, body->node) || !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_UNINIT,
-            decl->fields[f].type, {0}, {0}, (decl->fields[f].flags & XR_XIR_FIELD_MUTABLE) ? 0 : 1}, &place)) return false;
+            decl->fields[f].type, {0}, {0}, (decl->fields[f].flags & XR_XIR_FIELD_MUTABLE) ? 0 : 1, {0}}, &place)) return false;
         body->constructor_places[f] = place.id;
         uint32_t initializer = ctx->nominal_defaults[owner][f];
         if (initializer) {
             const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, self->type);
-            SourceValue value; XrXirInstruction op = {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, initializer};
+            SourceValue value; XrXirInstruction op = {XR_XIR_CALL, decl->fields[f].type, {0}, {0}, initializer, {0}};
             if (!source_type_arguments(ctx, body->node, nominal->nominal.arguments, nominal->nominal.argument_count, &op) ||
-                !emit(ctx, op, &value) || !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place.id, value.id}, {0}, 0}, NULL)) return false;
+                !emit(ctx, op, &value) || !emit(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place.id, value.id}, {0}, 0, {0}}, NULL)) return false;
         }
     }
     return statement(ctx, method->body, false) && (ctx->returned || source_constructor_return(ctx, NULL));

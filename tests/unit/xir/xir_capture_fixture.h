@@ -13,26 +13,40 @@
 #define XIR_CAPTURE_FIXTURE_H
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
-static XrXirArtifact *capture_checked(void) {
+#include "xir_error_fixture.h"
+static XrXirArtifact *capture_checked(bool throwing) {
     XrXirType fn = (XrXirType) 256, t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter input = {XR_XIR_STRING,0};
     XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input,1,XR_XIR_STRING,0,0, {0}};
-    XrXirTypes types = {&signature,1, NULL};
-    XrXirInstruction init[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
-    XrXirInstruction root[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},17},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
-    XrXirInstruction make[] = {{XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0},
-        {XR_XIR_FUNCTION_REF,fn,{0,1},{0,1},5},
-        {XR_XIR_FUNCTION_REF,fn,{1,1},{0},3},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
-    XrXirInstruction wrap[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0},
-        {XR_XIR_CALL_INDIRECT,XR_XIR_STRING,{0,1},{0},0},
-        {XR_XIR_CONCAT_STRING,XR_XIR_STRING,{3,1},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{4},{0},0}};
-    XrXirInstruction invoke[] = {{XR_XIR_CALL_INDIRECT,XR_XIR_STRING,{0,1},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
-    XrXirInstruction target[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
+    ErrorFixture error; error_fixture_init(&error,false);
+    error.declaration.module = (XrXirLiteral){"root",4};
+    XrXirTypeNode nodes[] = {signature,error.node};
+    XrXirTypes types = {nodes,2,&error.table};
+    XrXirInstruction init[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
+    XrXirInstruction root[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},17, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
+    XrXirInstruction make[] = {{XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
+        {XR_XIR_FUNCTION_REF,fn,{0,1},{0},5, {0,1}},
+        {XR_XIR_FUNCTION_REF,fn,{1,1},{0},3, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
+    XrXirInstruction wrap[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0, {0}},
+        {XR_XIR_CALL_INDIRECT,XR_XIR_STRING,{0,1},{0},0, {0}},
+        {XR_XIR_CONCAT_STRING,XR_XIR_STRING,{3,1},{0},0, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{4},{0},0, {0}}};
+    XrXirInstruction invoke[] = {
+        {XR_XIR_INVOKE_INDIRECT,XR_XIR_STRING,{0,1},{1,2},0,{0}},
+        {XR_XIR_INVOKE_RESULT,XR_XIR_STRING,{0},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{3},{0},0,{0}},
+        {XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},0,{0}},
+        {XR_XIR_THROW,XR_XIR_UNIT,{5},{0},0,{0}}};
+    XrXirBlock invoke_blocks[] = {{0,1},{1,2},{3,2}};
+    XrXirInstruction target[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
+    XrXirInstruction failure[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0,{0}},
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},91,{0}},
+        {XR_XIR_ENUM_NEW,(XrXirType)257,{0,1},{0},0,{0}},
+        {XR_XIR_THROW,XR_XIR_UNIT,{4},{0},0,{0}}};
+    uint32_t error_argument = 3;
     XrXirType parameters[] = {fn,XR_XIR_STRING,t,XR_XIR_STRING}, concrete = XR_XIR_STRING;
     uint32_t captures[] = {0,1}, argument = 1, constraint = 0;
     XrXirBlock blocks[] = {{0,1},{0,2},{0,4}};
@@ -41,9 +55,13 @@ static XrXirArtifact *capture_checked(void) {
         {"root",4,NULL,0,XR_XIR_I64,blocks+1,1,root,2,NULL,0},
         {"make",4,NULL,0,fn,blocks+2,1,make,4,captures,2},
         {"wrap",4,parameters,2,XR_XIR_STRING,blocks+2,1,wrap,4,&argument,1},
-        {"invoke",6,parameters,2,XR_XIR_STRING,blocks+1,1,invoke,2,&argument,1},
+        {"invoke",6,parameters,2,XR_XIR_STRING,invoke_blocks,3,invoke,5,&argument,1},
         {"capture",7,parameters+2,2,t,blocks+1,1,target,2,NULL,0}
     };
+    if (throwing) {
+        functions[5].instructions = failure; functions[5].instruction_count = 4;
+        functions[5].blocks = blocks+2; functions[5].operands = &error_argument; functions[5].operand_count = 1;
+    }
     XrXirGeneric generics[] = {{0},{0},{NULL,0,&concrete,1},{0},{0},{&constraint,1,NULL,0}};
     XrXirSourceModule source = {"root",4,NULL,0,0};
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0},{0,1, 0, 0},{0,1, 0, 0},{0,0, 0, 0},{0,1, 0, 0},{0,0, 0, 0}};
@@ -55,8 +73,8 @@ static XrXirArtifact *capture_checked(void) {
     memset(make,0xcc,sizeof(make)); memset(captures,0xcc,sizeof(captures));
     return checked;
 }
-static XrXirArtifact *capture_fixture(void) {
-    XrXirArtifact *checked = capture_checked(), *decoded = NULL, *closed = NULL, *lowered = NULL;
+static XrXirArtifact *capture_fixture(bool throwing) {
+    XrXirArtifact *checked = capture_checked(throwing), *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked);

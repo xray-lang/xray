@@ -23,8 +23,8 @@ static XrXirStatus native_metadata_fixture(const XrXirProgramSpec *spec, XrXirAr
         const XrXirCallEntry *entry = &spec->entries[i];
         int length = snprintf(names[i], sizeof(names[i]), "native_test_%u", i);
         CHECK(length > 0 && (size_t)length < sizeof(names[i]));
-        instructions[i][0] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0};
-        instructions[i][1] = (XrXirInstruction) {XR_XIR_MATCH_FAIL, XR_XIR_UNIT, {0}, {0}, 0};
+        instructions[i][0] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}};
+        instructions[i][1] = (XrXirInstruction) {XR_XIR_MATCH_FAIL, XR_XIR_UNIT, {0}, {0}, 0, {0}};
         functions[i] = (XrXirFunction) {names[i], (uint32_t)length, entry->parameters,
             entry->parameter_count, entry->result, &block, 1, instructions[i], 2, NULL, 0};
     }

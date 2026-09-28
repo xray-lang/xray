@@ -16,23 +16,23 @@ static XrXirArtifact *output_fixture(void) {
     const uint32_t operands[] = {0, 1, 5};
     const XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirInstruction ops[] = {
-        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 2}, {0, 0}, 0},
-        {XR_XIR_OUTPUT, XR_XIR_UNIT, {1, 0}, {0, 0}, 2},
-        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0}, 1},
-        {XR_XIR_PRINT, XR_XIR_UNIT, {2, 1}, {0, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0}
+        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {0, 2}, {0, 0}, 0, {0}},
+        {XR_XIR_OUTPUT, XR_XIR_UNIT, {1, 0}, {0, 0}, 2, {0}},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0}, 1, {0}},
+        {XR_XIR_PRINT, XR_XIR_UNIT, {2, 1}, {0, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}
     };
     const XrXirBlock blocks[] = {{0, 6}};
     const XrXirType string = XR_XIR_STRING;
     const XrXirInstruction write_ops[] = {
-        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 2},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0}
+        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 2, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}
     };
     const XrXirInstruction continue_ops[] = {
-        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 1},
-        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}
+        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 1, {0}},
+        {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 1, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}
     };
     const XrXirBlock write_block = {0, 2}, continue_block = {0, 3};
     const XrXirFunction functions[] = {

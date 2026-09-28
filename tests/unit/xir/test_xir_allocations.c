@@ -95,6 +95,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_output.c"
 
 #include "xir_string_fixture.h"
+#include "xir_call_fixture.h"
 #include "xir_output_fixture.h"
 #include "xir_local_fixture.h"
 #include "xir_segment_cases.h"
@@ -241,6 +242,64 @@ static void managed_allocation_run(XrXirArtifact *artifact, bool throwing) {
     xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
     xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]); xr_xir_value_drop(&owned);
 }
+static bool invoke_allocation_run(XrXirArtifact *artifact, uint32_t mode, uint32_t cancel_at) {
+    XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
+    XrXirCall *call = NULL; XrXirValue owned = {0};
+    XrXirCallEntry entries[5]; XrXirVmBinding bindings[5];
+    XrXirCallAccounting accounting = {0}; bool completed = false;
+    XrXirCallConfig config = {entries,5,NULL,65536,100,10,&accounting,{NULL,NULL},{0}};
+    for (uint32_t i = 0; i < 5; ++i) {
+        XrXirStatus status = xr_xir_vm_bind(artifact,i,&bindings[i],&entries[i]);
+        if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
+    }
+    XrXirValueStatus status = xr_xir_domain_new(65536,&domain);
+    if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
+    XrXirBudget budget = xr_xir_default_budget();
+    status = xr_xir_type_arena_new(domain,xr_xir_artifact_module(artifact)->types,&budget,&arena);
+    if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
+    config.admission = error_fixture_admission(domain,arena);
+    XrXirValue args[] = {{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
+    XrXirCallStatus admitted = xr_xir_call_new(&config,0,args,2,&call);
+    if (admitted != XR_XIR_CALL_READY) { CHECK(admitted == XR_XIR_CALL_OOM); goto done; }
+    XrXirCallResult result = xr_xir_call_poll(call);
+    uint32_t suspensions = 0;
+    while (result.status == XR_XIR_CALL_SUSPENDED) {
+        CHECK(++suspensions <= 2);
+        if (suspensions == cancel_at) CHECK(xr_xir_call_cancel(call) == XR_XIR_CALL_CANCELLED);
+        else CHECK(xr_xir_call_resume(call,result.wake) == XR_XIR_CALL_READY);
+        result = xr_xir_call_poll(call);
+    }
+    if (result.status == XR_XIR_CALL_OOM) goto done;
+    if (cancel_at && suspensions == cancel_at) CHECK(result.status == XR_XIR_CALL_CANCELLED);
+    else if (mode == 9) {
+        CHECK(result.status == XR_XIR_CALL_THROWN);
+        CHECK(xr_xir_call_take_result(call,&owned) == XR_XIR_CALL_THROWN);
+    } else CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 &&
+        result.value.payload == (mode == 10 ? 44 : 77));
+    completed = true;
+ done:
+    CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
+    CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees && !accounting.depth);
+    xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&owned);
+    return completed;
+}
+static void invoke_allocation_failures(void) {
+    const uint32_t modes[] = {5,9,10,11};
+    for (uint32_t m = 0; m < 4; ++m) for (uint32_t cancel = 0; cancel < 3; ++cancel) {
+        fail_at = SIZE_MAX;
+        XrXirArtifact *artifact = call_fixture(modes[m]); size_t baseline = live;
+        calls = 0; CHECK(invoke_allocation_run(artifact,modes[m],cancel)); size_t sites = calls;
+        CHECK(live == baseline && sites);
+        for (size_t i = 0; i < sites; ++i) {
+            fail_at = i; calls = 0;
+            CHECK(!invoke_allocation_run(artifact,modes[m],cancel) && live == baseline);
+        }
+        fail_at = SIZE_MAX; xr_xir_artifact_free(artifact); CHECK(!live);
+        printf("Invoke physical release: mode=%u cancel=%u allocation failure sites=%zu\n",modes[m],cancel,sites);
+    }
+}
+
 static size_t managed_allocation_failures(void) {
     size_t total=0;
     for (uint32_t mode=0;mode<2;++mode) {
@@ -424,9 +483,9 @@ int main(void) {
     nominal_allocation_failures();
     segment_cases();
     XrXirInstruction ops[] = {
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42},
-        {XR_XIR_COPY, XR_XIR_I64, {0, 0}, {0, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42, {0}},
+        {XR_XIR_COPY, XR_XIR_I64, {0, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0, {0}},
     };
     XrXirBlock block = {0, 3};
     XrXirType parameter = XR_XIR_I64;
@@ -537,6 +596,7 @@ int main(void) {
     printf("Declaration stage/emission physical release: %zu allocation sites\n", declaration_allocation_failures());
     printf("Program seal, instance and initialization physical release: %zu allocation sites\n", program_allocation_failures());
     printf("Write-result activation and renderer physical release: %zu allocation sites\n", write_allocation_failures());
+    invoke_allocation_failures();
     phi_snapshot_failure();
     function_allocation_failures();
     instance_admission_cases();

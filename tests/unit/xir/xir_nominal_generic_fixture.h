@@ -18,7 +18,7 @@ static XrXirArtifact *nominal_generic_fixture(bool expressions) {
     XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirFunction functions[4]; memcpy(functions, built.functions, 3 * sizeof(*functions));
     XrXirGeneric generics[4] = {0}; memcpy(generics, built.generics, 3 * sizeof(*generics));
-    XrXirInstruction init = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0};
+    XrXirInstruction init = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     XrXirBlock block = {0, 1};
     functions[3] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &block, 1, &init, 1, NULL, 0};
     XrXirSourceModule module = {"alpha", 5, NULL, 0, 3};

@@ -18,21 +18,21 @@ static XrXirArtifact *enum_ops_checked(unsigned invalid, bool wrong_variant) {
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     XrXirTypes types = {&node,1,&table};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[] = {
-        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23},
-        {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0},
-        {XR_XIR_ENUM_NEW,(XrXirType)256,{0,2},{0},1},
-        {XR_XIR_ENUM_TAG,XR_XIR_I64,{2},{0},0},
-        {XR_XIR_ENUM_GET,XR_XIR_I64,{2,0},{0},1},
-        {XR_XIR_ENUM_GET,XR_XIR_STRING,{2,1},{0},1},
-        {XR_XIR_ENUM_NEW,(XrXirType)256,{0},{0},0},
-        {XR_XIR_ENUM_TAG,XR_XIR_I64,{6},{0},0},
-        {XR_XIR_PRINT,XR_XIR_UNIT,{2,4},{0},0},
-        {XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},23, {0}},
+        {XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0, {0}},
+        {XR_XIR_ENUM_NEW,(XrXirType)256,{0,2},{0},1, {0}},
+        {XR_XIR_ENUM_TAG,XR_XIR_I64,{2},{0},0, {0}},
+        {XR_XIR_ENUM_GET,XR_XIR_I64,{2,0},{0},1, {0}},
+        {XR_XIR_ENUM_GET,XR_XIR_STRING,{2,1},{0},1, {0}},
+        {XR_XIR_ENUM_NEW,(XrXirType)256,{0},{0},0, {0}},
+        {XR_XIR_ENUM_TAG,XR_XIR_I64,{6},{0},0, {0}},
+        {XR_XIR_PRINT,XR_XIR_UNIT,{2,4},{0},0, {0}},
+        {XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
     uint32_t operands[] = {0,1,3,4,7,5};
-    XrXirInstruction main_ops[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0}};
+    XrXirInstruction main_ops[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0, {0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
     XrXirBlock one = {0,1}, two = {0,2}, block = {0,11};
     XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0},

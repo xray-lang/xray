@@ -44,12 +44,12 @@ static void fixture_init(Fixture *fixture) {
     fixture->parameters[1] = XR_XIR_I64;
     for (uint32_t b = 0; b < 3; ++b)
         fixture->blocks[b] = (XrXirBlock) {b * 2, 2};
-    fixture->instructions[0] = (XrXirInstruction) {XR_XIR_COPY, XR_XIR_I64, {1, 0}, {0, 0}, 0};
-    fixture->instructions[1] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 2}, 0};
-    fixture->instructions[2] = (XrXirInstruction) {XR_XIR_ADD_INT, XR_XIR_I64, {2, 1}, {0, 0}, 0};
-    fixture->instructions[3] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0};
-    fixture->instructions[4] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 9};
-    fixture->instructions[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {6, 0}, {0, 0}, 0};
+    fixture->instructions[0] = (XrXirInstruction) {XR_XIR_COPY, XR_XIR_I64, {1, 0}, {0, 0}, 0, {0}};
+    fixture->instructions[1] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 2}, 0, {0}};
+    fixture->instructions[2] = (XrXirInstruction) {XR_XIR_ADD_INT, XR_XIR_I64, {2, 1}, {0, 0}, 0, {0}};
+    fixture->instructions[3] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0, {0}};
+    fixture->instructions[4] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 9, {0}};
+    fixture->instructions[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {6, 0}, {0, 0}, 0, {0}};
     fixture->function = (XrXirFunction) {fixture->name, 5, fixture->parameters, 2,
         XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6, NULL, 0};
     fixture->module = (XrXirModule) {XR_XIR_BUILT, &fixture->function, 1, NULL, NULL, NULL, NULL};
@@ -175,7 +175,7 @@ static void malformed_inputs(void) {
     f.instructions[3].type = XR_XIR_I64;
     expect(&f, XR_XIR_BAD_STRUCTURE);
     fixture_init(&f);
-    f.instructions[0] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0};
+    f.instructions[0] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0, {0}};
     expect(&f, XR_XIR_BAD_STRUCTURE);
     fixture_init(&f);
     f.function.result = XR_XIR_BOOL;
@@ -249,11 +249,11 @@ static void budgets(void) {
 
 static void loops_and_storage_order(void) {
     XrXirInstruction ops[] = {
-        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0}, 1},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0},
-        {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 3}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0},
+        {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0}, 1, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0, {0}},
+        {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 3}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}},
     };
     XrXirBlock blocks[] = {{0, 2}, {2, 1}, {3, 1}, {4, 1}};
     XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0};
@@ -278,17 +278,17 @@ static void dominance_word_boundary(void) {
         blocks[b] = (XrXirBlock) {next, b == 65 ? 2 : 1};
         if (b == 65) {
             definition = next;
-            ops[next++] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42};
+            ops[next++] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42, {0}};
         }
         if (b == 69)
-            ops[next++] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {definition, 0}, {0, 0}, 0};
+            ops[next++] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {definition, 0}, {0, 0}, 0, {0}};
         else
-            ops[next++] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {b + 1, 0}, 0};
+            ops[next++] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {b + 1, 0}, 0, {0}};
     }
     XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
-    ops[64] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {65, 69}, 0};
+    ops[64] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {65, 69}, 0, {0}};
     XrXirType boolean = XR_XIR_BOOL;
     function.parameters = &boolean;
     function.parameter_count = 1;
@@ -298,12 +298,12 @@ static void dominance_word_boundary(void) {
 
 static void reverse_storage_and_boolean_values(void) {
     XrXirInstruction ops[] = {
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0},
-        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 7},
-        {XR_XIR_EQ_INT, XR_XIR_BOOL, {2, 2}, {0, 0}, 0},
-        {XR_XIR_COPY, XR_XIR_BOOL, {3, 0}, {0, 0}, 0},
-        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {2, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {4, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 7, {0}},
+        {XR_XIR_EQ_INT, XR_XIR_BOOL, {2, 2}, {0, 0}, 0, {0}},
+        {XR_XIR_COPY, XR_XIR_BOOL, {3, 0}, {0, 0}, 0, {0}},
+        {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}},
     };
     XrXirBlock blocks[] = {{0, 1}, {1, 1}, {2, 4}};
     XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0};
@@ -322,7 +322,7 @@ static void numeric_admission(void) {
     for (XrXirOp op = XR_XIR_SUB_INT; op <= XR_XIR_SHR_INT; op = (XrXirOp) (op + 1)) {
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64};
         XrXirType result = op >= XR_XIR_NE_INT && op <= XR_XIR_GE_INT ? XR_XIR_BOOL : XR_XIR_I64;
-        XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0}};
+        XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0, {0}}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
         const XrXirBlock block = {0, 2};
         XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};

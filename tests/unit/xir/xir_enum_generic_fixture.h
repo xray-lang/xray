@@ -22,13 +22,13 @@ static XrXirArtifact *enum_generic_checked(unsigned mode) {
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&t,1,NULL,0}},
         {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&concrete,1,NULL,0}}};
     XrXirTypes types = {nodes,2,&table};
-    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0};
-    XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},42},
-        {XR_XIR_CALL,(XrXirType)257,{0,1},{0,1},2},
-        {XR_XIR_ENUM_GET,XR_XIR_I64,{1,0},{0},1},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0}};
-    XrXirInstruction make[] = {{XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},1},
-        {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0}};
+    XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
+    XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},42, {0}},
+        {XR_XIR_CALL,(XrXirType)257,{0,1},{0},2, {0,1}},
+        {XR_XIR_ENUM_GET,XR_XIR_I64,{1,0},{0},1, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
+    XrXirInstruction make[] = {{XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},1, {0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0, {0}}};
     uint32_t operand = 0, dependency = 0;
     XrXirBlock one = {0,1}, four = {0,4}, two = {0,2};
     XrXirType parameter = t;
@@ -47,7 +47,7 @@ static XrXirArtifact *enum_generic_checked(unsigned mode) {
     if (mode == 3) { modules[1].dependencies = NULL; modules[1].dependency_count = 0; }
     if (mode == 4) parameter = XR_XIR_STRING;
     if (mode == 5) {
-        entry[1] = (XrXirInstruction) {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0};
+        entry[1] = (XrXirInstruction) {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
         four.count = 2; functions[1].instruction_count = 2;
         functions[1].operands = NULL; functions[1].operand_count = 0;
         generics[1].arguments = NULL; generics[1].argument_count = 0;

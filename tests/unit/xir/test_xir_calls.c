@@ -125,8 +125,8 @@ static void cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 
 static XrXirArtifact *comparator_artifact(void) {
     XrXirInstruction instructions[] = {
-        {XR_XIR_LT_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0}
+        {XR_XIR_LT_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
     };
     XrXirBlock block = {0, 2};
     XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
@@ -250,35 +250,55 @@ XR_DATA const XrXirCallEntry fixture_calls0_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls1_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls2_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls3_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls4_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls5_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls6_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls7_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls8_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls9_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls10_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls11_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls12_entries[5];
+XR_DATA const XrXirCallEntry fixture_calls13_entries[5];
+
 static void xir_instruction_calls(void) {
-    for (uint32_t mode = 0; mode < 4; ++mode) for (uint32_t native = 0; native < 2; ++native) {
+    for (uint32_t mode = 0; mode < 14; ++mode) for (uint32_t native = 0; native < 2; ++native) {
+        uint32_t kind = mode >= 12 ? mode - 12 : mode >= 10 ? mode - 10 : mode % 4;
         XrXirArtifact *artifact = call_fixture(mode);
-        XrXirVmBinding bindings[3];
-        XrXirCallEntry entries[3];
-        for (uint32_t i = 0; i < 3; ++i)
+        XrXirVmBinding bindings[5];
+        XrXirCallEntry entries[5];
+        for (uint32_t i = 0; i < 5; ++i)
             CHECK(xr_xir_vm_bind(artifact, i, &bindings[i], &entries[i]) == XR_XIR_OK);
         if (native) {
-            const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries, fixture_calls3_entries};
-            entries[1] = tables[mode][1];
+            const XrXirCallEntry *tables[] = {fixture_calls0_entries, fixture_calls1_entries, fixture_calls2_entries, fixture_calls3_entries, fixture_calls4_entries, fixture_calls5_entries, fixture_calls6_entries, fixture_calls7_entries, fixture_calls8_entries, fixture_calls9_entries, fixture_calls10_entries, fixture_calls11_entries, fixture_calls12_entries, fixture_calls13_entries};
+            uint32_t callee = mode >= 12 ? 4u : 1u;
+            entries[callee] = tables[mode][callee];
         }
         XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
         XrXirTypeArena *arena=error_fixture_arena(domain);
         XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
+        XrXirCallConfig config = {entries, 5, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
         config.admission=error_fixture_admission(domain,arena);
         XrXirValue args[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
         XrXirCall *call = NULL;
         CHECK(xr_xir_call_new(&config, 0, args, 2, &call) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_call_poll(call);
-        if (mode != 2) {
-            CHECK(result.status == XR_XIR_CALL_SUSPENDED && accounting.depth == 3);
+        if (kind != 2) {
+            CHECK(result.status == XR_XIR_CALL_SUSPENDED && accounting.depth == (mode >= 12 ? 2u : 3u));
             CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
             result = xr_xir_call_poll(call);
         }
-        if (mode == 0) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 4);
-        if (mode == 1) CHECK(result.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.value,domain,91));
-        if (mode == 2) CHECK(result.status == XR_XIR_CALL_DIVIDE_BY_ZERO && result.value.type == XR_XIR_UNIT);
-        if (mode == 3) CHECK(result.status == XR_XIR_CALL_MATCH_FAILURE && result.value.type == XR_XIR_UNIT && xr_xir_fault_match_valid(result.fault));
+        if (mode == 9) {
+            CHECK(result.status == XR_XIR_CALL_SUSPENDED && accounting.depth == 1);
+            CHECK(xr_xir_call_resume(call,result.wake) == XR_XIR_CALL_READY);
+            result = xr_xir_call_poll(call);
+        }
+        if (mode == 0 || mode == 4 || mode == 8 || mode == 12) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == 4);
+        if (mode == 10) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 44);
+        if (mode == 5 || mode == 11 || mode == 13) CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 && result.value.payload == 77);
+        if (mode == 1 || mode == 9) CHECK(result.status == XR_XIR_CALL_THROWN && error_fixture_is_code(&result.value,domain,91));
+        if (kind == 2) CHECK(result.status == XR_XIR_CALL_DIVIDE_BY_ZERO && result.value.type == XR_XIR_UNIT);
+        if (kind == 3) CHECK(result.status == XR_XIR_CALL_MATCH_FAILURE && result.value.type == XR_XIR_UNIT && xr_xir_fault_match_valid(result.fault));
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
         CHECK(accounting.live_bytes == 0 && accounting.allocations == accounting.frees);
         xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain);
@@ -294,7 +314,7 @@ static void call_admission(void) {
     const XrXirModule *module = xr_xir_artifact_module(artifact);
     XrXirInstruction *throw_op=(XrXirInstruction *)&module->functions[2].instructions[3];
     XrXirInstruction saved=*throw_op;
-    *throw_op=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{4},{0},0};
+    *throw_op=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{4},{0},0, {0}};
     CHECK(xr_xir_artifact_verify(artifact,NULL,NULL)==XR_XIR_BAD_TYPE);
     *throw_op=saved;
     XrXirInstruction *op = (XrXirInstruction *) module->functions[0].instructions;

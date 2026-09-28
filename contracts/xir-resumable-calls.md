@@ -182,16 +182,15 @@ exact arena/type and transitive payload authority, takes ownership before child
 cleanup, and transfers the owned inbox to the surviving parent. Admission or
 copy failure publishes no partial error. Pending errors, one-shot result take,
 initialization failure and cancellation retain the same physical release rules.
-Runtime faults remain a separate channel. Source try/catch, catch-all Error values,
+Runtime faults remain a separate channel. Source try/catch,
 full effects and panic objects are separate open capabilities.
 
-## Catch error ownership contract (runtime value implementation in progress)
+## Catch error ownership and protected-call execution
 
 Value ABI 12 adds the enum-only Error handle; Call/Program ABI 17 reject older
 entries at independent runtime boundaries. The value conversion APIs implement
-retained erasure and exact nominal narrowing. The current implementation increment
-admits Error type expressions and ERROR_ERASE in the same uncommitted semantic 30
-cutover from revision 29. ERROR_ERASE has one value operand and an Error result;
+retained erasure and exact nominal narrowing. Error type expressions and ERROR_ERASE were admitted in semantic 30;
+the current schema 10 / semantic 31 additionally admits explicit invoke edges. ERROR_ERASE has one value operand and an Error result;
 the operand must prove Error in its own declaration context. The proof is checked
 again after specialization, including an Error actual argument. Error is storable
 and copyable but does not prove Sendable or grant enum field authority.
@@ -202,7 +201,8 @@ otherwise the built-in Error type names the enum existential. Error-constrained
 generic conversion remains ordinary Checked code, not AST instantiation. The
 VM and native emitter canonicalize an Error THROW to a borrowed concrete enum
 action, while the driver preserves its exact-arena admission and ownership rules.
-Invoke/catch execution and checked narrowing control flow remain pending.
+VM and native invoke execution use explicit successors and owned result slots.
+Source catch and checked narrowing control flow remain pending.
 
 Nominal and authority-bearing array admission share one iterative value walker.
 Traversal depth is bounded by work and scratch, not the number of type nodes.
@@ -246,13 +246,43 @@ one canonical representation: concrete enum type plus payload. Rethrowing an
 Error canonicalizes the borrowed action while its frame still owns the value;
 the driver validates and fixes the independent owner before releasing the frame.
 
-Locally handled calls require explicit normal and error CFG successors. Generic
-CALL targets currently encode a type-argument range, so handler edges must not
-reuse those fields without a complete schema migration. An invoke terminator
-does not define a normally usable SSA value. Successor values need an explicitly
-verified edge-result representation, including dominance, predecessor identity,
-type, initialization and ownership. Its precise packet encoding remains open;
-no handler stack, hidden mid-block edge or legacy executor is admitted.
+Locally handled calls require explicit normal and error CFG successors. The
+catch implementation cutover separates `type_arguments[2]` (first/count in the
+caller's generic argument table) from `targets[2]` (CFG block IDs). Generic CALL,
+FUNCTION_REF and direct INVOKE use that range; all other operations require it
+to be zero. Specialization clears only type_arguments and preserves CFG edges.
+Provenance compares the same edges and independently validates substituted type
+arguments. Nongeneric ranges are canonical zero/zero. This is a single schema
+migration, not an additional interpretation of the old targets fields.
+
+INVOKE and INVOKE_INDIRECT are terminators with normal target 0 and error target
+1. Their args remain the ordinary value-argument table range; immediate names
+the direct callee or the indirect callable value, respectively. Their type is
+the normal result type (possibly Unit), but they define no usable SSA value.
+Direct INVOKE retains direct-call resolution and permission checks; it must not
+allocate a closure merely to obtain protected-call semantics.
+
+Each successor must be nonentry, distinct and have exactly the originating
+invoke as its sole predecessor. For non-Unit normal results, the first normal
+successor instruction is INVOKE_RESULT of the exact substituted result type.
+Unit results have no result instruction. The first error successor instruction
+is INVOKE_ERROR of static Error type. Each result instruction's immediate is
+the originating invoke instruction index, not an SSA operand or a function ID;
+args, targets and type_arguments are zero. Only the corresponding successor may
+contain that selector, once, at its first instruction. No PHI precedes it.
+Ordinary dominance governs all subsequent uses. Forged selectors, wrong-edge
+uses, additional incoming edges and entry-block selectors reject, including in
+unused templates and after packet digest recomputation. General catch joins use
+ordinary PHIs after these dedicated successor blocks.
+
+On resume, the backend selects the normal/error successor from the driver's
+owned inbox and copies its result into the selector's owned frame slot before
+any later call can replace the inbox. Error selection retains the concrete enum
+owner as an Error view without an extra wrapper. The inbox is a borrowed view
+to backend code; it must not be stolen or dropped independently. Failure to
+retain publishes no result and follows normal fault cleanup. Cancellation and
+panic/fault outcomes do not enter a normal error handler. No handler stack,
+hidden mid-block edge or legacy executor is admitted.
 
 Before source catch is admitted, verification must cover both successors even
 for unused templates and statically unselected source branches. Catch clauses

@@ -100,7 +100,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         if (c->reading) blocks[i] = b;
     }
     f->instruction_count = checked_count(c, f->instruction_count, &c->remaining.instructions);
-    XrXirInstruction *instructions = checked_array(c, f->instructions, f->instruction_count, sizeof(*instructions), 32);
+    XrXirInstruction *instructions = checked_array(c, f->instructions, f->instruction_count, sizeof(*instructions), 40);
     f->instructions = instructions;
     for (uint32_t i = 0; i < f->instruction_count && c->status == XR_XIR_OK; ++i) {
         XrXirInstruction in = instructions[i];
@@ -110,6 +110,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         for (unsigned j = 0; j < 2; ++j) in.targets[j] = checked_u32(c, in.targets[j]);
         uint64_t bits = checked_integer(c, (uint64_t) in.immediate, 8);
         in.immediate = bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) (UINT64_MAX - bits);
+        for (unsigned j = 0; j < 2; ++j) in.type_arguments[j] = checked_u32(c, in.type_arguments[j]);
         if (c->reading) instructions[i] = in;
     }
     f->operand_count = checked_u32(c, f->operand_count);

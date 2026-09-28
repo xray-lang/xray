@@ -21,8 +21,9 @@ static bool layout_equal(XrXirLayout left, XrXirLayout right) {
 }
 
 static XrXirType slot_type(const XrXirFunction *function, uint32_t slot) {
-    return slot < function->parameter_count ? function->parameters[slot] :
-        function->instructions[slot - function->parameter_count].type;
+    if (slot < function->parameter_count) return function->parameters[slot];
+    const XrXirInstruction *op = &function->instructions[slot - function->parameter_count];
+    return op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT ? XR_XIR_UNIT : op->type;
 }
 
 static bool subtract_bytes(uint64_t *remaining, uint64_t amount) {
@@ -135,7 +136,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         const XrXirInstruction *op = &function->instructions[i];
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
-            op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT ||
+            op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CALL_INDIRECT ||
             op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_ENUM_NEW ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;

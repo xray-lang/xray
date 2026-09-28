@@ -26,7 +26,7 @@ static bool source_match_test(SourceContext *ctx, SourceValue condition, bool tr
     if (!failure) return false;
     SourceFunction *body=&ctx->bodies[ctx->function];
     *failure=(SourceMatchFailure){*failures,body->count,truth?1u:0u}; *failures=failure;
-    XrXirInstruction branch={XR_XIR_BRANCH,XR_XIR_UNIT,{condition.id,0},{0},0};
+    XrXirInstruction branch={XR_XIR_BRANCH,XR_XIR_UNIT,{condition.id,0},{0},0, {0}};
     branch.targets[truth?0:1]=body->block_count;
     return emit(ctx,branch,NULL) && begin_block(ctx);
 }
@@ -34,7 +34,7 @@ static bool source_pattern_integer_value(SourceContext *ctx, XrXirType type, uin
     uint64_t bias=source_pattern_integer_bias(type), bits=key^bias;
     if (bits&bias) bits|=~source_pattern_integer_max(type);
     int64_t payload=bits<=INT64_MAX?(int64_t)bits:-1-(int64_t)(UINT64_MAX-bits);
-    return emit(ctx,(XrXirInstruction){XR_XIR_CONST_INT,type,{0},{0},payload},value);
+    return emit(ctx,(XrXirInstruction){XR_XIR_CONST_INT,type,{0},{0},payload, {0}},value);
 }
 static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern,
     SourceValue receiver, bool test, SourceMatchFailure **failures, uint32_t depth) {
@@ -47,7 +47,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
     if (pattern->node->type==AST_PATTERN_RANGE) {
         if (!test) return true;
         SourceValue low,high,condition;
-        if (pattern->empty) return emit(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},0},&condition) &&
+        if (pattern->empty) return emit(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},0, {0}},&condition) &&
             source_match_test(ctx,condition,true,failures);
         return source_pattern_integer_value(ctx,pattern->type,pattern->low,&low) &&
             source_binary(ctx,pattern->node,AST_BINARY_GE,receiver,low,&condition) &&
@@ -61,16 +61,16 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
         if (pattern->type==XR_XIR_STRING) {
             if (!source_literal(ctx,pattern->literal,&literal)) return false;
         } else if (!emit(ctx,(XrXirInstruction){xr_xir_float_bits(pattern->type)?XR_XIR_CONST_FLOAT:XR_XIR_CONST_INT,
-            pattern->type,{0},{0},pattern->literal_payload},&literal)) return false;
+            pattern->type,{0},{0},pattern->literal_payload, {0}},&literal)) return false;
         return !test || (source_binary(ctx,pattern->node,AST_BINARY_EQ,receiver,literal,&condition) &&
             source_match_test(ctx,condition,true,failures));
     }
     SourceEnumSelection *selected=&pattern->selection;
     if (test) {
         SourceValue tag,ordinal,condition;
-        if (!emit(ctx,(XrXirInstruction){XR_XIR_ENUM_TAG,XR_XIR_I64,{receiver.id,0},{0},0},&tag) ||
-            !emit(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},selected->variant},&ordinal) ||
-            !emit(ctx,(XrXirInstruction){XR_XIR_EQ_INT,XR_XIR_BOOL,{tag.id,ordinal.id},{0},0},&condition) ||
+        if (!emit(ctx,(XrXirInstruction){XR_XIR_ENUM_TAG,XR_XIR_I64,{receiver.id,0},{0},0, {0}},&tag) ||
+            !emit(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},selected->variant, {0}},&ordinal) ||
+            !emit(ctx,(XrXirInstruction){XR_XIR_EQ_INT,XR_XIR_BOOL,{tag.id,ordinal.id},{0},0, {0}},&condition) ||
             !source_match_test(ctx,condition,true,failures)) return false;
     }
     for (uint32_t i=0;i<pattern->count;++i) {
@@ -78,7 +78,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
         SourceMatchPattern *child=pattern->fields[i];
         if (!child || (child->any && !child->binding)) continue;
         SourceValue value;
-        if (!emit(ctx,(XrXirInstruction){XR_XIR_ENUM_GET,child->type,{receiver.id,i},{0},selected->variant},&value) ||
+        if (!emit(ctx,(XrXirInstruction){XR_XIR_ENUM_GET,child->type,{receiver.id,i},{0},selected->variant, {0}},&value) ||
             !source_match_payload(ctx,child,value,test,failures,depth+1)) return false;
     }
     return true;
@@ -132,7 +132,7 @@ static bool source_match(SourceContext *ctx, AstNode *node, XrXirType expected, 
             else if (result!=output.type) return source_fail(ctx,arm->body,XR_XIR_BAD_TYPE,"match arms need the same admitted type");
             inputs[continuing*2]=(SourceValue){body->block_count-1,XR_XIR_UNIT};
             inputs[continuing*2+1]=output; jumps[continuing++]=body->count;
-            if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0},NULL)) return false;
+            if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0, {0}},NULL)) return false;
         }
         uint32_t next=body->block_count;
         for (SourceMatchFailure *f=failures;f;f=f->next) body->ops[f->instruction].targets[f->target]=next;
@@ -140,7 +140,7 @@ static bool source_match(SourceContext *ctx, AstNode *node, XrXirType expected, 
     }
     ctx->locals=saved; ctx->scope=scope;
     if (!exhaustive && (!begin_block(ctx) ||
-        !emit(ctx,(XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0},NULL))) return false;
+        !emit(ctx,(XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0, {0}},NULL))) return false;
     if (!continuing) {
         if (result_required) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"never-valued expression context is not admitted");
         ctx->returned=true; *value=(SourceValue){0,XR_XIR_UNIT}; return true;
@@ -149,5 +149,5 @@ static bool source_match(SourceContext *ctx, AstNode *node, XrXirType expected, 
     if (!begin_block(ctx)) return false;
     for (uint32_t i=0;i<continuing;++i) body->ops[jumps[i]].targets[0]=join;
     if (result==XR_XIR_UNIT) { *value=(SourceValue){0,XR_XIR_UNIT}; return true; }
-    return emit_group(ctx,(XrXirInstruction){XR_XIR_PHI,result,{0},{0},0},inputs,continuing*2,value);
+    return emit_group(ctx,(XrXirInstruction){XR_XIR_PHI,result,{0},{0},0, {0}},inputs,continuing*2,value);
 }

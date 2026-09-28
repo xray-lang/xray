@@ -241,14 +241,14 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         SourceSubstitution substitution = {instance->nominal.arguments, instance->nominal.argument_count};
         XrXirType field_type;
         if (!source_substitute(ctx, &substitution, decl->fields[f].type, 0, &field_type)) return false;
-        XrXirInstruction op = {XR_XIR_CALL, field_type, {0}, {0}, function};
+        XrXirInstruction op = {XR_XIR_CALL, field_type, {0}, {0}, function, {0}};
         if (!source_type_arguments(ctx, node, substitution.types, substitution.count, &op) ||
             !emit(ctx, op, &fields[f])) return false;
         if (!source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
             ctx->nominal_members[symbol->index][f], XR_XIR_SOURCE_READ)) return false;
     }
     return source_query_reference(ctx, path, binding, symbol, XR_XIR_SOURCE_TYPE_USE) &&
-        emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, instance_type, {0}, {0}, 0}, fields, count, value);
+        emit_group(ctx, (XrXirInstruction) {XR_XIR_STRUCT_NEW, instance_type, {0}, {0}, 0, {0}}, fields, count, value);
 }
 static bool source_struct_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
     if (node->type == AST_STRUCT_LITERAL) {
@@ -263,7 +263,7 @@ static bool source_struct_literal(SourceContext *ctx, AstNode *node, SourceValue
 static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceValue receiver, SourceValue *value) {
     uint32_t index; XrXirType type;
     if (!source_struct_field(ctx, node, receiver.type, node->as.member_access.name, false, &index, &type)) return false;
-    return emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index}, value);
+    return emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
 }
 static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     MemberSetNode *set = &node->as.member_set;
@@ -275,9 +275,9 @@ static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *va
     if (!source_struct_field(ctx, node, root->type, set->member, true, &index, &type) ||
         !source_query_reference(ctx, set->object, root, root, XR_XIR_SOURCE_READ_WRITE)) return false;
     XrXirInstruction op = {root->kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
-        root->type, {root->kind == SOURCE_SLOT ? 0 : root->index, 0}, {0}, root->kind == SOURCE_SLOT ? root->index : 0};
+        root->type, {root->kind == SOURCE_SLOT ? 0 : root->index, 0}, {0}, root->kind == SOURCE_SLOT ? root->index : 0, {0}};
     if (!emit(ctx, op, &place) || !expression_in(ctx, set->value, type, &incoming)) return false;
     if (incoming.type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field assignment type mismatch");
-    if (!emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_SET, XR_XIR_UNIT, {place.id, incoming.id}, {0}, index}, NULL)) return false;
+    if (!emit(ctx, (XrXirInstruction) {XR_XIR_STRUCT_SET, XR_XIR_UNIT, {place.id, incoming.id}, {0}, index, {0}}, NULL)) return false;
     *value = incoming; return true;
 }

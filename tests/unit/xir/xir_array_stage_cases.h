@@ -65,22 +65,22 @@ static void array_stage_attacks(void) {
         if (attack == 9) f.operands[2] = 2;
         if (attack == 10) f.operands[0] = 5;
         if (attack == 11) f.ops[10].args[0] = 2;
-        if (attack == 12) f.ops[7] = (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 0};
+        if (attack == 12) f.ops[7] = (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 0, {0}};
         if (attack == 13) f.ops[8].type = XR_XIR_BOOL;
         if (attack == 14) f.operands[4] = 2;
         if (attack == 15) f.ops[5].targets[0] = 1;
         if (attack == 16) f.ops[12].args[1] = 1;
         if (attack == 17) { f.operands[2] = 6; f.slot.mutable = 0; }
-        if (attack == 18) f.ops[11] = (XrXirInstruction) {XR_XIR_COPY, array, {5}, {0}, 0};
-        if (attack == 19) f.ops[11] = (XrXirInstruction) {XR_XIR_LOCAL_READ, array, {5}, {0}, 0};
-        if (attack == 20) f.ops[11] = (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {6}, {0}, 0};
+        if (attack == 18) f.ops[11] = (XrXirInstruction) {XR_XIR_COPY, array, {5}, {0}, 0, {0}};
+        if (attack == 19) f.ops[11] = (XrXirInstruction) {XR_XIR_LOCAL_READ, array, {5}, {0}, 0, {0}};
+        if (attack == 20) f.ops[11] = (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {6}, {0}, 0, {0}};
         if (attack == 21) f.ops[13].args[0] = 5;
-        if (attack == 22) f.ops[11] = (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {4, 5}, {0}, 0};
-        if (attack == 23) f.ops[11] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, array, {6}, {0}, 0};
+        if (attack == 22) f.ops[11] = (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {4, 5}, {0}, 0, {0}};
+        if (attack == 23) f.ops[11] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, array, {6}, {0}, 0, {0}};
         if (attack == 24 || attack == 25) {
             f.functions[1].operand_count = 6; f.operands[5] = 5;
             f.ops[11] = (XrXirInstruction) {attack == 24 ? XR_XIR_CALL : XR_XIR_FUNCTION_REF,
-                attack == 24 ? XR_XIR_I64 : (XrXirType) 258, {5, 1}, {0}, 2};
+                attack == 24 ? XR_XIR_I64 : (XrXirType) 258, {5, 1}, {0}, 2, {0}};
         }
         if (attack == 26) f.operands[4] = 12;
         if (attack == 27) f.ops[8].args[1] = UINT32_MAX;
@@ -104,16 +104,16 @@ static void array_stage_attacks(void) {
 static void array_phi_place_rejection(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     XrXirBlock blocks[] = {{0, 5}, {5, 1}, {6, 1}, {7, 3}};
-    f.ops[0] = (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1};
-    f.ops[1] = (XrXirInstruction) {XR_XIR_ARRAY_NEW, (XrXirType) 256, {0}, {0}, 0};
-    f.ops[2] = (XrXirInstruction) {XR_XIR_CELL_NEW, (XrXirType) 257, {1}, {0}, 0};
-    f.ops[3] = (XrXirInstruction) {XR_XIR_CELL_PLACE, (XrXirType) 256, {2}, {0}, 0};
-    f.ops[4] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0}, {1, 2}, 0};
-    f.ops[5] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {3}, 0};
+    f.ops[0] = (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}};
+    f.ops[1] = (XrXirInstruction) {XR_XIR_ARRAY_NEW, (XrXirType) 256, {0}, {0}, 0, {0}};
+    f.ops[2] = (XrXirInstruction) {XR_XIR_CELL_NEW, (XrXirType) 257, {1}, {0}, 0, {0}};
+    f.ops[3] = (XrXirInstruction) {XR_XIR_CELL_PLACE, (XrXirType) 256, {2}, {0}, 0, {0}};
+    f.ops[4] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0}, {1, 2}, 0, {0}};
+    f.ops[5] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {3}, 0, {0}};
     f.ops[6] = f.ops[5];
-    f.ops[7] = (XrXirInstruction) {XR_XIR_PHI, (XrXirType) 256, {0, 4}, {0}, 0};
-    f.ops[8] = (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {7}, {0}, 0};
-    f.ops[9] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {8}, {0}, 0};
+    f.ops[7] = (XrXirInstruction) {XR_XIR_PHI, (XrXirType) 256, {0, 4}, {0}, 0, {0}};
+    f.ops[8] = (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {7}, {0}, 0, {0}};
+    f.ops[9] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {8}, {0}, 0, {0}};
     f.functions[1].blocks = blocks; f.functions[1].block_count = 4;
     f.functions[1].instruction_count = 10; f.functions[1].operand_count = 4;
     f.operands[0] = 1; f.operands[1] = 1; f.operands[2] = 2; f.operands[3] = 1;

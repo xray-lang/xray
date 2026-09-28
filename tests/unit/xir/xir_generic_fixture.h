@@ -19,13 +19,13 @@ static XrXirArtifact *generic_fixture(void) {
     const uint32_t operands[] = {0, 1, 3};
     const XrXirType types[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_STRING};
     const XrXirInstruction caller[] = {
-        {XR_XIR_CALL, XR_XIR_I64, {0, 1}, {0, 1}, 1},
-        {XR_XIR_CALL, XR_XIR_STRING, {1, 1}, {1, 1}, 1},
-        {XR_XIR_CALL, XR_XIR_STRING, {2, 1}, {2, 1}, 1},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {4}, {0}, 0}
+        {XR_XIR_CALL, XR_XIR_I64, {0, 1}, {0}, 1, {0, 1}},
+        {XR_XIR_CALL, XR_XIR_STRING, {1, 1}, {0}, 1, {1, 1}},
+        {XR_XIR_CALL, XR_XIR_STRING, {2, 1}, {0}, 1, {2, 1}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {4}, {0}, 0, {0}}
     };
-    const XrXirInstruction body[] = {{XR_XIR_COPY, t, {0}, {0}, 0},
-        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0}};
+    const XrXirInstruction body[] = {{XR_XIR_COPY, t, {0}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     const XrXirBlock blocks[] = {{0, 4}, {0, 2}};
     const XrXirFunction functions[] = {
         {"caller", 6, parameters, 2, XR_XIR_STRING, blocks, 1, caller, 4, operands, 3},

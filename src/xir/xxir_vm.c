@@ -31,7 +31,7 @@ typedef struct ScalarRun {
 } ScalarRun;
 
 typedef struct VmState {
-    uint32_t instruction, destination;
+    uint32_t instruction, destination, invoke;
     XrXirType expected;
     bool initialized, waiting;
     XrXirValue *arguments;
@@ -247,7 +247,7 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
     XrXirAction *action, uint32_t destination) {
     uint32_t callee = (uint32_t) op->immediate;
     XrXirValue value = {0};
-    if (op->op == XR_XIR_CALL_INDIRECT) {
+    if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
         value = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, callee), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
         XrXirCallStatus status = xr_xir_instance_resolve_function(run->view, &value, &callee);
@@ -261,6 +261,8 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
         state->arguments[i] = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
     }
+    state->invoke = op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT ?
+        (uint32_t) (op - run->function->instructions) + 1 : 0;
     state->waiting = true; state->destination = destination; state->expected = op->type;
     *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], value, {0}};
     return XR_XIR_RUN_OK;
@@ -450,7 +452,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         if (status != XR_XIR_RUN_OK) return status;
         break;
     }
-    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT:
+    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         state->instruction = next;
         return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);
     case XR_XIR_SUSPEND:
@@ -507,19 +509,31 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     }
     if (state->waiting) {
         state->waiting = false;
+        XrXirValue inbox = view->inbox.value;
+        if (state->invoke) {
+            const XrXirInstruction *op = &function->instructions[state->invoke - 1];
+            bool error = view->inbox.status == XR_XIR_CALL_THROWN;
+            if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+            uint32_t first = function->blocks[op->targets[error ? 1 : 0]].first;
+            state->expected = error ? XR_XIR_ERROR : op->type;
+            state->destination = state->expected == XR_XIR_UNIT ? UINT32_MAX : layout->offsets[function->parameter_count + first];
+            state->instruction = first + (state->expected != XR_XIR_UNIT);
+            state->invoke = 0;
+            if (error) inbox.type = XR_XIR_ERROR;
+        } else
         if (view->inbox.status == XR_XIR_CALL_THROWN)
-            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value, {0}};
-        if (view->inbox.status != XR_XIR_CALL_RETURNED)
+            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}};
+        if (view->inbox.status != XR_XIR_CALL_RETURNED && view->inbox.status != XR_XIR_CALL_THROWN)
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
         if (state->expected == XR_XIR_UNIT ?
-            (view->inbox.value.type != XR_XIR_UNIT || view->inbox.value.reserved || view->inbox.value.payload) :
-            !xr_xir_value_argument(&view->inbox.value, view->arena, state->expected))
+            (inbox.type != XR_XIR_UNIT || inbox.reserved || inbox.payload) :
+            !xr_xir_value_argument(&inbox, view->arena, state->expected))
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
         if (xr_xir_type_is_owned(module->types, state->expected)) {
-            if (xr_xir_owned_slot_copy(run.frame, state->destination, view->arena, state->expected, view->inbox.value.payload) != XR_XIR_VALUE_OK)
+            if (xr_xir_owned_slot_copy(run.frame, state->destination, view->arena, state->expected, inbox.payload) != XR_XIR_VALUE_OK)
                 return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}};
         } else if (state->destination != UINT32_MAX)
-            xr_xir_scalar_store(run.frame, state->destination, view->inbox.value.payload);
+            xr_xir_scalar_store(run.frame, state->destination, inbox.payload);
     }
     XrXirAction action;
     XrXirRunStatus status = scalar_step(&run, state, &action);
@@ -628,7 +642,8 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
         if (!xr_xir_value_argument(&arguments[i], NULL, body->parameters[i]))
             return XR_XIR_RUN_BAD_ARGUMENT;
     for (uint32_t i = 0; i < body->instruction_count; ++i)
-        if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_SUSPEND ||
+        if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_INVOKE ||
+            body->instructions[i].op == XR_XIR_INVOKE_INDIRECT || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
             xr_xir_type_is_owned(module->types, body->instructions[i].type) ||
             body->instructions[i].op == XR_XIR_OUTPUT || body->instructions[i].op == XR_XIR_PRINT ||
