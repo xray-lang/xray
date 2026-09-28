@@ -445,7 +445,7 @@ anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa188
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
 anchor-sha256: src/module/xmodule_graph.c df2a1ef9ff63dee28badae0307f1a1279f6e8b6697b296ec63275a10cde1ba4c
 anchor-sha256: src/frontend/parser/xparse.c 41cafa47c7fc4f15512b81db04cfadc6b450eec9ae5e587ff81fdbdac5c56f5c
-anchor-sha256: src/frontend/parser/xparse_decl.c 41f7992bcb8569f10e76c5b8e196bf7dc69adc88d09d563b41fab3d0a4de9428
+anchor-sha256: src/frontend/parser/xparse_decl.c 5e22d8149d5bdd64e31b3fb483ccba96c34368f377a1a36f85420ecfc2cc2912
 anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 4da1394baa34244c76f07d0f9a6bccf406d862ba38f5b20b9b78b02ce894564a
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 478569a51124a79fa5f36fe24085de9cb22188e26b35f33b178b55a15265be75
@@ -498,7 +498,7 @@ anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c b9ef88ecf75777f9146180fbca884a68b66bc7fceb6ac56b385e79914d943aca
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 762ef2902b6da5723b114de13a8fde6a23492a73c30cb977d04804e9edeef6f7
-anchor-sha256: tests/unit/frontend/test_parser.c d7e4e7455e597c1ce6494d781792048ade9f1bbc3bc1e77ce745d05da7084644
+anchor-sha256: tests/unit/frontend/test_parser.c d59202f1d72a984264d6e09acca39a063a4de7953e2ea76e1643610feb54b649
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 9b20238895b7fe12cdf0aba33d3b8df43bb48615879859a4438f5fb401a6ead8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 39c2cbedd4bc84650f6faa2e098f93ea67a2389bf74ba54909ed3fc5871d0736
@@ -585,3 +585,13 @@ admission tests in default and ASan builds; the prior rejected tail case is kept
 in enum-match-focused-a1 and the repair in enum-match-focused-a2.
 
 verification-test: test_parser_asi
+
+## Optional panic binding syntax
+
+The shared parser accepts `catch panic { ... }` and `catch panic (p) { ... }`.
+An omitted binding records a panic clause with no name, type annotation or
+pattern; it does not invent a variable or change the ordinary enum catch grammar.
+An explicit empty binding list or a panic enum pattern remains invalid. This
+repairs the existing source grammar, not the execution capability: source XIR
+try/catch and full panic objects still require implementation. Parser assertions
+cover both forms, coexistence with ordinary catch, and malformed headers.

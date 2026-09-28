@@ -2119,7 +2119,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
     while (xr_parser_check(parser, TK_CATCH)) {
         xr_parser_advance(parser);  // consume 'catch'
 
-        /* `catch panic (p)` — panic boundary (recoverable-fault channel).
+        /* `catch panic` optionally binds its panic value with `(p)`.
          * `panic` is a contextual keyword here, not a reserved word. */
         bool is_panic = false;
         if (parser->current.type == TK_NAME && parser->current.length == 5 &&
@@ -2133,11 +2133,6 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         int var_column = parser->current.column;
         XrTypeRef *type_ann = NULL;
         AstNode *pattern = NULL;
-
-        if (is_panic && !xr_parser_check(parser, TK_LPAREN)) {
-            xr_parser_consume(parser, TK_LPAREN, "expected '(' after catch panic");
-            return NULL;
-        }
 
         if (xr_parser_match(parser, TK_LPAREN)) {
             XrParserStreamState saved = xr_parser_stream_save(parser);
@@ -2176,7 +2171,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
                     type_ann = xr_tref_named(parser->compiler_session, head);
             }
             xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch header");
-        } else {
+        } else if (!is_panic) {
             pattern = xr_parse_unparenthesized_catch_pattern(parser);
             if (!pattern) {
                 xr_parser_error(parser, "expected catch pattern");

@@ -991,6 +991,34 @@ TEST(parser_enum_record_payload_surface) {
     teardown();
 }
 
+TEST(parser_panic_catch_optional_binding) {
+    setup();
+    AstNode *program = parse_ok("fn f() { try { return } catch (e) { return } catch panic { return } }\n"
+                                "fn g() { try { return } catch panic (p) { return } }\n");
+    ASSERT_EQ_INT(program->as.program.count, 2);
+    AstNode *first = program->as.program.statements[0]->as.function_decl.body->as.block.statements[0];
+    ASSERT_EQ_INT(first->type, AST_TRY_CATCH);
+    ASSERT_EQ_INT(first->as.try_catch.catch_count, 2);
+    XrCatchClause *ordinary = first->as.try_catch.catch_clauses[0];
+    XrCatchClause *unbound = first->as.try_catch.catch_clauses[1];
+    ASSERT_EQ_INT(ordinary->is_panic, false);
+    ASSERT_STR_EQ(ordinary->var_name, "e");
+    ASSERT_EQ_INT(unbound->is_panic, true);
+    ASSERT_NULL(unbound->var_name);
+    ASSERT_NULL(unbound->type);
+    ASSERT_NULL(unbound->pattern);
+    ASSERT_EQ_INT(unbound->body->type, AST_BLOCK);
+    AstNode *second = program->as.program.statements[1]->as.function_decl.body->as.block.statements[0];
+    XrCatchClause *bound = second->as.try_catch.catch_clauses[0];
+    ASSERT_EQ_INT(bound->is_panic, true);
+    ASSERT_STR_EQ(bound->var_name, "p");
+    ASSERT_NULL(bound->pattern);
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch panic () {}"));
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch panic Fault.Bad {}"));
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch {}"));
+    teardown();
+}
+
 TEST(parser_rejects_positional_enum_payload_surface) {
     setup();
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
@@ -1583,6 +1611,7 @@ int main(void) {
     RUN_TEST(parser_reexport_preserves_module_identity_kind);
     RUN_TEST(parser_enum_static_method);
     RUN_TEST(parser_enum_record_payload_surface);
+    RUN_TEST(parser_panic_catch_optional_binding);
     RUN_TEST(parser_rejects_positional_enum_payload_surface);
 
     // Calls
