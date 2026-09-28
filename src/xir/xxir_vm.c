@@ -341,6 +341,21 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return value_run_status(status);
     }
+    case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: {
+        XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        int64_t result = 0;
+        XrXirValueStatus status;
+        if (op->op == XR_XIR_STRING_LEN) status = xr_xir_string_length(&left, &result);
+        else {
+            XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+            bool equal = false;
+            status = xr_xir_string_equal(&left, &right, &equal) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
+            result = op->op == XR_XIR_EQ_STRING ? equal : !equal;
+        }
+        if (status == XR_XIR_VALUE_OK) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
+        state->instruction = next;
+        return value_run_status(status);
+    }
     case XR_XIR_OUTPUT:
     case XR_XIR_WRITE_STREAM:
     case XR_XIR_PRINT: {

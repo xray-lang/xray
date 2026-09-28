@@ -106,3 +106,32 @@ verification-test: test_xir_emit_strings
 verification-test: test_xir_emit_output
 verification-test: test_xir_output_vm
 verification-test: test_xir_output_native
+
+## String scalar queries
+
+Checked semantic contract 24 replaces 23 without a reader or compatibility path.
+STRING_LEN (78) returns i64 from one string value; EQ_STRING (79) and NE_STRING
+(80) return canonical bool from two string values. All stages admit them, with
+zero immediate, no successors and no operand-table range. Non-string operands,
+local/place operands without a value read, wrong result types and dirty unused
+fields reject during ordinary verification and packet reading.
+
+Length reads the existing strict UTF-8 scalar count in O(1), with embedded NUL
+counted and no normalization. Equality compares full lengths and bytes, not
+C-string termination, hashes or intern identity. Queries borrow existing owned
+values without allocating, retaining, mutating or releasing them. Operand
+evaluation remains left-to-right and may fail independently. Results contain no
+borrowed pointers and survive operand destruction. Length exceeding INT64_MAX
+fails with the ordinary resource limit; no narrowing wrap is allowed.
+
+Both backends use the same owned string primitives. Source len lookup keeps its
+core declaration identity and lexical shadowing; string comparisons require
+concrete string types at definition checking. Existing Array len behavior stays
+in the same intrinsic, with its governed read-place rules. No generic constraint
+is inferred from future instantiations. String methods, ordering, iterators,
+parsing and independently published stdlib definitions remain separate work.
+
+Evidence must cover empty/ASCII/multibyte/supplementary/combining/NUL content,
+distinct equal allocations, prefixes, mutation after snapshot, operand effects
+and suspension, dead producers, bad unused generic definitions, forged packets,
+VM/native independent expected outputs, cleanup and allocation-failure walks.

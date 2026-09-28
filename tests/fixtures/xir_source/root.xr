@@ -185,7 +185,7 @@ fn resumedNative(flag:bool)->string {
     return text
 }
 
-export fn resumeText(flag:bool)->string { return resumedNative(flag) }
+export fn resumeText(flag:bool)->string { const expected=flag ? "ry!" : "rn!"; if (expected != resumedNative(flag) || len(expected)!=3) { return "bad" }; return expected }
 
 export fn stackDepth(n:i64)->string {
     const held = "f" + "r"
@@ -495,3 +495,12 @@ const methodGenericStatic=alpha.MethodBox<i64>.choose<string>
 const methodGenericPrivate=methodGenericBox.bound<string>()
 methodGenericBox.value="changed"
 print(methodGenericBox.map<i64>(41),methodGenericBound("tail",fn(outer:string,item:string)->string {return outer+item}),methodGenericStatic(7,"static"),alpha.MethodBox<string>.choose<i64>("unused",23),methodGenericPrivate("private"))
+
+var stringQueryText="before"
+var stringQueryOrder=0
+fn stringQueryLeft()->string { stringQueryOrder=stringQueryOrder*10+1; return stringQueryText }
+fn stringQueryRight()->string { stringQueryOrder=stringQueryOrder*10+2; stringQueryText="after"; return "before" }
+fn stringQueryCount()->i64 { return stringQueryOrder }
+fn stringQueryLength()->i64 { return len(stringQueryText) }
+
+print(len(""),len(alpha.identity<string>("A中😀é")),""=="",("ab"+"cd")=="abcd","é"=="é","abc"!="ab",stringQueryLeft()==stringQueryRight(),stringQueryCount(),stringQueryLength())

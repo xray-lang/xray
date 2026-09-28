@@ -104,3 +104,12 @@ rejects missing storage or a changed digest. Artifact destruction releases the
 packet through the Checked packet owner, including every failed transition.
 This identity is not authentication or native descriptor correspondence; native
 admission must decode, reverify, lower and compare the descriptor before use.
+
+Semantic contract 24 admits STRING_LEN=78, EQ_STRING=79 and NE_STRING=80 under
+the managed-value string-query contract. Schema 8 and instruction record size
+are unchanged. Semantic 23 packets reject even when their digest is repaired.
+The independent scalar KAT uses a 121-byte payload and digest
+`4cadb7d850aa5cd130bc013f0f133f65368ce80430b1c057c69f34559e480b1a`.
+Rehashed string-query records must revalidate result/operand types, dominance,
+zero unused fields and immediate; scalar result types never permit treating
+string operands as integer payloads.

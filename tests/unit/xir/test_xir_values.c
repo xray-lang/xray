@@ -373,7 +373,36 @@ static void nominal_arena_ownership(void) {
 }
 
 #include "xir_struct_value_cases.h"
+static void string_queries(void) {
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    const char text[] = "a\0b\xF0\x9F\x98\x80";
+    XrXirValue a = {0}, b = {0}, prefix = {0}, empty = {0}, different = {0};
+    CHECK(xr_xir_string_new(domain, text, sizeof(text) - 1, &a) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, text, sizeof(text) - 1, &b) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, "a", 1, &prefix) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, NULL, 0, &empty) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain, "a\0c\xF0\x9F\x98\x80", 7, &different) == XR_XIR_VALUE_OK);
+    uint64_t before = xr_xir_domain_stats(domain).live_bytes;
+    bool equal = false; int64_t length = -1;
+    CHECK(xr_xir_string_equal(&a, &b, &equal) && equal);
+    CHECK(xr_xir_string_equal(&a, &prefix, &equal) && !equal);
+    CHECK(xr_xir_string_equal(&a, &different, &equal) && !equal);
+    CHECK(xr_xir_string_equal(&empty, &empty, &equal) && equal);
+    CHECK(xr_xir_string_length(&a, &length) == XR_XIR_VALUE_OK && length == 4);
+    CHECK(xr_xir_string_length(&empty, &length) == XR_XIR_VALUE_OK && !length);
+    XrXirValue invalid = {0}; length = 19; equal = true;
+    CHECK(xr_xir_string_length(&invalid, &length) == XR_XIR_VALUE_BAD_ARGUMENT && length == 19);
+    CHECK(!xr_xir_string_equal(&a, &invalid, &equal) && equal);
+    CHECK(!xr_xir_string_equal(&a, &b, NULL));
+    CHECK(xr_xir_domain_stats(domain).live_bytes == before);
+    xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&a);
+    CHECK(xr_xir_string_length(&b, &length) == XR_XIR_VALUE_OK && length == 4);
+    xr_xir_value_drop(&b); xr_xir_value_drop(&prefix); xr_xir_value_drop(&empty); xr_xir_value_drop(&different);
+}
 int main(void) {
+    string_queries();
     struct_value_cases();
     nominal_arena_ownership();
     nominal_arena_admission();

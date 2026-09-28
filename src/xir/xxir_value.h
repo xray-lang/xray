@@ -91,6 +91,8 @@ XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *byte
 XR_FUNC XrXirValueStatus xr_xir_string_append(XrXirValue *destination, const XrXirValue *suffix);
 XR_FUNC bool xr_xir_string_view(const XrXirValue *value, const char **bytes, size_t *length);
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count);
+XR_FUNC XrXirValueStatus xr_xir_string_length(const XrXirValue *value, int64_t *length);
+XR_FUNC bool xr_xir_string_equal(const XrXirValue *left, const XrXirValue *right, bool *equal);
 XR_FUNC void xr_xir_owned_slot_clear(void *frame, uint32_t offset);
 XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, const XrXirTypeArena *arena,
                                                 XrXirType type, int64_t payload);

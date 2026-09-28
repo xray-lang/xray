@@ -18,9 +18,10 @@ typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     SourceOutput *output = context;
     CHECK(stream == (output->calls == 6 ? XR_XIR_STDERR : XR_XIR_STDOUT));
-    CHECK(output->calls < 43);
+    CHECK(output->calls < 44);
     if (!output->calls) CHECK(length == 8 && !memcmp(bytes, "a\xE4\xB8\xAD 20\n", 8));
     else if (output->calls == 36) CHECK(length == 18 && !memcmp(bytes, "changed method 97\n", 18));
+    else if (output->calls == 43) CHECK(length == 35 && !memcmp(bytes, "0 5 true true false true true 12 5\n", 35));
     else if (output->calls == 42) CHECK(length == 31 && !memcmp(bytes, "41 outertail static 23 private\n", 31));
     else if (output->calls == 41) CHECK(length == 38 && !memcmp(bytes, "direct value generic 18 privatestatic\n", 38));
     else if (output->calls == 40) CHECK(length == 63 && !memcmp(bytes, "explicitdefault XY againdefault vdefault default generic 12222\n", 63));
@@ -68,6 +69,14 @@ static bool source_bytes(void *context, XrXirOutputStream stream, const char *by
 static bool source_output(void *context, const XrXirOutputGroup *group) {
     XrXirOutputSink *sink = context;
     SourceOutput *output = sink->context;
+    if (output->calls == 43) {
+        const int64_t expected[] = {0,5,1,1,0,1,1,12,5};
+        CHECK(group && group->count == 9 && group->line && group->stream == XR_XIR_STDOUT);
+        for (unsigned i = 0; i < 9; ++i) {
+            CHECK(group->values[i].type == (uint32_t) (i >= 2 && i <= 6 ? XR_XIR_BOOL : XR_XIR_I64));
+            CHECK(group->values[i].payload == expected[i]);
+        }
+    }
     if (output->calls == 36) {
         CHECK(group && group->count == 3 && group->line && group->stream == XR_XIR_STDOUT);
         const char *expected[] = {"changed", "method"};
@@ -271,7 +280,7 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
         CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
         if (mode > 2) {
-            CHECK(source_drive(instance, 8).status == XR_XIR_CALL_RETURNED && output.calls == 43);
+            CHECK(source_drive(instance, 8).status == XR_XIR_CALL_RETURNED && output.calls == 44);
             XrXirValue arg = {XR_XIR_BOOL, 0, 1};
             CHECK(xr_xir_instance_start(instance, resume_text, &arg, 1) == XR_XIR_CALL_READY);
         }
@@ -478,7 +487,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
             if (result.outcome.status != XR_XIR_CALL_RETURNED)
                 fprintf(stderr, "Source initialization status=%u outputs=%u\n", result.outcome.status, outputs[i].calls);
             CHECK(result.outcome.status == XR_XIR_CALL_RETURNED && result.outcome.value.type == XR_XIR_I64 && !result.outcome.value.payload);
-            CHECK(outputs[i].calls == 43 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
+            CHECK(outputs[i].calls == 44 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
         }
     }
     source_cancel_cases(program, entry, functions.resume_text);
@@ -498,7 +507,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
     for (int64_t expected = 15; expected < 17; ++expected) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.advance, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 43);
+        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 44);
     }
     XrXirValue bound[2] = {{0}, {0}}, bound_text[2] = {{0}, {0}};
     for (uint32_t i = 0; i < 2; ++i) {

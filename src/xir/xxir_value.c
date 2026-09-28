@@ -415,6 +415,20 @@ XR_FUNC bool xr_xir_string_view(const XrXirValue *value, const char **bytes, siz
     *length = string->length;
     return true;
 }
+XR_FUNC XrXirValueStatus xr_xir_string_length(const XrXirValue *value, int64_t *length) {
+    size_t count;
+    if (!length || !xr_xir_string_runes(value, &count)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (count > INT64_MAX) return XR_XIR_VALUE_LIMIT;
+    *length = (int64_t) count;
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC bool xr_xir_string_equal(const XrXirValue *left, const XrXirValue *right, bool *equal) {
+    if (!equal || !xr_xir_value_argument(left, NULL, XR_XIR_STRING) ||
+        !xr_xir_value_argument(right, NULL, XR_XIR_STRING)) return false;
+    const XirString *a = string_pointer(left), *b = string_pointer(right);
+    *equal = a == b || (a->length == b->length && (!a->length || !memcmp(a->bytes, b->bytes, a->length)));
+    return true;
+}
 XR_FUNC bool xr_xir_string_runes(const XrXirValue *value, size_t *count) {
     if (!count || !xr_xir_value_argument(value, NULL, XR_XIR_STRING)) return false;
     *count = string_pointer(value)->runes;

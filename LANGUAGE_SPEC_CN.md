@@ -6118,6 +6118,8 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
 | `toString()` | 返回自身 |
 
+`len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
+
 string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
 ### 14.6 `Array<u8>`

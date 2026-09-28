@@ -168,16 +168,16 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
     default: return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array member operation is not implemented");
     }
 }
-static bool source_array_length(SourceContext *ctx, AstNode *node,
+static bool source_length(SourceContext *ctx, AstNode *node,
     const XrCoreIntrinsicDesc *descriptor, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (!descriptor || descriptor->id != XR_CORE_BUILTIN_LEN || !xr_core_intrinsic_descriptor_validate(descriptor) ||
         call->arg_count != 1 || call->type_arg_count || call->default_arg_count ||
         (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len requires one ordinary Array operand");
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len requires one ordinary value operand");
     SourceValue array;
     if (!source_array_receiver(ctx, call->arguments[0], NULL, false, &array)) return false;
-    if (!xr_xir_type_is_array(&ctx->types, array.type))
+    if (array.type != XR_XIR_STRING && !xr_xir_type_is_array(&ctx->types, array.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len receiver family is not admitted");
     if (!ctx->length_declaration) {
         XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
@@ -198,7 +198,7 @@ static bool source_array_length(SourceContext *ctx, AstNode *node,
         record->type = (XrXirSourceType) {XR_XIR_I64, 0, true};
         record->parameters = parameter; record->parameter_count = 1;
     }
-    return emit(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0}, value) &&
+    return emit(ctx, (XrXirInstruction) {array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0}, value) &&
         source_query_target_reference(ctx, source_query_range(ctx, call->callee, NULL),
             ctx->length_declaration, XR_XIR_SOURCE_CALL);
 }

@@ -639,7 +639,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         if (!target) {
             const XrCoreIntrinsicDesc *intrinsic = xr_core_intrinsic_by_source_name(name, strlen(name));
             if (intrinsic && intrinsic->id == XR_CORE_BUILTIN_LEN)
-                return source_array_length(ctx, node, intrinsic, value);
+                return source_length(ctx, node, intrinsic, value);
             print = !strcmp(name, "print"); atomic = !strcmp(name, "Atomic"); stream = stream_primitive(ctx, name);
         }
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
@@ -840,6 +840,10 @@ static bool source_binary(SourceContext *ctx, AstNode *node, AstNodeType operati
                           SourceValue left, SourceValue right, SourceValue *value) {
     if (operation == AST_BINARY_ADD && left.type == XR_XIR_STRING && right.type == XR_XIR_STRING)
         return emit(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {left.id, right.id}, {0}, 0}, value);
+    if (left.type == XR_XIR_STRING && right.type == XR_XIR_STRING &&
+        (operation == AST_BINARY_EQ || operation == AST_BINARY_NE))
+        return emit(ctx, (XrXirInstruction) {operation == AST_BINARY_EQ ? XR_XIR_EQ_STRING : XR_XIR_NE_STRING,
+            XR_XIR_BOOL, {left.id, right.id}, {0}, 0}, value);
     if (xr_xir_float_bits(left.type) && xr_xir_float_bits(right.type))
         return source_float_binary(ctx, node, operation, left, right, value);
     if (!xr_xir_type_is_integer(left.type) || !xr_xir_type_is_integer(right.type))

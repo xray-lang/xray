@@ -117,6 +117,12 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "fn bad<T>(value:T)->i64{return len(value)}\n",
+    "fn bad<T>(value:T)->bool{return value==\"x\"}\n",
+    "print(\"x\"==1)\n",
+    "print(len(1))\n",
+    "print(len<string>(\"x\"))\n",
+
     "struct C<T>{static f<T>(value:T)->T{return value}}\n",
     "struct C{static f<T,T>(value:T)->T{return value}}\n",
     "struct C<T>{static f<U>(value:T)->U{return value}}\n",
@@ -191,7 +197,6 @@ static const char *const rejected[] = {
     "var values=[1]\nvalues.get()\n",
     "var values=[1]\nvalues.set(0)\n",
     "var values=[1]\nvalues[0]=\"wrong\"\n",
-    "const bad=len(\"unadmitted family\")\n",
     "const len=7\nlen([1])\n",
     "fn made()->Array<i64> { return [1] }\nmade().push(2)\n",
     "fn made()->Array<i64> { return [1] }\nmade()[0]=2\n",
