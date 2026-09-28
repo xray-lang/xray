@@ -16,6 +16,9 @@
 #include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/base/xarena.h"
+#include "../../../src/frontend/parser/xast_api.h"
+#include "../../../src/frontend/parser/xast_walk.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 
 /* ========== Name Mangling Tests ========== */
@@ -378,10 +381,45 @@ TEST(ast_clone_literal_int) {
     free(clone);
 }
 
+TEST(ast_owned_string_length) {
+    for (unsigned pooled = 0; pooled < 2; ++pooled) {
+        XrCompilerSession *session = xr_compiler_session_new(NULL);
+        ASSERT_NOT_NULL(session);
+        XrArena arena; xr_arena_init(&arena, 4096);
+        XrCompilerSessionScope scope;
+        ASSERT_TRUE(xr_compiler_session_push_arena(session, &arena, NULL, &scope));
+        if (!pooled) xr_compiler_session_set_string_pool(session, NULL);
+        char text[] = {'a',0,'b'};
+        AstNode *node = xr_ast_literal_string(session,text,sizeof(text),XR_LITERAL_ESCAPED,XR_LITERAL_INLINE,1);
+        AstNode *same = xr_ast_literal_string(session,text,sizeof(text),XR_LITERAL_ESCAPED,XR_LITERAL_INLINE,1);
+        text[2]='c';
+        AstNode *different = xr_ast_literal_string(session,text,sizeof(text),XR_LITERAL_ESCAPED,XR_LITERAL_INLINE,1);
+        memset(text,'X',sizeof(text));
+        ASSERT_EQ(node->as.literal.string_length,3);
+        ASSERT_TRUE(!memcmp(node->as.literal.raw_value.string_val,"a\0b",3));
+        ASSERT_TRUE(node->as.literal.raw_value.string_val[3]==0);
+        if (pooled) ASSERT_TRUE(node->as.literal.raw_value.string_val==same->as.literal.raw_value.string_val);
+        ASSERT_TRUE(node->as.literal.raw_value.string_val!=different->as.literal.raw_value.string_val);
+        char first[256],second[256],third[256];
+        ASSERT_TRUE(xr_ast_node_signature(node,first,sizeof(first)));
+        ASSERT_TRUE(xr_ast_node_signature(same,second,sizeof(second)));
+        ASSERT_TRUE(xr_ast_node_signature(different,third,sizeof(third)));
+        ASSERT_STR_EQ(first,second); ASSERT_TRUE(strcmp(first,third)!=0);
+        AstNode *clone=xr_ast_clone(node,NULL,0); ASSERT_NOT_NULL(clone);
+        ASSERT_TRUE(clone->as.literal.raw_value.string_val!=node->as.literal.raw_value.string_val);
+        xr_compiler_session_pop_arena(&scope); xr_arena_destroy(&arena); xr_compiler_session_delete(session);
+        ASSERT_EQ(clone->as.literal.string_length,3);
+        ASSERT_TRUE(!memcmp(clone->as.literal.raw_value.string_val,"a\0b",3));
+        ASSERT_TRUE(xr_ast_node_signature(clone,second,sizeof(second))); ASSERT_STR_EQ(first,second);
+        xr_free((void *)clone->as.literal.raw_value.string_val); xr_free(clone);
+    }
+}
+
 TEST(ast_clone_literal_string) {
     AstNode node = {.type = AST_LITERAL_STRING, .line = 1};
     node.as.literal.kind = LITERAL_KIND_STRING;
     node.as.literal.raw_value.string_val = "hello";
+    node.as.literal.string_length = 5;
 
     AstNode *clone = xr_ast_clone(&node, NULL, 0);
     ASSERT(clone != NULL);
@@ -496,7 +534,10 @@ TEST(ast_clone_named_enum_record_nodes) {
     ASSERT(pattern_clone->as.pattern_adt.patterns != patterns);
     ASSERT(pattern_clone->as.pattern_adt.patterns[0] != &wildcard);
 
-    AstNode method = {.type = AST_METHOD_DECL, .line = 3};
+    AstNode method;
+    memset(&method, 0, sizeof(method));
+    method.type = AST_METHOD_DECL;
+    method.line = 3;
     method.as.method_decl.name = "inspect";
     method.as.method_decl.receiver_mode = XR_PARAM_MOVE;
     method.as.method_decl.is_override = true;
@@ -811,6 +852,7 @@ int main(void) {
     RUN_TEST(ast_clone_literal_int);
     RUN_TEST(ast_clone_decimal_spelling);
     RUN_TEST(ast_clone_literal_string);
+    RUN_TEST(ast_owned_string_length);
     RUN_TEST(ast_clone_binary);
     RUN_TEST(ast_clone_variable);
     RUN_TEST(ast_clone_with_type_substitution);

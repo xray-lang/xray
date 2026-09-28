@@ -431,11 +431,28 @@ TEST(decimal_spelling_round_trip) {
     free(out);
 }
 
+TEST(formatter_preserves_binary_ast_payload) {
+    AstNode literal={0}; literal.type=AST_LITERAL_STRING;
+    literal.as.literal.kind=LITERAL_KIND_STRING;
+    literal.as.literal.raw_value.string_val="a\0b";
+    literal.as.literal.string_length=3;
+    literal.as.literal.escape_mode=XR_LITERAL_ESCAPED;
+    literal.as.literal.source_form=XR_LITERAL_INLINE;
+    AstNode statement = {0};
+    statement.type = AST_EXPR_STMT;
+    statement.as.expr_stmt = &literal;
+    char *formatted=xfmt_format_ast(&statement,NULL,g_iso);
+    ASSERT_NOT_NULL(formatted);
+    ASSERT_STR_EQ(formatted,"\"a\\0b\"\n");
+    free(formatted);
+}
+
 TEST_MAIN_BEGIN()
 setup();
 RUN_TEST_SUITE("string / template round-trip");
 RUN_TEST(regular_string_round_trip_basic);
 RUN_TEST(decimal_spelling_round_trip);
+RUN_TEST(formatter_preserves_binary_ast_payload);
 RUN_TEST(raw_string_form_is_preserved);
 RUN_TEST(template_string_round_trip);
 RUN_TEST(idempotence_after_two_passes);

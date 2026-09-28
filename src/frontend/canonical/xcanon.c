@@ -1093,10 +1093,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             const char *pattern = node->as.literal.raw_value.regex.pattern;
             const char *flags = node->as.literal.raw_value.regex.flags;
             AstNode *pattern_arg = xr_ast_literal_string(
-                ctx->session, pattern ? pattern : "", XR_LITERAL_ESCAPED,
+                ctx->session, pattern ? pattern : "", pattern ? strlen(pattern) : 0, XR_LITERAL_ESCAPED,
                 XR_LITERAL_INLINE, node->line);
             AstNode *flags_arg = xr_ast_literal_string(
-                ctx->session, flags ? flags : "", XR_LITERAL_ESCAPED,
+                ctx->session, flags ? flags : "", flags ? strlen(flags) : 0, XR_LITERAL_ESCAPED,
                 XR_LITERAL_INLINE, node->line);
             AstNode **arguments = (AstNode **) ast_alloc_array(
                 ctx->session, sizeof(AstNode *), 2);

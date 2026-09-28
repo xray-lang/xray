@@ -10,6 +10,11 @@ and Xglobal callsite to one exact generated-stdlib suspension row before
 emitting the typed Program request. This contract
 continues to govern the old product path only until that path is deleted.
 
+The shared parser records explicit decoded byte lengths for string literals,
+including object keys. Object keys still reject embedded NUL and invalid UTF-8
+before construction. The parser anchor below tracks this constructor contract;
+it does not authorize source NUL admission or restore PSC execution authority.
+
 PSC v10 removes the source-module scalar private-leaf execution family. No
 publisher, Xi binding, semantic classifier, TargetPlan projection, or runtime
 selector may reconstruct it. Canonical Program provider requirements own the
@@ -432,7 +437,7 @@ anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa188
 anchor-sha256: src/module/xmodule_graph.h 6e7df5201a75894aaed694bb0a9f9d93ff8f0a708b4caea038dd837f8434117d
 anchor-sha256: src/module/xmodule_graph.c df2a1ef9ff63dee28badae0307f1a1279f6e8b6697b296ec63275a10cde1ba4c
 anchor-sha256: src/frontend/parser/xparse.c dedcf2cb95e3e1f3b3d8b154de91ab4aa829c4910a7d6d352fc6590838144e7d
-anchor-sha256: src/frontend/parser/xparse_decl.c 1be2af95757660387952659a614f0f1b9bbdad25630932a16a4e24fbe8c573a8
+anchor-sha256: src/frontend/parser/xparse_decl.c 41f7992bcb8569f10e76c5b8e196bf7dc69adc88d09d563b41fab3d0a4de9428
 anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 4da1394baa34244c76f07d0f9a6bccf406d862ba38f5b20b9b78b02ce894564a
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 478569a51124a79fa5f36fe24085de9cb22188e26b35f33b178b55a15265be75

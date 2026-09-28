@@ -438,6 +438,15 @@ XrTypeRef *xr_mono_type_substitute_in_analyzer(XaAnalyzer *analyzer, XrTypeRef *
 
 /* ========== AST Clone ========== */
 
+static char *clone_string_payload(const LiteralNode *literal) {
+    size_t length = literal->string_length;
+    if (!literal->raw_value.string_val || length == SIZE_MAX) return NULL;
+    char *copy = xr_malloc(length + 1);
+    if (!copy) return NULL;
+    if (length) memcpy(copy, literal->raw_value.string_val, length);
+    copy[length] = '\0';
+    return copy;
+}
 static char *clone_str(const char *s) {
     return s ? xr_strdup(s) : NULL;
 }
@@ -655,7 +664,11 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             break;
         case AST_LITERAL_STRING:
             n->as.literal = node->as.literal;
-            n->as.literal.raw_value.string_val = clone_str(node->as.literal.raw_value.string_val);
+            n->as.literal.raw_value.string_val = clone_string_payload(&node->as.literal);
+            if (!n->as.literal.raw_value.string_val) {
+                if (clone_ctx) clone_ctx->type_substitution_failed = true;
+                xr_free(n); return NULL;
+            }
             break;
         case AST_FIXED_BYTES_LITERAL:
             n->as.fixed_bytes_literal = node->as.fixed_bytes_literal;

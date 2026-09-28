@@ -313,6 +313,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
+- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。结构对象字段名和 C literal 仍遵守各自的无 NUL 限制。
 - `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
 - `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
 - 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
@@ -795,6 +796,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
+- Decoded string payloads carry explicit byte lengths in the AST and subsequent value boundaries. A storage terminator is not a content boundary; copying, equality, signatures and formatting must not truncate at embedded NUL. Structural field names and C literals retain their separate no-NUL restrictions.
 - `b/br` produces `[u8; L]`; `c/cr` produces `[u8; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
 - `${...}` interpolates only in the no-prefix / `r` family. It is always ordinary payload bytes in `b/br/c/cr`.
 - The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.

@@ -229,7 +229,7 @@ void xfmt_emit_string_literal(XrFmtContext *ctx, AstNode *node) {
     LiteralNode *literal = &node->as.literal;
     const char *value = literal->raw_value.string_val;
     const char *prefix = literal->escape_mode == XR_LITERAL_RAW ? "r" : "";
-    emit_quoted_payload(ctx, prefix, (const uint8_t *) value, value ? strlen(value) : 0,
+    emit_quoted_payload(ctx, prefix, (const uint8_t *) value, value ? literal->string_length : 0,
                         literal->escape_mode, literal->source_form, false, false);
 }
 
@@ -254,7 +254,7 @@ static int template_quote_count(const TemplateStringNode *tmpl) {
             if (part && part->type == AST_LITERAL_STRING) {
                 const char *value = part->as.literal.raw_value.string_val;
                 if (value &&
-                    quote_line_collision((const uint8_t *) value, strlen(value), quote_count)) {
+                    quote_line_collision((const uint8_t *) value, part->as.literal.string_length, quote_count)) {
                     collision = true;
                     quote_count++;
                     break;
@@ -278,7 +278,7 @@ static void emit_template_parts(XrFmtContext *ctx, TemplateStringNode *tmpl, boo
             lit_indent(ctx);
         if (part->type == AST_LITERAL_STRING && part->as.literal.is_template_chunk) {
             const char *value = part->as.literal.raw_value.string_val;
-            emit_payload(ctx, (const uint8_t *) value, value ? strlen(value) : 0, tmpl->escape_mode,
+            emit_payload(ctx, (const uint8_t *) value, value ? part->as.literal.string_length : 0, tmpl->escape_mode,
                          block, false, true);
         } else {
             lit_str(ctx, "${");

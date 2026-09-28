@@ -418,6 +418,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
+- Decoded string payloads carry explicit byte lengths in the AST and subsequent value boundaries. A storage terminator is not a content boundary; copying, equality, signatures and formatting must not truncate at embedded NUL. Structural field names and C literals retain their separate no-NUL restrictions.
 - `b/br` produces `[u8; L]`; `c/cr` produces `[u8; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
 - `${...}` interpolates only in the no-prefix / `r` family. It is always ordinary payload bytes in `b/br/c/cr`.
 - The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.

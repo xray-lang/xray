@@ -770,7 +770,7 @@ static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value
             ctx->literals = literals; ctx->literal_capacity = capacity;
         }
         const char *bytes = node->as.literal.raw_value.string_val;
-        size_t length = strlen(bytes);
+        size_t length = node->as.literal.string_length;
         if (length > UINT32_MAX) return source_fail(ctx, node, XR_XIR_BUDGET, "string literal exceeds format limit");
         uint32_t id = ctx->literal_count++;
         ctx->literals[id] = (XrXirLiteral) {bytes, (uint32_t) length};

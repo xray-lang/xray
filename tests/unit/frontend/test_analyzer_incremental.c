@@ -50,6 +50,7 @@
 #include "frontend/analyzer/xanalyzer_symbol.h"
 #include "frontend/analyzer/xanalyzer_incremental.h"
 #include "base/xmalloc.h"
+#include "frontend/parser/xast_nodes.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
 
@@ -294,6 +295,18 @@ TEST(dead_API_is_actually_dead) {
 /* Driver                                                                  */
 /* ====================================================================== */
 
+TEST(string_hash_includes_full_payload) {
+    AstNode first={0},second={0}; first.type=second.type=AST_LITERAL_STRING;
+    first.as.literal.raw_value.string_val="a\0b"; second.as.literal.raw_value.string_val="a\0c";
+    first.as.literal.string_length=second.as.literal.string_length=3;
+    uint64_t original=xa_hash_ast_block(&first);
+    ASSERT_TRUE(original!=xa_hash_ast_block(&second));
+    second.as.literal.raw_value.string_val=first.as.literal.raw_value.string_val;
+    ASSERT_TRUE(original==xa_hash_ast_block(&second));
+    second.as.literal.string_length=1;
+    ASSERT_TRUE(original!=xa_hash_ast_block(&second));
+}
+
 TEST_MAIN_BEGIN()
 setup();
 RUN_TEST_SUITE("incremental analysis closed loop");
@@ -304,5 +317,6 @@ RUN_TEST(get_dirty_files_returns_marked_files);
 RUN_TEST(mark_file_dirty_propagation);
 RUN_TEST(api_is_null_safe);
 RUN_TEST(dead_API_is_actually_dead);
+RUN_TEST(string_hash_includes_full_payload);
 teardown();
 TEST_MAIN_END()

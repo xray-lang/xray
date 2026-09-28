@@ -56,6 +56,8 @@ typedef struct LiteralNode {
     LiteralKind kind;
     XrLiteralEscapeMode escape_mode;
     XrLiteralSourceForm source_form;
+    /* Exact decoded byte count; the storage terminator is not payload. */
+    size_t string_length;
     /* Integer literals keep their original 64-bit bit pattern so uint64
      * contexts can distinguish 0xffff_ffff_ffff_ffff from a parse-time
      * signed overflow. raw_value.int_val remains the signed view used by

@@ -1163,7 +1163,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             char *key_str = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
             memcpy(key_str, payload.bytes, payload.length);
             key_str[payload.length] = '\0';
-            key = xr_ast_literal_string(parser->compiler_session, key_str, key_token.escape_mode,
+            key = xr_ast_literal_string(parser->compiler_session, key_str, payload.length, key_token.escape_mode,
                                         key_token.source_form, line);
             xr_quoted_payload_free(&payload);
         }
@@ -1193,7 +1193,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                 (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length + 1);
             memcpy(key_str, key_token.start, key_token.length);
             key_str[key_token.length] = '\0';
-            key = xr_ast_literal_string(parser->compiler_session, key_str, XR_LITERAL_ESCAPED,
+            key = xr_ast_literal_string(parser->compiler_session, key_str, (size_t) key_token.length, XR_LITERAL_ESCAPED,
                                         XR_LITERAL_INLINE, line);
             if (key_token.type == TK_NAME)
                 shorthand_name = key_str;

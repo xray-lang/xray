@@ -374,7 +374,7 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
             return xr_float(node->as.literal.raw_value.float_val);
         case AST_LITERAL_STRING: {
             const char *s = node->as.literal.raw_value.string_val;
-            XrString *str = xr_string_intern(ctx->isolate, s, strlen(s), 0);
+            XrString *str = xr_string_intern(ctx->isolate, s, node->as.literal.string_length, 0);
             return xr_string_value(str);
         }
         case AST_LITERAL_TRUE:

@@ -253,3 +253,25 @@ source-query lifetime and budget behavior, Checked packet revalidation,
 independent VM/native results and physical failure release. Constructor-owned
 generics, witnesses, inference and other unimplemented declaration families
 remain separate obligations, not implicit consequences of method admission.
+
+## Length-delimited AST string ownership
+
+Every string LiteralNode records its exact decoded byte length independently
+of the trailing storage terminator. Its single construction API receives that
+length and owns all bytes, including interior zero bytes. String-pool identity,
+cloning, structural signatures and incremental hashes must use the complete
+length and contents; equal prefixes terminated by zero cannot hide different
+suffixes. Formatter and source-to-XIR literal publication consume the same length.
+Names and structural field keys retain their own no-NUL validation.
+
+The AST representation change does not itself admit NUL source syntax. Parser
+admission must stay closed until value-producing consumers and name-validation
+boundaries have been audited and migrated. A C-string-only CTFE producer must
+record its known byte count and cannot claim arbitrary binary-safe strings.
+No missing length is inferred with strlen as a compatibility fallback.
+
+Required evidence covers owned binary payloads after producer destruction,
+separately allocated clones, same-length differing suffixes in signatures and
+hashes, formatter preservation, ordinary parser callers, query/source ownership
+and allocation failure. Full source NUL and old-consumer deletion remain open
+until their respective executable tests and consumer inventory prove completion.

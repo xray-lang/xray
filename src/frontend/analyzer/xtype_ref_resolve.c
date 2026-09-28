@@ -1099,6 +1099,7 @@ bool xa_consteval_fold_node(AstNode *node, const XrCtValue *value) {
             node->type = AST_LITERAL_STRING;
             node->as.literal.kind = LITERAL_KIND_STRING;
             node->as.literal.raw_value.string_val = value->as.string_val;
+            node->as.literal.string_length = value->as.string_val ? strlen(value->as.string_val) : 0;
             break;
         case XR_CT_CHAR:
             node->type = AST_LITERAL_RUNE;

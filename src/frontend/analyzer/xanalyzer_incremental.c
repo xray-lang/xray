@@ -97,7 +97,8 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
             hash = hash_int_into(fbits, hash);
         } break;
         case AST_LITERAL_STRING:
-            hash = hash_string_into(node->as.literal.raw_value.string_val, hash);
+            hash = hash_bytes_into((const uint8_t *) node->as.literal.raw_value.string_val,
+                                   node->as.literal.string_length, hash);
             hash = hash_int_into(node->as.literal.escape_mode, hash);
             hash = hash_int_into(node->as.literal.source_form, hash);
             break;

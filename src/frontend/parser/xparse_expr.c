@@ -368,7 +368,7 @@ AstNode *xr_parse_literal(Parser *parser) {
                 return NULL;
             }
             AstNode *node = xr_ast_literal_string(
-                parser->compiler_session, (const char *) payload.bytes,
+                parser->compiler_session, (const char *) payload.bytes, payload.length,
                 parser->previous.escape_mode, parser->previous.source_form, parser->previous.line);
             node->column = column;
             xr_quoted_payload_free(&payload);
@@ -622,7 +622,7 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
         }
     }
     buf[out_len] = '\0';
-    AstNode *node = xr_ast_literal_string(parser->compiler_session, buf,
+    AstNode *node = xr_ast_literal_string(parser->compiler_session, buf, out_len,
                                           is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, source_form,
                                           parser->previous.line);
     xr_free(buf);
@@ -859,7 +859,7 @@ AstNode *xr_parse_template_string(Parser *parser) {
 
     if (part_count == 0) {
         xr_quoted_payload_free(&payload);
-        return xr_ast_literal_string(parser->compiler_session, "",
+        return xr_ast_literal_string(parser->compiler_session, "", 0,
                                      is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, source_form,
                                      parser->previous.line);
     }

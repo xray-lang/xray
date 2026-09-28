@@ -627,7 +627,10 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_name(s, "big", n->as.literal.raw_value.bigint_val);
             return true;
         case AST_LITERAL_STRING:
-            sig_name(s, "str", n->as.literal.raw_value.string_val);
+            sig_add(s, " str[%zu]=", n->as.literal.string_length);
+            if (!n->as.literal.raw_value.string_val) sig_add(s, "<null>");
+            else for (size_t i = 0; i < n->as.literal.string_length && !s->overflow; ++i)
+                sig_add(s, "%02x", (unsigned) (unsigned char) n->as.literal.raw_value.string_val[i]);
             sig_add(s, " esc=%u form=%u chunk=%d", (unsigned) n->as.literal.escape_mode,
                     (unsigned) n->as.literal.source_form, n->as.literal.is_template_chunk ? 1 : 0);
             return true;

@@ -112,14 +112,24 @@ AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, in
 }
 
 // Create string literal node
-AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value,
+AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, size_t length,
                                XrLiteralEscapeMode escape_mode, XrLiteralSourceForm source_form,
                                int line) {
     AstNode *node = alloc_node(session, AST_LITERAL_STRING, line);
     node->as.literal.kind = LITERAL_KIND_STRING;
     node->as.literal.escape_mode = escape_mode;
     node->as.literal.source_form = source_form;
-    node->as.literal.raw_value.string_val = ast_strdup(session, value);
+    XR_CHECK(length != SIZE_MAX && (value || !length), "invalid string literal payload");
+    node->as.literal.string_length = length;
+    XrCompileStringPool *pool = xr_compiler_session_string_pool(session);
+    if (pool) node->as.literal.raw_value.string_val = xr_string_pool_intern_len(pool, value ? value : "", length);
+    else {
+        char *copy = ast_alloc(session, length + 1);
+        if (length) memcpy(copy, value, length);
+        copy[length] = '\0';
+        node->as.literal.raw_value.string_val = copy;
+    }
+    XR_CHECK(node->as.literal.raw_value.string_val, "string literal allocation failed");
     return node;
 }
 
@@ -1762,7 +1772,10 @@ void xr_ast_print(AstNode *node, int indent) {
             printf("(%g)", node->as.literal.raw_value.float_val);  // Print raw value
             break;
         case AST_LITERAL_STRING:
-            printf("(\"%s\")", node->as.literal.raw_value.string_val);  // Print C string
+            printf("(\"");
+            if (node->as.literal.raw_value.string_val)
+                fwrite(node->as.literal.raw_value.string_val, 1, node->as.literal.string_length, stdout);
+            printf("\")");
             break;
         case AST_FIXED_BYTES_LITERAL:
             printf("(%zu bytes%s)", node->as.fixed_bytes_literal.payload_length,
