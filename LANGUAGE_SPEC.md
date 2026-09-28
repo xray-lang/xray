@@ -4425,6 +4425,8 @@ try {
 
 The built-in `Error` is an owned value type containing only enums. Converting an enum to Error preserves its concrete nominal identity, generic arguments, active variant, and payload; copying, storing, returning, and rethrowing obey the same value-ownership rules. Error grants no arbitrary field, construction, or visibility authority and does not implicitly prove `Sendable`. Accessing a concrete variant payload requires authorized type narrowing. Ordinary generic conversion is checked against constraints at definition and rechecked after specialization; a concrete enum at a call site cannot supply a missing definition-time proof.
 
+Catch bindings are visible only in their handler, and both the binding and its value-semantic portion are read-only. Create a local logical copy with `var local = e` when rebinding is needed. Every handler undergoes complete static checking even when the try body has no error predecessor: invalid names, types, generic constraints, visibility, initialization, and read-only writes must still be rejected. An unexecutable constructor handler is checked from the initialization state at try entry; writes inside it cannot establish initialization in the normal successor. Branches and loops within the handler follow the ordinary must/may initialization rules. Handler returns still participate in the enclosing function's return-type inference.
+
 `catch` may also use an enum variant pattern directly. A unit variant is written as
 `catch NetErr.Timeout { ... }`, where the only brace group is the catch body. A payload variant is
 written as `catch DbErr.QueryFailed { query } { ... }`: the first braces are the named pattern and

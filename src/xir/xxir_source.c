@@ -10,6 +10,7 @@
  *   Source names are resolved before lowering and never rediscovered at runtime.
  */
 #include "xxir_source.h"
+#include "xxir_initialization.h"
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
@@ -38,6 +39,7 @@ typedef struct SourceName {
     bool mutable, construction;
     uint32_t declaration;
 } SourceName;
+typedef struct SourceErrorContext SourceErrorContext;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
     XrGenericParam **type_parameters;
@@ -53,10 +55,19 @@ typedef struct SourceFunction {
     uint32_t declaration, generic_owner;
     uint32_t *constructor_places, *argument_defaults;
     AstNode *default_expression;
+    SourceErrorContext *error_context;
+    XrXirInitializationRegion *initialization_regions, *initialization_parent;
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
 typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; } SourceLoop;
 typedef struct SourceValue { uint32_t id; XrXirType type; } SourceValue;
+typedef struct SourceErrorEdge {
+    struct SourceErrorEdge *next;
+    uint32_t block, jump;
+    SourceValue value;
+} SourceErrorEdge;
+struct SourceErrorContext { SourceErrorEdge *edges; uint32_t count; };
+
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrXirBudget budget;
@@ -436,7 +447,7 @@ static bool begin_block(SourceContext *ctx) {
     body->blocks[body->block_count++] = (XrXirBlock) {body->count, 0};
     --ctx->budget.blocks; ctx->returned = false; return true;
 }
-static bool emit(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
+static bool emit_raw(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count) {
         bool terminated = ctx->returned;
@@ -456,6 +467,7 @@ static bool emit(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     body->ops[body->count++] = op; ++body->blocks[body->block_count - 1].count; --ctx->budget.instructions;
     return true;
 }
+#include "xxir_source_invoke.inc.c"
 static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool expression_in(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value);
 static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
@@ -1327,10 +1339,12 @@ static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
     ctx->returned = true;
     return emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0, {0}}, NULL);
 }
+#include "xxir_source_catch.inc.c"
 static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     if (!node || !source_work(ctx, node)) return false;
     if (ctx->returned) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unreachable statements are not admitted");
     switch (node->type) {
+    case AST_TRY_CATCH: return source_try(ctx, node);
     case AST_IF_STMT: return source_if(ctx, node);
     case AST_WHILE_STMT:
         if (node->as.while_stmt.label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "labelled loops are not admitted");
@@ -1358,6 +1372,10 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
             generic->constraints, generic->parameter_count, &ctx->budget.work);
         if (status != XR_XIR_OK)
             return source_fail(ctx, node, status, "throw requires a proved enum error value");
+        if (ctx->bodies[ctx->function].error_context) {
+            if (!source_expect(ctx,node,XR_XIR_ERROR,&value) || !source_error_edge(ctx,value)) return false;
+            ctx->returned = true; return true;
+        }
         ctx->returned = true;
         return emit(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {value.id, 0}, {0, 0}, 0, {0}}, NULL);
     }
@@ -1675,6 +1693,17 @@ static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
         }
         scan->bound=saved; return true;
     }
+    case AST_TRY_CATCH: {
+        TryCatchNode *attempt = &node->as.try_catch;
+        if (!capture_scope(scan,attempt->try_body)) return false;
+        for (int i = 0; i < attempt->catch_count; ++i) {
+            XrCatchClause *clause = attempt->catch_clauses[i]; SourceName *saved = scan->bound;
+            if (clause->var_name && !capture_bind(scan,clause->var_name,node)) return false;
+            if (!capture_scope(scan,clause->body)) return false;
+            scan->bound = saved;
+        }
+        return true;
+    }
     case AST_THIS_EXPR: return capture_name(scan, "this", node);
     case AST_VARIABLE: return capture_name(scan, node->as.variable.name, node);
     case AST_INC: return capture_name(scan, node->as.inc.name, node);
@@ -1937,7 +1966,14 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
         XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, ctx.types.count || ctx.types.nominals ? &ctx.types : NULL, NULL};
         XrXirDiagnostic location = {0};
         XrXirStatus status = xr_xir_check(&built, &checking, &output->checked, &location);
+        for (uint32_t f=0;status==XR_XIR_OK && f<ctx.function_count;++f) {
+            if (!ctx.bodies[f].initialization_regions) continue;
+            location.function=f;
+            status=xr_xir_initialization_check(&built,&ctx.functions[f],
+                ctx.bodies[f].initialization_regions,&checking,&location);
+        }
         if (status != XR_XIR_OK) {
+            xr_xir_artifact_free(output->checked); output->checked=NULL;
             char message[128];
             snprintf(message, sizeof(message), "constructed XIR failed checking at function %u block %u instruction %u",
                 location.function, location.block, location.instruction);

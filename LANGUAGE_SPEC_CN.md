@@ -4408,6 +4408,8 @@ try {
 
 内置 `Error` 是只容纳 enum 的持有值类型。enum 到 Error 的值转换保留实际名义身份、泛型实参、活动变体与载荷；复制、保存、返回和重新抛出均遵守相同值所有权规则。Error 不提供任意字段、构造或可见性权限，也不隐式证明 `Sendable`。读取具体变体载荷前必须完成有权限的类型窄化。普通泛型转换在定义处按约束检查，特化后复验，不能等调用处看到具体 enum 才补充证明。
 
+catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读；需要重新赋值时先用 `var local = e` 创建局部逻辑副本。所有 handler 都接受完整静态检查，即使 try 块没有错误前驱，名称、类型、泛型约束、可见性、初始化和只读错误仍必须拒绝。不可执行的构造器 handler 从 try 入口的初始化状态开始检查，其内部写入不能成为正常后继已初始化的证据；handler 内部分支和循环遵循通常的必定/可能初始化规则。handler 的 return 仍参与所在函数的返回类型推断。
+
 `catch` 也可以直接使用 enum variant pattern。unit variant 写作
 `catch NetErr.Timeout { ... }`，其中唯一一对花括号是 catch 块体；payload variant 写作
 `catch DbErr.QueryFailed { query } { ... }`，第一对花括号是具名 pattern，第二对是块体。

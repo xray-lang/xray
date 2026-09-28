@@ -13,8 +13,9 @@ can escape. Const field assign-once and declaration-local parameter inference
 remain separate source checks; this operation grants neither field access nor
 construction permission.
 
-The verifier computes a bounded fixed point for each declared place, using the
-existing CFG scratch after reachability and ordinary operand checks. It checks
+The verifier computes a bounded fixed point for each declared place, using a
+compiler-owned instruction flow graph after reachability and ordinary operand
+checks. It checks
 reads only after convergence, avoiding transient loop-order decisions. Budget
 exhaustion fails closed. Checked packets and Lowered are independently checked.
 
@@ -41,3 +42,16 @@ Redeclaration resets both must and may states. Other write-through operations
 cannot mutate initialize-once storage. This advances the semantic revision;
 packet shape and runtime ABI remain unchanged. Source constructor admission is
 qualified only by its source tests, not these internal storage tests.
+
+
+Source-owned detached handler obligations reuse the same must/may flow engine.
+An analysis-only edge inherits the state before the recorded try-entry
+instruction; it is not inserted in executable XIR. Detached writes never flow
+back to the main graph. Nested regions inherit their parent checkpoint, and
+internal loops retain the same fixed-point rules. Region snapshots and graph
+allocations consume bounded compiler budgets and are freed on every outcome.
+A failed obligation prevents source Checked publication; no packet or runtime
+ABI gains a second region format.
+
+verification-test: test_xir_source_admission
+verification-test: test_xir_allocations

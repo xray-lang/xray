@@ -6,6 +6,38 @@ Checked is the only published XIR artifact. It never invokes the legacy
 analyzer, IR producer or executor. Parsed AST storage and resolver identities are
 borrowed only during construction; Checked owns its complete snapshot.
 
+## Source error handlers (implementation pending)
+
+Catch-all bindings have the static Error type, are read-only, and are scoped to
+their handler. A mutable local copy may be rebound without changing the caught
+value binding.
+Calls in a protected region use the current function's explicit error
+continuation. Compiling a closure or default-value helper never inherits the
+enclosing function's continuation. A handler uses the outer continuation for
+its own calls and rethrows. Direct throw and call failure join with ordinary
+owned Error PHIs after dedicated invoke successors.
+
+All handlers must be checked even when the try body has no error predecessor.
+Undefined names, invalid types, insufficient generic constraints, forbidden
+access and invalid ownership cannot be hidden in an unreachable handler.
+Only after those obligations are checked may an unreachable executable region
+be omitted. No fabricated call or hidden constant branch supplies reachability.
+This does not introduce a second analyzer or a legacy execution path. Catch
+patterns, ordered type filtering, narrowing and panic handlers remain explicit
+implementation obligations; catch-all admission alone does not qualify them.
+
+Constructor initialization in a discarded handler is checked by the same
+must/may-initialized analysis as executable Checked instructions. A temporary
+compiler-owned region records its parent and the instruction checkpoint before
+the try body. The analysis inherits that checkpoint's state, follows branches
+and loops inside the handler, and treats exits from the detached region as
+exits only. Its writes cannot initialize or invalidate the executable successor.
+Nested detached regions inherit their containing region's checkpoint. These
+records are never executable instructions, serialized XIR, or published query
+state; symbolic Error bindings cannot escape into executable operands. Checking
+and allocation failure prevent publication of Checked. Return inference remains
+a semantic obligation even when executable instructions are discarded.
+
 ## Owned source query snapshot
 
 One source check publishes an owned result containing Checked and a read-only

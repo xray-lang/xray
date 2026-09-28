@@ -101,6 +101,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_segment_cases.h"
 #include "xir_function_cases.h"
 #include "xir_instance_admission_cases.h"
+#include "xir_initialization_allocations.h"
 static void function_allocation_failures(void) {
     for (unsigned cancel = 0; cancel < 2; ++cancel) {
         calls = 0; fail_at = SIZE_MAX;
@@ -600,5 +601,6 @@ int main(void) {
     phi_snapshot_failure();
     function_allocation_failures();
     instance_admission_cases();
+    initialization_region_allocations();
     return 0;
 }
