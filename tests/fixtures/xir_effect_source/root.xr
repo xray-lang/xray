@@ -1,4 +1,4 @@
-enum Fault { Bad }
+enum Fault { Bad, Other }
 export fn pure()->i64 { return 7 }
 export fn sleeper() { Coro.yield() }
 export fn relay<T>(value:T)->T { sleeper(); return value }
@@ -10,3 +10,26 @@ export fn rethrow()->i64 { try { return fail() } catch(e) { throw e } }
 export fn dynamic(f:fn()->i64)->i64 { return f() }
 export fn dynamicHandled(f:fn()->i64)->i64 { try { return f() } catch(e) { return 11 } }
 export fn panicOnly()->i64 { try { return 1/0 } catch panic { return 13 } }
+export fn typedHandled()->i64 { try { return fail() } catch(e:Fault) { return 17 } }
+export fn variantHandled()->i64 { try { return fail() } catch(Fault.Bad) { return 19 } }
+export fn variantUnmatched()->i64 { try { return fail() } catch(Fault.Other) { return 23 } }
+export fn typedRethrow()->i64 { try { return fail() } catch(e:Fault) { throw e } }
+export fn dynamicRethrow(f:fn()->i64)->i64 { try { return f() } catch(e) { throw e } }
+export fn dynamicTyped(f:fn()->i64)->i64 { try { return f() } catch(e:Fault) { return 29 } }
+enum Foreign { Bad }
+export fn wrongTyped()->i64 { try { return fail() } catch(e:Foreign) { return 31 } }
+export fn parameterThrow(e:Fault)->i64 { throw e }
+export fn unknownParameter(e:Error)->i64 { throw e }
+export fn localOverwrite()->i64 { var e = Fault.Bad; e = Fault.Other; throw e }
+export fn phiThrow(flag:bool)->i64 { throw (flag ? Fault.Bad : Fault.Other) }
+export fn loopThrow(flag:bool)->i64 { var e = Fault.Bad; while (flag) { e = Fault.Other; break }; throw e }
+export fn recursiveError(flag:bool)->i64 { if (flag) { throw Fault.Other }; return recursivePeer(flag) }
+fn recursivePeer(flag:bool)->i64 { return recursiveError(flag) }
+export fn cellAfterCall()->i64 { var e = Fault.Bad; pure(); throw e }
+export fn cellSnapshot()->i64 { var e = Fault.Bad; const old = e; e = Fault.Other; throw old }
+export fn panicThrows()->i64 { try { return 1/0 } catch panic { throw Fault.Other } }
+enum GenericFault<T> { Bad { item:T } }
+fn genericFail<T>(item:T)->i64 { throw GenericFault<T>.Bad { item:item } }
+export fn genericUse()->i64 { return genericFail<i64>(7) }
+export fn cellAfterYield()->i64 { var e = Fault.Bad; Coro.yield(); throw e }
+export fn cellAfterOutput()->i64 { var e = Fault.Bad; print(1); throw e }

@@ -13,10 +13,17 @@
  */
 #include "xxir_effects.h"
 #include "xxir_internal.h"
+#include "xxir_types.h"
 #include "../base/xmalloc.h"
 
-struct XrXirEffects { uint32_t count; XrXirFunctionEffects *functions; };
-typedef struct EffectEdge { uint32_t caller, next; bool throws; } EffectEdge;
+typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectErrorAtom;
+struct XrXirEffects {
+    uint32_t count, atom_count, words;
+    XrXirFunctionEffects *functions;
+    EffectErrorAtom *atoms;
+    uint64_t *errors;
+};
+typedef struct EffectEdge { uint32_t caller, next; } EffectEdge;
 typedef struct EffectGraph {
     uint32_t *heads, *queue;
     uint8_t *queued;
@@ -30,7 +37,7 @@ static void effect_graph_free(EffectGraph *graph) {
     xr_free(graph->heads); xr_free(graph->queue); xr_free(graph->queued); xr_free(graph->edges);
 }
 void xr_xir_effects_free(XrXirEffects *effects) {
-    if (effects) { xr_free(effects->functions); xr_free(effects); }
+    if (effects) { xr_free(effects->errors); xr_free(effects->atoms); xr_free(effects->functions); xr_free(effects); }
 }
 const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function) {
     return effects && function < effects->count ? &effects->functions[function] : NULL;
@@ -39,10 +46,8 @@ const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects,
 static bool effect_seed(XrXirOp op, XrXirFunctionEffects *effect) {
     switch (op) {
     case XR_XIR_SUSPEND: effect->suspend = XR_XIR_EFFECT_MAY; return true;
-    case XR_XIR_THROW: effect->throws = XR_XIR_EFFECT_MAY; return true;
+    case XR_XIR_THROW: return true;
     case XR_XIR_CALL_INDIRECT:
-        if (effect->throws < XR_XIR_EFFECT_UNKNOWN) effect->throws = XR_XIR_EFFECT_UNKNOWN;
-        /* fall through */
     case XR_XIR_INVOKE_INDIRECT:
         if (effect->suspend < XR_XIR_EFFECT_UNKNOWN) effect->suspend = XR_XIR_EFFECT_UNKNOWN;
         return true;
@@ -115,7 +120,7 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE) continue;
             uint32_t callee = (uint32_t) op->immediate;
-            graph->edges[at] = (EffectEdge) {f, graph->heads[callee], op->op == XR_XIR_CALL};
+            graph->edges[at] = (EffectEdge) {f, graph->heads[callee]};
             graph->heads[callee] = at++;
         }
     }
@@ -136,7 +141,6 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, u
             XrXirFunctionEffects *to = &effects->functions[link.caller];
             bool changed = false;
             if (from.suspend > to->suspend) { to->suspend = from.suspend; changed = true; }
-            if (link.throws && from.throws > to->throws) { to->throws = from.throws; changed = true; }
             if (changed && !graph->queued[link.caller]) {
                 graph->queue[back] = link.caller;
                 back = back + 1 == effects->count ? 0 : back + 1;
@@ -146,6 +150,8 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, u
     }
     return XR_XIR_OK;
 }
+#include "xxir_effect_errors.inc.c"
+
 XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,
     const XrXirBudget *budget, XrXirEffects **output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
@@ -166,6 +172,9 @@ XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,
     status = effect_graph_build(module, effects, &graph, &remaining);
     if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, &remaining.work);
     effect_graph_free(&graph);
+    if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
+    remaining.metadata_bytes -= bytes;
+    status = effect_errors_analyze(module, effects, &remaining);
     if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
     *output = effects; return XR_XIR_OK;
 }

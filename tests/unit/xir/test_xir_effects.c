@@ -27,6 +27,7 @@ static void effect_free(void *p) {
 #include "xir/xxir_effects.c"
 #undef xr_calloc
 #undef xr_free
+#include "xir_enum_ops_fixture.h"
 static XrXirArtifact *effect_fixture(bool suspends) {
     XrXirType parameter = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE; node.result = XR_XIR_UNIT;
@@ -76,6 +77,19 @@ static void effect_expect(const XrXirEffects *effects, uint32_t f, XrXirEffect s
     const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
     CHECK(fact && fact->suspend == suspend && fact->throws == throws);
 }
+static size_t effect_failures(XrXirArtifact *artifact) {
+    size_t sites = 0;
+    for (size_t attempt = 0; attempt <= sites; ++attempt) {
+        attempts = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
+        XrXirEffects *effects = NULL;
+        XrXirStatus status = xr_xir_effects_analyze(artifact, NULL, &effects);
+        if (!attempt) { CHECK(status == XR_XIR_OK && effects); sites = attempts; }
+        else CHECK(status == XR_XIR_OUT_OF_MEMORY && !effects);
+        xr_xir_effects_free(effects); CHECK(!live);
+    }
+    fail_at = SIZE_MAX;
+    return sites;
+}
 static void effect_cases(bool suspends) {
     XrXirArtifact *artifact = effect_fixture(suspends);
     XrXirCheckedPacket packet = {0};
@@ -93,27 +107,18 @@ static void effect_cases(bool suspends) {
             effect_expect(effects, f, suspends ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE);
         effect_expect(effects, 2, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
         effect_expect(effects, 3, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_NONE);
-        effect_expect(effects, 4, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_MAY);
+        effect_expect(effects, 4, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
         effect_expect(effects, 5, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE);
         CHECK(!xr_xir_effects_function(effects, 8)); xr_xir_effects_free(effects); CHECK(!live);
     }
     xr_xir_artifact_free(lowered);
-    size_t sites = 0;
-    for (size_t attempt = 0; attempt <= sites; ++attempt) {
-        attempts = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        XrXirEffects *effects = NULL;
-        XrXirStatus status = xr_xir_effects_analyze(artifact, NULL, &effects);
-        if (!attempt) { CHECK(status == XR_XIR_OK && effects); sites = attempts; }
-        else CHECK(status == XR_XIR_OUT_OF_MEMORY && !effects);
-        xr_xir_effects_free(effects); CHECK(!live);
-    }
-    fail_at = SIZE_MAX;
+    size_t sites = effect_failures(artifact);
     XrXirBudget budget = xr_xir_default_budget(); budget.work = 1;
     XrXirEffects *effects = NULL;
     CHECK(xr_xir_effects_analyze(artifact, &budget, &effects) == XR_XIR_BUDGET && !effects && !live);
     CHECK(xr_xir_effects_analyze(artifact, NULL, &effects) == XR_XIR_OK);
     xr_xir_artifact_free(artifact);
-    effect_expect(effects, 4, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_MAY);
+    effect_expect(effects, 4, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
     xr_xir_effects_free(effects); CHECK(!live);
     printf("Control effects: cycle seed %u, %zu allocation failure sites released\n", suspends, sites);
 }
@@ -147,7 +152,39 @@ static void effect_long_cycle(void) {
     CHECK(xr_xir_effects_analyze(artifact, &budget, &effects) == XR_XIR_BUDGET && !effects && !live);
     xr_xir_artifact_free(artifact);
 }
+static void effect_enum_ownership(void) {
+    XrXirArtifact *original=enum_ops_checked(0,false), *artifact=NULL;
+    XrXirModule built=*xr_xir_artifact_module(original); built.stage=XR_XIR_BUILT;
+    XrXirFunction functions[3]; memcpy(functions,built.functions,sizeof(functions));
+    XrXirInstruction ops[11]; memcpy(ops,functions[2].instructions,sizeof(ops));
+    ops[10]=(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{2},{0},0,{0}};
+    functions[2].instructions=ops; built.functions=functions;
+    CHECK(xr_xir_check(&built,NULL,&artifact,NULL)==XR_XIR_OK); xr_xir_artifact_free(original);
+    size_t sites=effect_failures(artifact); XrXirEffects *effects=NULL;
+    CHECK(xr_xir_effects_analyze(artifact,NULL,&effects)==XR_XIR_OK);
+    xr_xir_artifact_free(artifact);
+    CHECK(xr_xir_effects_error(effects,2,(XrXirType)256,1));
+    CHECK(!xr_xir_effects_error(effects,2,(XrXirType)256,0));
+    CHECK(!xr_xir_effects_error_unknown(effects,2));
+    xr_xir_effects_free(effects); CHECK(!live);
+    artifact=enum_ops_lowered(false); sites+=effect_failures(artifact); xr_xir_artifact_free(artifact);
+    printf("Error atoms: %zu allocation failure sites released across checked and lowered\n",sites);
+}
+static void effect_extreme_budgets(void) {
+    XrXirEffects effects={0}; effects.words=UINT32_MAX/64+1; effects.atom_count=UINT32_MAX-1;
+    XrXirFunction function={0}; function.parameter_count=UINT32_MAX-1; function.instruction_count=1;
+    function.block_count=UINT32_MAX;
+    XrXirModule module={0}; module.functions=&function; module.function_count=1;
+    XrXirBudget budget=xr_xir_default_budget(); budget.scratch_bytes=UINT64_MAX; budget.work=UINT64_MAX;
+    ErrorFlow flow={0}; flow.module=&module; flow.effects=&effects; flow.remaining=&budget;
+    attempts=0; CHECK(error_function(&flow,0)==XR_XIR_BUDGET && !attempts && !live);
+    flow.values=UINT32_MAX; flow.stride=(size_t)UINT32_MAX*effects.words;
+    budget.work=UINT64_MAX;
+    CHECK(error_edge(&flow,0,0,NULL,true)==XR_XIR_BUDGET && !attempts && !live);
+}
 int main(void) {
+    effect_extreme_budgets();
+    effect_enum_ownership();
     effect_long_cycle();
     effect_cases(false); effect_cases(true);
     XrXirEffects *effects = NULL;

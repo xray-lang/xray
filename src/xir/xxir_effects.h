@@ -17,5 +17,9 @@ XR_FUNC XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,
     const XrXirBudget *budget, XrXirEffects **output);
 /* The borrowed fact remains valid until its owning summary is freed. */
 XR_FUNC const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function);
+/* Numeric type identities refer to the analyzed artifact, without borrowing it. */
+XR_FUNC bool xr_xir_effects_error(const XrXirEffects *effects, uint32_t function,
+    XrXirType type, uint32_t variant);
+XR_FUNC bool xr_xir_effects_error_unknown(const XrXirEffects *effects, uint32_t function);
 XR_FUNC void xr_xir_effects_free(XrXirEffects *effects);
 #endif // XXIR_EFFECTS_H

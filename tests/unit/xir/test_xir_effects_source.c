@@ -8,6 +8,7 @@
  */
 #include "xir/xxir_effects.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "toolchain/xcompiler_session.h"
@@ -17,6 +18,25 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 static void source_effects(const XrXirArtifact *artifact) {
     const struct { const char *name; XrXirEffect suspend, throws; } expected[] = {
+        {"typedHandled", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
+        {"variantHandled", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
+        {"variantUnmatched", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"typedRethrow", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"dynamicRethrow", XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN},
+        {"dynamicTyped", XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN},
+        {"wrongTyped", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"parameterThrow", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"unknownParameter", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_UNKNOWN},
+        {"localOverwrite", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"phiThrow", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"loopThrow", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"recursiveError", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"recursivePeer", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellAfterCall", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellSnapshot", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"panicThrows", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellAfterYield", XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_MAY},
+        {"cellAfterOutput", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"pure", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE},
         {"sleeper", XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_NONE},
         {"relay", XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_NONE},
@@ -43,10 +63,47 @@ static void source_effects(const XrXirArtifact *artifact) {
             if (fact->suspend != expected[e].suspend || fact->throws != expected[e].throws)
                 fprintf(stderr, "effect %s: suspend=%u throws=%u\n", expected[e].name, fact->suspend, fact->throws);
             CHECK(fact->suspend == expected[e].suspend && fact->throws == expected[e].throws); found = true;
+            uint32_t mask = expected[e].throws == XR_XIR_EFFECT_MAY ? 1u : 0u;
+            if (!strcmp(expected[e].name,"parameterThrow") || !strcmp(expected[e].name,"phiThrow") ||
+                !strcmp(expected[e].name,"loopThrow") || !strcmp(expected[e].name,"cellAfterCall") ||
+                !strcmp(expected[e].name,"cellAfterYield") || !strcmp(expected[e].name,"cellAfterOutput")) mask = 3;
+            if (!strcmp(expected[e].name,"localOverwrite") || !strcmp(expected[e].name,"recursiveError") ||
+                !strcmp(expected[e].name,"recursivePeer") || !strcmp(expected[e].name,"panicThrows")) mask = 2;
+            for (uint32_t t = 0; t < module->types->count; ++t) {
+                XrXirType type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+                if (!xr_xir_type_is_enum(module->types,type)) continue;
+                uint32_t d = module->types->nodes[t].nominal.declaration;
+                const XrXirNominalTable *table = module->types->nominals;
+                XrXirLiteral name = table->declarations ? table->declarations[d].name : table->identities[d].name;
+                bool fault = name.length == 5 && !memcmp(name.bytes,"Fault",5);
+                if (xr_xir_effects_error(effects,f,type,0) != (fault && (mask&1) != 0))
+                    fprintf(stderr,"error atom %s type=%u name=%.*s fault=%u mask=%u bad=%u stage=%u\n",expected[e].name,type,(int)name.length,name.bytes,fault,mask,xr_xir_effects_error(effects,f,type,0),module->stage);
+                CHECK(xr_xir_effects_error(effects,f,type,0) == (fault && (mask&1) != 0));
+                if (fault) CHECK(xr_xir_effects_error(effects,f,type,1) == ((mask&2) != 0));
+            }
+            CHECK(xr_xir_effects_error_unknown(effects,f) == (expected[e].throws == XR_XIR_EFFECT_UNKNOWN));
         }
         if (!found) fprintf(stderr, "missing effect function %s at stage %u\n", expected[e].name, module->stage);
         CHECK(found);
     }
+    bool generic_open=false, generic_found=false;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *fn=&module->functions[f];
+        if (fn->name_length<11 || memcmp(fn->name,"genericFail",11)) continue;
+        generic_found=true;
+        generic_open=module->generics && module->generics[f].parameter_count;
+        CHECK(xr_xir_effects_function(effects,f)->throws==XR_XIR_EFFECT_MAY);
+    }
+    CHECK(generic_found);
+    bool use_found=false;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *fn=&module->functions[f];
+        if (fn->name_length!=10 || memcmp(fn->name,"genericUse",10)) continue;
+        use_found=true;
+        CHECK(xr_xir_effects_function(effects,f)->throws==(generic_open ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_MAY));
+        CHECK(xr_xir_effects_error_unknown(effects,f)==generic_open);
+    }
+    CHECK(use_found);
     xr_xir_effects_free(effects);
 }
 int main(void) {
