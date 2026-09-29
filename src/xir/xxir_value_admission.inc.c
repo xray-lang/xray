@@ -7,15 +7,17 @@
  * xxir_value_admission.inc.c - Budgeted iterative authority traversal
  */
 typedef struct ValueAdmissionFrame {
-    XirObject *object;
+    union { XirObject *object; StorageSpan storage; };
     size_t next, count;
+    uint32_t begin;
+    bool inline_storage;
 } ValueAdmissionFrame;
 typedef struct ValueAdmissionStack {
     ValueAdmissionFrame *frames;
     size_t depth, capacity, bytes;
 } ValueAdmissionStack;
-static XrXirValueStatus admission_push(ValueAdmissionStack *stack, XirObject *object,
-    size_t count, XrXirValueAdmission *admission) {
+static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissionFrame frame,
+    XrXirValueAdmission *admission) {
     if (stack->depth == stack->capacity) {
         if (stack->capacity > SIZE_MAX / 2 / sizeof(*stack->frames)) return XR_XIR_VALUE_LIMIT;
         size_t capacity = stack->capacity ? stack->capacity * 2 : 1;
@@ -33,7 +35,7 @@ static XrXirValueStatus admission_push(ValueAdmissionStack *stack, XirObject *ob
         }
         stack->frames = frames; stack->capacity = capacity; stack->bytes = bytes;
     }
-    stack->frames[stack->depth++] = (ValueAdmissionFrame) {object, 0, count};
+    stack->frames[stack->depth++] = frame;
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus array_needs_admission(const XirArray *array,
@@ -52,56 +54,95 @@ static XrXirValueStatus array_needs_admission(const XirArray *array,
         type = node->element;
     }
 }
-static XrXirValue admission_child(ValueAdmissionFrame *frame) {
+static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *arena,
+    XrXirValue *value, StorageSpan *span, bool *inlined) {
     XR_CHECK(frame->next < frame->count, "admission cursor exceeded its validated owner");
     size_t index = frame->next++;
-    return frame->object->kind == XR_XIR_TYPE_ARRAY ?
-        array_element_value((XirArray *) frame->object, index) :
-        ((XirNominalValue *) frame->object)->fields[index];
+    *inlined = frame->inline_storage || frame->object->kind == XR_XIR_TYPE_ARRAY;
+    if (frame->inline_storage) {
+        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(arena), frame->storage.type);
+        const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, frame->storage.type);
+        uint32_t field = frame->begin + (uint32_t)index;
+        *span = (StorageSpan){node->nominal.fields[field],
+            frame->storage.bytes ? frame->storage.bytes + layout->field_offsets[field] : NULL};
+    } else if (*inlined) {
+        const XirArray *array = (const XirArray *)frame->object;
+        *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
+    } else *value = ((XirNominalValue *)frame->object)->fields[index];
+}
+static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
+    StorageSpan span, XrXirValueAdmission *admission) {
+    if (!admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypes *types = xr_xir_type_arena_types(admission->arena);
+    const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
+    const XrXirStorageLayout *layout = xr_xir_type_arena_storage(admission->arena, span.type);
+    if (!layout || (layout->value.size && !span.bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
+    uint32_t begin = 0, count = node->nominal.field_count, variant = 0;
+    if (identity->kind == XR_XIR_NOMINAL_ENUM) {
+        if (layout->tag_bytes) memcpy(&variant, span.bytes, layout->tag_bytes);
+        if (variant >= identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        begin = identity->variants[variant].field_begin; count = identity->variants[variant].field_count;
+    }
+    return count ? admission_push(stack, (ValueAdmissionFrame){.storage = span, .count = count,
+        .begin = begin, .inline_storage = true}, admission) : XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission) {
     if (!admission || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValueAdmissionStack stack = {0}; XrXirValue current = *value;
+    StorageSpan span = {0}; bool inlined = false;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     for (;;) {
         if (!admission->work) { status = XR_XIR_VALUE_LIMIT; break; }
         --admission->work;
-        if (!xr_xir_value_argument(&current, admission->arena, type)) {
-            status = XR_XIR_VALUE_BAD_ARGUMENT; break;
-        }
-        if (owned_carrier_type(type)) {
-            XirObject *object = object_pointer(&current);
-            size_t count = 0;
-            if (object->kind == XR_XIR_TYPE_NOMINAL) {
-                if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
-                count = ((XirNominalValue *) object)->count;
-            } else if (object->kind == XR_XIR_TYPE_ARRAY) {
-                bool needed = false;
-                status = array_needs_admission((XirArray *) object, admission, &needed);
-                if (status != XR_XIR_VALUE_OK) break;
-                if (needed) count = ((XirArray *) object)->length;
-            } else if (object->kind) {
-                if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
-                if (object->kind == XR_XIR_TYPE_CALLABLE) {
-                    if (!admission->function) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
-                    status = admission->function(admission->context,
-                        &((XirFunction *) object)->binding, type, &admission->work);
-                    if (status != XR_XIR_VALUE_OK) break;
-                } else if (object->kind == XR_XIR_TYPE_CELL) {
-                    type = xr_xir_cell_element(xr_xir_type_arena_types(object->arena), type);
-                    current = ((XirCell *) object)->value; continue;
-                } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+        if (inlined && xr_xir_type_is_nominal(xr_xir_type_arena_types(admission->arena), type)) {
+            status = admission_inline(&stack, span, admission);
+            if (status != XR_XIR_VALUE_OK) break;
+        } else {
+            if (inlined) {
+                XrXirLayout layout = {0};
+                if (!xr_xir_type_arena_layout(admission->arena, type, &layout) || !layout.size ||
+                    layout.size > sizeof(uint64_t) || !span.bytes) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                current = storage_leaf_value(type, span.bytes, layout.size);
             }
-            if (count) {
-                status = admission_push(&stack, object, count, admission);
-                if (status != XR_XIR_VALUE_OK) break;
+            if (!xr_xir_value_argument(&current, admission->arena, type)) {
+                status = XR_XIR_VALUE_BAD_ARGUMENT; break;
+            }
+            if (owned_carrier_type(type)) {
+                XirObject *object = object_pointer(&current);
+                size_t count = 0;
+                if (object->kind == XR_XIR_TYPE_NOMINAL) {
+                    if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                    count = ((XirNominalValue *) object)->count;
+                } else if (object->kind == XR_XIR_TYPE_ARRAY) {
+                    bool needed = false;
+                    status = array_needs_admission((XirArray *) object, admission, &needed);
+                    if (status != XR_XIR_VALUE_OK) break;
+                    if (needed) count = ((XirArray *) object)->length;
+                } else if (object->kind) {
+                    if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                    if (object->kind == XR_XIR_TYPE_CALLABLE) {
+                        if (!admission->function) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                        status = admission->function(admission->context,
+                            &((XirFunction *) object)->binding, type, &admission->work);
+                        if (status != XR_XIR_VALUE_OK) break;
+                    } else if (object->kind == XR_XIR_TYPE_CELL) {
+                        type = xr_xir_cell_element(xr_xir_type_arena_types(object->arena), type);
+                        current = ((XirCell *) object)->value; inlined = false; continue;
+                    } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                }
+                if (count) {
+                    status = admission_push(&stack, (ValueAdmissionFrame){.object = object, .count = count}, admission);
+                    if (status != XR_XIR_VALUE_OK) break;
+                }
             }
         }
         while (stack.depth && stack.frames[stack.depth - 1].next == stack.frames[stack.depth - 1].count)
             --stack.depth;
         if (!stack.depth) break;
-        current = admission_child(&stack.frames[stack.depth - 1]); type = (XrXirType) current.type;
+        admission_child(&stack.frames[stack.depth - 1], admission->arena, &current, &span, &inlined);
+        type = inlined ? span.type : (XrXirType)current.type;
     }
     if (stack.frames) {
         xr_xir_domain_deallocate(admission->domain, stack.frames, stack.bytes);

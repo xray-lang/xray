@@ -13,6 +13,7 @@ typedef struct NominalStorageNode {
     XrXirLayout layout;
     uint32_t *offsets;
     uint32_t next, state, variant, maximum;
+    uint32_t depth, owned_depth, tag_bytes;
 } NominalStorageNode;
 static bool nominal_storage_align(uint32_t size, uint32_t alignment, uint32_t *output) {
     if (!alignment || (alignment & (alignment - 1))) return false;
@@ -26,6 +27,7 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
     XrXirStatus status = XR_XIR_OK;
     stack[0] = root_index;
     nodes[root_index].state = 1; nodes[root_index].layout.alignment = 1;
+    nodes[root_index].depth = 1;
     while (depth && status == XR_XIR_OK) {
         if (!budget->work) { status = XR_XIR_BUDGET; break; }
         --budget->work;
@@ -51,6 +53,7 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
         if (current->next == nominal->field_count) {
             if (is_enum) {
                 uint32_t tag = variant_count == 1 ? 0 : variant_count <= 256 ? 1 : variant_count <= 65536 ? 2 : 4;
+                current->tag_bytes = tag;
                 uint32_t base = 0;
                 if (!nominal_storage_align(tag, current->layout.alignment, &base) ||
                     current->maximum > UINT32_MAX - base) { status = XR_XIR_BAD_LAYOUT; break; }
@@ -87,12 +90,17 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
             if (!nodes[child_index].state) {
                 if (depth >= types->count) { status = XR_XIR_BAD_LAYOUT; break; }
                 nodes[child_index].state = 1; nodes[child_index].layout.alignment = 1;
+                nodes[child_index].depth = 1;
                 stack[depth++] = child_index; continue;
             }
             physical = nodes[child_index].layout;
+            if (nodes[child_index].depth >= current->depth) current->depth = nodes[child_index].depth + 1;
+            if (nodes[child_index].owned_depth && nodes[child_index].owned_depth >= current->owned_depth)
+                current->owned_depth = nodes[child_index].owned_depth + 1;
         } else {
             status = xr_xir_layout(types, field, target, XR_XIR_LAYOUT_STORAGE, &physical);
             if (status != XR_XIR_OK) break;
+            if (xr_xir_type_is_owned(types, field) && !current->owned_depth) current->owned_depth = 1;
         }
         uint32_t offset = 0;
         if (!nominal_storage_align(current->layout.size, physical.alignment, &offset) ||

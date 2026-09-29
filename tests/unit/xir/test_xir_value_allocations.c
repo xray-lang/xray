@@ -685,7 +685,11 @@ static void deep_value_admission_failures(void) {
     xr_xir_value_drop(&value); CHECK(!live);
 }
 #include "xir_storage_cache_cases.h"
+#include "xir_storage_cursor_cases.h"
+#include "xir_storage_pack_cases.h"
 int main(void) {
+    storage_pack_cases();
+    storage_cursor_cases();
     storage_cache_cases(); storage_cache_shared_graph();
     error_deep_value_cases();
     deep_value_admission_failures();

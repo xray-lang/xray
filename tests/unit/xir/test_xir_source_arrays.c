@@ -30,19 +30,25 @@ int main(int argc, char **argv) {
     XrXirArtifact *checked = result.checked; result.checked = NULL;
     xr_compiler_session_delete(session);
     const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
-    unsigned members = 0, length = 0;
+    unsigned members = 0, nominal_members = 0, length = 0, ordinals = 0;
     for (uint32_t d = 0; d < view->declaration_count; ++d) {
         const XrXirSourceDeclaration *decl = &view->declarations[d];
-        if (decl->kind == XR_XIR_SOURCE_MEMBER) {
+        if (decl->kind == XR_XIR_SOURCE_MEMBER && decl->native_identity) {
             CHECK(decl->native_identity && decl->signature && decl->signature[0] == '(');
             CHECK(decl->range.module < view->module_count && decl->range.line > 0); ++members;
         }
-        if (decl->kind == XR_XIR_SOURCE_INTRINSIC) {
+        if (decl->kind == XR_XIR_SOURCE_MEMBER && !decl->native_identity) {
+            CHECK(decl->range.module < view->module_count && decl->range.line > 0); ++nominal_members;
+        }
+        if (decl->kind == XR_XIR_SOURCE_INTRINSIC && decl->native_identity) {
             CHECK(decl->native_identity == 6 && !strcmp(decl->name, "len"));
             CHECK(decl->parameter_count == 1 && !decl->parameters[0].known); ++length;
         }
+        if (decl->kind == XR_XIR_SOURCE_INTRINSIC && !decl->native_identity) {
+            CHECK(!strcmp(decl->name, "ordinal")); ++ordinals;
+        }
     }
-    CHECK(members == 3 && length == 1); xr_xir_source_result_free(&result);
+    CHECK(members == 3 && nominal_members == 5 && length == 1 && ordinals == 1); xr_xir_source_result_free(&result);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
     if (argc == 3) {

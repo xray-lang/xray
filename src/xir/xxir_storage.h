@@ -17,6 +17,7 @@ typedef struct XrXirStorageLayout {
     XrXirLayout value;
     const uint32_t *field_offsets;
     uint32_t field_count;
+    uint32_t depth, owned_depth, tag_bytes;
 } XrXirStorageLayout;
 
 /* Requires a verified pool and exact caller-owned destinations. Construction

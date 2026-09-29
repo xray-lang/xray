@@ -97,10 +97,18 @@ static void storage_cache_shared_graph(void) {
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     const XrXirStorageLayout *root = xr_xir_type_arena_storage(arena, (XrXirType)256);
     CHECK(root && root->value.size == 16 && root->field_offsets[0] == 0 && root->field_offsets[1] == 8);
+    CHECK(root->depth == COUNT && root->owned_depth == COUNT);
     for (uint32_t i = 1; i < COUNT; ++i) {
         const XrXirStorageLayout *layout = xr_xir_type_arena_storage(arena, (XrXirType)(256 + i));
         CHECK(layout && layout->value.size == 8 && layout->value.alignment == 8 && layout->field_offsets[0] == 0);
+        CHECK(layout->depth == COUNT - i && layout->owned_depth == COUNT - i);
     }
+    unsigned char raw[16] = {0}; StorageFrame frames[COUNT]; StorageCursor cursor = {0};
+    StorageSpan leaf = {0}; bool found = false; uint64_t work = 10000;
+    CHECK(storage_cursor_init(arena, (StorageSpan){(XrXirType)256, raw}, frames, COUNT, true, &cursor) == XR_XIR_VALUE_OK);
+    CHECK(storage_cursor_next(&cursor, &work, &leaf, &found) == XR_XIR_VALUE_OK && found && leaf.bytes == raw);
+    CHECK(storage_cursor_next(&cursor, &work, &leaf, &found) == XR_XIR_VALUE_OK && found && leaf.bytes == raw + 8);
+    CHECK(storage_cursor_next(&cursor, &work, &leaf, &found) == XR_XIR_VALUE_OK && !found);
     xr_xir_type_arena_drop(arena); arena = NULL;
     inner[COUNT - 1] = (XrXirType)256; budget = (XrXirBudget) {.parameters = 65536, .metadata_bytes = 1048576, .scratch_bytes = 1048576, .work = 16777216};
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_BAD_ARGUMENT && !arena);

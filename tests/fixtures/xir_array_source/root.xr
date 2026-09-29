@@ -96,3 +96,41 @@ export fn suspendedSet() -> string {
     a[setSuspendedIndex()] = setSuspendedValue()
     return a[1]
 }
+
+struct Item { text:string; values:Array<i64> }
+export fn aggregateResult() -> Array<Item> { return [Item{text:"escaped", values:[41]}] }
+export fn aggregate() -> string {
+    var items = [Item{text:"before", values:[3]}]
+    const original = items
+    items[0] = Item{text:"after", values:[7]}
+    items.push(first<Item>(original))
+    var read = items[1]
+    read.text = "local"
+    return original[0].text + ":" + items[0].text + ":" + items[1].text + ":" + read.text
+}
+export fn aggregateNested() -> i64 {
+    var items = [Item{text:"x", values:[3]}]
+    const original = items
+    items.set(0, Item{text:"y", values:[7]})
+    items.push(items.get(0))
+    return original[0].values[0] + items[0].values[0] + items[1].values[0]
+}
+struct EmptyItem {}
+export fn emptyAggregate() -> i64 {
+    var items: Array<EmptyItem> = []
+    for (var i = 0; i < 9; i++) { items.push(EmptyItem{}) }
+    const snapshot = items
+    items.set(0, snapshot[8])
+    return len(items)
+}
+enum ItemChoice { Empty, Text { text:string } }
+export fn enumAggregate() -> string {
+    var items = [ItemChoice.Empty, ItemChoice.Text{text:"enum"}]
+    const original = items
+    items[0] = items[1]
+    items.push(ItemChoice.Empty)
+    return match(first<ItemChoice>(items)) {
+        ItemChoice.Text{text} -> text,
+        ItemChoice.Empty -> "wrong"
+    }
+}

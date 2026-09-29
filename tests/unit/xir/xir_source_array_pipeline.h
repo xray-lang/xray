@@ -22,7 +22,8 @@ static XrXirArtifact *source_array_lower(XrXirArtifact *checked) {
 static void source_array_find(const XrXirModule *module, uint32_t *functions) {
     static const char *const names[] = {NULL, "result", "originalFirst", "advance", "rebound", "snapshot",
         "methodSnapshot", "reboundFault", "current", "assignResult", "local", "captured", "generic", "nested",
-        "importedLength", "localLength", "selfPush", "setOrder", "orderTrace", "suspendedSnapshot", "suspendedSet"};
+        "importedLength", "localLength", "selfPush", "setOrder", "orderTrace", "suspendedSnapshot", "suspendedSet",
+        "aggregate", "aggregateNested", "emptyAggregate", "enumAggregate", "aggregateResult"};
     functions[ARRAY_ENTRY] = module->declarations->entry_function;
     for (unsigned n = 1; n < ARRAY_FUNCTION_COUNT; ++n) {
         functions[n] = UINT32_MAX;

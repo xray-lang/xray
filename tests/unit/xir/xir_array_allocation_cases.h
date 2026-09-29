@@ -74,7 +74,8 @@ static size_t array_allocation_failure(unsigned mode, size_t offset) {
         CHECK(object_pointer(&array) == &original->object && original->length == old_length && original->capacity == old_capacity);
         CHECK(live == physical && domain->stats.live_bytes == bytes && receiver->stats.live_bytes == receiver_bytes);
         CHECK(atomic_load(&object_pointer(&string)->references) == references);
-        for (size_t i = 0; i < original->length; ++i) CHECK(array_element_value(original, i).payload == string.payload);
+        for (size_t i = 0; i < original->length; ++i)
+            CHECK(storage_leaf_value(original->element, original->data + i * original->stride, original->stride).payload == string.payload);
     }
     xr_xir_value_drop(&output); xr_xir_value_drop(&copy); xr_xir_value_drop(&array); xr_xir_value_drop(&string);
     xr_xir_type_arena_drop(arena); xr_xir_domain_drop(domain); xr_xir_domain_drop(receiver); CHECK(!live);

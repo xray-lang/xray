@@ -55,6 +55,7 @@ XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
     bool nominal = false;
     for (uint32_t i = 0; i < count; ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
+        layouts[i].depth = 0; layouts[i].owned_depth = 0; layouts[i].tag_bytes = 0;
         if (node->parameter_span || layouts[i].field_count != node->nominal.field_count ||
             (layouts[i].field_count != 0) != (layouts[i].field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
         if (node->kind == XR_XIR_TYPE_NOMINAL) nominal = true;
@@ -75,7 +76,12 @@ XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
     for (uint32_t i = 0; i < count && status == XR_XIR_OK; ++i) {
         if (types->nodes[i].kind != XR_XIR_TYPE_NOMINAL) continue;
         if (!nodes[i].state) status = nominal_storage_walk(types, target, &budget, nodes, stack, i);
-        if (status == XR_XIR_OK) layouts[i].value = nodes[i].layout;
+        if (status == XR_XIR_OK) {
+            layouts[i].value = nodes[i].layout;
+            layouts[i].depth = nodes[i].depth;
+            layouts[i].owned_depth = nodes[i].owned_depth;
+            layouts[i].tag_bytes = nodes[i].tag_bytes;
+        }
     }
     xr_free(nodes);
     if (status == XR_XIR_OK) *remaining = budget;

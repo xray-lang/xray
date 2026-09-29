@@ -57,6 +57,8 @@ static void enum_metadata_descriptors(void) {
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
     spec.abi_version = 16;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
+    spec.abi_version = 19;
+    CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
     spec.abi_version = XR_XIR_PROGRAM_ABI_VERSION;
     spec.target.abi_version = 11;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
