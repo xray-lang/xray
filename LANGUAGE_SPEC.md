@@ -6757,7 +6757,7 @@ The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is
 
 **`defer` runs on every exit edge that crosses its owning lexical scope**: normal fallthrough, `return`, `break`, `continue`, outward value-error propagation, panic unwinding, and **coroutine cancellation**. The frontend compiles each registration point into a program-point-sensitive static cleanup frontier; there is no closure, callback object, or dynamic runtime stack. Cancellation is not an external kill: a suspendable frame stores only fixed-layout cleanup-region identifiers and depth, and the scheduler invokes the generated static frontier on that coroutine's worker before marking it cancelled. `task.cancel()` correspondingly does not let an `await` observe cancellation before cleanup has run.
 
-For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §2.14.4). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
+For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §4.9 / §8.3.1). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
 
 > Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
 
@@ -7425,7 +7425,7 @@ All arguments still evaluate before complete-group budgeting/rendering and one p
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the uniqueness evidence `move` requires does not hold (live alias, published root, unknown provenance, incomplete storage plan) |
-| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §2.14.4 |
+| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §4.9 / §8.3.1 |
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
 
 ### 18.3 Runtime

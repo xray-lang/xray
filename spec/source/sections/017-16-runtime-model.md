@@ -197,7 +197,7 @@ class PanicInfo {
 
 **`defer` 在每一条跨越其所属词法作用域的退出边上都执行**，包括：正常落出、`return`、`break`、`continue`、值错误向外传播、panic 展开，以及**协程被取消**。前端把每个注册点编译为程序点相关的静态 cleanup frontier；没有闭包、回调对象或动态运行时栈。取消不是一次外部击杀：可挂起帧仅保存定长 cleanup 区域标识与深度，调度器在该协程的 worker 上调用生成的静态 frontier，清理完成后才标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
 
-为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点，也不得创建任务**（`E0392`，见 §2.14.4）。挂起无法保证静态 cleanup 区域在帧离开前完成；创建任务则会让工作逃逸清理边界。静态分析对直接、传递与动态调用保守拒绝，VM/AOT 还在任务创建或调度侧效之前以 `E0444` 失败关闭。清理期间取消被屏蔽，因此清理本身不会被取消打断。
+为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点，也不得创建任务**（`E0392`，见 §4.9 / §8.3.1）。挂起无法保证静态 cleanup 区域在帧离开前完成；创建任务则会让工作逃逸清理边界。静态分析对直接、传递与动态调用保守拒绝，VM/AOT 还在任务创建或调度侧效之前以 `E0444` 失败关闭。清理期间取消被屏蔽，因此清理本身不会被取消打断。
 
 > 演进说明：当确定性析构（RAII / `Drop`）被正式纳入语言时，本节将升级为**确定性回收契约**（明确析构点与顺序），并由跨后端差分测试逐字节守门。在此之前，"回收时机 / finalizer 行为"被显式声明为实现定义的非确定项。
 
@@ -483,7 +483,7 @@ The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is
 
 **`defer` runs on every exit edge that crosses its owning lexical scope**: normal fallthrough, `return`, `break`, `continue`, outward value-error propagation, panic unwinding, and **coroutine cancellation**. The frontend compiles each registration point into a program-point-sensitive static cleanup frontier; there is no closure, callback object, or dynamic runtime stack. Cancellation is not an external kill: a suspendable frame stores only fixed-layout cleanup-region identifiers and depth, and the scheduler invokes the generated static frontier on that coroutine's worker before marking it cancelled. `task.cancel()` correspondingly does not let an `await` observe cancellation before cleanup has run.
 
-For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §2.14.4). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
+For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §4.9 / §8.3.1). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
 
 > Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
 
