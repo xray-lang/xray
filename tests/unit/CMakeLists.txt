@@ -99,6 +99,7 @@ add_custom_command(OUTPUT ${XIR_EFFECT_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
     COMMAND $<TARGET_FILE:test_xir_effects_source> ${XIR_EFFECT_GENERATED}
     DEPENDS test_xir_effects_source ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/root.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/methods.xr
     VERBATIM)
 add_executable(test_xir_effects_native xir/test_xir_effects_native.c ${XIR_EFFECT_GENERATED})
 target_link_libraries(test_xir_effects_native PRIVATE xray_xir_scalar)
@@ -3692,6 +3693,9 @@ endif()
 # source module specialization. Schedule these measured long tests early.
 if(ENABLE_ASAN)
     set_tests_properties(test_xir_execution PROPERTIES COST 120)
+    # The exhaustive source-owner sweep takes about 280 seconds when run alone.
+    # Preserve every injection site and allow for sanitizer contention.
+    set_tests_properties(test_xir_source_allocations PROPERTIES COST 300 TIMEOUT 600)
     set_tests_properties(test_dostring_program_image PROPERTIES COST 230)
 endif()
 

@@ -253,6 +253,45 @@ static void source_nominal_substitution_failures(void) {
     fail_at = SIZE_MAX;
     printf("Source nominal identity and substitution: %zu OOM sites\n", sites);
 }
+static void method_promise_allocations(XrCompilerSession *session) {
+    char directory[] = "xir-method-promises-XXXXXX", absolute[4096], path[8192];
+    CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory, absolute, sizeof(absolute)));
+    CHECK(snprintf(path, sizeof(path), "%s/root.xr", absolute) > 0);
+    FILE *file = fopen(path, "wb"); CHECK(file);
+    CHECK(fputs("struct Box<T>{value:T;get()->T where T:Sendable{return this.value};"
+        "call(f:fn()->i64=fn()->i64{return 31})->i64{return f()}}\n"
+        "fn invoke(f:fn()->i64)->i64{return f()}\n"
+        "print(invoke(Box<i64>{value:23}.get),Box<i64>{value:29}.call())\n", file) >= 0);
+    CHECK(fclose(file) == 0);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
+    XrXirSourceRequest request = {session, path, &authority, NULL, NULL, NULL};
+    XrXirSourceResult baseline = {0};
+    CHECK(xr_xir_source_check(&request, &baseline, NULL) == XR_XIR_OK);
+    const XrXirDeclarations *decls = xr_xir_artifact_module(baseline.checked)->declarations;
+    const XrXirSourceModule *module = &decls->modules[decls->root_module];
+    char name[8192]; CHECK(module->name_length < sizeof(name));
+    memcpy(name, module->name, module->name_length);
+    XrXirLiteral identity = {name, module->name_length};
+    xr_xir_source_result_free(&baseline); CHECK(!live);
+    XrXirSourcePromise records[] = {
+        {identity, {"get",3}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box",3}},
+        {identity, {"call",4}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {"Box",3}},
+        {identity, {"call",4}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {"Box",3}},
+        {identity, {"invoke",6}, XR_XIR_FUNCTION_NO_SUSPEND, 1, {0}}};
+    XrXirSourcePromises declarations = {records, 4}; request.declarations = &declarations;
+    size_t sites = 0;
+    for (size_t site = 0; site <= sites; ++site) {
+        attempts = 0; fail_at = site ? site - 1 : SIZE_MAX;
+        XrXirSourceResult result = {0};
+        XrXirStatus status = xr_xir_source_check(&request, &result, NULL);
+        if (!site) { CHECK(status == XR_XIR_OK && result.checked && result.snapshot); sites = attempts; }
+        else CHECK(status == XR_XIR_OUT_OF_MEMORY && !result.checked && !result.snapshot);
+        xr_xir_source_result_free(&result); CHECK(!live);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_test_unlink(path) == 0 && xr_test_rmdir(directory) == 0);
+    printf("Method promise source ownership: %zu OOM sites; no partial publication\n", sites);
+}
 int main(void) {
     source_nominal_substitution_failures();
     snapshot_nominal_allocations();
@@ -286,6 +325,7 @@ int main(void) {
     }
     resolver_fault = 0;
     array_source_allocations(session);
+    method_promise_allocations(session);
     xr_compiler_session_delete(session);
     printf("Source-owner allocation failures: %zu; no partial artifact or live metadata\n", count);
     CHECK(!live); xr_free(owned); owned = NULL; owned_capacity = 0;

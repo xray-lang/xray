@@ -1,0 +1,17 @@
+struct Box<T> {
+    value:T
+    get()->T where T:Sendable { return this.value }
+    static identity<U>(value:U)->U where U:Sendable { return value }
+    call(f:fn()->i64)->i64 { return f() }
+    static callStatic(f:fn()->i64)->i64 { return f() }
+    sleeper()->i64 { Coro.yield(); return 0 }
+}
+struct Other { get()->i64 { return 99 } }
+fn invoke(f:fn()->i64)->i64 { return f() }
+fn invokeStatic(f:fn(i64)->i64)->i64 { return f(13) }
+export fn boundUse()->i64 { return invoke(Box<i64>{value:11}.get) }
+export fn staticUse()->i64 { return invokeStatic(Box<i64>.identity<i64>) }
+export fn callbackUse()->i64 {
+    const box=Box<i64>{value:17}
+    return box.call(fn()->i64{return 17}) + Box<i64>.callStatic(fn()->i64{return 19})
+}

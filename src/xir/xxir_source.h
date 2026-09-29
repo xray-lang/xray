@@ -18,8 +18,10 @@ typedef struct XrXirSourcePromise {
     XrXirLiteral module;
     XrXirLiteral function;
     uint32_t promises;
-    /* Zero selects the function; otherwise one plus the callable parameter index. */
+    /* Zero selects the function; otherwise one plus the explicit parameter index, excluding receiver. */
     uint32_t parameter;
+    /* Empty for top-level functions; otherwise the declaring nominal name. */
+    XrXirLiteral owner;
 } XrXirSourcePromise;
 typedef struct XrXirSourcePromises {
     const XrXirSourcePromise *items;

@@ -14,7 +14,9 @@
 XR_DATA const XrXirProgramSpec effect_source_program;
 XR_DATA const uint32_t effect_source_entry;
 XR_DATA const uint32_t effect_source_captured;
-static void native_attempt(XrXirProgram *program, uint32_t entry) {
+XR_DATA const XrXirProgramSpec method_source_program;
+XR_DATA const uint32_t method_source_selected_entries[3];
+static void native_attempt(XrXirProgram *program, uint32_t entry, int64_t expected) {
     XrXirInstanceConfig config = xr_xir_instance_defaults();
     XrXirInstance *instance = NULL;
     XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
@@ -23,7 +25,7 @@ static void native_attempt(XrXirProgram *program, uint32_t entry) {
     XrXirValue value = {0};
     if (status == XR_XIR_CALL_RETURNED) {
         CHECK(xr_xir_instance_take_result(instance, &value) == XR_XIR_CALL_RETURNED);
-        CHECK(value.type == XR_XIR_I64 && value.payload == 7);
+        CHECK(value.type == XR_XIR_I64 && value.payload == expected);
     } else CHECK(runtime_fail_at != SIZE_MAX && status == XR_XIR_CALL_OOM);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_value_drop(&value);
@@ -32,16 +34,23 @@ int main(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_program_seal(&effect_source_program,
         (XrXirProgramBudget){33554432, 64000000}, &program) == XR_XIR_OK);
+    XrXirProgram *methods = NULL;
+    CHECK(xr_xir_program_seal(&method_source_program,
+        (XrXirProgramBudget){33554432, 64000000}, &methods) == XR_XIR_OK);
     size_t baseline = runtime_live, bytes = runtime_bytes, sites = 0;
     for (size_t attempt = 0; attempt <= sites; ++attempt) {
         runtime_attempts = 0; runtime_fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        native_attempt(program, effect_source_entry); native_attempt(program, effect_source_captured);
+        native_attempt(program, effect_source_entry, 7); native_attempt(program, effect_source_captured, 7);
+        native_attempt(methods, method_source_selected_entries[0], 11);
+        native_attempt(methods, method_source_selected_entries[1], 13);
+        native_attempt(methods, method_source_selected_entries[2], 36);
         if (!attempt) sites = runtime_attempts;
         CHECK(runtime_live == baseline && runtime_bytes == bytes);
     }
-    runtime_fail_at = SIZE_MAX; xr_xir_program_drop(program);
+    runtime_fail_at = SIZE_MAX; xr_xir_program_drop(program); xr_xir_program_drop(methods);
     CHECK(!runtime_live && !runtime_bytes);
     printf("Native qualified callback released %zu allocation failure sites\n", sites);
     puts("Native qualified callback returned the independent expected value 7");
+    puts("Native method callbacks returned independent expected values 11, 13 and 36");
     return 0;
 }

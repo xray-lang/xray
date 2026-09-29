@@ -295,6 +295,16 @@ static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *p
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT,
         parameters, count, result, 0, 0, {0}}, type);
 }
+static bool source_reference_promise(SourceContext *ctx, AstNode *node,
+    uint32_t function, XrXirType expected, XrXirType *type) {
+    const XrXirTypeNode *context = xr_xir_callable_signature(&ctx->types, expected);
+    if (!context || context->flags != XR_XIR_CALLABLE_NO_SUSPEND) return true;
+    if (!(ctx->identities[function].promises & XR_XIR_FUNCTION_NO_SUSPEND))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "qualified reference requires an explicit target promise");
+    XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, *type);
+    signature.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+    return source_intern_type(ctx, signature, type);
+}
 static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CELL, element,
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
@@ -1063,14 +1073,7 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     XrXirType result;
     if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||
         !source_signature(ctx,parameters,count,result,&op.type)) return false;
-    const XrXirTypeNode *context = xr_xir_callable_signature(&ctx->types, expected);
-    if (context && context->flags == XR_XIR_CALLABLE_NO_SUSPEND) {
-        if (!(ctx->identities[symbol->index].promises & XR_XIR_FUNCTION_NO_SUSPEND))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "qualified reference requires an explicit target promise");
-        XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, op.type);
-        signature.flags = XR_XIR_CALLABLE_NO_SUSPEND;
-        if (!source_intern_type(ctx, signature, &op.type)) return false;
-    }
+    if (!source_reference_promise(ctx, node, symbol->index, expected, &op.type)) return false;
     return source_type_arguments(ctx, node, arguments.substitution.types, arguments.count, &op) && emit(ctx,op,value);
 }
 static bool source_explicit_reference(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
@@ -1083,7 +1086,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, XrXirTy
         if (base && base->kind == SOURCE_MODULE) { binding = base; symbol = imported_declaration(ctx,base,member->name); }
         else {
             SourceTypeArguments arguments = {node->as.function_ref.type_args, (uint32_t)node->as.function_ref.type_arg_count, {0}};
-            return source_member_value(ctx, callee, &arguments, value);
+            return source_member_value(ctx, callee, &arguments, expected, value);
         }
     }
     return source_function_value(ctx,node,binding,symbol,expected,value);
@@ -1114,7 +1117,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
         MemberAccessNode *member = &node->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
         SourceTypeArguments arguments = {0};
-        if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, &arguments, value);
+        if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, &arguments, expected, value);
         return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), expected, value);
     }
     case AST_THIS_EXPR: case AST_VARIABLE: {
@@ -1654,13 +1657,20 @@ static bool source_promises(SourceContext *ctx, const XrXirSourcePromises *decla
         const XrXirSourcePromise *item = &declarations->items[d];
         if (!source_work(ctx, NULL)) return false;
         if (!item->module.bytes || !item->module.length || !item->function.bytes ||
-            !item->function.length || item->promises != XR_XIR_FUNCTION_NO_SUSPEND)
+            !item->function.length || (item->owner.length && !item->owner.bytes) ||
+            item->promises != XR_XIR_FUNCTION_NO_SUSPEND)
             return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "unsupported source declaration promise");
         uint32_t selected = UINT32_MAX;
         for (uint32_t f = 0; f < ctx->function_count; ++f) {
             if (!source_work(ctx, NULL)) return false;
             AstNode *node = ctx->bodies[f].node;
-            if (!node || node->type != AST_FUNCTION_DECL || ctx->bodies[f].default_expression) continue;
+            if (!node || ctx->bodies[f].default_expression) continue;
+            uint32_t owner = ctx->identities[f].nominal_owner;
+            if (item->owner.length) {
+                if (node->type != AST_METHOD_DECL || node->as.method_decl.is_constructor || !owner) continue;
+                const XrXirLiteral *name = &ctx->nominals.declarations[owner - 1].name;
+                if (name->length != item->owner.length || memcmp(name->bytes, item->owner.bytes, name->length)) continue;
+            } else if (node->type != AST_FUNCTION_DECL || owner) continue;
             const XrXirFunction *function = &ctx->functions[f];
             uint32_t module = ctx->identities[f].module;
             if (ctx->modules[module].name_length != item->module.length ||
@@ -1674,7 +1684,9 @@ static bool source_promises(SourceContext *ctx, const XrXirSourcePromises *decla
         if (selected == UINT32_MAX)
             return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source declaration promise target is missing");
         if (item->parameter) {
-            if (!source_parameter_promise(ctx, selected, item->parameter - 1)) return false;
+            AstNode *node = ctx->bodies[selected].node;
+            uint32_t offset = node->type == AST_METHOD_DECL && !node->as.method_decl.is_static ? 1 : 0;
+            if (!source_parameter_promise(ctx, selected, item->parameter - 1 + offset)) return false;
             continue;
         }
         if (ctx->identities[selected].promises)

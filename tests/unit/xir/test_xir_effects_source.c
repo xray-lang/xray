@@ -20,6 +20,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_effect_witness_cases.h"
 #include "xir_source_promise_cases.h"
+#include "xir_source_method_promises.h"
 static void source_generic_effects(const XrXirModule *module, const XrXirEffects *effects) {
     bool open=false; uint32_t found=0;
     for (uint32_t f=0;f<module->function_count;++f)
@@ -162,8 +163,8 @@ static void source_declared_input(XrXirSourceRequest *request, XrXirSourceResult
     const XrXirModule *module = xr_xir_artifact_module(baseline->checked);
     const XrXirSourceModule *root = &module->declarations->modules[module->declarations->root_module];
     XrXirLiteral name = {root->name, root->name_length};
-    XrXirSourcePromise records[] = {{name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0},
-        {name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0}};
+    XrXirSourcePromise records[] = {{name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {0}},
+        {name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {0}}};
     XrXirSourcePromises declarations = {records, 1};
     request->declarations = &declarations;
     const char *targets[] = {"pure", "fail", "relay", "sleeper", "dynamic", "$entry", "absent"};
@@ -187,7 +188,7 @@ static void source_declared_input(XrXirSourceRequest *request, XrXirSourceResult
         CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BAD_STRUCTURE);
         CHECK(!result.checked); xr_xir_source_result_free(&result);
     }
-    records[0] = (XrXirSourcePromise){name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0};
+    records[0] = (XrXirSourcePromise){name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0, {0}};
     XrXirSourceResult promised = {0};
     CHECK(xr_xir_source_check(request, &promised, NULL) == XR_XIR_OK);
     xr_xir_source_result_free(baseline); *baseline = promised;
@@ -216,6 +217,7 @@ int main(int argc, char **argv) {
         diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK); source_effects(result.checked);
     source_callable_promise_cases(&request, result.checked, argc == 2 ? argv[1] : NULL);
+    source_method_promise_cases(&request, argc == 2 ? argv[1] : NULL);
     source_declared_input(&request, &result); source_promise_retained(result.checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);

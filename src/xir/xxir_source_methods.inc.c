@@ -39,7 +39,8 @@ static bool source_static_select(SourceContext *ctx, AstNode *node, SourceStatic
     selected->method = method; selected->substitution = arguments.substitution;
     return true;
 }
-static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticMethod *selected, SourceValue *value) {
+static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticMethod *selected,
+    XrXirType expected, SourceValue *value) {
     const XrXirFunction *function = &ctx->functions[selected->method->index];
     uint32_t count = function->parameter_count;
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
@@ -50,6 +51,7 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, selected->method->index, {0}};
     return source_substitute(ctx, &selected->substitution, function->result, 0, &result) &&
         source_signature(ctx, parameters, count, result, &op.type) &&
+        source_reference_promise(ctx, node, selected->method->index, expected, &op.type) &&
         source_type_arguments(ctx, node, selected->substitution.types, selected->substitution.count, &op) &&
         source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
             selected->method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) && emit(ctx, op, value);
@@ -91,7 +93,8 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
             method->declaration, XR_XIR_SOURCE_CALL) &&
         emit_group(ctx, op, arguments, function->parameter_count, value);
 }
-static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments, SourceValue *value) {
+static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
+    XrXirType expected, SourceValue *value) {
     SourceEnumSelection enumeration = {0};
     if (!source_enum_select(ctx, node, &enumeration)) return false;
     if (enumeration.owner) {
@@ -103,7 +106,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     if (selected.method) {
         if (!source_method_instantiation(ctx, node, selected.method->index, selected.substitution, type_arguments)) return false;
         selected.substitution = type_arguments->substitution;
-        return source_static_value(ctx, node, &selected, value);
+        return source_static_value(ctx, node, &selected, expected, value);
     }
     if (source_constructor_receiver(ctx, node->as.member_access.object)) {
         const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[ctx->identities[ctx->function].nominal_owner - 1];
@@ -150,6 +153,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index, {0}};
     return source_substitute(ctx, &substitution, function->result, 0, &result) &&
         source_signature(ctx, parameters, count, result, &op.type) &&
+        source_reference_promise(ctx, node, method->index, expected, &op.type) &&
         source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
         source_query_target_reference(ctx, source_query_range(ctx, node, NULL),
             method->declaration, XR_XIR_SOURCE_FUNCTION_VALUE) &&
