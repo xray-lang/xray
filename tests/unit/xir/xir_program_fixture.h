@@ -74,7 +74,7 @@ static XrXirArtifact *program_fixture(uint32_t mode) {
         {XR_XIR_OUTPUT, XR_XIR_UNIT, {1}, {0}, 1, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
-    const XrXirBlock blocks[] = {{0, 4, 0}, {0, 10, 0}, {0, 11, 0}, {0, 6, 0}, {0, 2, 0}};
+    const XrXirBlock blocks[] = {{0, 4, 0, 0}, {0, 10, 0, 0}, {0, 11, 0, 0}, {0, 6, 0, 0}, {0, 2, 0, 0}};
     const XrXirFunction functions[] = {
         {"init_root", 9, NULL, 0, XR_XIR_UNIT, &blocks[0], 1, init, 4, NULL, 0},
         {"init_beta", 9, NULL, 0, XR_XIR_UNIT, &blocks[1], 1, beta, 10, NULL, 0},

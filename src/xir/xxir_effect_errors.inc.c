@@ -194,7 +194,8 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i) {
     }
     if (op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT ||
         op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_SUSPEND ||
-        op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT)
+        op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT ||
+        op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR)
         return error_cells(flow,UINT32_MAX,NULL);
     return XR_XIR_OK;
 }
@@ -235,6 +236,14 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
         !effect_spend(&flow->remaining->work, (uint64_t)flow->values * (flow->effects->atom_count + 1)))
         return XR_XIR_BUDGET;
     memcpy(flow->edge, flow->work, flow->stride * sizeof(uint64_t));
+    if (flow->function->blocks[from].panic == to &&
+        flow->function->blocks[from].frontier != flow->function->blocks[to].frontier) {
+        uint64_t *saved = flow->work;
+        flow->work = flow->edge;
+        XrXirStatus status = error_cells(flow, UINT32_MAX, NULL);
+        flow->work = saved;
+        if (status != XR_XIR_OK) return status;
+    }
     if (branch && !error_filter(flow, branch, yes)) return XR_XIR_OK;
     memcpy(flow->snapshot, flow->edge, flow->stride * sizeof(uint64_t));
     const XrXirBlock *block = &flow->function->blocks[to];
@@ -263,7 +272,8 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b) {
         if (status != XR_XIR_OK || flow->restart) return status;
     }
     const XrXirInstruction *end = &flow->function->instructions[block->first + block->count - 1];
-    if (end->op == XR_XIR_JUMP) return error_edge(flow, b, end->targets[0], NULL, true);
+    if (end->op == XR_XIR_JUMP || end->op == XR_XIR_CLEANUP_REGISTER ||
+        end->op == XR_XIR_CLEANUP_LEAVE || end->op == XR_XIR_CLEANUP_ERROR) return error_edge(flow, b, end->targets[0], NULL, true);
     if (end->op == XR_XIR_BRANCH) {
         XrXirStatus status = error_edge(flow, b, end->targets[0], end, true);
         return status == XR_XIR_OK ? error_edge(flow, b, end->targets[1], end, false) : status;

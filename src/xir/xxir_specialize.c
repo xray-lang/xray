@@ -10,6 +10,7 @@
  *   Instances substitute verified types and calls without retaining or revisiting AST.
  */
 #include "xxir_generic.h"
+#include "xxir_operand_roles.h"
 #include "xxir_types.h"
 #include "xxir_internal.h"
 #include "../base/xmalloc.h"
@@ -230,7 +231,7 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         c->diagnostic.instruction = i;
         if (!spec_work(c, 1)) return false;
         XrXirInstruction *op = &ops[i];
-        if (op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE && op->op != XR_XIR_FUNCTION_REF) continue;
+        if (!xr_xir_op_references_function(op->op)) continue;
         uint32_t count = op->type_arguments[1];
         XrXirType *types = spec_alloc(c, count, sizeof(*types));
         if (count && !types) return false;
@@ -320,7 +321,7 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
 XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *budget,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     SpecContext c = {0};
-    c.diagnostic = (XrXirDiagnostic) {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    c.diagnostic = (XrXirDiagnostic) {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     c.source = xr_xir_artifact_module(checked);
     c.remaining = budget ? *budget : xr_xir_default_budget();
     XrXirBudget limits = c.remaining;

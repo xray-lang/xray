@@ -83,6 +83,12 @@ static void source_effects(const XrXirArtifact *artifact) {
         {"recursivePeer", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"cellAfterCall", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"cellSnapshot", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellAfterCleanup", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellCleanupSnapshot", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellPanicCleanup", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellPanicSnapshot", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellErrorCleanup", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
+        {"cellErrorSnapshot", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"panicThrows", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
         {"cellAfterYield", XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_MAY},
         {"cellAfterOutput", XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY},
@@ -119,6 +125,8 @@ static void source_effects(const XrXirArtifact *artifact) {
             CHECK(fact->suspend == expected[e].suspend && fact->throws == expected[e].throws); found = true;
             uint32_t mask = expected[e].throws == XR_XIR_EFFECT_MAY ? 1u : 0u;
             if (!strcmp(expected[e].name,"unknownParameter")) mask=0;
+            if (!strcmp(expected[e].name,"cellAfterCleanup") || !strcmp(expected[e].name,"cellPanicCleanup") ||
+                !strcmp(expected[e].name,"cellErrorCleanup")) mask=3;
             if (!strcmp(expected[e].name,"parameterThrow") || !strcmp(expected[e].name,"phiThrow") ||
                 !strcmp(expected[e].name,"loopThrow") || !strcmp(expected[e].name,"cellAfterCall") ||
                 !strcmp(expected[e].name,"cellAfterYield") || !strcmp(expected[e].name,"cellAfterOutput") || !strcmp(expected[e].name,"paramForward")) mask = 3;

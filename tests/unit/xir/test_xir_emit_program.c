@@ -25,9 +25,21 @@
 #include "xir_struct_ops_fixture.h"
 #include "xir_enum_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
+#include "xir_cleanup_program_fixture.h"
 int main(int argc, char **argv) {
     FILE *file = argc == 2 ? fopen(argv[1], "wb") : NULL;
     CHECK(argc == 1 || (argc == 2 && file));
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        XrXirArtifact *artifact = cleanup_program_fixture(mode);
+        XrXirCSource source = {0}; char prefix[32];
+        CHECK(snprintf(prefix, sizeof(prefix), "cleanup%u", mode) > 0);
+        CHECK(xr_xir_emit_c(artifact, prefix, 200000, &source) == XR_XIR_OK);
+        xr_xir_artifact_free(artifact);
+        CHECK(!strstr(source.text, "xr_xir_vm") && !strstr(source.text, "({"));
+        if (file) CHECK(fwrite(source.text, 1, source.length, file) == source.length);
+        xr_xir_c_source_free(&source);
+    }
+
     XrXirArtifact *enum_ops = enum_ops_lowered(false); XrXirCSource enum_ops_source = {0};
     CHECK(xr_xir_emit_c(enum_ops,"enum_ops",200000,&enum_ops_source) == XR_XIR_OK); xr_xir_artifact_free(enum_ops);
     CHECK(!strstr(enum_ops_source.text,"xr_xir_vm") && !strstr(enum_ops_source.text,"({"));

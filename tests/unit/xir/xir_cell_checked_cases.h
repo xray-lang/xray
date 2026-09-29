@@ -26,7 +26,7 @@ static void cell_checked_cases(void) {
             {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {2, 3}, {0}, 0, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
         };
-        XrXirBlock block = {0, 4, 0};
+        XrXirBlock block = {0, 4, 0, 0};
         functions[8].instructions = ops; functions[8].instruction_count = 4;
         functions[8].blocks = &block; functions[8].block_count = 1;
         functions[8].parameters = parameters; functions[8].operands = NULL; functions[8].operand_count = 0;

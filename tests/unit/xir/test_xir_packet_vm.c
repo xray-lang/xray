@@ -55,7 +55,9 @@ int main(int argc, char **argv) {
     XrXirCSource source;
     CHECK(xr_xir_emit_c(lowered, "fixture_source", 524288, &source) == XR_XIR_BUDGET);
     CHECK(!source.text && !source.length);
-    CHECK(xr_xir_emit_c(lowered, "fixture_source", 4194304, &source) == XR_XIR_OK);
+    XrXirStatus emitted = xr_xir_emit_c(lowered, "fixture_source", 4194304, &source);
+    if (emitted != XR_XIR_OK) fprintf(stderr, "Native source emission failed: %u, functions: %u\n", (unsigned)emitted, module->function_count);
+    CHECK(emitted == XR_XIR_OK);
     CHECK(source.length > 524288);
     if (argc >= 2) {
         file = fopen(argv[1], "wb"); CHECK(file);

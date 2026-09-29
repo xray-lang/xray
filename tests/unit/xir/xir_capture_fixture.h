@@ -39,7 +39,7 @@ static XrXirArtifact *capture_checked(bool throwing) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{3},{0},0,{0}},
         {XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},0,{0}},
         {XR_XIR_THROW,XR_XIR_UNIT,{5},{0},0,{0}}};
-    XrXirBlock invoke_blocks[] = {{0,1, 0},{1,2, 0},{3,2, 0}};
+    XrXirBlock invoke_blocks[] = {{0,1, 0, 0},{1,2, 0, 0},{3,2, 0, 0}};
     XrXirInstruction target[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
     XrXirInstruction failure[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0,{0}},
@@ -49,7 +49,7 @@ static XrXirArtifact *capture_checked(bool throwing) {
     uint32_t error_argument = 3;
     XrXirType parameters[] = {fn,XR_XIR_STRING,t,XR_XIR_STRING}, concrete = XR_XIR_STRING;
     uint32_t captures[] = {0,1}, argument = 1, constraint = 0;
-    XrXirBlock blocks[] = {{0,1, 0},{0,2, 0},{0,4, 0}};
+    XrXirBlock blocks[] = {{0,1, 0, 0},{0,2, 0, 0},{0,4, 0, 0}};
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,init,1,NULL,0},
         {"root",4,NULL,0,XR_XIR_I64,blocks+1,1,root,2,NULL,0},

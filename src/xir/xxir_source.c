@@ -50,7 +50,7 @@ typedef struct SourceFunction {
     uint32_t *operands, operand_count, operand_capacity;
     uint32_t type_capacity;
     XrXirBlock *blocks;
-    uint32_t block_count, block_capacity;
+    uint32_t block_count, block_capacity, frontier, lexical_depth;
     XrXirInstruction *ops;
     uint32_t declaration, generic_owner;
     uint32_t *constructor_places, *argument_defaults;
@@ -59,14 +59,14 @@ typedef struct SourceFunction {
     XrXirInitializationRegion *initialization_regions, *initialization_parent;
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
-typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; } SourceLoop;
+typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; uint32_t frontier; } SourceLoop;
 typedef struct SourceValue { uint32_t id; XrXirType type; } SourceValue;
 typedef struct SourceErrorEdge {
     struct SourceErrorEdge *next;
     uint32_t block, jump;
     SourceValue value;
 } SourceErrorEdge;
-struct SourceErrorContext { SourceErrorEdge *edges; uint32_t count; };
+struct SourceErrorContext { SourceErrorEdge *edges; uint32_t count, frontier; };
 
 typedef struct SourceContext {
     XrModuleGraph *graph;
@@ -447,7 +447,7 @@ static bool begin_block(SourceContext *ctx) {
         if (body->block_count) memcpy(blocks, body->blocks, body->block_count * sizeof(*blocks));
         body->blocks = blocks; body->block_capacity = capacity;
     }
-    body->blocks[body->block_count++] = (XrXirBlock) {body->count, 0, 0};
+    body->blocks[body->block_count++] = (XrXirBlock) {body->count, 0, 0, body->frontier};
     --ctx->budget.blocks; ctx->returned = false; return true;
 }
 static bool emit_raw(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
@@ -1102,6 +1102,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceV
     return source_function_value(ctx,node,binding,symbol,value);
 }
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value);
+static bool source_defer(SourceContext *ctx, AstNode *node);
 static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     switch (node->type) {
     case AST_ARRAY_LITERAL: return source_array_literal(ctx, node, expected, value);
@@ -1314,7 +1315,7 @@ static bool source_loop(SourceContext *ctx, AstNode *node, AstNode *condition_no
     if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "loop condition requires bool");
     uint32_t branch = body->count, entry = body->block_count;
     if (!emit(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {entry, 0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
-    SourceLoop loop = {ctx->loop, NULL, NULL}; ctx->loop = &loop;
+    SourceLoop loop = {ctx->loop, NULL, NULL, body->frontier}; ctx->loop = &loop;
     bool ok = scoped_statement(ctx, loop_body); ctx->loop = loop.parent;
     if (!ok) return false;
     if (!ctx->returned || loop.continues) {
@@ -1340,18 +1341,24 @@ static bool source_for(SourceContext *ctx, AstNode *node) {
 static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
     bool stop = node->type == AST_BREAK_STMT;
     const char *label = stop ? node->as.break_stmt.label : node->as.continue_stmt.label;
-    if (!ctx->loop || label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "loop exit requires an unlabelled enclosing loop");
+    if (!ctx->loop || label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE,
+        ctx->identities[ctx->function].cleanup_owner ? "E0395: defer cannot exit an enclosing loop outside its body" :
+        "loop exit requires an unlabelled enclosing loop");
     SourcePatch **head = stop ? &ctx->loop->breaks : &ctx->loop->continues;
     SourcePatch *patch = source_alloc(ctx, 1, sizeof(*patch)); if (!patch) return false;
     *patch = (SourcePatch) {*head, ctx->bodies[ctx->function].count}; *head = patch;
     ctx->returned = true;
-    return emit(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0, {0}}, NULL);
+    uint32_t target = ctx->loop->frontier;
+    bool leaving = ctx->bodies[ctx->function].frontier != target;
+    return emit(ctx, (XrXirInstruction) {leaving ? XR_XIR_CLEANUP_LEAVE : XR_XIR_JUMP,
+        XR_XIR_UNIT, {0}, {0}, leaving ? target : 0, {0}}, NULL);
 }
 #include "xxir_source_catch.inc.c"
 static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     if (!node || !source_work(ctx, node)) return false;
     if (ctx->returned) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "unreachable statements are not admitted");
     switch (node->type) {
+    case AST_DEFER_STMT: return source_defer(ctx, node);
     case AST_TRY_CATCH: return source_try(ctx, node);
     case AST_IF_STMT: return source_if(ctx, node);
     case AST_WHILE_STMT:
@@ -1388,6 +1395,8 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         return emit(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {value.id, 0}, {0, 0}, 0, {0}}, NULL);
     }
     case AST_RETURN_STMT: {
+        if (ctx->identities[ctx->function].cleanup_owner)
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "E0395: defer cannot return from its owning function");
         if (source_constructor_active(ctx)) return source_constructor_return(ctx, node);
         if (top || !ctx->bodies[ctx->function].node || node->as.return_stmt.value_count > 1)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid return placement or arity");
@@ -1405,11 +1414,18 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_BLOCK: {
         if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source block depth exhausted");
         SourceName *saved = ctx->locals, *scope = ctx->scope;
-        ctx->scope = saved; ++ctx->depth;
-        for (int i = 0; i < node->as.block.count; ++i)
-            if (!statement(ctx, node->as.block.statements[i], false)) { --ctx->depth; return false; }
-        --ctx->depth; ctx->locals = saved; ctx->scope = scope;
-        return true;
+        SourceFunction *body = &ctx->bodies[ctx->function]; uint32_t entry = body->frontier;
+        ctx->scope = saved; ++ctx->depth; ++body->lexical_depth;
+        bool ok = true;
+        for (int i = 0; ok && i < node->as.block.count; ++i)
+            ok = statement(ctx, node->as.block.statements[i], false);
+        --ctx->depth; --body->lexical_depth; ctx->locals = saved; ctx->scope = scope;
+        if (ok && !ctx->returned && body->frontier != entry) {
+            ok = emit(ctx, (XrXirInstruction){XR_XIR_CLEANUP_LEAVE, XR_XIR_UNIT, {0}, {body->block_count}, entry, {0}}, NULL);
+            body->frontier = entry;
+            if (ok) ok = begin_block(ctx);
+        } else body->frontier = entry;
+        return ok;
     }
     default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "statement syntax is not implemented in XIR");
     }
@@ -1503,9 +1519,9 @@ static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
     if (!source_work(scan->ctx,node)) return false;
-    if (scan->depth == 128 || (node->type == AST_FUNCTION_EXPR && scan->count == scan->ctx->budget.functions))
+    if (scan->depth == 128 || ((node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT) && scan->count == scan->ctx->budget.functions))
         return source_fail(scan->ctx,node,XR_XIR_BUDGET,"closure declaration budget exhausted");
-    if (node->type == AST_FUNCTION_EXPR) ++scan->count;
+    if (node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT) ++scan->count;
     XrParamNode **parameters = node->type == AST_FUNCTION_DECL ? node->as.function_decl.params :
         node->type == AST_METHOD_DECL ? node->as.method_decl.params : NULL;
     int count = node->type == AST_FUNCTION_DECL ? node->as.function_decl.param_count :
@@ -1761,8 +1777,7 @@ static bool capture_scan(AstNode *node, void *pointer) {
     ++scan->depth;
     bool ok = capture_children(scan, node); --scan->depth; return ok;
 }
-static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
-    XrXirCallableParameter *parameters) {
+static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     for (SourceCapture *p = scan->captures; p; p = p->next) {
         SourceName *symbol = add_name(ctx, &ctx->locals, p->source->name, node);
@@ -1774,6 +1789,12 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         if (symbol->mutable && !source_cell_type(ctx, type, &type)) return false;
         body->parameters[p->index] = type;
     }
+    return true;
+}
+static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
+    XrXirCallableParameter *parameters) {
+    if (!source_capture_parameters(ctx, node, scan)) return false;
+    SourceFunction *body = &ctx->bodies[ctx->function];
     FunctionDeclNode *decl = &node->as.function_expr;
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
@@ -1794,6 +1815,7 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
     }
     return true;
 }
+#include "xxir_source_cleanup.inc.c"
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value) {
     FunctionDeclNode *decl = &node->as.function_expr;
     if (decl->is_generator || decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_count ||
@@ -1985,7 +2007,16 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
             char message[128];
             snprintf(message, sizeof(message), "constructed XIR failed checking at function %u block %u instruction %u",
                 location.function, location.block, location.instruction);
-            source_fail(&ctx, NULL, status, message);
+            AstNode *site = NULL;
+            if (location.function < ctx.function_count) {
+                site = ctx.bodies[location.function].node;
+                ctx.module = ctx.bodies[location.function].module;
+            }
+            const char *cause = location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
+                "E0387: an error can escape the defer body" :
+                location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND ?
+                "E0392: defer may suspend or create a task" : message;
+            source_fail(&ctx, site, status, cause);
         }
     }
 done:

@@ -122,7 +122,7 @@ static void initialization_loops(void) {
         {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}
     };
-    XrXirBlock blocks[] = {{0, 3, 0}, {3, 2, 0}, {5, 2, 0}, {7, 1, 0}};
+    XrXirBlock blocks[] = {{0, 3, 0, 0}, {3, 2, 0, 0}, {5, 2, 0, 0}, {7, 1, 0, 0}};
     XrXirFunction function = {"loop", 4, parameters, 2, XR_XIR_I64, blocks, 4, ops, 8, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
@@ -148,7 +148,7 @@ static void initialization_loops(void) {
         {XR_XIR_BRANCH, XR_XIR_UNIT, {1}, {1, 2}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}
     };
-    const XrXirBlock reset_blocks[] = {{0, 1, 0}, {1, 4, 0}, {5, 1, 0}};
+    const XrXirBlock reset_blocks[] = {{0, 1, 0, 0}, {1, 4, 0, 0}, {5, 1, 0, 0}};
     function.instructions = reset_ops; function.instruction_count = 6;
     function.blocks = reset_blocks; function.block_count = 3;
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);

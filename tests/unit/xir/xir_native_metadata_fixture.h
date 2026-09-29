@@ -18,7 +18,7 @@ static XrXirStatus native_metadata_fixture(const XrXirProgramSpec *spec, XrXirAr
     XrXirFunction functions[16] = {0};
     XrXirInstruction instructions[16][2] = {0};
     char names[16][24];
-    const XrXirBlock block = {0, 2, 0};
+    const XrXirBlock block = {0, 2, 0, 0};
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
         int length = snprintf(names[i], sizeof(names[i]), "native_test_%u", i);

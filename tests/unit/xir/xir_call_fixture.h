@@ -23,9 +23,9 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
     mode = generic ? mode - 12 : unit ? mode - 10 : mode % 4;
     const uint32_t operands[] = {0, 1};
     const XrXirType params[] = {XR_XIR_I64, XR_XIR_I64};
-    const XrXirBlock root_block = {0, 2, 0};
-    const XrXirBlock sort_blocks[] = {{0, 2, 0}, {2, 1, 0}, {3, 1, 0}};
-    const XrXirBlock compare_block = {0, 4, 0};
+    const XrXirBlock root_block = {0, 2, 0, 0};
+    const XrXirBlock sort_blocks[] = {{0, 2, 0, 0}, {2, 1, 0, 0}, {3, 1, 0, 0}};
+    const XrXirBlock compare_block = {0, 4, 0, 0};
     const XrXirInstruction root[] = {
         {XR_XIR_CALL, XR_XIR_I64, {0, 2}, {0, 0}, 1, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
@@ -55,7 +55,7 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
     } else if (mode == 3) compare[3]=(XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction init={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0, {0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
-    XrXirBlock init_block={0,1, 0};
+    XrXirBlock init_block={0,1, 0, 0};
     XrXirFunction functions[] = {
         {"entry", 5, params, 2, XR_XIR_I64, &root_block, 1, root, 2, operands, 2},
         {"minimum", 7, params, 2, XR_XIR_I64, sort_blocks, 3, sort, 4, operands, 2},
@@ -71,7 +71,7 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},77,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{6},{0},0,{0}},
         {XR_XIR_THROW,XR_XIR_UNIT,{5},{0},0,{0}}};
-    XrXirBlock guarded_blocks[] = {{0,1, 0},{1,2, 0},{3,3, 0}};
+    XrXirBlock guarded_blocks[] = {{0,1, 0, 0},{1,2, 0, 0},{3,3, 0, 0}};
     if (guarded) {
         functions[0].instructions = invoke; functions[0].instruction_count = 6;
         functions[0].blocks = guarded_blocks; functions[0].block_count = 3;
@@ -91,7 +91,7 @@ static XrXirArtifact *call_fixture(uint32_t mode) {
     XrXirGeneric generics[] = {{NULL,0,&concrete,1},{&constraint,1,NULL,0},{0},{0},{0}};
     XrXirInstruction identity[] = {{XR_XIR_SUSPEND,XR_XIR_UNIT,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
-    XrXirBlock generic_block = {0,mode ? 4u : 2u, 0};
+    XrXirBlock generic_block = {0,mode ? 4u : 2u, 0, 0};
     if (generic) {
         invoke[0].type_arguments[1] = 1;
         functions[1].parameters = template_parameters; functions[1].result = template_parameters[0];

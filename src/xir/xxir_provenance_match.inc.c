@@ -117,7 +117,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
         c->remaining->work -= work;
         for (uint32_t b = 0; b < from->block_count; ++b)
             if (from->blocks[b].first != to->blocks[b].first || from->blocks[b].count != to->blocks[b].count ||
-                from->blocks[b].panic != to->blocks[b].panic)
+                from->blocks[b].panic != to->blocks[b].panic || from->blocks[b].frontier != to->blocks[b].frontier)
                 return XR_XIR_BAD_STRUCTURE;
         for (uint32_t o = 0; o < from->operand_count; ++o)
             if (from->operands[o] != to->operands[o]) return XR_XIR_BAD_STRUCTURE;
@@ -128,7 +128,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 provenance_lowered_op(c->destination->types, to, a->op, b) : a->op;
             if (expected != b->op || a->args[0] != b->args[0] || a->args[1] != b->args[1] ||
                 a->targets[0] != b->targets[0] || a->targets[1] != b->targets[1]) return XR_XIR_BAD_STRUCTURE;
-            if (a->op == XR_XIR_CALL || a->op == XR_XIR_INVOKE || a->op == XR_XIR_FUNCTION_REF) {
+            if (xr_xir_op_references_function(a->op)) {
                 XrXirStatus status = provenance_call_match(c, origin, a, b);
                 if (status != XR_XIR_OK) return status;
             } else if (a->op == XR_XIR_ERROR_IS) {
@@ -369,7 +369,7 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
         c->remaining->work -= function->instruction_count;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE && op->op != XR_XIR_FUNCTION_REF) continue;
+            if (!xr_xir_op_references_function(op->op)) continue;
             if (op->immediate < 0 || (uint64_t)op->immediate >= c->count) {
                 status = XR_XIR_BAD_STRUCTURE; goto done;
             }
@@ -404,7 +404,7 @@ done:
 XrXirStatus xr_xir_provenance_functions_match(const XrXirModule *source,
     const XrXirModule *destination, const XrXirOrigin *origins,
     XrXirBudget *remaining, XrXirDiagnostic *diagnostic) {
-    XrXirDiagnostic location = {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    XrXirDiagnostic location = {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status = XR_XIR_OK;
     if (!source || !destination || !origins || !remaining || !source->functions ||
         !destination->functions || !destination->function_count || destination->generics ||

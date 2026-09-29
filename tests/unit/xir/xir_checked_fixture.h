@@ -25,7 +25,7 @@ static XrXirArtifact *checked_fixture(void) {
         {XR_XIR_PRINT, XR_XIR_UNIT, {0, 2}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}
     };
-    const XrXirBlock block = {0, 3, 0};
+    const XrXirBlock block = {0, 3, 0, 0};
     functions[8] = (XrXirFunction) {"args", 4, parameters, 2, XR_XIR_I64, &block, 1, ops, 3, operands, 2};
     XrXirFunctionIdentity identities[9];
     memcpy(identities, built.declarations->functions, 8 * sizeof(*identities));

@@ -36,6 +36,27 @@
 #include "xir_enum_ops_cases.h"
 #include "xir_struct_set_fixture.h"
 #include "xir_struct_set_cases.h"
+#include "xir_cleanup_program_fixture.h"
+#include "xir_cleanup_program_cases.h"
+extern const XrXirProgramSpec cleanup0_program, cleanup1_program, cleanup2_program, cleanup3_program, cleanup4_program, cleanup5_program;
+static void cleanup_program_mixed(void) {
+    const XrXirProgramSpec *specs[] = {&cleanup0_program, &cleanup1_program, &cleanup2_program,
+        &cleanup3_program, &cleanup4_program, &cleanup5_program};
+    for (unsigned mode = 0; mode < 6; ++mode) for (unsigned mask = 1; mask < 7; ++mask) {
+        XrXirArtifact *artifact = cleanup_program_fixture(mode);
+        XrXirProgramSpec spec = *specs[mode];
+        XrXirCallEntry entries[3]; XrXirVmBinding bindings[3];
+        memcpy(entries, spec.entries, sizeof(entries));
+        for (unsigned f = 0; f < 3; ++f) if (mask & (1u << f))
+            CHECK(xr_xir_vm_bind(artifact, f, &bindings[f], &entries[f]) == XR_XIR_OK);
+        spec.entries = entries;
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget){2097152, 16000000}, &program) == XR_XIR_OK);
+        cleanup_program_cases(program, mode);
+        xr_xir_artifact_free(artifact);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
+}
 static void descriptor_correspondence(void) {
     XrXirArtifact *a = nominal_expression_lowered(), *b = nominal_expression_lowered();
     const XrXirModule *module = xr_xir_artifact_module(b);
@@ -222,6 +243,15 @@ static void array_mixed(void) {
     }
 }
 int main(void) {
+    cleanup_program_mixed();
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        XrXirArtifact *artifact = cleanup_program_fixture(mode);
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_vm_program_take(&artifact, (XrXirProgramBudget){2097152, 16000000}, &program) == XR_XIR_OK);
+        cleanup_program_cases(program, mode);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
+
     XrXirArtifact *struct_set = struct_set_lowered(); XrXirProgram *set_program = NULL;
     CHECK(xr_xir_vm_program_take(&struct_set,(XrXirProgramBudget) {2097152, 16000000},&set_program) == XR_XIR_OK && !struct_set);
     struct_set_cases(set_program);

@@ -92,12 +92,13 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
     }
     f->result = (XrXirType) checked_u32(c, (uint32_t) f->result);
     f->block_count = checked_count(c, f->block_count, &c->remaining.blocks);
-    XrXirBlock *blocks = checked_array(c, f->blocks, f->block_count, sizeof(*blocks), 12);
+    XrXirBlock *blocks = checked_array(c, f->blocks, f->block_count, sizeof(*blocks), 16);
     f->blocks = blocks;
     for (uint32_t i = 0; i < f->block_count && c->status == XR_XIR_OK; ++i) {
         XrXirBlock b = blocks[i];
         b.first = checked_u32(c, b.first); b.count = checked_u32(c, b.count);
         b.panic = checked_u32(c, b.panic);
+        b.frontier = checked_u32(c, b.frontier);
         if (c->reading) blocks[i] = b;
     }
     f->instruction_count = checked_count(c, f->instruction_count, &c->remaining.instructions);
@@ -370,7 +371,7 @@ static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]
     xr_sha256_final(&sha, digest);
 }
 static XrXirStatus checked_error(XrXirStatus status, XrXirDiagnostic *diagnostic) {
-    if (diagnostic) *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    if (diagnostic) *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     return status;
 }
 static size_t checked_capacity(const XrXirBudget *budget) {

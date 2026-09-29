@@ -489,7 +489,7 @@ int main(void) {
         {XR_XIR_COPY, XR_XIR_I64, {0, 0}, {0, 0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0, 0}, 0, {0}},
     };
-    XrXirBlock block = {0, 3, 0};
+    XrXirBlock block = {0, 3, 0, 0};
     XrXirType parameter = XR_XIR_I64;
     XrXirFunction functions[] = {
         {"first", 5, NULL, 0, XR_XIR_I64, &block, 1, ops, 3, NULL, 0},

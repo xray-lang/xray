@@ -15,7 +15,9 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"error continuation budget exhausted");
     *edge = (SourceErrorEdge){handler->edges,body->block_count-1,body->count,value};
     handler->edges = edge; ++handler->count;
-    return emit_raw(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
+    bool leaving = body->frontier != handler->frontier;
+    return emit_raw(ctx,(XrXirInstruction){leaving ? XR_XIR_CLEANUP_ERROR : XR_XIR_JUMP,
+        XR_XIR_UNIT,{leaving ? value.id : 0},{0},leaving ? handler->frontier : 0,{0}},NULL);
 }
 static bool emit(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     SourceFunction *body = &ctx->bodies[ctx->function];

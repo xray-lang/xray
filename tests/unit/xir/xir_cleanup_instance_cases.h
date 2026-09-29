@@ -106,7 +106,7 @@ static XrXirArtifact *drain_proof(const XrXirDeclarations *declarations, const X
     XrXirInstruction unit = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirInstruction value[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
-    XrXirBlock unit_block = {0,1,0}, value_block = {0,2,0};
+    XrXirBlock unit_block = {0,1,0, 0}, value_block = {0,2,0, 0};
     XrXirInstruction callee_value[] = {value[0],value[1]}; callee_value[1].args[0] = 1;
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,&unit_block,1,&unit,1,NULL,0},

@@ -1,0 +1,45 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_source_cleanup_admission.h - Cleanup definition effects and control boundaries
+ */
+static void source_cleanup_admission(XrXirSourceRequest *request, const char *path) {
+    const struct { const char *source; const char *code; } cases[] = {
+        {"enum E{Bad}\nfn unused(){defer{throw E.Bad}}\n", "E0387"},
+        {"fn unused<T:Error>(e:T){defer{throw e}}\n", "E0387"},
+        {"enum E{Bad}\nfn fail(){throw E.Bad}\nfn unused(){defer{fail()}}\n", "E0387"},
+        {"fn unused(){defer{Coro.yield()}}\n", "E0392"},
+        {"fn pause(){Coro.yield()}\nfn unused(){defer{pause()}}\n", "E0392"},
+        {"fn unused(g:fn()->i64){defer{const n=g()}}\n", "E0392"},
+        {"fn unused(){defer{return}}\n", "E0395"},
+        {"fn unused(){while(true){defer{break}}}\n", "E0395"},
+        {"fn unused(){while(true){defer{continue}}}\n", "E0395"},
+        {"enum E{Bad}\nfn unused(){defer{try{throw E.Bad}catch(e:E){print(1)}}}\n", NULL},
+        {"fn unused(){defer{var n=0;while(n<2){n=n+1;if(n==1){continue};break}}}\n", NULL},
+        {"fn unused(){defer{const f=fn()->i64{return 3};print(f())}}\n", "E0392"},
+        {"fn unused(){defer{const f=fn()->i64{return 3}}}\n", NULL},
+        {"fn unused<T>(v:T)->T{defer{const copy=v};return v}\n", NULL}
+    };
+    unsigned failures = 0;
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        write_source(path, cases[i].source);
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        const XrXirSourceView *view = xr_xir_source_snapshot_view(result.snapshot);
+        bool valid = cases[i].code == NULL;
+        bool correct = valid ? status == XR_XIR_OK && result.checked && result.snapshot :
+            status != XR_XIR_OK && !result.checked && view && !view->complete &&
+            view->diagnostic.status == status && diagnostic.status == status &&
+            diagnostic.line > 0 && strstr(diagnostic.message, cases[i].code) != NULL;
+        if (!correct) {
+            fprintf(stderr, "cleanup source case %u: %u at %d:%d: %s\n", i, status,
+                diagnostic.line, diagnostic.column, diagnostic.message);
+            ++failures;
+        }
+        xr_xir_source_result_free(&result);
+    }
+    CHECK(!failures);
+}

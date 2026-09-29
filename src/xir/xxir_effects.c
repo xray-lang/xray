@@ -46,7 +46,8 @@ const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects,
 static bool effect_seed(XrXirOp op, XrXirFunctionEffects *effect) {
     switch (op) {
     case XR_XIR_SUSPEND: effect->suspend = XR_XIR_EFFECT_MAY; return true;
-    case XR_XIR_THROW: return true;
+    case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
+    case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return true;
     case XR_XIR_CALL_INDIRECT:
     case XR_XIR_INVOKE_INDIRECT:
         if (effect->suspend < XR_XIR_EFFECT_UNKNOWN) effect->suspend = XR_XIR_EFFECT_UNKNOWN;

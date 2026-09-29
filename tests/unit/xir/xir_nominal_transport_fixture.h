@@ -36,7 +36,7 @@ static XrXirArtifact *nominal_transport_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {11}, {0}, 0, {0}}};
     XrXirInstruction leaf[] = {{XR_XIR_COPY, pair, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
-    XrXirBlock one = {0, 1, 0}, two = {0, 2, 0}, blocks[] = {{0, 3, 0}, {3, 2, 0}, {5, 2, 0}, {7, 4, 0}};
+    XrXirBlock one = {0, 1, 0, 0}, two = {0, 2, 0, 0}, blocks[] = {{0, 3, 0, 0}, {3, 2, 0, 0}, {5, 2, 0, 0}, {7, 4, 0, 0}};
     uint32_t operands[] = {1, 5, 2, 7, 9};
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,init,1,NULL,0},

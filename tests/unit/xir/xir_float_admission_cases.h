@@ -17,7 +17,7 @@ static void floating_ir_rejections(void) {
         XrXirType types[] = {XR_XIR_F32, XR_XIR_F32};
         XrXirInstruction ops[] = {{XR_XIR_EQ_FLOAT, XR_XIR_BOOL, {0, 1}, {0}, 0, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
-        XrXirBlock block = {0, 2, 0};
+        XrXirBlock block = {0, 2, 0, 0};
         XrXirFunction function = {"floating", 8, types, 2, XR_XIR_BOOL, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
         uint32_t constraint = 0; XrXirGeneric generic = {&constraint, 1, NULL, 0};

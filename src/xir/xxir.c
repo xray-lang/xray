@@ -14,6 +14,7 @@
 #include "xxir_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_operand_roles.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
 
@@ -154,7 +155,7 @@ static XrXirArtifact *clone_module(const XrXirModule *source) {
 
 static XrXirStatus transition_error(XrXirStatus status, XrXirDiagnostic *diagnostic) {
     if (diagnostic)
-        *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+        *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     return status;
 }
 

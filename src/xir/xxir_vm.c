@@ -35,8 +35,9 @@ typedef struct ScalarRun {
 
 typedef struct VmState {
     uint32_t instruction, destination, invoke, panic;
+    uint32_t frontier, exit_target, exit_block, landing;
     XrXirType expected;
-    bool initialized, waiting;
+    bool initialized, waiting, cleanup_waiting, leaving;
     XrXirValue *arguments;
 } VmState;
 
@@ -223,6 +224,12 @@ static uint32_t vm_block(const XrXirFunction *function, uint32_t instruction) {
     return low;
 }
 static XrXirAction vm_panic_land(ScalarRun *run, VmState *state, uint32_t handler, XrXirAction action) {
+    uint32_t target = run->function->blocks[handler].frontier;
+    if (xr_xir_call_panic_action(&action) && state->frontier != target) {
+        state->exit_target = target; state->landing = handler; state->leaving = true;
+        action.kind = XR_XIR_ACTION_LEAVE; action.flags = XR_XIR_ACTION_LEAVE_PANIC;
+        return action;
+    }
     uint32_t first = run->function->blocks[handler].first;
     uint32_t destination = run->function->instructions[first].type == XR_XIR_UNIT ? UINT32_MAX :
         run->layout->offsets[run->function->parameter_count + first];
@@ -259,6 +266,7 @@ static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t
     }
     return XR_XIR_RUN_OK;
 }
+#include "xxir_vm_cleanup.inc.c"
 
 static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
     XrXirAction *action, uint32_t destination) {
@@ -297,6 +305,126 @@ static XrXirRunStatus floating_step(ScalarRun *run, const XrXirInstruction *op, 
     return xr_xir_float_relation(type, (XrXirFloatRelation) (op->op - XR_XIR_EQ_FLOAT), left,
         xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), value);
 }
+static XrXirRunStatus vm_io_step(ScalarRun *run, VmState *state, XrXirAction *action) {
+    uint32_t instruction = state->instruction;
+    const XrXirInstruction *op = &run->function->instructions[instruction];
+    uint32_t result_id = run->function->parameter_count + instruction;
+    uint32_t next = instruction + 1;
+    switch (op->op) {
+    case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: {
+        const uint32_t *args = op->op == XR_XIR_STRING_INDEX_OF ?
+            &run->function->operands[op->args[0]] : op->args;
+        XrXirValue left = vm_value_operand(run, args[0]), right = vm_value_operand(run, args[1]);
+        int64_t result = 0, start = op->op == XR_XIR_STRING_INDEX_OF ? vm_value_operand(run, args[2]).payload : 0;
+        XrXirValueStatus status = op->op == XR_XIR_STRING_INDEX_OF ?
+            xr_xir_string_index_of(&left, &right, start, &result) : xr_xir_string_last_index_of(&left, &right, &result);
+        state->instruction = next;
+        if (status == XR_XIR_VALUE_BOUNDS) {
+            int64_t length = 0;
+            if (xr_xir_string_length(&left, &length) != XR_XIR_VALUE_OK) return XR_XIR_RUN_BAD_ARTIFACT;
+            *action = xr_xir_call_bounds(start, length);
+            return XR_XIR_RUN_OK;
+        }
+        if (status == XR_XIR_VALUE_OK) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
+        return value_run_status(status);
+    }
+    case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: {
+        XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+        bool result = false;
+        bool valid = op->op == XR_XIR_STRING_CONTAINS ? xr_xir_string_contains(&left, &right, &result) :
+            op->op == XR_XIR_STRING_STARTS_WITH ? xr_xir_string_starts_with(&left, &right, &result) :
+            xr_xir_string_ends_with(&left, &right, &result);
+        if (valid) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
+        state->instruction = next;
+        return value_run_status(valid ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT);
+    }
+    case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: {
+        XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        int64_t result = 0;
+        XrXirValueStatus status;
+        if (op->op == XR_XIR_STRING_LEN) status = xr_xir_string_length(&left, &result);
+        else {
+            XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+            bool equal = false;
+            status = xr_xir_string_equal(&left, &right, &equal) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
+            result = op->op == XR_XIR_EQ_STRING ? equal : !equal;
+        }
+        if (status == XR_XIR_VALUE_OK) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
+        state->instruction = next;
+        return value_run_status(status);
+    }
+    case XR_XIR_OUTPUT:
+    case XR_XIR_WRITE_STREAM:
+    case XR_XIR_PRINT: {
+        uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
+        for (uint32_t p = 0; p < count; ++p) {
+            uint32_t id = op->op == XR_XIR_PRINT ? run->function->operands[op->args[0] + p] : op->args[p];
+            XrXirType type = id < run->function->parameter_count ? run->function->parameters[id] :
+                run->function->instructions[id - run->function->parameter_count].type;
+            state->arguments[p] = (XrXirValue) {(uint32_t) type, 0,
+                xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
+        }
+        if (op->op == XR_XIR_WRITE_STREAM) {
+            state->waiting = true; state->destination = run->layout->offsets[result_id]; state->expected = XR_XIR_BOOL;
+        }
+        *action = (XrXirAction) {op->op == XR_XIR_WRITE_STREAM ? XR_XIR_ACTION_WRITE_STREAM : XR_XIR_ACTION_OUTPUT,
+            op->op == XR_XIR_PRINT ? XR_XIR_OUTPUT_LINE :
+            (uint32_t) op->immediate, state->arguments, count, {0}, {0}, 0};
+        state->instruction = next;
+        return XR_XIR_RUN_OK;
+    }
+    default: return XR_XIR_RUN_BAD_ARTIFACT;
+    }
+}
+static XrXirRunStatus vm_integer_step(ScalarRun *run, VmState *state) {
+    uint32_t instruction = state->instruction;
+    const XrXirInstruction *op = &run->function->instructions[instruction];
+    uint32_t result_id = run->function->parameter_count + instruction;
+    uint32_t next = instruction + 1;
+    int64_t value = 0;
+    switch (op->op) {
+    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
+    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
+    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
+    case XR_XIR_DIV_INT: case XR_XIR_REM_INT: {
+        int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
+        int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
+        XrXirRunStatus status = xr_xir_integer_arithmetic(xr_xir_integer_format(op->type), (XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
+        if (status != XR_XIR_RUN_OK) return status;
+        break;
+    }
+    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
+    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT: {
+        int ordering = 0;
+        XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
+        XrXirRunStatus status = xr_xir_integer_compare(xr_xir_integer_format(type),
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]),
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), &ordering);
+        if (status != XR_XIR_RUN_OK) return status;
+        switch (op->op) {
+        case XR_XIR_EQ_INT: value = ordering == 0; break;
+        case XR_XIR_NE_INT: value = ordering != 0; break;
+        case XR_XIR_LT_INT: value = ordering < 0; break;
+        case XR_XIR_LE_INT: value = ordering <= 0; break;
+        case XR_XIR_GT_INT: value = ordering > 0; break;
+        default: value = ordering >= 0; break;
+        }
+        break;
+    }
+    case XR_XIR_CONVERT_NUMBER: {
+        XrXirType from = xr_xir_operand_type(run->function, op->args[0]);
+        XrXirRunStatus status = xr_xir_number_convert(from, op->type,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &value);
+        if (status != XR_XIR_RUN_OK) return status;
+        break;
+    }
+    default: return XR_XIR_RUN_BAD_ARTIFACT;
+    }
+    xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], value);
+    state->instruction = next;
+    return XR_XIR_RUN_OK;
+}
 static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *action) {
     uint32_t instruction = state->instruction;
     const XrXirInstruction *op = &run->function->instructions[instruction];
@@ -304,6 +432,16 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     uint32_t next = instruction + 1;
     int64_t value = 0;
     *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+    if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
+        (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
+        op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
+        op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT)
+        return vm_io_step(run, state, action);
+    if (arithmetic_operation(op->op) >= 0 || (op->op == XR_XIR_EQ_INT || op->op == XR_XIR_NE_INT || op->op == XR_XIR_LT_INT ||
+        op->op == XR_XIR_LE_INT || op->op == XR_XIR_GT_INT || op->op == XR_XIR_GE_INT) ||
+        op->op == XR_XIR_CONVERT_NUMBER) return vm_integer_step(run, state);
+    if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR)
+        return vm_cleanup_step(run, state, op, action);
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE) {
         state->instruction = next;
         return XR_XIR_RUN_OK;
@@ -374,104 +512,6 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         state->instruction = next;
         return value_run_status(status);
     }
-    case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: {
-        const uint32_t *args = op->op == XR_XIR_STRING_INDEX_OF ?
-            &run->function->operands[op->args[0]] : op->args;
-        XrXirValue left = vm_value_operand(run, args[0]), right = vm_value_operand(run, args[1]);
-        int64_t result = 0, start = op->op == XR_XIR_STRING_INDEX_OF ? vm_value_operand(run, args[2]).payload : 0;
-        XrXirValueStatus status = op->op == XR_XIR_STRING_INDEX_OF ?
-            xr_xir_string_index_of(&left, &right, start, &result) : xr_xir_string_last_index_of(&left, &right, &result);
-        state->instruction = next;
-        if (status == XR_XIR_VALUE_BOUNDS) {
-            int64_t length = 0;
-            if (xr_xir_string_length(&left, &length) != XR_XIR_VALUE_OK) return XR_XIR_RUN_BAD_ARTIFACT;
-            *action = xr_xir_call_bounds(start, length);
-            return XR_XIR_RUN_OK;
-        }
-        if (status == XR_XIR_VALUE_OK) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
-        return value_run_status(status);
-    }
-    case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: {
-        XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
-        XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
-        bool result = false;
-        bool valid = op->op == XR_XIR_STRING_CONTAINS ? xr_xir_string_contains(&left, &right, &result) :
-            op->op == XR_XIR_STRING_STARTS_WITH ? xr_xir_string_starts_with(&left, &right, &result) :
-            xr_xir_string_ends_with(&left, &right, &result);
-        if (valid) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
-        state->instruction = next;
-        return value_run_status(valid ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT);
-    }
-    case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: {
-        XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
-        int64_t result = 0;
-        XrXirValueStatus status;
-        if (op->op == XR_XIR_STRING_LEN) status = xr_xir_string_length(&left, &result);
-        else {
-            XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
-            bool equal = false;
-            status = xr_xir_string_equal(&left, &right, &equal) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
-            result = op->op == XR_XIR_EQ_STRING ? equal : !equal;
-        }
-        if (status == XR_XIR_VALUE_OK) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
-        state->instruction = next;
-        return value_run_status(status);
-    }
-    case XR_XIR_OUTPUT:
-    case XR_XIR_WRITE_STREAM:
-    case XR_XIR_PRINT: {
-        uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
-        for (uint32_t p = 0; p < count; ++p) {
-            uint32_t id = op->op == XR_XIR_PRINT ? run->function->operands[op->args[0] + p] : op->args[p];
-            XrXirType type = id < run->function->parameter_count ? run->function->parameters[id] :
-                run->function->instructions[id - run->function->parameter_count].type;
-            state->arguments[p] = (XrXirValue) {(uint32_t) type, 0,
-                xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
-        }
-        if (op->op == XR_XIR_WRITE_STREAM) {
-            state->waiting = true; state->destination = run->layout->offsets[result_id]; state->expected = XR_XIR_BOOL;
-        }
-        *action = (XrXirAction) {op->op == XR_XIR_WRITE_STREAM ? XR_XIR_ACTION_WRITE_STREAM : XR_XIR_ACTION_OUTPUT,
-            op->op == XR_XIR_PRINT ? XR_XIR_OUTPUT_LINE :
-            (uint32_t) op->immediate, state->arguments, count, {0}, {0}, 0};
-        state->instruction = next;
-        return XR_XIR_RUN_OK;
-    }
-    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
-    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
-    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
-    case XR_XIR_DIV_INT: case XR_XIR_REM_INT: {
-        int64_t left = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]);
-        int64_t right = xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]);
-        XrXirRunStatus status = xr_xir_integer_arithmetic(xr_xir_integer_format(op->type), (XrXirArithmetic) arithmetic_operation(op->op), left, right, &value);
-        if (status != XR_XIR_RUN_OK) return status;
-        break;
-    }
-    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
-    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT: {
-        int ordering = 0;
-        XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
-        XrXirRunStatus status = xr_xir_integer_compare(xr_xir_integer_format(type),
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]),
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]), &ordering);
-        if (status != XR_XIR_RUN_OK) return status;
-        switch (op->op) {
-        case XR_XIR_EQ_INT: value = ordering == 0; break;
-        case XR_XIR_NE_INT: value = ordering != 0; break;
-        case XR_XIR_LT_INT: value = ordering < 0; break;
-        case XR_XIR_LE_INT: value = ordering <= 0; break;
-        case XR_XIR_GT_INT: value = ordering > 0; break;
-        default: value = ordering >= 0; break;
-        }
-        break;
-    }
-    case XR_XIR_CONVERT_NUMBER: {
-        XrXirType from = xr_xir_operand_type(run->function, op->args[0]);
-        XrXirRunStatus status = xr_xir_number_convert(from, op->type,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]]), &value);
-        if (status != XR_XIR_RUN_OK) return status;
-        break;
-    }
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         state->instruction = next;
         return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);
@@ -529,6 +569,8 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     VmState *state = view->state;
     ScalarRun run = {module, function, layout, state + 1, view};
     state->arguments = (XrXirValue *) ((unsigned char *) run.frame + layout->frame_bytes);
+    if (view->phase == XR_XIR_CALL_EXIT) return vm_cleanup_exit(&run, state);
+    if (state->leaving) return vm_cleanup_continue(&run, state);
     if (!state->initialized) {
         if (view->argument_count != function->parameter_count)
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
@@ -604,7 +646,6 @@ static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
 static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t function,
                                  XrXirVmBinding *binding, XrXirCallEntry *entry) {
     const XrXirModule *module = xr_xir_artifact_module(artifact);
-    if (module->declarations && module->declarations->functions[function].cleanup_owner) return XR_XIR_BAD_STAGE;
     const XrXirFunction *body = &module->functions[function];
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, function);
     uint64_t bytes = sizeof(VmState) + (uint64_t) layout->frame_bytes +
@@ -613,6 +654,11 @@ static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t functio
     *binding = (XrXirVmBinding) {artifact, function};
     *entry = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, body->parameters, body->parameter_count,
         body->result, (uint32_t) bytes, vm_resume, vm_release, binding, 0, 0};
+    if (module->declarations) {
+        entry->cleanup_owner = module->declarations->functions[function].cleanup_owner;
+        for (uint32_t i = function + 1; i < module->function_count; ++i)
+            if (module->declarations->functions[i].cleanup_owner == function + 1) entry->flags = XR_XIR_ENTRY_EXIT;
+    }
     return XR_XIR_OK;
 }
 
@@ -698,6 +744,8 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
             body->instructions[i].op == XR_XIR_INVOKE_INDIRECT || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
             body->instructions[i].op == XR_XIR_PANIC_CATCH ||
+            body->instructions[i].op == XR_XIR_CLEANUP_REGISTER || body->instructions[i].op == XR_XIR_CLEANUP_LEAVE ||
+            body->instructions[i].op == XR_XIR_CLEANUP_ERROR ||
             xr_xir_type_is_owned(module->types, body->instructions[i].type) ||
             body->instructions[i].op == XR_XIR_OUTPUT || body->instructions[i].op == XR_XIR_PRINT ||
             body->instructions[i].op == XR_XIR_WRITE_STREAM)

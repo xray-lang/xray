@@ -45,7 +45,7 @@ static void fixture_init(Fixture *fixture) {
     fixture->parameters[0] = XR_XIR_BOOL;
     fixture->parameters[1] = XR_XIR_I64;
     for (uint32_t b = 0; b < 3; ++b)
-        fixture->blocks[b] = (XrXirBlock) {b * 2, 2, 0};
+        fixture->blocks[b] = (XrXirBlock) {b * 2, 2, 0, 0};
     fixture->instructions[0] = (XrXirInstruction) {XR_XIR_COPY, XR_XIR_I64, {1, 0}, {0, 0}, 0, {0}};
     fixture->instructions[1] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 2}, 0, {0}};
     fixture->instructions[2] = (XrXirInstruction) {XR_XIR_ADD_INT, XR_XIR_I64, {2, 1}, {0, 0}, 0, {0}};
@@ -257,7 +257,7 @@ static void loops_and_storage_order(void) {
         {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 3}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}},
     };
-    XrXirBlock blocks[] = {{0, 2, 0}, {2, 1, 0}, {3, 1, 0}, {4, 1, 0}};
+    XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 1, 0, 0}, {3, 1, 0, 0}, {4, 1, 0, 0}};
     XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
@@ -277,7 +277,7 @@ static void dominance_word_boundary(void) {
     XrXirInstruction ops[71] = {0};
     uint32_t next = 0, definition = 0;
     for (uint32_t b = 0; b < 70; ++b) {
-        blocks[b] = (XrXirBlock) {next, b == 65 ? 2 : 1, 0};
+        blocks[b] = (XrXirBlock) {next, b == 65 ? 2 : 1, 0, 0};
         if (b == 65) {
             definition = next;
             ops[next++] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 42, {0}};
@@ -307,7 +307,7 @@ static void reverse_storage_and_boolean_values(void) {
         {XR_XIR_COPY, XR_XIR_BOOL, {3, 0}, {0, 0}, 0, {0}},
         {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}},
     };
-    XrXirBlock blocks[] = {{0, 1, 0}, {1, 1, 0}, {2, 4, 0}};
+    XrXirBlock blocks[] = {{0, 1, 0, 0}, {1, 1, 0, 0}, {2, 4, 0, 0}};
     XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
@@ -325,7 +325,7 @@ static void numeric_admission(void) {
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_I64};
         XrXirType result = op >= XR_XIR_NE_INT && op <= XR_XIR_GE_INT ? XR_XIR_BOOL : XR_XIR_I64;
         XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0, {0}}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
-        const XrXirBlock block = {0, 2, 0};
+        const XrXirBlock block = {0, 2, 0, 0};
         XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
         CHECK(xr_xir_verify(&module, NULL, NULL) == XR_XIR_OK);
@@ -713,10 +713,10 @@ static void error_filter_guards(void) {
             {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}},
             {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, -1, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {7}, {0}, 0, {0}}};
-        XrXirBlock blocks[] = {{0, 2, 0}, {2, 3, 0}, {5, 2, 0}};
+        XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 3, 0, 0}, {5, 2, 0, 0}};
         XrXirFunction function = {"filter", 6, parameters, 2, XR_XIR_I64, blocks, 3, ops, 7, NULL, 0};
         XrXirInstruction ret = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-        XrXirBlock empty = {0, 1, 0}, entry_block = {0, 2, 0};
+        XrXirBlock empty = {0, 1, 0, 0}, entry_block = {0, 2, 0, 0};
         XrXirInstruction entry_ops[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
         XrXirFunction functions[] = {
@@ -756,11 +756,11 @@ static void panic_handler_packets(const XrXirArtifact *checked) {
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_artifact_module(decoded)->functions[0].blocks[1].panic == 2);
     xr_xir_artifact_free(decoded); decoded = NULL;
-    CHECK(packet.length == 473 && packet.bytes[113] == 2);
-    CHECK(packet.bytes[333] == XR_XIR_PANIC_CATCH && packet.bytes[373] == XR_XIR_COPY);
+    CHECK(packet.length == 485 && packet.bytes[117] == 2);
+    CHECK(packet.bytes[345] == XR_XIR_PANIC_CATCH && packet.bytes[385] == XR_XIR_COPY);
     const struct { size_t offset; uint8_t value; } attacks[] = {
-        {101, 2}, {113, 1}, {113, 3}, {113, 0}, {125, 2},
-        {333, XR_XIR_COPY}, {373, XR_XIR_PANIC_CATCH}, {381, 2},
+        {101, 2}, {117, 1}, {117, 3}, {117, 0}, {133, 2},
+        {345, XR_XIR_COPY}, {385, XR_XIR_PANIC_CATCH}, {393, 2},
         {8, XR_XIR_CHECKED_SCHEMA - 1}, {12, XR_XIR_CHECKED_CONTRACT - 1}};
     for (size_t i = 0; i < sizeof(attacks) / sizeof(attacks[0]); ++i) {
         uint8_t saved = packet.bytes[attacks[i].offset];
@@ -780,7 +780,7 @@ static void panic_handler_structure(void) {
     fixture_init(&ordinary);
     expect(&ordinary, XR_XIR_OK);
     for (unsigned mode = 0; mode < 9; ++mode) {
-        XrXirBlock blocks[] = {{0, 2, 0}, {2, 3, 2}, {5, 3, 0}};
+        XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 3, 2, 0}, {5, 3, 0, 0}};
         XrXirInstruction ops[] = {
             {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 9, {0}},
             {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {1}, 0, {0}},

@@ -57,9 +57,9 @@ static void xir_array_metadata_init(XirArrayMetadataFixture *f) {
     f->worker_parameter = array;
     f->worker[0] = (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {0}, {0}, 0, {0}};
     f->worker[1] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}};
-    f->blocks[0] = (XrXirBlock) {0, 3, 0};
-    f->blocks[1] = (XrXirBlock) {0, 14, 0};
-    f->blocks[2] = (XrXirBlock) {0, 2, 0};
+    f->blocks[0] = (XrXirBlock) {0, 3, 0, 0};
+    f->blocks[1] = (XrXirBlock) {0, 14, 0, 0};
+    f->blocks[2] = (XrXirBlock) {0, 2, 0, 0};
     f->functions[0] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &f->blocks[0], 1, f->init, 3, NULL, 0};
     f->functions[1] = (XrXirFunction) {"entry", 5, NULL, 0, XR_XIR_I64, &f->blocks[1], 1, f->ops, 14, f->operands, 5};
     f->functions[2] = (XrXirFunction) {"read", 4, &f->worker_parameter, 1, XR_XIR_I64, &f->blocks[2], 1, f->worker, 2, NULL, 0};

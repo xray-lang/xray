@@ -30,7 +30,7 @@ static XrXirArtifact *enum_generic_checked(unsigned mode) {
     XrXirInstruction make[] = {{XR_XIR_ENUM_NEW,(XrXirType)256,{0,1},{0},1, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0, {0}}};
     uint32_t operand = 0, dependency = 0;
-    XrXirBlock one = {0,1, 0}, four = {0,4, 0}, two = {0,2, 0};
+    XrXirBlock one = {0,1, 0, 0}, four = {0,4, 0, 0}, two = {0,2, 0, 0};
     XrXirType parameter = t;
     XrXirFunction functions[] = {
         {"initA",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},

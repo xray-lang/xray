@@ -128,7 +128,7 @@ static XrXirArtifact *comparator_artifact(void) {
         {XR_XIR_LT_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
     };
-    XrXirBlock block = {0, 2, 0};
+    XrXirBlock block = {0, 2, 0, 0};
     XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

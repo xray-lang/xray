@@ -243,6 +243,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{first,0},0,{0}},NULL) || !begin_block(ctx)) return false;
     }
     SourceErrorContext handler = {0}, *outer = body->error_context;
+    handler.frontier = body->frontier;
     if (ordinary) body->error_context = &handler;
     bool ok = scoped_statement(ctx,attempt->try_body);
     body->error_context = outer;

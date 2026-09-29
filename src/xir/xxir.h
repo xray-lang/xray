@@ -91,6 +91,8 @@ typedef struct XrXirBlock {
     uint32_t first;
     uint32_t count;
     uint32_t panic;
+    /* Zero or one plus the active CLEANUP_REGISTER instruction index. */
+    uint32_t frontier;
 } XrXirBlock;
 
 /* Value IDs are parameters followed by instruction indices. Terminators occupy
@@ -173,11 +175,16 @@ typedef struct XrXirBudget {
     uint64_t frame_bytes;
 } XrXirBudget;
 
+typedef enum XrXirDiagnosticReason {
+    XR_XIR_DIAGNOSTIC_NONE, XR_XIR_DIAGNOSTIC_CLEANUP_THROW, XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND
+} XrXirDiagnosticReason;
+
 typedef struct XrXirDiagnostic {
     XrXirStatus status;
     uint32_t function;
     uint32_t block;
     uint32_t instruction;
+    XrXirDiagnosticReason reason;
 } XrXirDiagnostic;
 
 typedef struct XrXirArtifact XrXirArtifact;

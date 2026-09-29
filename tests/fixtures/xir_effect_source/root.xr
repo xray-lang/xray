@@ -27,6 +27,26 @@ export fn recursiveError(flag:bool)->i64 { if (flag) { throw Fault.Other }; retu
 fn recursivePeer(flag:bool)->i64 { return recursiveError(flag) }
 export fn cellAfterCall()->i64 { var e = Fault.Bad; pure(); throw e }
 export fn cellSnapshot()->i64 { var e = Fault.Bad; const old = e; e = Fault.Other; throw old }
+export fn cellAfterCleanup()->i64 { var e=Fault.Bad; {defer{e=Fault.Other}}; throw e }
+export fn cellCleanupSnapshot()->i64 { var e=Fault.Bad; const old=e; {defer{e=Fault.Other}}; throw old }
+export fn cellPanicCleanup()->i64 {
+    var e=Fault.Bad
+    try {defer{e=Fault.Other};const n=1/0} catch panic {throw e}
+    return 0
+}
+export fn cellPanicSnapshot()->i64 {
+    var e=Fault.Bad; const old=e
+    try {defer{e=Fault.Other};const n=1/0} catch panic {throw old}
+    return 0
+}
+export fn cellErrorCleanup()->i64 {
+    var e=Fault.Bad
+    try {defer{e=Fault.Other};throw Fault.Bad} catch(Fault.Bad){throw e}
+}
+export fn cellErrorSnapshot()->i64 {
+    var e=Fault.Bad
+    try {defer{e=Fault.Other};throw e} catch(error){throw error}
+}
 export fn panicThrows()->i64 { try { return 1/0 } catch panic { throw Fault.Other } }
 enum GenericFault<T> { Bad { item:T } }
 fn genericFail<T>(item:T)->i64 { throw GenericFault<T>.Bad { item:item } }

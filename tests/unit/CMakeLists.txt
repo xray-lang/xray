@@ -146,6 +146,10 @@ target_link_libraries(test_xir_cleanup_driver PRIVATE xray_xir_scalar)
 add_test(NAME test_xir_cleanup_fatal COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/check_xir_cleanup_fatal.py $<TARGET_FILE:test_xir_cleanup_driver>)
 set_tests_properties(test_xir_cleanup_fatal PROPERTIES LABELS "unit;xir;ownership")
+add_test(NAME test_xir_source_cleanup_fatal COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/check_xir_source_cleanup_fatal.py
+    $<TARGET_FILE:test_xir_cleanup_source> $<TARGET_FILE:test_xir_cleanup_native> $<TARGET_FILE:test_xir_cleanup_mixed>)
+set_tests_properties(test_xir_source_cleanup_fatal PROPERTIES LABELS "unit;xir;ownership;abi;execution")
 add_executable(test_xir_calls xir/test_xir_calls.c)
 target_link_libraries(test_xir_calls PRIVATE xray_xir_vm)
 add_executable(test_xir_emit xir/test_xir_emit.c)
@@ -301,6 +305,19 @@ target_link_libraries(test_xir_source_float_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_source_float_mixed xir/test_xir_source_float_mixed.c ${XIR_FLOAT_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_float_mixed PRIVATE xray_xir_vm)
 target_compile_definitions(test_xir_source_float_mixed PRIVATE XR_FLOAT_CHECKED_FIXTURE="${XIR_FLOAT_CHECKED_GENERATED}")
+add_xray_bootstrap_executable(test_xir_cleanup_source xir/test_xir_cleanup_source.c)
+target_link_libraries(test_xir_cleanup_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_cleanup_source PRIVATE XR_CLEANUP_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_cleanup_source")
+set(XIR_CLEANUP_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_cleanup_source.c)
+add_custom_command(OUTPUT ${XIR_CLEANUP_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_cleanup_source> ${XIR_CLEANUP_GENERATED}
+    DEPENDS test_xir_cleanup_source ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_cleanup_source/root.xr
+    VERBATIM)
+add_executable(test_xir_cleanup_native xir/test_xir_cleanup_native.c ${XIR_CLEANUP_GENERATED})
+target_link_libraries(test_xir_cleanup_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_cleanup_mixed xir/test_xir_cleanup_mixed.c ${XIR_CLEANUP_GENERATED})
+target_link_libraries(test_xir_cleanup_mixed PRIVATE xray_xir_vm)
 add_xray_bootstrap_executable(test_xir_panic_source xir/test_xir_panic_source.c)
 target_link_libraries(test_xir_panic_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_panic_source PRIVATE XR_PANIC_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source")
@@ -320,7 +337,7 @@ target_link_libraries(test_xir_panic_mixed PRIVATE xray_xir_vm)
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
-foreach(xir_test IN ITEMS test_xir_cleanup_driver test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_execution test_xir_emit test_xir_native test_xir_calls
+foreach(xir_test IN ITEMS test_xir_cleanup_native test_xir_cleanup_mixed test_xir_cleanup_source test_xir_cleanup_driver test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_execution test_xir_emit test_xir_native test_xir_calls
     test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
     test_xir_emit_program test_xir_program_vm test_xir_program_native

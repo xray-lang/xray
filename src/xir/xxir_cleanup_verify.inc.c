@@ -18,7 +18,7 @@ static XrXirStatus cleanup_effects_verify(const XrXirModule *module,
         uint32_t owner = module->declarations->functions[f].cleanup_owner;
         if (!owner) continue;
         present = true;
-        *diagnostic = (XrXirDiagnostic){XR_XIR_OK, f, UINT32_MAX, UINT32_MAX};
+        *diagnostic = (XrXirDiagnostic){XR_XIR_OK, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
         if (module->functions[f].result != XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
         if (module->generics) {
             const XrXirGeneric *body = &module->generics[f], *parent = &module->generics[owner - 1];
@@ -37,7 +37,9 @@ static XrXirStatus cleanup_effects_verify(const XrXirModule *module,
         if (!module->declarations->functions[f].cleanup_owner) continue;
         const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
         if (fact->throws == XR_XIR_EFFECT_MAY || fact->suspend != XR_XIR_EFFECT_NONE) {
-            *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX};
+            *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
+            diagnostic->reason = fact->throws == XR_XIR_EFFECT_MAY ?
+                XR_XIR_DIAGNOSTIC_CLEANUP_THROW : XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND;
             status = XR_XIR_BAD_TYPE;
         }
     }

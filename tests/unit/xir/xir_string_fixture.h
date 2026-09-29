@@ -46,8 +46,8 @@ static XrXirArtifact *string_fixture(uint32_t mode) {
     }
     XrXirInstruction init={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0, {0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
-    const XrXirBlock init_block={0,1, 0},entry_block={0,2, 0};
-    const XrXirBlock root_blocks[] = {{0, 4, 0}}, child_blocks[] = {{0, 6, 0}}, loop_blocks[] = {{0, 1, 0}, {1, 3, 0}};
+    const XrXirBlock init_block={0,1, 0, 0},entry_block={0,2, 0, 0};
+    const XrXirBlock root_blocks[] = {{0, 4, 0, 0}}, child_blocks[] = {{0, 6, 0, 0}}, loop_blocks[] = {{0, 1, 0, 0}, {1, 3, 0, 0}};
     const XrXirFunction functions[] = {
         {"root", 4, parameters, 2, XR_XIR_STRING, root_blocks, 1, root, 4, operands, 4},
         {"child", 5, parameters, 4, XR_XIR_STRING, child_blocks, 1, child, 6, mode ? &error_operand : NULL, mode ? 1u : 0u},

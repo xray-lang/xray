@@ -1,0 +1,58 @@
+enum Problem { Failed }
+export fn scopes()->string {
+    var n = 1
+    defer { print(n) }
+    {
+        const saved = n
+        defer { print(saved) }
+        defer { print("nested"); defer { print("inner") } }
+        n = 2
+    }
+    print("after")
+    return "kept"
+}
+export fn loops()->i64 {
+    var n = 0
+    while (n < 3) {
+        n++
+        defer { print(n) }
+        if (n == 1) { continue }
+        if (n == 2) { break }
+    }
+    return n
+}
+export fn errors()->i64 {
+    try { defer { print("error cleanup") }; throw Problem.Failed }
+    catch(e:Problem) { print("caught"); return 7 }
+}
+export fn panic()->i64 {
+    try { defer { print("panic cleanup") }; return 10/0 }
+    catch panic { print("handled"); return 9 }
+}
+export fn cancelled()->string {
+    defer { print("cancelled") }
+    Coro.yield()
+    return "resumed"
+}
+fn identity<T>(value:T)->T { defer { print("generic") }; return value }
+export fn generics()->string { return identity<string>("g") }
+export fn snapshot()->Array<i64> {
+    var a = [1]
+    defer { a[0] = 7; print(a[0]) }
+    return a
+}
+
+export fn fatalReturn()->i64 {
+    try {defer{const n=1/0};return 1} catch panic{return 99}
+}
+export fn fatalError()->i64 {
+    try {defer{const n=1/0};throw Problem.Failed} catch(e:Problem){return 99}
+}
+export fn fatalPanic()->i64 {
+    try {defer{const n=1/0};return 2/0} catch panic{return 99}
+}
+export fn fatalCancel()->i64 {
+    defer{const n=1/0}
+    Coro.yield()
+    return 99
+}

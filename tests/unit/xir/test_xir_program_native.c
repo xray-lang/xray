@@ -26,6 +26,8 @@
 #include "xir_enum_ops_cases.h"
 extern const XrXirProgramSpec enum_ops_program, enum_wrong_program;
 #include "xir_struct_set_cases.h"
+#include "xir_cleanup_program_cases.h"
+extern const XrXirProgramSpec cleanup0_program, cleanup1_program, cleanup2_program, cleanup3_program, cleanup4_program, cleanup5_program;
 extern const XrXirProgramSpec struct_set_program;
 extern const XrXirProgramSpec struct_ops_program;
 extern const XrXirProgramSpec nominal_transport_program;
@@ -60,6 +62,15 @@ static void enum_metadata_descriptors(void) {
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
 }
 int main(void) {
+    const XrXirProgramSpec *cleanup_specs[] = {&cleanup0_program, &cleanup1_program, &cleanup2_program,
+        &cleanup3_program, &cleanup4_program, &cleanup5_program};
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_program_seal(cleanup_specs[mode], (XrXirProgramBudget){2097152, 16000000}, &program) == XR_XIR_OK);
+        cleanup_program_cases(program, mode);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
+
     XrXirProgram *enum_program = NULL;
     CHECK(xr_xir_program_seal(&enum_ops_program,(XrXirProgramBudget) {2097152, 16000000},&enum_program) == XR_XIR_OK);
     enum_ops_cases(enum_program); CHECK(runtime_live == 0 && runtime_bytes == 0);

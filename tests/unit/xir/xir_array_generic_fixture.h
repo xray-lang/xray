@@ -30,7 +30,7 @@ static XrXirArtifact *array_generic_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}}};
     uint32_t entry_values[] = {0, 1}, value = 0, constraints[] = {0, XR_XIR_CONSTRAINT_SENDABLE};
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8};
-    XrXirBlock blocks[] = {{0, 5, 0}, {0, 6, 0}};
+    XrXirBlock blocks[] = {{0, 5, 0, 0}, {0, 6, 0, 0}};
     XrXirFunction functions[] = {
         {"root", 4, NULL, 0, XR_XIR_I64, &blocks[0], 1, entry, 5, entry_values, 2},
         {"first", 5, &t, 1, t, &blocks[1], 1, body, 6, &value, 1},

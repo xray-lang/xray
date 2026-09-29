@@ -50,10 +50,10 @@ static XrXirArtifact *effect_fixture(bool suspends) {
     rethrow[3] = (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {3}, {0}, 0, {0}};
     XrXirInstruction reference[] = {{XR_XIR_FUNCTION_REF, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
-    XrXirBlock pair = {0, 2, 0}, triple = {0, suspends ? 3u : 2u, 0};
-    XrXirBlock branches[] = {{0, 1, 0}, {1, 1, 0}, {2, 2, 0}};
+    XrXirBlock pair = {0, 2, 0, 0}, triple = {0, suspends ? 3u : 2u, 0, 0};
+    XrXirBlock branches[] = {{0, 1, 0, 0}, {1, 1, 0, 0}, {2, 2, 0, 0}};
     XrXirInstruction init = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-    XrXirBlock init_block = {0, 1, 0};
+    XrXirBlock init_block = {0, 1, 0, 0};
     XrXirInstruction entry[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirFunction functions[] = {
@@ -131,7 +131,7 @@ static void effect_long_cycle(void) {
         ops[f][0] = (XrXirInstruction) {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, (f + 1) % COUNT, {0}};
         ops[f][1] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}};
         ops[f][2] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
-        blocks[f] = (XrXirBlock) {0, 3, 0};
+        blocks[f] = (XrXirBlock) {0, 3, 0, 0};
         functions[f] = (XrXirFunction) {"cycle", 5, NULL, 0, XR_XIR_UNIT, &blocks[f], 1, ops[f], 3, NULL, 0};
     }
     ops[COUNT - 1][1] = (XrXirInstruction) {XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}};
@@ -219,7 +219,7 @@ static XrXirArtifact *effect_missing_fixture(bool wide) {
     XrXirInstruction entry[3]; memcpy(entry, functions[1].instructions, sizeof(entry));
     entry[1].type = XR_XIR_I64;
     entry[2] = (XrXirInstruction){XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}};
-    XrXirBlock block = {0, 3, 0};
+    XrXirBlock block = {0, 3, 0, 0};
     functions[1].instructions = entry; functions[1].instruction_count = 3; functions[1].blocks = &block;
     built.functions = functions;
     XrXirTypes types = *built.types; types.count = 1; built.types = &types;
@@ -265,7 +265,7 @@ static void effect_growing_cycle(void) {
         {XR_XIR_ARRAY_NEW, (XrXirType)257, {1, 1}, {0}, 0, {0}},
         {XR_XIR_CALL, XR_XIR_I64, {2, 1}, {0}, 2, {0, 1}},
         {XR_XIR_THROW, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
-    uint32_t operands[] = {0, 0, 2}; XrXirBlock block = {0, 4, 0};
+    uint32_t operands[] = {0, 0, 2}; XrXirBlock block = {0, 4, 0, 0};
     functions[2].instructions = ops; functions[2].instruction_count = 4; functions[2].blocks = &block;
     functions[2].operands = operands; functions[2].operand_count = 3; built.functions = functions;
     XrXirGeneric generics[4]; memcpy(generics, built.generics, sizeof(generics));
