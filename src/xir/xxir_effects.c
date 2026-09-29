@@ -20,10 +20,11 @@ typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectError
 struct XrXirEffects {
     uint32_t count, atom_count, atom_capacity, words, source_type_count;
     XrXirFunctionEffects *functions;
+    XrXirEffectWitness *witnesses;
     EffectErrorAtom *atoms;
     uint64_t *errors;
 };
-typedef struct EffectEdge { uint32_t caller, next; } EffectEdge;
+typedef struct EffectEdge { uint32_t caller, next, instruction; } EffectEdge;
 typedef struct EffectGraph {
     uint32_t *heads, *queue;
     uint8_t *queued;
@@ -37,10 +38,17 @@ static void effect_graph_free(EffectGraph *graph) {
     xr_free(graph->heads); xr_free(graph->queue); xr_free(graph->queued); xr_free(graph->edges);
 }
 void xr_xir_effects_free(XrXirEffects *effects) {
-    if (effects) { xr_free(effects->errors); xr_free(effects->atoms); xr_free(effects->functions); xr_free(effects); }
+    if (effects) {
+        xr_free(effects->errors); xr_free(effects->atoms); xr_free(effects->functions);
+        xr_free(effects->witnesses); xr_free(effects);
+    }
 }
 const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function) {
     return effects && function < effects->count ? &effects->functions[function] : NULL;
+}
+const XrXirEffectWitness *xr_xir_effects_suspend_witness(const XrXirEffects *effects, uint32_t function) {
+    return effects && function < effects->count && effects->witnesses[function].cause ?
+        &effects->witnesses[function] : NULL;
 }
 /* An unclassified opcode must not acquire an accidental no-effect proof. */
 static bool effect_seed(XrXirOp op, XrXirFunctionEffects *effect) {
@@ -122,7 +130,7 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE) continue;
             uint32_t callee = (uint32_t) op->immediate;
-            graph->edges[at] = (EffectEdge) {f, graph->heads[callee]};
+            graph->edges[at] = (EffectEdge) {f, graph->heads[callee], i};
             graph->heads[callee] = at++;
         }
     }
@@ -155,19 +163,59 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, u
 #include "xxir_effect_terms.inc.c"
 #include "xxir_effect_errors.inc.c"
 
+/* A breadth-first forest over final facts cannot inherit a cyclic cause chain
+ * from recursive fixed-point updates. Each function enters the queue once. */
+static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *effects,
+    EffectGraph *graph, uint64_t *work) {
+    uint32_t front = 0, back = 0;
+    for (uint32_t f = 0; f < effects->count; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        XrXirEffect fact = effects->functions[f].suspend;
+        if (!effect_spend(work, (uint64_t)function->instruction_count + 1)) return XR_XIR_BUDGET;
+        if (fact == XR_XIR_EFFECT_NONE) continue;
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            XrXirOp op = function->instructions[i].op;
+            XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
+            if (fact == XR_XIR_EFFECT_MAY && op == XR_XIR_SUSPEND) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
+            else if (fact == XR_XIR_EFFECT_UNKNOWN &&
+                (op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT)) cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
+            if (!cause) continue;
+            effects->witnesses[f] = (XrXirEffectWitness){cause, i, UINT32_MAX, 0};
+            graph->queue[back++] = f; break;
+        }
+    }
+    while (front < back) {
+        if (!effect_spend(work, 1)) return XR_XIR_BUDGET;
+        uint32_t callee = graph->queue[front++];
+        for (uint32_t e = graph->heads[callee]; e != UINT32_MAX; e = graph->edges[e].next) {
+            if (!effect_spend(work, 1)) return XR_XIR_BUDGET;
+            EffectEdge edge = graph->edges[e];
+            if (effects->witnesses[edge.caller].cause ||
+                effects->functions[edge.caller].suspend != effects->functions[callee].suspend) continue;
+            effects->witnesses[edge.caller] = (XrXirEffectWitness){XR_XIR_EFFECT_CAUSE_CALL,
+                edge.instruction, callee, effects->witnesses[callee].distance + 1};
+            graph->queue[back++] = edge.caller;
+        }
+    }
+    return XR_XIR_OK;
+}
+
 XrXirStatus xr_xir_effects_infer_verified(const XrXirModule *module,
     XrXirBudget *remaining, XrXirEffects **output) {
     *output = NULL;
-    uint64_t bytes = sizeof(XrXirEffects) + (uint64_t) module->function_count * sizeof(XrXirFunctionEffects);
+    uint64_t bytes = sizeof(XrXirEffects) + (uint64_t) module->function_count *
+        (sizeof(XrXirFunctionEffects) + sizeof(XrXirEffectWitness));
     if (bytes > remaining->metadata_bytes || bytes > SIZE_MAX) return XR_XIR_BUDGET;
     XrXirEffects *effects = xr_calloc(1, sizeof(*effects));
     if (!effects) return XR_XIR_OUT_OF_MEMORY;
     effects->count = module->function_count;
     effects->functions = xr_calloc(effects->count, sizeof(*effects->functions));
-    if (!effects->functions) { xr_xir_effects_free(effects); return XR_XIR_OUT_OF_MEMORY; }
+    effects->witnesses = xr_calloc(effects->count, sizeof(*effects->witnesses));
+    if (!effects->functions || !effects->witnesses) { xr_xir_effects_free(effects); return XR_XIR_OUT_OF_MEMORY; }
     EffectGraph graph = {0};
     XrXirStatus status = effect_graph_build(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, &remaining->work);
+    if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, &remaining->work);
     effect_graph_free(&graph);
     if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
     remaining->metadata_bytes -= bytes;

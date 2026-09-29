@@ -11,6 +11,15 @@
 #include "xxir.h"
 typedef enum XrXirEffect { XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_MAY } XrXirEffect;
 typedef struct XrXirFunctionEffects { XrXirEffect suspend, throws; } XrXirFunctionEffects;
+
+typedef enum XrXirEffectCause {
+    XR_XIR_EFFECT_CAUSE_NONE, XR_XIR_EFFECT_CAUSE_SUSPEND,
+    XR_XIR_EFFECT_CAUSE_INDIRECT, XR_XIR_EFFECT_CAUSE_CALL
+} XrXirEffectCause;
+typedef struct XrXirEffectWitness {
+    XrXirEffectCause cause;
+    uint32_t instruction, callee, distance;
+} XrXirEffectWitness;
 typedef struct XrXirEffects XrXirEffects;
 #define XR_XIR_ERROR_SYMBOLIC_VARIANT UINT32_MAX
 /* Reverification and inference consume one cumulative work allowance. */
@@ -18,6 +27,9 @@ XR_FUNC XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,
     const XrXirBudget *budget, XrXirEffects **output);
 /* The borrowed fact remains valid until its owning summary is freed. */
 XR_FUNC const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function);
+/* NULL for NONE/invalid queries; call steps strictly decrease distance.
+ * The summary owns numeric identities, not source locations or input storage. */
+XR_FUNC const XrXirEffectWitness *xr_xir_effects_suspend_witness(const XrXirEffects *effects, uint32_t function);
 /* Numeric type identities refer to the analyzed artifact, without borrowing it. */
 XR_FUNC bool xr_xir_effects_error(const XrXirEffects *effects, uint32_t function,
     XrXirType type, uint32_t variant);

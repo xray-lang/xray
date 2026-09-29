@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_effect_witness_cases.h"
 static void source_generic_effects(const XrXirModule *module, const XrXirEffects *effects) {
     bool open=false; uint32_t found=0;
     for (uint32_t f=0;f<module->function_count;++f)
@@ -151,6 +152,7 @@ static void source_effects(const XrXirArtifact *artifact) {
         CHECK(found);
     }
     source_generic_effects(module,effects);
+    effect_witness_paths(module,effects);
     xr_xir_effects_free(effects);
 }
 int main(void) {

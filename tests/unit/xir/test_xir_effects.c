@@ -30,6 +30,7 @@ static void effect_free(void *p) {
 #undef xr_free
 #include "xir_enum_ops_fixture.h"
 #include "xir_enum_generic_fixture.h"
+#include "xir_effect_witness_cases.h"
 static XrXirArtifact *effect_fixture(bool suspends) {
     XrXirType parameter = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_CALLABLE; node.result = XR_XIR_UNIT;
@@ -105,6 +106,13 @@ static void effect_cases(bool suspends) {
     for (unsigned stage = 0; stage < 2; ++stage) {
         XrXirEffects *effects = NULL;
         CHECK(xr_xir_effects_analyze(stage ? lowered : artifact, NULL, &effects) == XR_XIR_OK);
+        effect_witness_paths(xr_xir_artifact_module(stage ? lowered : artifact), effects);
+        if (suspends) {
+            const XrXirEffectWitness *a = xr_xir_effects_suspend_witness(effects, 0);
+            const XrXirEffectWitness *b = xr_xir_effects_suspend_witness(effects, 1);
+            CHECK(a && a->instruction == 0 && a->callee == 1 && a->distance == 1);
+            CHECK(b && b->instruction == 1 && b->distance == 0);
+        }
         for (uint32_t f = 0; f < 2; ++f)
             effect_expect(effects, f, suspends ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE);
         effect_expect(effects, 2, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
@@ -121,6 +129,8 @@ static void effect_cases(bool suspends) {
     CHECK(xr_xir_effects_analyze(artifact, NULL, &effects) == XR_XIR_OK);
     xr_xir_artifact_free(artifact);
     effect_expect(effects, 4, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
+    const XrXirEffectWitness *owned = xr_xir_effects_suspend_witness(effects, 4);
+    CHECK(owned && owned->cause == XR_XIR_EFFECT_CAUSE_INDIRECT && owned->instruction == 0);
     xr_xir_effects_free(effects); CHECK(!live);
     printf("Control effects: cycle seed %u, %zu allocation failure sites released\n", suspends, sites);
 }
@@ -141,6 +151,9 @@ static void effect_long_cycle(void) {
     XrXirEffects *effects = NULL;
     CHECK(xr_xir_effects_analyze(artifact, NULL, &effects) == XR_XIR_OK);
     for (uint32_t f = 0; f < COUNT; ++f) effect_expect(effects, f, XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_NONE);
+    effect_witness_paths(xr_xir_artifact_module(artifact), effects);
+    for (uint32_t f = 0; f < COUNT; ++f)
+        CHECK(xr_xir_effects_suspend_witness(effects, f)->distance == COUNT - 1 - f);
     xr_xir_effects_free(effects); effects = NULL; CHECK(!live);
     XrXirBudget proof = xr_xir_default_budget(), budget = proof;
     CHECK(xr_xir_verify_remaining(xr_xir_artifact_module(artifact), &proof, NULL) == XR_XIR_OK);
@@ -334,7 +347,34 @@ static void effect_cleanup_ownership(void) {
     xr_xir_artifact_free(artifact);
     printf("Cleanup verification and inference: %zu allocation failures released\n", sites);
 }
+static void effect_witness_competition(void) {
+    XrXirArtifact *base = effect_fixture(true), *artifact = NULL;
+    XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+    XrXirFunction functions[8]; memcpy(functions, built.functions, sizeof(functions));
+    XrXirInstruction ops[] = {
+        {XR_XIR_CALL_INDIRECT, XR_XIR_UNIT, {0}, {0}, 0, {0}},
+        {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, 0, {0}},
+        {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, 1, {0}},
+        {XR_XIR_CALL, XR_XIR_UNIT, {0}, {0}, 1, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+    XrXirBlock block = {0, 5, 0, 0};
+    functions[2].instructions = ops; functions[2].instruction_count = 5;
+    functions[2].blocks = &block; built.functions = functions;
+    CHECK(xr_xir_check(&built, NULL, &artifact, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(base);
+    XrXirEffects *effects = NULL;
+    CHECK(xr_xir_effects_analyze(artifact, NULL, &effects) == XR_XIR_OK);
+    effect_witness_paths(xr_xir_artifact_module(artifact), effects);
+    const XrXirEffectWitness *w = xr_xir_effects_suspend_witness(effects, 2);
+    CHECK(w && w->cause == XR_XIR_EFFECT_CAUSE_CALL && w->distance == 1);
+    CHECK(w->callee == 1 && w->instruction == 3);
+    CHECK(xr_xir_effects_function(effects, 2)->suspend == XR_XIR_EFFECT_MAY);
+    xr_xir_effects_free(effects); CHECK(!live);
+    CHECK(effect_failures(artifact) > 0);
+    xr_xir_artifact_free(artifact);
+}
 int main(void) {
+    effect_witness_competition();
     effect_cleanup_ownership();
     effect_term_shapes();
     effect_missing_errors(false); effect_missing_errors(true); effect_growing_cycle();

@@ -45,6 +45,7 @@ static void cleanup_role_rejections(XrXirArtifact *checked) {
     XrXirDiagnostic diagnostic = {0};
     CHECK(xr_xir_verify(module, NULL, &diagnostic) == XR_XIR_BAD_TYPE && diagnostic.function == 3);
     CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND);
+    CHECK(diagnostic.block == 0 && diagnostic.instruction == 0);
     XrXirType error = XR_XIR_ERROR;
     XrXirInstruction escaping = {XR_XIR_THROW, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     block.count = 1; body->instructions = &escaping; body->instruction_count = 1; body->parameters = &error; body->parameter_count = 1;

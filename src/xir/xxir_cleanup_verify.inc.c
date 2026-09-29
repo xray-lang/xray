@@ -41,6 +41,19 @@ static XrXirStatus cleanup_effects_verify(const XrXirModule *module,
             diagnostic->reason = fact->throws == XR_XIR_EFFECT_MAY ?
                 XR_XIR_DIAGNOSTIC_CLEANUP_THROW : XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND;
             status = XR_XIR_BAD_TYPE;
+            if (diagnostic->reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND) {
+                const XrXirEffectWitness *witness = xr_xir_effects_suspend_witness(effects, f);
+                if (!witness) { status = XR_XIR_BAD_STRUCTURE; break; }
+                diagnostic->instruction = witness->instruction;
+                const XrXirFunction *function = &module->functions[f];
+                for (uint32_t b = 0; b < function->block_count; ++b) {
+                    if (!spend(&remaining->work, 1)) { status = XR_XIR_BUDGET; break; }
+                    XrXirBlock block = function->blocks[b];
+                    if (witness->instruction >= block.first && witness->instruction - block.first < block.count) {
+                        diagnostic->block = b; break;
+                    }
+                }
+            }
         }
     }
     xr_xir_effects_free(effects);
