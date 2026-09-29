@@ -1,0 +1,12 @@
+enum Fault { Bad }
+export fn pure()->i64 { return 7 }
+export fn sleeper() { Coro.yield() }
+export fn relay<T>(value:T)->T { sleeper(); return value }
+export fn instantiated()->i64 { return relay<i64>(7) }
+export fn fail()->i64 { throw Fault.Bad }
+export fn forward()->i64 { return fail() }
+export fn handled()->i64 { try { return fail() } catch(e) { return 11 } }
+export fn rethrow()->i64 { try { return fail() } catch(e) { throw e } }
+export fn dynamic(f:fn()->i64)->i64 { return f() }
+export fn dynamicHandled(f:fn()->i64)->i64 { try { return f() } catch(e) { return 11 } }
+export fn panicOnly()->i64 { try { return 1/0 } catch panic { return 13 } }

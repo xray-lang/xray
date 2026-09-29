@@ -82,6 +82,8 @@ UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
 XIR_TESTS = (
     "test_xir_stages",
+    "test_xir_effects",
+    "test_xir_effects_source",
     "test_xir_allocations",
     "test_xir_execution",
     "test_xir_emit",
