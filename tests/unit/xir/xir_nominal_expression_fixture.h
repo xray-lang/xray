@@ -44,7 +44,7 @@ static XrXirArtifact *nominal_expression_fixture(void) {
         {XR_XIR_CALL, XR_XIR_STRING, {0, 1}, {0}, 1, {0, 1}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
     uint32_t operands[] = {0, 2, 4, 1, 3, 5}, body_operands[] = {0, 1}, escape_operand = 0;
-    XrXirBlock blocks[] = {{0, 8}, {0, 5}, {0, 1}, {0, 3}};
+    XrXirBlock blocks[] = {{0, 8, 0}, {0, 5, 0}, {0, 1, 0}, {0, 3, 0}};
     XrXirFunction functions[] = {
         {"root", 4, NULL, 0, XR_XIR_I64, blocks, 1, entry, 8, operands, 6},
         {"wrap", 4, &t, 1, t, blocks + 1, 1, body, 5, body_operands, 2},
@@ -76,7 +76,7 @@ static inline XrXirArtifact *nominal_forwarding_checked(void) {
     body[3] = (XrXirInstruction) {XR_XIR_STRUCT_GET, (XrXirType)256, {3}, {0}, 0, {0}};
     body[4] = (XrXirInstruction) {XR_XIR_STRUCT_GET, t, {4}, {0}, 0, {0}};
     body[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {5}, {0}, 0, {0}};
-    XrXirBlock block = {0,6}, identity_block = {0,2};
+    XrXirBlock block = {0,6, 0}, identity_block = {0,2, 0};
     functions[1].instructions = body; functions[1].instruction_count = 6;
     functions[1].blocks = &block; functions[1].operands = operands; functions[1].operand_count = 3;
     generics[1].arguments = &outer; generics[1].argument_count = 1;

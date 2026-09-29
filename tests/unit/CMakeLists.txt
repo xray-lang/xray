@@ -277,6 +277,22 @@ target_link_libraries(test_xir_source_float_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_source_float_mixed xir/test_xir_source_float_mixed.c ${XIR_FLOAT_SOURCE_GENERATED})
 target_link_libraries(test_xir_source_float_mixed PRIVATE xray_xir_vm)
 target_compile_definitions(test_xir_source_float_mixed PRIVATE XR_FLOAT_CHECKED_FIXTURE="${XIR_FLOAT_CHECKED_GENERATED}")
+add_xray_bootstrap_executable(test_xir_panic_source xir/test_xir_panic_source.c)
+target_link_libraries(test_xir_panic_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_panic_source PRIVATE XR_PANIC_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source")
+set(XIR_PANIC_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_panic_source.c)
+add_custom_command(OUTPUT ${XIR_PANIC_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_panic_source> ${XIR_PANIC_GENERATED}
+    DEPENDS test_xir_panic_source
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source/root.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source/initialization.xr
+        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_panic_source/faults.xr
+    VERBATIM)
+add_executable(test_xir_panic_native xir/test_xir_panic_native.c ${XIR_PANIC_GENERATED})
+target_link_libraries(test_xir_panic_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_panic_mixed xir/test_xir_panic_mixed.c ${XIR_PANIC_GENERATED})
+target_link_libraries(test_xir_panic_mixed PRIVATE xray_xir_vm)
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
@@ -287,7 +303,8 @@ foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generic
     test_xir_emit_output test_xir_output_vm test_xir_output_native test_xir_source test_xir_source_native
     test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics test_xir_source_query
     test_xir_source_arrays test_xir_array_packet_vm test_xir_source_array_native test_xir_source_array_mixed
-    test_xir_source_floats test_xir_float_packet_vm test_xir_source_float_native test_xir_source_float_mixed)
+    test_xir_source_floats test_xir_float_packet_vm test_xir_source_float_native test_xir_source_float_mixed
+    test_xir_panic_source test_xir_panic_native test_xir_panic_mixed)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()

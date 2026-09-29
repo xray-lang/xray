@@ -32,17 +32,17 @@ static const uint32_t identities[] = {0, 1, 2};
 static const XrXirType types[] = {XR_XIR_I64, XR_XIR_I64, XR_XIR_I64};
 
 static XrXirAction returned(XrXirValue value) {
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, value, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, value, {0}, 0};
 }
 static XrXirAction propagate(XrXirCallResult result) {
     return (XrXirAction) {result.status == XR_XIR_CALL_THROWN ? XR_XIR_ACTION_THROW : XR_XIR_ACTION_RETURN,
-        0, NULL, 0, result.value, {0}};
+        0, NULL, 0, result.value, {0}, 0};
 }
 static XrXirAction root_resume(XrXirCallView *view) {
     uint32_t *started = view->state;
     CHECK((uintptr_t) view->state % XR_XIR_CALL_STATE_ALIGNMENT == 0);
     if (!(*started)++)
-        return (XrXirAction) {XR_XIR_ACTION_CALL, 1, view->arguments, 3, {0, 0, 0}, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_CALL, 1, view->arguments, 3, {0, 0, 0}, {0}, 0};
     CHECK(view->inbox.status == XR_XIR_CALL_RETURNED || view->inbox.status == XR_XIR_CALL_THROWN);
     return propagate(view->inbox);
 }
@@ -80,7 +80,7 @@ static XrXirAction native_sort_resume(XrXirCallView *view) {
     state->arguments[0] = state->values[state->cursor];
     state->arguments[1] = state->values[state->cursor - 1];
     state->waiting = true;
-    return (XrXirAction) {XR_XIR_ACTION_CALL, 2, state->arguments, 2, {0, 0, 0}, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_CALL, 2, state->arguments, 2, {0, 0, 0}, {0}, 0};
 }
 
 static XrXirAction comparator_resume(XrXirCallView *view) {
@@ -93,14 +93,14 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
     CHECK(xr_xir_call_free(view->activation) == XR_XIR_CALL_BUSY);
     uint32_t before = (*resumed)++;
     if ((witness->mode == 1 && before == 0) || (witness->mode == 5 && before < 2))
-        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};
     if (witness->mode == 2)
-        return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, witness->error, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, witness->error, {0}, 0};
     if (witness->mode == 9)
-        return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,{XR_XIR_I64,0,91},{0}};
+        return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,{XR_XIR_I64,0,91},{0}, 0};
     if (witness->mode == 10) {
         XrXirValue invalid=witness->error; invalid.reserved=1;
-        return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,invalid,{0}};
+        return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,invalid,{0}, 0};
     }
     if (witness->mode == 3)
         CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCELLED);
@@ -128,7 +128,7 @@ static XrXirArtifact *comparator_artifact(void) {
         {XR_XIR_LT_INT, XR_XIR_BOOL, {0, 1}, {0, 0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2, 0}, {0, 0}, 0, {0}}
     };
-    XrXirBlock block = {0, 2};
+    XrXirBlock block = {0, 2, 0};
     XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
@@ -215,7 +215,7 @@ static XrXirAction recursive_resume(XrXirCallView *view) {
     if (!state->entered++) {
         if (view->arguments[0].payload == 0) return returned((XrXirValue) {XR_XIR_I64, 0, 0});
         state->child = (XrXirValue) {XR_XIR_I64, 0, view->arguments[0].payload - 1};
-        return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0, 0, 0}, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_CALL, 0, &state->child, 1, {0, 0, 0}, {0}, 0};
     }
     CHECK(view->inbox.status == XR_XIR_CALL_RETURNED);
     return returned((XrXirValue) {XR_XIR_I64, 0, view->inbox.value.payload + 1});
@@ -378,7 +378,7 @@ typedef struct FaultWitness {
 
 static XrXirAction fault_parent(XrXirCallView *view) {
     (void) view;
-    return (XrXirAction) {XR_XIR_ACTION_CALL, 1, NULL, 0, {XR_XIR_UNIT, 0, 0}, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_CALL, 1, NULL, 0, {XR_XIR_UNIT, 0, 0}, {0}, 0};
 }
 
 static XrXirAction fault_child(XrXirCallView *view) {

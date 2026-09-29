@@ -265,7 +265,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 > **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/builtin_symbols.def` 自动引入的类型符号：
 > `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
-> `Array<u8>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
+> `DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 > 这些名字**不可被重新声明**：`class Array {}`、`enum TaskResult {}`、`interface Stringable {}` 一律是编译错误。
 > 完整的保留集是该注册表的全部条目（类型、枚举、约束接口），不止上面列出的 prelude 类型；
 > 标准库自身对它们的声明是这些名字的**定义**，不受此限制。
@@ -615,7 +615,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Primitive | `i64`、`f64`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
 | 精确整数 | `i8`、`i16`、`i32`、`i64`、`u8`..`u64` |
 | 精确浮点 | `f32`、`f64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>` |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>` / `MutSlice<T>`（共享只读 / 独占可写，不拥有元素，见 §2.4.2） |
 | Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`Os*` 同步类型 |
@@ -4569,6 +4569,8 @@ try {
     log("runtime fault!")                    // panic 通道
 }
 ```
+
+**绑定与作用域规则**：每个 `try` 至多有一个 `catch panic`，因为它无条件匹配该通道。可省略头部，或写 `catch panic (p)` / `catch panic (p: PanicInfo)`；注解必须是 `PanicInfo`，不是运行时类型过滤器。绑定只读且仅在 handler 内可见，复制或返回该引用遵守 class 的身份与所有权规则，不自动获得 `Sendable`。handler 只保护对应的 try 主体，不保护同级 handler；handler 中的新 panic 继续寻找外层处理器。普通 enum 错误不能进入 panic handler，panic 也不能进入普通 catch。
 
 #### 8.2.3 `PanicInfo` 类
 

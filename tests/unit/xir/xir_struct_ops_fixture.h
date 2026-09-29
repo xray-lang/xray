@@ -35,7 +35,7 @@ static XrXirArtifact *struct_ops_checked(unsigned invalid) {
         {XR_XIR_STRUCT_NEW,(XrXirType)257,{0},{0},0, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
     uint32_t operands[] = {0,1};
-    XrXirBlock one = {0,1}, five = {0,5}, six = {0,6};
+    XrXirBlock one = {0,1, 0}, five = {0,5, 0}, six = {0,6, 0};
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&five,1,entry,5,operands,2},

@@ -26,7 +26,7 @@ static XrXirArtifact *callable_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
     XrXirInstruction generic_ops[] = {{XR_XIR_COPY, generic, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
-    XrXirBlock block = {0, 2}; uint32_t operand = 0, constraint = 0;
+    XrXirBlock block = {0, 2, 0}; uint32_t operand = 0, constraint = 0;
     XrXirFunction functions[] = {
         {"forward", 7, &fn1, 1, fn1, &block, 1, caller_ops, 2, &operand, 1},
         {"identity", 8, &generic, 1, generic, &block, 1, generic_ops, 2, NULL, 0}
@@ -52,7 +52,7 @@ static XrXirArtifact *function_ir_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
     XrXirInstruction target[] = {{XR_XIR_SUSPEND, XR_XIR_UNIT, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
-    XrXirBlock blocks[] = {{0,1}, {0,4}, {0,2}};
+    XrXirBlock blocks[] = {{0,1, 0}, {0,4, 0}, {0,2, 0}};
     uint32_t argument = 1;
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0},
@@ -80,7 +80,7 @@ static XrXirArtifact *generic_callable_fixture(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
     XrXirInstruction body[] = {{XR_XIR_CALL_INDIRECT,t,{0,1},{0},0, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
-    XrXirBlock block = {0,2};
+    XrXirBlock block = {0,2, 0};
     XrXirFunction functions[] = {
         {"caller",6,parameters,2,XR_XIR_STRING,&block,1,caller,2,arguments,2},
         {"apply",5,parameters+2,2,t,&block,1,body,2,&indirect,1}
@@ -119,7 +119,7 @@ static XrXirArtifact *constructed_fixture(void) {
         {XR_XIR_CALL,(XrXirType)265,{2,2},{0},2, {1,1}}, {XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0, {0}}};
     XrXirInstruction body[] = {{XR_XIR_COPY,(XrXirType)257,{0},{0},0, {0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
-    XrXirBlock blocks[] = {{0,3},{0,2}};
+    XrXirBlock blocks[] = {{0,3, 0},{0,2, 0}};
     XrXirFunction functions[] = {
         {"caller",6,parameters,4,(XrXirType)265,blocks,1,caller,3,operands,4},
         {"first",5,parameters+4,2,(XrXirType)257,blocks+1,1,body,2,NULL,0},

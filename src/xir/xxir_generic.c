@@ -15,7 +15,8 @@
 
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
     if (!module || function >= module->function_count) return false;
-    if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR) return true;
+    if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 ||
+        type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
     uint32_t count = module->generics ? module->generics[function].parameter_count : 0;
     const XrXirTypeNode *node = xr_xir_type_node(module->types, type);
     if (node) return (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||

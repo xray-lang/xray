@@ -64,7 +64,7 @@ XR_FUNC bool xr_xir_type_is_enum(const XrXirTypes *types, XrXirType type) {
 bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
-        (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
+        type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL));
 }
 const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type) {
@@ -121,7 +121,7 @@ XrXirStatus xr_xir_type_markers(const XrXirTypes *types, XrXirType type, uint32_
 static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     uint32_t id = (uint32_t) type;
     if (type == XR_XIR_BOOL || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR) return true;
+        type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&

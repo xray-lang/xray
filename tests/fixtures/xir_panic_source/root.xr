@@ -1,0 +1,57 @@
+import "./faults" as faults
+
+export fn direct()->i64 {
+    try { return 10/0 } catch panic { return 17 }
+}
+export fn bound()->string {
+    try { faults.divide(0) } catch panic(p:PanicInfo) { return p.message }
+    return "not caught"
+}
+export fn bounds()->string {
+    try { const xs=[7]; const value=xs[4]; return "not caught" }
+    catch panic(p) { return p.message }
+}
+export fn nested()->i64 {
+    try {
+        try { return faults.divide(0) }
+        catch panic(p) { return faults.remainder(0) }
+    } catch panic(outer) { return outer.code }
+}
+export fn channels()->i64 {
+    try {
+        try { return faults.business() } catch panic { return 0 }
+    } catch(e:faults.Business) { return 23 }
+}
+export fn throughOrdinary()->i64 {
+    try {
+        try { return faults.divide(0) } catch(e) { return 0 }
+    } catch panic(p) { return p.code }
+}
+export fn localState()->i64 {
+    var x=3
+    try { x=5; return faults.divide(0) } catch panic { return x }
+}
+export fn indirect()->i64 {
+    const f:fn(i64)->i64=faults.divide
+    try { return f(0) } catch panic(p) { return p.code }
+}
+export fn suspended()->string {
+    try { faults.paused() } catch panic(p) { return p.message }
+    return "not caught"
+}
+export fn suspendedHandler()->string {
+    try { faults.divide(0) }
+    catch panic(p) { Coro.yield(); return faults.identity<string>(p.message) }
+    return "not caught"
+}
+export fn information()->PanicInfo {
+    try { faults.divide(0) }
+    catch panic(p) { return faults.identity<PanicInfo>(p) }
+    return information()
+}
+export fn unmatched()->i64 {
+    try { return match(false) {true->1} } catch panic(p) { return p.code }
+}
+export fn uncaught()->i64 { return faults.divide(0) }
+
+print(direct(),nested(),channels(),localState())

@@ -28,7 +28,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Primitive | `i64`、`f64`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
 | 精确整数 | `i8`、`i16`、`i32`、`i64`、`u8`..`u64` |
 | 精确浮点 | `f32`、`f64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>` |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>` / `MutSlice<T>`（共享只读 / 独占可写，不拥有元素，见 §2.4.2） |
 | Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`Os*` 同步类型 |

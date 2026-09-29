@@ -85,9 +85,12 @@ typedef struct XrXirInstruction {
     uint32_t type_arguments[2];
 } XrXirInstruction;
 
+/* A nonzero panic names the handler block entered when an instruction of this
+ * block, or a callee of one of its calls, raises a panic-channel fault. */
 typedef struct XrXirBlock {
     uint32_t first;
     uint32_t count;
+    uint32_t panic;
 } XrXirBlock;
 
 /* Value IDs are parameters followed by instruction indices. Terminators occupy

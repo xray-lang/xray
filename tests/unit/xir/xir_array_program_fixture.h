@@ -98,7 +98,7 @@ static XrXirArtifact *array_program_fixture(bool fail_init, bool nominal) {
         {XR_XIR_ARRAY_GET, XR_XIR_STRING, {2, 4}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0, {0}}};
     uint32_t captured_operands[] = {2, 4, 3};
-    XrXirBlock blocks[] = {{0,4},{0,7},{0,23},{0,2},{0,3},{0,8}};
+    XrXirBlock blocks[] = {{0,4, 0},{0,7, 0},{0,23, 0},{0,2, 0},{0,3, 0},{0,8, 0}};
     XrXirType index_type = XR_XIR_I64;
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,4,NULL,0},

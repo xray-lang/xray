@@ -103,7 +103,7 @@ static void array_stage_attacks(void) {
 
 static void array_phi_place_rejection(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
-    XrXirBlock blocks[] = {{0, 5}, {5, 1}, {6, 1}, {7, 3}};
+    XrXirBlock blocks[] = {{0, 5, 0}, {5, 1, 0}, {6, 1, 0}, {7, 3, 0}};
     f.ops[0] = (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}};
     f.ops[1] = (XrXirInstruction) {XR_XIR_ARRAY_NEW, (XrXirType) 256, {0}, {0}, 0, {0}};
     f.ops[2] = (XrXirInstruction) {XR_XIR_CELL_NEW, (XrXirType) 257, {1}, {0}, 0, {0}};

@@ -122,6 +122,9 @@ XIR_TESTS = (
     "test_xir_source_float_mixed",
     "test_xir_locals",
     "test_xir_local_native",
+    "test_xir_panic_source",
+    "test_xir_panic_native",
+    "test_xir_panic_mixed",
 )
 
 EXACT_PROFILES = {

@@ -64,7 +64,7 @@ static XrXirArtifact *struct_set_checked(unsigned invalid) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{4},{0},0, {0}}};
     uint32_t init_values[] = {1,0}, replace_values[] = {0,1};
     uint32_t printed[] = {12,14,16,19,21};
-    XrXirBlock six = {0,6}, all = {0,28};
+    XrXirBlock six = {0,6, 0}, all = {0,28, 0};
     XrXirFunction functions[] = {
         {"init",4,NULL,0,XR_XIR_UNIT,&six,1,init,6,init_values,2},
         {"entry",5,NULL,0,XR_XIR_I64,&all,1,entry,28,printed,5},

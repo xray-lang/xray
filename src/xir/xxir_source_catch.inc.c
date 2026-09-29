@@ -4,13 +4,15 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_catch.inc.c - Ordered error regions and scoped handler bindings
+ * xxir_source_catch.inc.c - Ordered error regions, panic regions and scoped handler bindings
  *
  * KEY CONCEPT:
  *   A handler filters by one concrete enum type. Pattern handlers narrow the
  *   Error first and then reuse the typed match tree on the narrowed value, so
  *   a failed type, variant, literal or range test continues with the next
- *   handler and an unmatched error propagates unchanged.
+ *   handler and an unmatched error propagates unchanged. A panic handler
+ *   protects exactly the blocks of its try body; nested bodies keep their own
+ *   innermost handler, and no handler protects itself or its siblings.
  */
 
 /* The first alternative names the handler's enum type. An Error carries no
@@ -129,15 +131,18 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
     *body = saved; ctx->generics[ctx->function] = generic; ctx->returned = returned;
     return ok;
 }
+static bool source_catch_join(SourceContext *ctx, uint32_t *joins, uint32_t *count) {
+    if (ctx->returned) return true;
+    joins[(*count)++] = ctx->bodies[ctx->function].count;
+    return emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
+}
 static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, const XrXirType *types,
-    SourceMatchArm *patterns, SourceValue error, uint32_t checkpoint, uint32_t normal_jump) {
+    SourceMatchArm *patterns, SourceValue error, uint32_t checkpoint, uint32_t *joins, uint32_t *count) {
     SourceFunction *body = &ctx->bodies[ctx->function];
-    uint32_t *joins = source_alloc(ctx,(size_t)attempt->catch_count+1,sizeof(*joins)), count = 0;
-    if (!joins) return false;
-    if (normal_jump != UINT32_MAX) joins[count++] = normal_jump;
     bool consumed = false;
     for (int i = 0; i < attempt->catch_count; ++i) {
         XrCatchClause *clause = attempt->catch_clauses[i];
+        if (clause->is_panic) continue;
         if (!source_work(ctx,clause->body)) return false;
         if (consumed) {
             if (!source_dead_catch(ctx,clause,&patterns[i],types[i],checkpoint)) return false;
@@ -155,11 +160,7 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
             if (!begin_block(ctx) ||
                 !emit(ctx,(XrXirInstruction){XR_XIR_ERROR_NARROW,types[i],{error.id},{0},0,{0}},&bound)) return false;
         } else consumed = true;
-        if (!source_catch_body(ctx,clause,&patterns[i],bound,&failures)) return false;
-        if (!ctx->returned) {
-            joins[count++] = body->count;
-            if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL)) return false;
-        }
+        if (!source_catch_body(ctx,clause,&patterns[i],bound,&failures) || !source_catch_join(ctx,joins,count)) return false;
         if (branch != UINT32_MAX) {
             uint32_t next = body->block_count;
             body->ops[branch].targets[1] = next;
@@ -175,11 +176,22 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
             if (!source_error_edge(ctx,error)) return false;
         } else if (!emit(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{error.id},{0},0,{0}},NULL)) return false;
     }
-    ctx->returned = count == 0;
-    if (!count) return true;
-    uint32_t target = body->block_count;
-    if (!begin_block(ctx)) return false;
-    for (uint32_t i = 0; i < count; ++i) body->ops[joins[i]].targets[0] = target;
+    return true;
+}
+/* The handler block begins with its selector; the body's blocks are patched
+ * afterwards, so blocks already owned by a nested handler keep it. */
+static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint32_t first, uint32_t end,
+    uint32_t *joins, uint32_t *count) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    uint32_t handler = body->block_count;
+    SourceValue caught = {0, XR_XIR_UNIT};
+    if (!begin_block(ctx) || !emit(ctx,(XrXirInstruction){XR_XIR_PANIC_CATCH,
+            clause->var_name ? XR_XIR_PANIC_INFO : XR_XIR_UNIT,{0},{0},0,{0}},&caught) ||
+        !source_catch_body(ctx,clause,NULL,caught,NULL) || !source_catch_join(ctx,joins,count)) return false;
+    for (uint32_t b = first; b < end; ++b) {
+        if (!source_work(ctx,clause->body)) return false;
+        if (!body->blocks[b].panic) body->blocks[b].panic = handler;
+    }
     return true;
 }
 static XrXirStatus source_catch_type_proof(SourceContext *ctx, XrXirType type) {
@@ -195,14 +207,23 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"try requires error handlers");
     XrXirType *types = source_alloc(ctx,attempt->catch_count,sizeof(*types));
     SourceMatchArm *patterns = source_alloc(ctx,attempt->catch_count,sizeof(*patterns));
-    if (!types || !patterns) return false;
+    uint32_t *joins = source_alloc(ctx,(size_t)attempt->catch_count+1,sizeof(*joins)), count = 0;
+    if (!types || !patterns || !joins) return false;
+    XrCatchClause *panic = NULL;
+    bool ordinary = false;
     for (int i = 0; i < attempt->catch_count; ++i) {
         XrCatchClause *clause = attempt->catch_clauses[i]; types[i] = XR_XIR_ERROR;
         if (!source_work(ctx,node)) return false;
-        if (!clause || !clause->body || (clause->pattern && clause->var_name))
+        if (!clause || !clause->body || (clause->pattern && (clause->var_name || clause->is_panic)))
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"malformed catch clause");
-        if (clause->is_panic)
-            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"panic handlers require their checked contracts");
+        if (clause->is_panic) {
+            if (panic) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"try allows one catch panic clause");
+            if (clause->type && (!source_type(ctx,clause->type,&types[i]) || types[i] != XR_XIR_PANIC_INFO))
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"catch panic binding must have type PanicInfo");
+            types[i] = XR_XIR_PANIC_INFO; panic = clause;
+            continue;
+        }
+        ordinary = true;
         /* A pattern's own path names its enum; the parser's head annotation is
          * only an analyzer hint and is never read here. */
         if (clause->pattern) {
@@ -215,33 +236,46 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         }
     }
     SourceFunction *body = &ctx->bodies[ctx->function];
-    uint32_t checkpoint=body->count;
+    uint32_t checkpoint=body->count, first = 0;
+    if (panic) {
+        if (!body->block_count && !begin_block(ctx)) return false;
+        first = body->block_count;
+        if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{first,0},0,{0}},NULL) || !begin_block(ctx)) return false;
+    }
     SourceErrorContext handler = {0}, *outer = body->error_context;
-    body->error_context = &handler;
+    if (ordinary) body->error_context = &handler;
     bool ok = scoped_statement(ctx,attempt->try_body);
     body->error_context = outer;
     if (!ok) return false;
-    if (!handler.count) {
+    uint32_t end = body->block_count;
+    if (!handler.count && !panic) {
         for (int i = 0; i < attempt->catch_count; ++i)
             if (!source_dead_catch(ctx,attempt->catch_clauses[i],&patterns[i],types[i],checkpoint)) return false;
         return true;
     }
-    uint32_t normal_jump = UINT32_MAX;
-    if (!ctx->returned) {
-        normal_jump = body->count;
-        if (!emit(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL)) return false;
-    }
+    if (!source_catch_join(ctx,joins,&count)) return false;
+    if (handler.count) {
+        uint32_t target = body->block_count;
+        if (!begin_block(ctx)) return false;
+        SourceValue *inputs = source_alloc(ctx,(size_t)handler.count*2,sizeof(*inputs));
+        if (!inputs) return false;
+        uint32_t at = handler.count;
+        for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {
+            if (!source_work(ctx,node)) return false;
+            body->ops[edge->jump].targets[0] = target;
+            --at; inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
+        }
+        SourceValue error;
+        if (!emit_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error) ||
+            !source_catch_dispatch(ctx,attempt,types,patterns,error,checkpoint,joins,&count)) return false;
+    } else for (int i = 0; i < attempt->catch_count; ++i)
+        if (!attempt->catch_clauses[i]->is_panic &&
+            !source_dead_catch(ctx,attempt->catch_clauses[i],&patterns[i],types[i],checkpoint)) return false;
+    if (panic && !source_panic_handler(ctx,panic,first,end,joins,&count)) return false;
+    ctx->returned = count == 0;
+    if (!count) return true;
     uint32_t target = body->block_count;
     if (!begin_block(ctx)) return false;
-    SourceValue *inputs = source_alloc(ctx,(size_t)handler.count*2,sizeof(*inputs));
-    if (!inputs) return false;
-    uint32_t at = handler.count;
-    for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {
-        if (!source_work(ctx,node)) return false;
-        body->ops[edge->jump].targets[0] = target;
-        --at; inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
-    }
-    SourceValue error;
-    return emit_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error) &&
-        source_catch_dispatch(ctx,attempt,types,patterns,error,checkpoint,normal_jump);
+    for (uint32_t i = 0; i < count; ++i) body->ops[joins[i]].targets[0] = target;
+    return true;
 }

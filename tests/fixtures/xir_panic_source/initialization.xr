@@ -1,0 +1,2 @@
+import "./faults" as faults
+faults.divide(0)

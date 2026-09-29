@@ -15,7 +15,7 @@
 #include <string.h>
 typedef struct FunctionCaseFrame { uint32_t phase; XrXirValue owned; } FunctionCaseFrame;
 static XrXirAction function_case_fault(XrXirCallStatus status) {
-    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};
 }
 static XrXirAction function_case_resume(XrXirCallView *view) {
     FunctionCaseFrame *frame = view->state;
@@ -24,7 +24,7 @@ static XrXirAction function_case_resume(XrXirCallView *view) {
     if (entry == 0) {
         status = xr_xir_instance_literal(view, 0, &frame->owned);
         if (status == XR_XIR_CALL_READY) status = xr_xir_instance_slot_write(view, 0, &frame->owned, true);
-    } else if (entry == 1) return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, 17}, {0}};
+    } else if (entry == 1) return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, 17}, {0}, 0};
     else if (entry == 2) {
         XrXirValue capture = {0};
         status = xr_xir_instance_slot_read(view, 0, &capture);
@@ -35,16 +35,16 @@ static XrXirAction function_case_resume(XrXirCallView *view) {
     else if (entry == 3 && !frame->phase++) {
         status = xr_xir_value_copy(&view->arguments[0], &frame->owned) == XR_XIR_VALUE_OK ?
             XR_XIR_CALL_READY : XR_XIR_CALL_LIMIT;
-        if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0}, {0}};
+        if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0}, {0}, 0};
     } else if (entry == 4) {
         if (!frame->phase++) {
             uint32_t target = UINT32_MAX;
             status = xr_xir_instance_resolve_function(view, &view->arguments[0], &target);
-            if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_CALL, target, NULL, 0, view->arguments[0], {0}};
-        } else return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->inbox.value, {0}};
+            if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_CALL, target, NULL, 0, view->arguments[0], {0}, 0};
+        } else return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->inbox.value, {0}, 0};
     }
     if (status != XR_XIR_CALL_READY) return function_case_fault(status);
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, entry ? frame->owned : (XrXirValue) {0}, {0}};
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, entry ? frame->owned : (XrXirValue) {0}, {0}, 0};
 }
 static void function_case_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     (void) reason; xr_xir_value_drop(&((FunctionCaseFrame *) view->state)->owned);

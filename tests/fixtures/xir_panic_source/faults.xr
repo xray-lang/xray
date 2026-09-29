@@ -1,0 +1,6 @@
+export enum Business { Failed }
+export fn divide(n:i64)->i64 { return 10/n }
+export fn remainder(n:i64)->i64 { return 10%n }
+export fn paused()->i64 { Coro.yield(); return divide(0) }
+export fn identity<T>(value:T)->T { return value }
+export fn business()->i64 { throw Business.Failed }

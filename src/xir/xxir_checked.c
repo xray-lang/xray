@@ -92,11 +92,12 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
     }
     f->result = (XrXirType) checked_u32(c, (uint32_t) f->result);
     f->block_count = checked_count(c, f->block_count, &c->remaining.blocks);
-    XrXirBlock *blocks = checked_array(c, f->blocks, f->block_count, sizeof(*blocks), 8);
+    XrXirBlock *blocks = checked_array(c, f->blocks, f->block_count, sizeof(*blocks), 12);
     f->blocks = blocks;
     for (uint32_t i = 0; i < f->block_count && c->status == XR_XIR_OK; ++i) {
         XrXirBlock b = blocks[i];
         b.first = checked_u32(c, b.first); b.count = checked_u32(c, b.count);
+        b.panic = checked_u32(c, b.panic);
         if (c->reading) blocks[i] = b;
     }
     f->instruction_count = checked_count(c, f->instruction_count, &c->remaining.instructions);

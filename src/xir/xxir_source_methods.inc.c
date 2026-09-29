@@ -118,6 +118,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     }
     SourceValue receiver;
     if (!expression(ctx, node->as.member_access.object, &receiver)) return false;
+    if (receiver.type == XR_XIR_PANIC_INFO) return source_panic_member(ctx, node, type_arguments, receiver, value);
     if (xr_xir_type_is_enum(&ctx->types, receiver.type) && !strcmp(node->as.member_access.name, "ordinal")) {
         if (type_arguments->count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum ordinal is not generic");
         uint32_t declaration = xr_xir_type_node(&ctx->types, receiver.type)->nominal.declaration;

@@ -10,6 +10,9 @@
  * KEY CONCEPT:
  *   Structural admission precedes graph traversal. Dominance is checked from
  *   control flow, never inferred from the order of blocks in storage.
+ *   A protected block may fault before any of its instructions completes, so
+ *   its panic edge leaves from the block's start: a handler sees only values
+ *   that strictly dominate every block it protects.
  */
 
 #include "xxir_internal.h"
@@ -21,7 +24,7 @@
 #include <limits.h>
 
 typedef enum ResultRule {
-    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_NUMBER, RULE_FLOAT, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_CALL, RULE_ATOMIC, RULE_ARRAY, RULE_NOMINAL, RULE_ROOT
+    RULE_UNIT, RULE_BOOL, RULE_I64, RULE_INTEGER, RULE_NUMBER, RULE_FLOAT, RULE_SCALAR, RULE_VALUE, RULE_OWNED, RULE_STRING, RULE_CALL, RULE_ATOMIC, RULE_ARRAY, RULE_NOMINAL, RULE_ROOT, RULE_PANIC
 } ResultRule;
 typedef struct OpRule {
     uint8_t stages;
@@ -49,6 +52,7 @@ typedef struct Graph {
     uint32_t *owner;
     uint32_t *queue;
     uint32_t *head;
+    uint32_t *fault_head;
     uint32_t *predecessor;
     uint32_t *next;
     uint8_t *reachable;
@@ -174,6 +178,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_INTEGER && !xr_xir_type_is_integer(op->type)) ||
         (rule->result == RULE_OWNED && (!xr_xir_type_is_owned(module->types, op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
+        (rule->result == RULE_PANIC && op->type != XR_XIR_UNIT && op->type != XR_XIR_PANIC_INFO) ||
         (rule->result == RULE_ATOMIC && op->type != XR_XIR_ATOMIC_I64) ||
         (rule->result == RULE_ARRAY && (!xr_xir_type_is_array(module->types, op->type) ||
             !xr_xir_type_in_context(module, caller_id, op->type))) ||
@@ -271,7 +276,8 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         context->location.block = b;
         const XrXirBlock *block = &function->blocks[b];
         if (!block->count || block->first != end ||
-            block->count > function->instruction_count - end)
+            block->count > function->instruction_count - end ||
+            block->panic >= function->block_count || (block->panic && (block->panic == b || !b)))
             return XR_XIR_BAD_STRUCTURE;
         end += block->count;
         for (uint32_t i = block->first; i < end; ++i) {
@@ -318,6 +324,7 @@ static void graph_free(Graph *graph) {
     xr_free(graph->owner);
     xr_free(graph->queue);
     xr_free(graph->head);
+    xr_free(graph->fault_head);
     xr_free(graph->predecessor);
     xr_free(graph->next);
     xr_free(graph->reachable);
@@ -330,19 +337,20 @@ static XrXirStatus graph_allocate(Graph *graph, const XrXirFunction *function,
     uint64_t blocks = function->block_count;
     graph->words = (uint32_t) ((blocks + 63) / 64);
     uint64_t bytes = (uint64_t) function->instruction_count * sizeof(uint32_t) +
-        blocks * (6 * sizeof(uint32_t) + sizeof(uint8_t)) +
+        blocks * (9 * sizeof(uint32_t) + sizeof(uint8_t)) +
         (blocks + 1) * graph->words * sizeof(uint64_t);
-    if (bytes > context->remaining.scratch_bytes || bytes > SIZE_MAX || blocks > UINT32_MAX / 2)
+    if (bytes > context->remaining.scratch_bytes || bytes > SIZE_MAX || blocks > UINT32_MAX / 3)
         return XR_XIR_BUDGET;
     graph->owner = xr_calloc(function->instruction_count, sizeof(uint32_t));
     graph->queue = xr_calloc((size_t) blocks, sizeof(uint32_t));
     graph->head = xr_calloc((size_t) blocks, sizeof(uint32_t));
-    graph->predecessor = xr_calloc((size_t) blocks * 2, sizeof(uint32_t));
-    graph->next = xr_calloc((size_t) blocks * 2, sizeof(uint32_t));
+    graph->fault_head = xr_calloc((size_t) blocks, sizeof(uint32_t));
+    graph->predecessor = xr_calloc((size_t) blocks * 3, sizeof(uint32_t));
+    graph->next = xr_calloc((size_t) blocks * 3, sizeof(uint32_t));
     graph->reachable = xr_calloc((size_t) blocks, sizeof(uint8_t));
     graph->dominators = xr_calloc((size_t) blocks * graph->words, sizeof(uint64_t));
     graph->meet = xr_calloc(graph->words, sizeof(uint64_t));
-    if (!graph->owner || !graph->queue || !graph->head || !graph->predecessor ||
+    if (!graph->owner || !graph->queue || !graph->head || !graph->fault_head || !graph->predecessor ||
         !graph->next || !graph->reachable || !graph->dominators || !graph->meet)
         return XR_XIR_OUT_OF_MEMORY;
     return XR_XIR_OK;
@@ -357,7 +365,7 @@ static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function,
                                VerifyContext *context) {
     uint32_t edge = 0;
     for (uint32_t b = 0; b < function->block_count; ++b)
-        graph->head[b] = UINT32_MAX;
+        graph->head[b] = graph->fault_head[b] = UINT32_MAX;
     for (uint32_t b = 0; b < function->block_count; ++b) {
         const XrXirBlock *block = &function->blocks[b];
         if (!spend(&context->remaining.work, (uint64_t) block->count + 1))
@@ -371,16 +379,22 @@ static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function,
             graph->next[edge] = graph->head[target];
             graph->head[target] = edge++;
         }
+        if (block->panic) {
+            graph->predecessor[edge] = b;
+            graph->next[edge] = graph->fault_head[block->panic];
+            graph->fault_head[block->panic] = edge++;
+        }
     }
     uint32_t front = 0, count = 1;
     graph->reachable[0] = 1;
     while (front < count) {
         if (!spend(&context->remaining.work, 1))
             return XR_XIR_BUDGET;
-        const XrXirInstruction *op = terminator(function, graph->queue[front++]);
-        for (uint32_t i = 0; i < op_rules[op->op].edges; ++i) {
-            uint32_t target = op->targets[i];
-            if (!graph->reachable[target]) {
+        uint32_t block = graph->queue[front++];
+        const XrXirInstruction *op = terminator(function, block);
+        for (uint32_t i = 0; i <= op_rules[op->op].edges; ++i) {
+            uint32_t target = i < op_rules[op->op].edges ? op->targets[i] : function->blocks[block].panic;
+            if (target && !graph->reachable[target]) {
                 graph->reachable[target] = 1;
                 graph->queue[count++] = target;
             }
@@ -414,6 +428,15 @@ static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function,
                 size_t offset = (size_t) graph->predecessor[edge] * graph->words;
                 for (uint32_t w = 0; w < graph->words; ++w)
                     graph->meet[w] &= graph->dominators[offset + w];
+            }
+            for (uint32_t edge = graph->fault_head[b]; edge != UINT32_MAX; edge = graph->next[edge]) {
+                if (!spend(&context->remaining.work, graph->words))
+                    return XR_XIR_BUDGET;
+                uint32_t from = graph->predecessor[edge];
+                size_t offset = (size_t) from * graph->words;
+                for (uint32_t w = 0; w < graph->words; ++w)
+                    graph->meet[w] &= graph->dominators[offset + w] &
+                        ~(w == from / 64 ? UINT64_C(1) << (from % 64) : 0);
             }
             graph->meet[b / 64] |= UINT64_C(1) << (b % 64);
             size_t offset = (size_t) b * graph->words;
@@ -597,6 +620,7 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
 
 #include "xxir_invoke_verify.inc.c"
 #include "xxir_error_verify.inc.c"
+#include "xxir_panic_verify.inc.c"
 
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
@@ -673,6 +697,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
         if (op->op == XR_XIR_ATOMIC_I64_LOAD || op->op == XR_XIR_ATOMIC_I64_FETCH_ADD)
             expected = XR_XIR_ATOMIC_I64;
+        if (op->op == XR_XIR_PANIC_CODE || op->op == XR_XIR_PANIC_MESSAGE) expected = XR_XIR_PANIC_INFO;
         if (local_write(op->op)) {
             if (op->args[0] < function->parameter_count ||
                 op->args[0] - function->parameter_count >= function->instruction_count) return XR_XIR_BAD_VALUE;
@@ -739,6 +764,8 @@ static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage sta
         status = graph_dominators(&graph, function, context);
     if (status == XR_XIR_OK)
         status = invoke_edges(&graph, function, context);
+    if (status == XR_XIR_OK)
+        status = panic_edges(&graph, function, context);
     if (status == XR_XIR_OK)
         status = graph_uses(&graph, function, context);
     if (status == XR_XIR_OK)

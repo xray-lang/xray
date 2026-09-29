@@ -15,7 +15,7 @@
 #include "xxir_scalar.h"
 #include "xxir_fault.h"
 
-#define XR_XIR_CALL_ABI_VERSION 17u
+#define XR_XIR_CALL_ABI_VERSION 18u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -37,6 +37,8 @@ typedef enum XrXirActionKind {
     XR_XIR_ACTION_SUSPEND, XR_XIR_ACTION_CONTINUE, XR_XIR_ACTION_FAULT,
     XR_XIR_ACTION_OUTPUT, XR_XIR_ACTION_WRITE_STREAM
 } XrXirActionKind;
+/* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
+#define XR_XIR_ACTION_PROTECTED 1u
 typedef struct XrXirAction {
     XrXirActionKind kind;
     uint32_t callee;
@@ -44,12 +46,19 @@ typedef struct XrXirAction {
     uint32_t argument_count;
     XrXirValue value;
     XrXirFaultDetail fault;
+    uint32_t flags;
 } XrXirAction;
 
 /* Normalize failures inside an admitted entry; admission errors are separate. */
 XR_FUNC XrXirAction xr_xir_call_fault(XrXirRunStatus status);
+/* Integer arithmetic faults; remainder by zero keeps its own panic code. */
+XR_FUNC XrXirAction xr_xir_call_numeric_fault(XrXirRunStatus status, bool remainder);
 XR_FUNC XrXirAction xr_xir_call_bounds(int64_t index, int64_t length);
 XR_FUNC XrXirAction xr_xir_call_match_failure(void);
+/* Panic-channel statuses are the only faults a protected region may observe. */
+XR_FUNC bool xr_xir_call_panic_status(XrXirCallStatus status);
+XR_FUNC bool xr_xir_call_panic_detail(XrXirCallStatus status, XrXirFaultDetail detail);
+XR_FUNC bool xr_xir_call_panic_action(const XrXirAction *action);
 typedef struct XrXirCallView {
     XrXirCall *activation;
     void *instance;

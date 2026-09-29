@@ -23,7 +23,7 @@ typedef struct Environment { Witness *witness; uint32_t module; } Environment;
 typedef struct Frame { uint32_t phase; XrXirValue value; int64_t sum; } Frame;
 typedef struct Trace { uint32_t events[64], count; XrXirInstance *instance; } Trace;
 static XrXirAction action(XrXirActionKind kind, XrXirValue value) {
-    return (XrXirAction) {kind, 0, NULL, 0, value, {0}};
+    return (XrXirAction) {kind, 0, NULL, 0, value, {0}, 0};
 }
 static XrXirAction done(void) { return action(XR_XIR_ACTION_RETURN, (XrXirValue) {0}); }
 static XrXirAction fault(XrXirCallStatus status) {
@@ -78,13 +78,13 @@ static XrXirAction root(XrXirCallView *view) {
     Frame *frame = view->state;
     if (frame->phase == 0) {
         frame->phase = 1;
-        return (XrXirAction) {XR_XIR_ACTION_CALL, 4, NULL, 0, {0}, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_CALL, 4, NULL, 0, {0}, {0}, 0};
     }
     CHECK(view->inbox.status == XR_XIR_CALL_RETURNED);
     if (frame->phase == 1) {
         frame->sum = view->inbox.value.payload;
         frame->phase = 2;
-        return (XrXirAction) {XR_XIR_ACTION_CALL, 5, NULL, 0, {0}, {0}};
+        return (XrXirAction) {XR_XIR_ACTION_CALL, 5, NULL, 0, {0}, {0}, 0};
     }
     return action(XR_XIR_ACTION_RETURN, (XrXirValue) {XR_XIR_I64, 0, frame->sum + view->inbox.value.payload});
 }

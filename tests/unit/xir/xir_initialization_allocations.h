@@ -18,7 +18,7 @@ static void initialization_region_allocations(void) {
         {XR_XIR_LOCAL_READ,XR_XIR_STRING,{1},{0},0,{0}},
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}
     };
-    const XrXirBlock blocks[]={{0,4},{4,2},{6,2}};
+    const XrXirBlock blocks[]={{0,4, 0},{4,2, 0},{6,2, 0}};
     const XrXirFunction function={"initialize",10,&parameter,1,XR_XIR_STRING,blocks,1,ops,4,NULL,0};
     const XrXirModule module={XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL};
     XrXirInitializationRegion outer={0},inner={0};

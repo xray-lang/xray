@@ -28,7 +28,7 @@ static XrXirArtifact *uninitialized_leaf_fixture(void) {
         {XR_XIR_LOCAL_READ, XR_XIR_I64, {1}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {3}, {0}, 0, {0}}
     };
-    const XrXirBlock block = {0, 4};
+    const XrXirBlock block = {0, 4, 0};
     const XrXirFunction function = {"u", 1, &parameter, 1, XR_XIR_I64, &block, 1, ops, 4, NULL, 0};
     const XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
@@ -56,7 +56,7 @@ static XrXirFunction phi_leaf_fixture(void) {
         {XR_XIR_BRANCH, XR_XIR_UNIT, {13}, {2, 1}, 0, {0}}
     };
     static const uint32_t inputs[] = {0, 0, 2, 10, 0, 1, 2, 9, 0, 3, 2, 12};
-    static const XrXirBlock blocks[] = {{0, 4}, {4, 2}, {6, 6}};
+    static const XrXirBlock blocks[] = {{0, 4, 0}, {4, 2, 0}, {6, 6, 0}};
     return (XrXirFunction) {"phi", 3, parameters, 3, XR_XIR_I64, blocks, 3, ops, 12, inputs, 12};
 }
 
@@ -64,11 +64,11 @@ static XrXirArtifact *fixture_checked(void) {
     const XrXirType add_parameters[] = {XR_XIR_BOOL, XR_XIR_I64, XR_XIR_I64};
     const XrXirType eq_parameters[] = {XR_XIR_I64, XR_XIR_I64};
     const XrXirType bool_parameters[] = {XR_XIR_BOOL};
-    const XrXirBlock add_blocks[] = {{0, 1}, {1, 3}, {4, 2}};
-    const XrXirBlock pair_blocks[] = {{0, 2}};
-    const XrXirBlock unit_blocks[] = {{0, 1}};
-    const XrXirBlock loop_blocks[] = {{0, 1}, {1, 1}};
-    const XrXirBlock reverse_blocks[] = {{0, 1}, {1, 1}, {2, 4}};
+    const XrXirBlock add_blocks[] = {{0, 1, 0}, {1, 3, 0}, {4, 2, 0}};
+    const XrXirBlock pair_blocks[] = {{0, 2, 0}};
+    const XrXirBlock unit_blocks[] = {{0, 1, 0}};
+    const XrXirBlock loop_blocks[] = {{0, 1, 0}, {1, 1, 0}};
+    const XrXirBlock reverse_blocks[] = {{0, 1, 0}, {1, 1, 0}, {2, 4, 0}};
     const XrXirInstruction add[] = {
         {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {1, 2}, 0, {0}},
         {XR_XIR_ADD_INT, XR_XIR_I64, {1, 2}, {0, 0}, 0, {0}},

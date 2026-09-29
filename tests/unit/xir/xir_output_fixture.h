@@ -23,7 +23,7 @@ static XrXirArtifact *output_fixture(void) {
         {XR_XIR_PRINT, XR_XIR_UNIT, {2, 1}, {0, 0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}
     };
-    const XrXirBlock blocks[] = {{0, 6}};
+    const XrXirBlock blocks[] = {{0, 6, 0}};
     const XrXirType string = XR_XIR_STRING;
     const XrXirInstruction write_ops[] = {
         {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 2, {0}},
@@ -34,7 +34,7 @@ static XrXirArtifact *output_fixture(void) {
         {XR_XIR_WRITE_STREAM, XR_XIR_BOOL, {0}, {0}, 1, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}
     };
-    const XrXirBlock write_block = {0, 2}, continue_block = {0, 3};
+    const XrXirBlock write_block = {0, 2, 0}, continue_block = {0, 3, 0};
     const XrXirFunction functions[] = {
         {"output", 6, parameters, 2, XR_XIR_UNIT, blocks, 1, ops, 6, operands, 3},
         {"write", 5, &string, 1, XR_XIR_BOOL, &write_block, 1, write_ops, 2, NULL, 0},

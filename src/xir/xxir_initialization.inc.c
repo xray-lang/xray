@@ -8,6 +8,8 @@
  *
  * KEY CONCEPT:
  *   Detached entries inherit a checkpoint without adding executable control flow.
+ *   A panic edge leaves every instruction of a protected block before that
+ *   instruction's own effect, so handlers see only completed writes.
  */
 typedef struct InitializationNode {
     const XrXirFunction *function;
@@ -46,7 +48,7 @@ static XrXirStatus initialization_allocate(InitializationGraph *graph, const XrX
         ++views; nodes += (uint64_t)r->function.instruction_count-r->first_instruction+1;
         if (views>UINT32_MAX || nodes>UINT32_MAX) return XR_XIR_BUDGET;
     }
-    uint64_t edges = nodes*2+views;
+    uint64_t edges = nodes*3+views;
     uint64_t bytes = views*sizeof(*graph->views)+nodes*sizeof(*graph->nodes)+edges*sizeof(*graph->edges);
     if (views>UINT32_MAX || nodes>UINT32_MAX || edges>UINT32_MAX || bytes>SIZE_MAX ||
         !spend(&remaining->metadata_bytes,bytes)) return XR_XIR_BUDGET;
@@ -86,6 +88,13 @@ static XrXirStatus initialization_connect(InitializationGraph *graph, XrXirBudge
                 if (target<view->first || target>function->instruction_count ||
                     (!view->region && target==function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
                 initialization_edge(graph,node,view->offset+target-view->first,true);
+            }
+            uint32_t handler=function->blocks[owner].panic;
+            if (handler && !(view->region && handler<view->region->first_block)) {
+                if (handler>=function->block_count) return XR_XIR_BAD_STRUCTURE;
+                uint32_t target=function->blocks[handler].first;
+                if (target<view->first || target>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+                initialization_edge(graph,node,view->offset+target-view->first,false);
             }
         }
         if (!view->region) continue;

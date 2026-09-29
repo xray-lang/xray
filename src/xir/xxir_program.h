@@ -94,4 +94,10 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const Xr
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_write(XrXirCallView *view, uint32_t slot,
                                                  const XrXirValue *value, bool publish);
+/* Enter a protected region's handler with a panic action: bind a new
+ * PanicInfo at destination (UINT32_MAX for an unbound handler), store
+ * handler_pc and continue. Every other action is returned unchanged; a
+ * failed binding becomes that resource failure, which no handler observes. */
+XR_FUNC XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAction action,
+    uint32_t destination, uint32_t handler_pc, uint32_t *pc);
 #endif // XXIR_PROGRAM_H

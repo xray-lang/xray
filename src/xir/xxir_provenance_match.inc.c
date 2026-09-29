@@ -104,7 +104,8 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
         if (work > c->remaining->work) return XR_XIR_BUDGET;
         c->remaining->work -= work;
         for (uint32_t b = 0; b < from->block_count; ++b)
-            if (from->blocks[b].first != to->blocks[b].first || from->blocks[b].count != to->blocks[b].count)
+            if (from->blocks[b].first != to->blocks[b].first || from->blocks[b].count != to->blocks[b].count ||
+                from->blocks[b].panic != to->blocks[b].panic)
                 return XR_XIR_BAD_STRUCTURE;
         for (uint32_t o = 0; o < from->operand_count; ++o)
             if (from->operands[o] != to->operands[o]) return XR_XIR_BAD_STRUCTURE;

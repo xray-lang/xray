@@ -402,6 +402,9 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
         if (!strcmp(ref->name, "Error") && !source_nominal_name(ctx, ref->name)) {
             *type = XR_XIR_ERROR; return true;
         }
+        if (!strcmp(ref->name, "PanicInfo") && !source_nominal_name(ctx, ref->name)) {
+            *type = XR_XIR_PANIC_INFO; return true;
+        }
         return source_nominal_type(ctx, ref->name, type);
     }
     case XR_TREF_SCALAR:
@@ -444,7 +447,7 @@ static bool begin_block(SourceContext *ctx) {
         if (body->block_count) memcpy(blocks, body->blocks, body->block_count * sizeof(*blocks));
         body->blocks = blocks; body->block_capacity = capacity;
     }
-    body->blocks[body->block_count++] = (XrXirBlock) {body->count, 0};
+    body->blocks[body->block_count++] = (XrXirBlock) {body->count, 0, 0};
     --ctx->budget.blocks; ctx->returned = false; return true;
 }
 static bool emit_raw(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
@@ -681,6 +684,7 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
 #include "xxir_source_enum.inc.c"
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_constructors.inc.c"
+#include "xxir_source_panic.inc.c"
 #include "xxir_source_methods.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -703,6 +707,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             const XrCoreIntrinsicDesc *intrinsic = xr_core_intrinsic_by_source_name(name, strlen(name));
             if (intrinsic && intrinsic->id == XR_CORE_BUILTIN_LEN)
                 return source_length(ctx, node, intrinsic, value);
+            if (!strcmp(name, "PanicInfo"))
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo construction requires class support");
             print = !strcmp(name, "print"); atomic = !strcmp(name, "Atomic"); stream = stream_primitive(ctx, name);
         }
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
@@ -734,6 +740,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
+            if (receiver.type == XR_XIR_PANIC_INFO)
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo methods require class support");
             if (xr_xir_type_is_nominal(&ctx->types, receiver.type)) {
                 SourceName *member_method = source_method_find(ctx, receiver.type, member->name);
                 if (member_method) return source_method_call(ctx, node, receiver, member_method, value);

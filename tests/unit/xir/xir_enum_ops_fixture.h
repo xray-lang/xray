@@ -33,7 +33,7 @@ static XrXirArtifact *enum_ops_checked(unsigned invalid, bool wrong_variant) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0, {0}}};
     uint32_t operands[] = {0,1,3,4,7,5};
     XrXirInstruction main_ops[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0, {0}},{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}}};
-    XrXirBlock one = {0,1}, two = {0,2}, block = {0,11};
+    XrXirBlock one = {0,1, 0}, two = {0,2, 0}, block = {0,11, 0};
     XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0},
         {"make",4,NULL,0,(XrXirType)256,&block,1,entry,11,operands,6}};

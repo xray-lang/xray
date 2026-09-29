@@ -4587,6 +4587,8 @@ try {
 }
 ```
 
+**Binding and scope rules**: A `try` has at most one `catch panic`, since it matches that channel unconditionally. Its header may be omitted or written as `catch panic (p)` / `catch panic (p: PanicInfo)`; the annotation must be `PanicInfo`, not a runtime type filter. The binding is read-only and scoped to the handler. Copying or returning the reference follows class identity and ownership rules and does not grant `Sendable`. A handler protects its try body, not sibling handlers; a new panic in a handler searches the enclosing handlers. Ordinary enum errors never enter a panic handler, and panics never enter ordinary catch handlers.
+
 #### 8.2.3 The `PanicInfo` class
 
 `PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:

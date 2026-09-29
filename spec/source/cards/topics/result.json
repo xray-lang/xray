@@ -12,7 +12,9 @@
     "defer",
     "cleanup",
     "E0387",
-    "E0443"
+    "E0443",
+    "panic",
+    "PanicInfo"
   ],
   "lead": "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without PanicInfo allocation or stack unwinding.",
   "sections": [
@@ -23,6 +25,10 @@
     {
       "heading": "try / catch",
       "markdown": "`try { ... } catch (e: ErrType) { ... }` catches errors thrown within the try block. Typed catches filter by enum type; untyped `catch (e)` catches any error."
+    },
+    {
+      "heading": "catch panic",
+      "markdown": "The panic channel is separate from ordinary enum errors. Each try has at most one panic handler: `catch panic { ... }`, `catch panic (p) { ... }`, or `catch panic (p: PanicInfo) { ... }`. An annotation must be exactly PanicInfo. The binding is read-only and scoped to its handler; copies preserve class identity and do not imply Sendable. A handler protects only its try body, so a panic raised in a handler seeks an outer handler. The language PanicInfo class includes message, code, stack, cause and data."
     },
     {
       "heading": "Error propagation",

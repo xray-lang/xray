@@ -10,6 +10,8 @@
  * KEY CONCEPT:
  *   Values reside at lowering-owned frame offsets; scalar rules are shared
  *   with generated native code and all exits pass through one frame owner.
+ *   A panic raised in, or delivered to, a protected block enters its handler
+ *   through the same landing helper that native entries use.
  */
 
 #include "xxir_vm.h"
@@ -20,6 +22,7 @@
 #include "xxir_struct.h"
 #include "xxir_enum.h"
 #include "xxir_error.h"
+#include "xxir_panic.h"
 #include "../base/xmalloc.h"
 
 typedef struct ScalarRun {
@@ -31,7 +34,7 @@ typedef struct ScalarRun {
 } ScalarRun;
 
 typedef struct VmState {
-    uint32_t instruction, destination, invoke;
+    uint32_t instruction, destination, invoke, panic;
     XrXirType expected;
     bool initialized, waiting;
     XrXirValue *arguments;
@@ -164,7 +167,7 @@ static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
             op->op == XR_XIR_ARRAY_LEN, &output, &fault);
     }
     if (status != XR_XIR_CALL_READY) {
-        *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, fault};
+        *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, fault, 0};
         return XR_XIR_RUN_OK;
     }
     if (xr_xir_type_is_owned(run->module->types, op->type)) xr_xir_owned_slot_move(run->frame, destination, &output);
@@ -210,14 +213,24 @@ static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
     return XR_XIR_RUN_OK;
 }
 
-static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t target) {
-    const XrXirFunction *function = run->function;
+static uint32_t vm_block(const XrXirFunction *function, uint32_t instruction) {
     uint32_t low = 0, high = function->block_count;
     while (low + 1 < high) {
         uint32_t middle = low + (high - low) / 2;
         if (function->blocks[middle].first <= instruction) low = middle;
         else high = middle;
     }
+    return low;
+}
+static XrXirAction vm_panic_land(ScalarRun *run, VmState *state, uint32_t handler, XrXirAction action) {
+    uint32_t first = run->function->blocks[handler].first;
+    uint32_t destination = run->function->instructions[first].type == XR_XIR_UNIT ? UINT32_MAX :
+        run->layout->offsets[run->function->parameter_count + first];
+    return xr_xir_instance_panic_land(run->view, run->frame, action, destination, first + 1, &state->instruction);
+}
+static XrXirRunStatus scalar_edge(ScalarRun *run, uint32_t instruction, uint32_t target) {
+    const XrXirFunction *function = run->function;
+    uint32_t low = vm_block(function, instruction);
     uint32_t first = function->blocks[target].first, end = first;
     while (end < function->instruction_count && function->instructions[end].op == XR_XIR_PHI) {
         const XrXirInstruction *phi = &function->instructions[end];
@@ -256,7 +269,7 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
             xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
         XrXirCallStatus status = xr_xir_instance_resolve_function(run->view, &value, &callee);
         if (status != XR_XIR_CALL_READY) {
-            *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}};
+            *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};
             return XR_XIR_RUN_OK;
         }
     }
@@ -265,10 +278,12 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
         state->arguments[i] = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
     }
-    state->invoke = op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT ?
-        (uint32_t) (op - run->function->instructions) + 1 : 0;
+    uint32_t at = (uint32_t) (op - run->function->instructions);
+    state->invoke = op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT ? at + 1 : 0;
+    state->panic = run->function->blocks[vm_block(run->function, at)].panic;
     state->waiting = true; state->destination = destination; state->expected = op->type;
-    *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], value, {0}};
+    *action = (XrXirAction) {XR_XIR_ACTION_CALL, callee, state->arguments, op->args[1], value, {0},
+        state->panic ? XR_XIR_ACTION_PROTECTED : 0};
     return XR_XIR_RUN_OK;
 }
 
@@ -288,7 +303,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     uint32_t result_id = run->function->parameter_count + instruction;
     uint32_t next = instruction + 1;
     int64_t value = 0;
-    *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}};
+    *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE) {
         state->instruction = next;
         return XR_XIR_RUN_OK;
@@ -418,7 +433,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         }
         *action = (XrXirAction) {op->op == XR_XIR_WRITE_STREAM ? XR_XIR_ACTION_WRITE_STREAM : XR_XIR_ACTION_OUTPUT,
             op->op == XR_XIR_PRINT ? XR_XIR_OUTPUT_LINE :
-            (uint32_t) op->immediate, state->arguments, count, {0}, {0}};
+            (uint32_t) op->immediate, state->arguments, count, {0}, {0}, 0};
         state->instruction = next;
         return XR_XIR_RUN_OK;
     }
@@ -460,6 +475,22 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         state->instruction = next;
         return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);
+    case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: {
+        if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+        XrXirValue info = vm_value_operand(run, op->args[0]);
+        state->instruction = next;
+        if (op->op == XR_XIR_PANIC_CODE) {
+            XrXirFaultDetail detail;
+            if (!xr_xir_panic_info_detail(&info, &detail)) return XR_XIR_RUN_BAD_ARTIFACT;
+            xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], (int64_t) detail.code);
+            return XR_XIR_RUN_OK;
+        }
+        XrXirValue message = {0};
+        XrXirValueStatus status = xr_xir_panic_info_message(&info, &message);
+        if (status != XR_XIR_VALUE_OK) return value_run_status(status);
+        xr_xir_owned_slot_move(run->frame, run->layout->offsets[result_id], &message);
+        return XR_XIR_RUN_OK;
+    }
     case XR_XIR_SUSPEND:
         action->kind = XR_XIR_ACTION_SUSPEND;
         break;
@@ -468,7 +499,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         break;
     case XR_XIR_THROW:
         *action = (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, {(uint32_t) xr_xir_operand_type(run->function, op->args[0]), 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}};
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}, 0};
         if (action->value.type == XR_XIR_ERROR) {
             XrXirValue concrete = {0};
             if (!xr_xir_error_borrow(&action->value, &concrete)) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -500,20 +531,28 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     state->arguments = (XrXirValue *) ((unsigned char *) run.frame + layout->frame_bytes);
     if (!state->initialized) {
         if (view->argument_count != function->parameter_count)
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
         for (uint32_t i = 0; i < view->argument_count; ++i)
             if (!xr_xir_value_argument(&view->arguments[i], view->arena, function->parameters[i]))
-                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
+                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
         for (uint32_t i = 0; i < view->argument_count; ++i) {
             if (xr_xir_type_is_owned(module->types, function->parameters[i])) {
                 if (xr_xir_owned_slot_copy(run.frame, layout->offsets[i], view->arena, function->parameters[i], view->arguments[i].payload) != XR_XIR_VALUE_OK)
-                    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}};
+                    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};
             } else xr_xir_scalar_store(run.frame, layout->offsets[i], view->arguments[i].payload);
         }
         state->initialized = true;
     }
     if (state->waiting) {
         state->waiting = false;
+        uint32_t handler = state->panic;
+        state->panic = 0;
+        if (xr_xir_call_panic_status(view->inbox.status)) {
+            if (!handler) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+            state->invoke = 0;
+            return vm_panic_land(&run, state, handler, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
+                {XR_XIR_I64, 0, view->inbox.status}, view->inbox.fault, 0});
+        }
         XrXirValue inbox = view->inbox.value;
         if (state->invoke) {
             const XrXirInstruction *op = &function->instructions[state->invoke - 1];
@@ -527,23 +566,29 @@ static XrXirAction vm_resume(XrXirCallView *view) {
             if (error) inbox.type = XR_XIR_ERROR;
         } else
         if (view->inbox.status == XR_XIR_CALL_THROWN)
-            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}};
+            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, inbox, {0}, 0};
         if (view->inbox.status != XR_XIR_CALL_RETURNED && view->inbox.status != XR_XIR_CALL_THROWN)
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
         if (state->expected == XR_XIR_UNIT ?
             (inbox.type != XR_XIR_UNIT || inbox.reserved || inbox.payload) :
             !xr_xir_value_argument(&inbox, view->arena, state->expected))
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
         if (xr_xir_type_is_owned(module->types, state->expected)) {
             if (xr_xir_owned_slot_copy(run.frame, state->destination, view->arena, state->expected, inbox.payload) != XR_XIR_VALUE_OK)
-                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}};
+                return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};
         } else if (state->destination != UINT32_MAX)
             xr_xir_scalar_store(run.frame, state->destination, inbox.payload);
     }
+    uint32_t at = state->instruction;
     XrXirAction action;
     XrXirRunStatus status = scalar_step(&run, state, &action);
     if (status != XR_XIR_RUN_OK)
-        return xr_xir_call_fault(status);
+        action = xr_xir_call_numeric_fault(status, at < function->instruction_count &&
+            function->instructions[at].op == XR_XIR_REM_INT);
+    if (action.kind == XR_XIR_ACTION_FAULT && at < function->instruction_count) {
+        uint32_t handler = function->blocks[vm_block(function, at)].panic;
+        if (handler) return vm_panic_land(&run, state, handler, action);
+    }
     return action;
 }
 
@@ -650,6 +695,7 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
         if (body->instructions[i].op == XR_XIR_CALL || body->instructions[i].op == XR_XIR_INVOKE ||
             body->instructions[i].op == XR_XIR_INVOKE_INDIRECT || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
+            body->instructions[i].op == XR_XIR_PANIC_CATCH ||
             xr_xir_type_is_owned(module->types, body->instructions[i].type) ||
             body->instructions[i].op == XR_XIR_OUTPUT || body->instructions[i].op == XR_XIR_PRINT ||
             body->instructions[i].op == XR_XIR_WRITE_STREAM)

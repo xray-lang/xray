@@ -25,6 +25,7 @@ static void write_source(const char *path, const char *source) {
     CHECK(fwrite(source, 1, length, file) == length && fclose(file) == 0);
 }
 #include "xir_source_catch_cases.h"
+#include "xir_source_panic_cases.h"
 static void stdlib_resolution(void) {
     XrModuleResolverConfig config = {XR_SOURCE_STDLIB, NULL};
     XrModuleResolver *resolver = xr_module_resolver_new(&config); CHECK(resolver);
@@ -714,6 +715,7 @@ int main(void) {
     constructor_admission(&request, root);
     shadowed_coro(&request, root);
     source_catch_cases(&request, root, library);
+    source_panic_cases(&request, root);
     xr_compiler_session_delete(session);
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
     puts("Source declaration, visibility, type, graph and budget rejection passed");

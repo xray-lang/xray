@@ -26,7 +26,7 @@ static XrXirArtifact *local_fixture(void) {
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {4, 11}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {12}, {0}, 0, {0}}
     };
-    const XrXirBlock blocks[] = {{0, 3}, {3, 2}, {5, 2}, {7, 4}};
+    const XrXirBlock blocks[] = {{0, 3, 0}, {3, 2, 0}, {5, 2, 0}, {7, 4, 0}};
     const XrXirFunction function = {"local", 5, parameters, 3, XR_XIR_STRING, blocks, 4, ops, 11, NULL, 0};
     const XrXirType fault_parameters[] = {XR_XIR_STRING, XR_XIR_STRING, XR_XIR_I64};
     const XrXirInstruction fault_ops[] = {
@@ -36,7 +36,7 @@ static XrXirArtifact *local_fixture(void) {
         {XR_XIR_DIV_INT, XR_XIR_I64, {5, 2}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0, {0}}
     };
-    const XrXirBlock fault_block = {0, 5};
+    const XrXirBlock fault_block = {0, 5, 0};
     const XrXirInstruction phi_ops[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1, {0}},
@@ -53,7 +53,7 @@ static XrXirArtifact *local_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {14}, {0}, 0, {0}}
     };
     const uint32_t phi_inputs[] = {0, 0, 2, 7, 0, 1, 2, 6, 0, 3, 2, 12};
-    const XrXirBlock phi_blocks[] = {{0, 3}, {3, 5}, {8, 3}, {11, 2}};
+    const XrXirBlock phi_blocks[] = {{0, 3, 0}, {3, 5, 0}, {8, 3, 0}, {11, 2, 0}};
     const XrXirInstruction initialization_ops[] = {
         {XR_XIR_LOCAL_UNINIT, XR_XIR_STRING, {0}, {0}, 0, {0}},
         {XR_XIR_BRANCH, XR_XIR_UNIT, {2}, {1, 2}, 0, {0}},
@@ -66,7 +66,7 @@ static XrXirArtifact *local_fixture(void) {
         {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {0, 10}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {11}, {0}, 0, {0}}
     };
-    const XrXirBlock initialization_blocks[] = {{0,2},{2,2},{4,2},{6,4}};
+    const XrXirBlock initialization_blocks[] = {{0,2, 0},{2,2, 0},{4,2, 0},{6,4, 0}};
     const XrXirInstruction reset_ops[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 1, {0}},
@@ -87,7 +87,7 @@ static XrXirArtifact *local_fixture(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {18}, {0}, 0, {0}}
     };
     const uint32_t reset_inputs[] = {0, 0, 2, 7, 0, 1, 2, 6, 0, 3, 2, 16};
-    const XrXirBlock reset_blocks[] = {{0, 3}, {3, 5}, {8, 7}, {15, 2}};
+    const XrXirBlock reset_blocks[] = {{0, 3, 0}, {3, 5, 0}, {8, 7, 0}, {15, 2, 0}};
     const XrXirFunction functions[] = {function,
         {"fault", 5, fault_parameters, 3, XR_XIR_I64, &fault_block, 1, fault_ops, 5, NULL, 0},
         {"swap", 4, fault_parameters, 3, XR_XIR_STRING, phi_blocks, 4, phi_ops, 13, phi_inputs, 12},

@@ -198,7 +198,7 @@ static void error_erasure_packet(void) {
     XrXirType parameter = XR_XIR_ERROR;
     XrXirInstruction ops[] = {{XR_XIR_ERROR_ERASE, XR_XIR_ERROR, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
-    XrXirBlock block = {0, 2};
+    XrXirBlock block = {0, 2, 0};
     XrXirFunction function = {"erase", 5, &parameter, 1, XR_XIR_ERROR, &block, 1, ops, 2, NULL, 0};
     XrXirModule built = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
@@ -229,7 +229,7 @@ static void error_marker_definition(void) {
     uint32_t constraint = XR_XIR_CONSTRAINT_ERROR;
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInstruction instruction = {XR_XIR_THROW,XR_XIR_UNIT,{0},{0},0, {0}};
-    XrXirBlock block = {0,1};
+    XrXirBlock block = {0,1, 0};
     XrXirFunction function = {"e",1,&parameter,1,XR_XIR_I64,&block,1,&instruction,1,NULL,0};
     XrXirGeneric generic = {&constraint,1,NULL,0};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,&generic,NULL,NULL};
@@ -238,12 +238,12 @@ static void error_marker_definition(void) {
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_checked_write(checked,NULL,&packet,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(checked);
-    CHECK(packet.length==177 && packet.bytes[157]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==181 && packet.bytes[161]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_OK);
     xr_xir_artifact_free(decoded); decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
     for (unsigned i=0;i<sizeof(forged);++i) {
-        packet.bytes[157]=forged[i]; rehash_generic(&packet);
+        packet.bytes[161]=forged[i]; rehash_generic(&packet);
         CHECK(xr_xir_checked_read(packet.bytes,packet.length,NULL,&decoded,NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
     xr_xir_checked_packet_free(&packet);
@@ -406,7 +406,7 @@ static void deep_body_substitution(void) {
         {XR_XIR_ARRAY_NEW, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + DEPTH - 1), {0}, {0}, 0, {0}},
         functions[1].instructions[0], functions[1].instructions[1]};
     body[2].args[0] = 2;
-    XrXirBlock block = {0, 3};
+    XrXirBlock block = {0, 3, 0};
     functions[1].instructions = body; functions[1].instruction_count = 3; functions[1].blocks = &block;
     CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(fixture); memset(nodes, 0xCC, sizeof(nodes));

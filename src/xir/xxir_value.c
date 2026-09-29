@@ -18,11 +18,14 @@
 #include "xxir_struct.h"
 #include "xxir_enum.h"
 #include "xxir_error.h"
+#include "xxir_panic.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
 #include "../shared/xr_string_core.h"
+#include <inttypes.h>
 #include <stdatomic.h>
+#include <stdio.h>
 #include <string.h>
 
 struct XrXirDomain {
@@ -55,6 +58,10 @@ typedef struct XirString {
     char *bytes;
     size_t length, runes, capacity;
 } XirString;
+typedef struct XirPanicInfo {
+    XirObject object;
+    XrXirFaultDetail detail;
+} XirPanicInfo;
 
 _Static_assert(sizeof(void *) == sizeof(int64_t), "XIR pointer payload width");
 _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8,
@@ -83,8 +90,12 @@ static XrXirValue string_value(XirString *string) {
     memcpy(&value.payload, &string, sizeof(string));
     return value;
 }
+/* Built-in carriers own no type arena and no nested values. */
+static bool arena_free_carrier(XrXirType type) {
+    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_PANIC_INFO;
+}
 static bool owned_carrier_type(XrXirType type) {
-    return type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64 || type == XR_XIR_ERROR ||
+    return arena_free_carrier(type) || type == XR_XIR_ERROR ||
         ((uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
          (uint32_t) type < XR_XIR_CONSTRUCTED_TYPE_LIMIT);
 }
@@ -138,7 +149,9 @@ static bool value_header_valid(const XrXirValue *value) {
         if (!xr_xir_type_is_enum(xr_xir_type_arena_types(object->arena), object->type)) return false;
         type = object->type;
     }
-    if (type == XR_XIR_STRING || type == XR_XIR_ATOMIC_I64)
+    if (type == XR_XIR_PANIC_INFO)
+        return !object->arena && !object->kind && xr_xir_fault_panic_valid(((XirPanicInfo *) object)->detail);
+    if (arena_free_carrier(type))
         return !object->arena && !object->kind;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(object->arena), type);
     return node && !node->parameter_span && node->kind == object->kind &&
@@ -177,7 +190,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         const XrXirValue *content = &((XirCell *) object)->value;
         XrXirType element = xr_xir_cell_element(xr_xir_type_arena_types(object->arena), object->type);
         if (!element || content->type != (uint32_t) element || !value_header_valid(content)) return false;
-        if (owned_carrier_type(element) && element != XR_XIR_STRING && element != XR_XIR_ATOMIC_I64) {
+        if (owned_carrier_type(element) && !arena_free_carrier(element)) {
             XirObject *child = object_pointer(content);
             return child->arena == object->arena && child->kind != XR_XIR_TYPE_CELL && xr_xir_value_valid(content);
         }
@@ -382,6 +395,8 @@ XR_FUNC void xr_xir_value_drop(XrXirValue *value) {
             }
             if (array->data) xr_xir_domain_deallocate(domain, array->data, array->capacity * array->stride);
             xr_xir_domain_deallocate(domain, array, sizeof(*array));
+        } else if (object->type == XR_XIR_PANIC_INFO) {
+            xr_xir_domain_deallocate(domain, object, sizeof(XirPanicInfo));
         } else {
             XR_CHECK(object->type == XR_XIR_ATOMIC_I64, "unknown owned value kind");
             xr_xir_domain_deallocate(domain, object, sizeof(XirAtomicI64));
@@ -901,3 +916,4 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_struct_value.inc.c"
 #include "xxir_enum_value.inc.c"
 #include "xxir_error_value.inc.c"
+#include "xxir_panic_value.inc.c"

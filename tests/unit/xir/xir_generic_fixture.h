@@ -26,7 +26,7 @@ static XrXirArtifact *generic_fixture(void) {
     };
     const XrXirInstruction body[] = {{XR_XIR_COPY, t, {0}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1}, {0}, 0, {0}}};
-    const XrXirBlock blocks[] = {{0, 4}, {0, 2}};
+    const XrXirBlock blocks[] = {{0, 4, 0}, {0, 2, 0}};
     const XrXirFunction functions[] = {
         {"caller", 6, parameters, 2, XR_XIR_STRING, blocks, 1, caller, 4, operands, 3},
         {"id", 2, &t, 1, t, blocks + 1, 1, body, 2, NULL, 0}

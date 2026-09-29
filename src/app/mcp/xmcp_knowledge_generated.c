@@ -8680,7 +8680,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "result",
         .title = "Error Handling (throw / catch)",
-        .aliases_csv = "error_handling,throw,catch,try,error,value_return_error,defer,cleanup,E0387,E0443",
+        .aliases_csv = "error_handling,throw,catch,try,error,value_return_error,defer,cleanup,E0387,E0443,panic,PanicInfo",
         .body =
             "[Language reference](#8-\xe9\x94\x99\xe8\xaf\xaf\xe5\xa4\x84\xe7\x90\x86-error-handling)\n"
             "\n"
@@ -8693,6 +8693,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### try / catch\n"
             "`try { ... } catch (e: ErrType) { ... }` catches errors thrown within the try block. Typed catches filter by enum type; untyped `catch (e)` catches any error.\n"
+            "\n"
+            "### catch panic\n"
+            "The panic channel is separate from ordinary enum errors. Each try has at most one panic handler: `catch panic { ... }`, `catch panic (p) { ... }`, or `catch panic (p: PanicInfo) { ... }`. An annotation must be exactly PanicInfo. The binding is read-only and scoped to its handler; copies preserve class identity and do not imply Sendable. A handler protects only its try body, so a panic raised in a handler seeks an outer handler. The language PanicInfo class includes message, code, stack, cause and data.\n"
             "\n"
             "### Error propagation\n"
             "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation.\n"

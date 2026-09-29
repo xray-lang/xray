@@ -52,7 +52,7 @@ static void array_access_read(XrXirCallView *view, XrXirValueReceiver receiver, 
 }
 static XrXirAction array_access_permissions(XrXirCallView *view) {
     ArrayAccessFrame *frame = view->state;
-    if (!frame->phase++) return (XrXirAction) {XR_XIR_ACTION_CALL,3,NULL,0,{0},{0}};
+    if (!frame->phase++) return (XrXirAction) {XR_XIR_ACTION_CALL,3,NULL,0,{0},{0}, 0};
     XrXirFaultDetail detail = {0}; XrXirValue output = {0}, element = {XR_XIR_I64,0,9};
     XrXirValueReceiver root = array_slot_receiver(0), receiver = array_slot_receiver(1);
     CHECK(xr_xir_call_admission(view) != NULL);
@@ -114,12 +114,12 @@ static XrXirAction array_access_budget(XrXirCallView *view) {
         if (status == XR_XIR_CALL_LIMIT) {
             CHECK(output.type == XR_XIR_UNIT && !output.payload);
             CHECK(witness->reads > 32 && witness->reads < 64);
-            return (XrXirAction) {XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_LIMIT},{0}};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_LIMIT},{0}, 0};
         }
         CHECK(status == XR_XIR_CALL_READY && output.type == XR_XIR_I64 && !output.payload);
         ++witness->reads;
         if (witness->mode == 2 && witness->reads == 32)
-            return (XrXirAction) {XR_XIR_ACTION_SUSPEND,0,NULL,0,{0},{0}};
+            return (XrXirAction) {XR_XIR_ACTION_SUSPEND,0,NULL,0,{0},{0}, 0};
     }
     CHECK(false);
     return done();

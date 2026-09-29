@@ -19,7 +19,7 @@ static void invoke_generic_cases(void) {
             {XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},0,{0}},
             {XR_XIR_THROW,XR_XIR_UNIT,{4},{0},0,{0}}};
         XrXirInstruction ret = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
-        XrXirBlock blocks[] = {{0,1},{1,2},{3,2}}, leaf = {0,1};
+        XrXirBlock blocks[] = {{0,1, 0},{1,2, 0},{3,2, 0}}, leaf = {0,1, 0};
         XrXirFunction functions[] = {
             {"guard",5,&parameter,1,parameter,blocks,3,ops,5,&argument,1},
             {"leaf",4,&t,1,t,&leaf,1,&ret,1,NULL,0}};
@@ -64,7 +64,7 @@ static void invoke_checked_cases(void) {
             {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},7,{0}},
             {XR_XIR_RETURN,XR_XIR_UNIT,{5},{0},0,{0}}};
         XrXirInstruction ret = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
-        XrXirBlock blocks[] = {{0,1},{1,2},{3,3}}, leaf = {0,1};
+        XrXirBlock blocks[] = {{0,1, 0},{1,2, 0},{3,3, 0}}, leaf = {0,1, 0};
         uint32_t argument = 0;
         XrXirFunction functions[] = {
             {"guard",5,&parameter,1,XR_XIR_I64,blocks,3,ops,6,&argument,1},

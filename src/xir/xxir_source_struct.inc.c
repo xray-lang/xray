@@ -269,6 +269,8 @@ static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *va
     MemberSetNode *set = &node->as.member_set;
     if (source_constructor_receiver(ctx, set->object)) return source_constructor_field(ctx, node, set->member, value, set->value);
     SourceName *root = set->object->type == AST_VARIABLE ? visible_name(ctx, set->object->as.variable.name) : NULL;
+    if (root && root->type == XR_XIR_PANIC_INFO && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo field writes require class support");
     if (!root || !root->mutable || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field mutation requires a mutable named root");
     uint32_t index; XrXirType type; SourceValue place, incoming;

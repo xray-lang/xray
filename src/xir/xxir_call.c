@@ -10,6 +10,8 @@
  * KEY CONCEPT:
  *   Only the driver owns frame transitions; callbacks publish actions and
  *   cancellation cannot reclaim a frame while its callback is running.
+ *   A panic unwinds children first until the nearest frame whose pending
+ *   call is protected; every other failure unwinds the whole activation.
  */
 #include "xxir_call.h"
 #include "xxir_type_arena.h"
@@ -41,6 +43,7 @@ typedef struct CallFrame {
     uint64_t allocation_bytes;
     void *state;
     XrXirValue *arguments;
+    bool protected_call;
 } CallFrame;
 
 struct XrXirCall {
@@ -63,7 +66,28 @@ XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
         case XR_XIR_RUN_FRAME_LIMIT: reason = XR_XIR_CALL_LIMIT; break;
         default: reason = XR_XIR_CALL_BAD_STATE; break;
     }
-    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, reason}, {0}};
+    XrXirAction action = {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, reason}, {0}, 0};
+    if (reason == XR_XIR_CALL_DIVIDE_BY_ZERO) action.fault.code = XR_XIR_PANIC_DIVIDE;
+    else if (reason == XR_XIR_CALL_NUMERIC_RANGE) action.fault.code = XR_XIR_PANIC_RANGE;
+    return action;
+}
+XrXirAction xr_xir_call_numeric_fault(XrXirRunStatus status, bool remainder) {
+    XrXirAction action = xr_xir_call_fault(status);
+    if (remainder && status == XR_XIR_RUN_DIVIDE_BY_ZERO) action.fault.code = XR_XIR_PANIC_REMAINDER;
+    return action;
+}
+bool xr_xir_call_panic_status(XrXirCallStatus status) {
+    return status == XR_XIR_CALL_DIVIDE_BY_ZERO || status == XR_XIR_CALL_NUMERIC_RANGE ||
+        status == XR_XIR_CALL_BOUNDS || status == XR_XIR_CALL_MATCH_FAILURE;
+}
+bool xr_xir_call_panic_detail(XrXirCallStatus status, XrXirFaultDetail detail) {
+    switch (status) {
+    case XR_XIR_CALL_DIVIDE_BY_ZERO: return xr_xir_fault_divide_valid(detail);
+    case XR_XIR_CALL_NUMERIC_RANGE: return xr_xir_fault_range_valid(detail);
+    case XR_XIR_CALL_BOUNDS: return xr_xir_fault_bounds_valid(detail);
+    case XR_XIR_CALL_MATCH_FAILURE: return xr_xir_fault_match_valid(detail);
+    default: return false;
+    }
 }
 
 uint32_t xr_xir_call_current_entry(const XrXirCall *call) {
@@ -95,10 +119,20 @@ static bool boundary_value(XrXirValue value, XrXirType type) {
         return value.type == XR_XIR_UNIT && !value.reserved && !value.payload;
     return xr_xir_value_argument(&value, NULL, type);
 }
+static bool fault_panics(const XrXirAction *action) {
+    return action->kind == XR_XIR_ACTION_FAULT && boundary_value(action->value, XR_XIR_I64) &&
+        action->value.payload > 0 && action->value.payload <= XR_XIR_CALL_MATCH_FAILURE &&
+        xr_xir_call_panic_status((XrXirCallStatus) action->value.payload);
+}
+bool xr_xir_call_panic_action(const XrXirAction *action) {
+    return action && fault_panics(action) && !action->callee && !action->arguments &&
+        !action->argument_count && !action->flags &&
+        xr_xir_call_panic_detail((XrXirCallStatus) action->value.payload, action->fault);
+}
 
 XrXirAction xr_xir_call_bounds(int64_t index, int64_t length) {
     return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
-        {XR_XIR_I64, 0, XR_XIR_CALL_BOUNDS}, {430, 0, index, length}};
+        {XR_XIR_I64, 0, XR_XIR_CALL_BOUNDS}, {430, 0, index, length}, 0};
 }
 
 static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
@@ -279,6 +313,23 @@ static void unwind(XrXirCall *call, XrXirCallStatus reason) {
         pop_frame(call, reason);
     call->result = call_result(reason);
 }
+/* The faulting frame never observes its own panic here: an entry lands local
+ * faults itself. The detail is a copy, so cleanup cannot change it. */
+static void deliver_panic(XrXirCall *call, XrXirCallStatus reason, XrXirFaultDetail fault) {
+    pop_frame(call, reason);
+    while (call->top && !call->top->protected_call)
+        pop_frame(call, reason);
+    if (!call->top) {
+        call->result = call_result(reason);
+        call->result.fault = fault;
+        return;
+    }
+    CallFrame *frame = call->top;
+    xr_xir_value_drop(&frame->inbox.value);
+    frame->inbox = call_result(reason);
+    frame->inbox.fault = fault;
+    frame->protected_call = false;
+}
 
 static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes) {
     if (!config || !config->entries || !config->entry_count || config->entry_count > 65536 ||
@@ -361,16 +412,14 @@ XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t entry,
 
 XrXirAction xr_xir_call_match_failure(void) {
     return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
-        {XR_XIR_I64, 0, XR_XIR_CALL_MATCH_FAILURE}, {442, 0, 0, 0}};
+        {XR_XIR_I64, 0, XR_XIR_CALL_MATCH_FAILURE}, {442, 0, 0, 0}, 0};
 }
 
 static void accept_action(XrXirCall *call, XrXirAction action) {
-    bool bounds = action.kind == XR_XIR_ACTION_FAULT &&
-        boundary_value(action.value, XR_XIR_I64) && action.value.payload == XR_XIR_CALL_BOUNDS;
-    bool match = action.kind == XR_XIR_ACTION_FAULT &&
-        boundary_value(action.value, XR_XIR_I64) && action.value.payload == XR_XIR_CALL_MATCH_FAILURE;
-    if (bounds ? !xr_xir_fault_bounds_valid(action.fault) :
-        match ? !xr_xir_fault_match_valid(action.fault) : !xr_xir_fault_empty(action.fault)) {
+    bool panic = fault_panics(&action);
+    if ((panic ? !xr_xir_call_panic_detail((XrXirCallStatus) action.value.payload, action.fault) :
+         !xr_xir_fault_empty(action.fault)) ||
+        (action.kind == XR_XIR_ACTION_CALL ? (action.flags & ~XR_XIR_ACTION_PROTECTED) != 0 : action.flags != 0)) {
         unwind(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
@@ -421,6 +470,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         else {
             xr_xir_value_drop(&parent->inbox.value);
             parent->inbox = call_result(XR_XIR_CALL_READY);
+            parent->protected_call = (action.flags & XR_XIR_ACTION_PROTECTED) != 0;
         }
         return;
     }
@@ -434,13 +484,15 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         return;
     }
     if (action.kind == XR_XIR_ACTION_FAULT) {
+        if (panic) {
+            deliver_panic(call, (XrXirCallStatus) action.value.payload, action.fault);
+            return;
+        }
         XrXirCallStatus reason = XR_XIR_CALL_BAD_STATE;
         if (boundary_value(action.value, XR_XIR_I64) &&
-            (bounds || match || action.value.payload == XR_XIR_CALL_NUMERIC_RANGE || action.value.payload == XR_XIR_CALL_DIVIDE_BY_ZERO || action.value.payload == XR_XIR_CALL_OOM ||
-             action.value.payload == XR_XIR_CALL_LIMIT))
+            (action.value.payload == XR_XIR_CALL_OOM || action.value.payload == XR_XIR_CALL_LIMIT))
             reason = (XrXirCallStatus) action.value.payload;
         unwind(call, reason);
-        call->result.fault = action.fault;
         return;
     }
     if (action.kind == XR_XIR_ACTION_SUSPEND) {
@@ -476,6 +528,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (call->top) {
         xr_xir_value_drop(&call->top->inbox.value);
         call->top->inbox = result;
+        call->top->protected_call = false;
     } else call->result = result;
 }
 

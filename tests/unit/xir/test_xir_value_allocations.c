@@ -130,7 +130,7 @@ static void output_allocation(void) {
     CHECK(calls == before && published == 1 && !live);
 }
 static XrXirAction identity_resume(XrXirCallView *view) {
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->arguments[0], {0}};
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->arguments[0], {0}, 0};
 }
 static void fail_sequence(void) {
     XrXirDomain *domain = NULL;
