@@ -10,7 +10,7 @@ order: 007
 
 > 真值源：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
 
-模式出现在 `match` 表达式/语句与 `var` / `const` 解构中。
+模式出现在 `match` 表达式/语句、`var` / `const` 解构，以及括号内的 `catch` 头部（仅 enum variant pattern，见 §8.1.2）中。
 
 ### 6.1 字面量模式
 
@@ -210,7 +210,7 @@ match (p) {
 
 > Source of truth: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
 
-Patterns appear in `match` expressions/statements and in `var` / `const` destructuring.
+Patterns appear in `match` expressions/statements, in `var` / `const` destructuring, and in parenthesized `catch` headers (enum variant patterns only, see §8.1.2).
 
 ### 6.1 Literal Patterns
 

@@ -2061,44 +2061,70 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
 // ========== Exception handling parse functions ==========
 
+/* Simple enum head of a variant pattern, used only as the analyzer's type
+ * hint. Module-qualified and explicitly instantiated heads yield NULL; the
+ * XIR source owner resolves every pattern root from the pattern path itself. */
 static const char *catch_pattern_enum_head_name(AstNode *pattern) {
     if (!pattern)
         return NULL;
-    if (pattern->type == AST_PATTERN_ADT) {
-        AstNode *variant = pattern->as.pattern_adt.variant;
-        if (!variant)
-            return NULL;
-        if (variant->type == AST_ENUM_ACCESS)
-            return variant->as.enum_access.enum_name;
-        if (variant->type == AST_MEMBER_ACCESS && variant->as.member_access.object &&
-            variant->as.member_access.object->type == AST_VARIABLE)
-            return variant->as.member_access.object->as.variable.name;
+    AstNode *path = NULL;
+    if (pattern->type == AST_PATTERN_ADT)
+        path = pattern->as.pattern_adt.variant;
+    else if (pattern->type == AST_PATTERN_LITERAL)
+        path = pattern->as.pattern_literal.value;
+    if (!path)
         return NULL;
-    }
-    if (pattern->type != AST_PATTERN_LITERAL || !pattern->as.pattern_literal.value)
-        return NULL;
-    AstNode *value = pattern->as.pattern_literal.value;
-    if (value->type == AST_VARIABLE)
-        return value->as.variable.name;
-    if (value->type == AST_ENUM_ACCESS)
-        return value->as.enum_access.enum_name;
-    if (value->type == AST_MEMBER_ACCESS && value->as.member_access.object &&
-        value->as.member_access.object->type == AST_VARIABLE)
-        return value->as.member_access.object->as.variable.name;
+    if (path->type == AST_ENUM_ACCESS)
+        return path->as.enum_access.enum_name;
+    if (path->type == AST_MEMBER_ACCESS && path->as.member_access.object &&
+        path->as.member_access.object->type == AST_VARIABLE)
+        return path->as.member_access.object->as.variable.name;
     return NULL;
+}
+
+/* A catch pattern names enum variants: every alternative is a qualified
+ * variant path, optionally followed by its named payload pattern. Bare names
+ * inside the parentheses are bindings, so literals, ranges, wildcards and
+ * structural patterns cannot stand in for a catch-all or a type filter. */
+static bool catch_pattern_names_variants(AstNode *pattern) {
+    if (!pattern)
+        return false;
+    int count = 1;
+    AstNode **alternatives = &pattern;
+    if (pattern->type == AST_PATTERN_MULTI) {
+        count = pattern->as.pattern_multi.count;
+        alternatives = pattern->as.pattern_multi.patterns;
+    }
+    if (count <= 0 || !alternatives)
+        return false;
+    for (int i = 0; i < count; i++) {
+        AstNode *alternative = alternatives[i];
+        if (!alternative)
+            return false;
+        if (alternative->type == AST_PATTERN_ADT)
+            continue;
+        AstNode *path = alternative->type == AST_PATTERN_LITERAL
+                            ? alternative->as.pattern_literal.value
+                            : NULL;
+        if (!path || (path->type != AST_MEMBER_ACCESS && path->type != AST_ENUM_ACCESS))
+            return false;
+    }
+    return true;
 }
 
 /*
  * Parse try-catch statement.
- * Supports multiple typed catch clauses and an optional panic boundary:
+ * Every ordinary catch header is parenthesized; only a panic clause may omit
+ * its header:
  *   try { ... }
- *   catch (e: NetErr)    { ... }
- *   catch (e: DiskErr)   { ... }
- *   catch (e)            { ... }   // catch-all
- *   catch NetErr.NotFound { path } { ... } // variant/payload pattern
- *   catch NetErr          { ... }   // typed enum catch without binding
- *   catch panic (p)      { ... }   // recoverable-fault boundary
- * There is no `finally`; use `defer` for cleanup (runs on all exits).
+ *   catch (e: NetErr)                   { ... }   // typed binding
+ *   catch (DbErr.QueryFailed { query }) { ... }   // enum variant pattern
+ *   catch (NetErr.Timeout, NetErr.Lost) { ... }   // same-enum alternatives
+ *   catch (e)                           { ... }   // catch-all binding
+ *   catch panic (p)                     { ... }   // recoverable-fault boundary
+ *   catch panic                         { ... }
+ * Inside the parentheses a name followed by ':' or ')' is a binding; anything
+ * else is a pattern. There is no `finally`; use `defer` for cleanup.
  */
 AstNode *xr_parse_try_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_try_statement: NULL parser");
@@ -2134,6 +2160,10 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         XrTypeRef *type_ann = NULL;
         AstNode *pattern = NULL;
 
+        if (!is_panic && !xr_parser_check(parser, TK_LPAREN)) {
+            xr_parser_error(parser, "expected '(' after catch");
+            return NULL;
+        }
         if (xr_parser_match(parser, TK_LPAREN)) {
             XrParserStreamState saved = xr_parser_stream_save(parser);
             bool is_binding_header = false;
@@ -2164,6 +2194,10 @@ AstNode *xr_parse_try_statement(Parser *parser) {
                     xr_parser_error(parser, "expected catch pattern");
                     return NULL;
                 }
+                if (!catch_pattern_names_variants(pattern)) {
+                    xr_parser_error(parser, "catch pattern must name enum variants");
+                    return NULL;
+                }
                 var_line = pattern->line;
                 var_column = pattern->column;
                 const char *head = catch_pattern_enum_head_name(pattern);
@@ -2171,17 +2205,6 @@ AstNode *xr_parse_try_statement(Parser *parser) {
                     type_ann = xr_tref_named(parser->compiler_session, head);
             }
             xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch header");
-        } else if (!is_panic) {
-            pattern = xr_parse_unparenthesized_catch_pattern(parser);
-            if (!pattern) {
-                xr_parser_error(parser, "expected catch pattern");
-                return NULL;
-            }
-            var_line = pattern->line;
-            var_column = pattern->column;
-            const char *head = catch_pattern_enum_head_name(pattern);
-            if (head)
-                type_ann = xr_tref_named(parser->compiler_session, head);
         }
 
         // Parse catch body

@@ -21,11 +21,11 @@ fn classify(kind: i64) -> string {
     var tag = "ok"
     try {
         fail(kind)
-    } catch PayloadErr.Boom {
+    } catch (PayloadErr.Boom) {
         tag = "boom"
-    } catch PayloadErr.Payload { code } {
+    } catch (PayloadErr.Payload { code }) {
         tag = "payload:${code}"
-    } catch PayloadErr.Other {
+    } catch (PayloadErr.Other) {
         tag = "other"
     }
     return tag
@@ -35,7 +35,7 @@ fn classify_all(kind: i64) -> string {
     var tag = "ok"
     try {
         fail(kind)
-    } catch PayloadErr {
+    } catch (e: PayloadErr) {
         tag = "any"
     }
     return tag

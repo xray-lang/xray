@@ -19,8 +19,9 @@ typedef struct SourceOutput { uint32_t calls; bool reject_write; } SourceOutput;
 static bool source_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     SourceOutput *output = context;
     CHECK(stream == (output->calls == 6 ? XR_XIR_STDERR : XR_XIR_STDOUT));
-    CHECK(output->calls < 57);
+    CHECK(output->calls < 58);
     if (!output->calls) CHECK(length == 8 && !memcmp(bytes, "a\xE4\xB8\xAD 20\n", 8));
+    else if (output->calls == 57) CHECK(length == 73 && !memcmp(bytes, "61 1 2 500 67 71 73 83 79 89 101 generic 103 107 module captured 113 127\n", 73));
     else if (output->calls == 36) CHECK(length == 18 && !memcmp(bytes, "changed method 97\n", 18));
     else if (output->calls == 56) CHECK(length == 18 && !memcmp(bytes, "typed 43 47 53 59\n", 18));
     else if (output->calls == 55) CHECK(length == 47 && !memcmp(bytes, "2 7 11 17 19 23 29 31 37 41 caught constructed\n", 47));
@@ -83,6 +84,20 @@ static bool source_bytes(void *context, XrXirOutputStream stream, const char *by
 static bool source_output(void *context, const XrXirOutputGroup *group) {
     XrXirOutputSink *sink = context;
     SourceOutput *output = sink->context;
+    if (output->calls == 57) {
+        const int64_t expected[]={61,1,2,500,67,71,73,83,79,89,101,0,103,107,0,0,113,127};
+        const char *texts[]={"generic","module","captured"};
+        const uint32_t text_at[]={11,14,15};
+        CHECK(group && group->count==18 && group->line && group->stream==XR_XIR_STDOUT);
+        for (uint32_t i=0,t=0;i<18;++i) {
+            if (t<3 && text_at[t]==i) {
+                const char *bytes=NULL; size_t length=0;
+                CHECK(group->values[i].type==XR_XIR_STRING && xr_xir_string_view(&group->values[i],&bytes,&length));
+                CHECK(length==strlen(texts[t]) && !memcmp(bytes,texts[t],length));
+                ++t;
+            } else CHECK(group->values[i].type==XR_XIR_I64 && group->values[i].payload==expected[i]);
+        }
+    }
     if (output->calls == 56) {
         const int64_t expected[]={43,47,53,59};
         CHECK(group && group->count==5 && group->line && group->stream==XR_XIR_STDOUT);
@@ -351,17 +366,20 @@ static void source_resume_pair(XrXirInstance **instances, uint32_t entry, XrXirV
         argument.payload = i;
         CHECK(xr_xir_instance_start(instances[i], entry, &argument, 1) == XR_XIR_CALL_READY);
     }
-    for (unsigned step = 0; step < 11; ++step) for (unsigned i = 0; i < 2; ++i) {
+    for (unsigned step = 0; step < 13; ++step) for (unsigned i = 0; i < 2; ++i) {
         XrXirInstanceResult result = xr_xir_instance_poll(instances[i]);
-        if (step < 10) source_resume_once(instances[i], result);
+        if (step < 12) source_resume_once(instances[i], result);
         else {
             CHECK(result.outcome.status == XR_XIR_CALL_RETURNED);
             CHECK(xr_xir_instance_take_result(instances[i], &results[i]) == XR_XIR_CALL_RETURNED);
         }
     }
 }
+/* Modes 8-11 cancel resumeText at its 9th-12th suspension. The last two stop
+ * inside the enum-pattern handler region: first while its protected call is
+ * suspended, then while the handler's bindings and capturing closure are live. */
 static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t resume_text) {
-    for (unsigned mode = 0; mode < 10; ++mode) {
+    for (unsigned mode = 0; mode < 12; ++mode) {
         SourceOutput output = {0}; XrXirOutputSink sink = {source_bytes, &output, 65536};
         XrXirInstanceConfig config = xr_xir_instance_defaults(); config.poll_limit = 8000;
         config.output = (XrXirOutputProvider) {source_output, &sink};
@@ -369,7 +387,7 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
         CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance, entry, NULL, 0) == XR_XIR_CALL_READY);
         if (mode == 3 || mode == 4 || mode >= 8) {
-            CHECK(source_drive(instance, 13).status == XR_XIR_CALL_RETURNED && output.calls == 57);
+            CHECK(source_drive(instance, 13).status == XR_XIR_CALL_RETURNED && output.calls == 58);
             XrXirValue arg = {XR_XIR_BOOL, 0, 1};
             CHECK(xr_xir_instance_start(instance, resume_text, &arg, 1) == XR_XIR_CALL_READY);
         }
@@ -393,7 +411,7 @@ static void source_cancel_cases(XrXirProgram *program, uint32_t entry, uint32_t 
                     source_resume_once(instance, suspended); suspended = xr_xir_instance_poll(instance);
                     CHECK(suspended.outcome.status == XR_XIR_CALL_SUSPENDED);
                 }
-                CHECK(output.calls == 57);
+                CHECK(output.calls == 58);
             }
         }
         CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
@@ -583,6 +601,17 @@ static void source_search_bounds(XrXirInstance *instance, uint32_t function) {
         } else CHECK(result.value.type == XR_XIR_I64 && result.value.payload == (starts[i]==4 ? -1 : 3) && xr_xir_fault_empty(result.fault));
     }
 }
+/* calculate(33) catches a nested enum pattern thrown by another function; in
+ * the mixed program the handler is native and the thrower runs in the VM. */
+static void source_pattern_calls(XrXirInstance *instance, uint32_t function) {
+    const int64_t cases[][3] = {{3,5,88},{4,5,5},{0,5,-1}};
+    for (unsigned i = 0; i < 3; ++i) {
+        XrXirValue args[]={{XR_XIR_I64,0,33},{XR_XIR_I64,0,cases[i][0]},{XR_XIR_I64,0,cases[i][1]}};
+        CHECK(xr_xir_instance_start(instance,function,args,3)==XR_XIR_CALL_READY);
+        XrXirCallResult result=source_drive(instance,0);
+        CHECK(result.status==XR_XIR_CALL_RETURNED && result.value.type==XR_XIR_I64 && result.value.payload==cases[i][2]);
+    }
+}
 static void source_match_faults(XrXirInstance *instance, uint32_t function) {
     for (int64_t kind=27;kind<=31;++kind) for (int64_t input=0;input<2;++input) {
         XrXirValue args[]={{XR_XIR_I64,0,kind},{XR_XIR_I64,0,input},{XR_XIR_I64,0,0}};
@@ -648,13 +677,14 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
             if (result.outcome.status != XR_XIR_CALL_RETURNED)
                 fprintf(stderr, "Source initialization status=%u outputs=%u\n", result.outcome.status, outputs[i].calls);
             CHECK(result.outcome.status == XR_XIR_CALL_RETURNED && result.outcome.value.type == XR_XIR_I64 && !result.outcome.value.payload);
-            CHECK(outputs[i].calls == 57 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
+            CHECK(outputs[i].calls == 58 && xr_xir_instance_state(instances[i]) == XR_XIR_INSTANCE_READY);
         }
     }
     XrXirValue errors[2]={{0},{0}};
     for (unsigned i=0;i<2;++i) errors[i]=source_error(instances[i],functions.calculate);
     for (unsigned i = 0; i < 2; ++i) source_match_faults(instances[i],functions.calculate);
     for (unsigned i = 0; i < 2; ++i) source_search_bounds(instances[i], functions.calculate);
+    for (unsigned i = 0; i < 2; ++i) source_pattern_calls(instances[i], functions.calculate);
     source_cancel_cases(program, entry, functions.resume_text);
     source_numeric_pair(instances, functions.numeric_pause);
     XrXirValue resumed[2] = {{0}, {0}};
@@ -672,7 +702,7 @@ static void source_pair(XrXirProgram *program, uint32_t entry, SourceFunctions f
     for (int64_t expected = 15; expected < 17; ++expected) for (uint32_t i = 0; i < 2; ++i) {
         CHECK(xr_xir_instance_start(instances[i], functions.advance, NULL, 0) == XR_XIR_CALL_READY);
         XrXirCallResult result = xr_xir_instance_poll(instances[i]).outcome;
-        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 57);
+        CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.payload == expected && outputs[i].calls == 58);
     }
     XrXirValue bound[2] = {{0}, {0}}, bound_text[2] = {{0}, {0}};
     for (uint32_t i = 0; i < 2; ++i) {

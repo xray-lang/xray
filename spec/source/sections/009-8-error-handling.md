@@ -103,10 +103,29 @@ try {
 
 catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读；需要重新赋值时先用 `var local = e` 创建局部逻辑副本。所有 handler 都接受完整静态检查，即使 try 块没有错误前驱，名称、类型、泛型约束、可见性、初始化和只读错误仍必须拒绝。不可执行的构造器 handler 从 try 入口的初始化状态开始检查，其内部写入不能成为正常后继已初始化的证据；handler 内部分支和循环遵循通常的必定/可能初始化规则。handler 的 return 仍参与所在函数的返回类型推断。
 
-`catch` 也可以直接使用 enum variant pattern。unit variant 写作
-`catch NetErr.Timeout { ... }`，其中唯一一对花括号是 catch 块体；payload variant 写作
-`catch DbErr.QueryFailed { query } { ... }`，第一对花括号是具名 pattern，第二对是块体。
-这个边界只由 brace-group 数量决定，不查询 variant schema，也不允许 unit pattern 写 `{}`。
+**enum variant pattern catch**：
+
+普通 `catch` 的头部始终写在括号内。括号内是标识符且后跟 `:` 或 `)` 时为绑定（`catch (e)`、`catch (e: T)`），否则为 enum variant pattern：
+
+```xray
+enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
+
+try {
+    runQuery()
+} catch (DbErr.QueryFailed { query, code: 500..=599 }) {
+    log("server rejected:", query)
+} catch (DbErr.ConnLost, DbErr.Timeout) {
+    retry()
+}
+```
+
+- 每个备选都是 `Enum.Variant` 或 `Enum.Variant { 字段 }`，可带模块限定；字段子模式遵循 §6（字面量、范围、嵌套 enum、`_` 与绑定）。payload variant 必须写出花括号，`{}` 只测试 tag；unit variant 不能写 `{}`。
+- 逗号分隔的备选必须属于同一个 enum 类型。首个备选确定该 handler 的 enum 类型：Error 不携带静态类型实参，所以泛型 enum 必须在首个备选写全类型实参（如 `Event<string>.Failed { message }`）；其余备选须命名同一声明，省略的类型实参取自该类型，显式写出的必须完全相同。
+- 先判断错误值是否属于该 enum 类型，再按源码顺序测试备选。类型、变体、字面量或范围任何一项不匹配时，继续尝试下一个 `catch` 子句；全部不匹配时原错误值不变地继续传播。pattern handler 不要求穷举，也不会产生匹配失败（`E0442`）。
+- 各备选必须绑定同名、同静态类型的变量。pattern 绑定只读，仅在该 handler 内可见，与 catch 绑定规则相同。
+- 括号内的裸标识符是 catch-all 绑定：`catch (NetErr)` 绑定一个名为 `NetErr` 的 Error 值，而不是类型过滤；按类型过滤写 `catch (e: NetErr)`。`_`、字面量、范围，以及元组、对象、数组和 `is` 类型模式都不能作为 catch 头部。
+- 普通 `catch` 不能省略头部；只有 `catch panic` 可以省略。
+- 泛型 enum 目标在定义处按约束检查。不可执行的 pattern handler 同样完整检查名称、类型、约束、可见性、字段与绑定。
 
 #### 8.1.3 重抛与错误转换
 
@@ -653,11 +672,29 @@ The built-in `Error` is an owned value type containing only enums. Converting an
 
 Catch bindings are visible only in their handler, and both the binding and its value-semantic portion are read-only. Create a local logical copy with `var local = e` when rebinding is needed. Every handler undergoes complete static checking even when the try body has no error predecessor: invalid names, types, generic constraints, visibility, initialization, and read-only writes must still be rejected. An unexecutable constructor handler is checked from the initialization state at try entry; writes inside it cannot establish initialization in the normal successor. Branches and loops within the handler follow the ordinary must/may initialization rules. Handler returns still participate in the enclosing function's return-type inference.
 
-`catch` may also use an enum variant pattern directly. A unit variant is written as
-`catch NetErr.Timeout { ... }`, where the only brace group is the catch body. A payload variant is
-written as `catch DbErr.QueryFailed { query } { ... }`: the first braces are the named pattern and
-the second braces are the body. Brace-group count alone determines this boundary; the parser does
-not query the variant schema, and a unit pattern still cannot use `{}`.
+**Enum variant pattern catch**:
+
+An ordinary `catch` header is always parenthesized. Inside the parentheses, an identifier followed by `:` or `)` is a binding (`catch (e)`, `catch (e: T)`); anything else is an enum variant pattern:
+
+```xray
+enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
+
+try {
+    runQuery()
+} catch (DbErr.QueryFailed { query, code: 500..=599 }) {
+    log("server rejected:", query)
+} catch (DbErr.ConnLost, DbErr.Timeout) {
+    retry()
+}
+```
+
+- Every alternative is `Enum.Variant` or `Enum.Variant { fields }`, optionally module-qualified; field sub-patterns follow §6 (literals, ranges, nested enums, `_`, and bindings). A payload variant must write its braces, and `{}` tests only the tag; a unit variant cannot use `{}`.
+- Comma-separated alternatives must belong to one enum type. The first alternative determines the handler's enum type. An Error carries no static type arguments, so a generic enum must state all of its type arguments there (for example `Event<string>.Failed { message }`); later alternatives must name the same declaration, take omitted type arguments from that type, and must repeat explicit ones exactly.
+- The handler first tests whether the error value has that enum type, then tries the alternatives in source order. A type, variant, literal, or range mismatch continues with the next `catch` clause; if none matches, the original error keeps propagating unchanged. A pattern handler needs no exhaustiveness and never raises a match failure (`E0442`).
+- All alternatives must bind the same names with exactly the same static types. Pattern bindings are read-only and visible only in their handler, like a catch binding.
+- A bare identifier inside the parentheses is a catch-all binding: `catch (NetErr)` binds an Error value named `NetErr`; it is not a type filter. Filter by type with `catch (e: NetErr)`. `_`, literals, ranges, and tuple, object, array, and `is` type patterns cannot form a catch header.
+- An ordinary `catch` cannot omit its header; only `catch panic` may.
+- Generic enum targets are checked against their constraints at definition. An unexecutable pattern handler still receives complete name, type, constraint, visibility, field, and binding checks.
 
 #### 8.1.3 Rethrowing and error conversion
 

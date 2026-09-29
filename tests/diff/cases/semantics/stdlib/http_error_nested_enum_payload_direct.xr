@@ -6,6 +6,6 @@ fn rejectVersion() {
 
 try {
     rejectVersion()
-} catch HttpError.UnsupportedVersion { version } {
+} catch (HttpError.UnsupportedVersion { version }) {
     print(version!.name)
 }

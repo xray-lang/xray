@@ -23,7 +23,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
 | `for` 头 | `for (var i=0; ...)` | `i` 仅循环体可见 |
-| `catch` 参数 | `catch (e)` | `e` 仅 catch 体可见 |
+| `catch` 参数 | `catch (e)`、`catch (E.V { x })` | `e` 与 pattern 绑定 `x` 仅 catch 体可见 |
 | 类体 | `class` 定义 | 字段、方法 |
 
 **提升规则**：
@@ -224,7 +224,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
 | `for` header | `for (var i=0; ...)` | `i` is visible only within the loop body |
-| `catch` parameter | `catch (e)` | `e` is visible only within the catch body |
+| `catch` parameter | `catch (e)`, `catch (E.V { x })` | `e` and pattern binding `x` are visible only within the catch body |
 | Class body | `class` definition | fields, methods |
 
 **Hoisting rules**:

@@ -172,8 +172,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent
-                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumPattern     ::= EnumVariantPath
+                  | EnumVariantPath '{' EnumFieldPatternList? '}'
+EnumVariantPath ::= QualifiedIdent
+                  | QualifiedIdent TypeArgs '.' Identifier
 EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
 EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
@@ -238,7 +240,10 @@ ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
-CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 
 DeferStmt ::= 'defer' Block
 
@@ -511,8 +516,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent
-                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumPattern     ::= EnumVariantPath
+                  | EnumVariantPath '{' EnumFieldPatternList? '}'
+EnumVariantPath ::= QualifiedIdent
+                  | QualifiedIdent TypeArgs '.' Identifier
 EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
 EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
@@ -578,7 +585,10 @@ ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
-CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 
 DeferStmt ::= 'defer' Block
 

@@ -10,18 +10,18 @@ print(i64.parse(validInt))
 var invalidInt = "12abc"
 try {
     print(i64.parse(invalidInt))
-} catch NumberParseError.InvalidSyntax {
+} catch (NumberParseError.InvalidSyntax) {
     print("i64.InvalidSyntax")
-} catch NumberParseError.OutOfRange {
+} catch (NumberParseError.OutOfRange) {
     print("i64.OutOfRange")
 }
 
 var overflowInt = "9223372036854775808"
 try {
     print(i64.parse(overflowInt))
-} catch NumberParseError.InvalidSyntax {
+} catch (NumberParseError.InvalidSyntax) {
     print("overflow.InvalidSyntax")
-} catch NumberParseError.OutOfRange {
+} catch (NumberParseError.OutOfRange) {
     print("overflow.OutOfRange")
 }
 
@@ -33,9 +33,9 @@ print(f64.parse(hugeFloat))
 var invalidFloat = "1e+"
 try {
     print(f64.parse(invalidFloat))
-} catch NumberParseError.InvalidSyntax {
+} catch (NumberParseError.InvalidSyntax) {
     print("f64.InvalidSyntax")
-} catch NumberParseError.OutOfRange {
+} catch (NumberParseError.OutOfRange) {
     print("f64.OutOfRange")
 }
 

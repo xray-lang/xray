@@ -975,8 +975,8 @@ TEST(parser_enum_record_payload_surface) {
     AstNode *catch_program = parse_ok("enum Failure { Done, Bad { code: i64 } }\n"
                                       "fn probe() {\n"
                                       "  try { throw Failure.Done }\n"
-                                      "  catch Failure.Done { return }\n"
-                                      "  catch Failure.Bad { code } { return }\n"
+                                      "  catch (Failure.Done) { return }\n"
+                                      "  catch (Failure.Bad { code }) { return }\n"
                                       "}\n");
     ASSERT_EQ_INT(catch_program->as.program.count, 2);
     AstNode *probe = catch_program->as.program.statements[1];
@@ -1016,6 +1016,93 @@ TEST(parser_panic_catch_optional_binding) {
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch panic () {}"));
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch panic Fault.Bad {}"));
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "try {} catch {}"));
+    teardown();
+}
+
+/* Parses one try statement with a single catch header; NULL on any shape error. */
+static XrCatchClause *parse_single_catch(const char *header) {
+    char source[256];
+    int written = snprintf(source, sizeof(source),
+                           "fn probe() { try { return } catch %s { return } }\n", header);
+    if (written <= 0 || (size_t) written >= sizeof(source))
+        return NULL;
+    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(X), source);
+    if (!program || program->type != AST_PROGRAM || program->as.program.count != 1)
+        return NULL;
+    AstNode *function = program->as.program.statements[0];
+    if (!function || function->type != AST_FUNCTION_DECL || !function->as.function_decl.body)
+        return NULL;
+    AstNode *body = function->as.function_decl.body;
+    if (body->type != AST_BLOCK || body->as.block.count != 1)
+        return NULL;
+    AstNode *attempt = body->as.block.statements[0];
+    if (!attempt || attempt->type != AST_TRY_CATCH || attempt->as.try_catch.catch_count != 1)
+        return NULL;
+    return attempt->as.try_catch.catch_clauses[0];
+}
+
+TEST(parser_catch_headers_are_parenthesized) {
+    setup();
+    XrCatchClause *unit = parse_single_catch("(Failure.Done)");
+    ASSERT_NOT_NULL(unit);
+    ASSERT_NULL(unit->var_name);
+    ASSERT_EQ_INT(unit->pattern->type, AST_PATTERN_LITERAL);
+    ASSERT_EQ_INT(unit->pattern->as.pattern_literal.value->type, AST_MEMBER_ACCESS);
+
+    XrCatchClause *payload = parse_single_catch("(Failure.Bad { code, text: \"x\" })");
+    ASSERT_NOT_NULL(payload);
+    ASSERT_EQ_INT(payload->pattern->type, AST_PATTERN_ADT);
+    ASSERT_EQ_INT(payload->pattern->as.pattern_adt.count, 2);
+    ASSERT_STR_EQ(payload->pattern->as.pattern_adt.field_names[1], "text");
+
+    XrCatchClause *tag = parse_single_catch("(Failure.Bad {})");
+    ASSERT_NOT_NULL(tag);
+    ASSERT_EQ_INT(tag->pattern->type, AST_PATTERN_ADT);
+    ASSERT_EQ_INT(tag->pattern->as.pattern_adt.count, 0);
+
+    XrCatchClause *qualified = parse_single_catch("(lib.Failure<i64>.Bad { value })");
+    ASSERT_NOT_NULL(qualified);
+    ASSERT_EQ_INT(qualified->pattern->type, AST_PATTERN_ADT);
+    ASSERT_NULL(qualified->type);
+
+    XrCatchClause *alternatives = parse_single_catch("(Failure.Done, Failure.Bad { code: 1..=5 })");
+    ASSERT_NOT_NULL(alternatives);
+    ASSERT_EQ_INT(alternatives->pattern->type, AST_PATTERN_MULTI);
+    ASSERT_EQ_INT(alternatives->pattern->as.pattern_multi.count, 2);
+
+    XrCatchClause *binding = parse_single_catch("(Failure)");
+    ASSERT_NOT_NULL(binding);
+    ASSERT_STR_EQ(binding->var_name, "Failure");
+    ASSERT_NULL(binding->pattern);
+    ASSERT_NULL(binding->type);
+
+    XrCatchClause *typed = parse_single_catch("(e: lib.Failure<i64>)");
+    ASSERT_NOT_NULL(typed);
+    ASSERT_STR_EQ(typed->var_name, "e");
+    ASSERT_NOT_NULL(typed->type);
+    ASSERT_NULL(typed->pattern);
+
+    const char *rejected[] = {
+        "fn f() { try {} catch Failure.Done {} }",
+        "fn f() { try {} catch Failure.Bad { code } {} }",
+        "fn f() { try {} catch Failure {} }",
+        "fn f() { try {} catch {} }",
+        "fn f() { try {} catch (_) {} }",
+        "fn f() { try {} catch (1) {} }",
+        "fn f() { try {} catch (1..5) {} }",
+        "fn f() { try {} catch (\"text\") {} }",
+        "fn f() { try {} catch ((Failure.Done)) {} }",
+        "fn f() { try {} catch ({ code }) {} }",
+        "fn f() { try {} catch ([first]) {} }",
+        "fn f() { try {} catch (is Failure e) {} }",
+        "fn f() { try {} catch (Failure.Done, e) {} }",
+        "fn f() { try {} catch (Failure.Done,) {} }",
+        "fn f() { try {} catch (Failure.Bad(1)) {} }",
+        "fn f() { try {} catch () {} }",
+        "fn f() { try {} catch (Failure.Done {} }",
+    };
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++)
+        ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), rejected[i]));
     teardown();
 }
 
@@ -1612,6 +1699,7 @@ int main(void) {
     RUN_TEST(parser_enum_static_method);
     RUN_TEST(parser_enum_record_payload_surface);
     RUN_TEST(parser_panic_catch_optional_binding);
+    RUN_TEST(parser_catch_headers_are_parenthesized);
     RUN_TEST(parser_rejects_positional_enum_payload_surface);
 
     // Calls

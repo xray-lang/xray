@@ -15,7 +15,7 @@
 
 static bool runtime_sink(void *context, const XrXirOutputGroup *group) {
     (void) context;
-    CHECK(group && group->count <= 13); return true;
+    CHECK(group && group->count <= 18); return true;
 }
 static XrXirCallStatus runtime_drive(XrXirInstance *instance) {
     XrXirInstanceResult result = xr_xir_instance_poll(instance);

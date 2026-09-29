@@ -2611,8 +2611,10 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 ThrowStmt     ::= 'throw' Expression
 
 TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
-                | 'catch' 'panic' '(' Identifier ')' Block
+CatchClause   ::= 'catch' '(' CatchHeader ')' Block
+                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader   ::= Identifier (':' Type)?
+                | EnumPattern (',' EnumPattern)*
 ```
 
 ```xray
@@ -2640,6 +2642,7 @@ throw AppError.NotFound                      // value-return error channel
 **Semantics**:
 - A `try` must be followed by at least one `catch` or `catch panic` clause.
 - `catch (e)` catches recoverable errors propagated through the value-return channel (a user `throw <enum>`); use `match (e)` to destructure the error value.
+- `catch (e: T)` filters by a concrete enum type, and `catch (Enum.Variant { … })` filters by variant patterns of one enum (see §8.1.2); an ordinary `catch` header is always parenthesized.
 - `catch panic (p)` catches runtime faults (div-by-zero, out-of-bounds, `expr!`, `assert`), strictly separated from recoverable errors.
 - The `throw` operand is an error value (typically an enum) propagated through the value-return channel: no `PanicInfo` allocation, no stack unwinding, and only a predictable branch at call boundaries that may propagate or catch errors.
 - There is no `finally`: use `defer` (§4.9) for deterministic cleanup.
@@ -3936,7 +3939,7 @@ For full rules, path resolution, and visibility details see [§11 Modules](#11-m
 
 > Source of truth: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
 
-Patterns appear in `match` expressions/statements and in `var` / `const` destructuring.
+Patterns appear in `match` expressions/statements, in `var` / `const` destructuring, and in parenthesized `catch` headers (enum variant patterns only, see §8.1.2).
 
 ### 6.1 Literal Patterns
 
@@ -4147,7 +4150,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
 | `for` header | `for (var i=0; ...)` | `i` is visible only within the loop body |
-| `catch` parameter | `catch (e)` | `e` is visible only within the catch body |
+| `catch` parameter | `catch (e)`, `catch (E.V { x })` | `e` and pattern binding `x` are visible only within the catch body |
 | Class body | `class` definition | fields, methods |
 
 **Hoisting rules**:
@@ -4427,11 +4430,29 @@ The built-in `Error` is an owned value type containing only enums. Converting an
 
 Catch bindings are visible only in their handler, and both the binding and its value-semantic portion are read-only. Create a local logical copy with `var local = e` when rebinding is needed. Every handler undergoes complete static checking even when the try body has no error predecessor: invalid names, types, generic constraints, visibility, initialization, and read-only writes must still be rejected. An unexecutable constructor handler is checked from the initialization state at try entry; writes inside it cannot establish initialization in the normal successor. Branches and loops within the handler follow the ordinary must/may initialization rules. Handler returns still participate in the enclosing function's return-type inference.
 
-`catch` may also use an enum variant pattern directly. A unit variant is written as
-`catch NetErr.Timeout { ... }`, where the only brace group is the catch body. A payload variant is
-written as `catch DbErr.QueryFailed { query } { ... }`: the first braces are the named pattern and
-the second braces are the body. Brace-group count alone determines this boundary; the parser does
-not query the variant schema, and a unit pattern still cannot use `{}`.
+**Enum variant pattern catch**:
+
+An ordinary `catch` header is always parenthesized. Inside the parentheses, an identifier followed by `:` or `)` is a binding (`catch (e)`, `catch (e: T)`); anything else is an enum variant pattern:
+
+```xray
+enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
+
+try {
+    runQuery()
+} catch (DbErr.QueryFailed { query, code: 500..=599 }) {
+    log("server rejected:", query)
+} catch (DbErr.ConnLost, DbErr.Timeout) {
+    retry()
+}
+```
+
+- Every alternative is `Enum.Variant` or `Enum.Variant { fields }`, optionally module-qualified; field sub-patterns follow §6 (literals, ranges, nested enums, `_`, and bindings). A payload variant must write its braces, and `{}` tests only the tag; a unit variant cannot use `{}`.
+- Comma-separated alternatives must belong to one enum type. The first alternative determines the handler's enum type. An Error carries no static type arguments, so a generic enum must state all of its type arguments there (for example `Event<string>.Failed { message }`); later alternatives must name the same declaration, take omitted type arguments from that type, and must repeat explicit ones exactly.
+- The handler first tests whether the error value has that enum type, then tries the alternatives in source order. A type, variant, literal, or range mismatch continues with the next `catch` clause; if none matches, the original error keeps propagating unchanged. A pattern handler needs no exhaustiveness and never raises a match failure (`E0442`).
+- All alternatives must bind the same names with exactly the same static types. Pattern bindings are read-only and visible only in their handler, like a catch binding.
+- A bare identifier inside the parentheses is a catch-all binding: `catch (NetErr)` binds an Error value named `NetErr`; it is not a type filter. Filter by type with `catch (e: NetErr)`. `_`, literals, ranges, and tuple, object, array, and `is` type patterns cannot form a catch header.
+- An ordinary `catch` cannot omit its header; only `catch panic` may.
+- Generic enum targets are checked against their constraints at definition. An unexecutable pattern handler still receives complete name, type, constraint, visibility, field, and binding checks.
 
 #### 8.1.3 Rethrowing and error conversion
 
@@ -7655,8 +7676,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent
-                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumPattern     ::= EnumVariantPath
+                  | EnumVariantPath '{' EnumFieldPatternList? '}'
+EnumVariantPath ::= QualifiedIdent
+                  | QualifiedIdent TypeArgs '.' Identifier
 EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
 EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
@@ -7722,7 +7745,10 @@ ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
-CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 
 DeferStmt ::= 'defer' Block
 

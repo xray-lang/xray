@@ -713,7 +713,7 @@ int main(void) {
     write_source(library, "export fn visible() -> i64 { return 2 }\n");
     constructor_admission(&request, root);
     shadowed_coro(&request, root);
-    source_catch_cases(&request, root);
+    source_catch_cases(&request, root, library);
     xr_compiler_session_delete(session);
     CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
     puts("Source declaration, visibility, type, graph and budget rejection passed");

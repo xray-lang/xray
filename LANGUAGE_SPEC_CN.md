@@ -2589,8 +2589,10 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 ThrowStmt     ::= 'throw' Expression
 
 TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
-                | 'catch' 'panic' '(' Identifier ')' Block
+CatchClause   ::= 'catch' '(' CatchHeader ')' Block
+                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader   ::= Identifier (':' Type)?
+                | EnumPattern (',' EnumPattern)*
 ```
 
 ```xray
@@ -2616,6 +2618,7 @@ throw AppError.NotFound                      // 值返回错误通道
 **语义**：
 - `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
 - `catch (e)` 捕获经值返回通道传播的可恢复错误（用户 `throw <enum>`）；用 `match (e)` 解构错误值。
+- `catch (e: T)` 按具体 enum 类型过滤，`catch (Enum.Variant { … })` 按同一 enum 的 variant pattern 过滤（见 §8.1.2）；普通 `catch` 的头部必须写在括号内。
 - `catch panic (p)` 捕获运行时故障（除零、越界、`expr!`、`assert`），与可恢复错误严格分离。
 - `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：不分配 `PanicInfo`、不展开栈；需要传播或捕获错误的调用边界只经过可预测分支。
 - 没有 `finally`：用 `defer`（§4.9）做确定性清理。
@@ -3921,7 +3924,7 @@ export * from "./other"
 
 > 真值源：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
 
-模式出现在 `match` 表达式/语句与 `var` / `const` 解构中。
+模式出现在 `match` 表达式/语句、`var` / `const` 解构，以及括号内的 `catch` 头部（仅 enum variant pattern，见 §8.1.2）中。
 
 ### 6.1 字面量模式
 
@@ -4132,7 +4135,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
 | `for` 头 | `for (var i=0; ...)` | `i` 仅循环体可见 |
-| `catch` 参数 | `catch (e)` | `e` 仅 catch 体可见 |
+| `catch` 参数 | `catch (e)`、`catch (E.V { x })` | `e` 与 pattern 绑定 `x` 仅 catch 体可见 |
 | 类体 | `class` 定义 | 字段、方法 |
 
 **提升规则**：
@@ -4410,10 +4413,29 @@ try {
 
 catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读；需要重新赋值时先用 `var local = e` 创建局部逻辑副本。所有 handler 都接受完整静态检查，即使 try 块没有错误前驱，名称、类型、泛型约束、可见性、初始化和只读错误仍必须拒绝。不可执行的构造器 handler 从 try 入口的初始化状态开始检查，其内部写入不能成为正常后继已初始化的证据；handler 内部分支和循环遵循通常的必定/可能初始化规则。handler 的 return 仍参与所在函数的返回类型推断。
 
-`catch` 也可以直接使用 enum variant pattern。unit variant 写作
-`catch NetErr.Timeout { ... }`，其中唯一一对花括号是 catch 块体；payload variant 写作
-`catch DbErr.QueryFailed { query } { ... }`，第一对花括号是具名 pattern，第二对是块体。
-这个边界只由 brace-group 数量决定，不查询 variant schema，也不允许 unit pattern 写 `{}`。
+**enum variant pattern catch**：
+
+普通 `catch` 的头部始终写在括号内。括号内是标识符且后跟 `:` 或 `)` 时为绑定（`catch (e)`、`catch (e: T)`），否则为 enum variant pattern：
+
+```xray
+enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
+
+try {
+    runQuery()
+} catch (DbErr.QueryFailed { query, code: 500..=599 }) {
+    log("server rejected:", query)
+} catch (DbErr.ConnLost, DbErr.Timeout) {
+    retry()
+}
+```
+
+- 每个备选都是 `Enum.Variant` 或 `Enum.Variant { 字段 }`，可带模块限定；字段子模式遵循 §6（字面量、范围、嵌套 enum、`_` 与绑定）。payload variant 必须写出花括号，`{}` 只测试 tag；unit variant 不能写 `{}`。
+- 逗号分隔的备选必须属于同一个 enum 类型。首个备选确定该 handler 的 enum 类型：Error 不携带静态类型实参，所以泛型 enum 必须在首个备选写全类型实参（如 `Event<string>.Failed { message }`）；其余备选须命名同一声明，省略的类型实参取自该类型，显式写出的必须完全相同。
+- 先判断错误值是否属于该 enum 类型，再按源码顺序测试备选。类型、变体、字面量或范围任何一项不匹配时，继续尝试下一个 `catch` 子句；全部不匹配时原错误值不变地继续传播。pattern handler 不要求穷举，也不会产生匹配失败（`E0442`）。
+- 各备选必须绑定同名、同静态类型的变量。pattern 绑定只读，仅在该 handler 内可见，与 catch 绑定规则相同。
+- 括号内的裸标识符是 catch-all 绑定：`catch (NetErr)` 绑定一个名为 `NetErr` 的 Error 值，而不是类型过滤；按类型过滤写 `catch (e: NetErr)`。`_`、字面量、范围，以及元组、对象、数组和 `is` 类型模式都不能作为 catch 头部。
+- 普通 `catch` 不能省略头部；只有 `catch panic` 可以省略。
+- 泛型 enum 目标在定义处按约束检查。不可执行的 pattern handler 同样完整检查名称、类型、约束、可见性、字段与绑定。
 
 #### 8.1.3 重抛与错误转换
 
@@ -7507,8 +7529,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent
-                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumPattern     ::= EnumVariantPath
+                  | EnumVariantPath '{' EnumFieldPatternList? '}'
+EnumVariantPath ::= QualifiedIdent
+                  | QualifiedIdent TypeArgs '.' Identifier
 EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
 EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
@@ -7573,7 +7597,10 @@ ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
-CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 
 DeferStmt ::= 'defer' Block
 

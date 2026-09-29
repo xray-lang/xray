@@ -26,39 +26,6 @@
  */
 static AstNode *parse_pattern_single(Parser *parser);
 
-/* In an unparenthesized catch clause the final brace group is the catch body.
- * A qualified variant path therefore owns a record-pattern brace only when the
- * matching brace is followed by another top-level pattern (`,`) or by the body
- * brace (`{`). This token-only delimiter rule never queries variant metadata
- * and leaves nested record patterns unchanged. */
-static bool catch_brace_starts_record_pattern(Parser *parser) {
-    XR_DCHECK(parser != NULL, "catch_brace_starts_record_pattern: NULL parser");
-    XR_DCHECK(xr_parser_check(parser, TK_LBRACE),
-              "catch_brace_starts_record_pattern: expected current '{'");
-
-    XrParserStreamState saved = xr_parser_stream_save(parser);
-    int brace_depth = 0;
-    while (!xr_parser_check(parser, TK_EOF)) {
-        if (xr_parser_check(parser, TK_LBRACE)) {
-            brace_depth++;
-            xr_parser_advance(parser);
-            continue;
-        }
-        if (xr_parser_check(parser, TK_RBRACE)) {
-            brace_depth--;
-            xr_parser_advance(parser);
-            if (brace_depth == 0)
-                break;
-            continue;
-        }
-        xr_parser_advance(parser);
-    }
-    bool is_record_pattern = brace_depth == 0 && (xr_parser_check(parser, TK_COMMA) ||
-                                                  xr_parser_check(parser, TK_LBRACE));
-    xr_parser_stream_restore(parser, &saved);
-    return is_record_pattern;
-}
-
 /* Parse a positional tuple pattern starting at the current `(` token.
  * `()`, `(p,)` and `(p1, p2, ...)` are all accepted; sub-patterns
  * recurse through parse_pattern_single (NOT the alternation form), so
@@ -304,7 +271,7 @@ static AstNode *parse_adt_record_pattern(Parser *parser, AstNode *variant, int l
 // Inner implementation; parse_pattern_single wraps this with the recursion-depth
 // guard. Nested tuple/object/array patterns recurse through the public
 // wrapper, so the guard bounds pattern nesting depth.
-static AstNode *parse_pattern_single_inner(Parser *parser, bool unparenthesized_catch_header) {
+static AstNode *parse_pattern_single_inner(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_pattern_single: NULL parser");
     int line = parser->current.line;
 
@@ -369,8 +336,7 @@ static AstNode *parse_pattern_single_inner(Parser *parser, bool unparenthesized_
     }
 
     if ((first->type == AST_MEMBER_ACCESS || first->type == AST_ENUM_ACCESS) &&
-        xr_parser_check(parser, TK_LBRACE) &&
-        (!unparenthesized_catch_header || catch_brace_starts_record_pattern(parser))) {
+        xr_parser_check(parser, TK_LBRACE)) {
         return parse_adt_record_pattern(parser, first, line);
     }
 
@@ -388,32 +354,27 @@ static AstNode *parse_pattern_single_inner(Parser *parser, bool unparenthesized_
 // Public pattern-atom entry: recursion-depth guard around
 // parse_pattern_single_inner. Nested tuple/object/array patterns recurse
 // through here, so this bounds pattern nesting depth.
-static AstNode *parse_pattern_single_with_context(Parser *parser,
-                                                  bool unparenthesized_catch_header) {
+static AstNode *parse_pattern_single(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_pattern_single: NULL parser");
     if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
         parser->recursion_depth--;
         xr_parser_error(parser, "pattern nesting too deep (max 1000 levels)");
         return NULL;
     }
-    AstNode *result = parse_pattern_single_inner(parser, unparenthesized_catch_header);
+    AstNode *result = parse_pattern_single_inner(parser);
     parser->recursion_depth--;
     return result;
 }
 
-static AstNode *parse_pattern_single(Parser *parser) {
-    return parse_pattern_single_with_context(parser, false);
-}
-
-/* Top-level match-arm pattern: parse one atom, then optionally fold
- * in further atoms separated by `,` into an alternation pattern up
- * to the `->`. This is the only place where a top-level comma starts
+/* Top-level pattern of a match arm or parenthesized catch header: parse one
+ * atom, then optionally fold further atoms separated by `,` into an
+ * alternation pattern. This is the only place where a top-level comma starts
  * an alternation; tuple sub-elements use parse_pattern_single. */
-static AstNode *parse_top_level_pattern(Parser *parser, bool unparenthesized_catch_header) {
+static AstNode *parse_top_level_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_pattern: NULL parser");
     int line = parser->current.line;
 
-    AstNode *first = parse_pattern_single_with_context(parser, unparenthesized_catch_header);
+    AstNode *first = parse_pattern_single(parser);
     if (!first)
         return NULL;
 
@@ -440,7 +401,7 @@ static AstNode *parse_top_level_pattern(Parser *parser, bool unparenthesized_cat
             patterns = _new_patterns;
         }
 
-        AstNode *next = parse_pattern_single_with_context(parser, unparenthesized_catch_header);
+        AstNode *next = parse_pattern_single(parser);
         if (!next) {
             xr_parser_error(parser, "expected pattern value");
             break;
@@ -452,11 +413,7 @@ static AstNode *parse_top_level_pattern(Parser *parser, bool unparenthesized_cat
 }
 
 XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser) {
-    return parse_top_level_pattern(parser, false);
-}
-
-XR_FUNC AstNode *xr_parse_unparenthesized_catch_pattern(Parser *parser) {
-    return parse_top_level_pattern(parser, true);
+    return parse_top_level_pattern(parser);
 }
 
 /*

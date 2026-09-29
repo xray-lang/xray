@@ -5178,7 +5178,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "fn handled() { try { fail() } catch (e: CatchErr) { } }\n"
         "fn leaks() { try { fail() } catch (e: OtherErr) { } }\n"
         "fn catchesAll() { try { fail() } catch (e) { } }\n"
-        "fn bareEnumPatternHandlesAll() { try { failPayloadBoom() } catch PayloadErr { } }\n"
+        "fn typedEnumCatchHandlesAll() { try { failPayloadBoom() } catch (e: PayloadErr) { } }\n"
         "fn variantPatternHandlesOnlyBoom() { "
         "  try { failPayloadBoom() } catch (PayloadErr.Boom) { } "
         "}\n"
@@ -5424,8 +5424,8 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const XaEffectSummary *catches_all = analyzer_function_effect_summary(a, "catchesAll");
     const XaEffectSummary *catch_body_throws =
         analyzer_function_effect_summary(a, "catchBodyThrows");
-    const XaEffectSummary *bare_enum_pattern_handles_all =
-        analyzer_function_effect_summary(a, "bareEnumPatternHandlesAll");
+    const XaEffectSummary *typed_enum_catch_handles_all =
+        analyzer_function_effect_summary(a, "typedEnumCatchHandlesAll");
     const XaEffectSummary *variant_pattern_handles_only_boom =
         analyzer_function_effect_summary(a, "variantPatternHandlesOnlyBoom");
     const XaEffectSummary *variant_pattern_leaks_other =
@@ -5510,7 +5510,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(leaks != NULL);
     ASSERT(catches_all != NULL);
     ASSERT(catch_body_throws != NULL);
-    ASSERT(bare_enum_pattern_handles_all != NULL);
+    ASSERT(typed_enum_catch_handles_all != NULL);
     ASSERT(variant_pattern_handles_only_boom != NULL);
     ASSERT(variant_pattern_leaks_other != NULL);
     ASSERT(payload_pattern_handles_payload != NULL);
@@ -5556,7 +5556,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(handled->escaping.count == 0);
     ASSERT(effect_summary_has_enum_named(a, leaks, "CatchErr"));
     ASSERT(catches_all->escaping.count == 0);
-    ASSERT(bare_enum_pattern_handles_all->escaping.count == 0);
+    ASSERT(typed_enum_catch_handles_all->escaping.count == 0);
     ASSERT(variant_pattern_handles_only_boom->escaping.count == 0);
     ASSERT(payload_pattern_handles_payload->escaping.count == 0);
     const XaErrorTypeSet *variant_leak_set =
@@ -7260,7 +7260,7 @@ TEST(analyzer_error_effect_converges_recursive_components) {
                          "fn cycleA() { cycleB() }\n"
                          "fn cycleB() { cycleC() }\n"
                          "fn cycleC() { cycleA(); throw RecursiveErr.Boom }\n"
-                         "fn caughtCycleA() { try { caughtCycleB() } catch RecursiveErr { } }\n"
+                         "fn caughtCycleA() { try { caughtCycleB() } catch (e: RecursiveErr) { } }\n"
                          "fn caughtCycleB() { caughtCycleA(); throw RecursiveErr.Boom }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);

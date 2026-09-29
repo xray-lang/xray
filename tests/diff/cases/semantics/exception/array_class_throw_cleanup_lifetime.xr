@@ -32,7 +32,7 @@ fn parseOwned() -> Array<ParsedType> {
 var caught = false
 try {
     parseOwned()
-} catch ParseError.Invalid { code } {
+} catch (ParseError.Invalid { code }) {
     caught = code == 42
 }
 

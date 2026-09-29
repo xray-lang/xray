@@ -245,8 +245,10 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 ThrowStmt     ::= 'throw' Expression
 
 TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
-                | 'catch' 'panic' '(' Identifier ')' Block
+CatchClause   ::= 'catch' '(' CatchHeader ')' Block
+                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader   ::= Identifier (':' Type)?
+                | EnumPattern (',' EnumPattern)*
 ```
 
 ```xray @id=stmt-try
@@ -272,6 +274,7 @@ throw AppError.NotFound                      // 值返回错误通道
 **语义**：
 - `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
 - `catch (e)` 捕获经值返回通道传播的可恢复错误（用户 `throw <enum>`）；用 `match (e)` 解构错误值。
+- `catch (e: T)` 按具体 enum 类型过滤，`catch (Enum.Variant { … })` 按同一 enum 的 variant pattern 过滤（见 §8.1.2）；普通 `catch` 的头部必须写在括号内。
 - `catch panic (p)` 捕获运行时故障（除零、越界、`expr!`、`assert`），与可恢复错误严格分离。
 - `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：不分配 `PanicInfo`、不展开栈；需要传播或捕获错误的调用边界只经过可预测分支。
 - 没有 `finally`：用 `defer`（§4.9）做确定性清理。
@@ -614,8 +617,10 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 ThrowStmt     ::= 'throw' Expression
 
 TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
-                | 'catch' 'panic' '(' Identifier ')' Block
+CatchClause   ::= 'catch' '(' CatchHeader ')' Block
+                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader   ::= Identifier (':' Type)?
+                | EnumPattern (',' EnumPattern)*
 ```
 
 ```xray @id=stmt-try
@@ -643,6 +648,7 @@ throw AppError.NotFound                      // value-return error channel
 **Semantics**:
 - A `try` must be followed by at least one `catch` or `catch panic` clause.
 - `catch (e)` catches recoverable errors propagated through the value-return channel (a user `throw <enum>`); use `match (e)` to destructure the error value.
+- `catch (e: T)` filters by a concrete enum type, and `catch (Enum.Variant { … })` filters by variant patterns of one enum (see §8.1.2); an ordinary `catch` header is always parenthesized.
 - `catch panic (p)` catches runtime faults (div-by-zero, out-of-bounds, `expr!`, `assert`), strictly separated from recoverable errors.
 - The `throw` operand is an error value (typically an enum) propagated through the value-return channel: no `PanicInfo` allocation, no stack unwinding, and only a predictable branch at call boundaries that may propagate or catch errors.
 - There is no `finally`: use `defer` (§4.9) for deterministic cleanup.
