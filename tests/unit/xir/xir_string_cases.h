@@ -38,7 +38,7 @@ static bool string_output(void *context, const XrXirOutputGroup *group) {
     CHECK(xr_xir_call_take_result(output->call, &owned) == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_call_free(output->call) == XR_XIR_CALL_BUSY);
     if (output->mode == 6 && output->calls == 3)
-        CHECK(xr_xir_call_cancel(output->call) == XR_XIR_CALL_CANCELLED);
+        CHECK(xr_xir_call_cancel(output->call) == XR_XIR_CALL_CANCEL_REQUESTED);
     return output->mode != 3;
 }
 static void string_error_bytes(const XrXirValue *value, XrXirDomain *domain) {

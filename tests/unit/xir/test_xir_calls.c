@@ -103,7 +103,7 @@ static XrXirAction comparator_resume(XrXirCallView *view) {
         return (XrXirAction) {XR_XIR_ACTION_THROW,0,NULL,0,invalid,{0}, 0};
     }
     if (witness->mode == 3)
-        CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCELLED);
+        CHECK(xr_xir_call_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
     if (witness->mode == 4)
         return returned((XrXirValue) {XR_XIR_I64, 0, 7});
     XrXirRunContext context = {2, 24, 0, 0, 0, 0};
@@ -146,9 +146,9 @@ static void callback_cases(void) {
         witness.comparator = artifact;
         witness.mode = mode >= 6 && mode <= 8 ? 1 : mode;
         XrXirCallEntry entries[] = {
-            {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(uint32_t), root_resume, cleanup, &identities[0]},
-            {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(NativeSortState), native_sort_resume, cleanup, &identities[1]},
-            {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_BOOL, sizeof(uint32_t), comparator_resume, cleanup, &identities[2]}
+            {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(uint32_t), root_resume, cleanup, &identities[0], 0, 0},
+            {XR_XIR_CALL_ABI_VERSION, types, 3, XR_XIR_I64, sizeof(NativeSortState), native_sort_resume, cleanup, &identities[1], 0, 0},
+            {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_BOOL, sizeof(uint32_t), comparator_resume, cleanup, &identities[2], 0, 0}
         };
         XrXirDomain *domain=NULL; CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
         XrXirTypeArena *arena=error_fixture_arena(domain);
@@ -227,7 +227,7 @@ static void recursive_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
     ++witness->recursive_cleanups;
 }
 static void bounded_stack(void) {
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, types, 1, XR_XIR_I64, sizeof(RecursiveState), recursive_resume, recursive_cleanup, NULL};
+    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, types, 1, XR_XIR_I64, sizeof(RecursiveState), recursive_resume, recursive_cleanup, NULL, 0, 0};
     for (uint32_t variant = 0; variant < 3; ++variant) {
         Witness witness = {0};
         XrXirCallAccounting accounting = {0};
@@ -342,7 +342,7 @@ static void call_admission(void) {
     XrXirCallConfig config = {entries, 3, NULL, 65536, 100, 10, &accounting, {NULL, NULL}, {0}};
     XrXirValue arguments[] = {{XR_XIR_I64, 0, 9}, {XR_XIR_I64, 0, 4}};
     XrXirCall *call = NULL;
-    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, XR_XIR_CALL_ABI_VERSION + 1};
+    const uint32_t rejected_abis[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, XR_XIR_CALL_ABI_VERSION + 1};
     for (size_t i = 0; i < sizeof(rejected_abis) / sizeof(rejected_abis[0]); ++i) {
         entries[1].abi_version = rejected_abis[i];
         CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_BAD_ABI);
@@ -412,8 +412,8 @@ static void fault_boundary(void) {
         {(XrXirRunStatus) 999, XR_XIR_CALL_BAD_STATE},
     };
     const XrXirCallEntry entries[] = {
-        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_parent, fault_cleanup, &identities[0]},
-        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_child, fault_cleanup, &identities[1]},
+        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_parent, fault_cleanup, &identities[0], 0, 0},
+        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_child, fault_cleanup, &identities[1], 0, 0},
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         FaultWitness witness = {cases[i].failure, cases[i].reason, 0};

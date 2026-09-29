@@ -143,7 +143,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     for (uint32_t i = 0; i < 10; ++i) {
         f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0};
         f->entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
-            sizeof(Frame), initializer, cleanup, &f->env[owners[i]]};
+            sizeof(Frame), initializer, cleanup, &f->env[owners[i]], 0, 0};
     }
     f->entries[3].resume = root; f->entries[3].result = XR_XIR_I64;
     for (uint32_t i = 4; i <= 5; ++i) {

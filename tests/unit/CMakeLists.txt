@@ -141,6 +141,11 @@ add_executable(test_xir_checked_allocations xir/test_xir_checked_allocations.c
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c)
 target_include_directories(test_xir_checked_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_xir_execution PRIVATE xray_xir_vm)
+add_executable(test_xir_cleanup_driver xir/test_xir_cleanup_driver.c)
+target_link_libraries(test_xir_cleanup_driver PRIVATE xray_xir_scalar)
+add_test(NAME test_xir_cleanup_fatal COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/check_xir_cleanup_fatal.py $<TARGET_FILE:test_xir_cleanup_driver>)
+set_tests_properties(test_xir_cleanup_fatal PROPERTIES LABELS "unit;xir;ownership")
 add_executable(test_xir_calls xir/test_xir_calls.c)
 target_link_libraries(test_xir_calls PRIVATE xray_xir_vm)
 add_executable(test_xir_emit xir/test_xir_emit.c)
@@ -315,7 +320,7 @@ target_link_libraries(test_xir_panic_mixed PRIVATE xray_xir_vm)
 foreach(xir_source_test IN ITEMS test_xir_source test_xir_source_mixed test_xir_source_allocations test_xir_source_admission)
     target_compile_definitions(${xir_source_test} PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 endforeach()
-foreach(xir_test IN ITEMS test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_execution test_xir_emit test_xir_native test_xir_calls
+foreach(xir_test IN ITEMS test_xir_cleanup_driver test_xir_locals test_xir_local_native test_xir_generics test_xir_checked test_xir_checked_allocations test_xir_execution test_xir_emit test_xir_native test_xir_calls
     test_xir_emit_calls test_xir_call_native test_xir_values test_xir_value_allocations
     test_xir_emit_strings test_xir_string_native test_xir_string_vm test_xir_instances
     test_xir_emit_program test_xir_program_vm test_xir_program_native

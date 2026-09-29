@@ -847,7 +847,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     append(buffer, "    default: break;\n    }\ninvalid:\n"
            "    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n"
            "limit:\n    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};\n}\n");
-    append(buffer, "static void %s_cleanup_%u(XrXirCallView *view, XrXirCallStatus reason) {\n"
+    append(buffer, "static void %s_release_%u(XrXirCallView *view, XrXirCallStatus reason) {\n"
            "    (void) reason; (void) view;\n", prefix, index);
     if (layout->owned_count) {
         append(buffer, "    %s_state_%u *state = view->state;\n", prefix, index);
@@ -1084,7 +1084,7 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
         append(&buffer, "    {XR_XIR_CALL_ABI_VERSION, ");
         if (function->parameter_count) append(&buffer, "%s_parameters_%u", symbol_prefix, f);
         else append(&buffer, "NULL");
-        append(&buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_cleanup_%u, NULL},\n",
+        append(&buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_release_%u, NULL, 0, 0},\n",
                function->parameter_count, (uint32_t) function->result, symbol_prefix, f, symbol_prefix, f,
                symbol_prefix, f);
     }

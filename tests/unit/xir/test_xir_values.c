@@ -180,7 +180,7 @@ static XrXirAction typed_resume(XrXirCallView *view) {
 }
 static void typed_output(void) {
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
-        sizeof(TypedFrame), typed_resume, NULL, NULL};
+        sizeof(TypedFrame), typed_resume, NULL, NULL, 0, 0};
     for (uint32_t mode = 0; mode < 3; ++mode) {
         TypedOutput output = {0, mode == 1};
         XrXirCallAccounting accounting = {0};
@@ -211,7 +211,7 @@ static void atomic_boundaries(void) {
     int64_t frame = 0;
     CHECK(xr_xir_owned_slot_copy(&frame, 0, NULL, XR_XIR_I64, 42) == XR_XIR_VALUE_BAD_ARGUMENT && !frame);
     const XrXirType type = XR_XIR_ATOMIC_I64;
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_UNIT, 0, atomic_output_resume, NULL, NULL};
+    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_UNIT, 0, atomic_output_resume, NULL, NULL, 0, 0};
     XrXirCallAccounting accounting = {0};
     TypedOutput output = {0};
     XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {typed_write, &output}, {0}};

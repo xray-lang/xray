@@ -139,11 +139,11 @@ static void array_instance_cases(void) {
         XrXirSlot slots[] = {{0,(XrXirType)256,1},{0,(XrXirType)256,0},{1,(XrXirType)256,0}};
         XrXirDeclarations declarations = {modules,mode ? 1 : 2,identities,slots,mode ? 0 : 3,NULL,0,0,1};
         XrXirCallEntry entries[] = {
-            {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness},
+            {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness, 0, 0},
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,sizeof(ArrayAccessFrame),
-                mode ? array_access_budget : array_access_permissions,array_access_cleanup,&witness},
-            {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness},
-            {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_library,array_access_cleanup,&witness}};
+                mode ? array_access_budget : array_access_permissions,array_access_cleanup,&witness, 0, 0},
+            {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness, 0, 0},
+            {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_library,array_access_cleanup,&witness, 0, 0}};
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
             entries,mode ? 2 : 4,&declarations,{0},&types,{0}};
         XrXirArtifact *proof = NULL;

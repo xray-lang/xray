@@ -15,7 +15,7 @@
 #include "xxir_scalar.h"
 #include "xxir_fault.h"
 
-#define XR_XIR_CALL_ABI_VERSION 18u
+#define XR_XIR_CALL_ABI_VERSION 19u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -24,7 +24,8 @@ typedef enum XrXirCallStatus {
     XR_XIR_CALL_OOM, XR_XIR_CALL_BAD_ARGUMENT, XR_XIR_CALL_BAD_ABI,
     XR_XIR_CALL_BAD_STATE, XR_XIR_CALL_BUSY, XR_XIR_CALL_DIVIDE_BY_ZERO,
     XR_XIR_CALL_CONSUMED, XR_XIR_CALL_OUTPUT_ERROR, XR_XIR_CALL_NUMERIC_RANGE,
-    XR_XIR_CALL_BOUNDS, XR_XIR_CALL_MATCH_FAILURE
+    XR_XIR_CALL_BOUNDS, XR_XIR_CALL_MATCH_FAILURE, XR_XIR_CALL_DEFER_ASYNC,
+    XR_XIR_CALL_CANCEL_REQUESTED
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
@@ -35,10 +36,16 @@ typedef struct XrXirCallResult {
 typedef enum XrXirActionKind {
     XR_XIR_ACTION_CALL = 1, XR_XIR_ACTION_RETURN, XR_XIR_ACTION_THROW,
     XR_XIR_ACTION_SUSPEND, XR_XIR_ACTION_CONTINUE, XR_XIR_ACTION_FAULT,
-    XR_XIR_ACTION_OUTPUT, XR_XIR_ACTION_WRITE_STREAM
+    XR_XIR_ACTION_OUTPUT, XR_XIR_ACTION_WRITE_STREAM, XR_XIR_ACTION_LEAVE,
+    XR_XIR_ACTION_EXIT_DONE
 } XrXirActionKind;
 /* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
 #define XR_XIR_ACTION_PROTECTED 1u
+#define XR_XIR_ACTION_CLEANUP 2u
+#define XR_XIR_ACTION_LEAVE_ERROR 4u
+#define XR_XIR_ACTION_LEAVE_PANIC 8u
+#define XR_XIR_ENTRY_EXIT 1u
+typedef enum XrXirCallPhase { XR_XIR_CALL_NORMAL, XR_XIR_CALL_EXIT } XrXirCallPhase;
 typedef struct XrXirAction {
     XrXirActionKind kind;
     uint32_t callee;
@@ -68,11 +75,17 @@ typedef struct XrXirCallView {
     uint32_t argument_count;
     XrXirCallResult inbox;
     const XrXirTypeArena *arena;
+    XrXirCallPhase phase;
+    /* Borrowed pending exit; scope completion restores it to this frame inbox. */
+    XrXirCallResult exit;
+    bool scope_exit;
 } XrXirCallView;
 /* Borrowed only by the driver's current resume view, until that callback returns. */
 XR_FUNC XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view);
+/* Internal authority exists only within an active cleanup callback or value admission. */
+XR_FUNC bool xr_xir_call_cleanup_active(const XrXirCall *activation);
 typedef XrXirAction (*XrXirResumeEntry)(XrXirCallView *view);
-typedef void (*XrXirCleanupEntry)(XrXirCallView *view, XrXirCallStatus reason);
+typedef void (*XrXirReleaseEntry)(XrXirCallView *view, XrXirCallStatus reason);
 typedef struct XrXirCallEntry {
     uint32_t abi_version;
     const XrXirType *parameters;
@@ -80,8 +93,9 @@ typedef struct XrXirCallEntry {
     XrXirType result;
     uint32_t state_bytes;
     XrXirResumeEntry resume;
-    XrXirCleanupEntry cleanup;
+    XrXirReleaseEntry release;
     const void *environment;
+    uint32_t flags, cleanup_owner;
 } XrXirCallEntry;
 typedef struct XrXirCallAccounting {
     uint64_t live_bytes, peak_bytes, allocations, frees;
@@ -120,6 +134,7 @@ XR_FUNC XrXirCallResult xr_xir_call_poll(XrXirCall *activation);
 XR_FUNC XrXirCallStatus xr_xir_call_take_result(XrXirCall *activation, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_call_resume(XrXirCall *activation, uint64_t wake);
 XR_FUNC XrXirCallStatus xr_xir_call_cancel(XrXirCall *activation);
+/* Consumes the activation except on BUSY; reports a failed language cleanup. */
 XR_FUNC XrXirCallStatus xr_xir_call_free(XrXirCall *activation);
 XR_FUNC uint32_t xr_xir_call_current_entry(const XrXirCall *activation);
 XR_FUNC XrXirCallStatus xr_xir_call_state(const XrXirCall *activation);

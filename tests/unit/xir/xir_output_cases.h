@@ -22,7 +22,7 @@ static bool output_bytes(void *context, XrXirOutputStream stream, const char *by
     CHECK(length == sizes[probe->calls] && !memcmp(bytes, expected[probe->calls], length));
     CHECK(xr_xir_call_poll(probe->call).status == XR_XIR_CALL_BUSY);
     ++probe->calls;
-    if (probe->mode == 3) CHECK(xr_xir_call_cancel(probe->call) == XR_XIR_CALL_CANCELLED);
+    if (probe->mode == 3) CHECK(xr_xir_call_cancel(probe->call) == XR_XIR_CALL_CANCEL_REQUESTED);
     return probe->mode != 2;
 }
 static void output_cases(const XrXirCallEntry *entry) {
@@ -57,7 +57,7 @@ static bool write_bytes(void *context, XrXirOutputStream stream, const char *byt
     CHECK(length == 5 && !memcmp(bytes, "A\0\xE4\xB8\xAD", 5));
     CHECK(xr_xir_call_poll(probe->call).status == XR_XIR_CALL_BUSY);
     ++probe->calls;
-    if (probe->mode == 3) CHECK(xr_xir_call_cancel(probe->call) == XR_XIR_CALL_CANCELLED);
+    if (probe->mode == 3) CHECK(xr_xir_call_cancel(probe->call) == XR_XIR_CALL_CANCEL_REQUESTED);
     return probe->mode != 1 && !(probe->mode == 5 && probe->calls == 2) &&
         !(probe->mode == 6 && probe->calls == 1);
 }
@@ -121,7 +121,7 @@ static void write_action_admission(void) {
     XrXirType type = XR_XIR_STRING;
     for (uint32_t mode = 0; mode < 10; ++mode) {
         XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_BOOL,
-            sizeof(XrXirValue), malformed_write, NULL, &mode};
+            sizeof(XrXirValue), malformed_write, NULL, &mode, 0, 0};
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {&entry, 1, NULL, 65536, 100, 10, &accounting, {unexpected_write, NULL}, {0}};
         XrXirCall *call = NULL;

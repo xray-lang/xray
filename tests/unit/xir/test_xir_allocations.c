@@ -332,7 +332,7 @@ static XrXirAction allocation_resume(XrXirCallView *view) {
 
 static size_t call_allocation_failures(void) {
     XrXirType type = XR_XIR_I64;
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_I64, sizeof(AllocationFrame), allocation_resume, NULL, NULL};
+    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_I64, sizeof(AllocationFrame), allocation_resume, NULL, NULL, 0, 0};
     size_t expected_calls = 0;
     for (size_t attempt = 0; attempt <= expected_calls; ++attempt) {
         fail_at = attempt ? attempt - 1 : SIZE_MAX;

@@ -47,9 +47,12 @@ static XrXirStatus program_shape(const XrXirProgramSpec *spec, uint64_t *bytes, 
             slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
-        if (spec->declarations->functions[i].cleanup_owner) return XR_XIR_BAD_STAGE;
         const XrXirCallEntry *entry = &spec->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
+        if ((entry->flags & ~XR_XIR_ENTRY_EXIT) ||
+            entry->cleanup_owner != spec->declarations->functions[i].cleanup_owner ||
+            (entry->cleanup_owner && (entry->result != XR_XIR_UNIT ||
+                !(spec->entries[entry->cleanup_owner - 1].flags & XR_XIR_ENTRY_EXIT)))) return XR_XIR_BAD_STRUCTURE;
         if (!entry->resume || (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
         if (xr_xir_type_is_cell(spec->types, entry->result) || (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
         uint64_t parameter_bytes = (uint64_t) entry->parameter_count * sizeof(XrXirType);

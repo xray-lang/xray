@@ -158,7 +158,7 @@ static void fail_sequence(void) {
         goto done;
     }
     XrXirType type = XR_XIR_STRING;
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_STRING, 0, identity_resume, NULL, NULL};
+    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_STRING, 0, identity_resume, NULL, NULL, 0, 0};
     XrXirCallAccounting accounting = {0};
     XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {NULL, NULL}, {0}};
     XrXirCall *call = NULL;
@@ -188,7 +188,7 @@ static void saturation(void) {
     XrXirValue arguments[] = {first, value};
     XrXirType parameters[] = {XR_XIR_STRING, XR_XIR_STRING};
     XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, parameters, 2, XR_XIR_STRING,
-        0, identity_resume, NULL, NULL};
+        0, identity_resume, NULL, NULL, 0, 0};
     XrXirCallAccounting accounting = {0};
     XrXirCallConfig config = {&entry, 1, NULL, 65536, 10, 10, &accounting, {NULL, NULL}, {0}};
     XrXirCall *call = NULL;

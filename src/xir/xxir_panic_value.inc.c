@@ -17,6 +17,7 @@ XR_FUNC size_t xr_xir_panic_message_format(XrXirFaultDetail detail, char *buffer
     case XR_XIR_PANIC_DIVIDE: written = snprintf(buffer, capacity, "division by zero"); break;
     case XR_XIR_PANIC_REMAINDER: written = snprintf(buffer, capacity, "modulo by zero"); break;
     case XR_XIR_PANIC_RANGE: written = snprintf(buffer, capacity, "numeric conversion is out of range"); break;
+    case XR_XIR_PANIC_DEFER_ASYNC: written = snprintf(buffer, capacity, "defer cleanup cannot suspend or create tasks"); break;
     case XR_XIR_PANIC_BOUNDS:
         written = snprintf(buffer, capacity, "array index out of range: %" PRId64 " (length %" PRId64 ")",
             detail.index, detail.length);

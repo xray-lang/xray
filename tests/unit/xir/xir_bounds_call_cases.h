@@ -40,8 +40,8 @@ static bool bounds_output(void *context, const XrXirOutputGroup *group) {
 }
 static void bounds_fault_boundary(void) {
     const XrXirCallEntry entries[] = {
-        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_parent, bounds_cleanup, &identities[0]},
-        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, bounds_child, bounds_cleanup, &identities[1]},
+        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, fault_parent, bounds_cleanup, &identities[0], 0, 0},
+        {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, bounds_child, bounds_cleanup, &identities[1], 0, 0},
     };
     const int64_t indices[] = {INT64_MIN, -1, 3, INT64_MAX, 0};
     for (uint32_t variant = 0; variant < 21; ++variant) {
@@ -94,8 +94,8 @@ static void bounds_fault_boundary(void) {
 }
 static void match_fault_boundary(void) {
     const XrXirCallEntry entries[] = {
-        {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,fault_parent,bounds_cleanup,&identities[0]},
-        {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,bounds_child,bounds_cleanup,&identities[1]},
+        {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,fault_parent,bounds_cleanup,&identities[0], 0, 0},
+        {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,0,bounds_child,bounds_cleanup,&identities[1], 0, 0},
     };
     for (unsigned variant=0;variant<12;++variant) {
         BoundsWitness witness={0}; witness.action=xr_xir_call_match_failure();

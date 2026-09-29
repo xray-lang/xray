@@ -134,8 +134,23 @@ XrXirStatus xr_xir_program_match(const XrXirProgramSpec *spec,
     MATCH(spec->target.architecture, target->architecture);
     MATCH(spec->target.abi_version, target->abi_version);
     MATCH(spec->entry_count, module->function_count);
+    if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
+    bool cleanup = false;
+    for (uint32_t i = 0; i < module->function_count; ++i) {
+        if (!*work) return XR_XIR_BUDGET;
+        --*work;
+        if (module->declarations->functions[i].cleanup_owner) cleanup = true;
+    }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
+        uint32_t flags = 0;
+        if (cleanup) for (uint32_t child = 0; child < module->function_count; ++child) {
+            if (!*work) return XR_XIR_BUDGET;
+            --*work;
+            if (module->declarations->functions[child].cleanup_owner == i + 1) flags = XR_XIR_ENTRY_EXIT;
+        }
+        MATCH(entry->flags, flags);
+        MATCH(entry->cleanup_owner, module->declarations->functions[i].cleanup_owner);
         const XrXirFunction *function = &module->functions[i];
         MATCH(entry->parameter_count, function->parameter_count);
         MATCH(entry->result, function->result);

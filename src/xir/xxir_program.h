@@ -15,7 +15,7 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 18u
+#define XR_XIR_PROGRAM_ABI_VERSION 19u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirProgramBudget {
     uint64_t metadata_bytes, work;
@@ -78,6 +78,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t
 XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);
+/* Consumes the instance except on BUSY; reports a failed language cleanup. */
 XR_FUNC XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,
     const XrXirValue *arguments, uint32_t count);

@@ -77,7 +77,7 @@ static void segment_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 }
 static XrXirCallEntry segment_entry(uint32_t bytes) {
     return (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, &segment_type, 1, XR_XIR_I64,
-        bytes, segment_resume, segment_cleanup, NULL};
+        bytes, segment_resume, segment_cleanup, NULL, 0, 0};
 }
 static size_t segment_attempt(uint32_t bytes, uint32_t mode, uint32_t passes) {
     SegmentWitness witness = {0}; witness.root = 48; witness.state_bytes = bytes;
@@ -169,8 +169,8 @@ static void segment_copy_failure(void) {
     size_t baseline = live;
     for (unsigned large = 0; large < 2; ++large) {
         XrXirCallEntry entries[] = {
-            {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 16, segment_copy_resume, segment_copy_cleanup, NULL},
-            {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_UNIT, large ? 8193u : 16u, segment_copy_resume, segment_copy_cleanup, NULL}
+            {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 16, segment_copy_resume, segment_copy_cleanup, NULL, 0, 0},
+            {XR_XIR_CALL_ABI_VERSION, types, 2, XR_XIR_UNIT, large ? 8193u : 16u, segment_copy_resume, segment_copy_cleanup, NULL, 0, 0}
         };
         XrXirCallAccounting accounting = {0};
         XrXirCallConfig config = {entries, 2, &witness, 65536, 10, 4, &accounting, {0}, {0}};

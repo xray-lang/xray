@@ -592,7 +592,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     return action;
 }
 
-static void vm_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
+static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
     (void) reason;
     const XrXirVmBinding *binding = view->environment;
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(binding->artifact, binding->function);
@@ -612,7 +612,7 @@ static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t functio
     if (bytes > UINT32_MAX) return XR_XIR_BUDGET;
     *binding = (XrXirVmBinding) {artifact, function};
     *entry = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, body->parameters, body->parameter_count,
-        body->result, (uint32_t) bytes, vm_resume, vm_cleanup, binding};
+        body->result, (uint32_t) bytes, vm_resume, vm_release, binding, 0, 0};
     return XR_XIR_OK;
 }
 

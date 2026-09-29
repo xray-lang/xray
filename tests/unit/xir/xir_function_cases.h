@@ -64,7 +64,7 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     for (unsigned i = 0; i < 5; ++i) entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION,
         i == 4 ? &callback_type : i == 3 ? &capture_type : NULL, i >= 3 ? 1u : 0u,
         i == 0 ? XR_XIR_UNIT : i == 1 ? XR_XIR_I64 : i == 2 ? callback_type : XR_XIR_STRING,
-        sizeof(FunctionCaseFrame), function_case_resume, function_case_cleanup, NULL};
+        sizeof(FunctionCaseFrame), function_case_resume, function_case_cleanup, NULL, 0, 0};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         entries, 5, &declarations, {releases, function_case_release}, &types, {0}};
     XrXirArtifact *proof = NULL;
