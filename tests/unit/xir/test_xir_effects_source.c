@@ -11,12 +11,15 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_vm.h"
+#include "xir/xxir_emit_c.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_effect_witness_cases.h"
+#include "xir_source_promise_cases.h"
 static void source_generic_effects(const XrXirModule *module, const XrXirEffects *effects) {
     bool open=false; uint32_t found=0;
     for (uint32_t f=0;f<module->function_count;++f)
@@ -155,26 +158,78 @@ static void source_effects(const XrXirArtifact *artifact) {
     effect_witness_paths(module,effects);
     xr_xir_effects_free(effects);
 }
-int main(void) {
+static void source_declared_input(XrXirSourceRequest *request, XrXirSourceResult *baseline) {
+    const XrXirModule *module = xr_xir_artifact_module(baseline->checked);
+    const XrXirSourceModule *root = &module->declarations->modules[module->declarations->root_module];
+    XrXirLiteral name = {root->name, root->name_length};
+    XrXirSourcePromise records[] = {{name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0},
+        {name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0}};
+    XrXirSourcePromises declarations = {records, 1};
+    request->declarations = &declarations;
+    const char *targets[] = {"pure", "fail", "relay", "sleeper", "dynamic", "$entry", "absent"};
+    for (uint32_t i = 0; i < 7; ++i) {
+        records[0].function = (XrXirLiteral){targets[i], (uint32_t)strlen(targets[i])};
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_source_check(request, &result, &diagnostic);
+        CHECK(status == (i < 2 ? XR_XIR_OK : i < 5 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE));
+        CHECK((result.checked != NULL) == (i < 2));
+        if (i >= 2 && i < 5) CHECK(strstr(diagnostic.message, "declared no_suspend"));
+        xr_xir_source_result_free(&result);
+    }
+    records[0].function = (XrXirLiteral){"pure", 4};
+    for (uint32_t i = 0; i < 6; ++i) {
+        declarations.count = i == 0 ? 2 : 1;
+        declarations.items = i == 1 ? NULL : records;
+        records[0].module = i == 2 ? (XrXirLiteral){"missing-module", 14} :
+            i == 3 ? (XrXirLiteral){NULL, 0} : name;
+        records[0].promises = i == 4 ? 0 : i == 5 ? 2 : XR_XIR_FUNCTION_NO_SUSPEND;
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        CHECK(xr_xir_source_check(request, &result, &diagnostic) == XR_XIR_BAD_STRUCTURE);
+        CHECK(!result.checked); xr_xir_source_result_free(&result);
+    }
+    records[0] = (XrXirSourcePromise){name, {"pure", 4}, XR_XIR_FUNCTION_NO_SUSPEND, 0};
+    XrXirSourceResult promised = {0};
+    CHECK(xr_xir_source_check(request, &promised, NULL) == XR_XIR_OK);
+    xr_xir_source_result_free(baseline); *baseline = promised;
+    memset(records, 0xCC, sizeof(records)); request->declarations = NULL;
+}
+static void source_promise_retained(const XrXirArtifact *artifact) {
+    const XrXirModule *module = xr_xir_artifact_module(artifact);
+    uint32_t count = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        uint32_t promise = module->declarations->functions[f].promises;
+        if (!promise) continue;
+        CHECK(promise == XR_XIR_FUNCTION_NO_SUSPEND);
+        CHECK(module->functions[f].name_length == 4 && !memcmp(module->functions[f].name, "pure", 4));
+        ++count;
+    }
+    CHECK(count == 1);
+}
+int main(int argc, char **argv) {
+    CHECK(argc == 1 || argc == 2);
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_EFFECT_FIXTURES};
-    XrXirSourceRequest request = {session, XR_EFFECT_FIXTURES "/root.xr", &authority, NULL, NULL};
+    XrXirSourceRequest request = {session, XR_EFFECT_FIXTURES "/root.xr", &authority, NULL, NULL, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_source_check(&request, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "%u at %d:%d: %s\n", status,
         diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK); source_effects(result.checked);
+    source_callable_promise_cases(&request, result.checked, argc == 2 ? argv[1] : NULL);
+    source_declared_input(&request, &result); source_promise_retained(result.checked);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_checked_write(result.checked, NULL, &packet, NULL) == XR_XIR_OK);
     xr_xir_source_result_free(&result); xr_compiler_session_delete(session);
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &checked, NULL) == XR_XIR_OK);
     memset(packet.bytes, 0xCC, packet.length); xr_xir_checked_packet_free(&packet); source_effects(checked);
+    source_promise_retained(checked);
     CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
     xr_xir_artifact_free(checked); source_effects(closed);
+    source_promise_retained(closed);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
-    xr_xir_artifact_free(closed); source_effects(lowered); xr_xir_artifact_free(lowered);
+    xr_xir_artifact_free(closed); source_effects(lowered); source_promise_retained(lowered); xr_xir_artifact_free(lowered);
     puts("Source control effects survived packets, specialization and lowering");
     return 0;
 }

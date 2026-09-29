@@ -15,7 +15,7 @@
 #include "xxir.h"
 #include "xxir_call.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 21u
+#define XR_XIR_PROGRAM_ABI_VERSION 22u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirProgramBudget {
     uint64_t metadata_bytes, work;
@@ -68,6 +68,8 @@ XR_FUNC XrXirStatus xr_xir_program_seal(const XrXirProgramSpec *spec, XrXirProgr
                                       XrXirProgram **output);
 XR_FUNC void xr_xir_program_drop(XrXirProgram *program);
 XR_FUNC XrXirInstanceConfig xr_xir_instance_defaults(void);
+XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
+    XrXirType type, const XrXirValue *input, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceConfig *config,
                                           XrXirInstance **output);
 XR_FUNC XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance);

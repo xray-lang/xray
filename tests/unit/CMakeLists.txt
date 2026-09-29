@@ -85,7 +85,7 @@ add_xray_python_unit_test(xr_program_h2_backend_differential_self_test
 # ============================================================================
 
 add_executable(test_xir_effects_source xir/test_xir_effects_source.c)
-target_link_libraries(test_xir_effects_source PRIVATE xray_xir_source xray_core)
+target_link_libraries(test_xir_effects_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen xray_core)
 target_compile_definitions(test_xir_effects_source PRIVATE XR_EFFECT_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source")
 if(MSVC)
     target_compile_options(test_xir_effects_source PRIVATE /W4 /WX)
@@ -94,6 +94,16 @@ else()
 endif()
 add_test(NAME test_xir_effects_source COMMAND test_xir_effects_source)
 set_tests_properties(test_xir_effects_source PROPERTIES LABELS "unit;xir;metadata;ownership")
+set(XIR_EFFECT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_effect_fixture.c)
+add_custom_command(OUTPUT ${XIR_EFFECT_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_effects_source> ${XIR_EFFECT_GENERATED}
+    DEPENDS test_xir_effects_source ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source/root.xr
+    VERBATIM)
+add_executable(test_xir_effects_native xir/test_xir_effects_native.c ${XIR_EFFECT_GENERATED})
+target_link_libraries(test_xir_effects_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_effects_mixed xir/test_xir_effects_mixed.c ${XIR_EFFECT_GENERATED})
+target_link_libraries(test_xir_effects_mixed PRIVATE xray_xir_vm)
 add_executable(test_xir_effects xir/test_xir_effects.c)
 target_link_libraries(test_xir_effects PRIVATE xray_xir)
 if(MSVC)
@@ -345,7 +355,7 @@ foreach(xir_test IN ITEMS test_xir_cleanup_native test_xir_cleanup_mixed test_xi
     test_xir_source_admission test_xir_source_allocations test_xir_source_mixed test_xir_packet_vm test_xir_source_generics test_xir_source_query
     test_xir_source_arrays test_xir_array_packet_vm test_xir_source_array_native test_xir_source_array_mixed
     test_xir_source_floats test_xir_float_packet_vm test_xir_source_float_native test_xir_source_float_mixed
-    test_xir_panic_source test_xir_panic_native test_xir_panic_mixed)
+    test_xir_panic_source test_xir_panic_native test_xir_panic_mixed test_xir_effects_native test_xir_effects_mixed)
     if(MSVC)
         target_compile_options(${xir_test} PRIVATE /W4 /WX)
     else()

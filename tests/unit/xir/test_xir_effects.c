@@ -373,7 +373,129 @@ static void effect_witness_competition(void) {
     CHECK(effect_failures(artifact) > 0);
     xr_xir_artifact_free(artifact);
 }
+static void effect_declared_promises(void) {
+    for (unsigned suspends = 0; suspends < 2; ++suspends) {
+        XrXirArtifact *base = effect_fixture(suspends != 0);
+        XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+        XrXirDeclarations declarations = *built.declarations;
+        XrXirFunctionIdentity ids[8]; memcpy(ids, declarations.functions, sizeof(ids));
+        declarations.functions = ids; built.declarations = &declarations;
+        for (uint32_t f = 0; f < 8; ++f) {
+            ids[f].promises = XR_XIR_FUNCTION_NO_SUSPEND;
+            XrXirArtifact *checked = NULL;
+            XrXirDiagnostic diagnostic = {0};
+            XrXirStatus status = xr_xir_check(&built, NULL, &checked, &diagnostic);
+            bool invalid = (f < 2 && suspends) || (f >= 2 && f <= 4);
+            if (invalid) {
+                CHECK(status == XR_XIR_BAD_TYPE && !checked);
+                CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND && diagnostic.function == f);
+                CHECK(diagnostic.block == 0 && diagnostic.instruction == (f == 1 ? 1u : 0u));
+            } else {
+                CHECK(status == XR_XIR_OK && checked);
+                CHECK(effect_failures(checked) > 0);
+                XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *lowered = NULL;
+                CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+                xr_xir_artifact_free(checked);
+                CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+                xr_xir_checked_packet_free(&packet);
+                CHECK(decoded->module.declarations->functions[f].promises == XR_XIR_FUNCTION_NO_SUSPEND);
+                XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+                CHECK(xr_xir_lower(decoded, &target, NULL, &lowered, NULL) == XR_XIR_OK);
+                CHECK(lowered->module.declarations->functions[f].promises == XR_XIR_FUNCTION_NO_SUSPEND);
+                xr_xir_artifact_free(decoded); xr_xir_artifact_free(lowered);
+            }
+            ids[f].promises = 2;
+            CHECK(xr_xir_verify(&built, NULL, NULL) == XR_XIR_BAD_STRUCTURE);
+            ids[f].promises = 0;
+        }
+        xr_xir_artifact_free(base); CHECK(!live);
+    }
+}
+static void effect_qualified_callable(void) {
+    XrXirArtifact *base = effect_fixture(false), *checked = NULL;
+    XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+    XrXirTypeNode node = built.types->nodes[0]; node.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+    XrXirTypes types = {&node, 1, NULL}; built.types = &types;
+    XrXirFunctionIdentity ids[8]; memcpy(ids, built.declarations->functions, sizeof(ids));
+    ids[0].promises = ids[2].promises = XR_XIR_FUNCTION_NO_SUSPEND;
+    XrXirDeclarations declarations = *built.declarations; declarations.functions = ids; built.declarations = &declarations;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    XrXirEffects *effects = NULL;
+    CHECK(xr_xir_effects_analyze(checked, NULL, &effects) == XR_XIR_OK);
+    effect_expect(effects, 2, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_UNKNOWN);
+    effect_expect(effects, 3, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE);
+    effect_expect(effects, 4, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_UNKNOWN);
+    effect_witness_paths(xr_xir_artifact_module(checked), effects);
+    xr_xir_effects_free(effects); CHECK(!live);
+    CHECK(effect_failures(checked) > 0);
+    xr_xir_artifact_free(checked); checked = NULL;
+    ids[0].promises = 0;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    ids[0].promises = XR_XIR_FUNCTION_NO_SUSPEND; node.flags = 0;
+    XrXirDiagnostic diagnostic = {0};
+    CHECK(xr_xir_check(&built, NULL, &checked, &diagnostic) == XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND && diagnostic.function == 2);
+    node.flags = 2;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    xr_xir_artifact_free(base);
+}
+static void effect_mixed_callable_witness(void) {
+    XrXirArtifact *base = effect_fixture(false), *checked = NULL;
+    XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+    XrXirTypeNode nodes[2] = {built.types->nodes[0], built.types->nodes[0]};
+    nodes[1].flags = XR_XIR_CALLABLE_NO_SUSPEND;
+    XrXirTypes types = {nodes, 2, NULL}; built.types = &types;
+    XrXirFunction functions[8]; memcpy(functions, built.functions, sizeof(functions)); built.functions = functions;
+    XrXirType parameters[] = {(XrXirType)257, (XrXirType)256};
+    XrXirInstruction ops[] = {{XR_XIR_CALL_INDIRECT, XR_XIR_UNIT, {0}, {0}, 0, {0}},
+        {XR_XIR_CALL_INDIRECT, XR_XIR_UNIT, {0}, {0}, 1, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+    XrXirBlock block = {0, 3, 0, 0};
+    functions[2].parameters = parameters; functions[2].parameter_count = 2;
+    functions[2].instructions = ops; functions[2].instruction_count = 3; functions[2].blocks = &block;
+    CHECK(xr_xir_check(&built, NULL, &checked, NULL) == XR_XIR_OK);
+    XrXirEffects *effects = NULL;
+    CHECK(xr_xir_effects_analyze(checked, NULL, &effects) == XR_XIR_OK);
+    effect_expect(effects, 2, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
+    const XrXirEffectWitness *w = xr_xir_effects_suspend_witness(effects, 2);
+    CHECK(w && w->instruction == 1 && w->cause == XR_XIR_EFFECT_CAUSE_INDIRECT);
+    xr_xir_effects_free(effects); CHECK(!live);
+    xr_xir_artifact_free(checked); xr_xir_artifact_free(base);
+}
+static void effect_callable_weakening(void) {
+    XrXirCallableParameter parameters[2] = {{XR_XIR_I64, 0}, {XR_XIR_I64, 0}};
+    XrXirTypeNode nodes[2] = {
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[0], 1, XR_XIR_I64, 0, 0, {0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[1], 1, XR_XIR_I64, XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
+    XrXirTypes types = {nodes, 2, NULL};
+    XrXirType source = (XrXirType)257;
+    XrXirInstruction ops[] = {
+        {XR_XIR_FUNCTION_WEAKEN, (XrXirType)256, {0}, {0}, 0, {0}},
+        {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
+    XrXirBlock block = {0, 2, 0, 0};
+    XrXirFunction function = {"weaken", 6, &source, 1, (XrXirType)256, &block, 1, ops, 2, NULL, 0};
+    XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, &types, NULL};
+    XrXirArtifact *checked = NULL;
+    CHECK(xr_xir_check(&module, NULL, &checked, NULL) == XR_XIR_OK);
+    xr_xir_artifact_free(checked); checked = NULL;
+    uint64_t work = 1;
+    CHECK(xr_xir_callable_weakening(&types, (XrXirType)257, (XrXirType)256, &work) == XR_XIR_BUDGET);
+    work = 2;
+    CHECK(xr_xir_callable_weakening(&types, (XrXirType)257, (XrXirType)256, &work) == XR_XIR_OK && !work);
+    for (unsigned bad = 0; bad < 6; ++bad) {
+        source = bad == 0 ? (XrXirType)256 : (XrXirType)257;
+        nodes[0].flags = bad == 1 || bad == 5 ? XR_XIR_CALLABLE_NO_SUSPEND : 0;
+        nodes[1].flags = bad == 5 ? 0 : XR_XIR_CALLABLE_NO_SUSPEND;
+        nodes[0].result = bad == 2 ? XR_XIR_BOOL : XR_XIR_I64;
+        parameters[0].type = bad == 3 ? XR_XIR_BOOL : XR_XIR_I64;
+        nodes[0].parameter_count = bad == 4 ? 0 : 1;
+        CHECK(xr_xir_check(&module, NULL, &checked, NULL) != XR_XIR_OK && !checked);
+    }
+}
 int main(void) {
+    effect_callable_weakening();
+    effect_qualified_callable(); effect_mixed_callable_witness();
+    effect_declared_promises();
     effect_witness_competition();
     effect_cleanup_ownership();
     effect_term_shapes();

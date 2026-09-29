@@ -426,6 +426,11 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             append(buffer, "        status = xr_xir_instance_cell(view, (XrXirType) %u, &left, &value);\n", (uint32_t) op->type);
         else append(buffer, "        status = xr_xir_instance_cell_read(view, &left, &value);\n");
         break;
+    case XR_XIR_FUNCTION_WEAKEN:
+        append(buffer, "        XrXirValue input = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            (uint32_t)xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
+        append(buffer, "        status = xr_xir_instance_weaken_function(view, (XrXirType)%u, &input, &value);\n", (uint32_t)op->type);
+        break;
     case XR_XIR_FUNCTION_REF:
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             uint32_t id = function->operands[op->args[0] + p];
@@ -723,7 +728,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         emit_array_step(buffer, function, op, layout, destination, index);
         return;
     }
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF ||
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         emit_instance_step(buffer, module, function, op, layout, destination);
         return;
@@ -1079,7 +1084,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     }
     append(buffer, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count; ++f)
-        append(buffer, "    {%uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner);
+        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises);
     append(buffer, "};\n");
     if (d->slot_count) {
         append(buffer, "static const XrXirSlot %s_slots[] = {\n", prefix);

@@ -141,7 +141,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     f->modules[2] = (XrXirSourceModule) {"alpha", 5, NULL, 0, 2};
     uint32_t owners[] = {0, 1, 2, 0, 2, 1, 0, 0, 0, 2};
     for (uint32_t i = 0; i < 10; ++i) {
-        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0};
+        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0};
         f->entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
             sizeof(Frame), initializer, cleanup, &f->env[owners[i]], 0, 0};
     }
@@ -303,7 +303,7 @@ static void failed_initialization(void) {
     }
 }
 static void seal_rejection(void) {
-    for (uint32_t invalid = 0; invalid < 24; ++invalid) {
+    for (uint32_t invalid = 0; invalid < 26; ++invalid) {
         Fixture f; fixture(&f, 0);
         uint32_t cycle = 0;
         uint8_t identity[32];
@@ -351,19 +351,29 @@ static void seal_rejection(void) {
             memcpy(layouts, f.spec.proof.layouts, sizeof(layouts)); ++layouts[0].frame_bytes;
             f.spec.proof.layouts = layouts; break;
         case 23: f.slots[0].mutable ^= 1; break;
+        case 24: f.identities[3].promises = XR_XIR_FUNCTION_NO_SUSPEND; break;
+        case 25:
+            f.spec.abi_version = 21;
+            f.spec.declarations = (const XrXirDeclarations *) (uintptr_t) 1;
+            break;
         }
         XrXirProgram *program = NULL;
         XrXirStatus status = xr_xir_program_seal(&f.spec, (XrXirProgramBudget) {invalid == 9 ? 1 : 2097152, 16000000}, &program);
         xr_xir_artifact_free(f.proof); f.proof = NULL;
         CHECK(status != XR_XIR_OK);
         if (invalid >= 15 && invalid <= 18) CHECK(status == XR_XIR_BAD_LAYOUT);
-        if (invalid >= 19) CHECK(status == XR_XIR_BAD_STRUCTURE);
+        if (invalid >= 19 && invalid < 25) CHECK(status == XR_XIR_BAD_STRUCTURE);
+        if (invalid == 25) CHECK(status == XR_XIR_BAD_LAYOUT);
         CHECK(!program && !f.witness.releases);
     }
 }
 #include "xir_function_cases.h"
+#include "xir_effect_binding_cases.h"
+#include "xir_weaken_authority_cases.h"
 #include "xir_array_instance_cases.h"
 int main(void) {
+    effect_binding_cases();
+    weaken_authority_cases();
     array_instance_cases();
     CHECK(function_case_run(false) && function_case_run(true));
     isolation(); borrowed_restart(); failed_initialization(); seal_rejection();

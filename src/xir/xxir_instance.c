@@ -80,6 +80,9 @@ static XrXirValueStatus admit_function_binding(void *context, const XrXirFunctio
         binding->entry >= instance->program->entry_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypeNode *signature = xr_xir_callable_signature(instance->program->types, type);
     const XrXirCallEntry *entry = &instance->program->entries[binding->entry];
+    if (signature && (signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
+        !(instance->program->declarations->functions[binding->entry].promises & XR_XIR_FUNCTION_NO_SUSPEND))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!signature || entry->cleanup_owner || binding->capture_count > entry->parameter_count ||
         signature->parameter_count != entry->parameter_count - binding->capture_count ||
         signature->result != entry->result || (binding->capture_count && !binding->captures))
@@ -545,6 +548,23 @@ XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXi
     XrXirInstance *instance = view_instance(view);
     return instance ? resolve_function(instance, function, entry, xr_xir_call_admission(view)) : XR_XIR_CALL_BAD_STATE;
 }
+XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
+    XrXirType type, const XrXirValue *input, XrXirValue *output) {
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !input) return XR_XIR_CALL_BAD_STATE;
+    XrXirValueAdmission *admission = xr_xir_call_admission(view);
+    XrXirCallStatus status = admit_instance_value(admission, input, (XrXirType)input->type);
+    if (status != XR_XIR_CALL_READY) return status;
+    XrXirStatus match = xr_xir_callable_weakening(instance->program->types,
+        (XrXirType)input->type, type, &admission->work);
+    if (match != XR_XIR_OK) return match == XR_XIR_BUDGET ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
+    if (!binding || !function_gate_retain(instance->function_gate)) return XR_XIR_CALL_LIMIT;
+    status = value_call_status(xr_xir_function_new(instance->domain, instance->program->arena,
+        type, binding, admission, output));
+    if (status != XR_XIR_CALL_READY) function_gate_drop(instance->function_gate);
+    return status;
+}
 static XrXirCallStatus prepare_function_gate(XrXirInstance *instance) {
     if (instance->function_gate) return XR_XIR_CALL_READY;
     if (sizeof(FunctionGate) > instance->config.metadata_limit - instance->metadata_bytes)
@@ -567,6 +587,8 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view, XrXirType type, ui
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t caller = xr_xir_call_current_entry(view->activation);
     uint32_t from = d->functions[caller].module, to = d->functions[entry].module;
+    if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
+        !(d->functions[entry].promises & XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (target->cleanup_owner || entry == d->modules[to].initializer || !xr_xir_module_imports(d, from, to) ||
         (from != to && !d->functions[entry].exported) || count > target->parameter_count || target->parameter_count - count != signature->parameter_count ||
         target->result != signature->result) return XR_XIR_CALL_BAD_ARGUMENT;

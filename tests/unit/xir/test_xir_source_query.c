@@ -744,7 +744,7 @@ int main(void) {
     write_source(library, "export fn visible(value:i64)->i64 { return value }\nfn hidden(value:i64)->i64 { return value }\n");
     XrCompilerSession *session = xr_compiler_session_new(NULL); CHECK(session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, NULL, NULL};
+    XrXirSourceRequest request = {session, root, &authority, NULL, NULL, NULL};
     source_struct_facts(&request);
     source_enum_facts(&request);
     nested_pattern_facts(&request);

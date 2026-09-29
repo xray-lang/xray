@@ -155,6 +155,9 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             if (!module->declarations || !signature || op->args[1] > callee->parameter_count ||
                 signature->parameter_count != callee->parameter_count - op->args[1])
                 return XR_XIR_BAD_TYPE;
+            if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
+                !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
+                return XR_XIR_BAD_TYPE;
             result = signature->result;
         }
         generic_status = xr_xir_call_type_matches(module, caller_id, op, callee->result, result, remaining);
@@ -698,6 +701,12 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             continue;
         }
         XrXirType expected = op->type;
+        if (op->op == XR_XIR_FUNCTION_WEAKEN) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            XrXirStatus status = xr_xir_callable_weakening(context->module->types,
+                expected, op->type, &context->remaining.work);
+            if (status != XR_XIR_OK) return status;
+        }
         if (op->op == XR_XIR_RETURN)
             expected = function->result;
         else if (op->op == XR_XIR_BRANCH)
@@ -864,7 +873,7 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirBudget *rem
     return xr_xir_provenance_functions_match(&p->source->module, module, p->origins, remaining, diagnostic);
 }
 
-#include "xxir_cleanup_verify.inc.c"
+#include "xxir_effect_obligations.inc.c"
 
 XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *remaining,
                                   XrXirDiagnostic *diagnostic) {
@@ -927,7 +936,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
     }
     if (status == XR_XIR_OK && module->provenance)
         status = verify_provenance(module, &context.remaining, &context.location);
-    if (status == XR_XIR_OK) status = cleanup_effects_verify(module, &context.remaining, &context.location);
+    if (status == XR_XIR_OK) status = declaration_effects_verify(module, &context.remaining, &context.location);
     context.location.status = status;
     *remaining = context.remaining;
     if (diagnostic)

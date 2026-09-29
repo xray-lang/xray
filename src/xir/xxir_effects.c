@@ -51,15 +51,22 @@ const XrXirEffectWitness *xr_xir_effects_suspend_witness(const XrXirEffects *eff
         &effects->witnesses[function] : NULL;
 }
 /* An unclassified opcode must not acquire an accidental no-effect proof. */
-static bool effect_seed(XrXirOp op, XrXirFunctionEffects *effect) {
+static bool effect_seed(const XrXirModule *module, const XrXirFunction *function,
+    const XrXirInstruction *instruction, XrXirFunctionEffects *effect) {
+    XrXirOp op = instruction->op;
     switch (op) {
     case XR_XIR_SUSPEND: effect->suspend = XR_XIR_EFFECT_MAY; return true;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return true;
     case XR_XIR_CALL_INDIRECT:
-    case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_INVOKE_INDIRECT: {
+        XrXirType type = xr_xir_operand_type(function, (uint32_t)instruction->immediate);
+        const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, type);
+        if (!signature) return false;
+        if (signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) return true;
         if (effect->suspend < XR_XIR_EFFECT_UNKNOWN) effect->suspend = XR_XIR_EFFECT_UNKNOWN;
         return true;
+    }
     case XR_XIR_CALL: case XR_XIR_INVOKE:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE:
@@ -76,6 +83,7 @@ static bool effect_seed(XrXirOp op, XrXirFunctionEffects *effect) {
     case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
     case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
     case XR_XIR_SHL_INT: case XR_XIR_SHR_INT: case XR_XIR_PHI:
+    case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ:
     case XR_XIR_CELL_WRITE: case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
@@ -105,7 +113,8 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
         if (!effect_spend(&remaining->work, function->instruction_count)) return XR_XIR_BUDGET;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             XrXirOp op = function->instructions[i].op;
-            if (!effect_seed(op, &effects->functions[f])) return XR_XIR_BAD_STRUCTURE;
+            if (!effect_seed(module, function, &function->instructions[i], &effects->functions[f]))
+                return XR_XIR_BAD_STRUCTURE;
             if (op == XR_XIR_CALL || op == XR_XIR_INVOKE) {
                 if (edges == UINT32_MAX) return XR_XIR_BUDGET;
                 ++edges;
@@ -175,10 +184,12 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
         if (fact == XR_XIR_EFFECT_NONE) continue;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             XrXirOp op = function->instructions[i].op;
+            XrXirFunctionEffects local = {0};
+            if (!effect_seed(module, function, &function->instructions[i], &local)) return XR_XIR_BAD_STRUCTURE;
             XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
             if (fact == XR_XIR_EFFECT_MAY && op == XR_XIR_SUSPEND) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
-            else if (fact == XR_XIR_EFFECT_UNKNOWN &&
-                (op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT)) cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
+            else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)
+                cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             if (!cause) continue;
             effects->witnesses[f] = (XrXirEffectWitness){cause, i, UINT32_MAX, 0};
             graph->queue[back++] = f; break;

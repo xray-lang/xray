@@ -116,7 +116,8 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
         d->root_module >= d->module_count || d->entry_function >= functions ||
         (d->slot_count && !d->slots) || (d->literal_count && !d->literals)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < functions; ++i)
-        if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1) return XR_XIR_BAD_STRUCTURE;
+        if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
+            (d->functions[i].promises & ~XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_BAD_STRUCTURE;
     if (d->functions[d->entry_function].module != d->root_module ||
         d->functions[d->entry_function].nominal_owner) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions, bytes, work);

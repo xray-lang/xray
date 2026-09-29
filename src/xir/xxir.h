@@ -123,6 +123,8 @@ typedef struct XrXirGeneric {
 } XrXirGeneric;
 
 typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
+
+#define XR_XIR_CALLABLE_NO_SUSPEND 1u
 typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CALLABLE = 1,
     XR_XIR_TYPE_ARRAY = 2,
@@ -178,7 +180,8 @@ typedef struct XrXirBudget {
 
 typedef enum XrXirDiagnosticReason {
     XR_XIR_DIAGNOSTIC_NONE, XR_XIR_DIAGNOSTIC_CLEANUP_THROW, XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND,
-    XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ, XR_XIR_DIAGNOSTIC_READONLY_WRITE
+    XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ, XR_XIR_DIAGNOSTIC_READONLY_WRITE,
+    XR_XIR_DIAGNOSTIC_NO_SUSPEND
 } XrXirDiagnosticReason;
 
 typedef struct XrXirDiagnostic {

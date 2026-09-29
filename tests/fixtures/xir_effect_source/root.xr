@@ -8,6 +8,8 @@ export fn forward()->i64 { return fail() }
 export fn handled()->i64 { try { return fail() } catch(e) { return 11 } }
 export fn rethrow()->i64 { try { return fail() } catch(e) { throw e } }
 export fn dynamic(f:fn()->i64)->i64 { return f() }
+export fn promisedUse()->i64 { return weaken(pure) }
+fn weaken(f:fn()->i64)->i64 { const first=dynamic(f); return dynamicHandled(f) }
 export fn dynamicHandled(f:fn()->i64)->i64 { try { return f() } catch(e) { return 11 } }
 export fn panicOnly()->i64 { try { return 1/0 } catch panic { return 13 } }
 export fn typedHandled()->i64 { try { return fail() } catch(e:Fault) { return 17 } }

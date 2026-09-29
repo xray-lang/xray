@@ -98,7 +98,8 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             const XrXirFunctionIdentity *identity = &c->source->declarations->functions[origin->function];
             const XrXirFunctionIdentity *actual = &c->destination->declarations->functions[f];
             if (identity->module != actual->module || identity->exported != actual->exported ||
-                identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access) return XR_XIR_BAD_STRUCTURE;
+                identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access ||
+                identity->promises != actual->promises) return XR_XIR_BAD_STRUCTURE;
             if (!!identity->cleanup_owner != !!actual->cleanup_owner) return XR_XIR_BAD_STRUCTURE;
             if (identity->cleanup_owner) {
                 if (actual->cleanup_owner > f) return XR_XIR_BAD_STRUCTURE;

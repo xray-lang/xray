@@ -12,6 +12,20 @@
 #include "xxir_types.h"
 #include "../base/xmalloc.h"
 
+XrXirStatus xr_xir_callable_weakening(const XrXirTypes *types,
+    XrXirType source, XrXirType target, uint64_t *work) {
+    const XrXirTypeNode *from = xr_xir_callable_signature(types, source);
+    const XrXirTypeNode *to = xr_xir_callable_signature(types, target);
+    if (!from || !to || !work || from->flags != XR_XIR_CALLABLE_NO_SUSPEND || to->flags ||
+        from->parameter_count != to->parameter_count || from->result != to->result) return XR_XIR_BAD_TYPE;
+    uint64_t cost = (uint64_t)from->parameter_count + 1;
+    if (cost > *work) return XR_XIR_BUDGET;
+    *work -= cost;
+    for (uint32_t p = 0; p < from->parameter_count; ++p)
+        if (from->parameters[p].type != to->parameters[p].type ||
+            from->parameters[p].mode != to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+    return XR_XIR_OK;
+}
 static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrXirBudget *budget);
 static XrXirStatus nominal_copy_identities(const XrXirNominalTable *table, XrXirNominalTable **output);
 static bool nominal_identity_copy_work(const XrXirNominalTable *table, XrXirBudget *budget);
@@ -139,7 +153,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirBu
         (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
          node->nominal.fields || node->nominal.field_count)) return XR_XIR_BAD_STRUCTURE;
     if (node->kind == XR_XIR_TYPE_CALLABLE) {
-        if (node->element != XR_XIR_UNIT || node->flags ||
+        if (node->element != XR_XIR_UNIT || (node->flags & ~XR_XIR_CALLABLE_NO_SUSPEND) ||
             (node->result != XR_XIR_UNIT && !callable_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
         if (node->parameter_count > 65536 || node->parameter_count > remaining->parameters) return XR_XIR_BUDGET;
         uint64_t bytes = (uint64_t) node->parameter_count * sizeof(*node->parameters);

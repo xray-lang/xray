@@ -14,12 +14,24 @@
 #include "xxir_source_query.h"
 #include "../module/xmodule_identity.h"
 struct XrCompilerSession;
+typedef struct XrXirSourcePromise {
+    XrXirLiteral module;
+    XrXirLiteral function;
+    uint32_t promises;
+    /* Zero selects the function; otherwise one plus the callable parameter index. */
+    uint32_t parameter;
+} XrXirSourcePromise;
+typedef struct XrXirSourcePromises {
+    const XrXirSourcePromise *items;
+    uint32_t count;
+} XrXirSourcePromises;
 typedef struct XrXirSourceRequest {
     struct XrCompilerSession *session;
     const char *entry_path;
     const XrModuleIdentityAuthority *authority;
     const XrXirBudget *budget;
     const char *stdlib_path;
+    const XrXirSourcePromises *declarations;
 } XrXirSourceRequest;
 XR_FUNC XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic);

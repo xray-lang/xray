@@ -33,7 +33,10 @@ typedef struct XrXirFunctionIdentity {
     uint32_t module, exported, nominal_owner, member_access;
     /* Zero for ordinary functions; otherwise one plus the lexical owner index. */
     uint32_t cleanup_owner;
+    uint32_t promises;
 } XrXirFunctionIdentity;
+
+#define XR_XIR_FUNCTION_NO_SUSPEND 1u
 typedef struct XrXirSlot {
     uint32_t module;
     XrXirType type;

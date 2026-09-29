@@ -475,6 +475,11 @@ static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool expression_in(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value);
 static bool source_expect(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     if (!expected || value->type == expected) return true;
+    if (xr_xir_type_is_callable(&ctx->types, expected) && xr_xir_type_is_callable(&ctx->types, value->type)) {
+        XrXirStatus status = xr_xir_callable_weakening(&ctx->types, value->type, expected, &ctx->budget.work);
+        if (status != XR_XIR_OK) return source_fail(ctx, node, status, "callable conversion may only discard its top-level promise");
+        return emit(ctx, (XrXirInstruction){XR_XIR_FUNCTION_WEAKEN, expected, {value->id, 0}, {0}, 0, {0}}, value);
+    }
     if (expected == XR_XIR_ERROR) {
         const XrXirGeneric *generic = &ctx->generics[ctx->function];
         XrXirStatus status = xr_xir_type_markers(&ctx->types, value->type, XR_XIR_CONSTRAINT_ERROR,
@@ -1036,7 +1041,7 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, XrXirType expe
     return emit_group(ctx, (XrXirInstruction) {XR_XIR_PHI, yes.type, {0}, {0}, 0, {0}}, inputs, 4, value);
 }
 #include "xxir_source_match.inc.c"
-static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName *binding, SourceName *symbol, SourceValue *value) {
+static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName *binding, SourceName *symbol, XrXirType expected, SourceValue *value) {
     if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     if (!symbol || symbol->kind != SOURCE_FUNCTION)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a declared function");
@@ -1057,9 +1062,17 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     XrXirType result;
     if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||
         !source_signature(ctx,parameters,count,result,&op.type)) return false;
+    const XrXirTypeNode *context = xr_xir_callable_signature(&ctx->types, expected);
+    if (context && context->flags == XR_XIR_CALLABLE_NO_SUSPEND) {
+        if (!(ctx->identities[symbol->index].promises & XR_XIR_FUNCTION_NO_SUSPEND))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "qualified reference requires an explicit target promise");
+        XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, op.type);
+        signature.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+        if (!source_intern_type(ctx, signature, &op.type)) return false;
+    }
     return source_type_arguments(ctx, node, arguments.substitution.types, arguments.count, &op) && emit(ctx,op,value);
 }
-static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_explicit_reference(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {
     AstNode *callee = node->as.function_ref.callee;
     SourceName *symbol = NULL, *binding = NULL;
     if (callee && callee->type == AST_VARIABLE) binding = symbol = visible_name(ctx,callee->as.variable.name);
@@ -1072,7 +1085,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceV
             return source_member_value(ctx, callee, &arguments, value);
         }
     }
-    return source_function_value(ctx,node,binding,symbol,value);
+    return source_function_value(ctx,node,binding,symbol,expected,value);
 }
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
@@ -1090,7 +1103,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
     case AST_MATCH_EXPR: return source_match(ctx, node, expected, true, value);
     case AST_GROUPING: return expression_in(ctx, node->as.grouping, expected, value);
     case AST_CALL_EXPR: return source_call(ctx, node, value);
-    case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, value);
+    case AST_FUNCTION_REF: return source_explicit_reference(ctx, node, expected, value);
     case AST_FUNCTION_EXPR: return source_closure(ctx, node, value);
     case AST_STRUCT_LITERAL: return source_struct_literal(ctx, node, value);
     case AST_ENUM_CONSTRUCT: return source_enum_literal(ctx, node, value);
@@ -1101,12 +1114,12 @@ static bool expression_body(SourceContext *ctx, AstNode *node, XrXirType expecte
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
         SourceTypeArguments arguments = {0};
         if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, &arguments, value);
-        return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), value);
+        return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), expected, value);
     }
     case AST_THIS_EXPR: case AST_VARIABLE: {
         SourceName *symbol = visible_name(ctx, node->type == AST_THIS_EXPR ? "this" : node->as.variable.name);
         if (symbol && (symbol->kind == SOURCE_FUNCTION || symbol->kind == SOURCE_IMPORT))
-            return source_function_value(ctx, node, symbol, symbol, value);
+            return source_function_value(ctx, node, symbol, symbol, expected, value);
         if (!symbol || (symbol->kind != SOURCE_SLOT && symbol->kind != SOURCE_LOCAL) || !symbol->type)
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ)) return false;
@@ -1448,7 +1461,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
         }
     }
-    ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported, 0, 0, 0};
+    ctx->identities[index] = (XrXirFunctionIdentity) {ctx->module, node->is_exported, 0, 0, 0, 0};
     return source_query_parameters(ctx, symbol->declaration);
 }
 static bool source_same_text(const char *first, const char *second) {
@@ -1613,6 +1626,58 @@ static bool collect_declarations(SourceContext *ctx) {
         ctx->module = m;
         for (SourceName *p = ctx->names[m]; p; p = p->next)
             if (p->kind == SOURCE_IMPORT && !imported_declaration(ctx, p, p->imported)) return false;
+    }
+    return true;
+}
+static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
+    SourceFunction *body = &ctx->bodies[function];
+    AstNode *node = body->node;
+    if (parameter >= ctx->functions[function].parameter_count ||
+        node->as.function_decl.params[parameter]->default_value)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "callable promise requires a non-defaulted parameter");
+    const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types, body->parameters[parameter]);
+    if (!found || found->flags)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "callable promise target is invalid or duplicated");
+    XrXirTypeNode qualified = *found;
+    qualified.flags = XR_XIR_CALLABLE_NO_SUSPEND;
+    if (!source_intern_type(ctx, qualified, &body->parameters[parameter])) return false;
+    ctx->function = function; ctx->module = body->module;
+    return source_query_parameters(ctx, body->declaration);
+}
+static bool source_promises(SourceContext *ctx, const XrXirSourcePromises *declarations) {
+    if (!declarations) return true;
+    if (declarations->count && !declarations->items)
+        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source declaration table is missing");
+    for (uint32_t d = 0; d < declarations->count; ++d) {
+        const XrXirSourcePromise *item = &declarations->items[d];
+        if (!source_work(ctx, NULL)) return false;
+        if (!item->module.bytes || !item->module.length || !item->function.bytes ||
+            !item->function.length || item->promises != XR_XIR_FUNCTION_NO_SUSPEND)
+            return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "unsupported source declaration promise");
+        uint32_t selected = UINT32_MAX;
+        for (uint32_t f = 0; f < ctx->function_count; ++f) {
+            if (!source_work(ctx, NULL)) return false;
+            AstNode *node = ctx->bodies[f].node;
+            if (!node || node->type != AST_FUNCTION_DECL) continue;
+            const XrXirFunction *function = &ctx->functions[f];
+            uint32_t module = ctx->identities[f].module;
+            if (ctx->modules[module].name_length != item->module.length ||
+                memcmp(ctx->modules[module].name, item->module.bytes, item->module.length) ||
+                item->function.length != function->name_length ||
+                memcmp(function->name, item->function.bytes, function->name_length)) continue;
+            if (selected != UINT32_MAX)
+                return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "ambiguous source declaration promise");
+            selected = f;
+        }
+        if (selected == UINT32_MAX)
+            return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source declaration promise target is missing");
+        if (item->parameter) {
+            if (!source_parameter_promise(ctx, selected, item->parameter - 1)) return false;
+            continue;
+        }
+        if (ctx->identities[selected].promises)
+            return source_fail(ctx, ctx->bodies[selected].node, XR_XIR_BAD_STRUCTURE, "duplicate source declaration promise");
+        ctx->identities[selected].promises = item->promises;
     }
     return true;
 }
@@ -1975,7 +2040,8 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
     ctx.query_ready = true;
-    if (source_query_modules(&ctx) && collect_declarations(&ctx) && build_bodies(&ctx)) {
+    if (source_query_modules(&ctx) && collect_declarations(&ctx) &&
+        source_promises(&ctx, request->declarations) && build_bodies(&ctx)) {
         XrXirDeclarations declarations = {ctx.modules, (uint32_t) ctx.graph->spec_count, ctx.identities,
             ctx.slots, ctx.slot_count, ctx.literals, ctx.literal_count, (uint32_t) ctx.graph->entry_index, ctx.function_count - 1};
         XrXirModule built = {XR_XIR_BUILT, ctx.functions, ctx.function_count, &declarations, ctx.has_generics ? ctx.generics : NULL, ctx.types.count || ctx.types.nominals ? &ctx.types : NULL, NULL};
@@ -1997,7 +2063,9 @@ XrXirStatus xr_xir_source_check(const XrXirSourceRequest *request,
                 site = ctx.bodies[location.function].node;
                 ctx.module = ctx.bodies[location.function].module;
             }
-            const char *cause = location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
+            const char *cause = location.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND ?
+                "declared no_suspend function may suspend or call an unqualified callable" :
+                location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
                 "E0387: an error can escape the defer body" :
                 location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND ?
                 "E0392: defer may suspend or create a task" :
