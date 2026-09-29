@@ -197,3 +197,16 @@ export fn event<T:Sendable>(v:T)->Event<T> { return Event<T>.Data { label:"owned
 export fn eventValue<T:Sendable>(v:Event<T>,fallback:T)->T {
     return match(v) { Event.Data { value } -> value, Event.Empty -> fallback }
 }
+
+fn conditionalIdentity<T:Sendable>(value:T)->T { return value }
+export struct ConditionalBox<T> {
+    value:T
+    checked()->T where T:Sendable { return conditionalIdentity<T>(this.value) }
+    captured()->fn()->T where T:Sendable {
+        return fn()->T { return conditionalIdentity<T>(this.value) }
+    }
+    static forward<U>(value:U,transform:fn(U)->U=fn(item:U)->U{return conditionalIdentity<U>(item)})->U where T:Sendable,U:Sendable {
+        return transform(value)
+    }
+    raise()->i64 where T:Error { throw this.value }
+}

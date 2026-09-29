@@ -108,7 +108,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     MethodDeclNode *method = &node->as.method_decl;
     if (ctx->nominal_constructors[owner->index] || *next >= ctx->first_closure || method->is_static ||
         method->is_override || method->is_static_constructor || method->is_getter || method->is_setter ||
-        method->is_variadic || method->is_operator || method->attr_count || method->type_param_count ||
+        method->is_variadic || method->is_operator || method->attr_count || method->type_param_count || method->condition_count ||
         method->borrow_origin_count || method->borrow_origin_syntax || !method->body ||
         method->param_count < 0 || method->param_count > 65536 || (method->is_private && method->is_protected))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor declaration contract is not admitted");

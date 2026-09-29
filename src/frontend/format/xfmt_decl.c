@@ -91,6 +91,17 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
     }
 }
 
+static void xfmt_emit_method_conditions(XrFmtContext *ctx, const MethodDeclNode *method) {
+    for (int i = 0; i < method->condition_count; ++i) {
+        const XrGenericParam *condition = method->conditions[i];
+        xfmt_write_str(ctx, i ? ", " : " where ");
+        xfmt_write_str(ctx, condition->name); xfmt_write_str(ctx, ": ");
+        for (int c = 0; c < condition->constraint_count; ++c) {
+            if (c) xfmt_write_str(ctx, " & ");
+            xfmt_emit_type(ctx, condition->constraints[c]);
+        }
+    }
+}
 static void xfmt_emit_attributes(XrFmtContext *ctx, XrAttribute **attrs, int count) {
     for (int i = 0; i < count; i++) {
         xfmt_write_indent(ctx);
@@ -502,6 +513,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                                      m->borrow_origin_count);
         }
 
+        xfmt_emit_method_conditions(ctx, m);
         if (m->body) {
             xfmt_write_space(ctx);
             xfmt_emit_block(ctx, m->body);
@@ -696,6 +708,7 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_borrow_origins(ctx, m->borrow_origin_syntax, m->borrow_origins,
                                      m->borrow_origin_count);
         }
+        xfmt_emit_method_conditions(ctx, m);
         xfmt_write_char(ctx, ' ');
         xfmt_emit_block(ctx, m->body);
         xfmt_write_newline(ctx);

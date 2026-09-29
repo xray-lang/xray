@@ -85,6 +85,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     if (!source_intern_type(ctx, type, &symbol->type) ||
         !source_query_declare(ctx, symbol, XR_XIR_SOURCE_TYPE, 0, source_query_range(ctx, node, name))) return false;
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_parameter_count = count;
+    ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration - 1].generic_constraints = constraints;
     ctx->nominal_generic_owner = count ? symbol->declaration : 0;
     source_query_binding_type(ctx, symbol); ctx->nominal_generic_owner = 0; return true;
 }

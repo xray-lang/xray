@@ -1127,6 +1127,29 @@ void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_co
 
     } while (xr_parser_match(parser, TK_COMMA));
 }
+XrGenericParam **xr_parse_method_conditions(Parser *parser, int *out_count) {
+    *out_count = 0;
+    if (!xr_parser_match(parser, TK_WHERE)) return NULL;
+    XrGenericParam **conditions = NULL;
+    int count = 0, capacity = 0;
+    do {
+        xr_parser_consume(parser, TK_NAME, "expected type parameter name after 'where'");
+        Token subject = parser->previous;
+        XrGenericParam *condition = ast_alloc(parser->compiler_session, sizeof(*condition));
+        char *name = ast_alloc(parser->compiler_session, (size_t)subject.length + 1);
+        if (!condition || !name) {
+            xr_parser_error(parser, "method condition allocation failed");
+            return NULL;
+        }
+        memcpy(name, subject.start, (size_t)subject.length); name[subject.length] = '\0';
+        condition->name = name;
+        xr_parser_consume(parser, TK_COLON, "expected ':' after method condition subject");
+        condition->constraints = xr_parse_constraint_list(parser, &condition->constraint_count);
+        XR_PARSE_PUSH(parser, conditions, count, capacity, condition);
+    } while (xr_parser_match(parser, TK_COMMA));
+    *out_count = count;
+    return conditions;
+}
 void xr_parse_borrow_origin_set(Parser *parser, XrBorrowOriginSyntaxState *out_syntax,
                                 AstBorrowOriginRef **out_origins, int *out_count) {
     XR_DCHECK(parser != NULL, "parse_borrow_origin_set: NULL parser");

@@ -898,6 +898,8 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_params(s, n->as.method_decl.params, n->as.method_decl.param_count);
             sig_generic_params(s, n->as.method_decl.type_params,
                                n->as.method_decl.type_param_count);
+            sig_add(s, " conditions:");
+            sig_generic_params(s, n->as.method_decl.conditions, n->as.method_decl.condition_count);
             sig_borrow_origins(s, n->as.method_decl.borrow_origin_syntax,
                                n->as.method_decl.borrow_origins,
                                n->as.method_decl.borrow_origin_count);

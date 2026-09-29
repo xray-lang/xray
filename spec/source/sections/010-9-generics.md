@@ -115,7 +115,7 @@ counts.set(Token(7), 99)
 
 #### `where` 子句
 
-约束也可以写在签名之后。`where` 是**同一机制的另一种拼写**，不是第二套规则：它把约束追加到 `<T: C>` 填的那张列表，因此两种写法由同一条路径检查（`E0358`），并且在同一个参数上**取交集**而非互相覆盖。
+约束也可以写在签名之后。`where` 与 `<T: C>` 使用同一约束机制，同一个参数上的要求**取交集**而非互相覆盖。方法的附加要求属于方法声明，不修改外层名义类型的参数合同。
 
 ```ebnf
 WhereClause ::= 'where' WhereItem (',' WhereItem)*
@@ -138,7 +138,9 @@ interface Seq<T> where T: Comparable { ... }
 enum Wrap<T> where T: Comparable { ... }
 ```
 
-`where` 只能约束该声明自身的类型参数；命名其他标识符，或在没有类型参数的声明上使用，都是编译错误。
+普通实例方法或静态方法的 `where` 可以约束方法自身及外层名义类型的类型参数；方法不必另有 `<...>`。其有效条件为外层声明条件、自身内联条件与方法 `where` 条件的合取，只作用于该方法，不改变类型本身的构造、保存或其他方法准入。方法体、默认值及嵌套闭包在此定义上下文检查；直接调用和方法取值都必须由调用方证明条件，不能等具体实例补足缺失的泛型证明。名称仍唯一，条件失败不触发另选重载，也不扩大可见性、receiver 权限或效应承诺。
+
+其他声明的 `where` 只约束该声明自身的类型参数。未知约束主体及类型参数遮蔽是编译错误。同一已准入标记条件重复出现等同单次条件，仍计入检查预算；未知标记不能因重复或特化而获准。当前新 XIR 条件方法准入限定为普通名义值类型的 read/static 方法及 Sendable/Error 标记，条件构造器、accessor、override、接口成员条件与完整见证族仍待分别实现，不代表语言目标被删除。
 
 #### 键等价关系
 
@@ -427,7 +429,7 @@ Providing only one of `==` or `hash()` is a compile error. If the key/element is
 
 #### `where` clauses
 
-Constraints may also be written after the signature. `where` is **another spelling of the same mechanism**, not a second set of rules: it appends to the very list `<T: C>` fills, so both forms are checked by one path (`E0358`) and they **intersect** on a shared parameter rather than overriding each other.
+Constraints may also be written after the signature. `where` and `<T: C>` use the same constraint mechanism; requirements **intersect** on a shared parameter rather than overriding each other. Additional method requirements belong to the method declaration and do not modify the enclosing nominal type's parameter contract.
 
 ```ebnf
 WhereClause ::= 'where' WhereItem (',' WhereItem)*
@@ -450,7 +452,9 @@ interface Seq<T> where T: Comparable { ... }
 enum Wrap<T> where T: Comparable { ... }
 ```
 
-A `where` clause may only constrain type parameters of its own declaration; naming any other identifier, or using `where` on a declaration with no type parameters, is a compile error.
+An ordinary instance or static method's `where` clause may constrain its own type parameters and those of its enclosing nominal type, even when the method introduces no `<...>` parameters. Its effective requirements conjoin the enclosing declaration's requirements, its own inline requirements and its `where` requirements. They apply only to that method, without strengthening type construction, storage or other methods. The body, defaults and nested closures are checked in this definition context. Direct calls and method values require proof in the caller's context; concrete instantiation cannot supply a missing generic proof. Names remain unique: a failed condition does not select another overload or grant visibility, receiver authority or effect promises.
+
+Other declarations' `where` clauses constrain only their own type parameters. Unknown subjects and parameter shadowing are errors. Repeating the same admitted marker is equivalent to one requirement and remains charged to checking budgets; repetition or specialization cannot admit an unknown marker. New XIR conditional-method admission is currently limited to ordinary nominal value types' read/static methods and Sendable/Error markers. Conditional constructors, accessors, overrides, interface member requirements and full witnesses still require separate implementation; they are not removed from the language target.
 
 #### The key relation
 

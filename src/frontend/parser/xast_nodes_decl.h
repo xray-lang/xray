@@ -185,6 +185,8 @@ typedef struct MethodDeclNode {
     OperatorType op_type;
     XrGenericParam **type_params;  // Method-local generic type parameters (with constraints)
     int type_param_count;
+    XrGenericParam **conditions;  // Declaration-owned requirements on enclosing or own parameters
+    int condition_count;
 } MethodDeclNode;
 
 // new expression node

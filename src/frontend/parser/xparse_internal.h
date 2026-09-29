@@ -285,6 +285,7 @@ XR_FUNC XrGenericParam **xr_parse_generic_params(Parser *parser, int *out_count)
  * signature, while the generic scope from xr_parse_generic_params is still
  * installed, so constraint types can name the parameters. */
 XR_FUNC void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_count);
+XR_FUNC XrGenericParam **xr_parse_method_conditions(Parser *parser, int *out_count);
 
 /* ========== Destructuring ========== */
 

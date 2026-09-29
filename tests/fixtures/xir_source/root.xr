@@ -894,3 +894,17 @@ fn patternResumedText(text:string)->string {
     }
     return "bad"
 }
+
+fn conditionalForward<T:Sendable>(box:alpha.ConditionalBox<T>)->T {
+    const read=box.checked
+    return read()
+}
+fn conditionalError()->i64 {
+    try { return alpha.ConditionalBox<PatternFailure>{value:PatternFailure.Coded { code:137,text:"condition" }}.raise() }
+    catch (PatternFailure.Coded { code }) { return code }
+}
+const conditionalBox=alpha.ConditionalBox<string>{value:"conditional"}
+const conditionalRead=conditionalBox.captured()
+const conditionalStatic=alpha.ConditionalBox<i64>.forward<string>
+print(conditionalForward<string>(conditionalBox),conditionalRead(),conditionalStatic("static",fn(item:string)->string{return "explicit"}),
+    alpha.ConditionalBox<i64>.forward<string>("default"),conditionalError())

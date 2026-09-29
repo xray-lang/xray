@@ -10,6 +10,7 @@
 
 #include "xanalyzer.h"
 #include "xanalyzer_visitor.h"
+#include "../parser/xast_walk.h"
 #include "../../base/xchecks.h"
 #include "xanalyzer_infer.h"
 #include "xanalyzer_builtins.h"
@@ -2200,6 +2201,7 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
     }
 }
 
+#include "xanalyzer_conditional_admission.inc.c"
 void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) {
     if (!analyzer || !ast)
         return;
@@ -2210,6 +2212,7 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
         xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
     }
     analyzer->type_ref_batch_root_id = analyzer->graph ? 0u : ast->node_id;
+    if (!xa_conditional_admission(analyzer, file, ast)) return;
 
     xa_enum_record_plan_table_begin_analysis(
         (XaEnumRecordPlanTable *) analyzer->enum_record_plan_table);

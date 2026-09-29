@@ -59,6 +59,8 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
         decls[i].signature = query_string(copy, source->declarations[i].signature);
         decls[i].parameters = query_copy(copy, source->declarations[i].parameters,
             decls[i].parameter_count, sizeof(*decls[i].parameters));
+        decls[i].generic_constraints = query_copy(copy, source->declarations[i].generic_constraints,
+            decls[i].generic_parameter_count, sizeof(*decls[i].generic_constraints));
     }
 }
 static void query_literal(SourceQueryCopy *copy, XrXirLiteral *literal) {

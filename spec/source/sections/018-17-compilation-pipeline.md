@@ -185,8 +185,10 @@ installer 发布或完整无源码标准库分发已经验收。
 普通类型参数准入域为可复制、可保存的值，不包括 unit、视图和 noncopyable 资源。
 最初具体类型为 bool/i64/string/Atomic<i64>；后续数值、函数与Array类型按本章各节准入。函数可以声明 `<T, U:Sendable>`，
 或使用该声明自身参数的 `where U:Sendable`；调用须显式给出全部类型实参。
-参数名不重复，Sendable 是保留标记名；首批每个参数最多一个 Sendable 约束，
-不准入默认类型参数、交叉/成员/条件方法约束或类型推断。
+参数名不重复，Sendable 是保留标记名。已准入标记的合取按集合处理，重复要求幂等。
+条件方法的实施合同允许方法对外层及自身参数增加 Sendable/Error 要求，要求归方法所有，
+不加强名义类型本身；定义处证明和调用处义务沿同一 Checked 路径处理。
+默认类型参数、完整成员/见证约束及类型推断尚未准入；条件方法的执行资格须单独验证。
 
 每个模板体（包括未使用模板）在定义处检查。复制、读传参、保存与返回由普通准入域
 保证；Sendable 不授予成员、算术、显示或默认构造。无约束 T 不能调用要求 Sendable
@@ -619,9 +621,12 @@ and noncopyable resources. The initial concrete domain is bool/i64/string/Atomic
 later numeric, function and Array admission follows this chapter.
 Named functions can declare `<T, U:Sendable>` or an own-parameter `where U:Sendable`;
 calls supply all type arguments explicitly. Parameter names are distinct and
-Sendable is a reserved marker name. Each parameter currently admits at most one
-Sendable constraint; defaults, intersections, member/conditional constraints and
-inference remain unavailable.
+Sendable is a reserved marker name. Conjunctions of admitted markers are sets;
+repeated requirements are idempotent. The conditional-method implementation contract
+allows method-owned Sendable/Error requirements on enclosing and own parameters,
+without strengthening the nominal type itself. Definition proofs and call obligations
+use the same Checked path. Default type parameters, full member/witness constraints
+and inference remain unavailable; conditional-method execution requires separate qualification.
 
 Every body, including unused templates, is checked at its definition. Copying,
 read passing, storage and return follow from the ordinary domain. Sendable adds

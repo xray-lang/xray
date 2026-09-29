@@ -1004,6 +1004,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         return_type = xr_parse_type_annotation(parser);
     }
 
+    int condition_count = 0;
+    XrGenericParam **conditions = xr_parse_method_conditions(parser, &condition_count);
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start method body");
     AstNode *body = xr_parse_block(parser);
 
@@ -1028,6 +1030,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     // Set generic type parameters
     method_node->as.method_decl.type_params = type_params;
     method_node->as.method_decl.type_param_count = type_param_count;
+    method_node->as.method_decl.conditions = conditions;
+    method_node->as.method_decl.condition_count = condition_count;
 
     parser->type_scope = saved_scope;
     xr_type_scope_free(generic_scope);

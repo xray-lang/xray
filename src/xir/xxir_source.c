@@ -172,7 +172,7 @@ static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
     symbol->declaration = ctx->query.declaration_count;
     *record = (XrXirSourceDeclaration) {symbol->declaration, parent, 0, kind, symbol->name, range,
         {0}, NULL, 0, symbol->mutable,
-        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0};
+        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0, NULL};
     return true;
 }
 static void source_query_binding_type(SourceContext *ctx, SourceName *symbol) {
@@ -211,6 +211,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
     record->type = source_query_type(ctx, function->result);
     record->parameters = parameters; record->parameter_count = function->parameter_count;
     record->generic_parameter_count = ctx->generics[ctx->function].parameter_count;
+    record->generic_constraints = ctx->generics[ctx->function].constraints;
     uint32_t owner = ctx->bodies[ctx->function].generic_owner;
     if (owner && owner != declaration) {
         record->generic_parent = owner;
@@ -366,7 +367,7 @@ static bool source_parameter_markers(SourceContext *ctx, AstNode *node,
     const XrGenericParam *parameter, uint32_t *markers) {
     *markers = 0;
     if (!parameter || !parameter->name || !strcmp(parameter->name, "Sendable") ||
-        !strcmp(parameter->name, "Error") || parameter->constraint_count < 0 || parameter->constraint_count > 2)
+        !strcmp(parameter->name, "Error") || parameter->constraint_count < 0 || parameter->constraint_count > 65536)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic parameter contract is not admitted");
     for (int i = 0; i < parameter->constraint_count; ++i) {
         if (!source_work(ctx, node)) return false;
@@ -375,8 +376,8 @@ static bool source_parameter_markers(SourceContext *ctx, AstNode *node,
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic marker must be an unparameterized builtin");
         uint32_t bit = !strcmp(constraint->name, "Sendable") ? XR_XIR_CONSTRAINT_SENDABLE :
             !strcmp(constraint->name, "Error") ? XR_XIR_CONSTRAINT_ERROR : 0;
-        if (!bit || (*markers & bit))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unknown or duplicate generic marker");
+        if (!bit)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unknown generic marker");
         *markers |= bit;
     }
     return true;
@@ -1928,6 +1929,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, XrXirType expected
         query_declaration->generic_parent = body->generic_owner;
         query_declaration->generic_parent_count = body->type_parameter_count;
         query_declaration->generic_parameter_count = body->type_parameter_count;
+        query_declaration->generic_constraints = ctx->generics[index].constraints;
     }
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
     if (!ok) return false;

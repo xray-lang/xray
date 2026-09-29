@@ -53,6 +53,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
         XrXirSourceDeclaration *query = (XrXirSourceDeclaration *)&ctx->query.declarations[body->declaration - 1];
         query->type = source_query_type(ctx, XR_XIR_UNIT); query->generic_parent = body->generic_owner;
         query->generic_parent_count = body->type_parameter_count; query->generic_parameter_count = body->type_parameter_count;
+        query->generic_constraints = ctx->generics[index].constraints;
     }
     ctx->function = outer; ctx->locals = locals; ctx->scope = scope; ctx->loop = loop; ctx->returned = returned;
     if (!ok) return false;

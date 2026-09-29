@@ -5032,7 +5032,7 @@ Providing only one of `==` or `hash()` is a compile error. If the key/element is
 
 #### `where` clauses
 
-Constraints may also be written after the signature. `where` is **another spelling of the same mechanism**, not a second set of rules: it appends to the very list `<T: C>` fills, so both forms are checked by one path (`E0358`) and they **intersect** on a shared parameter rather than overriding each other.
+Constraints may also be written after the signature. `where` and `<T: C>` use the same constraint mechanism; requirements **intersect** on a shared parameter rather than overriding each other. Additional method requirements belong to the method declaration and do not modify the enclosing nominal type's parameter contract.
 
 ```ebnf
 WhereClause ::= 'where' WhereItem (',' WhereItem)*
@@ -5055,7 +5055,9 @@ interface Seq<T> where T: Comparable { ... }
 enum Wrap<T> where T: Comparable { ... }
 ```
 
-A `where` clause may only constrain type parameters of its own declaration; naming any other identifier, or using `where` on a declaration with no type parameters, is a compile error.
+An ordinary instance or static method's `where` clause may constrain its own type parameters and those of its enclosing nominal type, even when the method introduces no `<...>` parameters. Its effective requirements conjoin the enclosing declaration's requirements, its own inline requirements and its `where` requirements. They apply only to that method, without strengthening type construction, storage or other methods. The body, defaults and nested closures are checked in this definition context. Direct calls and method values require proof in the caller's context; concrete instantiation cannot supply a missing generic proof. Names remain unique: a failed condition does not select another overload or grant visibility, receiver authority or effect promises.
+
+Other declarations' `where` clauses constrain only their own type parameters. Unknown subjects and parameter shadowing are errors. Repeating the same admitted marker is equivalent to one requirement and remains charged to checking budgets; repetition or specialization cannot admit an unknown marker. New XIR conditional-method admission is currently limited to ordinary nominal value types' read/static methods and Sendable/Error markers. Conditional constructors, accessors, overrides, interface member requirements and full witnesses still require separate implementation; they are not removed from the language target.
 
 #### The key relation
 
@@ -7085,9 +7087,12 @@ and noncopyable resources. The initial concrete domain is bool/i64/string/Atomic
 later numeric, function and Array admission follows this chapter.
 Named functions can declare `<T, U:Sendable>` or an own-parameter `where U:Sendable`;
 calls supply all type arguments explicitly. Parameter names are distinct and
-Sendable is a reserved marker name. Each parameter currently admits at most one
-Sendable constraint; defaults, intersections, member/conditional constraints and
-inference remain unavailable.
+Sendable is a reserved marker name. Conjunctions of admitted markers are sets;
+repeated requirements are idempotent. The conditional-method implementation contract
+allows method-owned Sendable/Error requirements on enclosing and own parameters,
+without strengthening the nominal type itself. Definition proofs and call obligations
+use the same Checked path. Default type parameters, full member/witness constraints
+and inference remain unavailable; conditional-method execution requires separate qualification.
 
 Every body, including unused templates, is checked at its definition. Copying,
 read passing, storage and return follow from the ordinary domain. Sendable adds

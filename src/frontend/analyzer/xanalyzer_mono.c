@@ -1294,6 +1294,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->type_params =
                 clone_generic_params(src->type_params, src->type_param_count, map, mc, clone_ctx);
             dst->type_param_count = src->type_param_count;
+            dst->conditions = clone_generic_params(src->conditions, src->condition_count, map, mc, clone_ctx);
+            dst->condition_count = src->condition_count;
             break;
         }
 

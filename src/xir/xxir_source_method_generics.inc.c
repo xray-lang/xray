@@ -9,6 +9,26 @@
  * KEY CONCEPT:
  *   A declaration keeps its parameter owners while XIR uses one ordered scope.
  */
+static bool source_method_conditions(SourceContext *ctx, SourceFunction *body,
+    XrGenericParam **parameters, uint32_t *constraints, uint32_t count) {
+    MethodDeclNode *method = &body->node->as.method_decl;
+    if (method->condition_count < 0 || method->condition_count > 65536 ||
+        (method->condition_count && !method->conditions))
+        return source_fail(ctx, body->node, XR_XIR_BAD_STRUCTURE, "method conditions are malformed");
+    for (int i = 0; i < method->condition_count; ++i) {
+        const XrGenericParam *condition = method->conditions[i];
+        uint32_t markers = 0, selected = UINT32_MAX;
+        if (!source_parameter_markers(ctx, body->node, condition, &markers)) return false;
+        for (uint32_t p = 0; p < count; ++p) {
+            if (!source_work(ctx, body->node)) return false;
+            if (!strcmp(condition->name, parameters[p]->name)) { selected = p; break; }
+        }
+        if (selected == UINT32_MAX)
+            return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method condition subject is not a type parameter");
+        constraints[selected] |= markers;
+    }
+    return true;
+}
 static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t index) {
     SourceFunction *body = &ctx->bodies[index];
     MethodDeclNode *method = &body->node->as.method_decl;
@@ -16,7 +36,8 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
     if (method->type_param_count < 0 || (uint32_t)method->type_param_count > 65536 - prefix)
         return source_fail(ctx, body->node, XR_XIR_BUDGET, "method type parameter count exhausted");
     uint32_t own = (uint32_t)method->type_param_count, count = prefix + own;
-    if (!own) return true;
+    if (!own && !method->condition_count) return true;
+    if (!count) return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "method condition subject is not a type parameter");
     XrGenericParam **parameters = source_alloc(ctx, count, sizeof(*parameters));
     uint32_t *constraints = source_alloc(ctx, count, sizeof(*constraints));
     if (!parameters || !constraints) return false;
@@ -35,6 +56,7 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
         }
         parameters[p] = parameter;
     }
+    if (!source_method_conditions(ctx, body, parameters, constraints, count)) return false;
     body->type_parameters = parameters; body->type_parameter_count = count;
     body->generic_owner = body->declaration;
     ctx->generics[index].parameter_count = count; ctx->generics[index].constraints = constraints;
@@ -42,6 +64,7 @@ static bool source_method_scope(SourceContext *ctx, SourceName *owner, uint32_t 
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[body->declaration - 1];
     record->generic_parent = prefix ? owner->declaration : 0;
     record->generic_parent_count = prefix; record->generic_parameter_count = count;
+    record->generic_constraints = constraints;
     return true;
 }
 static bool source_method_instantiation(SourceContext *ctx, AstNode *node, uint32_t index,

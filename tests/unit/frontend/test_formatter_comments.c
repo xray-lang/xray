@@ -220,9 +220,26 @@ TEST(reexport_format_preserves_module_identity_kind) {
 /* Driver                                                                  */
 /* ====================================================================== */
 
+TEST(conditional_method_requirements_round_trip) {
+    setup();
+    const char *src = "struct Box<T> { value:T; checked<U>(other:U)->T where T:Sendable & Error,U:Sendable { return this.value } }\n"
+                      "enum Choice<T> { Item { value:T }, static checked<U>(other:U)->U where T:Sendable,U:Error { return other } }\n";
+    char *first = parse_and_format(src);
+    ASSERT_NOT_NULL(first);
+    ASSERT_TRUE(contains(first, "where T: Sendable & Error, U: Sendable"));
+    ASSERT_TRUE(contains(first, "where T: Sendable, U: Error"));
+    char *second = parse_and_format(first);
+    ASSERT_NOT_NULL(second);
+    ASSERT_STR_EQ(second, first);
+    free(second);
+    free(first);
+    teardown();
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Formatter comment fidelity (L-06 / F)");
 RUN_TEST(override_modifier_round_trip);
+RUN_TEST(conditional_method_requirements_round_trip);
 RUN_TEST(leading_line_comment_preserved);
 RUN_TEST(trailing_line_comment_preserved);
 RUN_TEST(trailing_comment_does_not_steal_next_line_leading);
