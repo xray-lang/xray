@@ -11,6 +11,7 @@
  */
 typedef struct NominalStorageNode {
     XrXirLayout layout;
+    uint32_t *offsets;
     uint32_t next, state, variant, maximum;
 } NominalStorageNode;
 static bool nominal_storage_align(uint32_t size, uint32_t alignment, uint32_t *output) {
@@ -19,35 +20,18 @@ static bool nominal_storage_align(uint32_t size, uint32_t alignment, uint32_t *o
     if (size > UINT32_MAX - padding) return false;
     *output = size + padding; return true;
 }
-XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType type,
-    const XrXirTarget *target, XrXirBudget *remaining, XrXirLayout *layout,
-    uint32_t *field_offsets, uint32_t field_count) {
-    if (!layout) return XR_XIR_BAD_LAYOUT;
-    *layout = (XrXirLayout) {0, 0};
-    if (!remaining || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
-        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
-        (field_count != 0) != (field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
-    XrXirBudget budget = *remaining;
-    XrXirStatus status = xr_xir_types_verify(types, &budget);
-    if (status != XR_XIR_OK) return status;
-    const XrXirTypeNode *root = xr_xir_type_node(types, type);
-    if (!root || root->kind != XR_XIR_TYPE_NOMINAL || root->parameter_span ||
-        root->nominal.field_count != field_count) return XR_XIR_BAD_LAYOUT;
-    uint64_t bytes = (uint64_t) types->count * (sizeof(NominalStorageNode) + sizeof(uint32_t)) +
-        (uint64_t) field_count * sizeof(uint32_t);
-    if (bytes > SIZE_MAX || bytes > budget.metadata_bytes || types->count > budget.work) return XR_XIR_BUDGET;
-    budget.metadata_bytes -= bytes; budget.work -= types->count;
-    NominalStorageNode *nodes = xr_calloc(1, (size_t) bytes);
-    if (!nodes) return XR_XIR_OUT_OF_MEMORY;
-    uint32_t *stack = (uint32_t *) (nodes + types->count), *offsets = stack + types->count;
-    uint32_t root_index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE, depth = 1;
+static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarget *target,
+    XrXirBudget *budget, NominalStorageNode *nodes, uint32_t *stack, uint32_t root_index) {
+    uint32_t depth = 1;
+    XrXirStatus status = XR_XIR_OK;
     stack[0] = root_index;
     nodes[root_index].state = 1; nodes[root_index].layout.alignment = 1;
     while (depth && status == XR_XIR_OK) {
-        if (!budget.work) { status = XR_XIR_BUDGET; break; }
-        --budget.work;
+        if (!budget->work) { status = XR_XIR_BUDGET; break; }
+        --budget->work;
         uint32_t index = stack[depth - 1];
         NominalStorageNode *current = &nodes[index];
+        if (types->nodes[index].parameter_span) return XR_XIR_BAD_LAYOUT;
         const XrXirNominalType *nominal = &types->nodes[index].nominal;
         uint32_t declared = types->nominals->declarations ?
             types->nominals->declarations[nominal->declaration].field_count :
@@ -72,10 +56,10 @@ XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType typ
                     current->maximum > UINT32_MAX - base) { status = XR_XIR_BAD_LAYOUT; break; }
                 current->layout.size = base + current->maximum;
                 if (tag > current->layout.alignment) current->layout.alignment = tag;
-                if (index == root_index)
-                    for (uint32_t f = 0; f < field_count; ++f) {
-                        if (!budget.work) { status = XR_XIR_BUDGET; break; }
-                        --budget.work; offsets[f] += base;
+                if (current->offsets != NULL)
+                    for (uint32_t f = 0; f < nominal->field_count; ++f) {
+                        if (!budget->work) { status = XR_XIR_BUDGET; break; }
+                        --budget->work; current->offsets[f] += base;
                     }
                 if (status != XR_XIR_OK) break;
             }
@@ -87,8 +71,8 @@ XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType typ
         if (is_enum) {
             while (current->variant < variant_count && current->next >=
                 variants[current->variant].field_begin + variants[current->variant].field_count) {
-                if (!budget.work) { status = XR_XIR_BUDGET; break; }
-                --budget.work; ++current->variant;
+                if (!budget->work) { status = XR_XIR_BUDGET; break; }
+                --budget->work; ++current->variant;
             }
             if (status != XR_XIR_OK) break;
             if (current->variant >= variant_count) { status = XR_XIR_BAD_LAYOUT; break; }
@@ -113,12 +97,38 @@ XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType typ
         uint32_t offset = 0;
         if (!nominal_storage_align(current->layout.size, physical.alignment, &offset) ||
             physical.size > UINT32_MAX - offset) { status = XR_XIR_BAD_LAYOUT; break; }
-        if (index == root_index) offsets[current->next] = offset;
+        if (current->offsets != NULL) current->offsets[current->next] = offset;
         current->layout.size = offset + physical.size;
         if (current->layout.size > current->maximum) current->maximum = current->layout.size;
         if (physical.alignment > current->layout.alignment) current->layout.alignment = physical.alignment;
         ++current->next;
     }
+    return status;
+}
+XR_FUNC XrXirStatus xr_xir_nominal_layout(const XrXirTypes *types, XrXirType type,
+    const XrXirTarget *target, XrXirBudget *remaining, XrXirLayout *layout,
+    uint32_t *field_offsets, uint32_t field_count) {
+    if (!layout) return XR_XIR_BAD_LAYOUT;
+    *layout = (XrXirLayout) {0, 0};
+    if (!remaining || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
+        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
+        (field_count != 0) != (field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
+    XrXirBudget budget = *remaining;
+    XrXirStatus status = xr_xir_types_verify(types, &budget);
+    if (status != XR_XIR_OK) return status;
+    const XrXirTypeNode *root = xr_xir_type_node(types, type);
+    if (!root || root->kind != XR_XIR_TYPE_NOMINAL || root->parameter_span ||
+        root->nominal.field_count != field_count) return XR_XIR_BAD_LAYOUT;
+    uint64_t bytes = (uint64_t) types->count * (sizeof(NominalStorageNode) + sizeof(uint32_t)) +
+        (uint64_t) field_count * sizeof(uint32_t);
+    if (bytes > SIZE_MAX || bytes > budget.metadata_bytes || types->count > budget.work) return XR_XIR_BUDGET;
+    budget.metadata_bytes -= bytes; budget.work -= types->count;
+    NominalStorageNode *nodes = xr_calloc(1, (size_t) bytes);
+    if (!nodes) return XR_XIR_OUT_OF_MEMORY;
+    uint32_t *stack = (uint32_t *) (nodes + types->count), *offsets = stack + types->count;
+    uint32_t root_index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    nodes[root_index].offsets = offsets;
+    status = nominal_storage_walk(types, target, &budget, nodes, stack, root_index);
     if (status == XR_XIR_OK) {
         *layout = nodes[root_index].layout;
         if (field_count) memcpy(field_offsets, offsets, (size_t) field_count * sizeof(*offsets));

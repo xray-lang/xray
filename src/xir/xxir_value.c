@@ -103,10 +103,9 @@ static bool array_layout(const XrXirTypeArena *arena, XrXirType type,
                          XrXirType *element, uint32_t *stride) {
     const XrXirTypes *types = xr_xir_type_arena_types(arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirLayout layout = {0};
     if (!node || node->kind != XR_XIR_TYPE_ARRAY || node->parameter_span ||
-        xr_xir_layout(types, node->element, &target, XR_XIR_LAYOUT_STORAGE, &layout) != XR_XIR_OK ||
+        !xr_xir_type_arena_layout(arena, node->element, &layout) ||
         !layout.size || layout.size > sizeof(int64_t) || layout.alignment > _Alignof(int64_t)) return false;
     *element = node->element; *stride = layout.size;
     return true;

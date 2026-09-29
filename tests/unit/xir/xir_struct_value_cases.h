@@ -17,7 +17,7 @@ static XrXirTypeArena *struct_value_arena(XrXirDomain *domain) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 2}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 2, 2}}};
     XrXirTypes types = {nodes, 2, &f.table};
-    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes));
@@ -37,7 +37,7 @@ static XrXirValue struct_deep_value(void) {
     XrXirNominalTable table = {NULL, DEPTH, identities}; XrXirTypes types = {nodes, DEPTH, &table};
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = NULL;
-    XrXirBudget budget = {0}; budget.parameters = 10000; budget.metadata_bytes = 1048576; budget.work = 1000000;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 10000; budget.metadata_bytes = 1048576; budget.work = 1000000;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 1000000, 65536};
     XrXirValue child = {XR_XIR_I64, 0, 71};
@@ -70,7 +70,7 @@ static void struct_function_gate(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 1}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 1, 1}}};
     XrXirTypes types = {nodes, 3, &f.table};
-    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     StructGate gate = {true, 0};

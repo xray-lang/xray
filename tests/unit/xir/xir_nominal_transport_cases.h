@@ -27,7 +27,7 @@ static XrXirValue nominal_transport_cases(const XrXirCallEntry *entries, const X
                                          unsigned mode, bool branch) {
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_domain_new(65536,&domain) == XR_XIR_VALUE_OK);
-    XrXirBudget budget = {0}; budget.parameters = 1000; budget.metadata_bytes = 65536; budget.work = 100000;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 1000; budget.metadata_bytes = 65536; budget.work = 100000;
     CHECK(xr_xir_type_arena_new(domain,types,&budget,&arena) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     XrXirValueAdmission admission = {arena,domain,NULL,NULL,100000,65536};

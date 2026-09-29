@@ -100,7 +100,7 @@ static void *thread_entry(void *pointer) { copy_worker(pointer); return NULL; }
 static XrXirTypeArena *string_cell_arena(XrXirDomain *domain) {
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING};
     XrXirTypes types = {&node, 1, NULL};
-    XrXirBudget budget = {0}; budget.metadata_bytes = 65536; budget.work = 100;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.metadata_bytes = 65536; budget.work = 100;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     return arena;
@@ -246,7 +246,7 @@ static void arena_identity_and_revocation(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
     XrXirTypes types = {nodes, 5, NULL};
-    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
     XrXirTypeArena *arena = NULL, *foreign = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &foreign) == XR_XIR_VALUE_OK);
@@ -306,7 +306,7 @@ static void nominal_arena_admission(void) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirDomainStats initial = xr_xir_domain_stats(domain);
-    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 1000;
     uint64_t bytes = budget.metadata_bytes, work = budget.work;
     XrXirTypeArena *arena = (XrXirTypeArena *) (uintptr_t) 1;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_BAD_ARGUMENT);
@@ -334,7 +334,7 @@ static void nominal_arena_ownership(void) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
-    XrXirBudget budget = {0}; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
+    XrXirBudget budget = {0}; budget.scratch_bytes = 1048576; budget.parameters = 100; budget.metadata_bytes = 65536; budget.work = 10000;
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     uint64_t bytes = 65536 - budget.metadata_bytes, work = 10000 - budget.work;

@@ -21,7 +21,7 @@ static void error_deep_value_cases(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_ERROR}};
     const XrXirTypes types = {nodes, 2, &table};
     XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .work = 10000};
+    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
     CHECK(!live && xr_xir_domain_new(4194304, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_type_arena_new(domain, &types, &budget, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 10000000, 65536};
@@ -75,7 +75,7 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     }
     ids[2].kind = XR_XIR_NOMINAL_STRUCT; ids[2].variants = NULL; ids[2].variant_count = 0;
     XrXirNominalTable table = {NULL, 3, ids}; XrXirTypes local = {nodes, 3, &table};
-    XrXirBudget budget = {.parameters = 1000, .metadata_bytes = 65536, .work = 100000};
+    XrXirBudget budget = {.parameters = 1000, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 100000};
     XrXirTypeArena *arena = NULL;
     CHECK(xr_xir_type_arena_new(admission->domain, &local, &budget, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = arena;
@@ -134,7 +134,7 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     CHECK(xr_xir_error_erase(empty, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     atomic_store(&arena->references, leases);
-    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .work = 10000};
+    XrXirBudget budget = {.parameters = 100, .metadata_bytes = 65536, .scratch_bytes = 65536, .work = 10000};
     XrXirTypeArena *foreign = NULL;
     CHECK(xr_xir_type_arena_new(admission->domain, types, &budget, &foreign) == XR_XIR_VALUE_OK);
     XrXirValueAdmission receiving = *admission; receiving.arena = foreign;

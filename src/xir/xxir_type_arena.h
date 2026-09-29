@@ -13,6 +13,7 @@
 #ifndef XXIR_TYPE_ARENA_H
 #define XXIR_TYPE_ARENA_H
 #include "xxir_value.h"
+#include "xxir_storage.h"
 
 typedef struct XrXirTypes XrXirTypes;
 typedef struct XrXirBudget XrXirBudget;
@@ -25,4 +26,9 @@ XR_FUNC XrXirValueStatus xr_xir_type_arena_new(XrXirDomain *domain, const XrXirT
 XR_FUNC bool xr_xir_type_arena_retain(XrXirTypeArena *arena);
 XR_FUNC void xr_xir_type_arena_drop(XrXirTypeArena *arena);
 XR_FUNC const XrXirTypes *xr_xir_type_arena_types(const XrXirTypeArena *arena);
+/* Borrowed immutable storage metadata; valid until the arena's last release. */
+XR_FUNC const XrXirStorageLayout *xr_xir_type_arena_storage(const XrXirTypeArena *arena,
+    XrXirType type);
+XR_FUNC bool xr_xir_type_arena_layout(const XrXirTypeArena *arena,
+    XrXirType type, XrXirLayout *layout);
 #endif // XXIR_TYPE_ARENA_H

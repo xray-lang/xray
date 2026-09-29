@@ -10,6 +10,7 @@
  *   Compact storage and compiler frames consume the same physical authority.
  */
 #include "xxir_types.h"
+#include "xxir_storage.h"
 #include "../base/xmalloc.h"
 
 XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
@@ -41,3 +42,42 @@ XrXirStatus xr_xir_layout(const XrXirTypes *types, XrXirType type, const XrXirTa
 }
 
 #include "xxir_nominal_storage.inc.c"
+
+XR_FUNC XrXirStatus xr_xir_storage_layouts(const XrXirTypes *types,
+    const XrXirTarget *target, XrXirBudget *remaining,
+    XrXirStorageLayout *layouts, uint32_t count) {
+    if (!remaining || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
+        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
+        count != (types ? types->count : 0) || (count != 0) != (layouts != NULL)) return XR_XIR_BAD_LAYOUT;
+    XrXirBudget budget = *remaining;
+    if (count > budget.work) return XR_XIR_BUDGET;
+    budget.work -= count;
+    bool nominal = false;
+    for (uint32_t i = 0; i < count; ++i) {
+        const XrXirTypeNode *node = &types->nodes[i];
+        if (node->parameter_span || layouts[i].field_count != node->nominal.field_count ||
+            (layouts[i].field_count != 0) != (layouts[i].field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
+        if (node->kind == XR_XIR_TYPE_NOMINAL) nominal = true;
+        else {
+            XrXirStatus status = xr_xir_layout(types, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i),
+                target, XR_XIR_LAYOUT_STORAGE, &layouts[i].value);
+            if (status != XR_XIR_OK) return status;
+        }
+    }
+    if (!nominal) { *remaining = budget; return XR_XIR_OK; }
+    uint64_t bytes = (uint64_t) count * (sizeof(NominalStorageNode) + sizeof(uint32_t));
+    if (bytes > SIZE_MAX || bytes > budget.scratch_bytes) return XR_XIR_BUDGET;
+    NominalStorageNode *nodes = xr_calloc(1, (size_t) bytes);
+    if (!nodes) return XR_XIR_OUT_OF_MEMORY;
+    uint32_t *stack = (uint32_t *) (nodes + count);
+    for (uint32_t i = 0; i < count; ++i) nodes[i].offsets = (uint32_t *) layouts[i].field_offsets;
+    XrXirStatus status = XR_XIR_OK;
+    for (uint32_t i = 0; i < count && status == XR_XIR_OK; ++i) {
+        if (types->nodes[i].kind != XR_XIR_TYPE_NOMINAL) continue;
+        if (!nodes[i].state) status = nominal_storage_walk(types, target, &budget, nodes, stack, i);
+        if (status == XR_XIR_OK) layouts[i].value = nodes[i].layout;
+    }
+    xr_free(nodes);
+    if (status == XR_XIR_OK) *remaining = budget;
+    return status;
+}
