@@ -27,6 +27,19 @@ typedef struct XrXirValueReceiver {
     uint32_t slot;
 } XrXirValueReceiver;
 
+XR_FUNC XrXirCallStatus xr_xir_instance_path_read(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, const XrXirValuePath *path,
+    XrXirValue *output, XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_write(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, const XrXirValuePath *path,
+    const XrXirValue *value, XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_push(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, const XrXirValuePath *path,
+    const XrXirValue *value, XrXirFaultDetail *fault);
+XR_FUNC XrXirCallStatus xr_xir_instance_path_length(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, const XrXirValuePath *path,
+    XrXirValue *output, XrXirFaultDetail *fault);
+
 XR_FUNC XrXirCallStatus xr_xir_instance_array_new(XrXirCallView *view, XrXirType type,
     const XrXirValue *values, uint32_t count, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,

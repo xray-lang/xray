@@ -120,6 +120,8 @@ static void shadowed_coro(const XrXirSourceRequest *request, const char *root) {
     xr_xir_artifact_free(artifact);
 }
 static const char *const rejected[] = {
+    "var a=[1]\na[0]+=2\n",
+    "var a=[[1]]\na[0][0]+=2\n",
     "fn raise<E:Error>(value:E){throw value}\nraise<i64>(1)\n",
     "fn raise<E:Error>(value:E){throw value}\nfn bad<T>(value:T){raise<T>(value)}\n",
     "fn bad<E:Error>(value:E)->i64{return value+1}\n",

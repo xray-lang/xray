@@ -229,7 +229,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
-               op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
+               op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
                op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
@@ -536,6 +536,30 @@ static XrXirStatus phi_uses(const Graph *graph, const XrXirFunction *function,
     return XR_XIR_OK;
 }
 
+static XrXirStatus place_write_authority(const XrXirFunction *function,
+    VerifyContext *context, uint32_t id) {
+    for (;;) {
+        if (!spend(&context->remaining.work, 1)) return XR_XIR_BUDGET;
+        XrXirPlaceKind place = xr_xir_place_kind(function, id);
+        if (place == XR_XIR_PLACE_NONE) return XR_XIR_BAD_VALUE;
+        const XrXirInstruction *op = &function->instructions[id - function->parameter_count];
+        if (place == XR_XIR_PLACE_FIELD) {
+            XrXirType type = xr_xir_operand_type(function, op->args[0]);
+            const XrXirTypeNode *node = xr_xir_type_node(context->module->types, type);
+            if (!node || !xr_xir_type_is_struct(context->module->types, type) || op->immediate < 0 ||
+                (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
+            XrXirStatus status = xr_xir_nominal_access(context->module, context->location.function,
+                node->nominal.declaration, (uint32_t)op->immediate, XR_XIR_NOMINAL_WRITE, &context->remaining.work);
+            if (status != XR_XIR_OK) return status;
+        } else if (place == XR_XIR_PLACE_SLOT) {
+            const XrXirDeclarations *d = context->module->declarations;
+            if (!d || op->immediate < 0 || (uint64_t)op->immediate >= d->slot_count) return XR_XIR_BAD_STRUCTURE;
+            const XrXirSlot *slot = &d->slots[op->immediate];
+            return slot->mutable && slot->module == d->root_module ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+        } else if (place != XR_XIR_PLACE_INDEX) return XR_XIR_OK;
+        id = op->args[0];
+    }
+}
 static XrXirStatus role_operand(const XrXirFunction *function, const Graph *graph,
                                 VerifyContext *context, uint32_t instruction,
                                 uint32_t ordinal, XrXirType expected) {
@@ -546,13 +570,9 @@ static XrXirStatus role_operand(const XrXirFunction *function, const Graph *grap
     XrXirOperandRole role = xr_xir_operand_role(op->op, ordinal);
     if ((role == XR_XIR_OPERAND_VALUE && place != XR_XIR_PLACE_NONE) ||
         (role == XR_XIR_OPERAND_WRITE && place == XR_XIR_PLACE_NONE)) return XR_XIR_BAD_VALUE;
-    if (role == XR_XIR_OPERAND_WRITE && place == XR_XIR_PLACE_SLOT) {
-        const XrXirDeclarations *d = context->module->declarations;
-        const XrXirInstruction *projection = &function->instructions[id - function->parameter_count];
-        if (!d || projection->immediate < 0 || (uint64_t) projection->immediate >= d->slot_count)
-            return XR_XIR_BAD_STRUCTURE;
-        const XrXirSlot *slot = &d->slots[projection->immediate];
-        if (!slot->mutable || slot->module != d->root_module) return XR_XIR_BAD_STRUCTURE;
+    if (role == XR_XIR_OPERAND_WRITE) {
+        XrXirStatus status = place_write_authority(function, context, id);
+        if (status != XR_XIR_OK) return status;
     }
     return value_use(function, graph, instruction, id, expected);
 }
@@ -632,6 +652,7 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
     return XR_XIR_OK;
 }
 
+#include "xxir_path_verify.inc.c"
 #include "xxir_enum_verify.inc.c"
 
 #include "xxir_invoke_verify.inc.c"
@@ -646,6 +667,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!spend(&context->remaining.work, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
+        if (op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) {
+            XrXirStatus status = path_uses(graph, function, context, i);
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
         if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
             XrXirStatus status = error_filter_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;

@@ -62,12 +62,10 @@ static SourceName *source_array_root(SourceContext *ctx, AstNode *node) {
     return root && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT) &&
         xr_xir_type_is_array(&ctx->types, root->type) ? root : NULL;
 }
-static bool source_array_place(SourceContext *ctx, AstNode *node, SourceName *root,
-    bool writable, SourceValue *place) {
-    if (!root || (writable && !root->mutable) ||
-        (root->kind == SOURCE_LOCAL && !root->mutable))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array mutation requires a mutable named root");
-    if (!source_query_reference(ctx, node, root, root, writable ? XR_XIR_SOURCE_READ_WRITE : XR_XIR_SOURCE_READ)) return false;
+static bool source_array_read_place(SourceContext *ctx, AstNode *node, SourceName *root, SourceValue *place) {
+    if (!root || (root->kind == SOURCE_LOCAL && !root->mutable))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array read requires a stored root");
+    if (!source_query_reference(ctx, node, root, root, XR_XIR_SOURCE_READ)) return false;
     if (root->kind == SOURCE_SLOT)
         return emit(ctx, (XrXirInstruction) {XR_XIR_SLOT_PLACE, root->type, {0}, {0}, root->index, {0}}, place);
     return emit(ctx, (XrXirInstruction) {XR_XIR_CELL_PLACE, root->type, {root->index, 0}, {0}, 0, {0}}, place);
@@ -85,10 +83,10 @@ static bool source_array_plain_index(SourceContext *ctx, AstNode *index) {
 static bool source_array_receiver(SourceContext *ctx, AstNode *node, AstNode *index,
     bool writable, SourceValue *value) {
     SourceName *root = source_array_root(ctx, node);
-    if (writable) return source_array_place(ctx, node, root, true, value);
+    if (writable) return source_value_place(ctx,node,value);
     if (root && (root->mutable || root->kind == SOURCE_SLOT) &&
         (!index || source_array_plain_index(ctx, index)))
-        return source_array_place(ctx, node, root, false, value);
+        return source_array_read_place(ctx, node, root, value);
     return expression(ctx, node, value);
 }
 static bool source_array_literal(SourceContext *ctx, AstNode *node, XrXirType expected, SourceValue *value) {

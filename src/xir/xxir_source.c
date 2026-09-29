@@ -676,11 +676,13 @@ static bool prepare_call(SourceContext *ctx, AstNode *node, SourceName *target,
         !source_substitute(ctx,&arguments.substitution,function->result,0,&op->type)) return false;
     *substitution = arguments.substitution; return true;
 }
+static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 #include "xxir_source_array.inc.c"
 #include "xxir_source_string.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
+#include "xxir_source_path.inc.c"
 #include "xxir_source_enum.inc.c"
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_constructors.inc.c"
@@ -736,6 +738,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
         } else {
             if (base && xr_xir_type_is_array(&ctx->types, base->type))
                 return source_array_call(ctx, node, NULL, value);
+            XrXirType path_type;
+            if (!source_path_type(ctx,member->object,&path_type)) return false;
+            if (xr_xir_type_is_array(&ctx->types,path_type) &&
+                (!strcmp(member->name,"set") || !strcmp(member->name,"push")))
+                return source_array_call(ctx,node,NULL,value);
             if (!expression(ctx, member->object, &receiver)) return false;
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);

@@ -21,7 +21,9 @@ enum {
     ARRAY_IMPORTED_LENGTH, ARRAY_LOCAL_LENGTH, ARRAY_SELF_PUSH, ARRAY_SET_ORDER,
     ARRAY_ORDER_TRACE, ARRAY_SUSPENDED_SNAPSHOT, ARRAY_SUSPENDED_SET,
     ARRAY_AGGREGATE, ARRAY_AGGREGATE_NESTED, ARRAY_EMPTY_AGGREGATE, ARRAY_ENUM_AGGREGATE,
-    ARRAY_AGGREGATE_RESULT, ARRAY_FUNCTION_COUNT
+    ARRAY_AGGREGATE_RESULT, ARRAY_PATH, ARRAY_PATH_SET, ARRAY_PATH_PUSH, ARRAY_PATH_COMPOUND,
+    ARRAY_PATH_SUSPENDED, ARRAY_PATH_WRITE_FAULT, ARRAY_PATH_FIELD_FAULT, ARRAY_PATH_COMPOUND_FAULT,
+    ARRAY_PATH_STATE, ARRAY_PATH_CAUGHT, ARRAY_FUNCTION_COUNT
 };
 typedef struct SourceArrayOutput { unsigned count; } SourceArrayOutput;
 static bool source_array_bytes(void *pointer, XrXirOutputStream stream, const char *bytes, size_t length) {
@@ -132,6 +134,31 @@ static void source_array_result_cases(XrXirInstance *instance, const uint32_t *f
     CHECK(value.type == XR_XIR_I64 && value.payload == 9); xr_xir_value_drop(&value);
     value = source_array_run(instance, functions[ARRAY_ENUM_AGGREGATE]);
     source_array_text(&value, "enum"); xr_xir_value_drop(&value);
+    const unsigned paths[] = {ARRAY_PATH,ARRAY_PATH_SET,ARRAY_PATH_PUSH};
+    const int64_t path_expected[] = {123110,123110,122791};
+    for (unsigned i = 0; i < 3; ++i) {
+        value = source_array_run(instance,functions[paths[i]]);
+        CHECK(value.type == XR_XIR_I64 && value.payload == path_expected[i]); xr_xir_value_drop(&value);
+    }
+    value = source_array_run(instance,functions[ARRAY_PATH_COMPOUND]);
+    source_array_text(&value,"oldx:old"); xr_xir_value_drop(&value);
+    value = source_array_run(instance,functions[ARRAY_ORDER_TRACE]);
+    CHECK(value.type == XR_XIR_I64 && value.payload == 12); xr_xir_value_drop(&value);
+    value = source_array_resume_one(instance,functions[ARRAY_PATH_SUSPENDED]);
+    CHECK(value.type == XR_XIR_I64 && value.payload == 123110); xr_xir_value_drop(&value);
+    const unsigned faults[] = {ARRAY_PATH_WRITE_FAULT,ARRAY_PATH_FIELD_FAULT,ARRAY_PATH_COMPOUND_FAULT};
+    value = source_array_run(instance,functions[ARRAY_PATH_CAUGHT]);
+    CHECK(value.type == XR_XIR_I64 && value.payload == 4301234); xr_xir_value_drop(&value);
+    const int64_t states[] = {123000,12001,1001};
+    for (unsigned i = 0; i < 3; ++i) {
+        CHECK(xr_xir_instance_start(instance,functions[faults[i]],NULL,0) == XR_XIR_CALL_READY);
+        XrXirCallResult failed = xr_xir_instance_poll(instance).outcome;
+        CHECK(failed.status == XR_XIR_CALL_BOUNDS && failed.fault.code == 430);
+        CHECK(failed.fault.index == (i ? 1 : 0) && failed.fault.length == (i ? 1 : 0));
+        CHECK(failed.value.type == XR_XIR_UNIT && !failed.value.payload && !failed.wake);
+        value = source_array_run(instance,functions[ARRAY_PATH_STATE]);
+        CHECK(value.type == XR_XIR_I64 && value.payload == states[i]); xr_xir_value_drop(&value);
+    }
 }
 typedef struct SourceArrayFaultOutput {
     XrXirOutputSink sink;
@@ -202,10 +229,11 @@ static void source_array_sticky_bounds(XrXirProgram *program, uint32_t entry) {
 static void source_array_program_cases(XrXirProgram *program, const uint32_t *functions) {
     source_array_runtime_failures(program, functions[ARRAY_ENTRY]);
     const unsigned aggregates[] = {ARRAY_AGGREGATE, ARRAY_AGGREGATE_NESTED, ARRAY_EMPTY_AGGREGATE,
-        ARRAY_ENUM_AGGREGATE, ARRAY_AGGREGATE_RESULT};
+        ARRAY_ENUM_AGGREGATE, ARRAY_AGGREGATE_RESULT, ARRAY_PATH, ARRAY_PATH_SET, ARRAY_PATH_PUSH, ARRAY_PATH_COMPOUND,
+        ARRAY_PATH_CAUGHT};
     for (unsigned i = 0; i < sizeof(aggregates) / sizeof(aggregates[0]); ++i)
         source_array_runtime_failures(program, functions[aggregates[i]]);
-    const unsigned cancelled[] = {ARRAY_SUSPENDED_SNAPSHOT, ARRAY_SUSPENDED_SET};
+    const unsigned cancelled[] = {ARRAY_SUSPENDED_SNAPSHOT, ARRAY_SUSPENDED_SET, ARRAY_PATH_SUSPENDED};
     const size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
     for (unsigned i = 0; i < sizeof(cancelled) / sizeof(cancelled[0]); ++i) {
         SourceArrayOutput output = {0}; XrXirOutputSink sink = {source_array_bytes, &output, 4096};

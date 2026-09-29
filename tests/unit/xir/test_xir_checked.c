@@ -131,7 +131,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 13 && XR_XIR_CHECKED_CONTRACT == 38 && XR_XIR_OP_COUNT == 104, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 13 && XR_XIR_CHECKED_CONTRACT == 39 && XR_XIR_OP_COUNT == 108, "packet revision");
     _Static_assert(XR_XIR_PANIC_CATCH == 97 && XR_XIR_PANIC_CODE == 98 && XR_XIR_PANIC_MESSAGE == 99 &&
         XR_XIR_PANIC_INFO == 15, "panic wire identities");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
@@ -164,8 +164,8 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
     const uint8_t expected_digest[32] = {
-        0x2c, 0x9d, 0x6c, 0xea, 0x6b, 0x2f, 0x83, 0xfd, 0x39, 0x61, 0xe8, 0x2c, 0x2e, 0x9a, 0x46, 0x86,
-        0xfd, 0x0f, 0x2f, 0xb7, 0xee, 0xc7, 0xb1, 0x77, 0x4d, 0xe2, 0x3e, 0x7e, 0x34, 0xdf, 0x70, 0x3a};
+        0x7f, 0x70, 0x71, 0x62, 0x4f, 0xd8, 0x70, 0x2d, 0x0b, 0x21, 0x53, 0x6e, 0xde, 0x36, 0x20, 0xbc,
+        0x49, 0xf5, 0x21, 0x33, 0xf1, 0x13, 0xe6, 0xcd, 0xa0, 0x36, 0x63, 0x30, 0xc5, 0x67, 0xfe, 0xb2};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[209]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 141; offset <= 145; offset += 4) {
@@ -959,7 +959,9 @@ static void match_fault_shape(void) {
 #include "xir_invoke_checked_cases.h"
 #include "xir_cleanup_role_cases.h"
 #include "xir_cleanup_frontier_cases.h"
+#include "xir_path_checked_cases.h"
 int main(void) {
+    path_array_checked_cases(); path_field_checked_cases(); path_ancestor_checked_cases();
     cleanup_role_cases();
     cleanup_frontier_cases();
     cleanup_error_frontier();

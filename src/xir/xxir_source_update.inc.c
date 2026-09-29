@@ -10,7 +10,6 @@
  *   Read the old field before RHS effects and commit to the current root value.
  */
 typedef struct SourceMemberPlace {
-    SourceName *root;
     SourceValue place;
     XrXirType type;
     uint32_t field;
@@ -25,26 +24,17 @@ static bool source_member_place(SourceContext *ctx, AstNode *node, AstNode *obje
     SourceName *root = object->type == AST_VARIABLE ? visible_name(ctx, object->as.variable.name) : NULL;
     if (root && root->type == XR_XIR_PANIC_INFO && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo field writes require class support");
-    if (!root || !root->mutable || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field mutation requires a mutable named root");
-    member->root = root;
-    if (!source_struct_field(ctx, node, root->type, name, access, &member->field, &member->type) ||
-        !source_query_reference(ctx, object, root, root, XR_XIR_SOURCE_READ_WRITE)) return false;
-    return emit(ctx, (XrXirInstruction){root->kind == SOURCE_SLOT ? XR_XIR_SLOT_PLACE : XR_XIR_CELL_PLACE,
-        root->type, {root->kind == SOURCE_SLOT ? 0 : root->index, 0}, {0}, root->kind == SOURCE_SLOT ? root->index : 0, {0}}, &member->place);
+    if (!source_value_place(ctx,object,&member->place) ||
+        !source_struct_field(ctx,node,member->place.type,name,access,&member->field,&member->type)) return false;
+    return emit(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,member->type,{member->place.id},{0},member->field,{0}},&member->place);
 }
 static bool source_member_read(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue *value) {
     if (member->constructor) return source_constructor_read(ctx, node, member->field, value);
-    SourceName *root = member->root; SourceValue receiver;
-    XrXirInstruction read = root->kind == SOURCE_LOCAL ?
-        (XrXirInstruction){XR_XIR_CELL_READ, root->type, {root->index}, {0}, 0, {0}} :
-        (XrXirInstruction){XR_XIR_SLOT_LOAD, root->type, {0}, {0}, root->index, {0}};
-    return emit(ctx, read, &receiver) && emit(ctx,
-        (XrXirInstruction){XR_XIR_STRUCT_GET, member->type, {receiver.id}, {0}, member->field, {0}}, value);
+    return emit(ctx,(XrXirInstruction){XR_XIR_PLACE_READ,member->type,{member->place.id},{0},0,{0}},value);
 }
 static bool source_member_store(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue value) {
     if (member->constructor) return source_constructor_store(ctx, node, member->field, value);
-    return emit(ctx, (XrXirInstruction){XR_XIR_STRUCT_SET, XR_XIR_UNIT, {member->place.id, value.id}, {0}, member->field, {0}}, NULL);
+    return emit(ctx, (XrXirInstruction){XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {member->place.id, value.id}, {0}, 0, {0}}, NULL);
 }
 static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     MemberSetNode *set = &node->as.member_set;

@@ -50,6 +50,54 @@ static void array_access_read(XrXirCallView *view, XrXirValueReceiver receiver, 
     CHECK(xr_xir_instance_array_read(view,&receiver,0,false,&output,&detail) == XR_XIR_CALL_READY);
     CHECK(output.type == XR_XIR_I64 && output.payload == expected && xr_xir_fault_empty(detail));
 }
+static void array_path_permissions(XrXirCallView *view) {
+    ArrayAccessFrame *frame = view->state;
+    XrXirValuePathStep steps[] = {{XR_XIR_PATH_INDEX,(XrXirType)258,0},
+        {XR_XIR_PATH_INDEX,(XrXirType)256,0}};
+    XrXirValuePath path = {steps + 1,1}, root_path = {NULL,0};
+    XrXirValueReceiver root = array_slot_receiver(0), receiver = array_slot_receiver(1);
+    XrXirValue output = {0}, element = {XR_XIR_I64,0,17}; XrXirFaultDetail detail = {0};
+    XrXirCallView copied = *view;
+    CHECK(xr_xir_instance_path_read(&copied,&root,&path,&output,&detail) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_path_write(&copied,&root,&path,&element,&detail) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_path_write(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_path_push(view,&receiver,&root_path,&element,&detail) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_path_read(view,&receiver,&path,&output,&detail) == XR_XIR_CALL_READY);
+    CHECK(output.type == XR_XIR_I64 && output.payload == 7); output = (XrXirValue){0};
+    receiver.slot = 2;
+    CHECK(xr_xir_instance_path_read(view,&receiver,&path,&output,&detail) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_path_write(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_instance_path_write(view,&root,&path,&element,&detail) == XR_XIR_CALL_READY);
+    array_access_read(view,root,17); array_access_read(view,array_slot_receiver(1),7);
+    receiver = (XrXirValueReceiver){XR_XIR_ROOT_VALUE,(XrXirType)256,frame->value,NULL,0};
+    CHECK(xr_xir_instance_path_read(view,&receiver,&path,&output,&detail) == XR_XIR_CALL_BAD_STATE);
+    receiver = (XrXirValueReceiver){XR_XIR_ROOT_LOCAL,(XrXirType)256,{0},
+        (char *)view->state + sizeof(*frame) - 7,0};
+    CHECK(xr_xir_instance_path_write(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_BAD_STATE);
+    receiver.local_payload = &frame->value.payload; element.payload = 31;
+    CHECK(xr_xir_instance_path_write(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_READY);
+    array_access_read(view,receiver,31); array_access_read(view,root,17);
+    receiver = (XrXirValueReceiver){XR_XIR_ROOT_CELL,(XrXirType)256,frame->cell,NULL,0};
+    element.payload = 41;
+    CHECK(xr_xir_instance_path_write(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_READY);
+    array_access_read(view,receiver,41); array_access_read(view,root,17);
+    XrXirValue outer = {0};
+    CHECK(xr_xir_instance_array_new(view,(XrXirType)258,&frame->value,1,&outer) == XR_XIR_CALL_READY);
+    xr_xir_value_drop(&frame->value); frame->value = outer;
+    receiver = (XrXirValueReceiver){XR_XIR_ROOT_LOCAL,(XrXirType)258,{0},&frame->value.payload,0};
+    path = (XrXirValuePath){steps,2}; element.payload = 55;
+    CHECK(xr_xir_instance_path_write(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_path_read(view,&receiver,&path,&output,&detail) == XR_XIR_CALL_READY);
+    CHECK(output.type == XR_XIR_I64 && output.payload == 55); output = (XrXirValue){0};
+    path.count = 1; element.payload = 61;
+    CHECK(xr_xir_instance_path_push(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_READY);
+    path.count = 2; steps[1].selector = 1;
+    CHECK(xr_xir_instance_path_read(view,&receiver,&path,&output,&detail) == XR_XIR_CALL_READY);
+    CHECK(output.type == XR_XIR_I64 && output.payload == 61); output = (XrXirValue){0};
+    steps[0].selector = -1;
+    CHECK(xr_xir_instance_path_write(view,&receiver,&path,&element,&detail) == XR_XIR_CALL_BOUNDS);
+    CHECK(detail.code == 430 && detail.index == -1 && detail.length == 1);
+}
 static XrXirAction array_access_permissions(XrXirCallView *view) {
     ArrayAccessFrame *frame = view->state;
     if (!frame->phase++) return (XrXirAction) {XR_XIR_ACTION_CALL,3,NULL,0,{0},{0}, 0};
@@ -86,6 +134,7 @@ static XrXirAction array_access_permissions(XrXirCallView *view) {
     receiver.slot = 1;
     CHECK(xr_xir_instance_array_write(view,&receiver,0,&element,false,&detail) == XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_fault_empty(detail));
+    array_path_permissions(view);
     return action(XR_XIR_ACTION_RETURN,(XrXirValue) {XR_XIR_I64,0,0});
 }
 static XrXirAction array_access_library(XrXirCallView *view) {
@@ -107,31 +156,41 @@ static XrXirAction array_access_budget(XrXirCallView *view) {
         frame->phase = 1;
     }
     XrXirValueReceiver receiver = {XR_XIR_ROOT_VALUE,(XrXirType)256,frame->value,NULL,0};
+    bool path_mode = witness->mode >= 3;
+    XrXirValuePath root_path = {NULL,0};
+    if (path_mode) receiver = (XrXirValueReceiver){XR_XIR_ROOT_LOCAL,(XrXirType)256,{0},&frame->value.payload,0};
     for (uint32_t attempt = 0; attempt < 65; ++attempt) {
         XrXirValue output = {0}; XrXirFaultDetail detail = {0};
-        XrXirCallStatus status = xr_xir_instance_array_read(view,&receiver,0,true,&output,&detail);
+        uint64_t before = xr_xir_call_admission(view)->work;
+        XrXirCallStatus status = path_mode ? xr_xir_instance_path_read(view,&receiver,&root_path,&output,&detail) :
+            xr_xir_instance_array_read(view,&receiver,0,true,&output,&detail);
         CHECK(xr_xir_fault_empty(detail));
         if (status == XR_XIR_CALL_LIMIT) {
             CHECK(output.type == XR_XIR_UNIT && !output.payload);
-            CHECK(witness->reads > 32 && witness->reads < 64);
+            CHECK(path_mode ? witness->reads > 8 && witness->reads < 32 : witness->reads > 32 && witness->reads < 64);
+            CHECK(!xr_xir_call_admission(view)->work);
             return (XrXirAction) {XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_LIMIT},{0}, 0};
         }
-        CHECK(status == XR_XIR_CALL_READY && output.type == XR_XIR_I64 && !output.payload);
+        CHECK(status == XR_XIR_CALL_READY);
+        CHECK(before - xr_xir_call_admission(view)->work == (path_mode ? 3u : 1u));
+        CHECK(path_mode ? output.type == 256 : output.type == XR_XIR_I64 && !output.payload);
+        xr_xir_value_drop(&output);
         ++witness->reads;
-        if (witness->mode == 2 && witness->reads == 32)
+        if ((witness->mode == 2 || witness->mode == 4) && witness->reads == (path_mode ? 8u : 32u))
             return (XrXirAction) {XR_XIR_ACTION_SUSPEND,0,NULL,0,{0},{0}, 0};
     }
     CHECK(false);
     return done();
 }
 static void array_instance_cases(void) {
-    uint32_t completed[2] = {0};
-    for (uint32_t mode = 0; mode < 3; ++mode) {
+    uint32_t completed[4] = {0};
+    for (uint32_t mode = 0; mode < 5; ++mode) {
         ArrayAccessWitness witness = {mode,0,0};
         XrXirTypeNode nodes[] = {
             {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}},
-            {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}}};
-        XrXirTypes types = {nodes,2, NULL};
+            {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},
+            {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}}};
+        XrXirTypes types = {nodes,3, NULL};
         uint32_t dependency = 1;
         XrXirSourceModule modules[] = {{"array",5,mode ? NULL : &dependency,mode ? 0 : 1,0},
             {"library",7,NULL,0,2}};
@@ -158,8 +217,8 @@ static void array_instance_cases(void) {
         xr_xir_program_drop(program);
         CHECK(xr_xir_instance_start(instance,1,NULL,0) == XR_XIR_CALL_READY);
         XrXirInstanceResult result = xr_xir_instance_poll(instance);
-        if (mode == 2) {
-            CHECK(result.outcome.status == XR_XIR_CALL_SUSPENDED && witness.reads == 32);
+        if (mode == 2 || mode == 4) {
+            CHECK(result.outcome.status == XR_XIR_CALL_SUSPENDED && witness.reads == (mode == 4 ? 8u : 32u));
             CHECK(xr_xir_instance_resume(instance,result.epoch,result.outcome.wake) == XR_XIR_CALL_READY);
             result = xr_xir_instance_poll(instance);
         }
@@ -168,6 +227,6 @@ static void array_instance_cases(void) {
         if (mode) completed[mode-1] = witness.reads;
         CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     }
-    CHECK(completed[0] == completed[1]);
+    CHECK(completed[0] == completed[1] && completed[2] == completed[3]);
 }
 #endif // XIR_ARRAY_INSTANCE_CASES_H

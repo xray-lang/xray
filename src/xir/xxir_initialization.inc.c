@@ -155,6 +155,13 @@ static XrXirStatus initialization_reads(const InitializationGraph *graph, uint32
         if (!spend(&context->remaining.work,count)) return XR_XIR_BUDGET;
         for (uint32_t a=0;a<count;++a) {
             uint32_t id=xr_xir_op_uses_operand_table(op->op) ? node->function->operands[op->args[0]+a] : op->args[a];
+            if (!a && (op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_INDEX_PLACE)) continue;
+            for (;;) {
+                XrXirPlaceKind kind=xr_xir_place_kind(node->function,id);
+                if (kind!=XR_XIR_PLACE_FIELD && kind!=XR_XIR_PLACE_INDEX) break;
+                if (!spend(&context->remaining.work,1)) return XR_XIR_BUDGET;
+                id=node->function->instructions[id-node->function->parameter_count].args[0];
+            }
             if (id!=place) continue;
             if (!(node->state&1)) {
                 context->location.reason=XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ;

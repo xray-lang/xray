@@ -6,20 +6,10 @@
  *
  * xxir_struct_value.inc.c - Failure-atomic nominal boxed snapshots
  */
-XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fields,
+/* Fields have already passed recursive admission. Copying a checked path
+ * must not re-admit every descendant at every ancestor. */
+static XrXirValueStatus struct_copy_fields(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
-    if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||
-        (count != 0) != (fields != NULL)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(admission->arena), type);
-    if (!node || !xr_xir_type_is_struct(xr_xir_type_arena_types(admission->arena), type) ||
-        node->parameter_span || node->nominal.field_count != count)
-        return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (count > admission->work) return XR_XIR_VALUE_LIMIT;
-    admission->work -= count;
-    for (uint32_t i = 0; i < count; ++i) {
-        XrXirValueStatus status = xr_xir_value_admit(&fields[i], node->nominal.fields[i], admission);
-        if (status != XR_XIR_VALUE_OK) return status;
-    }
     uint64_t bytes = sizeof(XirNominalValue) + (uint64_t) count * sizeof(XrXirValue);
     if (bytes > SIZE_MAX) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
@@ -37,6 +27,22 @@ XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fie
     }
     *output = (XrXirValue) {(uint32_t) type, 0, 0};
     memcpy(&output->payload, &record, sizeof(record)); return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fields,
+    uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission || !admission->domain || !admission->arena || !unit_value(output) ||
+        (count != 0) != (fields != NULL)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_type_arena_types(admission->arena), type);
+    if (!node || !xr_xir_type_is_struct(xr_xir_type_arena_types(admission->arena), type) ||
+        node->parameter_span || node->nominal.field_count != count)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (count > admission->work) return XR_XIR_VALUE_LIMIT;
+    admission->work -= count;
+    for (uint32_t i = 0; i < count; ++i) {
+        XrXirValueStatus status = xr_xir_value_admit(&fields[i], node->nominal.fields[i], admission);
+        if (status != XR_XIR_VALUE_OK) return status;
+    }
+    return struct_copy_fields(type, fields, count, admission, output);
 }
 XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {

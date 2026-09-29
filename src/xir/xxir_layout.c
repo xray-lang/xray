@@ -14,6 +14,7 @@
 #include "xxir_internal.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
+#include "xxir_value_place.h"
 #include "../base/xmalloc.h"
 
 static bool layout_equal(XrXirLayout left, XrXirLayout right) {
@@ -33,6 +34,30 @@ static bool subtract_bytes(uint64_t *remaining, uint64_t amount) {
     return true;
 }
 
+static XrXirStatus path_capacity(const XrXirFunction *function, uint64_t *work, uint32_t *capacity) {
+    *capacity = 0;
+    for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        if (!subtract_bytes(work, 1)) return XR_XIR_BUDGET;
+        const XrXirInstruction *op = &function->instructions[i];
+        if (op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_INDEX_PLACE ||
+            xr_xir_operand_role(op->op, 0) == XR_XIR_OPERAND_VALUE) continue;
+        uint32_t id = xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0]] : op->args[0];
+        uint32_t depth = 0;
+        for (;;) {
+            XrXirPlaceKind kind = xr_xir_place_kind(function, id);
+            if (kind != XR_XIR_PLACE_FIELD && kind != XR_XIR_PLACE_INDEX) break;
+            if (!subtract_bytes(work, 1)) return XR_XIR_BUDGET;
+            if (depth == function->instruction_count) return XR_XIR_BAD_VALUE;
+            ++depth; id = function->instructions[id - function->parameter_count].args[0];
+        }
+        if (depth && (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET)) {
+            if (depth == UINT32_MAX) return XR_XIR_BUDGET;
+            ++depth;
+        }
+        if (depth > *capacity) *capacity = depth;
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *budget) {
     uint64_t bytes = budget->metadata_bytes, work = budget->work;
     if (!subtract_bytes(&bytes, sizeof(XrXirArtifact)))
@@ -47,6 +72,9 @@ static XrXirStatus layout_budget(const XrXirModule *module, const XrXirBudget *b
     if (declaration_status != XR_XIR_OK) return declaration_status;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
+        uint32_t paths = 0;
+        XrXirStatus path_status = path_capacity(function, &work, &paths);
+        if (path_status != XR_XIR_OK) return path_status;
         uint64_t slots = (uint64_t) function->parameter_count + function->instruction_count;
         uint64_t required = sizeof(*function) + sizeof(XrXirFunctionLayout) +
             function->name_length +
@@ -86,7 +114,8 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
     uint32_t bytes = 0, owned = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
         XrXirPlaceKind place = xr_xir_place_kind(function, slot);
-        if (place == XR_XIR_PLACE_CELL || place == XR_XIR_PLACE_SLOT) {
+        if (place == XR_XIR_PLACE_CELL || place == XR_XIR_PLACE_SLOT ||
+            place == XR_XIR_PLACE_FIELD || place == XR_XIR_PLACE_INDEX) {
             if (create) ((uint32_t *) layout->offsets)[slot] = UINT32_MAX;
             else if (layout->offsets[slot] != UINT32_MAX) return XR_XIR_BAD_LAYOUT;
             continue;
@@ -141,7 +170,11 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             op->op == XR_XIR_ENUM_NEW ? op->args[1] : 0;
         if (count > outgoing) outgoing = count;
     }
-    uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue);
+    uint64_t path_work = budget->work; uint32_t paths = 0;
+    XrXirStatus path_status = path_capacity(function, &path_work, &paths);
+    if (path_status != XR_XIR_OK) return path_status;
+    uint64_t physical_bytes = bytes + (uint64_t) outgoing * sizeof(XrXirValue) +
+        (uint64_t) paths * sizeof(XrXirValuePathStep);
     if (physical_bytes > UINT32_MAX || physical_bytes > budget->frame_bytes) return XR_XIR_BUDGET;
     XrXirStatus status = xr_xir_layout(artifact->module.types, function->result, &artifact->target, XR_XIR_LAYOUT_RESULT, &result);
     if (status != XR_XIR_OK)
@@ -151,8 +184,9 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         layout->frame_bytes = bytes;
         layout->owned_count = owned;
         layout->outgoing_count = outgoing;
+        layout->path_count = paths;
     } else if (!layout_equal(layout->result, result) || layout->frame_bytes != bytes ||
-               layout->owned_count != owned || layout->outgoing_count != outgoing) {
+               layout->owned_count != owned || layout->outgoing_count != outgoing || layout->path_count != paths) {
         return XR_XIR_BAD_LAYOUT;
     }
     return XR_XIR_OK;

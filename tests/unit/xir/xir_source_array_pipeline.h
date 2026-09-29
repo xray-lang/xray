@@ -23,7 +23,9 @@ static void source_array_find(const XrXirModule *module, uint32_t *functions) {
     static const char *const names[] = {NULL, "result", "originalFirst", "advance", "rebound", "snapshot",
         "methodSnapshot", "reboundFault", "current", "assignResult", "local", "captured", "generic", "nested",
         "importedLength", "localLength", "selfPush", "setOrder", "orderTrace", "suspendedSnapshot", "suspendedSet",
-        "aggregate", "aggregateNested", "emptyAggregate", "enumAggregate", "aggregateResult"};
+        "aggregate", "aggregateNested", "emptyAggregate", "enumAggregate", "aggregateResult",
+        "nestedPath", "nestedMethodSet", "nestedMethodPush", "nestedCompound", "nestedSuspended",
+        "nestedWriteFault", "nestedFieldFault", "nestedCompoundFault", "nestedState", "nestedCaughtFault"};
     functions[ARRAY_ENTRY] = module->declarations->entry_function;
     for (unsigned n = 1; n < ARRAY_FUNCTION_COUNT; ++n) {
         functions[n] = UINT32_MAX;

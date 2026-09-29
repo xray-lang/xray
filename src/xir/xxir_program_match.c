@@ -111,6 +111,7 @@ static XrXirStatus match_layout(const XrXirFunctionLayout *a,
     const XrXirFunctionLayout *b, uint32_t parameters, uint64_t *work) {
     MATCH(a->slot_count, b->slot_count); MATCH(a->frame_bytes, b->frame_bytes);
     MATCH(a->owned_count, b->owned_count); MATCH(a->outgoing_count, b->outgoing_count);
+    MATCH(a->path_count, b->path_count);
     MATCH(a->result.size, b->result.size); MATCH(a->result.alignment, b->result.alignment);
     if ((a->slot_count && !a->offsets) || (a->owned_count && !a->owned_offsets) ||
         (parameters && !a->parameters) || (!parameters && a->parameters))

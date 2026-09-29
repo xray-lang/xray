@@ -27,6 +27,8 @@
 extern const XrXirProgramSpec enum_ops_program, enum_wrong_program;
 #include "xir_struct_set_cases.h"
 #include "xir_cleanup_program_cases.h"
+#include "xir_path_program_cases.h"
+extern const XrXirProgramSpec path0_program, path1_program, path2_program;
 extern const XrXirProgramSpec cleanup0_program, cleanup1_program, cleanup2_program, cleanup3_program, cleanup4_program, cleanup5_program;
 extern const XrXirProgramSpec struct_set_program;
 extern const XrXirProgramSpec struct_ops_program;
@@ -57,13 +59,20 @@ static void enum_metadata_descriptors(void) {
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
     spec.abi_version = 16;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
-    spec.abi_version = 19;
+    spec.abi_version = 20;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
     spec.abi_version = XR_XIR_PROGRAM_ABI_VERSION;
     spec.target.abi_version = 11;
     CHECK(xr_xir_program_seal(&spec, (XrXirProgramBudget) {2097152, 16000000}, &program) == XR_XIR_BAD_LAYOUT && !program);
 }
 int main(void) {
+    const XrXirProgramSpec *paths[] = {&path0_program,&path1_program,&path2_program};
+    for (unsigned kind = 0; kind < 3; ++kind) {
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_program_seal(paths[kind],(XrXirProgramBudget){2097152,16000000},&program) == XR_XIR_OK);
+        path_program_cases(program,kind);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
     const XrXirProgramSpec *cleanup_specs[] = {&cleanup0_program, &cleanup1_program, &cleanup2_program,
         &cleanup3_program, &cleanup4_program, &cleanup5_program};
     for (unsigned mode = 0; mode < 6; ++mode) {

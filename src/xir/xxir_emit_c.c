@@ -17,6 +17,7 @@
 #include "xxir_program.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
+#include "xxir_value_place.h"
 #include "xxir_scalar.h"
 #include "../base/xmalloc.h"
 #include "../aot/xi_cgen_verify_output.h"
@@ -534,6 +535,7 @@ static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
             (uint32_t) place->immediate);
     }
 }
+#include "xxir_emit_path.inc.c"
 static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     append(buffer, "        { XrXirCallStatus status; XrXirFaultDetail fault = {0};\n");
@@ -709,6 +711,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         emit_cleanup_step(buffer, function, layout, index); return;
     }
+    if (xr_xir_op_uses_value_path(function, op)) {
+        emit_path_step(buffer, function, op, layout, destination, index); return;
+    }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
         op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
@@ -724,7 +729,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     }
     switch (op->op) {
-    case XR_XIR_PHI: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE: break;
+    case XR_XIR_PHI: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE:
+    case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: break;
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_INT:
@@ -840,7 +846,8 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirModule *module = xr_xir_artifact_module(artifact);
     const XrXirFunction *function = &module->functions[index];
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, index);
-    if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) > UINT32_MAX - 128u) {
+    if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) +
+        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u) {
         buffer->status = XR_XIR_BUDGET;
         return;
     }
@@ -851,6 +858,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
         "    uint32_t frontier, cleanup_parent, exit_target, exit_pc, exit_destination, leave_instruction, panic_frontier;\n"
         "    bool cleanup_waiting, leaving;\n");
     if (layout->outgoing_count) append(buffer, "    XrXirValue arguments[%u];\n", layout->outgoing_count);
+    if (layout->path_count) append(buffer, "    XrXirValuePathStep path_steps[%u];\n", layout->path_count);
     append(buffer, "    unsigned char frame[%u];\n} %s_state_%u;\n",
            layout->frame_bytes ? layout->frame_bytes : 1, prefix, index);
     append(buffer, "XR_FUNC XrXirAction %s_f%u(XrXirCallView *view) {\n"
@@ -1041,7 +1049,7 @@ static void emit_proof(CBuffer *buffer, const XrXirArtifact *artifact, const cha
         append(buffer, "{%uu,%uu},%uu,", layout->result.size, layout->result.alignment, layout->owned_count);
         if (layout->owned_count) append(buffer, "%s_owned_%u,", prefix, f);
         else append(buffer, "NULL,");
-        append(buffer, "%uu},\n", layout->outgoing_count);
+        append(buffer, "%uu,%uu},\n", layout->outgoing_count, layout->path_count);
     }
     append(buffer, "};\n");
 }

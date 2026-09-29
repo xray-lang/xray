@@ -39,6 +39,7 @@ typedef struct VmState {
     XrXirType expected;
     bool initialized, waiting, cleanup_waiting, leaving;
     XrXirValue *arguments;
+    XrXirValuePathStep *path_steps;
 } VmState;
 
 static int arithmetic_operation(XrXirOp op) {
@@ -159,6 +160,7 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
     }
     return receiver;
 }
+#include "xxir_vm_path.inc.c"
 static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -455,9 +457,14 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         op->op == XR_XIR_CONVERT_NUMBER) return vm_integer_step(run, state);
     if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR)
         return vm_cleanup_step(run, state, op, action);
-    if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE) {
+    if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_SLOT_PLACE ||
+        op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_INDEX_PLACE) {
         state->instruction = next;
         return XR_XIR_RUN_OK;
+    }
+    if (xr_xir_op_uses_value_path(run->function, op)) {
+        state->instruction = next;
+        return vm_path_step(run, state, op, run->layout->offsets[result_id], action);
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
@@ -582,6 +589,7 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     VmState *state = view->state;
     ScalarRun run = {module, function, layout, state + 1, view};
     state->arguments = (XrXirValue *) ((unsigned char *) run.frame + layout->frame_bytes);
+    state->path_steps = (XrXirValuePathStep *)(state->arguments + layout->outgoing_count);
     if (view->phase == XR_XIR_CALL_EXIT) return vm_cleanup_exit(&run, state);
     if (state->leaving) return vm_cleanup_continue(&run, state);
     if (!state->initialized) {
@@ -662,7 +670,8 @@ static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t functio
     const XrXirFunction *body = &module->functions[function];
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, function);
     uint64_t bytes = sizeof(VmState) + (uint64_t) layout->frame_bytes +
-        (uint64_t) layout->outgoing_count * sizeof(XrXirValue);
+        (uint64_t) layout->outgoing_count * sizeof(XrXirValue) +
+        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep);
     if (bytes > UINT32_MAX) return XR_XIR_BUDGET;
     *binding = (XrXirVmBinding) {artifact, function};
     *entry = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, body->parameters, body->parameter_count,

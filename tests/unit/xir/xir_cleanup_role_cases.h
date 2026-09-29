@@ -74,7 +74,8 @@ static void cleanup_role_cases(void) {
     put32(packet.bytes + 12, 35); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 36); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + 12, 37); digest_packet(&packet); rejected(packet.bytes, packet.length);
-    put32(packet.bytes + 12, 38); digest_packet(&packet);
+    put32(packet.bytes + 12, 38); digest_packet(&packet); rejected(packet.bytes, packet.length);
+    put32(packet.bytes + 12, 39); digest_packet(&packet);
     put32(packet.bytes + at + 3 * 20 + 16, 4); digest_packet(&packet); rejected(packet.bytes, packet.length);
     put32(packet.bytes + at + 3 * 20 + 16, 3); digest_packet(&packet);
     CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);

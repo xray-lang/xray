@@ -74,6 +74,7 @@ typedef struct XrXirFunctionLayout {
     uint32_t owned_count;
     const uint32_t *owned_offsets;
     uint32_t outgoing_count;
+    uint32_t path_count;
 } XrXirFunctionLayout;
 
 typedef struct XrXirInstruction {

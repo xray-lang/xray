@@ -38,6 +38,26 @@
 #include "xir_struct_set_cases.h"
 #include "xir_cleanup_program_fixture.h"
 #include "xir_cleanup_program_cases.h"
+#include "xir_path_program_fixture.h"
+#include "xir_path_program_cases.h"
+extern const XrXirProgramSpec path0_program, path1_program, path2_program;
+static void path_program_mixed(void) {
+    const XrXirProgramSpec *specs[] = {&path0_program,&path1_program,&path2_program};
+    for (unsigned kind = 0; kind < 3; ++kind) for (unsigned mask = 1; mask < 15; ++mask) {
+        XrXirArtifact *artifact = path_program_fixture(kind);
+        XrXirProgramSpec spec = *specs[kind];
+        XrXirCallEntry entries[7]; XrXirVmBinding bindings[7];
+        memcpy(entries,spec.entries,sizeof(entries));
+        for (unsigned f = 0; f < 4; ++f) if (mask & (1u << f))
+            CHECK(xr_xir_vm_bind(artifact,f,&bindings[f],&entries[f]) == XR_XIR_OK);
+        spec.entries = entries;
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_program_seal(&spec,(XrXirProgramBudget){2097152,16000000},&program) == XR_XIR_OK);
+        path_program_cases(program,kind);
+        xr_xir_artifact_free(artifact);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
+}
 extern const XrXirProgramSpec cleanup0_program, cleanup1_program, cleanup2_program, cleanup3_program, cleanup4_program, cleanup5_program;
 static void cleanup_program_mixed(void) {
     const XrXirProgramSpec *specs[] = {&cleanup0_program, &cleanup1_program, &cleanup2_program,
@@ -102,7 +122,7 @@ static void descriptor_correspondence(void) {
         if (module->functions[i].parameter_count) parameter = i;
     }
     CHECK(owned != UINT32_MAX && parameter != UINT32_MAX);
-    for (uint32_t attack = 0; attack < 13; ++attack) {
+    for (uint32_t attack = 0; attack < 14; ++attack) {
         uint32_t index = attack >= 10 ? parameter : owned;
         XrXirFunctionLayout *layout = &b->layouts[index], saved = *layout;
         uint32_t offset = layout->offsets[0], owned_offset = layout->owned_offsets[0];
@@ -122,6 +142,7 @@ static void descriptor_correspondence(void) {
         case 10: ++((XrXirLayout *)layout->parameters)[0].size; break;
         case 11: ++((XrXirLayout *)layout->parameters)[0].alignment; break;
         case 12: layout->parameters = NULL; break;
+        case 13: ++layout->path_count; break;
         }
         work = 16000000;
         CHECK(xr_xir_program_match(&spec, b->layouts, a, &work) == XR_XIR_BAD_STRUCTURE);
@@ -243,6 +264,13 @@ static void array_mixed(void) {
     }
 }
 int main(void) {
+    path_program_mixed();
+    for (unsigned kind = 0; kind < 3; ++kind) {
+        XrXirArtifact *artifact = path_program_fixture(kind); XrXirProgram *program = NULL;
+        CHECK(xr_xir_vm_program_take(&artifact,(XrXirProgramBudget){2097152,16000000},&program) == XR_XIR_OK);
+        path_program_cases(program,kind);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
     cleanup_program_mixed();
     for (unsigned mode = 0; mode < 6; ++mode) {
         XrXirArtifact *artifact = cleanup_program_fixture(mode);

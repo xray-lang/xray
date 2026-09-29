@@ -98,6 +98,93 @@ export fn suspendedSet() -> string {
 }
 
 struct Item { text:string; values:Array<i64> }
+var pathItems = [Item{text:"old", values:[11]}]
+fn pathIndex() -> i64 { trace = trace * 10 + 1; return 0 }
+fn pathInner() -> i64 { trace = trace * 10 + 2; return 0 }
+fn pathValue() -> i64 {
+    trace = trace * 10 + 3
+    pathItems = [Item{text:"new", values:[73]}]
+    return 99
+}
+export fn nestedPath() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    const original = pathItems
+    pathItems[pathIndex()].values[pathInner()] = pathValue()
+    return trace * 1000 + pathItems[0].values[0] + original[0].values[0]
+}
+export fn nestedMethodSet() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    const original = pathItems
+    pathItems[pathIndex()].values.set(pathInner(), pathValue())
+    return trace * 1000 + pathItems[0].values[0] + original[0].values[0]
+}
+fn pathAppend() -> i64 {
+    trace = trace * 10 + 2
+    pathItems = [Item{text:"new", values:[73]}]
+    return 61
+}
+export fn nestedMethodPush() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    pathItems[pathIndex()].values.push(pathAppend())
+    return trace * 10000 + len(pathItems[0].values) * 1000 + pathItems[0].values[0] * 10 + pathItems[0].values[1]
+}
+fn pathText() -> string {
+    trace = trace * 10 + 2
+    pathItems = [Item{text:"new", values:[73]}]
+    return "x"
+}
+export fn nestedCompound() -> string {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    const original = pathItems
+    pathItems[pathIndex()].text += pathText()
+    return pathItems[0].text + ":" + original[0].text
+}
+fn pathSuspendedValue() -> i64 { Coro.yield(); return pathValue() }
+fn pathBadIndex() -> i64 { trace = trace * 10 + 1; return 1 }
+fn pathEmpty() -> i64 {
+    trace = trace * 10 + 3
+    pathItems = [Item{text:"empty", values:[]}]
+    return 99
+}
+export fn nestedWriteFault() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    pathItems[pathIndex()].values[pathInner()] = pathEmpty()
+    return -1
+}
+export fn nestedFieldFault() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    pathItems[pathBadIndex()].text = pathText()
+    return -1
+}
+export fn nestedCompoundFault() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    pathItems[pathBadIndex()].text += pathText()
+    return -1
+}
+export fn nestedState() -> i64 { return trace * 1000 + len(pathItems[0].values) }
+export fn nestedCaughtFault() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    try {
+        defer { trace = trace * 10 + 4 }
+        pathItems[pathIndex()].values[pathInner()] = pathEmpty()
+    } catch panic(p) { return p.code * 10000 + trace }
+    return -1
+}
+export fn nestedSuspended() -> i64 {
+    trace = 0
+    pathItems = [Item{text:"old", values:[11]}]
+    const original = pathItems
+    pathItems[pathIndex()].values[pathInner()] = pathSuspendedValue()
+    return trace * 1000 + pathItems[0].values[0] + original[0].values[0]
+}
 export fn aggregateResult() -> Array<Item> { return [Item{text:"escaped", values:[41]}] }
 export fn aggregate() -> string {
     var items = [Item{text:"before", values:[3]}]

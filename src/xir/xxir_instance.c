@@ -394,6 +394,7 @@ static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
     place->payload = &instance->slots[slot].payload;
     return XR_XIR_CALL_READY;
 }
+#include "xxir_instance_path.inc.c"
 XrXirCallStatus xr_xir_instance_array_new(XrXirCallView *view, XrXirType type,
     const XrXirValue *values, uint32_t count, XrXirValue *output) {
     XrXirInstance *instance = view_instance(view);
