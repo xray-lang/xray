@@ -16,6 +16,7 @@
 
 #include "xxir.h"
 #include "xxir_checked.h"
+#include "xxir_effects.h"
 
 typedef struct XrXirOrigin {
     uint32_t function;
@@ -47,6 +48,10 @@ struct XrXirArtifact {
     XrXirCheckedPacket checked_packet;
     uint8_t checked_identity[32];
 };
+
+/* Requires completed structural and type verification; never re-enters verification. */
+XR_FUNC XrXirStatus xr_xir_effects_infer_verified(const XrXirModule *module,
+    XrXirBudget *remaining, XrXirEffects **output);
 
 /* Consumes cumulative quotas even on failure; scratch and frame limits remain caps. */
 XR_FUNC XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *remaining,

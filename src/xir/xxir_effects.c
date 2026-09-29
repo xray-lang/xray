@@ -153,6 +153,26 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, u
 #include "xxir_effect_terms.inc.c"
 #include "xxir_effect_errors.inc.c"
 
+XrXirStatus xr_xir_effects_infer_verified(const XrXirModule *module,
+    XrXirBudget *remaining, XrXirEffects **output) {
+    *output = NULL;
+    uint64_t bytes = sizeof(XrXirEffects) + (uint64_t) module->function_count * sizeof(XrXirFunctionEffects);
+    if (bytes > remaining->metadata_bytes || bytes > SIZE_MAX) return XR_XIR_BUDGET;
+    XrXirEffects *effects = xr_calloc(1, sizeof(*effects));
+    if (!effects) return XR_XIR_OUT_OF_MEMORY;
+    effects->count = module->function_count;
+    effects->functions = xr_calloc(effects->count, sizeof(*effects->functions));
+    if (!effects->functions) { xr_xir_effects_free(effects); return XR_XIR_OUT_OF_MEMORY; }
+    EffectGraph graph = {0};
+    XrXirStatus status = effect_graph_build(module, effects, &graph, remaining);
+    if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, &remaining->work);
+    effect_graph_free(&graph);
+    if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
+    remaining->metadata_bytes -= bytes;
+    status = effect_errors_analyze(module, effects, remaining);
+    if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
+    *output = effects; return XR_XIR_OK;
+}
 XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,
     const XrXirBudget *budget, XrXirEffects **output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
@@ -161,21 +181,5 @@ XrXirStatus xr_xir_effects_analyze(const XrXirArtifact *artifact,
     if (!module || (module->stage != XR_XIR_CHECKED && module->stage != XR_XIR_LOWERED)) return XR_XIR_BAD_STAGE;
     XrXirBudget remaining = budget ? *budget : xr_xir_default_budget();
     XrXirStatus status = xr_xir_verify_remaining(module, &remaining, NULL);
-    if (status != XR_XIR_OK) return status;
-    uint64_t bytes = sizeof(XrXirEffects) + (uint64_t) module->function_count * sizeof(XrXirFunctionEffects);
-    if (bytes > remaining.metadata_bytes || bytes > SIZE_MAX) return XR_XIR_BUDGET;
-    XrXirEffects *effects = xr_calloc(1, sizeof(*effects));
-    if (!effects) return XR_XIR_OUT_OF_MEMORY;
-    effects->count = module->function_count;
-    effects->functions = xr_calloc(effects->count, sizeof(*effects->functions));
-    if (!effects->functions) { xr_xir_effects_free(effects); return XR_XIR_OUT_OF_MEMORY; }
-    EffectGraph graph = {0};
-    status = effect_graph_build(module, effects, &graph, &remaining);
-    if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, &remaining.work);
-    effect_graph_free(&graph);
-    if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
-    remaining.metadata_bytes -= bytes;
-    status = effect_errors_analyze(module, effects, &remaining);
-    if (status != XR_XIR_OK) { xr_xir_effects_free(effects); return status; }
-    *output = effects; return XR_XIR_OK;
+    return status == XR_XIR_OK ? xr_xir_effects_infer_verified(module, &remaining, output) : status;
 }

@@ -31,6 +31,8 @@ typedef enum XrXirMemberAccess {
 
 typedef struct XrXirFunctionIdentity {
     uint32_t module, exported, nominal_owner, member_access;
+    /* Zero for ordinary functions; otherwise one plus the lexical owner index. */
+    uint32_t cleanup_owner;
 } XrXirFunctionIdentity;
 typedef struct XrXirSlot {
     uint32_t module;

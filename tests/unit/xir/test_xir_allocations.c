@@ -81,6 +81,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "base/xsha256.c"
 #include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"
+#include "xir/xxir_effects.c"
 #include "xir/xxir_layout.c"
 #include "xir/xxir_value.c"
 #include "xir/xxir_type_arena.c"

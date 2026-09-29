@@ -55,6 +55,7 @@ static void packet_free(void *p) {
 #include "xir/xxir.c"
 #include "xir/xxir_declarations.c"
 #include "xir/xxir_verify.c"
+#include "xir/xxir_effects.c"
 #include "xir/xxir_layout.c"
 #include "xir/xxir_checked.c"
 #include "xir/xxir_specialize.c"
@@ -73,6 +74,7 @@ static void packet_free(void *p) {
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
 #include "xir_enum_checked_fixture.h"
+#include "xir_cleanup_role_fixture.h"
 static XrXirArtifact *array_packet_fixture(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     XrXirArtifact *checked = NULL;
@@ -80,9 +82,9 @@ static XrXirArtifact *array_packet_fixture(void) {
     return checked;
 }
 static void packet_failures(unsigned kind) {
-    XrXirArtifact *checked = kind == 19 ? enum_checked_fixture() : kind >= 17 ? nominal_expression_fixture() : kind == 16 ? struct_set_checked(0) : kind == 15 ? struct_ops_checked(0) : kind == 14 ? nominal_chain_fixture(3, 2) : kind >= 9 ? nominal_checked_fixture(kind >= 12 ? 3 : kind == 11 ? 2 : kind == 10 ? 1 : 0) : kind == 8 ? array_generic_fixture() : kind == 7 ? array_packet_fixture() :
+    XrXirArtifact *checked = kind >= 20 ? cleanup_role_fixture() : kind == 19 ? enum_checked_fixture() : kind >= 17 ? nominal_expression_fixture() : kind == 16 ? struct_set_checked(0) : kind == 15 ? struct_ops_checked(0) : kind == 14 ? nominal_chain_fixture(3, 2) : kind >= 9 ? nominal_checked_fixture(kind >= 12 ? 3 : kind == 11 ? 2 : kind == 10 ? 1 : 0) : kind == 8 ? array_generic_fixture() : kind == 7 ? array_packet_fixture() :
         kind == 6 ? constructed_fixture() : kind == 5 ? generic_callable_fixture() : kind == 4 ? function_ir_fixture() : kind == 3 ? callable_fixture() : kind == 2 ? local_fixture() : kind == 1 ? generic_fixture() : checked_fixture();
-    if (kind == 13 || kind == 18) {
+    if (kind == 13 || kind == 18 || kind == 21) {
         XrXirArtifact *closed = NULL;
         CHECK(xr_xir_specialize(checked, NULL, &closed, NULL) == XR_XIR_OK);
         xr_xir_artifact_free(checked); checked = closed;
@@ -613,6 +615,7 @@ static void specialization_correspondence_attacks(void) {
     xr_xir_artifact_free(closed); xr_xir_artifact_free(source); CHECK(!live);
 }
 int main(void) {
+    packet_failures(20); packet_failures(21);
     specialization_failures(9);
     packet_failures(19);
     native_packet_proof();

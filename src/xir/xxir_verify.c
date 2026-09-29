@@ -130,6 +130,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_FUNCTION_REF) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
             return XR_XIR_BAD_STRUCTURE;
+        if (module->declarations && module->declarations->functions[op->immediate].cleanup_owner)
+            return XR_XIR_BAD_STRUCTURE;
         const XrXirFunction *callee = &module->functions[op->immediate];
         if (((op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE) && callee->parameter_count != op->args[1]) || (callee->parameter_count && !callee->parameters))
             return XR_XIR_BAD_STRUCTURE;
@@ -819,6 +821,8 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirBudget *rem
     return xr_xir_provenance_functions_match(&p->source->module, module, p->origins, remaining, diagnostic);
 }
 
+#include "xxir_cleanup_verify.inc.c"
+
 XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *remaining,
                                   XrXirDiagnostic *diagnostic) {
     if (!remaining) {
@@ -880,6 +884,7 @@ XrXirStatus xr_xir_verify_remaining(const XrXirModule *module, XrXirBudget *rema
     }
     if (status == XR_XIR_OK && module->provenance)
         status = verify_provenance(module, &context.remaining, &context.location);
+    if (status == XR_XIR_OK) status = cleanup_effects_verify(module, &context.remaining, &context.location);
     context.location.status = status;
     *remaining = context.remaining;
     if (diagnostic)

@@ -100,10 +100,10 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
         if (!m) initializer = at;
         at += 4;
     }
-    size_t identities = at, slot_data = at + (size_t) functions * 16;
+    size_t identities = at, slot_data = at + (size_t) functions * 20;
     size_t literal_data = slot_data + (size_t) slots * 12;
     const size_t offsets[] = {declarations, declarations + 12, declarations + 16,
-        dependencies + 4, initializer, identities + 4 * 16 + 4, slot_data, literal_data + 4, identities + 4 * 16 + 8};
+        dependencies + 4, initializer, identities + 4 * 20 + 4, slot_data, literal_data + 4, identities + 4 * 20 + 8};
     const uint32_t values[] = {UINT32_MAX, 1, 0, 1, 3, 0, 1, UINT32_MAX, 1};
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         CHECK(offsets[i] + 4 <= packet->length);
@@ -131,7 +131,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 11 && XR_XIR_CHECKED_CONTRACT == 33 && XR_XIR_OP_COUNT == 100, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 12 && XR_XIR_CHECKED_CONTRACT == 34 && XR_XIR_OP_COUNT == 100, "packet revision");
     _Static_assert(XR_XIR_PANIC_CATCH == 97 && XR_XIR_PANIC_CODE == 98 && XR_XIR_PANIC_MESSAGE == 99 &&
         XR_XIR_PANIC_INFO == 15, "panic wire identities");
     _Static_assert(XR_XIR_MATCH_FAIL == 89, "match fault wire operation");
@@ -164,8 +164,8 @@ static void byte_order(void) {
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler. */
     const uint8_t expected_digest[32] = {
-        0xd9, 0xcc, 0x7f, 0xee, 0x50, 0x85, 0x83, 0x57, 0xc4, 0x85, 0xca, 0x04, 0xcc, 0x87, 0x0e, 0x8b,
-        0xa9, 0xe8, 0x63, 0xbb, 0xfc, 0xae, 0x2e, 0xa2, 0x44, 0xf5, 0x74, 0xbd, 0x18, 0x0f, 0x4d, 0x88};
+        0x19, 0x03, 0x15, 0x9b, 0x32, 0x80, 0x44, 0x5d, 0xd7, 0xbb, 0x2a, 0x3a, 0xbc, 0xf4, 0x93, 0x41,
+        0x47, 0xa3, 0x6a, 0x84, 0x83, 0xbc, 0x49, 0x09, 0x39, 0x7b, 0xfe, 0x65, 0x69, 0x54, 0xdc, 0xa8};
     CHECK(!memcmp(packet.bytes + 32, expected_digest, 32));
     uint8_t original[205]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 137; offset <= 141; offset += 4) {
@@ -952,7 +952,9 @@ static void match_fault_shape(void) {
     }
 }
 #include "xir_invoke_checked_cases.h"
+#include "xir_cleanup_role_cases.h"
 int main(void) {
+    cleanup_role_cases();
     invoke_checked_cases();
     match_fault_shape();
     enum_generic_cases(); enum_instruction_packet_cases();

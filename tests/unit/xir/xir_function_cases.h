@@ -53,7 +53,7 @@ static void function_case_release(void *owner) { ++*(unsigned *) owner; }
 #include "xir_native_metadata_fixture.h"
 static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program) {
     XrXirSourceModule module = {"root", 4, NULL, 0, 0};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0}, {0,1, 0, 0}, {0,1, 0, 0}, {0,0, 0, 0}, {0,1, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0}, {0,1, 0, 0, 0}, {0,1, 0, 0, 0}, {0,0, 0, 0, 0}, {0,1, 0, 0, 0}};
     XrXirSlot slot = {0, XR_XIR_STRING, 1};
     XrXirLiteral literal = {"owned callback result", 21};
     XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1};

@@ -24,6 +24,7 @@ typedef struct SpecContext {
     SpecMemory *memory;
     XrXirFunction *functions;
     XrXirFunctionIdentity *identities;
+    bool has_cleanup;
     SpecInstance *instances;
     uint32_t *ordinary;
     uint32_t count, capacity;
@@ -240,6 +241,15 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         if (target == UINT32_MAX) return false;
         op->immediate = target; op->type_arguments[0] = op->type_arguments[1] = 0;
     }
+    if (c->has_cleanup) {
+        for (uint32_t f = 0; f < c->source->function_count; ++f) {
+            if (!spec_work(c, 1)) return false;
+            if (c->source->declarations->functions[f].cleanup_owner != instance->declaration + 1) continue;
+            uint32_t child = spec_intern(c, f, instance->arguments, instance->count);
+            if (child == UINT32_MAX) return false;
+            c->identities[child].cleanup_owner = index + 1;
+        }
+    }
     return true;
 }
 static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
@@ -347,6 +357,7 @@ XrXirStatus xr_xir_specialize(const XrXirArtifact *checked, const XrXirBudget *b
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     for (uint32_t f = 0; f < c.source->function_count; ++f) {
         c.ordinary[f] = UINT32_MAX;
+        if (c.source->declarations && c.source->declarations->functions[f].cleanup_owner) c.has_cleanup = true;
         if (!c.source->generics[f].parameter_count) {
             c.diagnostic.function = f;
             c.ordinary[f] = spec_intern(&c, f, NULL, 0);

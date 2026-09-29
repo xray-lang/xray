@@ -99,6 +99,18 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             const XrXirFunctionIdentity *actual = &c->destination->declarations->functions[f];
             if (identity->module != actual->module || identity->exported != actual->exported ||
                 identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access) return XR_XIR_BAD_STRUCTURE;
+            if (!!identity->cleanup_owner != !!actual->cleanup_owner) return XR_XIR_BAD_STRUCTURE;
+            if (identity->cleanup_owner) {
+                if (actual->cleanup_owner > f) return XR_XIR_BAD_STRUCTURE;
+                const XrXirOrigin *parent = &c->origins[actual->cleanup_owner - 1];
+                if (parent->function != identity->cleanup_owner - 1 ||
+                    parent->argument_count != origin->argument_count) return XR_XIR_BAD_STRUCTURE;
+                for (uint32_t a = 0; a < origin->argument_count; ++a) {
+                    if (!c->remaining->work) return XR_XIR_BUDGET;
+                    --c->remaining->work;
+                    if (parent->arguments[a] != origin->arguments[a]) return XR_XIR_BAD_TYPE;
+                }
+            }
         }
         uint64_t work = (uint64_t)from->block_count + from->operand_count + from->instruction_count;
         if (work > c->remaining->work) return XR_XIR_BUDGET;
@@ -344,10 +356,13 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
             if (same) { status = XR_XIR_BAD_STRUCTURE; goto done; }
         }
     }
-    for (uint32_t f = 0; f < c->source->function_count; ++f)
+    bool has_cleanup = false;
+    for (uint32_t f = 0; f < c->source->function_count; ++f) {
+        if (c->source->declarations && c->source->declarations->functions[f].cleanup_owner) has_cleanup = true;
         if ((!c->source->generics || !c->source->generics[f].parameter_count) && !roots[f]) {
             status = XR_XIR_BAD_STRUCTURE; goto done;
         }
+    }
     for (uint32_t head = 0; head < tail; ++head) {
         const XrXirFunction *function = &c->destination->functions[queue[head]];
         if (function->instruction_count > c->remaining->work) { status = XR_XIR_BUDGET; goto done; }
@@ -360,6 +375,24 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
             }
             uint32_t target = (uint32_t)op->immediate;
             if (!seen[target]) { seen[target] = 1; queue[tail++] = target; }
+        }
+        if (has_cleanup) {
+            for (uint32_t child = 0; child < c->source->function_count; ++child) {
+                if (!c->remaining->work) { status = XR_XIR_BUDGET; goto done; }
+                --c->remaining->work;
+                if (c->source->declarations->functions[child].cleanup_owner != c->origins[queue[head]].function + 1) continue;
+                bool found = false;
+                for (uint32_t target = 0; target < c->count; ++target) {
+                    if (!c->remaining->work) { status = XR_XIR_BUDGET; goto done; }
+                    --c->remaining->work;
+                    if (c->origins[target].function != child ||
+                        c->destination->declarations->functions[target].cleanup_owner != queue[head] + 1) continue;
+                    if (found) { status = XR_XIR_BAD_STRUCTURE; goto done; }
+                    found = true;
+                    if (!seen[target]) { seen[target] = 1; queue[tail++] = target; }
+                }
+                if (!found) { status = XR_XIR_BAD_STRUCTURE; goto done; }
+            }
         }
     }
     if (tail != c->count) status = XR_XIR_BAD_STRUCTURE;

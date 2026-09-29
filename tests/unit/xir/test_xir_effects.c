@@ -326,7 +326,16 @@ static void effect_term_shapes(void) {
     fail_at = SIZE_MAX;
     printf("Structural error terms: %zu allocation failures restored shared scratch\n", sites);
 }
+static void effect_cleanup_ownership(void) {
+    XrXirArtifact *artifact = effect_fixture(false);
+    XrXirFunctionIdentity *ids = (XrXirFunctionIdentity *)artifact->module.declarations->functions;
+    ids[5].cleanup_owner = 1;
+    size_t sites = effect_failures(artifact);
+    xr_xir_artifact_free(artifact);
+    printf("Cleanup verification and inference: %zu allocation failures released\n", sites);
+}
 int main(void) {
+    effect_cleanup_ownership();
     effect_term_shapes();
     effect_missing_errors(false); effect_missing_errors(true); effect_growing_cycle();
     effect_generic_errors();

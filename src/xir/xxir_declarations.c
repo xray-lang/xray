@@ -122,6 +122,18 @@ XrXirStatus xr_xir_declarations_verify(const XrXirDeclarations *d, const XrXirTy
     XrXirStatus status = declaration_modules(d, functions, bytes, work);
     if (status != XR_XIR_OK) return status;
     for (uint32_t i = 0; i < functions; ++i) {
+        const XrXirFunctionIdentity *identity = &d->functions[i];
+        if (identity->cleanup_owner) {
+            if (identity->cleanup_owner > i || identity->exported || i == d->entry_function)
+                return XR_XIR_BAD_STRUCTURE;
+            const XrXirFunctionIdentity *parent = &d->functions[identity->cleanup_owner - 1];
+            if (identity->module != parent->module || identity->nominal_owner != parent->nominal_owner ||
+                identity->member_access != parent->member_access) return XR_XIR_BAD_STRUCTURE;
+            for (uint32_t m = 0; m < d->module_count; ++m) {
+                if (!declaration_spend(work, 1)) return XR_XIR_BUDGET;
+                if (d->modules[m].initializer == i) return XR_XIR_BAD_STRUCTURE;
+            }
+        }
         uint32_t owner = d->functions[i].nominal_owner;
         uint32_t access = d->functions[i].member_access;
         if (access > XR_XIR_MEMBER_PROTECTED ||

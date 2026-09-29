@@ -604,6 +604,7 @@ static void vm_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t function,
                                  XrXirVmBinding *binding, XrXirCallEntry *entry) {
     const XrXirModule *module = xr_xir_artifact_module(artifact);
+    if (module->declarations && module->declarations->functions[function].cleanup_owner) return XR_XIR_BAD_STAGE;
     const XrXirFunction *body = &module->functions[function];
     const XrXirFunctionLayout *layout = xr_xir_artifact_layout(artifact, function);
     uint64_t bytes = sizeof(VmState) + (uint64_t) layout->frame_bytes +
@@ -682,6 +683,7 @@ XrXirRunStatus xr_xir_vm_run(const XrXirArtifact *artifact, uint32_t function,
     XrXirStatus verified = xr_xir_artifact_verify(artifact, NULL, NULL);
     if (verified != XR_XIR_OK)
         return verified == XR_XIR_OUT_OF_MEMORY ? XR_XIR_RUN_OUT_OF_MEMORY : XR_XIR_RUN_BAD_ARTIFACT;
+    if (module->declarations && module->declarations->functions[function].cleanup_owner) return XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunction *body = &module->functions[function];
     if (xr_xir_type_is_owned(module->types, body->result)) return XR_XIR_RUN_BAD_ARTIFACT;
     for (uint32_t i = 0; i < body->parameter_count; ++i)

@@ -361,6 +361,8 @@ XrXirStatus xr_xir_emit_leaf_c(const XrXirArtifact *artifact, const char *symbol
         for (uint32_t p = 0; p < function->parameter_count; ++p)
             if (xr_xir_type_is_owned(module->types, function->parameters[p])) return XR_XIR_BAD_STAGE;
     }
+    if (module->declarations) for (uint32_t f = 0; f < module->function_count; ++f)
+        if (module->declarations->functions[f].cleanup_owner) return XR_XIR_BAD_STAGE;
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types};
     append(&buffer, "#include \"xir/xxir_float.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
@@ -1010,7 +1012,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     }
     append(buffer, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count; ++f)
-        append(buffer, "    {%uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access);
+        append(buffer, "    {%uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner);
     append(buffer, "};\n");
     if (d->slot_count) {
         append(buffer, "static const XrXirSlot %s_slots[] = {\n", prefix);
@@ -1051,6 +1053,8 @@ XrXirStatus xr_xir_emit_c(const XrXirArtifact *artifact, const char *symbol_pref
     if (!symbol_prefix_valid(symbol_prefix)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = xr_xir_artifact_verify(artifact, NULL, NULL);
     if (status != XR_XIR_OK) return status;
+    if (module->declarations) for (uint32_t f = 0; f < module->function_count; ++f)
+        if (module->declarations->functions[f].cleanup_owner) return XR_XIR_BAD_STAGE;
     CBuffer buffer = {NULL, 0, 0, byte_limit, XR_XIR_OK, module->types};
     append(&buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
