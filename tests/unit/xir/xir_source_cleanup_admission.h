@@ -21,7 +21,11 @@ static void source_cleanup_admission(XrXirSourceRequest *request, const char *pa
         {"fn unused(){defer{var n=0;while(n<2){n=n+1;if(n==1){continue};break}}}\n", NULL},
         {"fn unused(){defer{const f=fn()->i64{return 3};print(f())}}\n", "E0392"},
         {"fn unused(){defer{const f=fn()->i64{return 3}}}\n", NULL},
-        {"fn unused<T>(v:T)->T{defer{const copy=v};return v}\n", NULL}
+        {"fn unused<T>(v:T)->T{defer{const copy=v};return v}\n", NULL},
+        {"struct C{value:i64;constructor(){defer{print(this.value)};this.value=2}}\n", "constructed XIR failed"},
+        {"struct C{const value:i64=1;constructor(){defer{this.value=2}}}\n", "field access is not permitted"},
+        {"struct C{private value:i64=1;constructor(){} }\nfn f(){const c=C();defer{print(c.value)}}\n", "field access is not permitted"},
+        {"struct C{private const value:i64=1;constructor(){defer{print(this.value)}}}\n", NULL}
     };
     unsigned failures = 0;
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {

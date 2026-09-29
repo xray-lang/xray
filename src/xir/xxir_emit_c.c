@@ -402,6 +402,18 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     append(buffer, "        { XrXirCallStatus status = XR_XIR_CALL_READY;\n");
     if (op->op != XR_XIR_CELL_WRITE) append(buffer, "        XrXirValue value = {0};\n");
     switch (op->op) {
+    case XR_XIR_CELL_LOCAL_WRITE: {
+        uint32_t offset = layout->offsets[op->args[0]];
+        XrXirType type = xr_xir_operand_type(function, op->args[0]);
+        append(buffer, "        XrXirValue cell = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        XrXirValue incoming = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+            "        if (cell.payload) status = xr_xir_instance_cell_write(view, &cell, &incoming);\n"
+            "        else { status = xr_xir_instance_cell(view, (XrXirType)%u, &incoming, &value);\n"
+            "            if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(state->frame, %uu, &value); }\n",
+            (uint32_t)type, offset, (uint32_t)xr_xir_operand_type(function, op->args[1]),
+            layout->offsets[op->args[1]], (uint32_t)type, offset);
+        break;
+    }
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
         append(buffer, "        XrXirValue left = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
             (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
@@ -707,7 +719,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF ||
-        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE)) {
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         emit_instance_step(buffer, module, function, op, layout, destination);
         return;
     }

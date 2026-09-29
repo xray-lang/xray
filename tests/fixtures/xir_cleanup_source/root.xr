@@ -56,3 +56,50 @@ export fn fatalCancel()->i64 {
     Coro.yield()
     return 99
 }
+
+struct ConstructedCleanup {
+    private value:i64 = 1
+    constructor() {defer{print(this.value)};this.value=2}
+    get()->i64{return this.value}
+}
+export fn constructorLate()->i64{return ConstructedCleanup().get()}
+
+struct NestedConstructedCleanup<T> {
+    private value:T
+    private const label:string = "ctor"
+    constructor(flag:bool,value:T,replacement:T) {
+        if(flag){this.value=value}else{this.value=replacement}
+        defer{this.value=replacement;defer{print(this.label)}}
+        this.value=value
+    }
+    get()->T{return this.value}
+}
+export fn constructorNested()->string {
+    const first=NestedConstructedCleanup<string>(true,"before","after")
+    const second=NestedConstructedCleanup<string>(false,"before","after")
+    return first.get()+second.get()
+}
+
+struct BareConstructedCleanup {
+    private value:i64 = 1
+    constructor(){defer{this.value=9};return}
+    get()->i64{return this.value}
+}
+export fn constructorBare()->i64{return BareConstructedCleanup().get()}
+
+struct PlainConstructor {
+    private value:i64 = 1
+    constructor(){this.value=3}
+    get()->i64{return this.value}
+}
+struct UncapturedConstructor {
+    private value:i64 = 1
+    constructor(){
+        const read=fn()->i64{defer{print(this.value)};return this.value}
+        this.value=3
+        print(read())
+        defer{print("plain")}
+    }
+    get()->i64{return this.value}
+}
+export fn constructorUncaptured()->i64{return PlainConstructor().get()+UncapturedConstructor().get()}

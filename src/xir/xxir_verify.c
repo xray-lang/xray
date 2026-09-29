@@ -484,12 +484,12 @@ static XrXirStatus value_use(const XrXirFunction *function, const Graph *graph,
 }
 
 static bool local_access(XrXirOp op) {
-    return op == XR_XIR_LOCAL_READ || op == XR_XIR_LOCAL_WRITE ||
+    return op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_LOCAL_READ || op == XR_XIR_LOCAL_WRITE ||
         op == XR_XIR_SCALAR_LOCAL_READ || op == XR_XIR_SCALAR_LOCAL_WRITE ||
         op == XR_XIR_OWNED_LOCAL_READ || op == XR_XIR_OWNED_LOCAL_WRITE;
 }
 static bool local_write(XrXirOp op) {
-    return op == XR_XIR_LOCAL_WRITE || op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
+    return op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_LOCAL_WRITE || op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
 }
 static XrXirStatus local_operand(const XrXirTypes *types, const XrXirFunction *function, const XrXirInstruction *op,
                                   uint32_t id, uint32_t operand) {
@@ -498,7 +498,8 @@ static XrXirStatus local_operand(const XrXirTypes *types, const XrXirFunction *f
     if (local ? place != XR_XIR_PLACE_LOCAL : place != XR_XIR_PLACE_NONE) return XR_XIR_BAD_VALUE;
     if (local) {
         XrXirType type = function->instructions[id - function->parameter_count].type;
-        if ((op->op == XR_XIR_SCALAR_LOCAL_WRITE && !scalar(type)) ||
+        if ((op->op == XR_XIR_CELL_LOCAL_WRITE && !xr_xir_type_is_cell(types, type)) ||
+            (op->op == XR_XIR_SCALAR_LOCAL_WRITE && !scalar(type)) ||
             (op->op == XR_XIR_OWNED_LOCAL_WRITE && !xr_xir_type_is_owned(types, type))) return XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
@@ -745,7 +746,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             }
             if (op->op == XR_XIR_STRING_INDEX_OF && a == 2) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_ATOMIC_I64_FETCH_ADD && a == 1) operand_type = XR_XIR_I64;
-            if (op->op == XR_XIR_CELL_WRITE && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
+            if ((op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {
                 uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + a] : op->args[a];
                 if (id >= function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;

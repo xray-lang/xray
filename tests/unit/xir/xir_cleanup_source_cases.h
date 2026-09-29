@@ -10,7 +10,7 @@
 #define XIR_CLEANUP_SOURCE_CASES_H
 #include "xir/xxir_array.h"
 enum { CLEANUP_SCOPES, CLEANUP_LOOPS, CLEANUP_ERRORS, CLEANUP_PANIC, CLEANUP_CANCELLED,
-    CLEANUP_GENERICS, CLEANUP_SNAPSHOT, CLEANUP_SOURCE_FUNCTIONS };
+    CLEANUP_GENERICS, CLEANUP_SNAPSHOT, CLEANUP_CONSTRUCTOR, CLEANUP_CONSTRUCTOR_NESTED, CLEANUP_CONSTRUCTOR_BARE, CLEANUP_CONSTRUCTOR_UNCAPTURED, CLEANUP_SOURCE_FUNCTIONS };
 typedef struct CleanupExpected { XrXirType type; int64_t number; const char *text; } CleanupExpected;
 typedef struct CleanupSourceLog { const CleanupExpected *values; uint32_t count, at; } CleanupSourceLog;
 static void cleanup_source_string(const XrXirValue *value, const char *expected) {
@@ -36,7 +36,10 @@ static void cleanup_source_cases(XrXirProgram *program, const uint32_t *function
     const CleanupExpected cancel[] = {{XR_XIR_STRING,0,"cancelled"}};
     const CleanupExpected generic[] = {{XR_XIR_STRING,0,"generic"}};
     const CleanupExpected array[] = {{XR_XIR_I64,7,NULL}};
-    CleanupSourceLog logs[] = {{scopes,5,0},{loops,2,0},{errors,2,0},{panic,2,0},{cancel,1,0},{generic,1,0},{array,1,0}};
+    const CleanupExpected constructor[] = {{XR_XIR_I64,2,NULL}};
+    const CleanupExpected constructed_nested[] = {{XR_XIR_STRING,0,"ctor"},{XR_XIR_STRING,0,"ctor"}};
+    const CleanupExpected uncaptured[] = {{XR_XIR_I64,1,NULL},{XR_XIR_I64,1,NULL},{XR_XIR_STRING,0,"plain"}};
+    CleanupSourceLog logs[] = {{scopes,5,0},{loops,2,0},{errors,2,0},{panic,2,0},{cancel,1,0},{generic,1,0},{array,1,0},{constructor,1,0},{constructed_nested,2,0},{NULL,0,0},{uncaptured,3,0}};
     XrXirInstance *instances[CLEANUP_SOURCE_FUNCTIONS] = {0};
     XrXirValue results[CLEANUP_SOURCE_FUNCTIONS] = {{0}};
     for (unsigned i = 0; i < CLEANUP_SOURCE_FUNCTIONS; ++i) {
@@ -62,6 +65,10 @@ static void cleanup_source_cases(XrXirProgram *program, const uint32_t *function
     }
     cleanup_source_string(&results[CLEANUP_SCOPES], "kept");
     cleanup_source_string(&results[CLEANUP_GENERICS], "g");
+    CHECK(results[CLEANUP_CONSTRUCTOR].payload == 2);
+    CHECK(results[CLEANUP_CONSTRUCTOR_BARE].payload == 9);
+    CHECK(results[CLEANUP_CONSTRUCTOR_UNCAPTURED].payload == 6);
+    cleanup_source_string(&results[CLEANUP_CONSTRUCTOR_NESTED], "afterafter");
     CHECK(results[CLEANUP_LOOPS].payload == 2 && results[CLEANUP_ERRORS].payload == 7 && results[CLEANUP_PANIC].payload == 9);
     XrXirValueAdmission admission = {xr_xir_value_arena(&results[CLEANUP_SNAPSHOT]),NULL,NULL,NULL,10000,65536};
     XrXirValue element = {0}; XrXirFaultDetail fault = {0};

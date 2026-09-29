@@ -11,7 +11,52 @@
  */
 #ifndef XR_XIR_CELL_CHECKED_CASES_H
 #define XR_XIR_CELL_CHECKED_CASES_H
+static void cell_local_checked_cases(void) {
+    for (unsigned mode = 0; mode < 7; ++mode) {
+        XrXirArtifact *base = checked_fixture(), *checked = NULL, *decoded = NULL;
+        XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;
+        XrXirFunction functions[9]; memcpy(functions, built.functions, sizeof(functions));
+        XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
+        XrXirTypeNode node = {XR_XIR_TYPE_CELL, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+        XrXirTypes types = {&node, 1, NULL}; built.types = &types;
+        XrXirInstruction ops[] = {
+            {XR_XIR_LOCAL_UNINIT, (XrXirType)256, {0}, {0}, 0, {0}},
+            {XR_XIR_CELL_LOCAL_WRITE, XR_XIR_UNIT, {2,1}, {0}, 0, {0}},
+            {XR_XIR_LOCAL_READ, (XrXirType)256, {2}, {0}, 0, {0}},
+            {XR_XIR_CELL_READ, XR_XIR_STRING, {4}, {0}, 0, {0}},
+            {XR_XIR_CELL_LOCAL_WRITE, XR_XIR_UNIT, {2,5}, {0}, 0, {0}},
+            {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
+        XrXirBlock block = {0, 6, 0, 0};
+        functions[8].instructions = ops; functions[8].instruction_count = 6;
+        functions[8].blocks = &block; functions[8].block_count = 1;
+        functions[8].parameters = parameters; functions[8].operands = NULL; functions[8].operand_count = 0;
+        built.functions = functions;
+        if (mode == 1) ops[0].type = XR_XIR_I64;
+        if (mode == 2) ops[1].args[1] = 0;
+        if (mode == 3) ops[1].args[0] = 1;
+        if (mode == 4) ops[1] = (XrXirInstruction){XR_XIR_LOCAL_READ,(XrXirType)256,{2},{0},0,{0}};
+        if (mode == 5) ops[0].immediate = 1;
+        if (mode == 6) ops[0] = (XrXirInstruction){XR_XIR_CELL_NEW,(XrXirType)256,{1},{0},0,{0}};
+        XrXirStatus status = xr_xir_check(&built, NULL, &checked, NULL);
+        xr_xir_artifact_free(base);
+        if (mode) { CHECK(status != XR_XIR_OK && !checked); continue; }
+        CHECK(status == XR_XIR_OK && checked);
+        XrXirCheckedPacket packet = {0};
+        CHECK(xr_xir_checked_write(checked, NULL, &packet, NULL) == XR_XIR_OK);
+        xr_xir_artifact_free(checked);
+        CHECK(xr_xir_checked_read(packet.bytes, packet.length, NULL, &decoded, NULL) == XR_XIR_OK);
+        xr_xir_artifact_free(decoded); decoded = NULL;
+        uint8_t record[32] = {0}; put32(record, 103); put32(record + 8, 2); put32(record + 12, 1);
+        size_t at = 0; unsigned matches = 0;
+        for (size_t i = 64; i + sizeof(record) <= packet.length; ++i)
+            if (!memcmp(packet.bytes + i, record, sizeof(record))) { at = i; ++matches; }
+        CHECK(matches == 1); put32(packet.bytes + at + 12, 0); digest_packet(&packet);
+        rejected(packet.bytes, packet.length);
+        xr_xir_checked_packet_free(&packet);
+    }
+}
 static void cell_checked_cases(void) {
+    cell_local_checked_cases();
     for (unsigned mode = 0; mode < 9; ++mode) {
         XrXirArtifact *base = checked_fixture(), *checked = NULL, *decoded = NULL;
         XrXirModule built = *xr_xir_artifact_module(base); built.stage = XR_XIR_BUILT;

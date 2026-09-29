@@ -14,6 +14,15 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "defer requires an enclosing real block and a block body");
     SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0};
     if (!capture_scan(block, &scan)) return false;
+    for (SourceCapture *p = scan.captures; p; p = p->next) if (p->source->construction) {
+        uint32_t fields = xr_xir_type_node(&ctx->types, p->source->type)->nominal.field_count;
+        if (fields > 65536 || scan.count - 1 > 65536 - fields)
+            return source_fail(ctx, node, XR_XIR_BUDGET, "constructor cleanup capture budget exhausted");
+        for (SourceCapture *q = scan.captures; q; q = q->next)
+            if (q != p && q->index > p->index) q->index = q->index - 1 + fields;
+        scan.count = scan.count - 1 + fields;
+        break;
+    }
     if (scan.count > 65536 || ctx->next_closure >= ctx->function_count - 1)
         return source_fail(ctx, node, XR_XIR_BUDGET, "cleanup parameter or declaration budget exhausted");
     uint32_t index = ctx->next_closure++;
@@ -51,7 +60,9 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
         XrXirType type = p->source->type;
         if (p->source->mutable && !source_cell_type(ctx, type, &type)) return false;
         if (p->source->construction) {
-            if (!source_constructor_value(ctx, node, &captures[p->index])) return false;
+            uint32_t fields = xr_xir_type_node(&ctx->types, p->source->type)->nominal.field_count;
+            for (uint32_t f = 0; f < fields; ++f)
+                if (!source_constructor_storage(ctx, node, f, &captures[p->index + f])) return false;
         } else captures[p->index] = (SourceValue){p->source->index, type};
     }
     if (!owner->block_count && !begin_block(ctx)) return false;

@@ -44,7 +44,7 @@ typedef struct SourceFunction {
     AstNode *node, *type_owner;
     XrGenericParam **type_parameters;
     uint32_t type_parameter_count;
-    bool infer_result, saw_return;
+    bool infer_result, saw_return, constructor_captured, constructor_shared;
     uint32_t module, count, capacity;
     XrXirType *parameters;
     uint32_t *operands, operand_count, operand_capacity;
@@ -1785,6 +1785,17 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
         symbol->kind = SOURCE_LOCAL; symbol->index = p->index; symbol->type = p->source->type;
         symbol->mutable = p->source->mutable;
         symbol->declaration = p->source->declaration;
+        if (p->source->construction && ctx->identities[ctx->function].cleanup_owner) {
+            symbol->construction = true; body->constructor_captured = true; body->constructor_shared = true;
+            uint32_t count = xr_xir_type_node(&ctx->types, symbol->type)->nominal.field_count;
+            body->constructor_places = count ? source_alloc(ctx, count, sizeof(*body->constructor_places)) : NULL;
+            if (count && !body->constructor_places) return false;
+            for (uint32_t f = 0; f < count; ++f) {
+                body->constructor_places[f] = p->index + f;
+                if (!source_constructor_storage_type(ctx, symbol->type, f, &body->parameters[p->index + f])) return false;
+            }
+            continue;
+        }
         XrXirType type = symbol->type;
         if (symbol->mutable && !source_cell_type(ctx, type, &type)) return false;
         body->parameters[p->index] = type;

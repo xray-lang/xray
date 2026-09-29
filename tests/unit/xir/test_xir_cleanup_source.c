@@ -10,6 +10,7 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_nominal.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,11 +38,32 @@ static XrXirArtifact *cleanup_source_lower(const char *path) {
     CHECK(xr_xir_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK); xr_xir_artifact_free(closed);
     return lowered;
 }
+static void cleanup_constructor_storage(const XrXirModule *module) {
+    unsigned ordinary = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *function = &module->functions[f];
+        if (function->name_length != 11 || memcmp(function->name, "constructor", 11)) continue;
+        const XrXirTypeNode *type = xr_xir_type_node(module->types, function->result);
+        CHECK(type && type->kind == XR_XIR_TYPE_NOMINAL);
+        CHECK(module->types->nominals->identities && !module->types->nominals->declarations);
+        XrXirLiteral name = module->types->nominals->identities[type->nominal.declaration].name;
+        bool plain = name.length == 16 && !memcmp(name.bytes, "PlainConstructor", 16);
+        bool unrelated = name.length == 21 && !memcmp(name.bytes, "UncapturedConstructor", 21);
+        if (!plain && !unrelated) continue;
+        ++ordinary;
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            const XrXirInstruction *op = &function->instructions[i];
+            CHECK(op->op != XR_XIR_CELL_NEW && op->op != XR_XIR_CELL_LOCAL_WRITE);
+        }
+    }
+    CHECK(ordinary == 2);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 2 || (argc == 3 && !strcmp(argv[1], "--fatal")));
     XrXirArtifact *lowered = cleanup_source_lower(XR_CLEANUP_FIXTURES "/root.xr");
     const XrXirModule *module = xr_xir_artifact_module(lowered);
-    const char *names[] = {"scopes","loops","errors","panic","cancelled","generics","snapshot","fatalReturn","fatalError","fatalPanic","fatalCancel"};
+    cleanup_constructor_storage(module);
+    const char *names[] = {"scopes","loops","errors","panic","cancelled","generics","snapshot","constructorLate","constructorNested","constructorBare","constructorUncaptured","fatalReturn","fatalError","fatalPanic","fatalCancel"};
     uint32_t functions[CLEANUP_SOURCE_FUNCTIONS + 4];
     for (unsigned n = 0; n < CLEANUP_SOURCE_FUNCTIONS + 4; ++n) {
         functions[n] = UINT32_MAX;

@@ -195,7 +195,7 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i) {
     if (op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT ||
         op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_SUSPEND ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT ||
-        op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR)
+        op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR || op->op == XR_XIR_CELL_LOCAL_WRITE)
         return error_cells(flow,UINT32_MAX,NULL);
     return XR_XIR_OK;
 }

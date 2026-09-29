@@ -69,6 +69,19 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
     XrXirValue value = {0};
     XrXirCallStatus status = XR_XIR_CALL_READY;
     switch (op->op) {
+    case XR_XIR_CELL_LOCAL_WRITE: {
+        uint32_t offset = run->layout->offsets[op->args[0]];
+        XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
+        XrXirValue cell = {(uint32_t)type, 0, xr_xir_scalar_load(run->frame, offset)};
+        XrXirValue incoming = {(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+        if (cell.payload) status = xr_xir_instance_cell_write(run->view, &cell, &incoming);
+        else {
+            status = xr_xir_instance_cell(run->view, type, &incoming, &value);
+            if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(run->frame, offset, &value);
+        }
+        break;
+    }
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
         XrXirValue left = {(uint32_t) xr_xir_operand_type(run->function, op->args[0]), 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
@@ -457,7 +470,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return vm_array_step(run, state, op, run->layout->offsets[result_id], action);
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_ATOMIC_I64_FETCH_ADD) || op->op == XR_XIR_FUNCTION_REF ||
-        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE)) {
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
         state->instruction = next;
         return instance_step(run, state, op, run->layout->offsets[result_id]);
     }
